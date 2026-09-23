@@ -31,6 +31,7 @@ const { planRederivation } = require('../../dist/kernel');
 // jest's package exports hide bin/jest.js from require.resolve; the hoisted
 // .bin symlink at the repo root is the same file the CLI would find.
 const JEST_BIN = fs.realpathSync(path.resolve(__dirname, '../../../../node_modules/.bin/jest'));
+const BATS_BIN = fs.realpathSync(path.resolve(__dirname, '../../../../node_modules/.bin/bats'));
 
 // pytest is not part of this package's toolchain (CI's main test job has no
 // python setup). Real-pytest cases run only where it exists; the
@@ -780,6 +781,158 @@ describe('the node --test runner executes, and never verifies what it did not ru
     expect(calls[0].args).toContain('--test');
     expect(calls[0].args).toContain('--test-name-pattern=fails on purpose');
     expect(calls[0].options.shell).toBeFalsy();
+  });
+});
+
+// ─── bats (CAWS-EVIDENCE-REDERIVE-VITEST-BATS-RUNNERS-01) ───────────────────
+
+/**
+ * Like node --test, the decisive cases run the REAL bats (the repo's own,
+ * hoisted to the monorepo root) against a REAL fixture: `bats --filter` that
+ * selects nothing exits 0, and only the TAP it prints can tell that apart from
+ * a pass.
+ */
+describe('the bats runner executes the cited test, and never verifies what it did not run', () => {
+  const batsSpec = (nodeid) => spec({ A1: { test_nodeid: nodeid } });
+
+  function mkBatsRepo() {
+    const fx = mkFixtureRepo();
+    write(
+      fx.root,
+      'sh/tests/sample.bats',
+      [
+        '#!/usr/bin/env bats',
+        '# ghost only ever appears here, never as a real test',
+        '',
+        '@test "adds" {',
+        '  [ "$((1 + 1))" -eq 2 ]',
+        '}',
+        '',
+        '@test "fails on purpose" {',
+        '  [ 1 -eq 2 ]',
+        '}',
+        '',
+        '@test "later" {',
+        '  skip "not yet"',
+        '}',
+        '',
+      ].join('\n')
+    );
+    write(fx.root, 'sh/tests/skipped.bats', '@test "later" {\n  skip "not yet"\n}\n');
+    fs.symlinkSync(BATS_BIN, path.join(fx.root, 'node_modules', '.bin', 'bats'));
+    return fx;
+  }
+
+  test('a cited .bats test that passes is executed and passed, naming one test', () => {
+    const { root } = mkBatsRepo();
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::adds'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('passed');
+    expect(o.A1[0].detail).toBe('bats sh/tests/sample.bats::adds passed (1 test executed)');
+  });
+
+  test('a cited .bats test that fails -> failed, so the criterion is refuted', () => {
+    const { root } = mkBatsRepo();
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::fails on purpose'), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('failed');
+    expect(o.A1[0].detail).toContain('bats exit 1');
+    expect(o.A1[0].detail).toContain('not ok 1 fails on purpose');
+  });
+
+  test('a filter selecting nothing exits 0 in bats itself and is still missing, never passed', () => {
+    const { root } = mkBatsRepo();
+    // What bats itself reports for a name that selects nothing: exit 0, an
+    // empty plan. Reading the exit code would verify a test that never ran.
+    const raw = execFileSync(BATS_BIN, ['--tap', '--filter', '^ghost$', 'sh/tests/sample.bats'], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    expect(raw).toMatch(/^1\.\.0$/m);
+
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::ghost'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toBe(
+      'bats selected zero tests for "ghost" in sh/tests/sample.bats (bats exits 0 when --filter matches nothing)'
+    );
+  });
+
+  test('a skipped test is reported as not executed, never passed', () => {
+    const { root } = mkBatsRepo();
+    const named = outcomesFor(root, batsSpec('sh/tests/sample.bats::later'), { runTests: true });
+    expect(named.A1[0].outcome).toBe('missing');
+    expect(named.A1[0].detail).toBe(
+      'bats skipped "later" in sh/tests/sample.bats; a skipped test did not execute'
+    );
+    const file = outcomesFor(root, batsSpec('sh/tests/skipped.bats'), { runTests: true });
+    expect(file.A1[0].outcome).toBe('missing');
+    expect(file.A1[0].detail).toBe(
+      'bats ran no test in sh/tests/skipped.bats; every test in it was skipped or none exists'
+    );
+  });
+
+  test('a filter that is a prefix of a real name does not select it: the match is anchored', () => {
+    const { root } = mkBatsRepo();
+    write(root, 'sh/tests/sample.bats', '# add\n@test "adds" {\n  true\n}\n');
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::add'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('missing');
+  });
+
+  test('the cited name reaches bats as an anchored, escaped --filter in argv, never through a shell', () => {
+    const { root } = mkBatsRepo();
+    const { fn, calls } = spyExec();
+    outcomesFor(root, batsSpec('sh/tests/sample.bats::fails on purpose'), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].file).toBe(path.join(root, 'node_modules', '.bin', 'bats'));
+    expect(calls[0].args).toEqual([
+      '--tap',
+      '--filter',
+      '^fails on purpose$',
+      'sh/tests/sample.bats',
+    ]);
+    expect(calls[0].options.shell).toBeFalsy();
+  });
+
+  test('without --run a located bats citation is not_run and nothing is spawned', () => {
+    const { root } = mkBatsRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::adds'), {
+      runTests: false,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('not_run');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a cited name absent from the file is missing before any spawn', () => {
+    const { root } = mkBatsRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::nowhere'), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toBe('test name "nowhere" not found in sh/tests/sample.bats');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('no bats in node_modules or on PATH -> unavailable, never passed', () => {
+    const { root } = mkFixtureRepo();
+    write(root, 'sh/tests/sample.bats', '@test "adds" {\n  true\n}\n');
+    const enoent = () => {
+      const e = new Error('spawn bats ENOENT');
+      e.code = 'ENOENT';
+      throw e;
+    };
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::adds'), {
+      runTests: true,
+      execFile: enoent,
+    });
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toContain('bats');
   });
 });
 

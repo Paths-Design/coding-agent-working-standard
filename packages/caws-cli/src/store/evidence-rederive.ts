@@ -29,11 +29,11 @@
  * `command` CHECKS ARE NEVER EXECUTED. The plan marks them non-executable and
  * this module skips them; the kernel reports `command_not_executed`.
  *
- * WHAT IS PROVEN HERE. Execution is implemented for pytest and jest, the two
- * runners this repository can exercise in its own test suite. vitest, cargo
- * and go are DETECTED (so the runner name is right in output) but report
- * `unavailable` with a detail naming the gap, rather than shipping an untested
- * execution path.
+ * WHAT IS PROVEN HERE. Execution is implemented for pytest, jest, node --test
+ * and bats, the runners this repository can exercise in its own test suite.
+ * vitest, cargo and go are DETECTED (so the runner name is right in output) but
+ * report `unavailable` with a detail naming the gap, rather than shipping an
+ * untested execution path.
  */
 
 import { execFileSync } from 'child_process';
@@ -54,7 +54,16 @@ import {
   type Spec,
 } from '../kernel';
 
-export const TEST_RUNNERS = ['pytest', 'jest', 'node', 'vitest', 'cargo', 'go', 'unknown'] as const;
+export const TEST_RUNNERS = [
+  'pytest',
+  'jest',
+  'node',
+  'bats',
+  'vitest',
+  'cargo',
+  'go',
+  'unknown',
+] as const;
 export type TestRunner = (typeof TEST_RUNNERS)[number];
 /** Runners a caller may name as an override; `unknown` is a detection result, not a choice. */
 export const SELECTABLE_TEST_RUNNERS: readonly TestRunner[] = TEST_RUNNERS.filter(
@@ -71,7 +80,7 @@ export const SELECTABLE_TEST_RUNNERS: readonly TestRunner[] = TEST_RUNNERS.filte
  * into CI got a gate that reports success while checking nothing — the failure
  * class this repository's release stance names as the most dangerous.
  */
-export const EXECUTABLE_TEST_RUNNERS: readonly TestRunner[] = ['pytest', 'jest', 'node'];
+export const EXECUTABLE_TEST_RUNNERS: readonly TestRunner[] = ['pytest', 'jest', 'node', 'bats'];
 
 function isExecutableRunner(runner: TestRunner): boolean {
   return EXECUTABLE_TEST_RUNNERS.includes(runner);
@@ -422,6 +431,8 @@ function resolveRunner(
     const cfgDir = walk.find((d) => detectTestRunner(d) === 'pytest') ?? root;
     return { runner: 'pytest', cwd: cfgDir };
   }
+  // bats has no config file to detect; the extension is the whole signal.
+  if (nodeidFile.endsWith('.bats')) return { runner: 'bats', cwd: root };
   for (const d of walk) {
     const r = detectTestRunner(d);
     if (r !== 'unknown') return { runner: r, cwd: d };
@@ -766,6 +777,111 @@ function nodeOutcome(
     : { ...base, outcome: 'failed', detail: `node --test exit ${run.status}: ${tail(out)}` };
 }
 
+/** One bats TAP result: `ok N name`, `not ok N name`, or `ok N name # skip (reason)`. */
+function batsResults(tap: string): { name: string; skipped: boolean }[] {
+  const results: { name: string; skipped: boolean }[] = [];
+  for (const line of tap.split('\n')) {
+    const m = /^(?:not )?ok \d+ (.*)$/.exec(line.trimEnd());
+    if (m === null || m[1] === undefined) continue;
+    const skip = / # skip\b/.exec(m[1]);
+    results.push(
+      skip === null
+        ? { name: m[1], skipped: false }
+        : { name: m[1].slice(0, skip.index), skipped: true }
+    );
+  }
+  return results;
+}
+
+function batsOutcome(
+  exec: ExecFileSyncLike,
+  ctx: RunnerContext,
+  repoRoot: string,
+  nodeid: string,
+  runTests: boolean,
+  t: TestTimeouts
+): CheckOutcome {
+  const base = { class: 'test' as const, target: nodeid };
+  const [file, ...rest] = nodeid.split('::');
+  const absFile = path.resolve(repoRoot, file ?? '');
+  const testName = rest.length > 0 ? rest[rest.length - 1] : undefined;
+
+  if (!fs.existsSync(absFile))
+    return { ...base, outcome: 'missing', detail: `test file not found: ${file}` };
+  if (testName !== undefined && !fileContains(absFile, testName)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `test name ${JSON.stringify(testName)} not found in ${file}`,
+    };
+  }
+  if (!runTests)
+    return { ...base, outcome: 'not_run', detail: 'test file and name present; not executed' };
+
+  // The repo's own bats first; bats is as often a system install as an npm
+  // one, so PATH is the fallback (argv only — never a shell).
+  const bin = findBin(path.dirname(absFile), repoRoot, 'bats') ?? 'bats';
+  const relFile = path.relative(ctx.cwd, absFile);
+  // --filter is an unanchored regex, so a cited name would also select every
+  // test it is a substring of. Anchor it to select exactly the cited test.
+  const args = ['--tap'];
+  if (testName !== undefined) args.push('--filter', `^${escapeRegex(testName)}$`);
+  args.push(relFile);
+  const run = spawnBounded(exec, bin, args, ctx.cwd, t.run);
+  if (run.kind === 'enoent') {
+    return {
+      ...base,
+      outcome: 'unavailable',
+      detail: 'bats is not installed in node_modules/.bin or on PATH',
+    };
+  }
+  if (run.kind !== 'ok' && run.kind !== 'exit') {
+    return spawnToOutcome(base, run, () => ({ ...base, outcome: 'failed' }), `bats ${nodeid}`);
+  }
+  if (run.kind === 'exit') {
+    return {
+      ...base,
+      outcome: 'failed',
+      detail: `bats exit ${run.status}: ${tail(`${run.stdout}\n${run.stderr}`)}`,
+    };
+  }
+
+  // Exit 0 is not a pass: a --filter matching nothing prints an empty plan
+  // (`1..0`) and exits 0, and a skipped test is `ok` in TAP. Only the result
+  // lines that ran decide.
+  const results = batsResults(run.stdout);
+  const executed = results.filter((r) => !r.skipped);
+  if (testName !== undefined) {
+    const own = results.filter((r) => r.name === testName);
+    if (own.length > 0 && own.every((r) => r.skipped)) {
+      return {
+        ...base,
+        outcome: 'missing',
+        detail: `bats skipped ${JSON.stringify(testName)} in ${file}; a skipped test did not execute`,
+      };
+    }
+    if (!executed.some((r) => r.name === testName)) {
+      return {
+        ...base,
+        outcome: 'missing',
+        detail: `bats selected zero tests for ${JSON.stringify(testName)} in ${file} (bats exits 0 when --filter matches nothing)`,
+      };
+    }
+  } else if (executed.length === 0) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `bats ran no test in ${file}; every test in it was skipped or none exists`,
+    };
+  }
+  const n = executed.length;
+  return {
+    ...base,
+    outcome: 'passed',
+    detail: `bats ${nodeid} passed (${n} test${n === 1 ? '' : 's'} executed)`,
+  };
+}
+
 function testOutcome(
   exec: ExecFileSyncLike,
   repoRoot: string,
@@ -788,13 +904,14 @@ function testOutcome(
       outcome: 'unavailable',
       detail:
         ctx.runner === 'unknown'
-          ? 'no test runner detected (pytest.ini/conftest.py, jest.config.*, vitest.config.*, a package.json script invoking node --test, Cargo.toml, go.mod)'
+          ? 'no test runner detected (pytest.ini/conftest.py, jest.config.*, vitest.config.*, a package.json script invoking node --test, a .bats test file, Cargo.toml, go.mod)'
           : `runner ${ctx.runner} detected; re-derivation does not execute this runner — run the test yourself and cite the resulting commit or artifact`,
     };
   }
   if (ctx.runner === 'pytest') return pytestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
   if (ctx.runner === 'jest') return jestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
   if (ctx.runner === 'node') return nodeOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
+  if (ctx.runner === 'bats') return batsOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
   // Declared executable with no dispatch arm. That is a programming error, and
   // it must not read as a verdict about the citation.
   return {
