@@ -1,0 +1,56 @@
+id: CAWS-SCOPE-REMEDIATION-STATES-VERIFIED-SAFETY-01
+title: 'Scope remediation states verified facts and why each action is safe, and stops routing new work into landed specs'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-23T17:47:52.061Z'
+updated_at: '2026-09-23T17:47:52.061Z'
+created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
+blast_radius:
+  modules:
+    - 'caws-cli/shell (render/decision, commands/scope, binding/types)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/render/decision.ts'
+    - 'packages/caws-cli/src/shell/binding/types.ts'
+    - 'packages/caws-cli/src/shell/commands/scope.ts'
+    - 'packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js'
+    - 'packages/caws-cli/tests/shell/scope-target-claim-authority-handoff.test.js'
+    - 'packages/caws-cli/tests/shell/scope-show-json.test.js'
+    - 'packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js'
+  out: []
+invariants:
+  - 'Remediation asserts only facts sourced from the loaded snapshot (specs, worktree registry, events) or returned by the kernel''s evaluatePath; it never claims a binding admits a path unless evaluatePath under that binding returned admit.'
+  - 'The kernel decision fields (decision, rule, mode, boundSpecId, ambiguousClaimants) are unchanged by this slice; only shell-rendered remediation text and additive optional candidate fields change.'
+  - 'The scope show --json contract changes additively: every existing authorityCandidates field keeps its name and meaning, so hook consumers parsing today''s fields see identical values.'
+acceptance:
+  - id: A1
+    given: 'an unbound checkout and one active spec with no worktree whose scope.in admits the path and under whose binding evaluatePath returns admit'
+    when: 'caws scope show <path> --json runs'
+    then: 'a remediation note names the spec, its lifecycle state, that it has no worktree, the admitting scope.in entry, and that the kernel admits the path under its binding; the worktree ensure description states what ensure creates and that it changes no other spec or worktree; the redundant scope show --spec command for that claimant is absent; and no note contains ''does not grant current-checkout write authority'''
+  - id: A2
+    given: 'an active spec with no worktree that claims the path and whose latest binding-lifecycle event is worktree_merged with auto_closed_spec false'
+    when: 'caws scope show <path> --json runs from an unbound checkout'
+    then: 'no worktree ensure or worktree bind command names that spec, a note states it landed in merge <sha> at <ts> from session <id> and was left open with --no-close so it is finished work and not a lane for this edit, and the remediation directs the caller to author a new spec that claims the path'
+  - id: A3
+    given: 'a spec whose scope.in admits the path but under whose binding evaluatePath does not return admit (a scope.out exclusion)'
+    when: 'caws scope show <path> --json runs from an unbound checkout'
+    then: 'the remediation does not state that binding it admits the path, names the kernel rule that refuses it, and keeps the read-only scope show --spec command for that spec'
+  - id: A4
+    given: 'a path claimed by an active worktree W bound to spec S'
+    when: 'caws scope show <path> --json runs from the canonical checkout'
+    then: 'the summary names W, S and the admitting scope.in entry, and the note states that a base-checkout write to the path is blocked by worktree-write-guard because W claims it, without ''can still be'''
+  - id: A5
+    given: 'a spec merged with --no-close whose later event for that spec is spec_reopened, worktree_created or worktree_bound'
+    when: 'caws scope show runs for a path it claims'
+    then: 'the spec is not reported as landed and is offered the normal verified handoff'
+  - id: A6
+    given: 'any of the fixtures above'
+    when: 'caws scope show --json runs'
+    then: 'decision, rule, mode, boundSpecId and ambiguousClaimants equal their pre-change values, and every authorityCandidates entry still carries specId, lifecycleState, worktreeName and matchedScopeInEntry with unchanged meaning'
+non_functional: {}
+contracts:
+  - name: 'scope-remediation-verified-handoff'
+    type: behavior
