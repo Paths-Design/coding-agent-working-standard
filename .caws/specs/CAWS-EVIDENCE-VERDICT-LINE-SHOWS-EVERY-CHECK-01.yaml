@@ -57,3 +57,9 @@ evidence:
     recorded_at: "2026-09-23T19:42:38.731Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-verify-acs.test.js::--run: a commit and an executed test on one criterion print as two named checks"
     commit_sha: "8fa172b2"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "single-check lines keep '<id>: <verdict> (<reason>) — <detail>' with only the tag renamed"
+    recorded_at: "2026-09-23T19:42:42.665Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::one verified, one refuted, one narrative -> 1/1/1, and the lines carry the agent-cited tag"
+    commit_sha: "8fa172b2"
