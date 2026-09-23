@@ -2,9 +2,11 @@ id: CAWS-EVIDENCE-VERDICT-LINE-SHOWS-EVERY-CHECK-01
 title: 'verify-acs, evidence --verify and the close advisory print one check per criterion and a [self-reported] tag on every row, so an executed test reads as a commit-only check'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'describeVerdict names every check when a criterion has more than one; [self-reported] is [agent-cited] with a one-line legend in verify-acs and the close advisory; JSON unchanged. verify-acs --run: 4/4 verified. The close-advisory legend test is env-sensitive (harness session env inheritance), so A3 cites the verify-acs legend test; both pass with session env unset.'
 created_at: '2026-09-23T19:09:04.062Z'
-updated_at: '2026-09-23T19:18:04.834Z'
+updated_at: '2026-09-23T19:45:00.289Z'
 created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
 blast_radius:
   modules:
