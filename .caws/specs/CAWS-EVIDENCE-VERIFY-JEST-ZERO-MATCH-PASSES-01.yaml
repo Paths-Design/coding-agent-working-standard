@@ -4,7 +4,7 @@ risk_tier: 2
 mode: fix
 lifecycle_state: draft
 created_at: '2026-09-23T18:11:47.762Z'
-updated_at: '2026-09-23T18:11:47.762Z'
+updated_at: '2026-09-23T19:10:38.865Z'
 created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
 blast_radius:
   modules:
@@ -16,6 +16,7 @@ scope:
     - 'packages/caws-cli/src/store/evidence-rederive.ts'
     - 'packages/caws-cli/tests/shell/specs-evidence-verify.test.js'
     - 'packages/caws-cli/tests/shell/specs-verify-acs.test.js'
+    - packages/caws-cli/tests/store/evidence-rederive.test.js
   out: []
 invariants:
   - 'A jest citation re-derives as verified only when the run''s result shows the cited test executed and passed; a run in which the cited name selected zero tests is never verified.'
