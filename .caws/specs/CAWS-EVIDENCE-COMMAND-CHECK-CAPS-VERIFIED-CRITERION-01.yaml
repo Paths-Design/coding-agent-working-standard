@@ -2,9 +2,11 @@ id: CAWS-EVIDENCE-COMMAND-CHECK-CAPS-VERIFIED-CRITERION-01
 title: 'a recorded --command caps an otherwise-verified criterion at not_rederived, so disclosing the command run makes the verdict worse'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Command checks are excluded from worst-wins ranking when an executable check exists; still listed as command_not_executed, never executed; a command-only criterion stays not_rederived; refuted/unrun checks beside a command still decide. verify-acs --run: 4/4 verified. Not run: Stryker mutation on the kernel classifier (was 97.33% before this change); the three new classifier tests plus the asymmetric-tally rework are the drift protection.'
 created_at: '2026-09-23T19:09:30.379Z'
-updated_at: '2026-09-23T19:28:11.339Z'
+updated_at: '2026-09-23T19:45:01.836Z'
 created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
 blast_radius:
   modules:
