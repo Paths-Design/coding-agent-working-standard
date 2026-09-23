@@ -61,3 +61,9 @@ evidence:
     recorded_at: "2026-09-23T18:08:34.725Z"
     test_nodeid: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js::%s: offered the normal verified handoff"
     commit_sha: "3bc06471"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js A6 green; scope-show-json.test.js kernel-field pins unchanged and green
+    recorded_at: "2026-09-23T18:08:37.473Z"
+    test_nodeid: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js::canonical no-authority keeps its kernel contract across verified, landed and refused claimants"
+    commit_sha: "3bc06471"
