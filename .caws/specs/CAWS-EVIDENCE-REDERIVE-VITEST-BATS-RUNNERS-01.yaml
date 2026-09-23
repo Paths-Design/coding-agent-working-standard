@@ -22,7 +22,10 @@ acceptance:
   - id: A2
     given: 'a .bats file citing one test by name'
     when: 'verify-acs --run runs'
-    then: 'the named test is executed through the repo''s bats and verified or refuted by its result; a name selecting nothing is never verified'
+    then: >-
+      the named test is executed through the repo's bats (node_modules/.bin, else
+      PATH) and verified or refuted by its TAP result; a name selecting nothing, or
+      a file whose every test is skipped, is never verified
 non_functional: {}
 contracts:
   - name: 'evidence-rederive-executes-vitest-and-bats'
