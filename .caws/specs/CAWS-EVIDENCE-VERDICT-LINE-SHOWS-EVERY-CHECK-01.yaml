@@ -69,3 +69,9 @@ evidence:
     recorded_at: "2026-09-23T19:42:52.847Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-verify-acs.test.js::one verified, one refuted, one narrative -> 1/1/1 in --json through dist, exit 1"
     commit_sha: "8fa172b2"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "verify-acs prints the [agent-cited] tag, 'agent-cited N' and the legend line (this test). The close-advisory half is pinned by specs-close-rederive 'a pass citing HEAD is verified at close...', which passes with session env unset but fails when the verifier's child inherits CAWS_SESSION_ID (known harness-env inheritance class), so it is not the cited test."
+    recorded_at: "2026-09-23T19:43:51.739Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-verify-acs.test.js::the printed summary carries the same 1/1/1 and the REFUTED verdict line; the table marks agent-cited rows"
+    commit_sha: "8fa172b2"
