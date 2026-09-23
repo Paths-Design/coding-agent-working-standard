@@ -73,3 +73,9 @@ evidence:
     recorded_at: "2026-09-23T18:09:24.027Z"
     test_nodeid: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js::the note, the ensure description and the summary state what was verified"
     commit_sha: "3bc06471"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js A2 block (3 tests) green; runtime: sterling walker.py/goal_work_admission.py name the landed merges and hand off to a new spec"
+    recorded_at: "2026-09-23T18:09:28.520Z"
+    test_nodeid: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js::sole landed claimant: no ensure/bind for it, the landing is stated, a new spec is the handoff"
+    commit_sha: "3bc06471"
