@@ -1,0 +1,37 @@
+id: CAWS-EVIDENCE-CLOSE-ADVISORY-SHOWS-RECORDED-EXECUTION-01
+title: 'the close advisory reports every test-citing criterion not_rederived because close never runs tests, contradicting the verified verdict --verify just recorded'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-23T19:10:25.631Z'
+updated_at: '2026-09-23T19:10:25.631Z'
+created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
+blast_radius:
+  modules:
+    - 'caws-cli/kernel (spec schema, ac_recorded event)'
+    - 'caws-cli/store (specs-writer close advisory)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/kernel/schemas/events/ac_recorded.v1.json'
+    - 'packages/caws-cli/src/kernel/schemas/spec.v1.json'
+  out: []
+invariants:
+  - 'Close and merge still spawn no test runner; the advisory reports what was executed at record time as a recorded fact with its revision, never as a fresh execution.'
+  - 'A recorded execution is written only by evidence --verify after the cited test actually ran and passed; a hand-edited spec cannot be distinguished from it, so the advisory labels it recorded, not re-derived.'
+acceptance:
+  - id: A1
+    given: 'a criterion recorded with evidence --verify citing a jest test that executed and passed'
+    when: 'the spec is closed or auto-closed by merge'
+    then: 'the advisory line for it says the test was executed and passed at record time at <sha>, and the summary counts it separately from not_rederived (observed in 11 sessions: agents reconciled ''not_rederived N'' at close against ''verified N'' from --run)'
+  - id: A2
+    given: 'a criterion recorded without --verify'
+    when: 'the spec closes'
+    then: 'the advisory is unchanged: not_rederived (not_run) for the test check'
+non_functional: {}
+contracts:
+  - name: 'evidence-records-executed-verdict'
+    type: schema
