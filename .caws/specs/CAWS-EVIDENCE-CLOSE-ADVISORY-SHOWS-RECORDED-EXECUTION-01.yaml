@@ -42,6 +42,14 @@ acceptance:
     given: 'a criterion recorded without --verify'
     when: 'the spec closes'
     then: 'the advisory is unchanged: not_rederived (not_run) for the test check'
+  - id: A3
+    given: >-
+      a criterion recorded with evidence --verify (test passed, test_verified_at
+      written) whose other citation no longer re-derives at close
+    when: 'the spec closes'
+    then: >-
+      the criterion is reported refuted and is not listed as a recorded execution;
+      any re-record of the criterion drops test_verified_at
 non_functional: {}
 contracts:
   - name: 'evidence-records-executed-verdict'
