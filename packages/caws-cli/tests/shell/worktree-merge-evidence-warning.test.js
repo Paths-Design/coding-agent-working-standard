@@ -171,7 +171,7 @@ describe('mergeWorktree carries the auto-close AC-evidence advisory in its outco
     const warnings = result.value.data.evidence_warnings;
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain(
-      `Evidence at close for "${SPEC}": 1 criteria — verified 0, refuted 0, not_rederived 1 (self-reported 0, narrative-only 1, command declared 0)`
+      `Evidence at close for "${SPEC}": 1 criteria — verified 0, refuted 0, not_rederived 1 (agent-cited 0, narrative-only 1, command declared 0)`
     );
     expect(warnings[0]).not.toContain('lacking satisfying evidence');
   });

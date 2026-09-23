@@ -201,7 +201,7 @@ describe('three verdicts, never collapsed (A2) and self-report labeling (A12)', 
     expect(byId.A3.self_reported).toBe(false);
   });
 
-  test('the printed summary carries the same 1/1/1 and the REFUTED verdict line; the table marks self-reported rows', () => {
+  test('the printed summary carries the same 1/1/1 and the REFUTED verdict line; the table marks agent-cited rows', () => {
     const { root, cawsDir, head } = mkProject();
     record(cawsDir, 'A1', { commitSha: head });
     record(cawsDir, 'A2', { artifactPath: 'docs/nope.md' });
@@ -210,19 +210,23 @@ describe('three verdicts, never collapsed (A2) and self-report labeling (A12)', 
     const r = runVerify(root);
     expect(r.code).toBe(1);
     expect(r.out).toContain(
-      'summary: 3 criteria — verified 1, refuted 1, not_rederived 1 (narrative-only 1, self-reported 2, command declared 0)'
+      'summary: 3 criteria — verified 1, refuted 1, not_rederived 1 (narrative-only 1, agent-cited 2, command declared 0)'
     );
     expect(r.out).toContain(
       'verdict: REFUTED — 1 criterion/criteria cite evidence that does not re-derive; unverifiable: 1 (not counted as pass)'
     );
     expect(r.out).toMatch(
-      /A1: verified \(passed\) — commit [0-9a-f]{40} exists and is reachable from refs\/heads\/main \[self-reported\]/
+      /A1: verified \(passed\) — commit [0-9a-f]{40} exists and is reachable from refs\/heads\/main \[agent-cited\]/
     );
     expect(r.out).toContain(
-      'A2: refuted (artifact_missing) — docs/nope.md not found at HEAD [self-reported]'
+      'A2: refuted (artifact_missing) — docs/nope.md not found at HEAD [agent-cited]'
     );
     expect(r.out).toContain('A3: not_rederived (no_mechanical_field)');
     expect(r.out).not.toContain('A3: not_rederived (no_mechanical_field) — ');
+    expect(r.out).toContain(
+      'note: agent-cited means the agent chose which commit, artifact or test to cite; ' +
+        'it marks the citation’s relevance as unchecked, not the check as unrun.'
+    );
     expect(r.out).not.toContain('all mechanically-verifiable ACs passed');
   });
 
@@ -253,7 +257,7 @@ describe('existence is not execution (A1)', () => {
       'mode: exists — cited tests located, not executed; pass --run to execute'
     );
     expect(r.out).toContain(
-      'A1: not_rederived (not_run) — test file and name present; not executed [self-reported]'
+      'A1: not_rederived (not_run) — test file and name present; not executed [agent-cited]'
     );
     expect(r.out).toContain(
       'verdict: nothing was mechanically verified; unverifiable: 3 (not counted as pass)'
@@ -321,6 +325,16 @@ describe('existence is not execution (A1)', () => {
     );
   }, 60000);
 
+  test('--run: a commit and an executed test on one criterion print as two named checks', () => {
+    const { root, cawsDir, head } = mkProject();
+    record(cawsDir, 'A1', { commitSha: head, testNodeid: 'js/tests/sample.test.js::adds' });
+    const r = runVerify(root, { run: true });
+    expect(r.out).toContain(
+      `A1: verified (passed) — citation verified: commit ${head} exists and is reachable from refs/heads/main; ` +
+        'test verified: jest js/tests/sample.test.js::adds passed (1 test executed) [agent-cited]'
+    );
+  }, 60000);
+
   test('--run with only passing citations prints the honest qualifier with the unverifiable count beside it', () => {
     const { root, cawsDir, head } = mkProject();
     record(cawsDir, 'A1', { testNodeid: 'js/tests/sample.test.js::adds' });
@@ -363,10 +377,10 @@ describe('agent-authored strings never execute (A5) and argv injection is refuse
     const r = runVerify(root, { run: true });
     expect(r.code).toBe(1);
     expect(r.out).toContain(
-      'A1: refuted (target_refused) — test_nodeid "--collect-only" begins with "-"; a nodeid is an operand, not a runner flag [self-reported]'
+      'A1: refuted (target_refused) — test_nodeid "--collect-only" begins with "-"; a nodeid is an operand, not a runner flag [agent-cited]'
     );
     expect(r.out).toContain(
-      'A2: refuted (target_refused) — test_nodeid "-p no:cacheprovider" begins with "-"; a nodeid is an operand, not a runner flag [self-reported]'
+      'A2: refuted (target_refused) — test_nodeid "-p no:cacheprovider" begins with "-"; a nodeid is an operand, not a runner flag [agent-cited]'
     );
     expect(r.out).toContain('verified 0, refuted 2, not_rederived 1');
     expect(r.out).not.toContain('verified (');

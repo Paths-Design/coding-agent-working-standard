@@ -896,11 +896,40 @@ export function rederiveSpecEvidence(
   return { plan, report, verdicts, summary: summarizeRederivation(verdicts) };
 }
 
-/** One line per criterion, shared by the close-gate advisory and the CLI table. */
+/**
+ * What the `[agent-cited]` tag means, printed once beside any table that
+ * carries it. Every check today derives from an agent-supplied field, so the
+ * tag marks almost every row — including rows whose test just executed. It was
+ * once labelled `[self-reported]`, which agents read as "not executed".
+ */
+export const AGENT_CITED_LEGEND =
+  'agent-cited means the agent chose which commit, artifact or test to cite; ' +
+  'it marks the citation’s relevance as unchecked, not the check as unrun.';
+
+function checkDetail(c: CriterionVerdict['checks'][number]): string {
+  if (c.detail !== undefined) return c.detail;
+  return c.class === 'command'
+    ? `recorded, never executed: ${c.target}`
+    : `${c.reason}: ${c.target}`;
+}
+
+/**
+ * One line per criterion, shared by the close-gate advisory and the CLI table.
+ *
+ * Every check is named when there is more than one. Printing only the deciding
+ * check hid the rest: on a tie between a verified commit and a verified test
+ * the commit decided, so a test that executed and passed read as a commit-only
+ * check.
+ */
 export function describeVerdict(v: CriterionVerdict): string {
-  const marker = v.self_reported ? ' [self-reported]' : '';
-  const deciding = v.checks.find((c) => c.reason === v.reason);
-  const detail = deciding?.detail !== undefined ? ` — ${deciding.detail}` : '';
+  const marker = v.self_reported ? ' [agent-cited]' : '';
+  const only = v.checks.length === 1 ? v.checks[0] : undefined;
+  const detail =
+    v.checks.length === 0
+      ? ''
+      : only !== undefined
+        ? ` — ${only.class === 'command' ? `command ${checkDetail(only)}` : checkDetail(only)}`
+        : ` — ${v.checks.map((c) => `${c.class} ${c.verdict}: ${checkDetail(c)}`).join('; ')}`;
   const divergence =
     v.divergence !== undefined
       ? ` (acceptance declares ${v.divergence.declared.join(', ')}; evidence names ${v.divergence.reported})`

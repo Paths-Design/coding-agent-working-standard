@@ -278,7 +278,7 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
     // self-assertion; the close names it as such (counted, never refuted).
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain(
-      'Evidence at close for "CLOSE-PASS-001": 2 criteria — verified 0, refuted 0, not_rederived 2 (self-reported 0, narrative-only 2, command declared 0)'
+      'Evidence at close for "CLOSE-PASS-001": 2 criteria — verified 0, refuted 0, not_rederived 2 (agent-cited 0, narrative-only 2, command declared 0)'
     );
     expect(warnings[0]).not.toContain('lacking satisfying evidence');
   });
