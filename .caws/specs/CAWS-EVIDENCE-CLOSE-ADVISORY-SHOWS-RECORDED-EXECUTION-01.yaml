@@ -62,3 +62,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/specs-close-rederive.test.js::a test verified at record time is reported as executed then, at its commit, apart from the unexplained not_rederived"
     commit_sha: f48705f4
     test_verified_at: f48705f4eccb3b2439fdfb563951745760d6c0b9
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "plain record: summary not_rederived 1, no recorded-execution line; companion test in specs-evidence-verify.test.js asserts plain and commit-only --verify records carry no test_verified_at"
+    recorded_at: "2026-09-23T20:00:30.103Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-close-rederive.test.js::a criterion recorded without --verify gets no recorded-execution line"
+    commit_sha: f48705f4
+    test_verified_at: f48705f4eccb3b2439fdfb563951745760d6c0b9
