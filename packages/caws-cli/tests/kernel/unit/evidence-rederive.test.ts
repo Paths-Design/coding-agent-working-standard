@@ -245,14 +245,49 @@ describe('command checks are planned non-executable and never trusted', () => {
     expect(summarizeRederivation([v]).command_declared).toBe(1);
   });
 
-  test('a passing citation beside a command still yields not_rederived, not verified', () => {
+  test('a passing citation beside a command is verified; the command is still listed, unexecuted', () => {
+    // Recording the command an agent ran must not make its verdict worse than
+    // omitting it: a command is a disclosure, not a check that failed.
     const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'abc', command: 'x' })]);
     const [v] = run1(
       spec,
       report({ A1: [{ class: 'citation', target: 'abc', outcome: 'passed' }] })
     );
+    expect(v.verdict).toBe('verified');
+    expect(v.reason).toBe('passed');
+    expect(v.checks.map((c) => [c.class, c.verdict, c.reason])).toEqual([
+      ['citation', 'verified', 'passed'],
+      ['command', 'not_rederived', 'command_not_executed'],
+    ]);
+    expect(summarizeRederivation([v]).command_declared).toBe(1);
+  });
+
+  test('a criterion whose only checks are commands stays not_rederived (command_not_executed)', () => {
+    const spec = specWith(
+      [ac('A1', { test_command: 'make check' })],
+      [ev('A1', { command: 'npm test' })]
+    );
+    const [v] = run1(spec, report({ A1: [] }));
     expect(v.verdict).toBe('not_rederived');
     expect(v.reason).toBe('command_not_executed');
+    expect(v.checks).toHaveLength(2);
+  });
+
+  test('a command never masks a refuted check beside it', () => {
+    const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'gone', command: 'x' })]);
+    const [v] = run1(
+      spec,
+      report({ A1: [{ class: 'citation', target: 'gone', outcome: 'missing' }] })
+    );
+    expect(v.verdict).toBe('refuted');
+    expect(v.reason).toBe('object_missing');
+  });
+
+  test('a command never masks an unrun test beside it', () => {
+    const spec = specWith([ac('A1')], [ev('A1', { test_nodeid: 't::x', command: 'x' })]);
+    const [v] = run1(spec, report({ A1: [{ class: 'test', target: 't::x', outcome: 'not_run' }] }));
+    expect(v.verdict).toBe('not_rederived');
+    expect(v.reason).toBe('not_run');
   });
 });
 
@@ -523,10 +558,11 @@ describe('the summary tallies each category separately', () => {
         ev('A2', { artifact_path: 'gone-a.md' }),
         ev('A3', { artifact_path: 'gone-b.md' }),
         ev('A4', { test_nodeid: 't::unrun' }),
-        // A command beside a citation: the criterion declares a command AND a
-        // check of another class, so "declares a command" cannot be read as
-        // "every check is a command".
-        ev('A5', { commit_sha: 'sha-ok-2', command: 'make check' }),
+        // A command beside a check of another class, so "declares a command"
+        // cannot be read as "every check is a command". The companion check is
+        // an unrun test: the command does not decide the verdict, so the test
+        // keeps this criterion not_rederived and the tally asymmetric.
+        ev('A5', { test_nodeid: 't::unrun-2', command: 'make check' }),
         ev('A6'),
       ]
     );
@@ -537,7 +573,7 @@ describe('the summary tallies each category separately', () => {
         A2: [{ class: 'artifact', target: 'gone-a.md', outcome: 'missing' }],
         A3: [{ class: 'artifact', target: 'gone-b.md', outcome: 'missing' }],
         A4: [{ class: 'test', target: 't::unrun', outcome: 'not_run' }],
-        A5: [{ class: 'citation', target: 'sha-ok-2', outcome: 'passed' }],
+        A5: [{ class: 'test', target: 't::unrun-2', outcome: 'not_run' }],
       })
     );
 

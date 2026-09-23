@@ -320,9 +320,15 @@ function divergenceFor(spec: Spec, plan: CriterionPlan): CriterionVerdict['diver
 
 /**
  * Classify every criterion in the plan against the store's report. A
- * criterion's verdict is the WEAKEST of its checks (refuted < not_rederived <
- * verified): VERIFIED means every citation it made holds; one unrun or failed
- * check is enough to withhold it.
+ * criterion's verdict is the WEAKEST of its executable checks (refuted <
+ * not_rederived < verified): VERIFIED means every citation it made holds; one
+ * unrun or failed check is enough to withhold it.
+ *
+ * A command check does not rank beside executable checks. It is never run, so
+ * ranking it capped every criterion that disclosed its command at
+ * not_rederived — recording what was run made the verdict worse than omitting
+ * it, and agents learned to omit it. It is still listed among the checks, and
+ * a criterion whose only checks are commands stays not_rederived.
  */
 export function classifyRederivation(
   spec: Spec,
@@ -342,7 +348,9 @@ export function classifyRederivation(
       verdict = 'not_rederived';
       reason = criterion.status === undefined ? 'no_evidence' : 'no_mechanical_field';
     } else {
-      const deciding = checks.reduce((worst, c) =>
+      const executable = checks.filter((c) => c.class !== 'command');
+      const ranked = executable.length > 0 ? executable : checks;
+      const deciding = ranked.reduce((worst, c) =>
         VERDICT_RANK[c.verdict] < VERDICT_RANK[worst.verdict] ? c : worst
       );
       verdict = deciding.verdict;

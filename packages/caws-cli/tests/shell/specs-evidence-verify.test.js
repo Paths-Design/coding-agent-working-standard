@@ -247,6 +247,24 @@ describe('caws specs evidence --verify (A4 record-time, A14)', () => {
     expect(acRecordedEvents(cawsDir)).toEqual([]);
   }, 60000);
 
+  test('a verified commit recorded with the command that was run stays verified; the command is recorded, never run', () => {
+    const { root, cawsDir, head } = mkProject();
+    const probe = path.join(root, 'caws-exec-probe');
+    const r = runEvidence(root, { commitSha: head, command: `touch ${probe}`, verify: true });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('verified before recording:');
+    expect(r.out).toContain(
+      `A1: verified (passed) — citation verified: commit ${head} exists and is reachable from refs/heads/main; ` +
+        `command not_rederived: recorded, never executed: touch ${probe} [agent-cited]`
+    );
+    expect(r.err).not.toContain('could not be mechanically re-derived');
+    expect(fs.existsSync(probe)).toBe(false);
+    const events = acRecordedEvents(cawsDir);
+    expect(events).toHaveLength(1);
+    expect(events[0].data.command).toBe(`touch ${probe}`);
+    expect(events[0].data.commit_sha).toBe(head);
+  });
+
   test('a nodeid naming a test that does not exist is refused with test_not_found', () => {
     const { root, cawsDir } = mkProject();
     const r = runEvidence(root, {
