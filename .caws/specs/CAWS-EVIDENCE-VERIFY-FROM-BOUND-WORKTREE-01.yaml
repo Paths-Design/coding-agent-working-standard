@@ -55,3 +55,9 @@ evidence:
     recorded_at: "2026-09-23T19:40:08.420Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify-worktree.test.js::a committed test that exists only on the worktree branch verifies from inside the worktree, naming the tree and HEAD"
     commit_sha: "1c3f4a31"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "dirty worktree (modified tracked file + untracked file): evidence --verify refuses, lists both porcelain lines, spec bytes unchanged"
+    recorded_at: "2026-09-23T19:40:29.765Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify-worktree.test.js::a worktree with an uncommitted edit is refused before anything runs; nothing is written"
+    commit_sha: "1c3f4a31"
