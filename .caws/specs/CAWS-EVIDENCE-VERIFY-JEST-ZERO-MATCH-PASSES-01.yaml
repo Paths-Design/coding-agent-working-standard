@@ -3,7 +3,6 @@ title: 'specs evidence --verify and verify-acs --run report a jest citation veri
 risk_tier: 2
 mode: fix
 lifecycle_state: active
-worktree: wt-jest-zero-match
 created_at: '2026-09-23T18:11:47.762Z'
 updated_at: '2026-09-23T19:10:50.694Z'
 created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
