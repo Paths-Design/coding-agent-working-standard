@@ -38,6 +38,11 @@
     "commit_sha": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "test_verified_at": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "HEAD at which `caws specs evidence --verify` executed the cited test and saw it pass."
     }
   }
 }

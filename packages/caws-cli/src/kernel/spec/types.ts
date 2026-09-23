@@ -131,6 +131,8 @@ export interface EvidenceRecord {
   exit_code?: number;
   artifact_path?: string;
   commit_sha?: string;
+  /** HEAD at which `caws specs evidence --verify` executed the cited test and saw it pass. */
+  test_verified_at?: string;
 }
 
 export interface Spec {
