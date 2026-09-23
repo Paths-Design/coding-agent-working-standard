@@ -1,0 +1,49 @@
+id: CAWS-EVIDENCE-VERIFY-FROM-BOUND-WORKTREE-01
+title: 'evidence --verify and verify-acs --run re-derive against canonical even from a bound worktree, so a branch-only test is test_not_found and agents are routed to --no-close'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-23T19:10:24.196Z'
+updated_at: '2026-09-23T19:10:24.196Z'
+created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
+blast_radius:
+  modules:
+    - 'caws-cli/shell (specs evidence, verify-acs)'
+    - 'caws-cli/store (evidence-rederive)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/store/evidence-rederive.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/specs-evidence-verify-worktree.test.js'
+    - 'packages/caws-cli/tests/shell/specs-evidence-verify.test.js'
+    - 'packages/caws-cli/tests/shell/specs-verify-acs.test.js'
+    - 'docs/command-reference.md'
+  out: []
+invariants:
+  - 'Specs are still read from canonical .caws/specs; only the tree the cited tests, artifacts and HEAD resolve against moves to the invoking linked worktree.'
+  - 'evidence --verify from a linked worktree refuses to record when that worktree has uncommitted or untracked changes, so verified evidence always names committed code; nothing is written on refusal.'
+  - 'Output names the tree and the commit the evidence was re-derived against.'
+acceptance:
+  - id: A1
+    given: 'a linked worktree whose branch adds a committed jest test absent from canonical main'
+    when: 'caws specs evidence --ac A1 --status pass --test-nodeid <that test> --verify runs from inside the worktree'
+    then: 'it prints verified before recording, names the worktree path and its HEAD sha as the re-derivation tree, and records the evidence (observed 2026-09-18 c8eb69f0: canonical-only resolution returned test_not_found and the agent concluded proof needing the landed revision must go through --no-close)'
+  - id: A2
+    given: 'the same worktree with an uncommitted edit'
+    when: 'evidence --verify runs from it'
+    then: 'it refuses, names the dirty paths, writes nothing, and says to commit first'
+  - id: A3
+    given: 'the canonical checkout'
+    when: 'evidence --verify and verify-acs --run run there'
+    then: 'they re-derive against canonical exactly as before'
+  - id: A4
+    given: 'a linked worktree'
+    when: 'verify-acs --run runs from inside it'
+    then: 'it re-derives against the worktree tree and its header names that tree and HEAD'
+non_functional: {}
+contracts:
+  - name: 'evidence-verify-runs-in-invoking-worktree'
+    type: behavior
