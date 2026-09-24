@@ -2,9 +2,11 @@ id: CAWS-GPT6-TMP-QUALIFICATION-001
 title: 'Bounded GPT-6 headless qualification in repository tmp'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: abandoned
+closure_notes: 'Attempt 20260924T210721Z stopped immediately on native sentinel mutation. Bash guard accepted owner-self without bound-scope admission. One failed session, fifteen not run; no adoption. Frozen runtime and disposable failure evidence preserved.'
 created_at: '2026-09-24T18:02:41.347Z'
-updated_at: '2026-09-24T21:08:25.967Z'
+updated_at: '2026-09-24T21:40:39.099Z'
 created_by_session: '01a0d133-3f22-7da1-bef1-324d5721363b'
 blast_radius:
   modules:
