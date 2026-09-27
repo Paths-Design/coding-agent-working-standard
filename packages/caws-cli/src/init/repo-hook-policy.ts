@@ -234,7 +234,7 @@ export function emptyRepoHookPolicy(): RepoHookPolicy {
   return { version: HOOK_POLICY_VERSION, surfaces: {}, guards: {} };
 }
 
-function emptyRepoSurfacePolicy(): RepoSurfacePolicy {
+export function emptyRepoSurfacePolicy(): RepoSurfacePolicy {
   return { disabled: {}, extensions: {}, handlers: {}, libraries: {}, forks: {} };
 }
 

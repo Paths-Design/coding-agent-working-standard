@@ -759,6 +759,16 @@ function writePristineBaseline(
   const p = pristinePathFor(repoRoot, packId, file.destPath);
   ensureDir(path.dirname(p));
   fs.writeFileSync(p, rendered);
+  fs.writeFileSync(
+    p + '.origin.json',
+    JSON.stringify({
+      version: 1,
+      writer: 'upstream-template-only',
+      pack: packId,
+      template_sha256: crypto.createHash('sha256').update(rendered).digest('hex'),
+      pack_version: parseManagedHeader(rendered.toString('utf8'))?.hookPackVersion ?? null,
+    }) + '\n'
+  );
 }
 
 /** The pristine as-installed content for a managed pack path, or null when
