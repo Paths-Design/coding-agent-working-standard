@@ -2,9 +2,10 @@ id: CAWS-RECONCILIATION-ACCOUNTING-AND-IMPORT-001
 title: 'Diagnose lifecycle history accurately and reconcile machine hook policy without discarding retained overrides'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: reconciliation-accounting
 created_at: '2026-09-27T05:40:45.320Z'
-updated_at: '2026-09-27T05:40:45.320Z'
+updated_at: '2026-09-27T05:40:53.657Z'
 created_by_session: '01a0e13e-18df-7803-a4fa-cd06d2225972'
 blast_radius:
   modules:
