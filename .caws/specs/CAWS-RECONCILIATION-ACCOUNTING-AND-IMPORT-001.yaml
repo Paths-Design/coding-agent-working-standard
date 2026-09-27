@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: reconciliation-accounting
 created_at: '2026-09-27T05:40:45.320Z'
-updated_at: '2026-09-27T05:40:53.657Z'
+updated_at: '2026-09-27T06:24:40.199Z'
 created_by_session: '01a0e13e-18df-7803-a4fa-cd06d2225972'
 blast_radius:
   modules:
@@ -29,6 +29,9 @@ scope:
     - 'docs/architecture/repo-local-hook-policy.md'
     - 'docs/guides/sterling-machine-runtime-migration.md'
   out: []
+  support:
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/templates/agents.md
 invariants:
   - 'Doctor remains read-only and never converts unknown observation into absence or completion.'
   - 'Repository policy cannot disable or replace floor handlers; retained machine overrides survive selective migration.'
