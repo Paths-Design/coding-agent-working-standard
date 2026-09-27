@@ -126,9 +126,12 @@ describe('caws doctor repair-plan', () => {
       // condition can no longer dominate the warning tier.
       severity: 'info',
       allowed_mutation: null,
-      next_command: 'caws worktree create <name> --spec DOCTOR-PLAN-STALE-001',
+      next_command: 'caws specs show DOCTOR-PLAN-STALE-001',
     });
-    expect(item.refusal_reason).toContain('choose whether to bind work');
+    expect(item.refusal_reason).toContain('inspect unmet criteria');
+    expect(item.details.unmet_acceptance).toEqual([
+      { criterion_id: 'A1', then: 'fixture', status: 'unrecorded', evidence_ref: null },
+    ]);
     expect(fs.readFileSync(specPath, 'utf8')).toBe(beforeSpec);
     expect(fs.existsSync(path.join(caws, 'events.jsonl'))).toBe(beforeEventsExists);
   });
@@ -141,7 +144,7 @@ describe('caws doctor repair-plan', () => {
     expect(plan.code).toBe(0);
     expect(plan.out).toContain('caws doctor repair-plan:');
     expect(plan.out).toContain('- active-spec-unbound DOCTOR-PLAN-STALE-001');
-    expect(plan.out).toContain('next: caws worktree create <name> --spec DOCTOR-PLAN-STALE-001');
+    expect(plan.out).toContain('next: caws specs show DOCTOR-PLAN-STALE-001');
 
     const normal = runDoctor(root, {});
     expect(normal.code).toBe(0);

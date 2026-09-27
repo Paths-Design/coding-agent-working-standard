@@ -5,6 +5,7 @@
 // rules already enforced by spec, policy, scope, evidence, or worktree.
 
 import type { Diagnostic } from '../diagnostics/types';
+import { historicalWaiverUses, unmetObligations } from './history';
 import { verifyChain } from '../evidence/verify';
 import { CRITICAL_GATES, RISKY_ROOT_FILES } from '../policy/rules';
 import { waiverEffectiveness } from '../waiver/applicability';
@@ -144,7 +145,11 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           {
             subject: spec.id,
             narrowRepair: 'Set updated_at on the spec or bind a worktree to it.',
-            data: { spec_id: spec.id, lifecycle_state: spec.lifecycle_state },
+            data: {
+              spec_id: spec.id,
+              lifecycle_state: spec.lifecycle_state,
+              ...unmetObligations(spec),
+            },
           }
         )
       );
@@ -182,12 +187,13 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           `Active spec ${spec.id} has no bound worktree and has exceeded the unbound-active threshold.`,
           {
             subject: spec.id,
-            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — the slice never started), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
+            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — does not assert completion), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
             data: {
               spec_id: spec.id,
               age_ms: ageMs,
               threshold_ms: unboundActiveThresholdMs,
               updated_at: spec.updated_at,
+              ...unmetObligations(spec),
             },
           }
         )
@@ -649,7 +655,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     does not reflect — governance-half-state.
   //
   //     Detection (read-only, events-backed): walk the chain in seq order. For
-  //     each `worktree_created`, take data.name. If a later `worktree_destroyed`
+  //     each `worktree_created`, take data.name. If a later `worktree_destroyed` or `worktree_untracked`
   //     for the same name closes the lifecycle, OR a live registry entry exists,
   //     OR a loaded spec carries a live `worktree:` binding to it, the worktree
   //     is accounted for — no finding. Otherwise the created-event is orphaned.
@@ -658,14 +664,17 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     iterate in array order, which loadEvents guarantees is chain order.
   // -------------------------------------------------------------------------
   if (input.events !== undefined && input.events.length > 0) {
-    // Names whose lifecycle a worktree_destroyed event has closed.
-    const destroyedNames = new Set<string>();
+    // Terminal events account only for preceding creations, never a later reuse.
+    const pendingCreations = new Map<string, NonNullable<DoctorInput['events']>[number]>();
     for (const ev of input.events) {
-      if (ev.event === 'worktree_destroyed') {
-        const d = ev.data as Record<string, unknown> | undefined;
-        const name = typeof d?.worktree_name === 'string' ? d.worktree_name : undefined;
-        if (name) destroyedNames.add(name);
-      }
+      const d = ev.data as Record<string, unknown> | undefined;
+      if (ev.event === 'worktree_created' && typeof d?.name === 'string')
+        pendingCreations.set(d.name, ev);
+      if (
+        (ev.event === 'worktree_destroyed' || ev.event === 'worktree_untracked') &&
+        typeof d?.worktree_name === 'string'
+      )
+        pendingCreations.delete(d.worktree_name);
     }
     // Names that a live spec back-binds (any lifecycle_state — a binding is a
     // binding for accounting purposes here).
@@ -677,15 +686,13 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
     // Avoid duplicate findings if the same name was created more than once.
     const reportedOrphans = new Set<string>();
-    for (const ev of input.events) {
-      if (ev.event !== 'worktree_created') continue;
+    for (const ev of pendingCreations.values()) {
       const d = ev.data as Record<string, unknown> | undefined;
       const name = typeof d?.name === 'string' ? d.name : undefined;
       if (name === undefined || reportedOrphans.has(name)) continue;
       const hasLiveRegistry = Object.prototype.hasOwnProperty.call(registry, name);
       const hasSpecBinding = specBoundNames.has(name);
-      const wasDestroyed = destroyedNames.has(name);
-      if (hasLiveRegistry || hasSpecBinding || wasDestroyed) continue;
+      if (hasLiveRegistry || hasSpecBinding) continue;
       // Orphan: created-event with no live control-plane representation.
       reportedOrphans.add(name);
       // CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01 — verifiable-tombstone
@@ -1125,57 +1132,22 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
   }
 
-  // 8d. revoked_referenced — walk gate_evaluated events for waiver_ids
-  //     that point at currently-revoked waivers. Skipped silently when
-  //     either side is absent: with no events we have nothing to cross-
-  //     reference; with no waivers we can't classify any reference.
-  if (
-    input.events !== undefined &&
-    input.events.length > 0 &&
-    input.waivers !== undefined &&
-    input.waivers.length > 0
-  ) {
-    const revokedById = new Map<string, (typeof input.waivers)[number]>();
-    for (const w of input.waivers) {
-      if (w.status === 'revoked') revokedById.set(w.id, w);
-    }
-    if (revokedById.size > 0) {
-      // Dedupe per (waiver_id, event_seq) pair so multiple identical
-      // events don't produce duplicate findings, but keep one finding
-      // per distinct waiver_id (the operator should see every revoked
-      // reference, not just the first).
-      const seenWaiverIds = new Set<string>();
-      for (const ev of input.events) {
-        if (ev.event !== 'gate_evaluated') continue;
-        const data = ev.data as { waiver_ids?: unknown };
-        const ids = data.waiver_ids;
-        if (!Array.isArray(ids)) continue;
-        for (const id of ids) {
-          if (typeof id !== 'string') continue;
-          if (!revokedById.has(id)) continue;
-          if (seenWaiverIds.has(id)) continue;
-          seenWaiverIds.add(id);
-          const revoked = revokedById.get(id)!;
-          findings.push(
-            finding(
-              DOCTOR_RULES.WAIVER_REVOKED_REFERENCED,
-              'warning',
-              `Waiver ${id} is currently revoked but was credited by at least one gate_evaluated event (seq ${ev.seq}).`,
-              {
-                subject: id,
-                narrowRepair:
-                  'No file repair — events are append-only. Audit whether the suppression remains acceptable historically.',
-                data: {
-                  waiver_id: id,
-                  first_event_seq: ev.seq,
-                  revoked_at: revoked.revocation?.revoked_at,
-                },
-              }
-            )
-          );
+  // Assess every historical use rather than the current status or first use.
+  for (const use of historicalWaiverUses(input.events ?? [], input.waivers ?? [])) {
+    findings.push(
+      finding(
+        use.classification === 'post_revocation'
+          ? DOCTOR_RULES.WAIVER_REVOKED_REFERENCED
+          : 'doctor.waiver.historical_use',
+        use.classification === 'within_recorded_bounds' ? 'info' : 'warning',
+        `Waiver ${use.waiver_id} use at event ${use.event_seq}: ${use.classification}. This checks recorded bounds, not independent authorization of the original exception.`,
+        {
+          subject: use.waiver_id,
+          narrowRepair: 'Inspect the cited use and waiver record; preserve append-only history.',
+          data: use,
         }
-      }
-    }
+      )
+    );
   }
 
   // -------------------------------------------------------------------------

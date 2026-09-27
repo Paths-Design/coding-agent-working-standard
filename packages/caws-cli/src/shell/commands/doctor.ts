@@ -28,7 +28,7 @@
 import type { Diagnostic, DoctorFinding } from '../../kernel';
 import { DOCTOR_RULES, inspectProjectState } from '../../kernel';
 
-import { detectGitignoreDrift } from '../../init/gitignore-drift';
+import { inspectGitignoreCoverage } from '../../init/gitignore-drift';
 import { detectBuildStaleness } from '../build-freshness';
 import { AGENT_CWD_GONE_RULE, detectWedgedSessions } from '../cwd-recovery';
 import { composeDoctorSnapshot, resolveRepoRoot } from '../../store';
@@ -114,10 +114,10 @@ function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
       return genericPlanItem(finding, {
         stateClass: 'active-spec-unbound',
         ...(typeof data.spec_id === 'string'
-          ? { nextCommand: `caws worktree create <name> --spec ${data.spec_id}` }
+          ? { nextCommand: `caws specs show ${data.spec_id}` }
           : {}),
         refusalReason:
-          'The active spec has no bound worktree; choose whether to bind work, close the spec, or leave it active.',
+          'The active spec has no bound worktree; inspect unmet criteria and recorded holds before choosing to bind, defer, demote or close. Closure requires completed obligations.',
       });
 
     case DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY:
@@ -300,7 +300,7 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
   // they are computed here and merged into the findings list alongside the
   // kernel report (CAWS-DOCTOR-GITIGNORE-DRIFT-001,
   // CAWS-GUARD-BUILD-FRESHNESS-001, CAWS-GUARD-CWD-RECOVERY-001).
-  const gitignoreDrift = detectGitignoreDrift(repoRoot, cawsDir);
+  const gitignoreFindings = inspectGitignoreCoverage(repoRoot, cawsDir);
   // The build-staleness check reasons about the running binary's OWN dist/
   // (where __dirname lives at runtime), not about the project's working
   // tree — so it keys off the compiled file path, not repoRoot.
@@ -310,7 +310,7 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
   // under them (the ENOENT wedge with no self-recovery path).
   const wedgedSessions = detectWedgedSessions(cawsDir);
   const shellFindings: DoctorFinding[] = [
-    ...(gitignoreDrift ? [gitignoreDrift] : []),
+    ...gitignoreFindings,
     ...(buildStale ? [buildStale] : []),
     ...wedgedSessions,
   ];

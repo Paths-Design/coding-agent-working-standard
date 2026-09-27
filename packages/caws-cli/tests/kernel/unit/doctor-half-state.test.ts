@@ -449,3 +449,36 @@ describe('doctor is read-only (A5)', () => {
     expect(() => inspectProjectState(input)).not.toThrow();
   });
 });
+
+describe('ordered lifecycle accounting', () => {
+  test.each(['worktree_untracked', 'worktree_destroyed'])(
+    '%s accounts only for the preceding creation',
+    (terminal) => {
+      const events = chain([
+        { event: 'worktree_created', data: { name: 'salvage', path: '/old', branch: 'salvage' } },
+        { event: terminal, data: { worktree_name: 'salvage' } },
+      ]);
+      expect(
+        rules(
+          inspectProjectState({
+            now: NOW,
+            specs: [],
+            worktrees: {},
+            events,
+            localBranchRefs: ['refs/heads/salvage'],
+          })
+        )
+      ).not.toContain(DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
+      const reused = chain([
+        ...events.map((e) => ({ event: e.event, data: e.data })),
+        { event: 'worktree_created', data: { name: 'salvage', path: '/new', branch: 'salvage' } },
+      ]);
+      const f = findingFor(
+        inspectProjectState({ now: NOW, specs: [], worktrees: {}, events: reused }),
+        DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING
+      );
+      expect(f?.data?.created_event_seq).toBe(3);
+      expect(f?.severity).toBe('warning');
+    }
+  );
+});
