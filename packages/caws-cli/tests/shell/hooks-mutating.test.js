@@ -642,7 +642,7 @@ describe('the mutating leaves are reachable through Commander on the built CLI',
     ['disable', ['--event', '--reason', '--surface', '--json']],
     ['replace', ['--with', '--reason', '--approver', '--surface', '--json']],
     ['restore', ['--event', '--surface', '--json']],
-    ['import', ['--from-machine', '--plan', '--json']],
+    ['import', ['--from-machine', '--plan', '--select', '--apply-plan', '--recover', '--json']],
   ])('caws hooks %s --help declares its flags', (leaf, flags) => {
     const { status, out } = runCli(['hooks', leaf, '--help']);
     expect(status).toBe(0);
@@ -756,6 +756,124 @@ function runCliWithHome(args, { cwd, home }) {
   });
   return { status: result.status, out: `${result.stdout}${result.stderr}` };
 }
+
+describe('reviewed selective reconciliation through the built CLI', () => {
+  const fixture = require('../init/hook-reconciliation-fixture');
+  afterAll(fixture.cleanup);
+  test('blocked whole preview inventories retained floor entries; selected preview applies only its group', () => {
+    const { root, home, file } = fixture.setup();
+    const before = fs.readFileSync(file, 'utf8');
+    const all = runCliWithHome(['hooks', 'import', '--from-machine', '--plan', '--json'], {
+      cwd: root,
+      home,
+    });
+    expect(all.status).toBe(1);
+    const inventory = JSON.parse(all.out);
+    expect(
+      inventory.reconciliation.entries.find((e) => e.id === 'codex:handler:block-dangerous.sh')
+        .disposition
+    ).toBe('retain_machine_floor');
+    expect(inventory.reconciliation.entries).toHaveLength(8);
+    expect(fs.readFileSync(file, 'utf8')).toBe(before);
+    expect(fs.existsSync(path.join(root, POLICY))).toBe(false);
+    const preview = runCliWithHome(
+      [
+        'hooks',
+        'import',
+        '--from-machine',
+        '--plan',
+        '--select',
+        'codex:handler:marker.sh',
+        '--json',
+      ],
+      { cwd: root, home }
+    );
+    expect(preview.status).toBe(0);
+    const plan = JSON.parse(preview.out);
+    expect(plan.reconciliation.selected).toEqual(['codex:handler:marker.sh']);
+    expect(plan.reconciliation.blockers).toEqual([]);
+    const repeated = runCliWithHome(
+      [
+        'hooks',
+        'import',
+        '--from-machine',
+        '--plan',
+        '--select',
+        'codex:handler:other.sh',
+        '--select',
+        'codex:handler:marker.sh',
+        '--json',
+      ],
+      { cwd: root, home }
+    );
+    expect(repeated.status).toBe(0);
+    expect(JSON.parse(repeated.out).reconciliation.selected).toEqual([
+      'codex:handler:marker.sh',
+      'codex:handler:other.sh',
+    ]);
+    const planFile = path.join(root, 'reviewed-plan.json');
+    fs.writeFileSync(planFile, preview.out);
+    const applied = runCliWithHome(
+      ['hooks', 'import', '--from-machine', '--apply-plan', planFile],
+      { cwd: root, home }
+    );
+    expect(applied.status).toBe(0);
+    const result = JSON.parse(applied.out);
+    expect(result.cleared_entries).toEqual(['codex:handler:marker.sh']);
+    expect(fs.readFileSync(file, 'utf8')).toBe(plan.reconciliation.machine_after);
+    const policy = JSON.parse(fs.readFileSync(path.join(root, POLICY), 'utf8'));
+    expect(Object.keys(policy.surfaces)).toEqual(['codex']);
+    expect(policy.surfaces.codex.handlers).toEqual({ 'marker.sh': '.caws/hooks/ext/marker.sh' });
+    const recovery = runCliWithHome(
+      ['hooks', 'import', '--from-machine', '--recover', result.journal],
+      { cwd: root, home }
+    );
+    expect(recovery.status).toBe(0);
+    expect(JSON.parse(recovery.out).recovered).toBe(true);
+  });
+  test('selecting a floor or editing an input refuses without writing policy', () => {
+    const { root, home, file } = fixture.setup();
+    const before = fs.readFileSync(file, 'utf8');
+    const floor = runCliWithHome(
+      [
+        'hooks',
+        'import',
+        '--from-machine',
+        '--plan',
+        '--select',
+        'codex:handler:block-dangerous.sh',
+        '--json',
+      ],
+      { cwd: root, home }
+    );
+    expect(floor.status).toBe(1);
+    expect(JSON.parse(floor.out).error).toContain('not transferable');
+    const preview = runCliWithHome(
+      [
+        'hooks',
+        'import',
+        '--from-machine',
+        '--plan',
+        '--select',
+        'codex:handler:marker.sh',
+        '--json',
+      ],
+      { cwd: root, home }
+    );
+    expect(preview.status).toBe(0);
+    const planFile = path.join(root, 'reviewed-plan.json');
+    fs.writeFileSync(planFile, preview.out);
+    fs.appendFileSync(path.join(root, '.caws/hooks/ext/helper.py'), '# changed\n');
+    const result = runCliWithHome(['hooks', 'import', '--from-machine', '--apply-plan', planFile], {
+      cwd: root,
+      home,
+    });
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.out).error).toContain('stale');
+    expect(fs.readFileSync(file, 'utf8')).toBe(before);
+    expect(fs.existsSync(path.join(root, POLICY))).toBe(false);
+  });
+});
 
 /** The shape sterling actually carries: two surfaces, identical policy. */
 const TWO_IDENTICAL_SURFACES = {

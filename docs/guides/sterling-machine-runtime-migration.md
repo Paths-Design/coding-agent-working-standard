@@ -87,6 +87,23 @@ evidence directory. Project policy lives at
 selects another absolute machine home. Read it; update it only through the CLI.
 Inspect user-level library overrides under `surfaces/<surface>/lib` as well.
 
+Use `caws hooks import --from-machine --plan --json` to inventory all override
+groups before changing policy. Its reconciliation section still appears when the
+legacy whole-surface import refuses a floor handler. Preview a bounded move with
+repeatable `--select <surface>:handler:<name>` flags, then apply the saved JSON
+with `--apply-plan <path>`. This route preserves surface identity and clears
+only selected groups; core floor overrides and libraries stay on the machine. It
+refuses changed inputs and chain differences and reports a recovery journal for
+an interrupted write. See
+[selective reconciliation](../architecture/repo-local-hook-policy.md#reconcile-machine-overrides-selectively)
+for the dependency boundary and recovery contract. A successful import does not
+prove guard behavior, install a runtime, or complete Sterling's native adoption.
+
+Treat a pristine baseline without an upstream-origin record as unknown, even
+when it matches local bytes. New install/port writes record the template digest;
+older baselines may contain absorbed local content. Re-derive differences from
+the upstream source and retained local behavior before removing an override.
+
 ## 2. Reconcile behavior before removing core overrides
 
 Compare three sources: Sterling's installed pristine baseline when available,

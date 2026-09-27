@@ -32,6 +32,11 @@ import * as nodePath from 'node:path';
 import { isOk } from '../../kernel';
 import { resolveRepoRoot } from '../../store';
 import { machineHome } from '../../init/machine-adapters';
+import { planHookReconciliation, type ReconciliationPlan } from '../../init/hook-reconciliation';
+import {
+  applyHookReconciliation,
+  recoverHookReconciliation,
+} from '../../init/hook-import-transaction';
 import { SHARED_PACK_VERSION } from '../../init/hook-packs/manifest-shared';
 import { shippedHandlerProvenance } from '../../init/hook-install';
 import {
@@ -161,9 +166,7 @@ function describeSelection(
  * this be config or an upstream fix?" is answered in the reason, and an
  * answer nobody displays cannot be reviewed.
  */
-function guardConfigRows(
-  policy: RepoHookPolicy
-):
+function guardConfigRows(policy: RepoHookPolicy):
   | {
       guard: string;
       prefixes: { prefix: string; reason: string }[];
@@ -851,6 +854,9 @@ interface MachineProjectSettings {
 }
 
 export interface HooksImportOptions {
+  readonly select?: string[];
+  readonly applyPlan?: string;
+  readonly recover?: string;
   readonly cwd?: string;
   readonly fromMachine?: boolean;
   readonly plan?: boolean;
@@ -906,6 +912,76 @@ export function runHooksImportCommand(options: HooksImportOptions = {}): number 
     return 1;
   }
 
+  if (
+    (options.applyPlan && (options.plan || options.select || options.recover)) ||
+    (options.recover && (options.plan || options.select)) ||
+    (options.select && !options.plan)
+  ) {
+    process.stdout.write(
+      'caws hooks import: incompatible selection, plan, apply or recovery options; nothing written.\n'
+    );
+    return 1;
+  }
+  if (options.applyPlan || options.recover || options.select) {
+    try {
+      if (options.applyPlan) {
+        const input = JSON.parse(readFileSync(options.applyPlan, 'utf8')) as
+          | ReconciliationPlan
+          | { reconciliation: ReconciliationPlan };
+        const plan = 'reconciliation' in input ? input.reconciliation : input;
+        const journal = applyHookReconciliation(plan, ctx.repoRoot, machineHome());
+        process.stdout.write(
+          JSON.stringify({
+            schema: 'caws.hooks_import.v1',
+            wrote: true,
+            cleared_entries: plan.selected,
+            journal,
+            project_wired: 'Run caws hooks compile and verify each native surface separately.',
+          }) + '\n'
+        );
+      } else if (options.recover) {
+        const journal = recoverHookReconciliation(options.recover, ctx.repoRoot, machineHome());
+        process.stdout.write(
+          JSON.stringify({ schema: 'caws.hooks_import.v1', recovered: true, journal }) + '\n'
+        );
+      } else {
+        const reconciliation = planHookReconciliation(ctx.repoRoot, machineHome(), options.select);
+        process.stdout.write(
+          options.json
+            ? JSON.stringify({
+                schema: 'caws.hooks_import.v1',
+                plan: true,
+                wrote: false,
+                reconciliation,
+              }) + '\n'
+            : reconciliation.entries
+                .map((e) => e.id + ' ' + e.disposition + ' — ' + e.reason)
+                .join('\n') +
+                '\n' +
+                reconciliation.blockers.join('\n') +
+                '\n'
+        );
+      }
+      return 0;
+    } catch (e) {
+      process.stdout.write(
+        JSON.stringify({
+          schema: 'caws.hooks_import.v1',
+          error: (e as Error).message,
+          complete: false,
+        }) + '\n'
+      );
+      return 1;
+    }
+  }
+  let reconciliation: ReconciliationPlan | { error: string } | undefined;
+  if (options.plan) {
+    try {
+      reconciliation = planHookReconciliation(ctx.repoRoot, machineHome());
+    } catch (e) {
+      reconciliation = { error: (e as Error).message };
+    }
+  }
   const statePath = machineStatePath(ctx.repoRoot);
   if (!existsSync(statePath)) {
     process.stdout.write(
@@ -934,11 +1010,15 @@ export function runHooksImportCommand(options: HooksImportOptions = {}): number 
           wrote: false,
           cleared: [],
           error: mutation.error,
+          ...(reconciliation ? { reconciliation } : {}),
         })}\n`
       );
       return 1;
     }
     process.stdout.write(`caws hooks import: refused. Nothing was written.\n  ${mutation.error}\n`);
+    if (reconciliation && 'entries' in reconciliation)
+      for (const e of reconciliation.entries)
+        process.stdout.write(`  ${e.id}: ${e.disposition} — ${e.reason}\n`);
     return 1;
   }
 
@@ -953,6 +1033,7 @@ export function runHooksImportCommand(options: HooksImportOptions = {}): number 
           changed: mutation.changed,
           wouldClear: mutation.clear,
           machineState: statePath,
+          ...(reconciliation ? { reconciliation } : {}),
         })}\n`
       );
       return 0;

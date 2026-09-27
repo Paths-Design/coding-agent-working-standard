@@ -1646,7 +1646,23 @@ export const HOOKS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--plan',
           description:
-            'Show what would be written and which machine surfaces would be cleared. Writes nothing.',
+            'Inventory all machine groups and preview legacy import or an explicit --select candidate. Writes nothing.',
+        },
+        {
+          flag: '--select <entry-id>',
+          description:
+            'With --plan, select a transferable surface:handler:name group (repeatable). Retained floor and dependency entries are never selected.',
+          collect: true,
+        },
+        {
+          flag: '--apply-plan <path>',
+          description:
+            'Apply a reviewed JSON reconciliation plan after rechecking its input identities. Clears only selected machine keys.',
+        },
+        {
+          flag: '--recover <path>',
+          description:
+            'Resume an interrupted selective import from its machine journal, refusing concurrent edits or a live owner.',
         },
         { flag: '--json', description: 'Emit the import result as JSON' },
       ],

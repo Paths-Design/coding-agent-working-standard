@@ -87,10 +87,35 @@ export function planHookReconciliation(
   homeInput: string,
   selectedInput?: readonly string[]
 ): ReconciliationPlan {
+  return buildPlan(rootInput, homeInput, selectedInput);
+}
+
+// Recovery inventories the original selection against live non-policy dependencies,
+// including added files. The two journaled policy states are checked by the writer.
+export function verifyReconciliationRecoveryInputs(plan: ReconciliationPlan): void {
+  const live = buildPlan(plan.root, plan.home, plan.selected, plan);
+  const policyFiles = new Set([
+    path.join(plan.root, REPO_HOOK_POLICY_PATH),
+    path.join(plan.home, 'state/projects', digest(plan.root) + '.json'),
+  ]);
+  for (const file of policyFiles) live.inputs[file] = plan.inputs[file] ?? null;
+  const { plan_id: _id, ...body } = live;
+  if (digest(JSON.stringify(body)) !== plan.plan_id)
+    throw new Error(
+      'Recovery dependency inventory or candidate changed; reconcile the journal explicitly'
+    );
+}
+
+function buildPlan(
+  rootInput: string,
+  homeInput: string,
+  selectedInput?: readonly string[],
+  snapshot?: ReconciliationPlan
+): ReconciliationPlan {
   const root = fs.realpathSync(rootInput),
     home = path.resolve(homeInput);
   const machineFile = path.join(home, 'state/projects', digest(root) + '.json');
-  const machineText = readOptional(machineFile);
+  const machineText = snapshot ? snapshot.machine_before : readOptional(machineFile);
   if (machineText === null) throw new Error('This project has no machine overrides to reconcile');
   const settings = JSON.parse(machineText) as {
     version: number;
@@ -105,7 +130,9 @@ export function planHookReconciliation(
     Array.isArray(settings.surfaces)
   )
     throw new Error('Machine state does not identify this canonical project');
-  const repoText = readOptional(path.join(root, REPO_HOOK_POLICY_PATH));
+  const repoText = snapshot
+    ? snapshot.repo_before
+    : readOptional(path.join(root, REPO_HOOK_POLICY_PATH));
   const parsed = parseRepoHookPolicy(repoText);
   if (!parsed.ok) throw new Error(parsed.error);
   const policy = parsed.policy;
@@ -120,6 +147,8 @@ export function planHookReconciliation(
   // Bind the reader/writer implementation and the original native registrations as well.
   observe(__filename);
   observe(path.join(__dirname, 'repo-hook-policy.js'));
+  observe(path.join(__dirname, 'hook-import-transaction.js'));
+  observe(path.join(__dirname, 'machine-adapters.js'));
   for (const file of ['.codex/hooks.json', '.claude/settings.json', '.claude/settings.local.json'])
     observe(path.join(root, file));
   for (const file of ['.codex/hooks.json', '.claude/settings.json'])
@@ -192,7 +221,11 @@ export function planHookReconciliation(
           observe(full);
           sourceTrees.add(path.dirname(full));
         }
-        const baselinePath = pristinePathFor(root, 'shared', '.caws/hooks/' + name);
+        const baselinePath = pristinePathFor(
+          root,
+          'shared',
+          '.caws/hooks/' + (kind === 'library' ? 'lib/' : '') + name
+        );
         const baselineText = observe(baselinePath),
           originText = observe(baselinePath + '.origin.json');
         let origin: ReconciliationEntry['baseline']['origin'] = 'unknown';
@@ -262,7 +295,7 @@ export function planHookReconciliation(
       const stat = fs.statSync(full);
       if (stat.isDirectory()) scan(full, boundary);
       else if (
-        /\.(sh|py|cjs|mjs)$/.test(child) ||
+        /\.(sh|bash|py|js|ts|jsx|tsx|cjs|mjs)$/.test(child) ||
         child === 'hook-policy.json' ||
         child.endsWith('.schema.json')
       )
@@ -279,38 +312,46 @@ export function planHookReconciliation(
   const nextSettings = JSON.parse(machineText) as typeof settings;
   const nextPolicy = parseRepoHookPolicy(repoText);
   if (!nextPolicy.ok) throw new Error(nextPolicy.error);
+  const selectedNames = new Map<string, Set<string>>();
   for (const id of selected) {
     const row = entries.find((e) => e.id === id);
     if (!row || row.disposition !== 'transferable')
       throw new Error('Selection is not transferable: ' + id);
-    const from = nextSettings.surfaces[row.surface]!;
+    if (!selectedNames.has(row.surface)) selectedNames.set(row.surface, new Set());
+    selectedNames.get(row.surface)!.add(row.name);
+  }
+  for (const [surface, names] of selectedNames) {
+    const from = nextSettings.surfaces[surface]!;
     const into =
-      nextPolicy.policy.surfaces[row.surface] ??
-      (nextPolicy.policy.surfaces[row.surface] = emptyRepoSurfacePolicy());
+      nextPolicy.policy.surfaces[surface] ??
+      (nextPolicy.policy.surfaces[surface] = emptyRepoSurfacePolicy());
     for (const [event, list] of Object.entries(from.disabled ?? {})) {
-      const chosen = list.filter((name) => name === row.name);
+      const chosen = list.filter((name) => names.has(name));
       if (chosen.length)
         into.disabled[event] = [
           ...(into.disabled[event] ?? []),
           ...chosen.map((handler) => ({ handler, reason: null })),
         ];
-      from.disabled![event] = list.filter((name) => name !== row.name);
+      from.disabled![event] = list.filter((name) => !names.has(name));
     }
     for (const [event, list] of Object.entries(from.extensions ?? {})) {
-      const chosen = list.filter((e) => e.handler.split(' ')[0] === row.name);
+      // Filter the source event list once. Group-ID sorting must never reorder it.
+      const chosen = list.filter((e) => names.has(e.handler.split(' ')[0]!));
       if (chosen.length)
         into.extensions[event] = [
           ...(into.extensions[event] ?? []),
           ...chosen.map((e) => ({
             ...e,
-            reason: `Imported from machine state (${row.surface}); no justification was recorded when it was set there.`,
+            reason: `Imported from machine state (${surface}); no justification was recorded when it was set there.`,
           })),
         ];
-      from.extensions![event] = list.filter((e) => e.handler.split(' ')[0] !== row.name);
+      from.extensions![event] = list.filter((e) => !names.has(e.handler.split(' ')[0]!));
     }
-    if (from.handlers?.[row.name]) {
-      into.handlers[row.name] = from.handlers[row.name]!;
-      delete from.handlers[row.name];
+    for (const name of names) {
+      if (from.handlers?.[name]) {
+        into.handlers[name] = from.handlers[name]!;
+        delete from.handlers[name];
+      }
     }
   }
   const repoAfter = selected.length
@@ -383,7 +424,7 @@ export function planHookReconciliation(
     machine_after: selected.length ? JSON.stringify(nextSettings, null, 2) + '\n' : machineText,
     runtime_verified: runtimeRoot !== null && !blockers.some((b) => b.startsWith('Runtime')),
     dependency_scope:
-      'All source siblings beneath hook and override directories; dynamic non-source loads require separate behavioral qualification.',
+      'Visible shell, Python and JavaScript/TypeScript source beneath hook and override directories; hidden or dynamic non-source loads require separate behavioral qualification.',
   };
   return { ...body, plan_id: digest(JSON.stringify(body)) };
 }
