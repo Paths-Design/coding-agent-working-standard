@@ -82,11 +82,11 @@ evidence:
     test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
   - criterion_id: A3
     status: pass
-    evidence_ref: "Held and unmet obligations remain explicit; doctor plan tests select inspection and condition closure on completion, with no mutation. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
-    recorded_at: "2026-09-27T06:40:45.968Z"
-    test_nodeid: "packages/caws-cli/tests/kernel/unit/doctor-history.test.ts::recorded held obligations stay visible; passing evidence removes only its criterion"
-    commit_sha: "25584e6972887075f33d9923a303b2faab12b5ed"
-    test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
+    evidence_ref: "JSON and human repair plans expose unmet criteria, status, requirement and HELD evidence while retaining read-only behavior and inspecting the spec before mutation. Raw ignored logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/human-plan-final-validation.log; human-plan-staged-gates.log; final-regression.log."
+    recorded_at: "2026-09-27T06:49:02.228Z"
+    test_nodeid: "packages/caws-cli/tests/shell/doctor-plan.test.js::renders a human repair plan and preserves default doctor output when not requested"
+    commit_sha: "7c85393379c7de12263bf27ae04747afeaec14d5"
+    test_verified_at: "7c85393379c7de12263bf27ae04747afeaec14d5"
   - criterion_id: A4
     status: pass
     evidence_ref: "Inventory and origin fixtures cover retained floor/library groups, unknown absorbed baselines and new upstream digests. Live Sterling preview inventories 33 groups and preserves all 12 chains; preview only. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
@@ -103,8 +103,8 @@ evidence:
     test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
   - criterion_id: A6
     status: pass
-    evidence_ref: "Scoped build/types, 340 regression tests, staged gates and read-only doctor passed within their measured contracts; six bounded manual mutation controls killed with exact byte restoration. No Sterling or machine activation writes. Pre-existing template TUI marker drift retained. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
-    recorded_at: "2026-09-27T06:41:04.921Z"
-    test_nodeid: "packages/caws-cli/tests/shell/hooks-mutating.test.js::blocked whole preview inventories retained floor entries; selected preview applies only its group"
-    commit_sha: "25584e6972887075f33d9923a303b2faab12b5ed"
-    test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
+    evidence_ref: "Prior 340-test regression and six killed manual controls remain applicable. Final human renderer addition passes build/types and 30 doctor/history tests plus staged gates; the cited held-plan test is executed at the current clean source revision. No Sterling writes or machine activation. Pre-existing template marker drift retained. Raw ignored logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/human-plan-final-validation.log; human-plan-staged-gates.log; final-regression.log."
+    recorded_at: "2026-09-27T06:49:11.593Z"
+    test_nodeid: "packages/caws-cli/tests/shell/doctor-plan.test.js::renders a human repair plan and preserves default doctor output when not requested"
+    commit_sha: "7c85393379c7de12263bf27ae04747afeaec14d5"
+    test_verified_at: "7c85393379c7de12263bf27ae04747afeaec14d5"
