@@ -1,0 +1,63 @@
+id: CAWS-RECONCILIATION-ACCOUNTING-AND-IMPORT-001
+title: 'Diagnose lifecycle history accurately and reconcile machine hook policy without discarding retained overrides'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-27T05:40:45.320Z'
+updated_at: '2026-09-27T05:40:45.320Z'
+created_by_session: '01a0e13e-18df-7803-a4fa-cd06d2225972'
+blast_radius:
+  modules:
+    - 'doctor diagnostic accounting'
+    - 'hook policy reconciliation and selective import'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init'
+    - 'packages/caws-cli/src/kernel/doctor'
+    - 'packages/caws-cli/src/shell/commands/doctor.ts'
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/src/shell'
+    - 'packages/caws-cli/tests/init'
+    - 'packages/caws-cli/tests/kernel/unit'
+    - 'packages/caws-cli/tests/shell/doctor-plan.test.js'
+    - 'packages/caws-cli/tests/shell/hooks-mutating.test.js'
+    - 'packages/caws-cli/tests/shell/hooks-readonly.test.js'
+    - 'packages/caws-cli/tests/store/doctor-snapshot-tombstone.test.js'
+    - 'docs/architecture/repo-local-hook-policy.md'
+    - 'docs/guides/sterling-machine-runtime-migration.md'
+  out: []
+invariants:
+  - 'Doctor remains read-only and never converts unknown observation into absence or completion.'
+  - 'Repository policy cannot disable or replace floor handlers; retained machine overrides survive selective migration.'
+  - 'Reviewed migration plans bind input identities and fail closed on stale inputs or incomplete transaction recovery.'
+acceptance:
+  - id: A1
+    given: 'actual Git ignore rules and tracked ephemeral paths'
+    when: 'doctor observes protection'
+    then: 'missing coverage, local-only coverage, formatting drift and tracked runtime state are distinguished without writes'
+  - id: A2
+    given: 'ordered create, untrack, destroy and recreate events and historical waiver uses'
+    when: 'doctor evaluates history'
+    then: 'intentional dispositions are accounted for and new orphan lifecycles, invalid uses and unknown evidence remain visible'
+  - id: A3
+    given: 'unbound specs with unmet acceptance or recorded holds'
+    when: 'a repair plan is rendered'
+    then: 'unresolved obligations are shown and no mutation or closure is implied'
+  - id: A4
+    given: 'mixed floor and transferable machine entries and uncertain hook baselines'
+    when: 'reconciliation is previewed'
+    then: 'every entry has an explicit disposition, origins and effective chains are observable and no state changes'
+  - id: A5
+    given: 'a reviewed reconciliation plan'
+    when: 'selective application or recovery runs'
+    then: 'only admitted keys migrate, floor and unselected entries remain, stale plans refuse, and partial writes have a recoverable journal'
+  - id: A6
+    given: 'committed changes and synthetic adversarial fixtures'
+    when: 'scoped build, type checks, regression controls, doctor and gates run'
+    then: 'checks establish the measured behavior without modifying Sterling or machine activation'
+non_functional: {}
+contracts:
+  - name: 'reconciliation'
+    type: behavior
