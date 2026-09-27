@@ -256,6 +256,16 @@ function renderRepairPlan(
     out(`  source: ${item.source_rule} (${item.severity})`);
     out(`  allowed: ${item.allowed_mutation ?? 'refused'}`);
     if (item.refusal_reason !== undefined) out(`  refusal: ${item.refusal_reason}`);
+    const unmet = item.details?.unmet_acceptance;
+    if (Array.isArray(unmet)) {
+      for (const raw of unmet) {
+        if (raw === null || typeof raw !== 'object') continue;
+        const obligation = raw as Record<string, unknown>;
+        out(`  unmet: ${obligation.criterion_id} [${obligation.status}] ${obligation.then}`);
+        if (typeof obligation.evidence_ref === 'string')
+          out(`    evidence: ${obligation.evidence_ref}`);
+      }
+    }
     out(`  next: ${item.next_command}`);
   }
 }
