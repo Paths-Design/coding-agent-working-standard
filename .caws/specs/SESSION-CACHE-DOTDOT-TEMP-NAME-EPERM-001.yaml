@@ -50,3 +50,10 @@ contracts:
     type: 'contract-test'
     path: 'packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py'
     description: 'Temp name never dot-dot-prefixed and unique; end-to-end envelope write leaves valid JSON and no temp residue; installed copy matches the template scheme.'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "python3 -m pytest packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py::test_temp_name_is_not_dotdot_prefixed_and_is_unique[hook0]"
+    recorded_at: "2026-09-29T00:15:37.843Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py::test_temp_name_is_not_dotdot_prefixed_and_is_unique[hook0]"
+    test_verified_at: "1faf5641e2d07687511a47d877ae735a949d0a73"
