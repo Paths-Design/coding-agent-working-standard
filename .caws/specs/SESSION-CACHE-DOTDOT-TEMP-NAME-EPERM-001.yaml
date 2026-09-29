@@ -2,9 +2,10 @@ id: SESSION-CACHE-DOTDOT-TEMP-NAME-EPERM-001
 title: 'Session-cache atomic temp files no longer use a dot-dot-prefixed name'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-session-cache-dotdot
 created_at: '2026-09-28T17:20:00.000Z'
-updated_at: '2026-09-28T17:20:00.000Z'
+updated_at: '2026-09-29T00:09:12.898Z'
 created_by_session: 'session-142f2855-d906-45e6-adb9-3d7a3df7651b'
 blast_radius:
   modules:
