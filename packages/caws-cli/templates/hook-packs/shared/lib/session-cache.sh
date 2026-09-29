@@ -48,7 +48,10 @@ def directory(parent, name):
     return fd
 
 def atomic_json(parent, name, value):
-    temporary = '.' + name + '.' + uuid.uuid4().hex
+    # The temp name must never begin with two dots: '..'-prefixed names are
+    # flagged as traversal-looking by path sanitizers / sandbox proxies and
+    # denied outright, which fail-opens every capture.
+    temporary = 'tmp-' + name + '.' + uuid.uuid4().hex
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                  0o600, dir_fd=parent)
     try:
