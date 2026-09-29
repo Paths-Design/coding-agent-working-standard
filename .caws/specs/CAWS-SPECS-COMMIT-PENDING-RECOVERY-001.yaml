@@ -78,3 +78,9 @@ evidence:
     recorded_at: "2026-09-29T10:19:58.814Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-commit-recovery.test.js::A3: surfaces the refusal reason, exits 1, and never sweeps foreign content"
     test_verified_at: "95537b9988f8c51b80f3a05f98b7cabb268a8fba"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "cd packages/caws-cli && npx jest tests/shell/specs-commit-recovery.test.js"
+    recorded_at: "2026-09-29T10:20:05.491Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-commit-recovery.test.js::A4: lifecycle remediation names caws specs commit as the sanctioned recovery"
+    test_verified_at: "95537b9988f8c51b80f3a05f98b7cabb268a8fba"
