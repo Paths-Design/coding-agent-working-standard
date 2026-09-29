@@ -34,6 +34,7 @@ import {
   resolveRepoRoot,
   runSpecsMigrateApply,
 } from '../../store';
+import { autoCommit, isPathDirty } from '../../store/git-autocommit';
 import type { MigrationReport, SpecsMigrateApplyResult } from '../../store';
 import {
   activateSpec,
@@ -137,16 +138,22 @@ function emitJson(out: (line: string) => void, payload: unknown): void {
  */
 function surfaceAuditCommit(
   auditCommit: { readonly kind: string; readonly reason?: string } | undefined,
-  err: (s: string) => void
+  err: (s: string) => void,
+  specId?: string
 ): void {
   if (auditCommit !== undefined && auditCommit.kind === 'refused_dirty') {
     err('caws specs: the lifecycle change was applied but NOT committed.');
     if (auditCommit.reason !== undefined && auditCommit.reason.length > 0) {
       err(`  reason: ${auditCommit.reason}`);
     }
+    const recovery =
+      specId !== undefined && specId.length > 0
+        ? `caws specs commit ${specId}`
+        : 'caws specs commit <id>';
     err(
       '  The spec YAML is changed in your working tree but the audit commit ' +
-        'did not land. Commit it manually (git add <spec> && git commit), ' +
+        `did not land. Run \`${recovery}\` to land the pending audit state ` +
+        'through the governed recovery path (CAWS-SPECS-COMMIT-PENDING-RECOVERY-001), ' +
         'then verify with git log.'
     );
   }
@@ -1130,7 +1137,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     out('  (scope.in is authoritative inside that worktree; base-branch writes are');
     out('  governed by the worktree-write-guard, not scope.in.)');
   }
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -1477,9 +1484,64 @@ export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
       err(renderDiagnostics(outcome.cause, { showData }));
       return 1;
     }
-    surfaceAuditCommit(outcome.data?.audit_commit, err);
+    surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   }
   return plan.valid ? 0 : 1;
+}
+
+// ─── caws specs commit (CAWS-SPECS-COMMIT-PENDING-RECOVERY-001) ───────────
+//
+// Governed recovery for "spec mutation succeeded, audit commit did not
+// land". A harness sandbox can protect .git (index.lock denial) so the
+// AGENT cannot run the manual `git add <spec> && git commit` the old
+// remediation named — canonical main stayed dirty and the next session
+// inherited ambiguous state. This command runs the commit through the
+// SAME autoCommit discipline as the lifecycle writers: pathspec-scoped
+// to the one spec YAML, never -A, never --no-verify, pre-commit hooks
+// respected. Here the commit IS the operation, so the exit code reflects
+// it (0 resolved, 1 refused, 2 composition failure).
+
+export interface SpecsCommitOptions extends BaseCommandOptions {
+  readonly id: string;
+}
+
+export function runSpecsCommitCommand(opts: SpecsCommitOptions): number {
+  const { cwd, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'commit');
+  if (ctx === null) return 2;
+
+  const relPath = path.join('.caws', 'specs', `${opts.id}.yaml`);
+  if (!fs.existsSync(path.join(ctx.repoRoot, relPath))) {
+    err(`caws specs commit: no spec file at ${relPath} (id: ${opts.id}).`);
+    return 1;
+  }
+
+  if (!isPathDirty(ctx.repoRoot, relPath)) {
+    out(`caws specs commit: ${opts.id} is already committed — no pending audit state.`);
+    return 0;
+  }
+
+  const outcome = autoCommit({
+    repoRoot: ctx.repoRoot,
+    paths: [relPath],
+    message: `chore(caws): commit pending audit state for ${opts.id}`,
+    wasDirtyBeforeWrite: false,
+  });
+
+  if (outcome.kind === 'committed') {
+    const sha = outcome.sha !== undefined && outcome.sha.length > 0 ? ` ${outcome.sha}` : '';
+    out(`committed pending audit state for ${opts.id}${sha}`);
+    return 0;
+  }
+  if (outcome.kind === 'skipped_no_git') {
+    err('caws specs commit: repo root is not inside a git working tree.');
+    return 2;
+  }
+  err(`caws specs commit: refused for ${opts.id}.`);
+  if (outcome.reason !== undefined) {
+    err(`  reason: ${outcome.reason}`);
+  }
+  return 1;
 }
 
 // ─── caws specs prune-drafts ──────────────────────────────────────────────
@@ -1590,7 +1652,7 @@ export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): 
         out(`  failed ${entry.id}: ${entry.reason}`);
       }
     }
-    surfaceAuditCommit(outcome.data?.audit_commit, err);
+    surfaceAuditCommit(outcome.data?.audit_commit, err, undefined);
     return ok ? 0 : 1;
   }
 
@@ -1708,7 +1770,7 @@ export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
     return 1;
   }
   out(`activated ${outcome.id}`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -1928,7 +1990,7 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
   out(
     `recorded evidence for ${opts.id} AC ${opts.ac} (status: ${opts.status}) — dual-write: spec evidence block + ac_recorded event`
   );
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2129,7 +2191,7 @@ export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number 
   for (const w of outcome.warnings ?? []) {
     err(`caws advisory (non-blocking): ${w}`);
   }
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2263,7 +2325,7 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
   for (const w of outcome.warnings ?? []) {
     err(`caws advisory (non-blocking): ${w}`);
   }
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2316,7 +2378,7 @@ export function runSpecsReopenCommand(opts: SpecsReopenOptions): number {
     return 1;
   }
   out(`reopened ${outcome.id} (lifecycle_state: active)`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2395,7 +2457,7 @@ export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
     return 1;
   }
   out(`amended ${outcome.id}`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2449,7 +2511,7 @@ export function runSpecsDeactivateCommand(opts: SpecsDeactivateOptions): number 
     return 1;
   }
   out(`deactivated ${outcome.id} (lifecycle_state: draft)`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2630,7 +2692,7 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     for (const warning of outcome.warnings ?? []) {
       err(`caws advisory (non-blocking): ${warning}`);
     }
-    surfaceAuditCommit(outcome.data?.audit_commit, err);
+    surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
     return ok ? 0 : 1;
   }
 
@@ -2670,7 +2732,7 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
   for (const w of outcome.warnings ?? []) {
     err(`caws advisory (non-blocking): ${w}`);
   }
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2719,7 +2781,7 @@ export function runSpecsRetireDraftCommand(opts: SpecsRetireDraftOptions): numbe
     return 1;
   }
   out(`retired draft ${outcome.id} (recoverable via caws specs show ${outcome.id} --archived)`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
