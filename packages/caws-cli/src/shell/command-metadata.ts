@@ -144,7 +144,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/verify-acs/close/reopen/archive/prune-archive/migrate/validate/relocate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/commit/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/verify-acs/close/reopen/archive/prune-archive/migrate/validate/relocate)',
   options: [
     {
       flag: '--status <status>',
@@ -347,6 +347,18 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         { flag: '--json', description: 'Emit restore plan/apply result as JSON' },
         DATA_OPTION,
       ],
+    },
+    {
+      kind: 'leaf',
+      name: 'commit',
+      argument: {
+        name: 'id',
+        required: true,
+        description: 'Spec id whose pending audit state to commit',
+      },
+      description:
+        'Governed recovery for a spec mutation whose audit commit did not land (sandbox-protected .git, index.lock contention, or a pre-existing dirty tree). Stages and commits ONLY .caws/specs/<id>.yaml through the same path-scoped autoCommit discipline as lifecycle writers — never -A, never --no-verify, pre-commit hooks respected. A clean spec is a reported no-op; exit 1 surfaces the refusal reason. (CAWS-SPECS-COMMIT-PENDING-RECOVERY-001)',
+      options: [DATA_OPTION],
     },
     {
       kind: 'leaf',

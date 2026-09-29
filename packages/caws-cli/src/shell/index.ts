@@ -195,6 +195,7 @@ export {
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,
+  runSpecsCommitCommand,
   runSpecsRestoreCommand,
   runSpecsRetireDraftCommand,
   runSpecsPruneDraftsCommand,

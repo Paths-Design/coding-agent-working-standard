@@ -94,6 +94,7 @@ import {
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,
+  runSpecsCommitCommand,
   runSpecsRestoreCommand,
   runSpecsRetireDraftCommand,
   runSpecsPruneDraftsCommand,
@@ -1427,6 +1428,16 @@ export function registerShellCommands(
         ...(opts.as !== undefined ? { targetState: opts.as } : {}),
         ...(opts.apply === true ? { apply: true } : {}),
         ...(opts.json === true ? { json: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'commit')).action(
+    (id: string, opts: { data?: boolean }) => {
+      const code = runSpecsCommitCommand({
+        id,
         showData: opts.data === true,
       });
       exit(code);
