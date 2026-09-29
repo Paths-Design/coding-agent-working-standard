@@ -59,3 +59,10 @@ contracts:
     type: 'contract-test'
     path: 'packages/caws-cli/tests/shell/specs-commit-recovery.test.js'
     description: 'Covers A1 (dirty spec committed, sha reported, exit 0), A2 (clean no-op, exit 0, no empty commit), A3 (refusal surfaces reason, exit 1, foreign staged content untouched), A4 (lifecycle remediation names the recovery command).'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "cd packages/caws-cli && npx jest tests/shell/specs-commit-recovery.test.js"
+    recorded_at: "2026-09-29T10:19:37.279Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-commit-recovery.test.js::A1: commits a pending spec mutation, reports the sha, exits 0"
+    test_verified_at: "95537b9988f8c51b80f3a05f98b7cabb268a8fba"
