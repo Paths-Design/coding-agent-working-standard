@@ -88,3 +88,9 @@ evidence:
     recorded_at: "2026-10-01T20:32:06.164Z"
     test_nodeid: "packages/caws-cli/tests/docs/agent-surfaces-sync.test.js::populate-doc-markers.mjs --check exits 0 against the committed docs"
     test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Replays .husky/pre-commit's npx + lint-staged invocation (parsed from the hook) in a scratch npm-workspaces repo: fenced packages/pkg/docs/fenced.md stays byte-identical, loose.md is formatted. Control case drops --workspaces=false and both files are reformatted (lint-staged --debug showed cwd packages/pkg), so the cited case can fail for the right reason. Live in this repo: committing e436f05d ran the fixed hook over 3 staged md files; both fenced templates' shasums were unchanged and populate-doc-markers --check stayed up to date, while unfenced docs/api/schema.md was formatted. Commit 6ea6f785."
+    recorded_at: "2026-10-01T20:32:11.430Z"
+    test_nodeid: "packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js::the hook invocation leaves a fenced file byte-identical and formats an unfenced one"
+    test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
