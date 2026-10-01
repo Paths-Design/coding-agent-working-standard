@@ -29,7 +29,7 @@ caws doctor              # Project-wide CAWS drift detection
 .caws/
   specs/                 # Per-feature specs (canonical; the only spec location)
   specs/.archive/        # Archived specs (filesystem-authoritative)
-  policy.yaml            # Gates + risk_tier change budgets
+  policy.yaml            # Gates + risk_tier sizing goals (advisory)
   waivers/               # Per-id waiver files
   agents.json            # Session registry (gitignored runtime cache)
   leases/                # Per-session liveness leases (gitignored)
@@ -43,11 +43,9 @@ caws doctor              # Project-wide CAWS drift detection
 The governed command groups are:
 
 <!-- command-groups:start -->
-
 ```
 init  doctor  status  tui  scope  hooks  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree  goal
 ```
-
 <!-- command-groups:end -->
 
 Run `caws <group> --help` for the authoritative options of any group.
@@ -179,14 +177,15 @@ caws specs archive <id>
 
 The `.caws/specs/.archive/` directory is filesystem-authoritative — `caws specs list` reports any file under it as `lifecycle_state: archived` regardless of YAML literal. `caws specs create` refuses ids that already exist in `.archive/`.
 
-> **Budget note**: `change_budget:` is not accepted as a top-level spec field in v11.
-> Budgets derive from `.caws/policy.yaml` `risk_tiers`. Adjust thresholds via `policy.yaml`,
-> not via spec edits.
+> **Budget note**: `change_budget:` is not a v11 spec field. Risk-tier budgets live in
+> `.caws/policy.yaml` `risk_tiers` as an advisory sizing goal: `budget_limit` reports an
+> overage and never blocks, and no waiver is needed. Do not trim, defer or stub work to fit
+> one; if a change outgrows its plan, say so in the spec.
 
 ## Key Rules
 
 1. **Stay in scope** — only edit files admitted by `scope.in`, never touch `scope.out`
-2. **Respect change budgets** — stay within `max_files` and `max_loc` limits derived from `risk_tier`
+2. **Treat budgets as a sizing goal** — `max_files` / `max_loc` from `risk_tier` are advisory; never trim, defer or stub work to fit them, and say so in the spec when a change outgrows its plan
 3. **No shadow files** — edit in place, never create `*-enhanced.*`, `*-new.*`, `*-v2.*`, `*-final.*` copies
 4. **Tests first** — write failing tests before implementation
 5. **Deterministic code** — inject time, random, and UUID generators for testability
@@ -199,15 +198,15 @@ The `.caws/specs/.archive/` directory is filesystem-authoritative — `caws spec
 
 Gates are declared in `.caws/policy.yaml` with a `mode` (`block | warn | skip`). v11's five admissible gate names:
 
-| Gate                | Typical mode | Purpose                                                     |
-| ------------------- | ------------ | ----------------------------------------------------------- |
-| `budget_limit`      | block        | Enforce change_budget limits derived from `risk_tier`       |
-| `spec_completeness` | block        | Refuse load on schema-invalid specs                         |
-| `scope_boundary`    | block        | Refuse edits outside the bound spec's `scope.in`            |
-| `god_object`        | warn         | Flag large/responsibility-overloaded modules                |
-| `todo_detection`    | warn         | Flag TODOs/placeholders/dangling promises in committed code |
+| Gate                | Typical mode | Purpose                                                                         |
+| ------------------- | ------------ | ------------------------------------------------------------------------------- |
+| `budget_limit`      | warn         | Report a change over the `risk_tiers` sizing goal; advisory, never blocks       |
+| `spec_completeness` | block        | Refuse load on schema-invalid specs                                             |
+| `scope_boundary`    | block        | Refuse edits outside the bound spec's `scope.in`                                |
+| `god_object`        | warn         | Flag large/responsibility-overloaded modules                                    |
+| `todo_detection`    | warn         | Flag TODOs/placeholders/dangling promises in committed code                     |
 
-Risk tier governs change-budget thresholds but does NOT directly set per-gate enforcement levels — the gate `mode` is global. v10's "T1 90% coverage / T2 80% / T3 70%" table is gone; coverage and mutation gates were not ported into v11's gate vocabulary. Run those outside CAWS in CI if you need them.
+Risk tier selects the sizing goal but does NOT set per-gate enforcement — the gate `mode` is global, and `budget_limit` runs as advisory whatever mode is declared (a declared `block` is reported as not honored). v10's "T1 90% coverage / T2 80% / T3 70%" table is gone; coverage and mutation gates were not ported into v11's gate vocabulary. Run those outside CAWS in CI if you need them.
 
 Run `caws gates run --spec <id>` to evaluate all declared gates. Each evaluation appends a `gate_evaluated` event to `.caws/events.jsonl`.
 
@@ -263,7 +262,7 @@ Repeat `--gate` for multiple gates. Gate names must appear in `.caws/policy.yaml
 - [ ] Lints pass (`npm run lint`)
 - [ ] Types check (`npm run typecheck`)
 - [ ] No scope violations (`caws gates run --spec <id>` passes scope_boundary)
-- [ ] Change budget not exceeded (`caws gates run` passes budget_limit; check `policy.yaml risk_tiers` for the threshold)
+- [ ] Any `budget_limit` overage is explained in the spec, not trimmed away (it is advisory and never blocks)
 - [ ] Acceptance criteria proven (each `acceptance[i]` carries `test_nodeids:` or `evidence:`; record proofs via `caws specs evidence <id> --ac <ac> --status pass --evidence-ref "<test command>"` — the only writer of the `evidence:` block the close gate reads)
 - [ ] Conventional commit message
 
