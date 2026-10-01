@@ -52,3 +52,8 @@ evidence:
     evidence_ref: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats tests 1-11 (React Omit<..., \"placeholder\"> union + prop + attribute + JSDoc noun, RN props, CSS ::placeholder/:placeholder-shown, bare JSDoc Placeholder, descriptive comments, 'the skeleton is a placeholder', aria-placeholder beside 'later', ::placeholder before 'until', HTML comment, URL, Edit attribute) each assert empty stdout AND no strikes.json under an isolated HOME; 35/35 pass at this commit via 'bats tests/hooks/bats/shortcut-language-check.bats'. Against the pre-fix guard (SHORTCUT_GUARD_UNDER_TEST=canonical .caws/hooks copy, body sha-identical to the old template) 10 of these fail by firing; the skeleton case passes on both and is killed by the qualified-bare-is mutant."
     recorded_at: "2026-10-01T18:06:09.956Z"
     commit_sha: "75e0e3e9d3fa4084046cb51eb14d5f09cb16f767"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "shortcut-language-check.bats tests 12-15 (type Todo / todos.filter, XXX-XXX-XXXX input mask, \"src/*.ts\" and \"src/**/*.ts\" globs followed by an identifier named todo) assert empty stdout and no strikes.json; all pass at this commit and all 4 fail against the pre-fix guard. Mutants killed: code-keyword-any-case (12,14,15), code-keyword-adds-XXX (13), opener-any-prefix (14 — the single-star glob case)."
+    recorded_at: "2026-10-01T18:07:16.205Z"
+    commit_sha: "75e0e3e9d3fa4084046cb51eb14d5f09cb16f767"
