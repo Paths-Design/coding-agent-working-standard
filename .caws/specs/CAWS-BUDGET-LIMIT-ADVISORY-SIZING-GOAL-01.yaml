@@ -2,9 +2,11 @@ id: CAWS-BUDGET-LIMIT-ADVISORY-SIZING-GOAL-01
 title: 'Risk-tier change budgets are an advisory sizing goal, never an enforced limit'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'budget_limit is advisory by construction (kernel ADVISORY_GATES): gates run, list and explain report the effective warn mode; a declared block is flagged not honored by semantics, doctor and the renderer; init defaults to warn; scope_boundary and spec_completeness still block. Doctrine and .husky/pre-commit messages drop the budget-waiver prescription. Not in this slice: packages/caws-cli/templates/{CLAUDE,agents}.md still teach ''Respect change budgets'' and a budget_limit waiver — blocked by uncommitted tui marker regeneration in canonical (pre-existing agent-surfaces-sync failure from 019fe322); deriveBudget and the min_approvers_for_budget_raise schema key are now dead and left for a separate removal.'
 created_at: '2026-10-01T18:43:51.645Z'
-updated_at: '2026-10-01T19:17:18.489Z'
+updated_at: '2026-10-01T19:27:52.994Z'
 created_by_session: '367970bc-9a41-453e-8bbf-e5deb5cce4b5'
 blast_radius:
   modules:
