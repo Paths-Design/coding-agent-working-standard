@@ -3,7 +3,6 @@ title: 'Risk-tier change budgets are an advisory sizing goal, never an enforced 
 risk_tier: 2
 mode: feature
 lifecycle_state: active
-worktree: wt-budget-advisory
 created_at: '2026-10-01T18:43:51.645Z'
 updated_at: '2026-10-01T19:17:18.489Z'
 created_by_session: '367970bc-9a41-453e-8bbf-e5deb5cce4b5'
