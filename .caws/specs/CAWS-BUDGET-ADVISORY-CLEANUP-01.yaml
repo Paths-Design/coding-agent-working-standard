@@ -99,3 +99,8 @@ evidence:
     evidence_ref: "bash .husky/tests/run.sh: 57 passed, 0 failed. T12a stages an index-only .caws/specs/HOOK-TEST-GUARD3-FIXTURE.yaml adding change_budget and asserts exit 1 with 'adds a change_budget key', 'advisory sizing goal', 'needs no waiver' and no 'gate budget_limit'. T12b (control) stages the same fixture without the key and Guard 3 stays silent; T12c asserts the fixture is gone from the index. main's Guard 3 message ('Use a waiver: ... --gate budget_limit') fails T12a on both the advisory and no-waiver checks."
     recorded_at: "2026-10-01T20:32:42.714Z"
     commit_sha: "6ea6f7858e455abf39d8a2234ac19a1e8530cf37"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "docs/api/schema.md 'Tier Policy Configuration' (v10 min_branch/min_mutation/requires_contracts/allowed_modes JSON schema + TierPolicy interface) replaced by 'Risk-Tier Policy (risk_tiers in .caws/policy.yaml)': the policy.v1.json risk_tiers/tierBudget shape (max_files and max_loc required per tier), the monotonicity rule, a RiskTierBudget interface, and prose that the values are an advisory sizing goal budget_limit never blocks on. No inbound links to the old heading anchor."
+    recorded_at: "2026-10-01T20:32:47.332Z"
+    commit_sha: e436f05d923262b6e990ea3b3733bc39773900a2
