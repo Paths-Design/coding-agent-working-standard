@@ -134,8 +134,16 @@ fi
 # With concurrent agents committing constantly, that is cross-agent work loss.
 # This repo's own doctrine forbids touching the shared stash stack for exactly
 # this reason.
+#
+# --workspaces=false is load-bearing too. The root .npmrc sets workspaces=true,
+# which makes npx run lint-staged — and so prettier — from the workspace
+# directory instead of the repo root. Prettier reads .prettierignore from its
+# cwd, so the root fence was never consulted and every file fenced there (the
+# populate-doc-markers targets, the managed hook-pack templates) was
+# reformatted on commit, breaking the generated marker regions the fence
+# exists to protect.
 if [ -n "$LINTABLE" ] && [ -f "$CAWS_ROOT/package.json" ] && command -v npx >/dev/null 2>&1; then
-  if ! npx --no-install lint-staged --no-stash; then
+  if ! npx --no-install --workspaces=false lint-staged --no-stash; then
     echo "BLOCKED: lint-staged failed." >&2
     echo "  Fix the reported lint/format errors, then re-stage." >&2
     echo "  Note: --no-stash means there is no automatic backup; your working tree" >&2

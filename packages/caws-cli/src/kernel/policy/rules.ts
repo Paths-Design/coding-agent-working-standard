@@ -1,4 +1,4 @@
-// Stable rule identifiers for policy + budget diagnostics.
+// Stable rule identifiers for policy diagnostics.
 // Public contract; renaming is a breaking change.
 
 export const POLICY_RULES = {
@@ -24,10 +24,7 @@ export const POLICY_RULES = {
   ADVISORY_GATE_BLOCK_NOT_HONORED: 'policy.semantic.gates.advisory_block_not_honored',
   NON_GOVERNED_FORCE_USED: 'policy.semantic.non_governed_zones.force_used',
   ROOT_PASSTHROUGH_RISKY_FILE: 'policy.semantic.root_passthrough.risky_file',
-
-  // Budget derivation
-  BUDGET_TIER_NOT_FOUND: 'policy.budget.tier_not_found',
-  WAIVER_MALFORMED: 'policy.budget.waiver.malformed',
+  BUDGET_RAISE_APPROVERS_INERT: 'policy.semantic.waivers.budget_raise_approvers_inert',
 } as const;
 
 export type PolicyRule = (typeof POLICY_RULES)[keyof typeof POLICY_RULES];

@@ -886,6 +886,57 @@ if [ -z "${T10SKIP:-}" ]; then
   fi
 fi
 
+# ─────────────────────────────────────────────────────────────────────────
+# T12 Guard 3 refuses a spec that adds change_budget, and says budgets are an
+#     advisory sizing goal needing no waiver — never a budget_limit waiver.
+#     Index-only: the fixture spec is a blob staged with update-index (the
+#     specs dir is sparse-excluded in lane checkouts, so the working tree is
+#     never touched) and is force-removed from the index afterwards. npx is
+#     stubbed so the control run's lint-staged stage cannot reformat anything.
+# ─────────────────────────────────────────────────────────────────────────
+t12_spec=".caws/specs/HOOK-TEST-GUARD3-FIXTURE.yaml"
+mkdir -p "$SCRATCH/bin-npx-noop"
+printf '#!/bin/sh\nexit 0\n' > "$SCRATCH/bin-npx-noop/npx"
+chmod +x "$SCRATCH/bin-npx-noop/npx"
+run_t12() {
+  # $1 = fixture spec body; prints "<exit>|<hook output>"
+  local blob out code
+  blob=$(printf '%s' "$1" | git hash-object -w --stdin)
+  git update-index --add --cacheinfo "100644,$blob,$t12_spec"
+  out=$(PATH="$SCRATCH/bin-npx-noop:$PATH" bash .husky/pre-commit 2>&1); code=$?
+  git update-index --force-remove "$t12_spec"
+  printf '%s|%s' "$code" "$out"
+}
+if git ls-files --error-unmatch "$t12_spec" >/dev/null 2>&1; then
+  bad "T12 Guard 3 change_budget refusal" "skipped: $t12_spec is already tracked"
+else
+  t12=$(run_t12 $'id: HOOK-TEST-GUARD3\nchange_budget:\n  max_files: 1\n')
+  t12_exit=${t12%%|*}; t12_out=${t12#*|}
+  if [ "$t12_exit" = "1" ] \
+     && printf '%s' "$t12_out" | grep -q 'adds a change_budget key' \
+     && printf '%s' "$t12_out" | grep -q 'advisory sizing goal' \
+     && printf '%s' "$t12_out" | grep -q 'needs no waiver' \
+     && ! printf '%s' "$t12_out" | grep -q 'gate budget_limit'; then
+    ok "T12a a spec adding change_budget is refused with the advisory-budget message, no budget waiver"
+  else
+    bad "T12a a spec adding change_budget is refused with the advisory-budget message" \
+        "exit=$t12_exit out=$t12_out"
+  fi
+  # Control: without the key Guard 3 stays silent, so T12a cannot pass on a
+  # hook that refuses every staged spec.
+  t12c=$(run_t12 $'id: HOOK-TEST-GUARD3\ntitle: no budget here\n')
+  if printf '%s' "${t12c#*|}" | grep -q 'change_budget'; then
+    bad "T12b a spec without change_budget is not refused by Guard 3" "out=${t12c#*|}"
+  else
+    ok "T12b a spec without change_budget is not refused by Guard 3 (non-vacuity control)"
+  fi
+  if git ls-files --error-unmatch "$t12_spec" >/dev/null 2>&1; then
+    bad "T12c index restored after the test" "$t12_spec is still in the index"
+  else
+    ok "T12c index restored after the test (no residue)"
+  fi
+fi
+
 echo
 echo "hook tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
