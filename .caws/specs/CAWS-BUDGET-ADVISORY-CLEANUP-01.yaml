@@ -82,3 +82,9 @@ evidence:
     recorded_at: "2026-10-01T20:31:46.937Z"
     test_nodeid: "packages/caws-cli/tests/ci/mutation-contract.test.js::the live policy accounts for every kernel/store/shell source exactly once"
     test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "templates/CLAUDE.md + agents.md (e436f05d): budget note, gate table (budget_limit warn, 'advisory, never blocks'), tier paragraph (declared block reported as not honored), Key Rule 2 'Treat budgets as a sizing goal ... never trim, defer or stub work to fit them', CLAUDE waiver example moved to spec_completeness, agents checklist 'overage explained in the spec, not trimmed away'. grep of both templates finds no 'Respect change budgets', 'budget extension' or '--gate budget_limit'. Cited test: populate-doc-markers --check reports both templates up to date (it was STALE on main after the tui checkpoint's prettier pass)."
+    recorded_at: "2026-10-01T20:32:06.164Z"
+    test_nodeid: "packages/caws-cli/tests/docs/agent-surfaces-sync.test.js::populate-doc-markers.mjs --check exits 0 against the committed docs"
+    test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
