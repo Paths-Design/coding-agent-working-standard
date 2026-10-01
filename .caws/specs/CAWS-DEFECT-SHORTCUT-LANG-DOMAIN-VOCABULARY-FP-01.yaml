@@ -1,0 +1,45 @@
+id: CAWS-DEFECT-SHORTCUT-LANG-DOMAIN-VOCABULARY-FP-01
+title: 'shortcut-language guard strikes on placeholder/todo/XXX used as UI vocabulary instead of stub language'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-01T17:26:56.563Z'
+updated_at: '2026-10-01T17:26:56.563Z'
+created_by_session: '367970bc-9a41-453e-8bbf-e5deb5cce4b5'
+blast_radius:
+  modules:
+    - 'caws-cli shared hook pack (shortcut-language guard)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/shortcut-language-check.sh'
+    - 'packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/docs/guides/hook-packs.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'non-test UI source using placeholder as vocabulary (an Omit<..., "placeholder"> union member, a placeholder?: prop, placeholder={placeholder}, CSS ::placeholder / :placeholder-shown, aria-placeholder, a bare JSDoc prop description, a descriptive comment such as ''The skeleton is a placeholder shown while loading'')'
+    when: 'the shortcut-language guard scans the Write or Edit payload'
+    then: 'no advisory is emitted and no strike is recorded'
+  - id: A2
+    given: 'non-test source using todo / XXX as vocabulary (type Todo, todos.filter, an XXX-XXX-XXXX input mask) or a string glob such as src/**/*.ts or src/*.ts'
+    when: 'the guard scans it'
+    then: 'no advisory is emitted and no strike is recorded — a glob''s /* does not open a comment'
+  - id: A3
+    given: 'genuine stub language in non-test source (// placeholder, This is just a placeholder, it''s a placeholder, placeholder implementation, placeholder for now, a JSDoc-fragment Edit reading ''* placeholder for now'', // TODO, // todo:, an uppercase "TODO" value, throw new Error("not implemented"), // coming soon)'
+    when: 'the guard scans it'
+    then: 'a strike-1 advisory IS emitted naming the pattern class and quoting the source line number and text, and the strike is recorded'
+  - id: A4
+    given: 'the shared pack template changed'
+    when: 'the pack-fingerprint and install suites run'
+    then: 'SHARED_PACK_VERSION is bumped with an appended fingerprint history entry so installed consumers receive the fix on caws init'
+non_functional: {}
+contracts:
+  - name: 'shortcut-language-detection'
+    type: behavior
+    path: 'packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats'
