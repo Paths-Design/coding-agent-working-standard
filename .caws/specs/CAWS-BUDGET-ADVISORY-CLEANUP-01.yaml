@@ -1,0 +1,67 @@
+id: CAWS-BUDGET-ADVISORY-CLEANUP-01
+title: 'Retire the dead budget-raise machinery and finish advisory-budget doctrine for consumers'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-01T20:00:44.323Z'
+updated_at: '2026-10-01T20:00:44.323Z'
+created_by_session: '367970bc-9a41-453e-8bbf-e5deb5cce4b5'
+blast_radius:
+  modules:
+    - 'caws-cli kernel policy (dead budget-raise derivation, inert approver key)'
+    - 'consumer templates copied by caws init (CLAUDE.md, agents.md)'
+    - 'repo pre-commit hook (lint-staged prettier fence, Guard 3 message)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/pre-commit'
+    - '.husky/tests/run.sh'
+    - 'docs/api/schema.md'
+    - 'packages/caws-cli/templates/CLAUDE.md'
+    - 'packages/caws-cli/templates/agents.md'
+    - 'packages/caws-cli/mutation-policy.json'
+    - 'packages/caws-cli/src/kernel/policy/derive-budget.ts'
+    - 'packages/caws-cli/src/kernel/policy/index.ts'
+    - 'packages/caws-cli/src/kernel/policy/types.ts'
+    - 'packages/caws-cli/src/kernel/policy/rules.ts'
+    - 'packages/caws-cli/src/kernel/policy/validate-shape.ts'
+    - 'packages/caws-cli/src/kernel/policy/validate-semantics.ts'
+    - 'packages/caws-cli/src/kernel/schemas/policy.v1.json'
+    - 'packages/caws-cli/tests/kernel/unit/policy-derive-budget.test.ts'
+    - 'packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts'
+    - 'packages/caws-cli/tests/shell/gates-policy-discovery.test.js'
+    - 'packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a policy.yaml that still carries waivers.min_approvers_for_budget_raise'
+    when: 'policy semantics and caws doctor run'
+    then: 'the policy still loads, and a warning names the key as having no effect because budgets are an advisory sizing goal never raised by waiver, with the repair to remove it, and the same key misplaced under edit_rules is told to be removed rather than moved'
+  - id: A2
+    given: 'the kernel policy module'
+    when: 'it is built and the suites run'
+    then: 'deriveBudget, its budget-raise waiver types and the policy.budget rules are gone with no remaining importer, mutation-policy.json no longer lists derive-budget, and the kernel, shell, store, init, docs and ci jest suites pass'
+  - id: A3
+    given: 'the consumer templates packages/caws-cli/templates/CLAUDE.md and agents.md'
+    when: 'caws init copies them into a project'
+    then: 'they present budget_limit as advisory (warn, never blocks), tell the agent not to trim, defer or stub work to fit the sizing goal, no longer prescribe a budget_limit waiver, and populate-doc-markers --check reports both up to date'
+  - id: A4
+    given: 'a staged markdown file fenced by .prettierignore and an unfenced one'
+    when: 'lint-staged runs with the arguments .husky/pre-commit passes'
+    then: 'the fenced file is left byte-identical and the unfenced file is still formatted'
+  - id: A5
+    given: 'a staged spec that adds a change_budget key'
+    when: '.husky/pre-commit runs'
+    then: 'the commit is refused with the message that change_budget is not a v11 spec field and budgets are an advisory sizing goal needing no waiver'
+  - id: A6
+    given: 'docs/api/schema.md'
+    when: 'it documents risk-tier policy'
+    then: 'it shows the live risk_tiers shape (max_files and max_loc required per tier) as an advisory sizing goal instead of the retired v10 coverage and mutation tier schema'
+non_functional: {}
+contracts:
+  - name: 'budget-advisory-cleanup'
+    type: behavior
+    path: 'packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts'
