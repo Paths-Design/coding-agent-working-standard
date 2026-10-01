@@ -34,7 +34,9 @@ scope:
     - 'packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'budget_limit never blocks: no change in this slice reintroduces an enforced budget or a budget waiver path'
+  - 'an existing consumer policy.yaml that loads today still loads after this change (deprecated keys warn, they never fail validation)'
+  - 'scope_boundary and spec_completeness keep blocking exactly as before'
 acceptance:
   - id: A1
     given: 'a policy.yaml that still carries waivers.min_approvers_for_budget_raise'
