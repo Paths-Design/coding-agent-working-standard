@@ -94,3 +94,8 @@ evidence:
     recorded_at: "2026-10-01T20:32:11.430Z"
     test_nodeid: "packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js::the hook invocation leaves a fenced file byte-identical and formats an unfenced one"
     test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "bash .husky/tests/run.sh: 57 passed, 0 failed. T12a stages an index-only .caws/specs/HOOK-TEST-GUARD3-FIXTURE.yaml adding change_budget and asserts exit 1 with 'adds a change_budget key', 'advisory sizing goal', 'needs no waiver' and no 'gate budget_limit'. T12b (control) stages the same fixture without the key and Guard 3 stays silent; T12c asserts the fixture is gone from the index. main's Guard 3 message ('Use a waiver: ... --gate budget_limit') fails T12a on both the advisory and no-waiver checks."
+    recorded_at: "2026-10-01T20:32:42.714Z"
+    commit_sha: "6ea6f7858e455abf39d8a2234ac19a1e8530cf37"
