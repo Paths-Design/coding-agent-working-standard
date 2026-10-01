@@ -93,3 +93,8 @@ evidence:
     recorded_at: "2026-10-01T19:24:41.686Z"
     test_nodeid: "packages/caws-cli/tests/shell/gates-budget-advisory.test.js::a fresh init writes budget_limit in warn mode and keeps the sizing goals"
     test_verified_at: "7033df331b576998364d03ab4250d1660a2d1635"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Doctrine rewritten in 9f9a340c: CLAUDE.md governed-paths (change_budget/waiver line replaced by the advisory sizing-goal paragraph), AGENTS.md (MUST NOT trim/defer/stub to fit; tier table 'Sizing goal (advisory)'; waiver example now spec_completeness; troubleshooting entry), waiver-troubleshooting.md (Issue 4 rewritten; lifecycle, record shape and checklist off budget_limit), agent-workflow-tools.md, agent-integration-guide.md, full-guide.md (Q 'Can I exceed the risk-tier budget' -> Yes), schema.md (both notes), and both .husky/pre-commit refusal messages. Post-commit grep for 'gate budget_limit|budget breach|budget extension|budget_raise' over AGENTS.md, CLAUDE.md, docs/ hits only the v3.5 migration guide and rewrite/investigations history."
+    recorded_at: "2026-10-01T19:25:00.051Z"
+    commit_sha: "9f9a340c42ca948fd7d5ca5e05fd61f9d1a4b47c"
