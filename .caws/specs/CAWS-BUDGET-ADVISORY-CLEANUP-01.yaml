@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-budget-cleanup
 created_at: '2026-10-01T20:00:44.323Z'
-updated_at: '2026-10-01T20:01:30.189Z'
+updated_at: '2026-10-01T20:04:35.489Z'
 created_by_session: '367970bc-9a41-453e-8bbf-e5deb5cce4b5'
 blast_radius:
   modules:
@@ -33,6 +33,7 @@ scope:
     - 'packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts'
     - 'packages/caws-cli/tests/shell/gates-policy-discovery.test.js'
     - 'packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js'
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
   out: []
 invariants:
   - 'budget_limit never blocks: no change in this slice reintroduces an enforced budget or a budget waiver path'
