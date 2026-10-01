@@ -48,8 +48,11 @@ acceptance:
     when: 'it is built and the suites run'
     then: 'deriveBudget, its budget-raise waiver types and the policy.budget rules are gone with no remaining importer, mutation-policy.json no longer lists derive-budget, and the kernel, shell, store, init, docs and ci jest suites pass'
   - id: A3
-    given: 'the consumer templates packages/caws-cli/templates/CLAUDE.md and agents.md'
-    when: 'caws init copies them into a project'
+    given: >-
+      the repo's agent-facing doc templates packages/caws-cli/templates/CLAUDE.md
+      and agents.md (kept in sync by populate-doc-markers; not shipped in the npm
+      tarball and not installed by any v11 command)
+    when: 'they describe risk-tier budgets'
     then: 'they present budget_limit as advisory (warn, never blocks), tell the agent not to trim, defer or stub work to fit the sizing goal, no longer prescribe a budget_limit waiver, and populate-doc-markers --check reports both up to date'
   - id: A4
     given: 'a staged markdown file fenced by .prettierignore and an unfenced one'
@@ -82,11 +85,8 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/mutation-contract.test.js::the live policy accounts for every kernel/store/shell source exactly once"
     test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
   - criterion_id: A3
-    status: pass
-    evidence_ref: "templates/CLAUDE.md + agents.md (e436f05d): budget note, gate table (budget_limit warn, 'advisory, never blocks'), tier paragraph (declared block reported as not honored), Key Rule 2 'Treat budgets as a sizing goal ... never trim, defer or stub work to fit them', CLAUDE waiver example moved to spec_completeness, agents checklist 'overage explained in the spec, not trimmed away'. grep of both templates finds no 'Respect change budgets', 'budget extension' or '--gate budget_limit'. Cited test: populate-doc-markers --check reports both templates up to date (it was STALE on main after the tui checkpoint's prettier pass)."
-    recorded_at: "2026-10-01T20:32:06.164Z"
-    test_nodeid: "packages/caws-cli/tests/docs/agent-surfaces-sync.test.js::populate-doc-markers.mjs --check exits 0 against the committed docs"
-    test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
+    status: unchecked
+    recorded_at: "2026-10-01T20:35:47.734Z"
   - criterion_id: A4
     status: pass
     evidence_ref: "Replays .husky/pre-commit's npx + lint-staged invocation (parsed from the hook) in a scratch npm-workspaces repo: fenced packages/pkg/docs/fenced.md stays byte-identical, loose.md is formatted. Control case drops --workspaces=false and both files are reformatted (lint-staged --debug showed cwd packages/pkg), so the cited case can fail for the right reason. Live in this repo: committing e436f05d ran the fixed hook over 3 staged md files; both fenced templates' shasums were unchanged and populate-doc-markers --check stayed up to date, while unfenced docs/api/schema.md was formatted. Commit 6ea6f785."
