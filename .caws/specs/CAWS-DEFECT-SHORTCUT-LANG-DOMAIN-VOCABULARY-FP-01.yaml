@@ -2,9 +2,10 @@ id: CAWS-DEFECT-SHORTCUT-LANG-DOMAIN-VOCABULARY-FP-01
 title: 'shortcut-language guard strikes on placeholder/todo/XXX used as UI vocabulary instead of stub language'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-shortcut-domain-vocab
 created_at: '2026-10-01T17:26:56.563Z'
-updated_at: '2026-10-01T17:26:56.563Z'
+updated_at: '2026-10-01T17:28:20.953Z'
 created_by_session: '367970bc-9a41-453e-8bbf-e5deb5cce4b5'
 blast_radius:
   modules:
