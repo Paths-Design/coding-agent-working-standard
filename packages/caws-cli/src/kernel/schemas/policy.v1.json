@@ -40,7 +40,7 @@
     "risk_tiers": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Per-tier budgets. Tier keys are integer strings '1', '2', '3' — matching spec.risk_tier coerced to string. Tier 1 is most strict.",
+      "description": "Per-tier sizing goals, read by the advisory budget_limit gate (it reports an overage and never blocks). Tier keys are integer strings '1', '2', '3' — matching spec.risk_tier coerced to string. Tier 1 has the smallest goal.",
       "required": ["1", "2", "3"],
       "properties": {
         "1": { "$ref": "#/$defs/tierBudget" },
@@ -69,7 +69,9 @@
         "min_approvers_for_budget_raise": {
           "type": "integer",
           "minimum": 1,
-          "default": 1
+          "default": 1,
+          "deprecated": true,
+          "description": "Deprecated and inert: risk-tier budgets are an advisory sizing goal and are never raised by waiver. Accepted so existing policies load; policy semantics warns when it is present."
         },
         "max_active_waivers_per_gate": {
           "type": "integer",
@@ -144,12 +146,12 @@
         "max_files": {
           "type": "integer",
           "minimum": 0,
-          "description": "Maximum files changed in a single PR/slice for this tier."
+          "description": "Sizing goal: files a slice at this tier is expected to touch. Advisory, never a limit."
         },
         "max_loc": {
           "type": "integer",
           "minimum": 0,
-          "description": "Maximum lines of code changed."
+          "description": "Sizing goal: lines a slice at this tier is expected to add. Advisory, never a limit."
         },
         "description": {
           "type": "string",

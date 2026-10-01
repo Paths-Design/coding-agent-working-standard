@@ -79,7 +79,7 @@ function tunePolicy(cawsDir) {
       ``,
     ].join('\n')
   );
-  raw += [`waivers:`, `  min_approvers_for_budget_raise: 2`, ``].join('\n');
+  raw += [`waivers:`, `  max_active_waivers_per_gate: 2`, ``].join('\n');
   fs.writeFileSync(policyPath, raw);
 }
 
@@ -143,7 +143,7 @@ describe('caws gates list/explain discovery', () => {
     expect(godObject.advisory).toBe(false);
     expect(godObject.thresholds).toEqual({ warning: 1750, critical: 2000 });
     expect(payload.risk_tiers['3'].max_files).toBe(30);
-    expect(payload.waiver_policy.min_approvers_for_budget_raise).toBe(2);
+    expect(payload.waiver_policy).toEqual({ max_active_waivers_per_gate: 2 });
     expect(readEvents(caws)).toBe(before);
   });
 

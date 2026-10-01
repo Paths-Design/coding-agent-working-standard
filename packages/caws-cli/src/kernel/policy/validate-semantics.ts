@@ -20,6 +20,7 @@ export interface SemanticOptions {
  *  - non_governed_zones_force: true is in effect
  *  - critical gates (spec_completeness, scope_boundary) not in block mode
  *  - an advisory gate (budget_limit) declared in block mode, which is not honored
+ *  - waivers.min_approvers_for_budget_raise, which has no effect
  *  - root_passthrough entries that match high-blast-radius file names
  */
 export function validatePolicySemantics(
@@ -102,6 +103,23 @@ export function validatePolicySemantics(
         })
       );
     }
+  }
+
+  // A budget-raise approver count reads as a process for buying a bigger
+  // budget. No such process exists, so name the key as inert.
+  if (policy.waivers?.min_approvers_for_budget_raise !== undefined) {
+    warnings.push(
+      diagnostic({
+        rule: POLICY_RULES.BUDGET_RAISE_APPROVERS_INERT,
+        authority: 'kernel/policy',
+        message:
+          'waivers.min_approvers_for_budget_raise has no effect: risk-tier budgets are an advisory sizing goal and are never raised by waiver.',
+        subject: subjectBase,
+        location: { pointer: '/waivers/min_approvers_for_budget_raise' },
+        narrowRepair: 'Remove waivers.min_approvers_for_budget_raise.',
+        severity: 'warning',
+      })
+    );
   }
 
   // non_governed_zones_force is a deliberate authority-relinquishing flag.
