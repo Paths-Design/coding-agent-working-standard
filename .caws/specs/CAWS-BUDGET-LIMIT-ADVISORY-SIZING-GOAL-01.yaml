@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-budget-advisory
 created_at: '2026-10-01T18:43:51.645Z'
-updated_at: '2026-10-01T18:44:06.451Z'
+updated_at: '2026-10-01T19:03:21.096Z'
 created_by_session: '367970bc-9a41-453e-8bbf-e5deb5cce4b5'
 blast_radius:
   modules:
@@ -40,6 +40,7 @@ scope:
     - 'docs/guides/agent-integration-guide.md'
     - 'docs/agents/full-guide.md'
     - 'docs/api/schema.md'
+    - packages/caws-cli/tests/shell/gates-policy-discovery.test.js
   out: []
 invariants:
   - 'A size budget never blocks a gate run, commit, merge or close: budget_limit is reported as an advisory sizing observation whatever mode policy.yaml declares.'
