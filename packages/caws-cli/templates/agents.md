@@ -43,9 +43,11 @@ caws doctor              # Project-wide CAWS drift detection
 The governed command groups are:
 
 <!-- command-groups:start -->
+
 ```
-init  doctor  status  scope  hooks  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree  goal
+init  doctor  status  tui  scope  hooks  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree  goal
 ```
+
 <!-- command-groups:end -->
 
 Run `caws <group> --help` for the authoritative options of any group.
@@ -197,13 +199,13 @@ The `.caws/specs/.archive/` directory is filesystem-authoritative — `caws spec
 
 Gates are declared in `.caws/policy.yaml` with a `mode` (`block | warn | skip`). v11's five admissible gate names:
 
-| Gate | Typical mode | Purpose |
-|------|--------------|---------|
-| `budget_limit` | block | Enforce change_budget limits derived from `risk_tier` |
-| `spec_completeness` | block | Refuse load on schema-invalid specs |
-| `scope_boundary` | block | Refuse edits outside the bound spec's `scope.in` |
-| `god_object` | warn | Flag large/responsibility-overloaded modules |
-| `todo_detection` | warn | Flag TODOs/placeholders/dangling promises in committed code |
+| Gate                | Typical mode | Purpose                                                     |
+| ------------------- | ------------ | ----------------------------------------------------------- |
+| `budget_limit`      | block        | Enforce change_budget limits derived from `risk_tier`       |
+| `spec_completeness` | block        | Refuse load on schema-invalid specs                         |
+| `scope_boundary`    | block        | Refuse edits outside the bound spec's `scope.in`            |
+| `god_object`        | warn         | Flag large/responsibility-overloaded modules                |
+| `todo_detection`    | warn         | Flag TODOs/placeholders/dangling promises in committed code |
 
 Risk tier governs change-budget thresholds but does NOT directly set per-gate enforcement levels — the gate `mode` is global. v10's "T1 90% coverage / T2 80% / T3 70%" table is gone; coverage and mutation gates were not ported into v11's gate vocabulary. Run those outside CAWS in CI if you need them.
 
@@ -230,13 +232,13 @@ Forbidden file name modifiers: `enhanced`, `unified`, `better`, `new`, `next`, `
 
 ## Modes
 
-| Mode | Contracts | New Files | Key Artifacts |
-|------|-----------|-----------|---------------|
-| **feature** | Required first | Allowed in scope.in | Migration plan, feature flag, perf budget |
-| **refactor** | Must not change | Discouraged | Codemod script + semantic diff |
-| **fix** | Unchanged | Discouraged | Red test → green; root cause note |
-| **doc** | N/A | Docs only | Updated README/usage snippets |
-| **chore** | N/A | Build/tools only | Version updates, dependency changes |
+| Mode         | Contracts       | New Files           | Key Artifacts                             |
+| ------------ | --------------- | ------------------- | ----------------------------------------- |
+| **feature**  | Required first  | Allowed in scope.in | Migration plan, feature flag, perf budget |
+| **refactor** | Must not change | Discouraged         | Codemod script + semantic diff            |
+| **fix**      | Unchanged       | Discouraged         | Red test → green; root cause note         |
+| **doc**      | N/A             | Docs only           | Updated README/usage snippets             |
+| **chore**    | N/A             | Build/tools only    | Version updates, dependency changes       |
 
 ## Waivers
 
@@ -255,7 +257,7 @@ Repeat `--gate` for multiple gates. Gate names must appear in `.caws/policy.yaml
 
 ## Pre-Submit Checklist
 
-- [ ] Canonical spec exists and validates (`caws doctor` reports 0 spec.schema.* errors)
+- [ ] Canonical spec exists and validates (`caws doctor` reports 0 spec.schema.\* errors)
 - [ ] All tests pass (`npm test`)
 - [ ] Coverage meets your CI thresholds (run outside CAWS — coverage is not a v11 gate)
 - [ ] Lints pass (`npm run lint`)

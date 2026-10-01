@@ -40,9 +40,11 @@ caws gates run --spec <SPEC-ID>
 The governed command groups are:
 
 <!-- command-groups:start -->
+
 ```
-init  doctor  status  scope  hooks  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree  goal
+init  doctor  status  tui  scope  hooks  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree  goal
 ```
+
 <!-- command-groups:end -->
 
 `reprieve` grants a session-scoped, expiring skip of ONE PreToolUse guard when a
@@ -143,6 +145,7 @@ The scope guard enforces file edit boundaries based on your spec's `scope.in` an
 - **Union mode** (no binding): The guard checks ALL active specs. Any `scope.out` from any spec can block you, even unrelated ones. This is the common source of "why is spec X blocking me?" confusion.
 
 **The mutual binding** requires both sides:
+
 1. The worktree registry (`.caws/worktrees.json`) must have `spec_id` (v11) or `specId` (v10 carryover) pointing to your spec
 2. Your spec (`.caws/specs/<id>.yaml`) must have `worktree: <name>` pointing to your worktree
 
@@ -179,13 +182,13 @@ If you try `caws specs create <id>` for an id that already exists in `.archive/`
 
 v11 declares gates in `.caws/policy.yaml` as a flat object, each with a `mode` (`block | warn | skip`). The five admissible gate names:
 
-| Gate | Typical mode | Purpose |
-|------|--------------|---------|
-| `budget_limit` | block | Enforce change_budget limits (max_files, max_loc) per `risk_tiers` |
-| `spec_completeness` | block | Refuse load on schema-invalid specs |
-| `scope_boundary` | block | Refuse edits outside the bound spec's `scope.in` |
-| `god_object` | warn | Flag large/responsibility-overloaded modules (observability) |
-| `todo_detection` | warn | Flag TODOs/placeholders/dangling promises in committed code |
+| Gate                | Typical mode | Purpose                                                            |
+| ------------------- | ------------ | ------------------------------------------------------------------ |
+| `budget_limit`      | block        | Enforce change_budget limits (max_files, max_loc) per `risk_tiers` |
+| `spec_completeness` | block        | Refuse load on schema-invalid specs                                |
+| `scope_boundary`    | block        | Refuse edits outside the bound spec's `scope.in`                   |
+| `god_object`        | warn         | Flag large/responsibility-overloaded modules (observability)       |
+| `todo_detection`    | warn         | Flag TODOs/placeholders/dangling promises in committed code        |
 
 Risk tier governs change-budget thresholds (max_files / max_loc) but does not directly set per-gate enforcement levels — the gate `mode` is global. v10's "T1 90% coverage / T2 80% / T3 70%" table is gone. Coverage and mutation gates were not ported into v11's gate vocabulary; if you need them, run them outside CAWS as part of CI.
 
@@ -255,7 +258,7 @@ This project has Claude Code hooks configured in `.claude/settings.json`:
 
 See `.claude/hooks/CLAUDE.md` for the canonical pack lineage map (which hook covers which incident class) and `.claude/README.md` for project-specific extension wiring.
 
-**These hooks are a starting point you grow, not a frozen baseline.** CAWS ships them from its failure lineage as a sensible default; CAWS owns the *why/what* (the failure class and the invariant each guard enforces — do not weaken those to dodge a block), and your repo owns the *how* (thresholds, env tuning, repo-specific checks). Editing a managed hook to grow your governance is expected and welcome. Your edits are preserved: as long as a hook keeps its `CAWS-MANAGED-HOOK` header, `caws init` classifies a changed hook as drift and refuses to overwrite it (re-run with `--adopt` to keep yours, `--overwrite` to pull the upstream baseline). The only out-of-bounds edit is one that bypasses or weakens a guard.
+**These hooks are a starting point you grow, not a frozen baseline.** CAWS ships them from its failure lineage as a sensible default; CAWS owns the _why/what_ (the failure class and the invariant each guard enforces — do not weaken those to dodge a block), and your repo owns the _how_ (thresholds, env tuning, repo-specific checks). Editing a managed hook to grow your governance is expected and welcome. Your edits are preserved: as long as a hook keeps its `CAWS-MANAGED-HOOK` header, `caws init` classifies a changed hook as drift and refuses to overwrite it (re-run with `--adopt` to keep yours, `--overwrite` to pull the upstream baseline). The only out-of-bounds edit is one that bypasses or weakens a guard.
 
 ### Dangerous-command latch
 
