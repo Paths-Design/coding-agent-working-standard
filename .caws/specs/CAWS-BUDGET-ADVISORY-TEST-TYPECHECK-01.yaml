@@ -25,3 +25,9 @@ acceptance:
     then: 'it exits 0 with no TS18048 or TS2532 error from that file, and the file''s 10 tests still pass'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Commit f48b3464 adds an only<T>() helper (asserts toHaveLength(1), returns the narrowed item) and replaces the four unchecked accesses (two const [w] destructurings, misplaced[0], relayed[0]). Baseline: the pre-push [1/5] typecheck stage refused the push with TS18048 at lines 67-73/116-122 and TS2532 at 141/181 of this file. After: npm run typecheck -w @paths.design/caws-cli (tsc -p tsconfig.vnext.test.json && tsc -p tsconfig.kernel-test.json) exits 0 with no error TS lines; npx jest tests/kernel/unit/policy-budget-advisory.test.ts passes 10/10."
+    recorded_at: "2026-10-01T20:48:05.529Z"
+    commit_sha: f48b3464
