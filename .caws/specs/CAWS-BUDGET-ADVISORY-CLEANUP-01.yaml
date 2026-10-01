@@ -85,8 +85,11 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/mutation-contract.test.js::the live policy accounts for every kernel/store/shell source exactly once"
     test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
   - criterion_id: A3
-    status: unchecked
-    recorded_at: "2026-10-01T20:35:47.734Z"
+    status: pass
+    evidence_ref: "Corrected criterion (these templates are repo doc surfaces, not shipped by caws init). e436f05d: budget note, gate table (budget_limit warn, 'advisory, never blocks'), tier paragraph, Key Rule 2 'Treat budgets as a sizing goal ... never trim, defer or stub work to fit them', CLAUDE waiver example moved to spec_completeness, agents checklist 'overage explained in the spec, not trimmed away'. grep of both templates for 'Respect change budgets|budget extension|--gate budget_limit' returns no match. Cited test re-run on main: populate-doc-markers --check up to date for both."
+    recorded_at: "2026-10-01T20:36:07.934Z"
+    test_nodeid: "packages/caws-cli/tests/docs/agent-surfaces-sync.test.js::populate-doc-markers.mjs --check exits 0 against the committed docs"
+    test_verified_at: "3d32681e06ccabde8b2b7af8db4416d3758b961b"
   - criterion_id: A4
     status: pass
     evidence_ref: "Replays .husky/pre-commit's npx + lint-staged invocation (parsed from the hook) in a scratch npm-workspaces repo: fenced packages/pkg/docs/fenced.md stays byte-identical, loose.md is formatted. Control case drops --workspaces=false and both files are reformatted (lint-staged --debug showed cwd packages/pkg), so the cited case can fail for the right reason. Live in this repo: committing e436f05d ran the fixed hook over 3 staged md files; both fenced templates' shasums were unchanged and populate-doc-markers --check stayed up to date, while unfenced docs/api/schema.md was formatted. Commit 6ea6f785."
