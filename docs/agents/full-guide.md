@@ -222,7 +222,7 @@ ships no plan-file generator or template; author it directly.
    ```bash
    # Implement to make tests pass
    # Stay within scope.in boundaries
-   # Keep files under max_loc budget
+   # Build it durably; the tier's max_loc is a sizing goal, never a cap
    ```
 
 4. **Integration/E2E tests**
@@ -239,8 +239,8 @@ ships no plan-file generator or template; author it directly.
 
 - **DO**: Edit existing modules, use injected dependencies, write deterministic
   code
-- **DON'T**: Create shadow files, hardcode timestamps/UUIDs, exceed change
-  budget
+- **DON'T**: Create shadow files, hardcode timestamps/UUIDs, or trim, defer or
+  stub work to fit the tier's sizing goal
 
 ### Phase 3: Verify (Must Pass Before PR)
 
@@ -891,9 +891,12 @@ blast_radius/scope, suggesting the slice should be broken up.
 **Fix - Split PR**: Break into smaller, focused PRs, each with its own spec and
 clearly bounded scope.
 
-Note: `change_budget` (max_files/max_loc) is not a valid v11 spec field. Scope
-enforcement is done by the scope guard via `scope.in` / `scope.out`. Use
-`caws waiver create` for bounded exceptions to policy gates.
+Split for scope coherence, not for size. `change_budget` (max_files/max_loc) is
+not a valid v11 spec field, and the risk-tier sizing goal `budget_limit` checks
+is advisory — an overage is reported, never blocks, and is not by itself a
+reason to split. Scope enforcement is done by the scope guard via `scope.in` /
+`scope.out`. Use `caws waiver create` for bounded exceptions to blocking policy
+gates.
 
 ### Test Coverage Failures
 
@@ -1145,17 +1148,23 @@ needs:
 4. Request human approval
 5. Then implement
 
-### Q: Can I exceed the change budget if the task requires it?
+### Q: Can I exceed the risk-tier budget if the task requires it?
 
-**A: Split the task.** If the change is too large for a single focused slice:
+**A: Yes.** The budget (`max_files` / `max_loc` for the spec's risk tier in
+`.caws/policy.yaml`) is an advisory sizing goal. `budget_limit` reports an
+overage and never blocks, and no waiver is needed. Do not trim, defer or stub
+work to come in under it — durable software matters more than a line count. If
+the change is larger than the spec planned, say so in the spec.
+
+Split the task only when it is genuinely several slices — separate concerns with
+separate scopes:
 
 1. Break into multiple smaller PRs
 2. Each with its own working spec
 3. Each with a clearly bounded scope
 
 `change_budget` (max_files/max_loc) is not a recognized spec field in v11. Scope
-and blast_radius govern the change boundary; use waivers (`caws waiver create`)
-for policy-driven gate exceptions.
+and blast_radius govern the change boundary.
 
 ### Q: What if lints fail but I think they're wrong?
 

@@ -29,7 +29,13 @@ export type {
 // Legacy budget-raise waiver types aliased to avoid the name clash
 // with the new gate-violation `Waiver` from `../waiver`.
 export type { Waiver as BudgetWaiver, WaiverStatus as BudgetWaiverStatus } from './types';
-export { POLICY_RULES, CRITICAL_GATES, RISKY_ROOT_FILES, type PolicyRule } from './rules';
+export {
+  POLICY_RULES,
+  CRITICAL_GATES,
+  ADVISORY_GATES,
+  RISKY_ROOT_FILES,
+  type PolicyRule,
+} from './rules';
 export { parsePolicyYaml } from './parse';
 export { validatePolicyShape } from './validate-shape';
 export { validatePolicySemantics } from './validate-semantics';

@@ -21,6 +21,7 @@ export const POLICY_RULES = {
   TIER_NON_MONOTONIC_FILES: 'policy.semantic.risk_tiers.non_monotonic_files',
   TIER_NON_MONOTONIC_LOC: 'policy.semantic.risk_tiers.non_monotonic_loc',
   CRITICAL_GATE_NOT_BLOCKING: 'policy.semantic.gates.critical_not_blocking',
+  ADVISORY_GATE_BLOCK_NOT_HONORED: 'policy.semantic.gates.advisory_block_not_honored',
   NON_GOVERNED_FORCE_USED: 'policy.semantic.non_governed_zones.force_used',
   ROOT_PASSTHROUGH_RISKY_FILE: 'policy.semantic.root_passthrough.risky_file',
 
@@ -32,7 +33,17 @@ export const POLICY_RULES = {
 export type PolicyRule = (typeof POLICY_RULES)[keyof typeof POLICY_RULES];
 
 /** Critical gates that should default to block-mode (semantic warning otherwise). */
-export const CRITICAL_GATES = ['budget_limit', 'spec_completeness', 'scope_boundary'] as const;
+export const CRITICAL_GATES = ['spec_completeness', 'scope_boundary'] as const;
+
+/**
+ * Gates that report but never block, whatever mode policy declares. A
+ * risk-tier change budget is a sizing goal: enforcing it pushed agents to
+ * trim, defer or stub work to fit a line count, and the boundary CAWS
+ * enforces is scope. A declared `block` is honored as `warn` and reported
+ * (ADVISORY_GATE_BLOCK_NOT_HONORED) so the config never silently misstates
+ * what runs.
+ */
+export const ADVISORY_GATES = ['budget_limit'] as const;
 
 /**
  * High-blast-radius root-level filenames that warrant a warning when listed

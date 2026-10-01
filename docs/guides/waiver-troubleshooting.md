@@ -90,25 +90,20 @@ new waiver with a forward-dated `expires_at` and a fresh approval. Do not edit
 the expired waiver's YAML by hand — the audit trail expects waivers to be
 created and revoked through the CLI.
 
-### Issue 4: I tried to set `change_budget` in my spec to "fix" the budget gate
+### Issue 4: The budget gate reports an overage
 
-**Cause**: hand-editing `change_budget` is a governed-paths violation. CI
-rejects it. The right escape is a waiver against the budget gate.
+**Cause**: the staged change is larger than the sizing goal for the spec's risk
+tier (`max_files` / `max_loc` under `risk_tiers` in `.caws/policy.yaml`).
+`budget_limit` is advisory: it prints
+`OVER budget_limit ... [advisory — never blocks]`, records its `gate_evaluated`
+event in mode `warn`, and never fails `caws gates run`.
 
-**Fix**: revert the spec edit and open a waiver:
-
-```bash
-caws waiver create FEAT-1a \
-  --title "Budget breach during emergency refactor" \
-  --gate budget_limit \
-  --reason "Refactor required emergency budget breach; cleanup tracked in FEAT-2" \
-  --approved-by "tech-lead@example.com" \
-  --expires-at "2026-09-01T00:00:00Z"
-```
-
-In v11, budget enforcement is driven by `policy.yaml` (which owns the gate's
-`mode`) and per-spec `risk_tier` thresholds. The spec's `change_budget` is
-informational; gates enforce against policy-derived limits.
+**Fix**: nothing to fix, and no waiver to open. Do not trim, defer or stub work
+to come in under the goal — it is there to prompt a check against the plan, not
+to cap the work. If the change is larger than the spec planned, say so in the
+spec. A policy that still declares `budget_limit` with `mode: block` is not
+honored; `caws doctor` reports it with the repair `mode: warn`. `change_budget`
+is not a v11 spec field, and the spec schema rejects it.
 
 ### Issue 5: `caws gates run --spec <id>` exits 2
 
@@ -131,9 +126,9 @@ missing (it's idempotent).
 ```bash
 # Create
 caws waiver create FEAT-1a \
-  --title "Emergency budget extension" \
-  --gate budget_limit \
-  --reason "Emergency budget extension for FEAT-1 integration" \
+  --title "Experimental mode past expiry during rollout" \
+  --gate spec_completeness \
+  --reason "FEAT-1 rollout finishes after experimental_mode.expires_at; renewal tracked in FEAT-2" \
   --approved-by "tech-lead@example.com" \
   --expires-at "2026-12-31T23:59:59Z"
 
@@ -154,14 +149,14 @@ hash-chained `appendEvent`. The audit trail is durable and verifiable.
 
 ```yaml
 id: FEAT-1a
-title: Emergency budget extension
+title: Experimental mode past expiry during rollout
 status: active
 effectiveness: active
 gates:
-  - budget_limit
+  - spec_completeness
 reason: |
-  Emergency budget extension for FEAT-1 integration.
-  Cleanup tracked in FEAT-2.
+  FEAT-1 rollout finishes after experimental_mode.expires_at.
+  Renewal tracked in FEAT-2.
 approved_by: tech-lead@example.com
 created_at: 2026-05-15T10:00:00Z
 expires_at: 2026-12-31T23:59:59Z
@@ -179,7 +174,8 @@ writes via `writeFileAtomic`.
 
 Fields v11 does NOT use (legacy v3/v10 leftovers — ignore them):
 
-- `delta:` (max_files / max_loc) — budget is policy-driven in v11.
+- `delta:` (max_files / max_loc) — budgets are an advisory sizing goal and are
+  never waived.
 - `gate:` singular — the current field is `gates:`, an array.
 - `risk_assessment:` (impact_level / mitigation_plan) — capture in `reason`
   instead.
@@ -206,7 +202,9 @@ Before opening a waiver:
       want past it_.
 - [ ] The approver is real and authorized.
 - [ ] `expires_at` is short and matches the planned remediation horizon.
-- [ ] No hand-edits to `policy.yaml` or the spec's `change_budget`.
+- [ ] The gate actually blocks — a `budget_limit` overage never does and needs
+      no waiver.
+- [ ] No hand-edits to `policy.yaml` to change the gate's mode.
 
 After opening:
 

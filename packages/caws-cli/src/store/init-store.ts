@@ -80,10 +80,12 @@ const LEGACY_PATHS = ['.caws/working-spec.yaml', '.caws/working-spec.schema.json
 // Default policy
 //
 // The seed below mirrors the gate set the vNext gates command knows
-// about. Block-mode for the structural gates (budget_limit,
-// spec_completeness, scope_boundary), warn for the heuristic gates
-// (god_object, todo_detection). edit_rules is set to the conservative
-// "policy and code may live in the same PR" default; teams can tighten.
+// about. Block-mode for the structural gates (spec_completeness,
+// scope_boundary), warn for the heuristic gates (god_object,
+// todo_detection) and for budget_limit, which is advisory: risk_tiers are
+// sizing goals, never limits (kernel ADVISORY_GATES). edit_rules is set to
+// the conservative "policy and code may live in the same PR" default; teams
+// can tighten.
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_POLICY_YAML = `version: 1
@@ -100,7 +102,7 @@ risk_tiers:
 gates:
   budget_limit:
     enabled: true
-    mode: block
+    mode: warn
   spec_completeness:
     enabled: true
     mode: block

@@ -40,13 +40,15 @@ function dispoFor(result, gateId) {
   return result.dispositions.find((d) => d.gate_id === gateId);
 }
 
+// scope_boundary stands in for any enforcing gate here; budget_limit is
+// advisory and never blocks (gates-budget-advisory.test.js).
 describe('deriveDispositions: block / warn / skip semantics', () => {
   test('block + violation -> fail AND blocks', () => {
     const r = deriveDispositions(
-      report([v('budget_limit')]),
-      policy({ budget_limit: gate('block') })
+      report([v('scope_boundary')]),
+      policy({ scope_boundary: gate('block') })
     );
-    const d = dispoFor(r, 'budget_limit');
+    const d = dispoFor(r, 'scope_boundary');
     expect(d.outcome).toBe('fail');
     expect(d.blocks).toBe(true);
     expect(r.anyBlocks).toBe(true);
@@ -54,10 +56,10 @@ describe('deriveDispositions: block / warn / skip semantics', () => {
 
   test('warn + violation -> fail but DOES NOT block (the load-bearing distinction)', () => {
     const r = deriveDispositions(
-      report([v('budget_limit')]),
-      policy({ budget_limit: gate('warn') })
+      report([v('scope_boundary')]),
+      policy({ scope_boundary: gate('warn') })
     );
-    const d = dispoFor(r, 'budget_limit');
+    const d = dispoFor(r, 'scope_boundary');
     expect(d.outcome).toBe('fail');
     expect(d.blocks).toBe(false);
     expect(r.anyBlocks).toBe(false);
@@ -65,27 +67,27 @@ describe('deriveDispositions: block / warn / skip semantics', () => {
 
   test('skip mode -> skipped, never blocks (even with a violation)', () => {
     const r = deriveDispositions(
-      report([v('budget_limit')]),
-      policy({ budget_limit: gate('skip') })
+      report([v('scope_boundary')]),
+      policy({ scope_boundary: gate('skip') })
     );
-    const d = dispoFor(r, 'budget_limit');
+    const d = dispoFor(r, 'scope_boundary');
     expect(d.outcome).toBe('skipped');
     expect(d.blocks).toBe(false);
   });
 
   test('enabled:false -> skipped, never blocks (even at mode block with a violation)', () => {
     const r = deriveDispositions(
-      report([v('budget_limit')]),
-      policy({ budget_limit: gate('block', false) })
+      report([v('scope_boundary')]),
+      policy({ scope_boundary: gate('block', false) })
     );
-    const d = dispoFor(r, 'budget_limit');
+    const d = dispoFor(r, 'scope_boundary');
     expect(d.outcome).toBe('skipped');
     expect(d.blocks).toBe(false);
   });
 
   test('no violation -> pass, never blocks', () => {
-    const r = deriveDispositions(report([]), policy({ budget_limit: gate('block') }));
-    const d = dispoFor(r, 'budget_limit');
+    const r = deriveDispositions(report([]), policy({ scope_boundary: gate('block') }));
+    const d = dispoFor(r, 'scope_boundary');
     expect(d.outcome).toBe('pass');
     expect(d.blocks).toBe(false);
   });
@@ -163,7 +165,7 @@ describe('deriveDispositions: canonical gate name literals are load-bearing', ()
     'todo_detection',
   ];
 
-  for (const name of CANONICAL) {
+  for (const name of CANONICAL.filter((n) => n !== 'budget_limit')) {
     test(`canonical gate '${name}' routes its violation to block disposition`, () => {
       const r = deriveDispositions(report([v(name)]), policy({ [name]: gate('block') }));
       expect(isOk(r)).toBe(true);
@@ -175,6 +177,24 @@ describe('deriveDispositions: canonical gate name literals are load-bearing', ()
       expect(d.blocks).toBe(true);
     });
   }
+
+  // budget_limit is advisory: its violation still routes to its own gate, but
+  // a declared block runs as warn and does not block.
+  test("canonical gate 'budget_limit' routes its violation to an advisory disposition", () => {
+    const r = deriveDispositions(
+      report([v('budget_limit')]),
+      policy({ budget_limit: gate('block') })
+    );
+    const d = dispoFor(r, 'budget_limit');
+    expect(d).toMatchObject({
+      gate_id: 'budget_limit',
+      mode: 'warn',
+      declared_mode: 'block',
+      outcome: 'fail',
+      blocks: false,
+    });
+    expect(d.violations).toHaveLength(1);
+  });
 
   // Ordering is canonical-five first, in KNOWN_GATE_IDS order.
   test('all five canonical gates appear in their fixed order before non-canonical gates', () => {
@@ -267,12 +287,12 @@ describe('deriveDispositions: return object shape', () => {
 
   test('each disposition has gate_id, mode, outcome, blocks, violations', () => {
     const r = deriveDispositions(
-      report([v('budget_limit')]),
-      policy({ budget_limit: gate('block') })
+      report([v('scope_boundary')]),
+      policy({ scope_boundary: gate('block') })
     );
     expect(isOk(r)).toBe(true);
     const d = r.dispositions[0];
-    expect(d.gate_id).toBe('budget_limit');
+    expect(d.gate_id).toBe('scope_boundary');
     expect(d.mode).toBe('block');
     expect(d.outcome).toBe('fail');
     expect(d.blocks).toBe(true);
@@ -295,15 +315,15 @@ describe('deriveDispositions: return object shape', () => {
 describe('deriveDispositions: anyBlocks semantics (some, not every)', () => {
   test('anyBlocks is true when at least ONE gate blocks (even if another does not)', () => {
     const r = deriveDispositions(
-      report([v('budget_limit'), v('scope_boundary')]),
+      report([v('scope_boundary'), v('spec_completeness')]),
       policy({
-        budget_limit: gate('block'), // blocks
-        scope_boundary: gate('warn'), // fails but does NOT block
+        scope_boundary: gate('block'), // blocks
+        spec_completeness: gate('warn'), // fails but does NOT block
       })
     );
     expect(isOk(r)).toBe(true);
-    expect(dispoFor(r, 'budget_limit').blocks).toBe(true);
-    expect(dispoFor(r, 'scope_boundary').blocks).toBe(false);
+    expect(dispoFor(r, 'scope_boundary').blocks).toBe(true);
+    expect(dispoFor(r, 'spec_completeness').blocks).toBe(false);
     expect(r.anyBlocks).toBe(true);
   });
 

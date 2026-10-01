@@ -29,6 +29,12 @@ export interface DeriveBudgetOptions {
 /**
  * Pure budget derivation.
  *
+ * No gate consults this. `caws gates run` reads policy.risk_tiers directly,
+ * and budget_limit is advisory (ADVISORY_GATES): a change over its sizing
+ * goal never blocks, so a budget-raise waiver — and the approver count
+ * below — is never needed to land work. The arithmetic is kept as a pure
+ * kernel API only.
+ *
  *   baseline = policy.risk_tiers[String(spec.risk_tier)]
  *   effective = baseline + sum(applicable budget_limit waiver deltas)
  *

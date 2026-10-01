@@ -110,8 +110,9 @@ Run `caws <group> --help` for full options and flag details.
 - Invoke removed commands (see list above) — they are gone.
 - Edit `.caws/working-spec.yaml`, `.caws/events.jsonl`, `.caws/policy.yaml`, or
   other governed state by hand. Use the CLI.
-- Hand-edit `change_budget` keys in spec YAML to make a gate pass — create a
-  waiver instead.
+- Trim, defer or stub work to come in under a risk-tier budget. Budgets are an
+  advisory sizing goal: `budget_limit` reports an overage and never blocks. If
+  the change is larger than planned, say so in the spec.
 - Take over a worktree owned by another session (`caws claim --takeover`)
   without explicit user authorization.
 - Create shadow files (`*-enhanced.*`, `*-final.*`, `*-v2.*`, `*-copy.*`) — edit
@@ -283,18 +284,21 @@ These are enforced by code, not docs. Don't try to work around them.
 
 ## Risk tiers (your quality contract)
 
-| Tier  | Contracts | Change-budget posture                       | Use Case                    |
-| ----- | --------- | ------------------------------------------- | --------------------------- |
-| **1** | Required  | Tightest (smallest `max_files` / `max_loc`) | Auth, billing, migrations   |
-| **2** | Required  | Moderate                                    | Features, APIs, data writes |
-| **3** | Optional  | Loosest                                     | UI, internal tools          |
+| Tier  | Contracts | Sizing goal (advisory)             | Use Case                    |
+| ----- | --------- | ---------------------------------- | --------------------------- |
+| **1** | Required  | Smallest (`max_files` / `max_loc`) | Auth, billing, migrations   |
+| **2** | Required  | Moderate                           | Features, APIs, data writes |
+| **3** | Optional  | Largest                            | UI, internal tools          |
 
 Set the tier in your spec's `risk_tier` field (integer `1`/`2`/`3`). Tier
-governs change-budget thresholds (derived from `.caws/policy.yaml` `risk_tiers`)
-and whether contracts are required. **Coverage and mutation are NOT v11 CAWS
-gates** — the v10 "90%/80%/70%" coverage table is gone; run coverage/mutation
-thresholds in your own CI. `caws gates run --spec <id>` evaluates the gates
-declared in `policy.yaml` (each with a `mode` of block/warn/skip).
+selects the sizing goal (`.caws/policy.yaml` `risk_tiers`) and whether contracts
+are required. The sizing goal is advisory: `budget_limit` reports an overage and
+never blocks, so never trim, defer or stub work to fit it — durable work that
+runs larger than planned is the right outcome, recorded in the spec. **Coverage
+and mutation are NOT v11 CAWS gates** — the v10 "90%/80%/70%" coverage table is
+gone; run coverage/mutation thresholds in your own CI.
+`caws gates run --spec <id>` evaluates the gates declared in `policy.yaml` (each
+with a `mode` of block/warn/skip).
 
 ## Waivers
 
@@ -303,9 +307,9 @@ they filter violations out of the disposition.
 
 ```bash
 caws waiver create FEAT-1a \
-  --title "Budget breach during emergency refactor" \
-  --gate budget_limit \
-  --reason "Refactor required emergency budget breach; cleanup tracked in FEAT-2" \
+  --title "Experimental mode past expiry during rollout" \
+  --gate spec_completeness \
+  --reason "FEAT-1 rollout finishes after experimental_mode.expires_at; renewal tracked in FEAT-2" \
   --approved-by "team-lead@example.com" \
   --expires-at "2026-12-01T00:00:00Z"
 
@@ -431,9 +435,12 @@ owner treated as foreign. **Fix**: Verify the owner uuid equals your
 the current resolver and writes the `prior_owners` audit. A genuinely foreign
 owner still requires explicit user authorization.
 
-**Problem**: A gate keeps blocking and you want to bypass it. **Cause**:
-Hand-editing `change_budget` will be rejected by CI; the right escape is a
-waiver. **Fix**: `caws waiver create` with reason, approver, and expiry.
+**Problem**: A gate keeps blocking and you want to bypass it. **Cause**: The
+gate is in `block` mode and the violation is real; editing `.caws/policy.yaml`
+to change its mode is a governed-path edit, not an escape. **Fix**:
+`caws waiver create` with reason, approver, and expiry. A `budget_limit` overage
+is not this problem — it never blocks, needs no waiver, and is not a reason to
+cut work.
 
 ---
 
