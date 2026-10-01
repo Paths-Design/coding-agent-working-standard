@@ -5,6 +5,7 @@
 // Rule ids are not shown here (this is a command summary, not a Diagnostic
 // stream); each disposition carries enough text for an agent to triage.
 
+import { ADVISORY_GATES } from '../../kernel';
 import type { DispositionResult } from '../gates/disposition';
 
 function outcomeLabel(o: 'pass' | 'fail' | 'skipped'): string {
@@ -25,9 +26,20 @@ export function renderGatesRun(result: DispositionResult): string {
     lines.push('  (no gates declared in policy)');
   } else {
     for (const d of result.dispositions) {
-      const blockTag = d.outcome === 'fail' ? (d.blocks ? ' [BLOCKS]' : ' [warn]') : '';
+      // An advisory gate over its goal is an observation, not a failure:
+      // label it OVER so the run does not read as something to cut work for.
+      const advisory = (ADVISORY_GATES as readonly string[]).includes(d.gate_id);
+      const label = advisory && d.outcome === 'fail' ? 'OVER   ' : outcomeLabel(d.outcome);
+      const blockTag =
+        d.outcome === 'fail'
+          ? advisory
+            ? ' [advisory — never blocks]'
+            : d.blocks
+              ? ' [BLOCKS]'
+              : ' [warn]'
+          : '';
       lines.push(
-        `  ${outcomeLabel(d.outcome)}  ${d.gate_id} (mode=${d.mode}, ${d.violations.length} violations)${blockTag}`
+        `  ${label}  ${d.gate_id} (mode=${d.mode}, ${d.violations.length} violations)${blockTag}`
       );
       // Show first violation message per failing gate as a hint.
       const first = d.violations[0];
@@ -36,6 +48,12 @@ export function renderGatesRun(result: DispositionResult): string {
         if (d.violations.length > 1) {
           lines.push(`              … and ${d.violations.length - 1} more`);
         }
+      }
+      if (d.declared_mode !== undefined) {
+        lines.push(
+          `              policy.yaml declares mode=${d.declared_mode} for this gate; it is not ` +
+            `honored (budgets are a sizing goal). Set gates.${d.gate_id}.mode to "warn".`
+        );
       }
     }
   }

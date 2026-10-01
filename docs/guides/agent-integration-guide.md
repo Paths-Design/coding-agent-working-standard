@@ -162,7 +162,7 @@ caws waiver show <id>-w
 caws waiver revoke <id>-w
 ```
 
-Waivers are the legitimate escape. Hand-editing `change_budget` in the spec or editing `policy.yaml` directly will be rejected by CI and is a violation of the governed-paths discipline.
+Waivers are the legitimate escape from a blocking gate. Editing `policy.yaml` directly will be rejected by CI and is a violation of the governed-paths discipline. Risk-tier budgets need neither: `budget_limit` is an advisory sizing goal that reports an overage and never blocks, so do not trim, defer or stub work to fit it.
 
 ## Worktree ownership (multi-agent)
 
@@ -240,7 +240,7 @@ Legacy `.caws/working-spec.yaml` is present. Migrate to per-feature `.caws/specs
 Run `caws scope show <path>` to see the decision. Likely the file is not in `scope.in`. If it should be, edit the spec; if it shouldn't, the agent is out of bounds.
 
 **`caws gates run --spec <id>` returned 1 and the failing gate seems wrong.**
-Read the diagnostic output. If the violation is genuinely acceptable, open a waiver. Do not edit `policy.yaml` or the spec's `change_budget` to bypass.
+Read the diagnostic output. If the violation is genuinely acceptable, open a waiver. Do not edit `policy.yaml` to bypass. (`budget_limit` is never the cause: it is advisory and does not affect the exit code.)
 
 **`caws claim` refused with a foreign owner.**
 Another session id owns the worktree. Read their `.caws/sessions/<sessionId>/` log. Take over only with explicit user authorization.

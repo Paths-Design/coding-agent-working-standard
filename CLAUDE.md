@@ -79,8 +79,13 @@ governance.
 - `.caws/policy.yaml` — owns gate `mode` (block/warn/skip). Waivers filter
   violations; they do not change gate mode.
 - `CODEOWNERS` — reviewer routing.
-- `change_budget` keys in any spec YAML — use waivers, not edits.
 - Pre-commit hooks — do not bypass with `--no-verify`.
+
+Risk-tier budgets (`risk_tiers` in policy, checked by `budget_limit`) are an
+advisory sizing goal, not a limit: an overage is reported, never blocks, and
+needs no waiver. Do not trim, defer or stub work to fit one; if a change
+outgrows its plan, say so in the spec. A declared `mode: block` on
+`budget_limit` is not honored, and `caws doctor` says so.
 
 Legitimate escape:
 `caws waiver create <id> --title "<title>" --gate <gate> --reason "..." --approved-by "..." --expires-at <iso8601>`

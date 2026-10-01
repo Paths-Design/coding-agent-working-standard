@@ -127,8 +127,9 @@ path discipline (no code changes in the same PR).
 **Approved workflow:**
 
 1. Open a separate PR for the policy change.
-2. If the underlying motivation is a budget breach, prefer a waiver over a
-   policy edit. Waivers are time-bound and auditable.
+2. If the underlying motivation is a blocking gate violation, prefer a waiver
+   over a policy edit. Waivers are time-bound and auditable. A budget overage is
+   neither: `budget_limit` is an advisory sizing goal and never blocks.
 
 ---
 
@@ -196,7 +197,8 @@ path discipline (no code changes in the same PR).
 1. **Use observability proactively.** `caws doctor` and `caws status` are free;
    run them often.
 2. **Waivers are normal.** Time-bound exceptions with an approver are the
-   legitimate escape; hand-editing `change_budget` is not.
+   legitimate escape from a blocking gate; hand-editing policy is not. Risk-tier
+   budgets are a sizing goal, not a gate to escape — never trim work to fit one.
 3. **Dual control on governed paths is real.** `policy.yaml`, `CODEOWNERS`, and
    pre-commit hooks are not yours to silently bypass.
 4. **Transparency by construction.** Every gate evaluation appends a

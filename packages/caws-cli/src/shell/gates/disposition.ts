@@ -13,12 +13,16 @@
 //   any matched violation + mode==='warn'   → result: 'fail',     blocks=false
 //   no matched violation                    → result: 'pass',     blocks=false
 //
+// An advisory gate (kernel ADVISORY_GATES: budget_limit) declared 'block'
+// runs as 'warn' and never blocks; the declared mode is carried as
+// `declared_mode` so the renderer can say it was not honored.
+//
 // A violation is "matched" to a policy gate iff the violation's `gate`
 // field equals the policy gate id. Violations targeting unknown gate
 // names are surfaced separately as `unmatchedViolations` so the renderer
 // can show them, but they do NOT drive policy disposition.
 
-import type { Policy } from '../../kernel';
+import { ADVISORY_GATES, type Policy } from '../../kernel';
 
 import type { GatesReport, GatesViolation } from './gate-result-contract';
 
@@ -27,7 +31,12 @@ export type GateOutcome = 'pass' | 'fail' | 'skipped';
 
 export interface GateDisposition {
   readonly gate_id: string;
+  /** The mode the gate ran in. For an advisory gate declared `block`, this
+   *  is `warn` — the mode that actually decided the outcome. */
   readonly mode: GateMode;
+  /** Present only when policy declared a mode that was not honored (an
+   *  advisory gate declared `block`), so the renderer can say so. */
+  readonly declared_mode?: GateMode;
   readonly outcome: GateOutcome;
   /** True iff this gate's outcome contributes to a final exit 1. */
   readonly blocks: boolean;
@@ -78,6 +87,20 @@ const REPORT_GATE_TO_POLICY_GATE: Readonly<Record<string, string>> = {
 
 function canonicalGateName(reportGate: string): string {
   return REPORT_GATE_TO_POLICY_GATE[reportGate] ?? reportGate;
+}
+
+export function isAdvisoryGate(gateId: string): boolean {
+  return (ADVISORY_GATES as readonly string[]).includes(gateId);
+}
+
+/**
+ * The mode a gate actually runs in. An advisory gate declared `block` runs
+ * as `warn`; every other declaration is honored as written. `gates run`,
+ * `gates list` and `gates explain` all read the mode through here, so no
+ * surface reports a block the runtime will not enforce.
+ */
+export function effectiveGateMode(gateId: string, declared: GateMode): GateMode {
+  return isAdvisoryGate(gateId) && declared === 'block' ? 'warn' : declared;
 }
 
 // gateId is a plain string: the authoritative iteration set is
@@ -146,9 +169,13 @@ export function deriveDispositions(report: GatesReport, policy: Policy): Disposi
     const violations = byGate.get(gateId) ?? [];
     byGate.delete(gateId);
 
+    // An advisory gate runs as warn whatever policy declares; a declared
+    // block is recorded as not honored rather than silently dropped.
+    const mode = effectiveGateMode(gateId, cfg.mode);
+
     let outcome: GateOutcome;
     let blocks: boolean;
-    if (cfg.enabled === false || cfg.mode === 'skip') {
+    if (cfg.enabled === false || mode === 'skip') {
       outcome = 'skipped';
       blocks = false;
     } else if (violations.length === 0) {
@@ -156,12 +183,13 @@ export function deriveDispositions(report: GatesReport, policy: Policy): Disposi
       blocks = false;
     } else {
       outcome = 'fail';
-      blocks = cfg.mode === 'block';
+      blocks = mode === 'block';
     }
 
     dispositions.push({
       gate_id: gateId,
-      mode: cfg.mode,
+      mode,
+      ...(mode !== cfg.mode ? { declared_mode: cfg.mode } : {}),
       outcome,
       blocks,
       violations,

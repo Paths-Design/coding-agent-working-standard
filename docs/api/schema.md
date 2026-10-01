@@ -298,8 +298,9 @@ constraints.
 ```
 
 > **Removed in v11:** `change_budget` (with `max_files`/`max_loc`) is rejected
-> by the kernel. File and LOC budgets now derive from `.caws/policy.yaml`
-> risk-tier thresholds; the spec never encodes them directly.
+> by the kernel. File and LOC sizing goals come from `.caws/policy.yaml`
+> risk-tier thresholds; the spec never encodes them directly, and `budget_limit`
+> treats them as advisory — an overage is reported, never blocks.
 
 > **Rejected fields (kernel returns `spec.schema.violation`):** `change_budget`,
 > `acceptance_criteria`, `scope.include`, `scope.exclude`, `status` (use
@@ -583,9 +584,10 @@ output; they do not consume a provenance manifest.
 }
 ```
 
-> **Note:** `max_files` and `max_loc` are no longer part of the tier policy
-> schema. Change budgets were removed from the spec schema in v11; budget
-> enforcement derives entirely from `.caws/policy.yaml` risk-tier configuration.
+> **Note:** `max_files` and `max_loc` live under `risk_tiers` in
+> `.caws/policy.yaml` (the kernel's `policy.v1.json` requires both per tier),
+> not in the spec. They are an advisory sizing goal: `budget_limit` reports an
+> overage and never blocks, and a declared `mode: block` on it is not honored.
 
 ### TypeScript Interface
 
