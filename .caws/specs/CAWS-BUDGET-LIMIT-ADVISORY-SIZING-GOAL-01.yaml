@@ -87,3 +87,9 @@ evidence:
     recorded_at: "2026-10-01T19:24:36.741Z"
     test_nodeid: "packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts::budget_limit in block mode is reported as not honored, with the one-line repair"
     test_verified_at: "7033df331b576998364d03ab4250d1660a2d1635"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "initProject on a temp repo writes gates.budget_limit {enabled: true, mode: warn}, scope_boundary {enabled: true, mode: block}, risk_tiers['2'] {max_files: 15, max_loc: 600}. gates-policy-discovery.test.js also reads the init policy back as mode warn, advisory true, no declared_mode. Commit 9f9a340c."
+    recorded_at: "2026-10-01T19:24:41.686Z"
+    test_nodeid: "packages/caws-cli/tests/shell/gates-budget-advisory.test.js::a fresh init writes budget_limit in warn mode and keeps the sizing goals"
+    test_verified_at: "7033df331b576998364d03ab4250d1660a2d1635"
