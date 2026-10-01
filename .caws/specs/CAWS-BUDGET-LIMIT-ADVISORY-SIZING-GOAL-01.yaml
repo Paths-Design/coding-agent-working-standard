@@ -81,3 +81,9 @@ evidence:
     recorded_at: "2026-10-01T19:24:14.562Z"
     test_nodeid: "packages/caws-cli/tests/shell/gates-budget-advisory.test.js::under a policy still declaring block, the run exits 0 and records mode warn"
     test_verified_at: "7033df331b576998364d03ab4250d1660a2d1635"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "policy-budget-advisory.test.ts 7/7: warn -> no semantic warning; block -> exactly one policy.semantic.gates.advisory_block_not_honored warning at /gates/budget_limit/mode with repair 'Set gates.budget_limit.mode to \"warn\".' and never a critical-gate rule; spec_completeness warn + scope_boundary skip -> two critical warnings; doctor: budget warn -> no posture finding, scope warn -> finding on policy.gates.scope_boundary, budget block -> relayed POLICY_VALID_WITH_WARNINGS only. Live: doctor and gates list on canonical's still-block policy printed the not-honored warning with that repair. Commit 9f9a340c."
+    recorded_at: "2026-10-01T19:24:36.741Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts::budget_limit in block mode is reported as not honored, with the one-line repair"
+    test_verified_at: "7033df331b576998364d03ab4250d1660a2d1635"
