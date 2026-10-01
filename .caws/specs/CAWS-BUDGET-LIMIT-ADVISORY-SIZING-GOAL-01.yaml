@@ -74,3 +74,10 @@ contracts:
   - name: 'budget-advisory'
     type: behavior
     path: 'packages/caws-cli/tests/shell/gates-budget-advisory.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Spawned dist CLI on a temp git repo; policy budget_limit mode block, tier-3 sizing goal max_files 1 / max_loc 3; two staged in-scope files. Asserts exit 0, 'Overall: OK', 'OVER budget_limit (mode=warn, 2 violations)', the files message ending 'do not trim, defer or stub work to fit it', and exactly one gate_evaluated budget_limit event with mode warn, result fail, rules max_files_exceeded + max_loc_exceeded. Companion case 'the same run still blocks on a staged file outside scope.in' asserts scope_boundary exits 1. Code 9f9a340c, fixture 7033df33; gates-budget-advisory.test.js 12/12 with and without CLAUDE_CODE_SESSION_ID."
+    recorded_at: "2026-10-01T19:24:14.562Z"
+    test_nodeid: "packages/caws-cli/tests/shell/gates-budget-advisory.test.js::under a policy still declaring block, the run exits 0 and records mode warn"
+    test_verified_at: "7033df331b576998364d03ab4250d1660a2d1635"
