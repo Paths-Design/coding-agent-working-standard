@@ -533,7 +533,15 @@ import { isAdapterCoveredSurface } from './types';
 // session 1aa3f0bd followed out of the repo. bash-write-guard additionally
 // fails CLOSED on a lib that loads but predates those functions, because that
 // shape used to lose the cross-repo arm with nothing in the output to say so.
-export const SHARED_PACK_VERSION = 88;
+// 89 closes CAWS-DEFECT-SHORTCUT-LANG-DOMAIN-VOCABULARY-FP-01. The
+// shortcut-language guard struck UI code that uses the placeholder word as
+// vocabulary (the input attribute and prop, a union member, the CSS
+// pseudo-element) and type names or input masks sharing a marker word, while
+// missing "this is just a ..." stub phrasing. Marker words are now scoped to
+// where they are unambiguous: the placeholder word counts only in comment text
+// beside a stub cue, and in code only the uppercase marker convention counts.
+// The advisory names the line it quotes, counted within the edit for an Edit.
+export const SHARED_PACK_VERSION = 89;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

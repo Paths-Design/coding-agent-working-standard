@@ -72,10 +72,20 @@ agent authored.
   escalates through the shared guard-strikes mechanism: **strike 1 → warn**,
   **strike 2 → ask** (permission prompt), **strike 3 → block**. Strikes are
   per-session.
-- **What it flags:** incomplete-work markers (`TODO`, `FIXME`, `XXX`, `HACK`,
-  `TBD`), placeholder/not-implemented phrases (`not implemented`,
-  `implement later`, `coming soon`, `placeholder`), and explicit
-  `throw new Error("not implemented")` stub shapes.
+- **What it flags:** explicit `throw new Error("not implemented")` stub shapes;
+  incomplete-work markers (`TODO`, `FIXME`, `XXX`, `HACK`, `TBD`) in comment
+  text in any case, and in code only as uppercase `TODO`/`FIXME`/ `HACK`/`TBD`;
+  the phrases `not implemented`, `implement later` and `coming soon`; and
+  `placeholder` in comment text beside a stub cue (`// placeholder`,
+  `just a placeholder`, `this is a placeholder`, `placeholder implementation`,
+  `placeholder for now`, or a deferral such as `fill in later`).
+- **What it leaves alone:** marker words used as vocabulary. `placeholder` in
+  code (the input attribute and prop, a `"placeholder"` union member,
+  `::placeholder`, `aria-placeholder`) or as a bare doc-comment prop description
+  never counts, nor does a descriptive comment such as "the skeleton is a
+  placeholder shown while loading". In code, `Todo`/`todo` identifiers and an
+  `XXX-XXX-XXXX` input mask never count. The advisory quotes the matched source
+  line with its number — counted within the edit for an Edit.
 - **Policy counterpart:** the `todo_detection` gate. The hook ships the
   high-signal subset of that vocabulary to stay single-file and fast.
 - **Doctrine:** enforces the CAWS key rule "No fake implementations — no
