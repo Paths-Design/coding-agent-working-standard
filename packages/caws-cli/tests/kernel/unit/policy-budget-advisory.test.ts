@@ -55,15 +55,22 @@ function semanticWarnings(p: Policy): readonly Diagnostic[] {
   return result.warnings ?? [];
 }
 
+// Asserts the list holds exactly one item and returns it, narrowed for the
+// strict-index typecheck.
+function only<T>(items: readonly T[]): T {
+  expect(items).toHaveLength(1);
+  const [first] = items;
+  if (first === undefined) throw new Error('expected exactly one item');
+  return first;
+}
+
 describe('policy semantics: budget_limit is advisory', () => {
   test('budget_limit in warn mode draws no warning at all', () => {
     expect(semanticWarnings(policy({ budget: 'warn' }))).toEqual([]);
   });
 
   test('budget_limit in block mode is reported as not honored, with the one-line repair', () => {
-    const warnings = semanticWarnings(policy({ budget: 'block' }));
-    expect(warnings).toHaveLength(1);
-    const [w] = warnings;
+    const w = only(semanticWarnings(policy({ budget: 'block' })));
     expect(w.rule).toBe(POLICY_RULES.ADVISORY_GATE_BLOCK_NOT_HONORED);
     expect(w.severity).toBe('warning');
     expect(w.location).toEqual({ pointer: '/gates/budget_limit/mode' });
@@ -110,9 +117,7 @@ describe('policy load: min_approvers_for_budget_raise is accepted but named iner
     );
     if (!result.ok) throw new Error(`policy failed to load: ${JSON.stringify(result.errors)}`);
     expect(result.value.waivers).toEqual({ min_approvers_for_budget_raise: 2 });
-    const warnings = result.warnings ?? [];
-    expect(warnings).toHaveLength(1);
-    const [w] = warnings;
+    const w = only(result.warnings ?? []);
     expect(w.rule).toBe(POLICY_RULES.BUDGET_RAISE_APPROVERS_INERT);
     expect(w.severity).toBe('warning');
     expect(w.location).toEqual({ pointer: '/waivers/min_approvers_for_budget_raise' });
@@ -137,8 +142,7 @@ describe('policy load: min_approvers_for_budget_raise is accepted but named iner
     expect(result.ok).toBe(false);
     const errors = result.ok ? [] : result.errors;
     const misplaced = errors.filter((e) => e.rule === POLICY_RULES.MISPLACED_APPROVERS_FIELD);
-    expect(misplaced).toHaveLength(1);
-    expect(misplaced[0].narrowRepair).toBe(
+    expect(only(misplaced).narrowRepair).toBe(
       'Remove min_approvers_for_budget_raise from edit_rules: it has no effect, because risk-tier budgets are an advisory sizing goal and are never raised by waiver.'
     );
   });
@@ -177,7 +181,6 @@ describe('doctor posture: budget_limit is not a critical gate', () => {
         (f.data as { source_rule?: string } | undefined)?.source_rule ===
           POLICY_RULES.ADVISORY_GATE_BLOCK_NOT_HONORED
     );
-    expect(relayed).toHaveLength(1);
-    expect(relayed[0].narrowRepair).toBe('Set gates.budget_limit.mode to "warn".');
+    expect(only(relayed).narrowRepair).toBe('Set gates.budget_limit.mode to "warn".');
   });
 });
