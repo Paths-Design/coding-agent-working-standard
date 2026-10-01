@@ -76,3 +76,9 @@ evidence:
     recorded_at: "2026-10-01T20:31:44.258Z"
     test_nodeid: "packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts::a policy carrying the key still loads, with exactly one inert-key warning"
     test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "derive-budget.ts, its test, the BudgetWaiver/WaiverDelta/EffectiveBudget/SkipReason/Applied|SkippedWaiverEntry/BudgetDerivationTrace types and POLICY_RULES.BUDGET_TIER_NOT_FOUND/WAIVER_MALFORMED removed in ccc85215; grep finds no importer; dist/kernel/policy carries no derive-budget output after a clean build. validate-mutation-policy: 'PASS: 156 source files accounted for exactly once' / 'PASS: 20 mutation targets across 3 surfaces' (also classifies the five tui sources 019fe322 left red on main). env -u CLAUDE_CODE_SESSION_ID jest tests/{shell,kernel,init,store,docs,ci}: 246 suites / 3364 tests, 0 failed; under the harness env the only failures are the 11 pre-existing CAWS-TEST-SESSION-ENV-ISOLATION-01 suites, none touching this slice."
+    recorded_at: "2026-10-01T20:31:46.937Z"
+    test_nodeid: "packages/caws-cli/tests/ci/mutation-contract.test.js::the live policy accounts for every kernel/store/shell source exactly once"
+    test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
