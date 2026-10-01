@@ -20,7 +20,9 @@ scope:
     - 'packages/caws-cli/docs/guides/hook-packs.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A guard strikes on incomplete work, never on domain vocabulary that shares a marker word.'
+  - 'A narrowing that removes false positives is proven not to remove true positives: every silent case is paired with a firing positive control that asserts the pattern class, quoted line, and a recorded strike.'
+  - 'A silent case asserts no strike was recorded, not only that stdout is empty.'
 acceptance:
   - id: A1
     given: 'non-test UI source using placeholder as vocabulary (an Omit<..., "placeholder"> union member, a placeholder?: prop, placeholder={placeholder}, CSS ::placeholder / :placeholder-shown, aria-placeholder, a bare JSDoc prop description, a descriptive comment such as ''The skeleton is a placeholder shown while loading'')'
