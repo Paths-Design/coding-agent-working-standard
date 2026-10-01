@@ -57,3 +57,8 @@ evidence:
     evidence_ref: "shortcut-language-check.bats tests 12-15 (type Todo / todos.filter, XXX-XXX-XXXX input mask, \"src/*.ts\" and \"src/**/*.ts\" globs followed by an identifier named todo) assert empty stdout and no strikes.json; all pass at this commit and all 4 fail against the pre-fix guard. Mutants killed: code-keyword-any-case (12,14,15), code-keyword-adds-XXX (13), opener-any-prefix (14 — the single-star glob case)."
     recorded_at: "2026-10-01T18:07:16.205Z"
     commit_sha: "75e0e3e9d3fa4084046cb51eb14d5f09cb16f767"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "shortcut-language-check.bats tests 18-35 assert, per case, the exact pattern class, 'line N: \"<source line>' (or 'line N of the edit' for Edit payloads), the strike-1 wording, AND .shortcut_language == 1 in the isolated strikes.json. Covers // placeholder, 'This is just a placeholder', \"it's a placeholder\", placeholder implementation / for now / until, temporary placeholder, multi-line block body, deferral cue, first-line ordering, Edit and JSDoc-fragment Edit, // TODO, // todo:, 'data TODO', \"TODO\" value, not-implemented throw (throw class), coming soon. 35/35 pass; 25/25 hand mutants killed with an identity control surviving (bash-3.2-safe splice seam in setup_file)."
+    recorded_at: "2026-10-01T18:07:18.090Z"
+    commit_sha: "75e0e3e9d3fa4084046cb51eb14d5f09cb16f767"
