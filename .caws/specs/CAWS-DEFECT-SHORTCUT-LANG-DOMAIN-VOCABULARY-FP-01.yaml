@@ -62,3 +62,8 @@ evidence:
     evidence_ref: "shortcut-language-check.bats tests 18-35 assert, per case, the exact pattern class, 'line N: \"<source line>' (or 'line N of the edit' for Edit payloads), the strike-1 wording, AND .shortcut_language == 1 in the isolated strikes.json. Covers // placeholder, 'This is just a placeholder', \"it's a placeholder\", placeholder implementation / for now / until, temporary placeholder, multi-line block body, deferral cue, first-line ordering, Edit and JSDoc-fragment Edit, // TODO, // todo:, 'data TODO', \"TODO\" value, not-implemented throw (throw class), coming soon. 35/35 pass; 25/25 hand mutants killed with an identity control surviving (bash-3.2-safe splice seam in setup_file)."
     recorded_at: "2026-10-01T18:07:18.090Z"
     commit_sha: "75e0e3e9d3fa4084046cb51eb14d5f09cb16f767"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "SHARED_PACK_VERSION 88 -> 89 with rationale comment in manifest-shared.ts; tests/init/pack-fingerprints.json shared entry {version: 89, fingerprint: c9c99728...}. With version bumped but fingerprint stale, pack-fingerprint.test.js failed (Received c9c99728...); after recording it, 'npx jest tests/init tests/store/doctor-snapshot-repo-hook-policy.test.js' = 19 suites / 450 tests pass, and the full hooks bats dir = 452 tests, 0 not ok."
+    recorded_at: "2026-10-01T18:07:19.814Z"
+    commit_sha: "75e0e3e9d3fa4084046cb51eb14d5f09cb16f767"
