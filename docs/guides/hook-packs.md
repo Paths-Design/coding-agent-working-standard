@@ -74,8 +74,8 @@ agent authored.
   per-session.
 - **What it flags:** explicit `throw new Error("not implemented")` stub shapes;
   incomplete-work markers (`TODO`, `FIXME`, `XXX`, `HACK`, `TBD`) in comment
-  text in any case, and in code only as uppercase `TODO`/`FIXME`/ `HACK`/`TBD`;
-  the phrases `not implemented`, `implement later` and `coming soon`; and
+  text in any case, and in code only as uppercase `TODO`, `FIXME`, `HACK` or
+  `TBD`; the phrases `not implemented`, `implement later` and `coming soon`; and
   `placeholder` in comment text beside a stub cue (`// placeholder`,
   `just a placeholder`, `this is a placeholder`, `placeholder implementation`,
   `placeholder for now`, or a deferral such as `fill in later`).
