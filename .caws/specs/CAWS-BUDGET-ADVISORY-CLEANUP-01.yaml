@@ -69,3 +69,10 @@ contracts:
   - name: 'budget-advisory-cleanup'
     type: behavior
     path: 'packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "parseAndValidatePolicy (full parse + strict Ajv schema + semantics) on a policy with waivers.min_approvers_for_budget_raise: 2 returns ok with value.waivers intact and exactly one warning: rule policy.semantic.waivers.budget_raise_approvers_inert, pointer /waivers/min_approvers_for_budget_raise, message 'waivers.min_approvers_for_budget_raise has no effect: risk-tier budgets are an advisory sizing goal and are never raised by waiver.', repair 'Remove waivers.min_approvers_for_budget_raise.'. Companion cases: no key -> no warning; key under edit_rules -> MISPLACED_APPROVERS_FIELD with the remove-not-move repair. policy-budget-advisory.test.ts 10/10. Commit ccc85215."
+    recorded_at: "2026-10-01T20:31:44.258Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts::a policy carrying the key still loads, with exactly one inert-key warning"
+    test_verified_at: e436f05d923262b6e990ea3b3733bc39773900a2
