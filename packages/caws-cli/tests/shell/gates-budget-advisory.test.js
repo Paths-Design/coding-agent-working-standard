@@ -28,7 +28,6 @@ const { deriveDispositions } = require('../../dist/shell/gates/disposition');
 const { evaluateBudgetLimit } = require('../../dist/shell/gates/local-evaluators/budget-limit');
 const { renderGatesRun } = require('../../dist/shell/render/gates');
 const { initProject } = require('../../dist/store/init-store');
-const { runSpecsCreateCommand } = require('../../dist/shell/commands/specs');
 const { cleanupAll, makeTempRepo, git } = require('../helpers/git-repo-factory');
 
 const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
@@ -201,19 +200,26 @@ describe('caws gates run: an over-budget staged change does not block', () => {
     const init = initProject(root);
     if (!init.ok) throw new Error('initProject failed: ' + JSON.stringify(init.errors));
     fs.writeFileSync(path.join(root, '.caws', 'policy.yaml'), yaml.dump(policyWith(budgetMode)));
-    const code = runSpecsCreateCommand({
-      cwd: root,
-      id: 'BUDGET-ADVISORY-001',
-      title: 'Budget advisory end to end',
-      mode: 'fix',
-      tier: 3,
-      scopeIn: ['src'],
-      activate: true,
-      now: () => new Date('2026-10-01T00:00:00.000Z'),
-      out: () => {},
-      err: () => {},
-    });
-    if (code !== 0) throw new Error(`spec create failed with code ${code}`);
+    // Spawned under the test's own session: an in-process create would inherit
+    // the caller's harness session, which the cross-repo boundary refuses to
+    // let write governance records into this temp repo.
+    const create = runCli(root, [
+      'specs',
+      'create',
+      'BUDGET-ADVISORY-001',
+      '--title',
+      'Budget advisory end to end',
+      '--mode',
+      'fix',
+      '--risk-tier',
+      '3',
+      '--scope-in',
+      'src',
+      '--activate',
+    ]);
+    if (create.status !== 0) {
+      throw new Error(`spec create failed with code ${create.status}:\n${create.stderr}`);
+    }
     fs.mkdirSync(path.join(root, 'src'));
     fs.writeFileSync(
       path.join(root, 'src', 'a.ts'),
@@ -224,12 +230,16 @@ describe('caws gates run: an over-budget staged change does not block', () => {
     return root;
   }
 
-  function runGates(root) {
-    return spawnSync(process.execPath, [CLI, 'gates', 'run', 'BUDGET-ADVISORY-001'], {
+  function runCli(root, args) {
+    return spawnSync(process.execPath, [CLI, ...args], {
       cwd: root,
       encoding: 'utf8',
       env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'gates-budget-advisory-test' },
     });
+  }
+
+  function runGates(root) {
+    return runCli(root, ['gates', 'run', 'BUDGET-ADVISORY-001']);
   }
 
   function budgetEvents(root) {
