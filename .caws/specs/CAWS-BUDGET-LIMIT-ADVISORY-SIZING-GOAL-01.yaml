@@ -1,0 +1,73 @@
+id: CAWS-BUDGET-LIMIT-ADVISORY-SIZING-GOAL-01
+title: 'Risk-tier change budgets are an advisory sizing goal, never an enforced limit'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-01T18:43:51.645Z'
+updated_at: '2026-10-01T18:43:51.645Z'
+created_by_session: '367970bc-9a41-453e-8bbf-e5deb5cce4b5'
+blast_radius:
+  modules:
+    - 'caws-cli gates (budget_limit disposition, evaluator, renderer)'
+    - 'caws-cli kernel policy semantics and doctor posture'
+    - 'agent-facing doctrine (CLAUDE.md, AGENTS.md, docs)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/policy/rules.ts'
+    - 'packages/caws-cli/src/kernel/policy/index.ts'
+    - 'packages/caws-cli/src/kernel/policy/validate-semantics.ts'
+    - 'packages/caws-cli/src/kernel/policy/derive-budget.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/shell/gates/disposition.ts'
+    - 'packages/caws-cli/src/shell/gates/local-evaluators/budget-limit.ts'
+    - 'packages/caws-cli/src/shell/render/gates.ts'
+    - 'packages/caws-cli/src/shell/commands/gates.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/store/init-store.ts'
+    - 'packages/caws-cli/tests/shell/gates-budget-advisory.test.js'
+    - 'packages/caws-cli/tests/kernel/unit/policy-budget-advisory.test.ts'
+    - 'packages/caws-cli/tests/shell/gates-disposition.test.js'
+    - 'packages/caws-cli/tests/docs/agent-doc-examples.test.js'
+    - 'CLAUDE.md'
+    - 'AGENTS.md'
+    - '.caws/policy.yaml'
+    - 'docs/guides/waiver-troubleshooting.md'
+    - 'docs/agent-workflow-tools.md'
+    - 'docs/guides/agent-integration-guide.md'
+    - 'docs/agents/full-guide.md'
+    - 'docs/api/schema.md'
+  out: []
+invariants:
+  - 'A size budget never blocks a gate run, commit, merge or close: budget_limit is reported as an advisory sizing observation whatever mode policy.yaml declares.'
+  - 'The enforced boundary is scope (scope.in / scope.out) and spec completeness; their block semantics are unchanged and stay proven by a blocking control.'
+  - 'Existing policy and waiver files keep loading: budget_limit mode block is accepted, reported as not honored with a one-line repair, and never silently treated as enforced.'
+  - 'No agent-facing text invites trimming, deferring, stubbing or splitting work to fit a size number, or offers a waiver as the response to one.'
+acceptance:
+  - id: A1
+    given: 'policy.yaml declares budget_limit mode block (the pre-change default) and a tier budget smaller than the staged change'
+    when: 'caws gates run evaluates an active spec whose scope admits the staged files'
+    then: 'the run exits 0, the gate_evaluated event for budget_limit records mode warn, and the output labels the gate advisory with a message that says not to trim or defer work to fit; a scope_boundary violation in the same setup still exits 1'
+  - id: A2
+    given: 'policy semantics and doctor posture checks'
+    when: 'budget_limit is declared warn'
+    then: 'neither emits a critical-gate-not-blocking finding for it; when it is declared block, then policy validation emits a warning that block is not honored, with the repair set mode: warn; and spec_completeness / scope_boundary in warn mode still produce their critical-gate warnings'
+  - id: A3
+    given: 'a fresh caws init'
+    when: 'the default policy is written'
+    then: 'budget_limit is declared enabled with mode warn and the risk-tier max_files / max_loc sizing goals are still present'
+  - id: A4
+    given: 'the agent-facing doctrine in this repo (CLAUDE.md, AGENTS.md, the waiver, workflow, integration and full guides, the schema reference)'
+    when: 'it describes risk-tier budgets'
+    then: 'it presents them as an advisory sizing goal, says not to cut or defer work to fit them, and no longer prescribes a budget_limit waiver'
+  - id: A5
+    given: 'this repo''s .caws/policy.yaml'
+    when: 'caws doctor runs on the merged result'
+    then: 'budget_limit is declared warn and no budget-related posture or semantic warning is reported'
+non_functional: {}
+contracts:
+  - name: 'budget-advisory'
+    type: behavior
+    path: 'packages/caws-cli/tests/shell/gates-budget-advisory.test.js'
