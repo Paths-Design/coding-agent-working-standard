@@ -72,3 +72,10 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/tmp/evidence-qualification/01a10082/caws-evidence-boundaries-final.json"
     commit_sha: "840656ece3dff04cb70d47fa37456e00db21c94f"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Nine selected suites passed 140/140; final additional unterminated-EOF boundary case passed separately (31/31 boundary suite, total distinct selected cases 141). Exact LF/CRLF/control/unicode and YAML-coercible strings round trip. The real recordSpecEvidence transaction test preserves the historical multiline item and source prefix, emits the exact matching ac_recorded data, keeps one current row on repeat with a separate second event, leaves both stores byte-identical on unknown criterion and schema rejection, and restores both on injected ac_recorded append failure with partial_failure_recovered explicitly asserted. All 7 roundtrip and 11 existing evidence cases passed. No blanket full-suite or mutation-score claim."
+    recorded_at: "2026-10-03T07:34:50.877Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/tmp/evidence-qualification/01a10082/caws-reprieve-evidence-final-tests.json"
+    commit_sha: "840656ece3dff04cb70d47fa37456e00db21c94f"
