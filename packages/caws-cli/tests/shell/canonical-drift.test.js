@@ -71,12 +71,11 @@ function create(root, extra = {}) {
     id: 'CD-001',
     title: 'Canonical drift test spec',
     mode: 'chore',
-    riskTier: 3,
     scopeIn: ['tests'],
     module: ['tests'],
     invariant: ['fixture'],
     cwd: root,
-    env: { ...process.env },
+    env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
     out: (l) => out.push(l),
     err: (l) => err.push(l),
     ...extra,
@@ -141,6 +140,7 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
       const out = [];
       const err = [];
       const code = runSpecsRelocateCommand({
+        env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
         id: 'CD-002',
         cwd: root,
         out: (l) => out.push(l),
@@ -159,6 +159,7 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
       const out = [];
       const err = [];
       const code = runSpecsRelocateCommand({
+        env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
         id: 'CD-002',
         apply: true,
         cwd: root,
@@ -203,6 +204,7 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
       const out = [];
       const err = [];
       const code = runSpecsRelocateCommand({
+        env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
         id: 'CD-003',
         cwd: root,
         out: (l) => out.push(l),

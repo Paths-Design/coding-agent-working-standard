@@ -1314,8 +1314,7 @@ export function registerShellCommands(
         id?: string;
         title?: string;
         mode?: string;
-        riskTier?: string;
-        tier?: string;
+
         scopeIn?: string[];
         'scope.in'?: string[];
         acceptance?: string[];
@@ -1338,8 +1337,7 @@ export function registerShellCommands(
         ...(opts.id !== undefined ? { idOption: opts.id } : {}),
         ...(opts.title !== undefined ? { title: opts.title } : {}),
         ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
-        ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),
-        ...(opts.tier !== undefined ? { tier: opts.tier } : {}),
+
         ...(opts.scopeIn !== undefined ? { scopeIn: opts.scopeIn } : {}),
         ...(opts['scope.in'] !== undefined ? { scopeInDot: opts['scope.in'] } : {}),
         ...(opts.acceptance !== undefined ? { acceptance: opts.acceptance } : {}),
@@ -1351,7 +1349,7 @@ export function registerShellCommands(
         // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: same forwarding discipline as
         // --contract above — Commander parsing a flag is NOT the same as the
         // handler receiving it, and a handler-only test would pass over a
-        // dropped mapping here. The tier-1 trio is proven end-to-end through
+        // dropped mapping here. These optional fields are proven end-to-end through
         // the spawned CLI for exactly that reason.
         ...(opts.observability !== undefined ? { observability: opts.observability } : {}),
         ...(opts.rollback !== undefined ? { rollback: opts.rollback } : {}),

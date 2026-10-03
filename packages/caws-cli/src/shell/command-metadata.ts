@@ -27,7 +27,7 @@
 //     push"). The lock test cannot verify prose accuracy — co-location +
 //     same-slice scope.in is the discipline that keeps it honest.
 
-import { EVIDENCE_STATUSES, RISK_TIERS, SPEC_MODES, SPEC_RESOLUTIONS } from '../kernel';
+import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS } from '../kernel';
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
 import { EXECUTABLE_TEST_RUNNERS, SELECTABLE_TEST_RUNNERS } from '../store/evidence-rederive';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
@@ -138,8 +138,8 @@ const DATA_OPTION: CommandOptionMeta = {
 // ─── specs group (CLI-SPECS-001) ──────────────────────────────────────────
 // Co-located authority for `caws specs` help. The descriptions here are the
 // single source consumed by register.ts; the option `allowedValues` derive
-// from the kernel enum arrays (SPEC_MODES / SPEC_RESOLUTIONS / RISK_TIERS) so
-// --mode/--resolution/--risk-tier help cannot drift from the validation enums.
+// from the kernel enum arrays (SPEC_MODES / SPEC_RESOLUTIONS) so
+// --mode/--resolution help cannot drift from the validation enums.
 export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
@@ -160,7 +160,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       argument: { name: 'id', required: false, description: 'Spec id to create' },
       description:
         'Create a new spec in lifecycle_state: draft. Binding a worktree (caws worktree create <name> --spec <id>) activates it, so active means the slice is being worked. Use --activate to create it active instead.',
-      // W3: --title/--mode/--risk-tier are functionally required, but the
+      // W3: --title/--mode are functionally required, but the
       // handler (runSpecsCreateCommand) owns the missing-args check so it can
       // emit rich guidance (usage block + --type hint) that Commander's
       // .requiredOption() pre-validation would degrade. So we mark them
@@ -178,17 +178,6 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--mode <mode>',
           description: 'Spec mode (required)',
           allowedValues: SPEC_MODES,
-        },
-        {
-          flag: '--risk-tier <n>',
-          description:
-            'Risk tier (required). Tiers 1 and 2 require at least one --contract (tier 3 / --mode chore do not)',
-          allowedValues: RISK_TIERS,
-        },
-        {
-          flag: '--tier <n>',
-          description: 'Alias for --risk-tier; writes the canonical risk_tier field',
-          allowedValues: RISK_TIERS,
         },
         {
           flag: '--scope-in <path>',
@@ -211,7 +200,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--contract <spec>',
           description:
-            'Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Example: --contract "core-api:behavior". Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.',
+            'Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Example: --contract "core-api:behavior".',
           collect: true,
         },
         {
@@ -229,13 +218,12 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--observability <text>',
           description:
-            'Add an observability item at creation (repeatable): a log, metric, trace, or alert. REQUIRED non-empty for --risk-tier 1.',
+            'Add an observability item at creation (repeatable): a log, metric, trace, or alert.',
           collect: true,
         },
         {
           flag: '--rollback <text>',
-          description:
-            'Add a rollback step at creation (repeatable). REQUIRED non-empty for --risk-tier 1.',
+          description: 'Add a rollback step at creation (repeatable).',
           collect: true,
         },
         {
@@ -245,8 +233,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--security <text>',
-          description:
-            'Add a non_functional.security requirement at creation (repeatable). REQUIRED non-empty for --risk-tier 1.',
+          description: 'Add a non_functional.security requirement at creation (repeatable).',
           collect: true,
         },
         {

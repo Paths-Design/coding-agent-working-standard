@@ -55,9 +55,9 @@ v11 has no project-level working spec. `caws init` refuses legacy
 The host (or first agent) creates per-feature specs via the CLI:
 
 ```bash
-caws specs create FEAT-001 --title "User Authentication System" --mode feature --risk-tier 1 --contract "auth-api:api"
-caws specs create FEAT-002 --title "Payment System" --mode feature --risk-tier 1 --contract "payments-api:api"
-caws specs create FEAT-003 --title "Dashboard UI" --mode feature --risk-tier 1 --contract "dashboard-ui:behavior"
+caws specs create FEAT-001 --title "User Authentication System" --mode feature --contract "auth-api:api"
+caws specs create FEAT-002 --title "Payment System" --mode feature --contract "payments-api:api"
+caws specs create FEAT-003 --title "Dashboard UI" --mode feature --contract "dashboard-ui:behavior"
 ```
 
 Each generated spec lives at `.caws/specs/<id>.yaml`. Edit it to define
@@ -70,7 +70,6 @@ Example (`FEAT-001.yaml`):
 ```yaml
 id: FEAT-001
 title: User Authentication System
-risk_tier: 1
 mode: feature
 scope:
   in:
@@ -196,7 +195,7 @@ overlap, compare `scope.in` patterns manually. A defensive `scope.out` per spec
 caws specs list
 ```
 
-Shows each spec's `id`, `title`, `status`, and `risk_tier`. Pass `--archived` to
+Shows each spec's `id`, `title`, and lifecycle state. Pass `--archived` to
 include archived specs.
 
 ## Common pitfalls

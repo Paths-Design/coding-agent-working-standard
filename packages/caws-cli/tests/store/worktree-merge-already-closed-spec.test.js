@@ -71,7 +71,6 @@ function seedBoundableSpec(caws, id) {
     id,
     title: 'x',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn: ['payload.txt'],
   });

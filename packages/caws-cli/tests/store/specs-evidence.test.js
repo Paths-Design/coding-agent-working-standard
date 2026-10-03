@@ -57,7 +57,6 @@ function seedActiveSpec(caws, id, acIds) {
     id,
     title: 'evidence fixture',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
   });
   if (!r.ok || r.value.kind !== 'success') {

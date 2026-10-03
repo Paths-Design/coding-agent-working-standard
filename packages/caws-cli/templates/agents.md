@@ -29,7 +29,7 @@ caws doctor              # Project-wide CAWS drift detection
 .caws/
   specs/                 # Per-feature specs (canonical; the only spec location)
   specs/.archive/        # Archived specs (filesystem-authoritative)
-  policy.yaml            # Gates + risk_tier sizing goals (advisory)
+  policy.yaml            # Gates + legacy sizing goals (advisory)
   waivers/               # Per-id waiver files
   agents.json            # Session registry (gitignored runtime cache)
   leases/                # Per-session liveness leases (gitignored)
@@ -61,7 +61,7 @@ For a new feature:
 ```bash
 # Created as a DRAFT — `active` means a worktree is bound and the slice is being
 # worked, which creation cannot claim. `--activate` opts out.
-caws specs create FEAT-001 --title "My Feature" --mode feature --risk-tier 3
+caws specs create FEAT-001 --title "My Feature" --mode feature
 # Then edit .caws/specs/FEAT-001.yaml to populate scope/invariants/acceptance/...
 git add .caws/specs/FEAT-001.yaml && git commit -m "chore(caws): create FEAT-001 spec"
 # Binding activates the draft in the same transaction.
@@ -69,13 +69,15 @@ caws worktree create wt-feat-001 --spec FEAT-001
 cd .caws/worktrees/wt-feat-001
 ```
 
-## v11 Spec Shape
+## Spec Shape
+
+New specs have no risk tier. Existing tiered specs remain readable without migration.
+Contracts, observability, rollback and security requirements can be supplied as needed.
 
 Specs at `.caws/specs/<id>.yaml` carry:
 
 - `id` (pattern `^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$`)
 - `title` (≤200 chars)
-- `risk_tier` (integer 1|2|3 — string forms like `"T3"` are rejected)
 - `mode` (`feature|refactor|fix|doc|chore` — v10 `development` is rejected)
 - `lifecycle_state` (`draft|active|closed|archived` — replaces v10 `status:`)
 - `blast_radius.modules` (non-empty string array)
@@ -83,7 +85,7 @@ Specs at `.caws/specs/<id>.yaml` carry:
 - `invariants` (non-empty array of strings)
 - `acceptance` (array of `{id: ^A\d+$, given, when, then}` — v10 `acceptance_criteria:` is rejected)
 - `non_functional` (object; admits exactly four subkeys — `accessibility`, `performance`, `reliability`, `security` — per `spec.v1.json`, which sets `additionalProperties: false`. Each value is an array of strings.)
-- `contracts` (`{name, type: api|schema|contract-test|behavior, path?, description?}`; tier-1/2 require non-empty)
+- `contracts` (`{name, type: api|schema|contract-test|behavior, path?, description?}`; optional entries)
 
 **v10 fields removed from the schema**: `type:`, `description:`, `notes:`, `non_goals:`, `bounded_claim:`, `dependencies:`, `status_rationale:`, `change_budget:`, `created:`.
 
@@ -177,15 +179,15 @@ caws specs archive <id>
 
 The `.caws/specs/.archive/` directory is filesystem-authoritative — `caws specs list` reports any file under it as `lifecycle_state: archived` regardless of YAML literal. `caws specs create` refuses ids that already exist in `.archive/`.
 
-> **Budget note**: `change_budget:` is not a v11 spec field. Risk-tier budgets live in
+> **Budget note**: `change_budget:` is not a v11 spec field. Legacy risk-tier budgets live in
 > `.caws/policy.yaml` `risk_tiers` as an advisory sizing goal: `budget_limit` reports an
 > overage and never blocks, and no waiver is needed. Do not trim, defer or stub work to fit
-> one; if a change outgrows its plan, say so in the spec.
+> one; if a change outgrows its plan, say so in the spec. New tierless specs have no legacy sizing goal.
 
 ## Key Rules
 
 1. **Stay in scope** — only edit files admitted by `scope.in`, never touch `scope.out`
-2. **Treat budgets as a sizing goal** — `max_files` / `max_loc` from `risk_tier` are advisory; never trim, defer or stub work to fit them, and say so in the spec when a change outgrows its plan
+2. **Treat budgets as a sizing goal** — legacy `max_files` / `max_loc` goals are advisory; never trim, defer or stub work to fit them, and say so in the spec when a change outgrows its plan
 3. **No shadow files** — edit in place, never create `*-enhanced.*`, `*-new.*`, `*-v2.*`, `*-final.*` copies
 4. **Tests first** — write failing tests before implementation
 5. **Deterministic code** — inject time, random, and UUID generators for testability
@@ -206,7 +208,7 @@ Gates are declared in `.caws/policy.yaml` with a `mode` (`block | warn | skip`).
 | `god_object`        | warn         | Flag large/responsibility-overloaded modules                                    |
 | `todo_detection`    | warn         | Flag TODOs/placeholders/dangling promises in committed code                     |
 
-Risk tier selects the sizing goal but does NOT set per-gate enforcement — the gate `mode` is global, and `budget_limit` runs as advisory whatever mode is declared (a declared `block` is reported as not honored). v10's "T1 90% coverage / T2 80% / T3 70%" table is gone; coverage and mutation gates were not ported into v11's gate vocabulary. Run those outside CAWS in CI if you need them.
+On legacy specs, risk tier selects the sizing goal but does NOT set per-gate enforcement — the gate `mode` is global, and `budget_limit` runs as advisory whatever mode is declared (a declared `block` is reported as not honored). v10's "T1 90% coverage / T2 80% / T3 70%" table is gone; coverage and mutation gates were not ported into v11's gate vocabulary. Run those outside CAWS in CI if you need them.
 
 Run `caws gates run --spec <id>` to evaluate all declared gates. Each evaluation appends a `gate_evaluated` event to `.caws/events.jsonl`.
 

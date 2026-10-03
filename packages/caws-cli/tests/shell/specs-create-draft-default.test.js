@@ -48,7 +48,6 @@ function runCreate(cwd, id, opts = {}) {
     id,
     title: 'draft default fixture',
     mode: 'chore',
-    riskTier: '3',
     out: (line) => out.push(line),
     err: (line) => err.push(line),
     ...opts,
@@ -86,8 +85,6 @@ function spawnCreate(cwd, id, extraArgs = []) {
       'spawned draft default fixture',
       '--mode',
       'chore',
-      '--risk-tier',
-      '3',
       ...extraArgs,
     ],
     {

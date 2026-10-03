@@ -79,7 +79,7 @@ Run `caws <group> --help` for full options and flag details.
   `caws specs create/list/show/recover/retire-draft/activate/amend-scope/close/reopen/archive/prune-archive/migrate/validate`.
   `caws specs reopen <id>` reverses a close (closed→active) when the auto-close
   from `worktree merge` was premature. Create with
-  `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`,
+  `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore>`,
   then edit the generated YAML. See existing specs in `.caws/specs/` for the
   shape.
 - v11 does **not** ship `caws validate` (removed in v11.0, not returning).
@@ -145,7 +145,7 @@ If `.caws/working-spec.yaml` exists, plain init refuses. Use a reviewed
 
 ```bash
 # 1. Author a spec for your work
-caws specs create FEAT-1 --title "Short title" --mode feature --risk-tier 3
+caws specs create FEAT-1 --title "Short title" --mode feature
 $EDITOR .caws/specs/FEAT-1.yaml          # fill in scope / invariants / acceptance
 
 # 2. Verify scope/structure
@@ -282,23 +282,17 @@ These are enforced by code, not docs. Don't try to work around them.
 7. `caws status` is observability. Running it any number of times produces no
    `.caws/` byte changes.
 
-## Risk tiers (your quality contract)
+## Spec requirements
 
-| Tier  | Contracts | Sizing goal (advisory)             | Use Case                    |
-| ----- | --------- | ---------------------------------- | --------------------------- |
-| **1** | Required  | Smallest (`max_files` / `max_loc`) | Auth, billing, migrations   |
-| **2** | Required  | Moderate                           | Features, APIs, data writes |
-| **3** | Optional  | Largest                            | UI, internal tools          |
+New specs have no risk tier. Declare the scope, invariants and acceptance for
+actual work; add contracts, observability, rollback and security requirements
+when they help describe that work. No tier determines which authoring flags must
+be supplied, and creation does not silently choose a default tier.
 
-Set the tier in your spec's `risk_tier` field (integer `1`/`2`/`3`). Tier
-selects the sizing goal (`.caws/policy.yaml` `risk_tiers`) and whether contracts
-are required. The sizing goal is advisory: `budget_limit` reports an overage and
-never blocks, so never trim, defer or stub work to fit it — durable work that
-runs larger than planned is the right outcome, recorded in the spec. **Coverage
-and mutation are NOT v11 CAWS gates** — the v10 "90%/80%/70%" coverage table is
-gone; run coverage/mutation thresholds in your own CI.
-`caws gates run --spec <id>` evaluates the gates declared in `policy.yaml` (each
-with a `mode` of block/warn/skip).
+Existing tiered specs retain their recorded fields and legacy validation.
+`budget_limit` reports legacy policy sizing goals only for those specs; a new
+spec has no inferred tier budget. Scope and policy gates continue to apply.
+Coverage and mutation thresholds belong in project checks and CI.
 
 ## Waivers
 
@@ -406,7 +400,7 @@ trail shows when and why a guard was skipped. A foreign session is never covered
 
 ## When to ask a human
 
-- **Tier 1 changes** — always request review.
+- **Security-sensitive or irreversible changes** — request appropriate review.
 - **Architecture decisions** — when the design affects multiple components or
   governed paths.
 - **Waivers on T1 gates** — emergency only; document mitigation plan.

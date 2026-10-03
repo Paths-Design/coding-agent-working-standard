@@ -124,7 +124,7 @@ help.
 ### Author a spec
 
 ```bash
-caws specs create FEAT-1 --title "Short title" --mode feature --risk-tier 3
+caws specs create FEAT-1 --title "Short title" --mode feature
 ```
 
 This creates `.caws/specs/FEAT-1.yaml` in `lifecycle_state: draft`. Edit it to
@@ -166,8 +166,8 @@ from `scope.in`/`scope.out`; ownership lives in `.caws/worktrees.json`.
 ```bash
 # One spec + one worktree per agent (loop this per agent; there is no
 # `caws parallel setup` — that surface is deferred to v11.3+)
-# Tier 2 requires at least one --contract.
-caws specs create FEAT-AUTH-001 --title "Auth" --mode feature --risk-tier 2 \
+# Declare the boundary this change must preserve.
+caws specs create FEAT-AUTH-001 --title "Auth" --mode feature \
   --contract "auth-api:behavior"
 caws worktree create wt-auth --spec FEAT-AUTH-001   # writes the binding atomically
 cd .caws/worktrees/wt-auth

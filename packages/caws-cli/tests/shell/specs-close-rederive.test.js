@@ -67,7 +67,6 @@ function mkProject(id, scopeIn) {
     id,
     title: 'close re-derive fixture',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn,
   });

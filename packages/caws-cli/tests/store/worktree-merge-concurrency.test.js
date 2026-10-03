@@ -60,7 +60,7 @@ function seedSpec(caws, id, scopeIn) {
   // CAWS-PREPUSH-PROVENANCE-REWORK-001: merge now enforces lane provenance —
   // every lane commit must touch only paths inside the bound spec's scope.in.
   // Seed that scope so the fixture lanes stay mergeable.
-  const r = createSpec(caws, { id, title: 'x', mode: 'chore', riskTier: 3, actor: ACTOR, scopeIn });
+  const r = createSpec(caws, { id, title: 'x', mode: 'chore', actor: ACTOR, scopeIn });
   if (!r.ok || r.value.kind !== 'success') throw new Error('seed failed');
 }
 

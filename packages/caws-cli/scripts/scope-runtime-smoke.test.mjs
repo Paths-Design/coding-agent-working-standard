@@ -55,8 +55,6 @@ test('installed scope guard evaluates root and nested targets in their bound lan
         id,
         '--mode',
         'fix',
-        '--risk-tier',
-        '3',
         '--activate',
         '--module',
         'fixture',

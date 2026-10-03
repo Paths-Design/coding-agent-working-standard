@@ -45,6 +45,7 @@ function runCreate(root, opts) {
   const out = [];
   const err = [];
   const code = runSpecsCreateCommand({
+    env: {},
     cwd: root,
     out: (line) => out.push(line),
     err: (line) => err.push(line),
@@ -80,8 +81,6 @@ describe('caws specs create --id alias', () => {
       'Create id alias',
       '--mode',
       'chore',
-      '--tier',
-      '3',
       '--scope-in',
       'README.md',
     ]);
@@ -101,7 +100,6 @@ describe('caws specs create --id alias', () => {
       idOption: 'CREATE-ID-OTHER-002',
       title: 'Create id conflict',
       mode: 'chore',
-      tier: 3,
       scopeIn: ['README.md'],
     });
 

@@ -63,7 +63,6 @@ function seedSpec(caws, id, scopeIn = ['work.txt']) {
     id,
     title: 'apply fixture',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn,
   });

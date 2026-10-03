@@ -74,7 +74,6 @@ function seedSpec(caws, id, scopeIn) {
     id,
     title: 'x',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn,
   });

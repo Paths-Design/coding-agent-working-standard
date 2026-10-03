@@ -10,7 +10,7 @@ export interface SemanticOptions {
 }
 
 /**
- * Tier-gated and lifecycle-shape semantic rules. Runs after the schema
+ * Legacy tier constraints and lifecycle-shape semantic rules. Runs after the schema
  * has confirmed the structural shape.
  *
  * Out of scope (deferred to lifecycle / worktree / evidence slices):
@@ -95,8 +95,12 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
     }
   }
 
-  // experimental_mode is only valid on Tier 3.
-  if (spec.experimental_mode !== undefined && spec.risk_tier !== 3) {
+  // Existing tiered specs retain their experimental-mode restriction.
+  if (
+    spec.experimental_mode !== undefined &&
+    spec.risk_tier !== undefined &&
+    spec.risk_tier !== 3
+  ) {
     errors.push(
       diagnostic({
         rule: SPEC_RULES.EXPERIMENTAL_MODE_TIER_RESTRICTED,

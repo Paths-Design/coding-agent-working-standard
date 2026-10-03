@@ -41,8 +41,6 @@ test('real CLI grant reaches the granting repo and its linked worktree but not a
       'Fixture context',
       '--mode',
       'chore',
-      '--risk-tier',
-      '3',
       '--scope-in',
       'src',
       '--module',

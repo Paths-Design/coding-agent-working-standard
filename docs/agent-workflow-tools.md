@@ -135,40 +135,40 @@ path discipline (no code changes in the same PR).
 
 ## v11.1 command cheat sheet
 
-| Situation                               | Command                                                                                                                                                     |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Health check                            | `caws doctor`                                                                                                                                               |
-| Dashboard                               | `caws status`                                                                                                                                               |
-| Explain scope decision                  | `caws scope show <path>`                                                                                                                                    |
-| Enforce scope decision                  | `caws scope check <path>`                                                                                                                                   |
-| Inspect worktree claim                  | `caws claim`                                                                                                                                                |
-| Take over worktree (with authorization) | `caws claim --takeover`                                                                                                                                     |
-| Run quality gates                       | `caws gates run --spec <id>`                                                                                                                                |
-| Record test evidence                    | `caws evidence record --type test --spec <id> --data '{...}'`                                                                                               |
-| Record AC closure                       | `caws specs evidence <id> --ac A1 --status pass --evidence-ref "<test command>"`                                                                            |
-| Open a waiver                           | `caws waiver create <id> --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso8601>`                                            |
-| List waivers                            | `caws waiver list`                                                                                                                                          |
-| Show waiver                             | `caws waiver show <id>`                                                                                                                                     |
-| Revoke waiver                           | `caws waiver revoke <id>`                                                                                                                                   |
-| Grant a guard reprieve                  | `caws reprieve grant --handlers <handler.sh> --reason "..." --approved-by "..." --for 1h`                                                                   |
-| Create a spec                           | `caws specs create <id> --title "..." --mode <feature\|refactor\|fix\|doc\|chore> --risk-tier 1 --contract "<name>:<behavior\|api\|schema\|contract-test>"` |
-| List specs                              | `caws specs list`                                                                                                                                           |
-| Show a spec                             | `caws specs show <id>`                                                                                                                                      |
-| Close a spec                            | `caws specs close <id>`                                                                                                                                     |
-| Archive a spec                          | `caws specs archive <id>`                                                                                                                                   |
-| Create a worktree                       | `caws worktree create <name> --spec <id>`                                                                                                                   |
-| List worktrees                          | `caws worktree list`                                                                                                                                        |
-| Merge a worktree                        | `caws worktree merge <name>`                                                                                                                                |
-| Destroy a worktree                      | `caws worktree destroy <name>`                                                                                                                              |
-| List active agents                      | `caws agents list`                                                                                                                                          |
-| Show one agent                          | `caws agents show <session-id>`                                                                                                                             |
-| Send a message to another session       | `caws message send --to <session-id> --text "..."`                                                                                                          |
+| Situation                               | Command                                                                                                                                       |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health check                            | `caws doctor`                                                                                                                                 |
+| Dashboard                               | `caws status`                                                                                                                                 |
+| Explain scope decision                  | `caws scope show <path>`                                                                                                                      |
+| Enforce scope decision                  | `caws scope check <path>`                                                                                                                     |
+| Inspect worktree claim                  | `caws claim`                                                                                                                                  |
+| Take over worktree (with authorization) | `caws claim --takeover`                                                                                                                       |
+| Run quality gates                       | `caws gates run --spec <id>`                                                                                                                  |
+| Record test evidence                    | `caws evidence record --type test --spec <id> --data '{...}'`                                                                                 |
+| Record AC closure                       | `caws specs evidence <id> --ac A1 --status pass --evidence-ref "<test command>"`                                                              |
+| Open a waiver                           | `caws waiver create <id> --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso8601>`                              |
+| List waivers                            | `caws waiver list`                                                                                                                            |
+| Show waiver                             | `caws waiver show <id>`                                                                                                                       |
+| Revoke waiver                           | `caws waiver revoke <id>`                                                                                                                     |
+| Grant a guard reprieve                  | `caws reprieve grant --handlers <handler.sh> --reason "..." --approved-by "..." --for 1h`                                                     |
+| Create a spec                           | `caws specs create <id> --title "..." --mode <feature\|refactor\|fix\|doc\|chore> --contract "<name>:<behavior\|api\|schema\|contract-test>"` |
+| List specs                              | `caws specs list`                                                                                                                             |
+| Show a spec                             | `caws specs show <id>`                                                                                                                        |
+| Close a spec                            | `caws specs close <id>`                                                                                                                       |
+| Archive a spec                          | `caws specs archive <id>`                                                                                                                     |
+| Create a worktree                       | `caws worktree create <name> --spec <id>`                                                                                                     |
+| List worktrees                          | `caws worktree list`                                                                                                                          |
+| Merge a worktree                        | `caws worktree merge <name>`                                                                                                                  |
+| Destroy a worktree                      | `caws worktree destroy <name>`                                                                                                                |
+| List active agents                      | `caws agents list`                                                                                                                            |
+| Show one agent                          | `caws agents show <session-id>`                                                                                                               |
+| Send a message to another session       | `caws message send --to <session-id> --text "..."`                                                                                            |
 
 ---
 
 ## Daily agent loop
 
-1. **Create the spec**: `caws specs create <id> --title "..." --risk-tier T1`.
+1. **Create the spec**: `caws specs create <id> --title "..." --mode feature`.
    Edit the generated `.caws/specs/<id>.yaml` to set `scope.in`, `scope.out`,
    and acceptance criteria.
 2. **Create and enter the worktree**: `caws worktree create <name> --spec <id>`.

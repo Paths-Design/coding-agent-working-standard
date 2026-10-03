@@ -51,7 +51,6 @@ function seedMerge(repo, name, specId) {
     id: specId,
     title: 'canonical consistency fixture',
     mode: 'fix',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn: ['payload.txt'],
   });

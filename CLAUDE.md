@@ -102,10 +102,10 @@ Get them right at spec-activation time:
 2. **`scope.out` cannot contain glob patterns.** `.github/workflows/**` is
    rejected (`spec.schema.scope.out_glob_forbidden`). Use directory paths only:
    `.github/workflows`, `packages/foo` — never `packages/foo/**`.
-3. **Tier 1/2 require `contracts`.** A genuinely cross-package tier-2 slice
-   declares a contract; a structural chore sets `mode: chore` (no contracts
-   required). Mode and commit type are separate concerns — the release guard
-   reads the commit-message scope (`fix(cli):` publishes), not the spec mode.
+3. **New specs have no risk tier.** Declare contracts and operational
+   requirements when they describe the work. Existing tiered specs remain
+   readable, but new authoring neither chooses nor infers a tier. Mode and
+   commit type remain separate concerns.
 4. **`scope.out` is enforcement, not documentation.** Listing a sibling spec's
    `scope.in` paths in your `scope.out` refuses YOUR edits to those paths in
    union mode. Omit the entry, or accept you cannot edit those paths.

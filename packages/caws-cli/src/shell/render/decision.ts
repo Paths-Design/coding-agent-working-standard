@@ -365,7 +365,7 @@ function newSpecCommands(
 ): ScopeRemediationCommand[] {
   return [
     {
-      command: `caws specs create <id> --title "<title>" --mode <mode> --risk-tier <n> --scope-in ${shellQuote(normPath)}`,
+      command: `caws specs create <id> --title "<title>" --mode <mode> --scope-in ${shellQuote(normPath)}`,
       description:
         'Author a new spec that claims this path. Every spec listed above has already landed or is refused this path by the kernel, so none is a lane for this edit.',
       mutates: true,
