@@ -2,9 +2,11 @@ id: CAWS-REPRIEVE-REASON-AND-EVIDENCE-BOUNDARIES-01
 title: 'Require bounded reprieve justifications and preserve YAML evidence boundaries'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Both requested changes landed in 764cd2cc and installed snapshot 17e7fbe13052242a-O7KeiV. All four corrected citations verified before recording: A1/A4 committed source artifacts, A2/A3 actual decisive regression executions. Broader observed qualification is 141 distinct selected passing cases, five staged policy gates passing, copied Sterling specimen preserving A19/history and spec/event consistency, and five installed module hashes identical to committed rebuild. Generated receipts remain untracked and are explicitly narrative execution references; source presence is not a runtime proof. Live Sterling A20 remains untouched. Doctor baseline remains 0E4W8I.'
 created_at: '2026-10-03T06:57:41.466Z'
-updated_at: '2026-10-03T07:38:35.859Z'
+updated_at: '2026-10-03T08:02:41.250Z'
 created_by_session: '01a10082-452c-78e3-a0a2-7c6d87c48088'
 blast_radius:
   modules:
