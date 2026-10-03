@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: reconciliation-accounting
 created_at: '2026-09-27T05:40:45.320Z'
-updated_at: '2026-09-27T06:24:40.199Z'
+updated_at: '2026-10-03T15:18:07.569Z'
 created_by_session: '01a0e13e-18df-7803-a4fa-cd06d2225972'
 blast_radius:
   modules:
@@ -28,6 +28,12 @@ scope:
     - 'packages/caws-cli/tests/store/doctor-snapshot-tombstone.test.js'
     - 'docs/architecture/repo-local-hook-policy.md'
     - 'docs/guides/sterling-machine-runtime-migration.md'
+    - packages/caws-cli/src/kernel/evidence
+    - packages/caws-cli/src/kernel/schemas/events/worktree_pruned.v1.json
+    - packages/caws-cli/src/store/worktree-reconciliation.ts
+    - packages/caws-cli/tests/shell
+    - packages/caws-cli/tests/store/worktree-reconciliation.test.js
+    - docs/guides/doctor-current-state.md
   out: []
   support:
     - packages/caws-cli/templates/CLAUDE.md
@@ -61,6 +67,21 @@ acceptance:
     given: 'committed changes and synthetic adversarial fixtures'
     when: 'scoped build, type checks, regression controls, doctor and gates run'
     then: 'checks establish the measured behavior without modifying Sterling or machine activation'
+  - id: A7
+    given: 'retained creation events with verified absence and deliberately untracked worktrees'
+    when: 'prune previews or applies reconciliation and status is inspected again'
+    then: >-
+      preview is read-only, application logs an identity-bound worktree_pruned
+      receipt after revalidation, subsequent diagnosis discharges only that
+      creation, and missing observations or a later recreation remain visible
+  - id: A8
+    given: 'healthy configuration, historical waiver uses, owner availability and hook drift'
+    when: 'status and repair plans project current state'
+    then: >-
+      current actionable conditions are distinguished from inventory and valid
+      history, executable next steps are separate from explanation, and the Sterling
+      hook audit records upstream, retain and superseded candidates without changing
+      native activation
 non_functional: {}
 contracts:
   - name: 'reconciliation'
