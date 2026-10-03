@@ -90,6 +90,10 @@ test('the effective coverage config includes unexecuted runtime files and enforc
   const root = fixture();
   fs.mkdirSync(path.join(root, 'dist/store'), { recursive: true });
   fs.mkdirSync(path.join(root, 'tests/helpers'), { recursive: true });
+  fs.copyFileSync(
+    path.join(packageRoot, 'tests/helpers/isolate-session-env.js'),
+    path.join(root, 'tests/helpers/isolate-session-env.js')
+  );
   fs.writeFileSync(path.join(root, 'dist/store/probe.js'), 'exports.value = () => 7;\n');
   fs.writeFileSync(
     path.join(root, 'dist/store/unexecuted.js'),

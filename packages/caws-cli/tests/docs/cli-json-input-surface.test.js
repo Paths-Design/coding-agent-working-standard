@@ -44,6 +44,9 @@ function isOperatorSuppliedJsonInput(option) {
   if (option.command === 'evidence record' && option.flag === '--data <json>') {
     return true;
   }
+  if (option.command === 'hooks import' && option.flag === '--apply-plan <path>') {
+    return true;
+  }
   if (option.command === 'specs migrate' && option.flag === '--lifecycle-mapping <path>') {
     return true;
   }
@@ -59,6 +62,7 @@ describe('CLI JSON input surface reconciliation', () => {
 
     expect(inputs).toEqual([
       'evidence record --data <json>',
+      'hooks import --apply-plan <path>',
       'init adapters adopt --from <file>',
       'init adapters migrate --from <file>',
       'init migrate --from <file>',

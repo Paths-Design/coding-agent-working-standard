@@ -31,8 +31,11 @@ class PytestEntrypoint(unittest.TestCase):
         evidence = Path(tempfile.mkdtemp(prefix='entrypoint-', dir=retained)) if retained else root / 'evidence'
         evidence.mkdir(exist_ok=True, parents=True)
         self.addCleanup(shutil.rmtree, root)
-        copy = root / 'package'
-        copy.mkdir()
+        copy = root / 'packages/caws-cli'
+        copy.mkdir(parents=True)
+        # Build owns documentation staging too. Mirror the source monorepo
+        # layout so this tests a fresh checkout with all authored inputs.
+        shutil.copytree(PACKAGE.parents[1] / 'docs', root / 'docs')
         for name in ('src', 'scripts', 'surfaces', 'templates'):
             shutil.copytree(PACKAGE / name, copy / name,
                             ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))

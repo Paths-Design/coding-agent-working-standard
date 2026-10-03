@@ -67,6 +67,7 @@ test('actual npm files policy excludes planted bytecode while retaining executab
       '--ignore-scripts',
       '--json',
       '--workspaces=false',
+      '--update-notifier=false',
       '--cache',
       path.join(root, 'cache'),
     ],

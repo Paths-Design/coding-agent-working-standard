@@ -21,6 +21,7 @@ function createJestConfig(surfaceId, tests) {
   const config = {
     rootDir: '.',
     testEnvironment: 'node',
+    setupFiles: ['<rootDir>/tests/helpers/isolate-session-env.js'],
     testMatch: tests.map((file) => `<rootDir>/${file}`),
     testPathIgnorePatterns: ['/node_modules/'],
     moduleFileExtensions: ['ts', 'js', 'json'],

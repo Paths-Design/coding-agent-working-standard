@@ -36,6 +36,7 @@ jobs:
       - run: npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2
         env:
           CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
+          CAWS_RELEASE_ARTIFACT_DIR: ${{ github.workspace }}/release-scenarios
       - name: Retain coverage evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -62,7 +63,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hook-bytes-${{ github.sha }}
-          path: hook-artifacts/
+          path: |
+            hook-artifacts/
+            release-scenarios/
           if-no-files-found: warn
 
   package-upgrade:

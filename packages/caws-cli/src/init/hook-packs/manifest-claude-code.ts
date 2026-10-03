@@ -204,7 +204,7 @@ import type { HookPackV1 } from './types';
 // alongside the session-log's usage / rewind / interrupt-kind signals. Without
 // the bump a consumer already on v22 keeps four wired dispatchers and never
 // receives the SessionEnd seal.
-export const CLAUDE_CODE_PACK_VERSION = 23;
+export const CLAUDE_CODE_PACK_VERSION = 24;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',

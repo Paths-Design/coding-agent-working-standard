@@ -96,6 +96,27 @@ test('committed forbidden lane work is evaluated despite an empty canonical inde
   const narrowed = cli(lane, ['gates', 'run', '--spec', 'RELEASE-001', '--base', 'HEAD']);
   expect(narrowed.status).toBe(2);
   expect(narrowed.stderr).toContain('cannot narrow');
+  fs.writeFileSync(path.join(lane, 'staged-forbidden.txt'), 'staged outside scope\n');
+  git(lane, ['add', 'staged-forbidden.txt']);
+  const stagedResult = cli(lane, ['gates', 'run', '--spec', 'RELEASE-001']);
+  expect(stagedResult.status).toBe(1);
+  const stagedScope = fs
+    .readFileSync(path.join(caws, 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map(JSON.parse)
+    .filter((e) => e.event === 'gate_evaluated' && e.data.gate_id === 'scope_boundary')
+    .at(-1);
+  expect(stagedScope.data.violations.map((v) => v.subject).sort()).toEqual([
+    'forbidden.txt',
+    'staged-forbidden.txt',
+  ]);
+  retain('scope-staged', {
+    exit_status: stagedResult.status,
+    stdout: stagedResult.stdout,
+    stderr: stagedResult.stderr,
+    scope_event: stagedScope,
+  });
   retain('scope-lane', {
     command: [CLI, 'gates', 'run', '--spec', 'RELEASE-001'],
     exit_status: result.status,

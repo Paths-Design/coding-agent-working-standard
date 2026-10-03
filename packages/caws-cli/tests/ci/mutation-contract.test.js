@@ -199,6 +199,9 @@ describe('mutation policy topology contract', () => {
   test.each(['kernel', 'store', 'shell'])(
     '%s sandbox excludes sibling runs while retaining source and tests',
     (surface) => {
+      expect(createStrykerConfig(surface).jest.config.setupFiles).toEqual([
+        '<rootDir>/tests/helpers/isolate-session-env.js',
+      ]);
       const dir = makeTempDir();
       const required = [
         'src/init/runtime.ts',
