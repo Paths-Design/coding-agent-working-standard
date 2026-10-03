@@ -75,3 +75,34 @@ export function historicalWaiverUses(events: readonly ChainedEvent[], waivers: r
   }
   return uses;
 }
+
+/** Replay dispositions against the current incarnation, never all uses of a name. */
+export function worktreeHistory(events: readonly ChainedEvent[]) {
+  const pending = new Map<string, ChainedEvent>();
+  const releasedPaths = new Set<string>();
+  for (const event of events) {
+    const d = event.data as Record<string, unknown>;
+    if (event.event === 'worktree_created' && typeof d.name === 'string') {
+      pending.set(d.name, event);
+      if (typeof d.path === 'string') releasedPaths.delete(d.path);
+    } else if (event.event === 'worktree_untracked' && typeof d.worktree_name === 'string') {
+      pending.delete(d.worktree_name);
+      if (typeof d.path === 'string') releasedPaths.add(d.path);
+    } else if (event.event === 'worktree_destroyed' && typeof d.worktree_name === 'string') {
+      pending.delete(d.worktree_name);
+      if (typeof d.path === 'string') releasedPaths.delete(d.path);
+    } else if (event.event === 'worktree_pruned' && typeof d.worktree_name === 'string') {
+      const creation = pending.get(d.worktree_name);
+      if (
+        d.h_class === 'ghost_registry' ||
+        (creation &&
+          d.h_class === 'verified_dead_creation' &&
+          d.created_event_seq === creation.seq &&
+          d.created_event_hash === creation.event_hash)
+      ) {
+        pending.delete(d.worktree_name);
+      }
+    }
+  }
+  return { pending, releasedPaths };
+}

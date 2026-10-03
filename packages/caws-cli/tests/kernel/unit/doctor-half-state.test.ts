@@ -225,7 +225,7 @@ describe('event-backed governance-half-state (A2/A6 — worktree_created orphan)
     expect(f?.data?.created_event_seq).toBe(2);
     expect(typeof f?.data?.created_event_hash).toBe('string');
     expect(f?.data?.spec_id).toBe('WT-SPEC');
-    // DIAGNOSE ONLY: no mutating command in the repair.
+    // Incomplete observations cannot authorize a reconciliation receipt.
     expect(f?.narrowRepair ?? '').not.toMatch(/\bcaws\s+\w|\bgit\s+\w/);
   });
 
@@ -333,7 +333,7 @@ describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DIS
     expect(f?.data?.branch_observed_absent).toBe('wt-tomb');
     expect(f?.data?.path_observed_absent).toBe('/fixture/absent/wt-tomb');
     // The tombstone names no command either — diagnose-only posture holds.
-    expect(f?.narrowRepair ?? '').not.toMatch(/\bcaws\s+\w|\bgit\s+\w/);
+    expect(f?.narrowRepair).toContain('caws worktree prune --state verified-dead-creation');
     // The tombstone contributes to infos, not warnings.
     expect(report.summary.warnings).toBe(0);
     expect(report.summary.infos).toBe(1);

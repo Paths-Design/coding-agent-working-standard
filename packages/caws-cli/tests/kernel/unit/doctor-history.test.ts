@@ -1,4 +1,9 @@
-import { historicalWaiverUses, unmetObligations } from '../../../src/kernel/doctor/history';
+import { inspectProjectState } from '../../../src/kernel/doctor/inspect';
+import {
+  historicalWaiverUses,
+  unmetObligations,
+  worktreeHistory,
+} from '../../../src/kernel/doctor/history';
 import type { Waiver } from '../../../src/kernel/waiver/types';
 import type { ChainedEvent } from '../../../src/kernel/evidence/types';
 import type { Spec } from '../../../src/kernel/spec/types';
@@ -88,4 +93,69 @@ test('recorded held obligations stay visible; passing evidence removes only its 
       },
     ],
   });
+});
+
+test('untrack releases its path and a later creation restores lifecycle accountability', () => {
+  const create = {
+    event: 'worktree_created',
+    seq: 1,
+    event_hash: 'first',
+    data: { name: 'lane', path: '/lane' },
+  } as unknown as ChainedEvent;
+  const untrack = {
+    event: 'worktree_untracked',
+    seq: 2,
+    data: { worktree_name: 'lane', path: '/lane' },
+  } as unknown as ChainedEvent;
+  expect([...worktreeHistory([create, untrack]).pending.keys()]).toEqual([]);
+  expect([...worktreeHistory([create, untrack]).releasedPaths]).toEqual(['/lane']);
+  const again: ChainedEvent = { ...create, seq: 3, event_hash: 'sha256:second' };
+  expect([...worktreeHistory([create, untrack, again]).pending.values()]).toEqual([again]);
+  expect([...worktreeHistory([create, untrack, again]).releasedPaths]).toEqual([]);
+});
+test('absence receipts match both creation sequence and hash; ghost pruning accounts for its lifecycle', () => {
+  const create = {
+    event: 'worktree_created',
+    seq: 1,
+    event_hash: 'first',
+    data: { name: 'lane' },
+  } as unknown as ChainedEvent;
+  const receipt = (seq: number, hash: string) =>
+    ({
+      event: 'worktree_pruned',
+      seq: 2,
+      data: {
+        worktree_name: 'lane',
+        h_class: 'verified_dead_creation',
+        created_event_seq: seq,
+        created_event_hash: hash,
+      },
+    }) as unknown as ChainedEvent;
+  expect(worktreeHistory([create, receipt(1, 'first')]).pending.size).toBe(0);
+  expect(worktreeHistory([create, receipt(2, 'first')]).pending.size).toBe(1);
+  expect(worktreeHistory([create, receipt(1, 'different')]).pending.size).toBe(1);
+  expect(
+    worktreeHistory([
+      create,
+      {
+        event: 'worktree_pruned',
+        data: { worktree_name: 'lane', h_class: 'ghost_registry' },
+      } as unknown as ChainedEvent,
+    ]).pending.size
+  ).toBe(0);
+});
+
+test('valid historical uses are discharged while later invalid uses remain current findings', () => {
+  const findings = inspectProjectState({
+    now: new Date('2026-02-01'),
+    specs: [],
+    waivers: [waiver],
+    events: [use('2026-01-02T00:00:00Z', 1), use('2026-01-03T00:00:00Z', 2)],
+  }).findings.filter(
+    (f) =>
+      f.rule === 'doctor.waiver.historical_use' || f.rule === 'doctor.waiver.revoked_referenced'
+  );
+  expect(findings.map((f) => [f.severity, f.data?.event_seq, f.data?.classification])).toEqual([
+    ['warning', 2, 'post_revocation'],
+  ]);
 });
