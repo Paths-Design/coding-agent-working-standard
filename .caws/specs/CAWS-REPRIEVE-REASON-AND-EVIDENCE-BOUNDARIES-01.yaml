@@ -2,9 +2,10 @@ id: CAWS-REPRIEVE-REASON-AND-EVIDENCE-BOUNDARIES-01
 title: 'Require bounded reprieve justifications and preserve YAML evidence boundaries'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: reprieve-evidence-boundaries
 created_at: '2026-10-03T06:57:41.466Z'
-updated_at: '2026-10-03T06:57:41.466Z'
+updated_at: '2026-10-03T06:58:00.884Z'
 created_by_session: '01a10082-452c-78e3-a0a2-7c6d87c48088'
 blast_radius:
   modules:
