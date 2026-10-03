@@ -54,7 +54,6 @@ function seedSpec(caws, id, acceptance) {
     id,
     title: 'roundtrip fixture',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     acceptance,
   });

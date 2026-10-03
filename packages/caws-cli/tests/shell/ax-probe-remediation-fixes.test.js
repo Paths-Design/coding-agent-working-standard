@@ -56,7 +56,6 @@ function runCreate(cwd, id, opts = {}) {
     id,
     title: 'AX probe fixture',
     mode: 'chore',
-    riskTier: '3',
     out: (line) => out.push(line),
     err: (line) => err.push(line),
     ...opts,

@@ -211,8 +211,6 @@ describe('caws gates run: an over-budget staged change does not block', () => {
       'Budget advisory end to end',
       '--mode',
       'fix',
-      '--risk-tier',
-      '3',
       '--scope-in',
       'src',
       '--activate',
@@ -220,6 +218,8 @@ describe('caws gates run: an over-budget staged change does not block', () => {
     if (create.status !== 0) {
       throw new Error(`spec create failed with code ${create.status}:\n${create.stderr}`);
     }
+    const legacySpecPath = path.join(root, '.caws/specs/BUDGET-ADVISORY-001.yaml');
+    fs.appendFileSync(legacySpecPath, '\nrisk_tier: 3\n');
     fs.mkdirSync(path.join(root, 'src'));
     fs.writeFileSync(
       path.join(root, 'src', 'a.ts'),

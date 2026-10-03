@@ -94,7 +94,7 @@ Risk tiers drive rigor and determine quality gates:
 
 - Infer and declare the tier in your plan
 - Meet or exceed tier requirements
-- Request human review for Tier 1 changes
+- Request human review for security-sensitive or irreversible changes
 - Never downgrade a tier without human approval
 
 ### Key Invariants (Never Violate These)
@@ -113,7 +113,7 @@ Every task needs a working spec at `.caws/specs/<spec-id>.yaml`. Create one with
 the CLI, then fill in the project-specific fields:
 
 ```bash
-caws specs create FEAT-001 --title "Add user authentication flow" --mode feature --risk-tier 1 \
+caws specs create FEAT-001 --title "Add user authentication flow" --mode feature \
   --contract "auth-api:api"
 ```
 
@@ -123,7 +123,6 @@ non-functional requirements:
 ```yaml
 id: FEAT-001
 title: 'Add user authentication flow'
-risk_tier: 1
 mode: feature
 lifecycle_state: draft # create writes draft; caws worktree create --spec FEAT-001 (or --activate) is what moves this to active
 operational_rollback_slo: '5m'
@@ -166,9 +165,9 @@ contracts:
 
 ```bash
 # 1. Create the spec via CLI — this is the canonical path.
-#    Tier 1/2 REQUIRE at least one --contract ("name:type[:path]", where type is
+#    Optional --contract declares a boundary ("name:type[:path]", where type is
 #    api|schema|contract-test|behavior); the command refuses without it.
-caws specs create <id> --title "Feature title" --mode feature --risk-tier 2 \
+caws specs create <id> --title "Feature title" --mode feature \
   --contract "core-api:behavior"
 
 # 2. Edit the generated file to add scope, invariants, acceptance criteria
@@ -260,28 +259,10 @@ npm run test:contract     # Contract validation
 npm run test:e2e          # End-to-end smoke tests
 ```
 
-**Quality gates by tier:**
-
-**Tier 1:**
-
-- Branch coverage ≥ 90%
-- Mutation score ≥ 70%
-- All contract tests pass
-- Manual code review completed
-- No SAST/secret scan violations
-
-**Tier 2:**
-
-- Branch coverage ≥ 80%
-- Mutation score ≥ 50%
-- Contract tests pass (if external APIs)
-- E2E smoke tests pass
-
-**Tier 3:**
-
-- Branch coverage ≥ 70%
-- Mutation score ≥ 30%
-- Integration happy-path tests pass
+**Quality checks follow the work and project policy.** Run the relevant tests,
+contract checks, coverage, mutation checks, and security checks configured by
+the project. CAWS does not assign coverage thresholds through a spec tier.
+Review requirements should follow the affected boundary and consequences.
 
 ### Phase 4: Document & Deliver
 
@@ -293,7 +274,7 @@ npm run test:e2e          # End-to-end smoke tests
 ## Feature Spec
 
 - [ ] `.caws/specs/<spec-id>.yaml` attached and validates
-- [ ] Risk tier appropriate for change impact
+- [ ] Scope and requirements describe the actual change
 - [ ] Acceptance criteria met
 
 ## Tests
@@ -428,7 +409,7 @@ other writer.
 ### Spec lifecycle
 
 ```bash
-caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>
+caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore>
                           # creates .caws/specs/<id>.yaml in lifecycle_state: draft
                           # (--activate creates it active; worktree create activates on bind)
 caws specs list           # list specs (excludes archived by default)
@@ -819,16 +800,11 @@ EOF
 
 ### Validation Errors
 
-#### Error: `risk_tier is required`
+#### An older CLI asks for a risk tier
 
-**Cause**: feature spec missing risk tier.
-
-**Fix**:
-
-```yaml
-# Add to .caws/specs/<spec-id>.yaml
-risk_tier: 2 # Choose 1, 2, or 3 based on impact
-```
+New creation uses `caws specs create <id> --title "..." --mode <mode>`. Upgrade
+the installed CLI if it still requires a tier. Existing tiered specs remain
+readable; new specs do not select a tier or inherit a default one.
 
 #### Error: `Invalid ID format`
 
@@ -900,7 +876,7 @@ gates.
 
 ### Test Coverage Failures
 
-#### Error: `Branch coverage 75% below tier 2 requirement of 80%`
+#### Error: `Branch coverage below the project threshold`
 
 **Cause**: Insufficient test coverage.
 
@@ -911,7 +887,7 @@ gates.
 3. Add tests for uncovered paths
 4. Re-run: `npm run test:coverage`
 
-#### Error: `Mutation score 45% below tier 2 requirement of 50%`
+#### Error: `Mutation score below the project threshold`
 
 **Cause**: Tests aren't strong enough (mutants survive).
 
@@ -985,13 +961,12 @@ Each evidence-event payload is validated against a closed kernel schema
 v11's `caws init` is no-arg and ships no project-template scaffolds.
 `caws templates` is removed and is not planned to return. Use
 `caws specs create` to bootstrap a spec, then fill in project-specific fields.
-Below are recommended `risk_tier` and `non_functional` defaults for common
-archetypes.
+Below are examples of `non_functional` requirements for common archetypes.
+Choose concrete requirements for the work; no risk tier is assigned.
 
 ### VS Code extension
 
 ```yaml
-risk_tier: 2 # high user impact
 non_functional:
   performance:
     - 'extension activation < 1000ms on typical machine'
@@ -1002,7 +977,6 @@ non_functional:
 ### React library
 
 ```yaml
-risk_tier: 2 # API stability
 non_functional:
   performance:
     - 'tree-shakeable bundle < 50KB'
@@ -1011,7 +985,6 @@ non_functional:
 ### API service
 
 ```yaml
-risk_tier: 1 # data integrity
 non_functional:
   performance:
     - 'api p95 < 250ms'
@@ -1022,9 +995,7 @@ non_functional:
 
 ### CLI tool
 
-```yaml
-risk_tier: 3 # low risk
-```
+Declare command behavior, exit codes and relevant compatibility requirements.
 
 ---
 
@@ -1140,8 +1111,8 @@ needs:
 
 **A: Create one.** Before any implementation:
 
-1. `caws specs create <id> --title "..." --mode <mode> --risk-tier <n>` — this
-   is the canonical creation path
+1. `caws specs create <id> --title "..." --mode <mode>` — this is the canonical
+   creation path
 2. Edit `.caws/specs/<id>.yaml` to add scope, invariants, acceptance criteria,
    and non-functional requirements
 3. Run `caws doctor` to verify drift / structure

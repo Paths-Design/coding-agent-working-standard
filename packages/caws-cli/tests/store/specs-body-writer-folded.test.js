@@ -46,12 +46,11 @@ function create(root, id, invariantLines) {
     id,
     title: 't',
     mode: 'chore',
-    riskTier: 3,
     scopeIn: ['tests'],
     module: ['tests'],
     invariant: invariantLines,
     cwd: root,
-    env: { ...process.env },
+    env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
     out: () => {},
     err: (l) => err.push(l),
   });
@@ -83,7 +82,7 @@ function amend(root, id, opts) {
   const code = runSpecsAmendCommand({
     id,
     cwd: root,
-    env: { ...process.env },
+    env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
     out: (l) => out.push(l),
     err: (l) => err.push(l),
     ...opts,

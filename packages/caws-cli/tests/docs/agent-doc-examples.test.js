@@ -149,29 +149,27 @@ describe('caws evidence record examples in agent-facing docs are runnable', () =
   });
 });
 
-describe('caws specs create examples satisfy the tier/contract rule', () => {
-  // Tier 1 and 2 specs require at least one contract; the CLI refuses without
-  // one. TUTORIAL.md's first hands-on command violated this, so a reader
-  // following the tutorial literally was blocked on step one.
-  const CREATE_RE = /caws specs create\s+([^\n`]*)/g;
-
-  test('no documented tier-1/2 create omits --contract', () => {
+describe('spec creation examples do not require tier selection', () => {
+  test('current authoring surfaces use tierless creation commands', () => {
+    const surfaces = [
+      ...DOC_SURFACES,
+      'README.md',
+      'packages/caws-cli/README.md',
+      'docs/guides/caws-contracts.md',
+      'docs/guides/caws-developer-guide.md',
+      'packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md',
+      'packages/caws-cli/templates/hook-packs/codex/CAWS.md',
+    ];
     const failures = [];
-    for (const rel of DOC_SURFACES) {
+    let commands = 0;
+    for (const rel of surfaces) {
       const body = fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\\\n\s*/g, ' ');
-      let m;
-      CREATE_RE.lastIndex = 0;
-      while ((m = CREATE_RE.exec(body)) !== null) {
-        const inv = m[1];
-        const tier = /--risk-tier\s+(\d)/.exec(inv);
-        if (!tier) continue;
-        const isChore = /--mode\s+chore/.test(inv);
-        if (isChore) continue;
-        if ((tier[1] === '1' || tier[1] === '2') && !/--contract/.test(inv)) {
-          failures.push(`${rel}: tier ${tier[1]} create without --contract: ${inv.trim()}`);
-        }
+      for (const match of body.matchAll(/caws specs create\s+([^\n`]*)/g)) {
+        commands += 1;
+        if (/--(?:risk-tier|tier)\b/.test(match[1])) failures.push(rel + ': ' + match[1]);
       }
     }
+    expect(commands).toBeGreaterThan(10);
     expect(failures).toEqual([]);
   });
 });

@@ -67,7 +67,6 @@ function seedBoundableSpec(caws, id) {
     id,
     title: 'AC evidence window fixture',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn: ['payload.txt'],
   });

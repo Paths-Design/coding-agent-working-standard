@@ -170,8 +170,6 @@ describe('governed lifecycle commands are contained to the session root', () => 
       'a spec authored where the session lives',
       '--mode',
       'chore',
-      '--risk-tier',
-      '3',
     ]);
 
     expect(r.status).toBe(0);
@@ -190,8 +188,6 @@ describe('governed lifecycle commands are contained to the session root', () => 
       'a spec reaching into a repo this session does not belong to',
       '--mode',
       'chore',
-      '--risk-tier',
-      '3',
     ]);
 
     expect(r.status).toBe(1);
@@ -260,8 +256,6 @@ describe('governed lifecycle commands are contained to the session root', () => 
       'second spec in the session root',
       '--mode',
       'chore',
-      '--risk-tier',
-      '3',
     ]);
     expect(create.status).toBe(0);
     expect(fs.existsSync(path.join(repoA, '.caws', 'specs', 'HOMEA-002.yaml'))).toBe(true);
@@ -304,8 +298,6 @@ describe('the escape is a human grant, and it is honored end to end (A6)', () =>
       'authored across the boundary under an explicit human grant',
       '--mode',
       'chore',
-      '--risk-tier',
-      '3',
     ]);
 
     expect(r.status).toBe(0);
@@ -335,8 +327,6 @@ describe('the escape is a human grant, and it is honored end to end (A6)', () =>
       'attempted after the grant was withdrawn',
       '--mode',
       'chore',
-      '--risk-tier',
-      '3',
     ]);
     expect(r.status).toBe(1);
     expect(r.all).toContain('this session is rooted in another repository');

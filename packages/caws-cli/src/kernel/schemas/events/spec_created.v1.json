@@ -5,10 +5,14 @@
   "$comment": "Class: REQUIRES_SPEC_ID. Envelope.spec_id is the spec being created.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["title", "risk_tier", "mode", "lifecycle_state"],
+  "required": ["title", "mode", "lifecycle_state"],
   "properties": {
     "title": { "type": "string", "minLength": 1 },
-    "risk_tier": { "type": "integer", "enum": [1, 2, 3] },
+    "risk_tier": {
+      "type": "integer",
+      "enum": [1, 2, 3],
+      "description": "Legacy optional field. Preserved on existing records; new spec creation omits it."
+    },
     "mode": {
       "type": "string",
       "enum": ["feature", "refactor", "fix", "doc", "chore"]

@@ -70,7 +70,7 @@ function mkCaws(prefix) {
 
 /** Create a spec, optionally with a declared scope.in. */
 function seed(caws, id, scopeIn) {
-  const input = { id, title: 'x', mode: 'chore', riskTier: 3, actor: ACTOR };
+  const input = { id, title: 'x', mode: 'chore', actor: ACTOR };
   if (scopeIn !== undefined) input.scopeIn = scopeIn;
   const r = createSpec(caws, input);
   if (!r.ok || r.value.kind !== 'success') {

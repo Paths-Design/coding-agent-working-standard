@@ -45,6 +45,7 @@ function runCreate(root, opts) {
   const out = [];
   const err = [];
   const code = runSpecsCreateCommand({
+    env: {},
     cwd: root,
     out: (line) => out.push(line),
     err: (line) => err.push(line),
@@ -80,8 +81,6 @@ describe('caws specs create --scope.in alias', () => {
       'Scope dot alias',
       '--mode',
       'chore',
-      '--tier',
-      '3',
       '--scope.in',
       'README.md',
     ]);
@@ -103,7 +102,6 @@ describe('caws specs create --scope.in alias', () => {
       id: 'SCOPE-DOT-002',
       title: 'Scope dot conflict',
       mode: 'chore',
-      tier: 3,
       scopeIn: ['README.md'],
       scopeInDot: ['docs/guide.md'],
     });

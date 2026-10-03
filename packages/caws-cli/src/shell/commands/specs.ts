@@ -2,7 +2,7 @@
 //
 // CLI-SPECS-001: the canonical replacement for manual lifecycle YAML
 // edits. Five subcommands:
-//   - caws specs create <id> --title <title> --mode <mode> --risk-tier <n>
+//   - caws specs create <id> --title <title> --mode <mode>
 //   - caws specs list [--archived]
 //   - caws specs show <id>
 //   - caws specs close <id> --resolution <r> [--reason <text>] [--merge-commit <sha>] [--superseded-by <id>]
@@ -234,9 +234,6 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
   readonly idOption?: string;
   readonly title?: string;
   readonly mode?: string;
-  readonly riskTier?: number | string;
-  /** Alias for --risk-tier; writes the canonical risk_tier YAML field. */
-  readonly tier?: number | string;
   readonly legacyType?: string;
   /**
    * Repeatable --scope-in <path>. When supplied, scope.in is written with the
@@ -251,19 +248,9 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
    * "given: ...; when: ...; then: ..." value seeds all v11 fields.
    */
   readonly acceptance?: readonly string[];
-  /**
-   * Repeatable --contract "name:type[:path]". Tier-1/2 specs require at least
-   * one contract; supplying it here creates the spec valid in one command
-   * (FIX-SPECS-CONTRACT-ORIENTATION-001).
-   */
+  /** Optional repeatable contract declarations. */
   readonly contract?: readonly string[];
-  /**
-   * The three fields validate-semantics REQUIRES non-empty on risk_tier 1
-   * (CAWS-DEFECT-SPECS-CREATE-AUTHORING-01, Sterling ledger N15). Each is
-   * repeatable. Before these existed, a tier-1 spec was uncreatable through
-   * this command — the validator demanded fields no flag could supply, so
-   * hand-written YAML was the only route.
-   */
+  /** Optional repeatable operational requirements. */
   readonly observability?: readonly string[];
   readonly rollback?: readonly string[];
   readonly security?: readonly string[];
@@ -455,21 +442,16 @@ function parseStructuredAcceptance(
 
 const SPECS_CREATE_USAGE = [
   'Usage:',
-  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--tier <1|2|3>] [--scope-in <path>]... [--scope.in <path>]... [--acceptance <text>]... [--contract "name:type[:path]"]... [--plan] [--json]',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> [--scope-in <path>]... [--scope.in <path>]... [--acceptance <text>]... [--contract "name:type[:path]"]... [--plan] [--json]',
   '',
   'Example:',
-  '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
-  '  caws specs create FEAT-002 --title "Render slice" --mode feature --risk-tier 3 --scope-in src/render.js --scope-in tests/render.test.js',
-  '  caws specs create FEAT-003 --title "Tier-2 cross-package" --mode feature --risk-tier 2 --contract "core-api:behavior"',
+  '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore',
+  '  caws specs create FEAT-002 --title "Render slice" --mode feature --scope-in src/render.js --scope-in tests/render.test.js',
+  '  caws specs create FEAT-003 --title "Cross-package change" --mode feature --contract "core-api:behavior"',
   '',
   'Notes:',
   '  --type is not supported in v11. Use --mode instead.',
-  '  --tier is an alias for --risk-tier; both write the canonical risk_tier field.',
-  '  Risk tier 3 is appropriate for docs, tests, harnesses, and low-blast-radius slices.',
-  '  Tier 1/2 specs require at least one contract: pass --contract "name:type[:path]"',
-  '    (repeatable); type is one of api|schema|contract-test|behavior.',
-  '  Pick the tier from the blast radius, then declare the contract that tier implies.',
-  '    Re-tiering to clear this check is a maintainer decision, not a hotfix.',
+  '  --contract optionally declares a behavior, schema, API or contract-test boundary.',
   '  --scope-in (repeatable) writes scope.in at creation time, so you never hand-edit it.',
   '  --scope.in is an alias for --scope-in; both write the canonical scope.in field.',
   '  --acceptance is repeatable; free text becomes then, or pass "given: ...; when: ...; then: ...".',
@@ -482,7 +464,6 @@ function createCommandPreview(opts: {
   readonly id: string;
   readonly title: string;
   readonly mode: ValidMode;
-  readonly riskTier: 1 | 2 | 3;
   readonly scopeIn?: readonly string[];
   readonly acceptance?: readonly string[];
   readonly contract?: readonly string[];
@@ -499,8 +480,6 @@ function createCommandPreview(opts: {
     shellQuote(opts.title),
     '--mode',
     shellQuote(opts.mode),
-    '--risk-tier',
-    String(opts.riskTier),
   ];
   for (const p of opts.scopeIn ?? []) {
     parts.push('--scope-in', shellQuote(p));
@@ -512,7 +491,7 @@ function createCommandPreview(opts: {
     parts.push('--contract', shellQuote(c));
   }
   // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: the preview must reproduce the
-  // candidate it previewed. Omitting the tier-1 trio printed a command that is
+  // candidate it previewed. Omitting optional fields printed a command that is
   // REFUSED when copied — which is worse than printing nothing, because the
   // operator trusts a preview whose entire purpose is to be pasted.
   for (const o of opts.observability ?? []) {
@@ -715,7 +694,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     specId === undefined ? '<id> or --id' : undefined,
     opts.title === undefined ? '--title' : undefined,
     opts.mode === undefined ? '--mode' : undefined,
-    opts.riskTier === undefined && opts.tier === undefined ? '--risk-tier' : undefined,
   ].filter((v): v is string => v !== undefined);
   if (missing.length > 0) {
     err(`caws specs create: missing required options: ${missing.join(', ')}`);
@@ -725,18 +703,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
 
   const title = opts.title;
   const mode = opts.mode;
-  if (opts.riskTier !== undefined && opts.tier !== undefined) {
-    err('caws specs create: --risk-tier and --tier both write risk_tier; pass only one.');
-    return 1;
-  }
-
-  const rawRiskTier = opts.riskTier ?? opts.tier;
-  if (
-    specId === undefined ||
-    title === undefined ||
-    mode === undefined ||
-    rawRiskTier === undefined
-  ) {
+  if (specId === undefined || title === undefined || mode === undefined) {
     err('caws specs create: missing required options.');
     err(SPECS_CREATE_USAGE);
     return 1;
@@ -752,12 +719,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     err(`caws specs create: invalid --mode "${mode}". Expected one of: ${VALID_MODES.join(', ')}.`);
     return 1;
   }
-  const riskTier = typeof rawRiskTier === 'string' ? Number.parseInt(rawRiskTier, 10) : rawRiskTier;
-  if (riskTier !== 1 && riskTier !== 2 && riskTier !== 3) {
-    err(`caws specs create: invalid risk tier "${rawRiskTier}". Expected 1, 2, or 3.`);
-    return 1;
-  }
-
   const ctx = resolveCawsCtx(cwd, err, showData, 'create');
   if (ctx === null) return 2;
 
@@ -774,8 +735,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   if (actor === null) return 2;
 
   // FIX-SPECS-CONTRACT-ORIENTATION-001: parse repeatable --contract into
-  // structured entries (validating the type enum) BEFORE the writer, so a
-  // tier-1/2 spec is created valid in one command.
+  // structured entries (validating the type enum) before any write.
   let parsedContracts: { name: string; type: ContractType; path?: string }[] | undefined;
   if (opts.contract !== undefined && opts.contract.length > 0) {
     const parsed = parseContractFlags(opts.contract);
@@ -800,7 +760,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     id: specId,
     title,
     mode: mode as ValidMode,
-    riskTier: riskTier as 1 | 2 | 3,
     now: nowFn,
     actor,
     // SPEC-CREATED-BY-SESSION-001: the actor's session id is already resolved
@@ -816,7 +775,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(parsedContracts !== undefined && parsedContracts.length > 0
       ? { contracts: parsedContracts }
       : {}),
-    // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: the tier-1 trio.
+    // Preserve optional operational requirements.
     ...(opts.observability !== undefined && opts.observability.length > 0
       ? { observability: opts.observability }
       : {}),
@@ -851,7 +810,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       id: specId,
       title,
       mode: mode as ValidMode,
-      riskTier: riskTier as 1 | 2 | 3,
       ...(scopeIn !== undefined && scopeIn.length > 0 ? { scopeIn } : {}),
       ...(opts.acceptance !== undefined && opts.acceptance.length > 0
         ? { acceptance: opts.acceptance }
@@ -884,7 +842,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         candidate: {
           title,
           mode,
-          risk_tier: riskTier,
           lifecycle_state: opts.activate === true ? 'active' : 'draft',
           scope_in: scopeIn ?? [],
           acceptance: parsedAcceptance ?? [],
@@ -928,67 +885,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   if (!isOk(result)) {
     err('caws specs create: failed.');
     err(renderDiagnostics(result.errors, { showData }));
-    // CAWS-DEFECT-MSG-ENRICHMENT-01 (DEFECT-02): the kernel's narrowRepair says
-    // "Add at least one contract" but does not name the --contract flag, and the
-    // prior hint only fired when parsedContracts === undefined (so a malformed
-    // contract suppressed the shape hint). Fire on the rejection RULE instead —
-    // the writer wraps kernel diagnostics with data.source_rule — and lead with
-    // the runnable retry command so the operator never has to look up the shape.
-    const TIER_CONTRACT_RULES = new Set([
-      'spec.semantic.tier1.contracts_required',
-      'spec.semantic.tier2.contracts_required',
-    ]);
-    const rejectedForMissingContracts = result.errors.some(
-      (d) =>
-        typeof d.data?.source_rule === 'string' &&
-        TIER_CONTRACT_RULES.has(d.data.source_rule as string)
-    );
-    if ((riskTier === 1 || riskTier === 2) && rejectedForMissingContracts) {
-      err('');
-      err(`  ${CONTRACT_SHAPE_HINT}`);
-      err(
-        `  Retry: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} --contract "core-api:behavior"`
-      );
-    }
-    // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01 (Sterling ledger N15): the kernel
-    // narrowRepair says "Add at least one observability item" without naming a
-    // flag — and until this slice there WAS no flag, so an operator reading it
-    // concluded the requirement was unsatisfiable from the CLI and hand-wrote
-    // the YAML. Name the flag that satisfies each rule, and prescribe only the
-    // ones still missing (re-listing a flag the operator already passed sends
-    // them to re-pass it).
-    const TIER1_FIELD_FLAGS: readonly { rule: string; flag: string; example: string }[] = [
-      {
-        rule: 'spec.semantic.tier1.observability_required',
-        flag: '--observability',
-        example: 'Log the decision path and refusal reason for each governed operation.',
-      },
-      {
-        rule: 'spec.semantic.tier1.rollback_required',
-        flag: '--rollback',
-        example: 'Revert the implementation commit and rerun caws doctor plus focused tests.',
-      },
-      {
-        rule: 'spec.semantic.tier1.security_required',
-        flag: '--security',
-        example: 'No new secret material is logged, persisted, or exposed in diagnostics.',
-      },
-    ];
-    const rejectedRules = new Set(
-      result.errors
-        .map((d) => d.data?.source_rule)
-        .filter((r): r is string => typeof r === 'string')
-    );
-    const missingTier1 = TIER1_FIELD_FLAGS.filter((f) => rejectedRules.has(f.rule));
-    if (missingTier1.length > 0) {
-      err('');
-      err('  Tier-1 specs require these fields; each flag is repeatable:');
-      for (const f of missingTier1) err(`    ${f.flag} "${f.example}"`);
-      err(
-        `  Retry: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} ` +
-          missingTier1.map((f) => `${f.flag} "..."`).join(' ')
-      );
-    }
     return 1;
   }
   const outcome = result.value;
@@ -1073,26 +969,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       `caws advisory (non-blocking): ${outcome.id} was created with scaffolded defaults in ` +
         `${scaffolded.join(', ')}. These fields are schema-required non-empty, so create had to ` +
         `write a value. Supply them at creation next time — both flags are repeatable.`
-    );
-  }
-  // CAWS-SPECS-CREATE-SUCCESS-CONTRACT-HINT-001: the contract orientation is
-  // inlined here (docs/guides/caws-contracts.md is NOT shipped in the published
-  // package, so pointing at it dangles in a consumer install — FIX-SPECS-
-  // CONTRACT-ORIENTATION-001 A3), but it is emitted only where it is TRUE.
-  // A non-chore tier-1/2 create is refused without contracts, so on the success
-  // path they are already present; tier 3 is not governed by the rule at all.
-  // That leaves one reachable success state with `contracts: []` on a tier-1/2
-  // spec — mode: chore — and that spec is EXEMPT, not deficient. It also must
-  // not be the last line: whatever prints last is the whole result to a reader
-  // piping through `tail`, and a caveat there reads as a verdict.
-  if (
-    (riskTier === 1 || riskTier === 2) &&
-    (parsedContracts === undefined || parsedContracts.length === 0)
-  ) {
-    out(
-      `  Note: this spec has no contracts. mode: ${mode} waives the tier-1/2 contract ` +
-        `requirement; a tier-${riskTier} spec in any other mode is refused without one. ` +
-        `Supply one at create time — ${CONTRACT_EXAMPLE_HINT}.`
     );
   }
   out('');

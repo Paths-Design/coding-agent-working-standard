@@ -13,10 +13,10 @@ updated: 2026-08-19
 
 > All examples conform to the v11.9.0 kernel schema
 > (`packages/caws-cli/src/kernel/schemas/spec.v1.json`). Create specs with
-> `caws specs create <id> --title "..." --mode <mode> --risk-tier <n>`, then
-> edit to add scope/invariants/acceptance. Fields `change_budget`, `threats`,
-> `migrations`, `human_override`, `ai_assessment` are rejected by the schema and
-> must not appear. `non_functional` accepts only four string-array subkeys:
+> `caws specs create <id> --title "..." --mode <mode>`, then edit to add
+> scope/invariants/acceptance. Fields `change_budget`, `threats`, `migrations`,
+> `human_override`, `ai_assessment` are rejected by the schema and must not
+> appear. `non_functional` accepts only four string-array subkeys:
 > `accessibility`, `performance`, `reliability`, `security`.
 
 ---
@@ -24,14 +24,12 @@ updated: 2026-08-19
 ## VS Code Extension - Theme Switcher
 
 **Project**: VS Code extension adding theme switching capabilities  
-**Risk Tier**: 2 (high user impact)  
 **Files Changed**: 12  
 **Lines Changed**: 450
 
 ```yaml
 id: EXT-002
 title: 'Add Theme Switcher Extension'
-risk_tier: 2
 mode: feature
 lifecycle_state: active
 blast_radius:
@@ -91,14 +89,12 @@ rollback:
 ## React Component Library - Button Component
 
 **Project**: Add accessible button component to design system  
-**Risk Tier**: 2 (API stability required)  
 **Files Changed**: 8  
 **Lines Changed**: 320
 
 ```yaml
 id: LIB-003
 title: 'Add Accessible Button Component'
-risk_tier: 2
 mode: feature
 lifecycle_state: active
 blast_radius:
@@ -155,14 +151,12 @@ rollback:
 ## REST API - User Authentication
 
 **Project**: Add JWT-based authentication to user service  
-**Risk Tier**: 1 (security critical)  
 **Files Changed**: 18  
 **Lines Changed**: 850
 
 ```yaml
 id: API-004
 title: 'Implement JWT Authentication'
-risk_tier: 1
 mode: feature
 lifecycle_state: active
 blast_radius:
@@ -238,14 +232,12 @@ rollback:
 ## Code Refactor - Extract Service Layer
 
 **Project**: Extract business logic into service layer  
-**Risk Tier**: 2 (behavior preservation required)  
 **Files Changed**: 12  
 **Lines Changed**: 380
 
 ```yaml
 id: REFACTOR-005
 title: 'Extract User Service Layer'
-risk_tier: 2
 mode: refactor
 lifecycle_state: active
 blast_radius:
@@ -297,14 +289,12 @@ rollback:
 ## Bug Fix - Memory Leak in Data Processing
 
 **Project**: Fix memory leak in CSV processing pipeline  
-**Risk Tier**: 1 (data integrity + performance)  
 **Files Changed**: 3  
 **Lines Changed**: 45
 
 ```yaml
 id: FIX-006
 title: 'Fix Memory Leak in CSV Processor'
-risk_tier: 1
 mode: fix
 lifecycle_state: active
 blast_radius:
@@ -361,14 +351,12 @@ rollback:
 ## Documentation - API Reference
 
 **Project**: Add comprehensive API documentation  
-**Risk Tier**: 3 (no functional changes)  
 **Files Changed**: 8  
 **Lines Changed**: 1200
 
 ```yaml
 id: DOC-007
 title: 'Add API Documentation'
-risk_tier: 3
 mode: doc
 lifecycle_state: active
 blast_radius:
@@ -406,14 +394,12 @@ rollback:
 ## CLI Tool - Add Interactive Mode
 
 **Project**: Add interactive mode to CLI tool  
-**Risk Tier**: 3 (low risk feature addition)  
 **Files Changed**: 4  
 **Lines Changed**: 120
 
 ```yaml
 id: CLI-008
 title: 'Add Interactive Mode to CLI'
-risk_tier: 3
 mode: feature
 lifecycle_state: active
 blast_radius:
@@ -453,14 +439,12 @@ rollback:
 ## Monorepo - Add Shared Component
 
 **Project**: Add shared Button component to monorepo  
-**Risk Tier**: 1 (cross-package compatibility)  
 **Files Changed**: 12  
 **Lines Changed**: 280
 
 ```yaml
 id: MONO-009
 title: 'Add Shared Button Component'
-risk_tier: 1
 mode: feature
 lifecycle_state: active
 blast_radius:
@@ -507,28 +491,13 @@ rollback:
 
 ## Key Patterns Observed
 
-### Risk Tier Patterns
+### Requirements follow the change
 
-**Tier 1 Projects** (Critical):
-
-- Authentication, billing, data migrations
-- API contracts always required
-- Manual review mandatory
-- Higher change budgets for complexity
-
-**Tier 2 Projects** (Standard):
-
-- Features, UI components, refactorings
-- Contracts required for external APIs
-- E2E testing recommended
-- Balanced change budgets
-
-**Tier 3 Projects** (Low Risk):
-
-- Internal tools, docs, simple fixes
-- Minimal testing requirements
-- Lower change budgets
-- Fast rollback times
+Authentication, billing and data migrations need explicit security, data
+integrity and recovery requirements. API changes need compatibility and contract
+tests. UI changes need relevant behavior and accessibility checks. State the
+requirements in the spec and verify them; no numeric tier chooses or relaxes
+them.
 
 ### Project Type Patterns
 
@@ -560,9 +529,8 @@ stability
 
 1. **Find Similar Project**: Look for examples matching your project type and
    risk level
-2. **Create via CLI**: Run
-   `caws specs create <id> --title "..." --mode <mode> --risk-tier <n>` to
-   generate the base YAML
+2. **Create via CLI**: Run `caws specs create <id> --title "..." --mode <mode>`
+   to generate the base YAML
 3. **Edit the result**: Add scope, invariants, acceptance criteria, and
    non-functional requirements from the examples above
 4. **Verify early**: Run `caws doctor` and `caws gates run --spec <id>` to catch

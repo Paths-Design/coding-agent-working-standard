@@ -223,7 +223,7 @@ describe('createSpec — inject on spec_created [classify: transaction-contained
     const preCount = readEventsRaw(caws).length;
 
     const result = withFault('spec_created', () =>
-      createSpec(caws, { id, title: 'x', mode: 'chore', riskTier: 3, actor: ACTOR })
+      createSpec(caws, { id, title: 'x', mode: 'chore', actor: ACTOR })
     );
 
     expect(result.ok).toBe(true);
@@ -464,7 +464,6 @@ function seedBoundableSpec(caws, id) {
     id,
     title: 'x',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn: ['payload.txt'],
   });

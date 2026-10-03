@@ -66,7 +66,6 @@ function seedBoundableSpec(caws, id) {
     id,
     title: 'AC evidence merge fixture',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn: ['payload.txt'],
   });

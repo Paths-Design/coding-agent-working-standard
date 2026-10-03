@@ -63,7 +63,6 @@ function seed(caws, id, scopeIn) {
     id,
     title: 'x',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     initialState: 'draft',
   };

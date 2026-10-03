@@ -8,7 +8,6 @@
   "required": [
     "id",
     "title",
-    "risk_tier",
     "mode",
     "lifecycle_state",
     "blast_radius",
@@ -33,7 +32,7 @@
     "risk_tier": {
       "type": "integer",
       "enum": [1, 2, 3],
-      "description": "Tier 1 most strict, Tier 3 least. String forms ('T1', '1') are NOT accepted; coerce upstream."
+      "description": "Legacy optional field. Preserved on existing records; new spec creation omits it."
     },
     "mode": {
       "type": "string",
@@ -191,7 +190,7 @@
     },
     "contracts": {
       "type": "array",
-      "description": "Tier 1+2 require non-empty contracts (semantic check). Empty array is structurally valid for tier 3.",
+      "description": "Optional declarations for new specs. Existing legacy Tier 1+2 specs retain their non-empty contract check.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -219,7 +218,7 @@
     },
     "experimental_mode": {
       "type": "object",
-      "description": "Tier 3 only. Semantic check rejects on Tier 1 or 2.",
+      "description": "Optional for tierless specs. Existing legacy Tier 1 or 2 specs retain their restriction.",
       "additionalProperties": false,
       "required": ["enabled", "rationale", "expires_at"],
       "properties": {

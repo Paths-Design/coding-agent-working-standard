@@ -43,7 +43,6 @@ function runCreate(root, id, opts = {}) {
     id,
     title: 'semicolon fixture',
     mode: 'chore',
-    riskTier: '3',
     out: (line) => out.push(line),
     err: (line) => err.push(line),
     now: () => new Date('2026-08-12T00:00:00.000Z'),

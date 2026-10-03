@@ -37,12 +37,12 @@ export interface BudgetLimitResult {
   readonly observed: {
     readonly files_changed: number;
     readonly loc_changed: number;
-    readonly max_files: number;
-    readonly max_loc: number;
+    readonly max_files: number | null;
+    readonly max_loc: number | null;
   };
 }
 
-function tierKey(tier: number): '1' | '2' | '3' | undefined {
+function tierKey(tier: number | undefined): '1' | '2' | '3' | undefined {
   if (tier === 1) return '1';
   if (tier === 2) return '2';
   if (tier === 3) return '3';
@@ -56,11 +56,11 @@ export function evaluateBudgetLimit(input: BudgetLimitInput): BudgetLimitResult 
 
   const tk = tierKey(input.spec.risk_tier);
   if (tk === undefined) {
-    // Spec carries a risk_tier the schema accepts (1, 2, 3); anything
-    // else is a spec-completeness problem, not a budget violation.
+    // Tierless specs have no legacy sizing goal. Never invent a tier or
+    // report a zero-sized budget for them.
     return {
       violations: [],
-      observed: { files_changed, loc_changed, max_files: 0, max_loc: 0 },
+      observed: { files_changed, loc_changed, max_files: null, max_loc: null },
     };
   }
   const budget = input.policy.risk_tiers[tk];

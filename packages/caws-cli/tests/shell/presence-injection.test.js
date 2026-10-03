@@ -90,9 +90,8 @@ function mkSpec(root, id) {
     id,
     title: 'Presence injection test spec',
     mode: 'feature',
-    riskTier: 3,
     cwd: root,
-    env: { ...process.env },
+    env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
     out: s.outFn,
     err: s.errFn,
   });
@@ -104,7 +103,7 @@ function activate(root, id, env = process.env) {
   const code = runSpecsActivateCommand({
     id,
     cwd: root,
-    env: { ...env },
+    env: { ...env, CAWS_HOME: path.join(root, 'machine') },
     out: s.outFn,
     err: s.errFn,
   });

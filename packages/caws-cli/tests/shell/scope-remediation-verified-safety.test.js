@@ -225,7 +225,7 @@ describe('A2: a spec whose lane landed under --no-close is never offered as a la
     expect(commands.filter((c) => /worktree (ensure|bind) .*LANDED-001/.test(c))).toEqual([]);
     expect(commands).toContain('caws specs show LANDED-001');
     expect(commands).toContain(
-      'caws specs create <id> --title "<title>" --mode <mode> --risk-tier <n> --scope-in packages/owned/file.ts'
+      'caws specs create <id> --title "<title>" --mode <mode> --scope-in packages/owned/file.ts'
     );
     expect(commands).toContain('caws worktree ensure <name> --spec <id>');
     expect(json.remediation.notes[0]).toBe(

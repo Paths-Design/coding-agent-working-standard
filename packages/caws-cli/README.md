@@ -44,7 +44,7 @@ project registrations once, preserving reviewed custom behavior.
 ```bash
 caws doctor
 caws status
-caws specs create FEAT-001 --title "Implement the selected feature" --mode feature --risk-tier 3 --scope-in src/
+caws specs create FEAT-001 --title "Implement the selected feature" --mode feature --scope-in src/
 caws worktree create wt-feature --spec FEAT-001
 ```
 

@@ -76,7 +76,6 @@ function runCreate(cwd, id, env, opts = {}) {
     id,
     title: 'session provenance fixture',
     mode: 'chore',
-    riskTier: '3',
     out: (line) => out.push(line),
     err: (line) => err.push(line),
     ...opts,
@@ -142,8 +141,6 @@ describe('specs create stamps created_by_session', () => {
         'spawned provenance fixture',
         '--mode',
         'chore',
-        '--risk-tier',
-        '3',
       ],
       {
         cwd: root,
@@ -165,7 +162,6 @@ describe('the field is optional and strictness is unchanged', () => {
       id: 'PROV-ABSENT-005',
       title: 'no session supplied',
       mode: 'chore',
-      riskTier: 3,
       now: () => new Date('2026-09-03T12:00:00.000Z'),
       actor: { kind: 'agent', id: 'writer-direct' },
     });
@@ -238,7 +234,6 @@ describe('provenance survives the spec lifecycle and matches the dry run', () =>
       id: 'PROV-PLAN-009',
       title: 'plan provenance fixture',
       mode: 'chore',
-      riskTier: 3,
       now: () => new Date('2026-09-03T12:00:00.000Z'),
       actor: { kind: 'agent', id: 'planner', session_id: 'sess_plan_actor' },
       createdBySession: 'sess_plan_actor',

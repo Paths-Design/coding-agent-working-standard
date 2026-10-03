@@ -45,8 +45,6 @@ gates.
 - Handle storage errors gracefully
 - Include proper TypeScript types
 
-**Risk Level**: Tier 2 (standard feature with data persistence)
-
 ---
 
 ## Step 1: Initialize CAWS
@@ -66,16 +64,13 @@ This creates `.caws/` with `policy.yaml`, `specs/`, `waivers/`,
 Use the CLI to create the spec — this is the canonical path:
 
 ```bash
-caws specs create PREF-001 --title "Add User Preferences Storage" --mode feature --risk-tier 2 \
+caws specs create PREF-001 --title "Add User Preferences Storage" --mode feature \
   --contract "preferences-api:behavior"
 ```
 
-`--contract` is not optional here: tier 1 and tier 2 specs require at least one,
-and the command refuses without it
-(`Tier 2 specs require at least one contract`). The shape is
-`"name:type[:path]"`, where type is one of
-`api | schema | contract-test | behavior`. A tier-3 or `--mode chore` spec needs
-no contract.
+The optional `--contract` declares the preferences boundary this feature must
+preserve. It uses `"name:type[:path]"`, with type one of
+`api | schema | contract-test | behavior`. No tier selection is required.
 
 This writes `.caws/specs/PREF-001.yaml` with `lifecycle_state: draft` (pass
 `--activate` to create it active directly, or bind a worktree later with
@@ -85,7 +80,6 @@ edit it to add scope, invariants, acceptance, and non-functional requirements:
 ```yaml
 id: PREF-001
 title: 'Add User Preferences Storage'
-risk_tier: 2
 mode: feature
 lifecycle_state: draft
 blast_radius:
@@ -437,7 +431,7 @@ caws gates run --spec PREF-001
 npm run test:coverage
 ```
 
-**Expected**: ≥80% branch coverage for Tier 2
+**Expected**: The coverage threshold configured by this project
 
 ### Manual Verification
 

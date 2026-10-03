@@ -139,19 +139,17 @@ hit blind. Each has a concrete fix below. **Validate every authored spec with
 `caws specs show <id>` (or `caws doctor`) before you commit it** — those surface
 a schema rejection immediately, so you never commit a spec that will not load.
 
-- **Tier 1 / tier 2 specs require at least one contract.** A bare
-  `caws specs create <id> --mode feature --risk-tier 2` is rejected
-  (`Tier 2 specs require at least one contract`). Author the contract in the same
-  command — do not hand-edit the YAML afterward:
+- **Create specs without selecting a risk tier.** Declare scope and acceptance
+  for the work. Add a contract when it helps state an interface or guarantee:
 
   ```bash
-  caws specs create FEAT-001 --title "..." --mode feature --risk-tier 2 \
+  caws specs create FEAT-001 --title "..." --mode feature \
     --contract "core-api:behavior"
   ```
 
-  `--contract` is repeatable and takes `"name:type[:path]"`, where `type` is one
-  of `api | schema | contract-test | behavior`. If the slice is a low-blast-radius
-  chore, use `--risk-tier 3` (or `--mode chore`) instead — those need no contract.
+  `--contract` is optional and repeatable, using `"name:type[:path]"` with
+  `api | schema | contract-test | behavior`. Operational requirements can be
+  supplied through `--observability`, `--rollback` and `--security` independently.
 
 - **`non_functional.*` values are arrays of strings, not scalars.** The four
   admitted subkeys (`accessibility`, `performance`, `reliability`, `security`)

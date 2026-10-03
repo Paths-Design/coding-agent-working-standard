@@ -38,7 +38,6 @@ function setup() {
     id: 'CANONICAL-SHELL-001',
     title: 'canonical shell fixture',
     mode: 'fix',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn: ['payload.txt'],
   });

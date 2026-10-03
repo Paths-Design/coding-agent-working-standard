@@ -57,7 +57,7 @@ All commands are scriptable. Exit codes are uniform: 0 success/observation, 1 do
 
 - CLI installed: `npm install -g @paths.design/caws-cli`
 - Project initialized: `caws init` (idempotent; refuses legacy `.caws/working-spec.yaml` residue)
-- At least one spec created: `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier 1 --contract "<name>:<behavior|api|schema|contract-test>"`
+- At least one spec created: `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --contract "<name>:<behavior|api|schema|contract-test>"`
 
 ## Pre-implementation checks
 

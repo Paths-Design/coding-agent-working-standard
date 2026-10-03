@@ -61,7 +61,7 @@ caws status
 # 2. Create a feature spec (v11 takes --mode from a closed enum, not --type).
 #    It is created as a DRAFT: `active` means a worktree is bound and the slice
 #    is being worked, so step 4 is what activates it. `--activate` opts out.
-caws specs create FEAT-001 --title "description" --mode feature --risk-tier 3
+caws specs create FEAT-001 --title "description" --mode feature
 
 # 3. Edit .caws/specs/FEAT-001.yaml to populate scope.in / scope.out / invariants /
 #    acceptance / non_functional / contracts. Commit it before creating the worktree —
@@ -106,7 +106,7 @@ If you see a `caws validate` or `caws iterate` invocation in any project doctrin
 - `caws evidence record --type <test|gate|ac> --spec <id> --data <json>` — append a typed evidence event.
 - `caws events migrate | rotate | verify-archive` — maintain `.caws/events.jsonl`.
 - `caws waiver create | list | show | revoke` — manage waiver records (singular `waiver`, not plural).
-- `caws specs create | list | show | recover | restore | retire-draft | prune-drafts | activate | deactivate | amend-scope | amend | evidence | close | reopen | archive | prune-archive | migrate | validate | relocate` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`. There is no `--type` flag. **Lifecycle exits by current state:** active → `close`; closed → `archive`; never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`). **`amend-scope <id> --add <path>... [--remove <path>] [--add-out <path>]`** mutates an active/draft spec's `scope.in`/`scope.out` on the canonical control plane and appends `spec_scope_amended` — the sanctioned way to widen scope mid-slice (no `git cherry-pick`, no danger latch; the worktree sees the change immediately). `reopen` reverses a premature `close` (closed→active); `evidence` is the only writer of the AC-closure `evidence:` block the close gate reads.
+- `caws specs create | list | show | recover | restore | retire-draft | prune-drafts | activate | deactivate | amend-scope | amend | evidence | close | reopen | archive | prune-archive | migrate | validate | relocate` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore>`. There is no `--type` flag. **Lifecycle exits by current state:** active → `close`; closed → `archive`; never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`). **`amend-scope <id> --add <path>... [--remove <path>] [--add-out <path>]`** mutates an active/draft spec's `scope.in`/`scope.out` on the canonical control plane and appends `spec_scope_amended` — the sanctioned way to widen scope mid-slice (no `git cherry-pick`, no danger latch; the worktree sees the change immediately). `reopen` reverses a premature `close` (closed→active); `evidence` is the only writer of the AC-closure `evidence:` block the close gate reads.
 - `caws worktree create | list | ensure | bind | destroy | untrack | merge | review | migrate-registry | repair-sparse | repair | prune | cleanup-plan` — worktree lifecycle. `ensure <name> --spec <id>` is the idempotent create-or-admit form; `review <name>` is a read-only pre-merge gate (commit list, per-commit scope-provenance, AC evidence status — never mutates); `untrack` releases the registry binding while keeping the directory; `prune` and `cleanup-plan` are dry-run-by-default cleanup planners (registry and physical, respectively). `create <name> --spec <id>` writes the bidirectional worktree↔spec binding and emits the `worktree_created` + `worktree_bound` events. `destroy <name>` is non-forceful and does NOT auto-delete the branch (run `git branch -d <branch>` manually).
 - `caws agents register | heartbeat | stop | list | show | work-state | prune` — agent liveness substrate. `list/show` are read-only; `work-state` is a visibility-only annotation (`working|blocked_awaiting_human|review_ready|done`) a session sets on its own lease; ownership decisions still use `claim`/`worktree`.
 - `caws session prune | pickup` — dry-run-default retention for `.caws/sessions/` turn logs, and a `manual_pickup` event when one session continues another's paused work. The full session lifecycle (`start`/`checkpoint`/`end`) remains deferred.
@@ -117,11 +117,10 @@ Run `caws <group> --help` for full options.
 
 ### Specs
 
-Specs live exclusively at `.caws/specs/<id>.yaml`. **There is no project-level working spec** — every spec is per-feature. v11 spec shape:
+Specs live exclusively at `.caws/specs/<id>.yaml`. **There is no project-level working spec** — every spec is per-feature. New specs have no risk tier; optional contracts and operational requirements describe the actual work. Existing tiered specs remain readable. Spec shape:
 
 - `id` (matches `^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$`)
 - `title` (≤200 chars)
-- `risk_tier` (integer 1|2|3 — string forms like `"T3"` are rejected)
 - `mode` (one of `feature|refactor|fix|doc|chore` — v10 `development` is rejected)
 - `lifecycle_state` (one of `draft|active|closed|archived` — replaces v10 `status:`)
 - `blast_radius.modules` (non-empty string array)
@@ -129,7 +128,7 @@ Specs live exclusively at `.caws/specs/<id>.yaml`. **There is no project-level w
 - `invariants` (non-empty array of strings)
 - `acceptance` (array of `{id: ^A\d+$, given, when, then}` — v10 `acceptance_criteria:` is rejected)
 - `non_functional` (object; admits exactly four subkeys — `accessibility`, `performance`, `reliability`, `security` — per the kernel's `spec.v1.json` schema)
-- `contracts` (array of `{name, type: api|schema|contract-test|behavior, path?, description?}`; tier-1/2 require non-empty)
+- `contracts` (array of `{name, type: api|schema|contract-test|behavior, path?, description?}`; optional entries)
 
 v10 fields **removed** from the schema: `type:`, `description:`, `notes:`, `non_goals:`, `bounded_claim:`, `dependencies:`, `status_rationale:`, `change_budget:`, `created:`. Migrate any v10 spec via the v10→v11 migration recipe (see `docs/migration-v10-to-v11.md` if you're on the upstream caws repo).
 
@@ -172,10 +171,10 @@ Use `caws specs close <id>` to close an active spec, then `caws specs archive <i
 
 If you try `caws specs create <id>` for an id that already exists in `.archive/`, the command refuses. Resurrect old ids only when you genuinely intend a continuation, and via spec authoring (not by deleting the archive entry).
 
-> **Budget note**: `change_budget:` is not a v11 spec field. Risk-tier budgets live in
+> **Budget note**: `change_budget:` is not a v11 spec field. Legacy risk-tier budgets live in
 > `.caws/policy.yaml` `risk_tiers` as an advisory sizing goal: `budget_limit` reports an
 > overage and never blocks, and no waiver is needed. Do not trim, defer or stub work to fit
-> one; if a change outgrows its plan, say so in the spec.
+> one; if a change outgrows its plan, say so in the spec. New tierless specs have no legacy sizing goal.
 
 ### Quality Gates
 
@@ -189,14 +188,14 @@ v11 declares gates in `.caws/policy.yaml` as a flat object, each with a `mode` (
 | `god_object`        | warn         | Flag large/responsibility-overloaded modules (observability)                    |
 | `todo_detection`    | warn         | Flag TODOs/placeholders/dangling promises in committed code                     |
 
-Risk tier selects the sizing goal (max_files / max_loc) but does not set per-gate enforcement — the gate `mode` is global, and `budget_limit` runs as advisory whatever mode is declared (a declared `block` is reported as not honored). v10's "T1 90% coverage / T2 80% / T3 70%" table is gone. Coverage and mutation gates were not ported into v11's gate vocabulary; if you need them, run them outside CAWS as part of CI.
+On legacy specs, risk tier selects the sizing goal (max_files / max_loc) but does not set per-gate enforcement — the gate `mode` is global, and `budget_limit` runs as advisory whatever mode is declared (a declared `block` is reported as not honored). v10's "T1 90% coverage / T2 80% / T3 70%" table is gone. Coverage and mutation gates were not ported into v11's gate vocabulary; if you need them, run them outside CAWS as part of CI.
 
 Run `caws gates run --spec <id>` to evaluate all declared gates. Each evaluation appends a `gate_evaluated` event to `.caws/events.jsonl`.
 
 ### Key Rules
 
 1. **Stay in scope** — only edit files admitted by `scope.in`, never touch `scope.out`
-2. **Treat budgets as a sizing goal** — `max_files` / `max_loc` from `risk_tier` are advisory; never trim, defer or stub work to fit them, and say so in the spec when a change outgrows its plan
+2. **Treat budgets as a sizing goal** — legacy `max_files` / `max_loc` goals are advisory; never trim, defer or stub work to fit them, and say so in the spec when a change outgrows its plan
 3. **No shadow files** — edit in place, never create `*-enhanced.*`, `*-new.*`, `*-v2.*`, `*-final.*` copies
 4. **Tests first** — write failing tests before implementation
 5. **Deterministic code** — inject time, random, and UUID generators for testability
@@ -231,7 +230,7 @@ Repeat `--gate` for multiple gates. The CLI validates against the kernel before 
 .caws/
   specs/              # Per-feature specs (canonical; the only spec location)
   specs/.archive/     # Archived specs (filesystem-authoritative)
-  policy.yaml         # Gates + risk_tier sizing goals (advisory)
+  policy.yaml         # Gates + legacy sizing goals (advisory)
   waivers/            # Per-id waiver files
   agents.json         # Session registry (gitignored runtime cache)
   leases/             # Per-session liveness leases (gitignored)

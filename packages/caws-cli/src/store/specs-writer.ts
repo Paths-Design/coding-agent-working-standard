@@ -65,7 +65,6 @@ export interface CreateSpecInput {
   readonly id: string;
   readonly title: string;
   readonly mode: 'feature' | 'refactor' | 'fix' | 'doc' | 'chore';
-  readonly riskTier: 1 | 2 | 3;
   /** Initial state. v11.1 defaults to active. */
   readonly initialState?: 'active' | 'draft';
   /**
@@ -86,28 +85,13 @@ export interface CreateSpecInput {
     readonly when: string;
     readonly then: string;
   }[];
-  /**
-   * Contracts to populate at creation time (FIX-SPECS-CONTRACT-ORIENTATION-001).
-   * Tier-1/2 specs require at least one contract; supplying them here lets a
-   * tier-1/2 spec be created in one command instead of create-at-tier-3-then-
-   * hand-edit. When non-empty, the rendered spec's `contracts:` lists exactly
-   * these entries; when undefined/empty, `contracts: []` is rendered (prior
-   * behavior — valid for tier-3 / mode: chore).
-   */
+  /** Optional contracts, preserved in caller order; omitted entries render as contracts: []. */
   readonly contracts?: readonly {
     readonly name: string;
     readonly type: 'api' | 'schema' | 'contract-test' | 'behavior';
     readonly path?: string;
   }[];
-  /**
-   * The three fields validate-semantics.ts REQUIRES non-empty on risk_tier 1
-   * (CAWS-DEFECT-SPECS-CREATE-AUTHORING-01, Sterling ledger N15). Without
-   * these, a tier-1 spec could not be authored through `caws specs create` at
-   * all — the validator demanded fields the command surface had no flag for,
-   * so the only route was hand-written YAML that bypassed this renderer
-   * entirely. Optional and valid at any tier; a lower-tier spec may supply
-   * them voluntarily.
-   */
+  /** Optional operational requirements; no tier determines whether they may be supplied. */
   readonly observability?: readonly string[];
   readonly rollback?: readonly string[];
   readonly security?: readonly string[];
@@ -913,11 +897,7 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
           ]),
         ]
       : [`acceptance:`, `  - id: A1`, `    given: 'TODO'`, `    when: 'TODO'`, `    then: 'TODO'`];
-  // FIX-SPECS-CONTRACT-ORIENTATION-001: when --contract entries were supplied,
-  // render them so a tier-1/2 spec is created valid in one command. Each entry
-  // is {name, type[, path]}; single-quote string scalars defensively. When none
-  // are supplied, render the empty sequence (prior behavior; valid for tier-3 /
-  // mode: chore).
+  // Preserve optional contracts in caller order, quoting string scalars.
   const contractsLines =
     input.contracts !== undefined && input.contracts.length > 0
       ? [
@@ -929,10 +909,10 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
           ]),
         ]
       : [`contracts: []`];
-  // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: the tier-1 trio. Each renders as a
+  // Optional operational fields. Each renders as a
   // top-level string sequence when supplied; when absent the prior scaffold
   // shape is preserved exactly (`non_functional: {}`, no observability/rollback
-  // keys) so lower-tier creates are byte-identical to before.
+  // keys).
   const stringSeq = (key: string, values: readonly string[]): string[] => [
     `${key}:`,
     ...values.map((v) => `  - ${sq(v)}`),
@@ -972,7 +952,6 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
   return [
     `id: ${input.id}`,
     `title: '${input.title.replace(/'/g, "''")}'`,
-    `risk_tier: ${input.riskTier}`,
     `mode: ${input.mode}`,
     `lifecycle_state: ${state}`,
     `created_at: '${now}'`,
@@ -1149,7 +1128,6 @@ export function createSpec(cawsDir: string, input: CreateSpecInput): Result<Spec
     spec_id: input.id,
     data: {
       title: input.title,
-      risk_tier: input.riskTier,
       mode: input.mode,
       lifecycle_state: input.initialState ?? 'active',
     },

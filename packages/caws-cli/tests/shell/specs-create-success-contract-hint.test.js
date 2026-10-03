@@ -7,7 +7,7 @@
  * The success path closed with an unconditional
  * "Tier 1/2 specs require at least one contract." That sentence was false in
  * every state it could reach: a tier-1/2 create is REFUSED without contracts,
- * so on success the contracts are already there; a tier-3 create is not
+ * so on success the contracts are already there; a minimal create is not
  * governed by the rule at all; and the one reachable carve-out (tier-1/2 with
  * mode: chore, which writes `contracts: []`) is exempt because of the mode, not
  * short of a requirement.
@@ -42,8 +42,8 @@ function setupRepo() {
   return { root, cawsDir: path.join(root, '.caws') };
 }
 
-/** The tier-1 trio, required by the kernel for every tier-1 create. */
-const TIER1_FIELDS = {
+/** Optional operational requirements, preserved when supplied. */
+const OPERATIONAL_FIELDS = {
   observability: ['Log the decision path for each governed operation.'],
   rollback: ['Revert the implementation commit.'],
   security: ['No secret material is logged.'],
@@ -59,7 +59,6 @@ function runCreate(cwd, id, opts = {}) {
     id,
     title: 'contract hint fixture',
     mode: 'chore',
-    riskTier: '3',
     out: (line) => out.push(line),
     err: (line) => err.push(line),
     ...opts,
@@ -68,12 +67,11 @@ function runCreate(cwd, id, opts = {}) {
 }
 
 describe('a successful create does not state an unmet contract requirement', () => {
-  test('tier-2 create that supplied --contract is not told it needs a contract', () => {
+  test('create that supplied --contract is not told it needs a contract', () => {
     const { root } = setupRepo();
 
     const result = runCreate(root, 'HINT-TIER2-001', {
       mode: 'fix',
-      riskTier: '2',
       contract: ['core-api:behavior:packages/caws-cli/src/index.ts'],
     });
 
@@ -83,21 +81,20 @@ describe('a successful create does not state an unmet contract requirement', () 
     expect(result.out).not.toContain(CONTRACT_REQUIREMENT_CLAIM);
   });
 
-  test('tier-1 create that supplied --contract is not told it needs a contract', () => {
+  test('create with operational fields that supplied --contract is not told it needs a contract', () => {
     const { root } = setupRepo();
 
     const result = runCreate(root, 'HINT-TIER1-002', {
       mode: 'fix',
-      riskTier: '1',
       contract: ['core-api:behavior'],
-      ...TIER1_FIELDS,
+      ...OPERATIONAL_FIELDS,
     });
 
     expect(result.code).toBe(0);
     expect(result.out).not.toContain(CONTRACT_REQUIREMENT_CLAIM);
   });
 
-  test('tier-3 create is not told about a tier-1/2 rule that cannot apply to it', () => {
+  test('minimal create is not told about a tier-1/2 rule that cannot apply to it', () => {
     const { root } = setupRepo();
 
     const result = runCreate(root, 'HINT-TIER3-003');
@@ -107,22 +104,18 @@ describe('a successful create does not state an unmet contract requirement', () 
     expect(result.out).not.toContain('Tier 1/2');
   });
 
-  test('tier-1 chore create is told the mode waives contracts, not that one is missing', () => {
+  test('chore create has no tier waiver advisory', () => {
     const { root } = setupRepo();
 
-    // The only reachable success state with `contracts: []` on a tier-1/2 spec.
-    // Contracts are waived here BY THE MODE; saying "requires at least one"
-    // describes a rule this spec is exempt from.
     const result = runCreate(root, 'HINT-CHORE-004', {
       mode: 'chore',
-      riskTier: '1',
-      ...TIER1_FIELDS,
+      ...OPERATIONAL_FIELDS,
     });
 
     expect(result.code).toBe(0);
     expect(result.out).not.toContain(CONTRACT_REQUIREMENT_CLAIM);
-    expect(result.out).toContain('mode: chore');
-    expect(result.out).toContain('--contract');
+    expect(result.out).not.toContain('waives');
+    expect(result.out).not.toContain('tier-');
   });
 });
 
@@ -130,13 +123,13 @@ describe('the last line of a successful create is an actionable next step', () =
   // The tail-read failure mode: whatever this line says IS the result, for any
   // reader piping through `tail`. A caveat here reads as a verdict.
   test.each([
-    ['tier-3', 'HINT-LAST-TIER3-005', {}],
+    ['minimal', 'HINT-LAST-TIER3-005', {}],
+    ['with contract', 'HINT-LAST-TIER2-006', { mode: 'fix', contract: ['core-api:behavior'] }],
     [
-      'tier-2 with contract',
-      'HINT-LAST-TIER2-006',
-      { mode: 'fix', riskTier: '2', contract: ['core-api:behavior'] },
+      'chore with operational fields',
+      'HINT-LAST-CHORE-007',
+      { mode: 'chore', ...OPERATIONAL_FIELDS },
     ],
-    ['tier-1 chore', 'HINT-LAST-CHORE-007', { mode: 'chore', riskTier: '1', ...TIER1_FIELDS }],
   ])('%s: the final stdout line does not read as a requirement failure', (_label, id, opts) => {
     const { root } = setupRepo();
 
@@ -149,23 +142,8 @@ describe('the last line of a successful create is an actionable next step', () =
   });
 });
 
-describe('the failure path keeps the contract remediation it needs', () => {
-  test('a tier-2 create with no contract still gets the shape and a retry command', () => {
-    const { root } = setupRepo();
-
-    // This is the state the orientation was written for, and the only one where
-    // it is true. Removing it from the success path must not remove it here.
-    const result = runCreate(root, 'HINT-REFUSED-006', { mode: 'fix', riskTier: '2' });
-
-    expect(result.code).toBe(1);
-    expect(result.err).toContain(CONTRACT_REQUIREMENT_CLAIM);
-    expect(result.err).toContain('--contract "name:type[:path]"');
-    expect(result.err).toContain('Retry: caws specs create HINT-REFUSED-006');
-  });
-});
-
 describe('the behavior survives Commander parsing', () => {
-  test('spawned CLI: a tier-2 create with --contract prints no requirement claim', () => {
+  test('spawned CLI: a create with --contract prints no requirement claim', () => {
     const { root } = setupRepo();
 
     // Handler-level assertions cannot see a register.ts mapping that drops
@@ -182,8 +160,6 @@ describe('the behavior survives Commander parsing', () => {
         'spawned contract hint fixture',
         '--mode',
         'fix',
-        '--risk-tier',
-        '2',
         '--contract',
         'core-api:behavior:packages/caws-cli/src/index.ts',
       ],

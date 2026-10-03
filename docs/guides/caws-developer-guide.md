@@ -24,9 +24,9 @@ audience: consumer
 ## 1) Quick Start
 
 ```bash
-# create a spec for the change — tier 1 requires at least one --contract,
-# plus non-empty observability/rollback/non_functional.security
-caws specs create FEAT-1234 --title "Apply coupon at checkout" --mode feature --risk-tier 1 \
+# Create a spec for the change and declare its relevant requirements.
+# These optional fields describe this particular change.
+caws specs create FEAT-1234 --title "Apply coupon at checkout" --mode feature \
   --contract "checkout-api:behavior" \
   --observability "log: coupon application outcome" \
   --rollback "disable coupon feature flag" \

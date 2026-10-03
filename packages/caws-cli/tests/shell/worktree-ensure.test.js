@@ -71,7 +71,6 @@ function mkSpec(root, id) {
     id,
     title: 'Ensure test spec',
     mode: 'feature',
-    riskTier: 3,
     scopeIn: ['src/**'],
     cwd: root,
     env: { ...fixtureEnv },
