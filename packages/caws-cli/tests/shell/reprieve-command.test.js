@@ -101,6 +101,27 @@ function captureOut() {
 
 describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
   describe('grant', () => {
+    test('rejects a whitespace-only reason and explains the required justification without writing', () => {
+      const { repoRoot, stateDir, logsDir } = makeRepoRoot();
+      const errors = [];
+      const code = runReprieveGrantCommand({
+        cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {},
+        out: () => {},
+        err: (message) => errors.push(message),
+        handlers: 'protected-paths.sh',
+        reason: ' \n\t ',
+        approvedBy: 'human',
+        expiresAt: FUTURE_ISO,
+        session: 'sess-x',
+        surface: 'claude-code',
+      });
+      expect(code).toBe(1);
+      expect(errors.join('\n')).toContain('why ordinary alternatives cannot work');
+      expect(fs.readdirSync(stateDir)).toEqual([]);
+      expect(fs.existsSync(path.join(logsDir, 'guard-reprieves.log'))).toBe(false);
+    });
     test('writes the state file with all fields + the resolved session id', () => {
       const { repoRoot, stateDir } = makeRepoRoot();
       const { lines, out } = captureOut();

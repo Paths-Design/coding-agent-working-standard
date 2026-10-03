@@ -302,6 +302,11 @@ describe('A6 — --all-repos is the explicit, visible way to widen reach', () =>
           CLAUDE_CODE_SESSION_ID: '',
           CLAUDE_SESSION_ID: '',
           CAWS_SESSION_ID: '',
+          CODEX_THREAD_ID: '',
+          HOOK_SESSION_ID: '',
+          CURSOR_TRACE_ID: '',
+          QWEN_CODE_SESSION_ID: '',
+          DSH_SESSION_ID: '',
         },
       });
 
@@ -369,6 +374,11 @@ describe('A6 — --all-repos is the explicit, visible way to widen reach', () =>
             CLAUDE_CODE_SESSION_ID: '',
             CLAUDE_SESSION_ID: '',
             CAWS_SESSION_ID: '',
+            CODEX_THREAD_ID: '',
+            HOOK_SESSION_ID: '',
+            CURSOR_TRACE_ID: '',
+            QWEN_CODE_SESSION_ID: '',
+            DSH_SESSION_ID: '',
           },
         }
       );

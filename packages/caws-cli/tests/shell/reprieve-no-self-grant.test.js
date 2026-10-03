@@ -112,6 +112,8 @@ describe('CAWS-REPRIEVE-NO-SELF-GRANT-001: refusal inside an agent session (A1)'
 
     expect(r.code).toBe(1);
     expect(r.err).toContain('agents cannot grant their own reprieves');
+    expect(r.err).toContain('why ordinary alternatives cannot work');
+    expect(r.err).toContain('verification/recovery; revoke when done');
     // The refusal must name WHICH var betrayed the session, or the operator
     // cannot tell why a shell they think is human was treated as an agent.
     expect(r.err).toContain(varName);

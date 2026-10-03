@@ -441,7 +441,8 @@ function renderForeignRefusal(
     '  records no session in it is accountable for.',
     '  Changing directory does not change this: the boundary reads the recorded session root, not the cwd.',
     '  Do the work from a session started in the target repository, or ask the operator for a grant:',
-    `    caws reprieve grant --handlers ${LIFECYCLE_PLANE_HANDLER} --reason "<why this crossing is safe>" --approved-by "<their id>" --for 30m`,
+    '  Before requesting a grant, explain why a target-repository session or other ordinary route cannot accomplish the action.',
+    `    caws reprieve grant --handlers ${LIFECYCLE_PLANE_HANDLER} --reason "<blocked action/target/spec; CAWS limitation; why ordinary alternatives cannot work; bounds; verification/recovery; revoke when done>" --approved-by "<their id>" --for 30m`,
     `  (run in ${decision.targetRoot}; the grant is scoped to that repo unless --all-repos is passed)`,
     `  recorded origin: ${decision.recordPath}`,
   ];

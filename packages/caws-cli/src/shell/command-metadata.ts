@@ -2031,7 +2031,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'grant',
       description:
-        'Human-terminal operation: grant a reprieve under CAWS_HOME/state/sessions for the named handlers until expiry. Agents cannot grant their own reprieves. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). One session, one repo by default: the record is stamped with the repo it was granted from and guards elsewhere ignore it unless --all-repos was given. A grant covering part of a handler set that jointly enforces one boundary is refused. The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
+        'Human-terminal operation: grant a reprieve under CAWS_HOME/state/sessions for the named handlers until expiry. Agents cannot grant their own reprieves. Use for a necessary action CAWS cannot adequately adjudicate. Before asking the human, the agent must provide a self-contained reason: action and target/spec, observed refusal and CAWS limitation, ordinary alternatives and why none can accomplish it, session/handlers, extent/use count, exclusions, expiry, verification, recovery and revocation. Use an ordinary route when available. Disclose prior refusals; a past or peer grant is not reusable permission. Approval must precede the action. One session, one repo by default; other repos ignore the grant unless --all-repos was given. Partial grants over handlers enforcing one boundary are refused. The entire named handler is skipped on matching calls until expiry: paths, operations and use counts in the reason are agent obligations, not machine-enforced restrictions. The CLI does not assess the justification. The skip is logged when it fires.',
       options: [
         {
           flag: '--handlers <list>',
@@ -2041,7 +2041,8 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--reason <text>',
           required: true,
-          description: 'Why this reprieve is safe; recorded',
+          description:
+            'Self-contained justification: blocked action/target/spec, CAWS limitation, why ordinary alternatives cannot work, exact bounds, verification/recovery and revocation. Recorded for human review and future agents; not machine-enforced path authority.',
         },
         { flag: '--approved-by <id>', required: true, description: 'Approver identity' },
         {

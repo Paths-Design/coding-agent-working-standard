@@ -57,6 +57,7 @@ import { AGENT_CITED_LEGEND, describeVerdict, rederiveSpecEvidence } from './evi
 import { STORE_RULES } from './rules';
 import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
 import { readYamlSource } from './yaml-store';
+import { evidenceSpans } from './yaml-evidence-spans';
 
 // ─── Common types ────────────────────────────────────────────────────────
 
@@ -3760,58 +3761,21 @@ export function patchEvidenceBlock(
     test_verified_at?: string;
   }
 ): string | null {
-  const lines = source.split('\n');
-
-  // Locate the top-level `evidence:` key (column 0). If absent, append the
-  // block at end of file (the spec schema makes it optional; first record
-  // creates it). Match either block form (`evidence:`) or inline-empty
-  // (`evidence: []`).
-  const evidenceIdx = lines.findIndex((l) => /^evidence:\s*(\[\s*\])?\s*$/.test(l));
-  if (evidenceIdx === -1) {
-    const trimmed = source.endsWith('\n') ? source : source + '\n';
-    const block = renderEvidenceEntry(entry, 0);
-    return trimmed + `evidence:\n${block}`;
+  const spans = evidenceSpans(source);
+  if (!spans) return null;
+  const rendered = renderEvidenceEntry(entry, spans.indent - 2).replace(/\n/g, spans.newline);
+  const existing = spans.entries.find((item) => item.id === entry.criterion_id);
+  if (existing) {
+    return source.slice(0, existing.start) + rendered + spans.newline + source.slice(existing.end);
   }
-
-  // Normalize inline-empty `evidence: []` to block form.
-  if (/\[\s*\]/.test(lines[evidenceIdx] ?? '')) {
-    lines[evidenceIdx] = 'evidence:';
+  const prefix = source.slice(0, spans.append);
+  const separator = prefix.endsWith('\n') || prefix.length === 0 ? '' : spans.newline;
+  const header = spans.key ? '' : `evidence:${spans.newline}`;
+  let patched = prefix + separator + header + rendered + spans.newline + source.slice(spans.append);
+  if (spans.empty) {
+    patched = patched.slice(0, spans.empty.start) + patched.slice(spans.empty.end);
   }
-
-  // Find the extent of the evidence block: items are `  - ` (2-space dash) at
-  // the top level. Each item is a map whose first key is `criterion_id`.
-  const itemStartRe = /^  - criterion_id:\s*(.+?)\s*$/;
-  const itemStartLines = new Map<string, number>();
-  let blockEnd = evidenceIdx + 1;
-  for (let i = evidenceIdx + 1; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    if (/^\S/.test(line)) break;
-    const m = itemStartRe.exec(line);
-    if (m && m[1] !== undefined) {
-      itemStartLines.set(unquoteScalar(m[1].trim()), i);
-    }
-    blockEnd = i + 1;
-  }
-
-  const rendered = renderEvidenceEntry(entry, 0);
-  const renderedLines = rendered.split('\n');
-
-  const existingItemLine = itemStartLines.get(entry.criterion_id);
-  if (existingItemLine !== undefined) {
-    // UPSERT: replace the existing item.
-    let itemEnd = existingItemLine + 1;
-    for (let i = existingItemLine + 1; i < blockEnd; i++) {
-      const line = lines[i] ?? '';
-      if (/^  - /.test(line)) break;
-      itemEnd = i + 1;
-    }
-    return [...lines.slice(0, existingItemLine), ...renderedLines, ...lines.slice(itemEnd)].join(
-      '\n'
-    );
-  }
-
-  // INSERT: append the new item at the end of the evidence block.
-  return [...lines.slice(0, blockEnd), ...renderedLines, ...lines.slice(blockEnd)].join('\n');
+  return patched;
 }
 
 /**
@@ -3827,44 +3791,16 @@ export function deleteEvidenceEntry(
   source: string,
   criterionId: string
 ): { bytes: string; removed: boolean } {
-  const lines = source.split('\n');
-
-  const evidenceIdx = lines.findIndex((l) => /^evidence:\s*(\[\s*\])?\s*$/.test(l));
-  if (evidenceIdx === -1) return { bytes: source, removed: false };
-
-  const itemStartRe = /^  - criterion_id:\s*(.+?)\s*$/;
-  const starts: Array<{ id: string; line: number }> = [];
-  let blockEnd = evidenceIdx + 1;
-  for (let i = evidenceIdx + 1; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    if (/^\S/.test(line)) break;
-    const m = itemStartRe.exec(line);
-    if (m && m[1] !== undefined) {
-      starts.push({ id: unquoteScalar(m[1].trim()), line: i });
-    }
-    blockEnd = i + 1;
+  const spans = evidenceSpans(source);
+  const entry = spans?.entries.find((item) => item.id === criterionId);
+  if (!spans || !entry) return { bytes: source, removed: false };
+  let bytes = source.slice(0, entry.start) + source.slice(entry.end);
+  if (spans.entries.length === 1 && spans.key) {
+    // Retain the key spelling and any inline comment; replace only the value.
+    const colon = spans.key.end;
+    bytes = bytes.slice(0, colon + 1) + ' []' + bytes.slice(colon + 1);
   }
-
-  const idx = starts.findIndex((s) => s.id === criterionId);
-  if (idx === -1) return { bytes: source, removed: false };
-  const itemStart = starts[idx]!.line;
-  const itemEnd = idx + 1 < starts.length ? starts[idx + 1]!.line : blockEnd;
-  if (starts.length === 1) {
-    // Removing the ONLY entry must not strand a bare `evidence:` key — YAML
-    // reads that as null and document revalidation would refuse the spec
-    // ("Expected array." at /evidence). Normalize to the flow empty
-    // sequence, matching how `acceptance: []` is rendered elsewhere.
-    const next = [...lines];
-    next[evidenceIdx] = 'evidence: []';
-    return {
-      bytes: [...next.slice(0, itemStart), ...next.slice(itemEnd)].join('\n'),
-      removed: true,
-    };
-  }
-  return {
-    bytes: [...lines.slice(0, itemStart), ...lines.slice(itemEnd)].join('\n'),
-    removed: true,
-  };
+  return { bytes, removed: true };
 }
 
 function renderEvidenceEntry(
@@ -3883,8 +3819,8 @@ function renderEvidenceEntry(
   },
   baseIndent: number
 ): string {
-  const dash = `${' '.repeat(baseIndent)}  - `;
-  const cont = `${' '.repeat(baseIndent)}    `;
+  const dash = `${' '.repeat(baseIndent + 2)}- `;
+  const cont = `${' '.repeat(baseIndent + 4)}`;
   const fields: string[] = [];
   const pushStr = (key: string, value: string | undefined) => {
     if (value === undefined) return;
@@ -3904,20 +3840,17 @@ function renderEvidenceEntry(
   return fields.map((f, i) => `${i === 0 ? dash : cont}${f}`).join('\n');
 }
 
-/** Minimal YAML scalar formatter: quote strings containing YAML-special chars. */
+/** JSON strings are YAML double-quoted scalars; escape every control character
+ * and preserve strings that YAML would otherwise resolve to a typed value. */
 function yamlScalar(value: string): string {
-  if (value === '') return `""`;
-  if (
-    /[:#\[\]{}&*!|>'"%@`,]/.test(value) ||
-    /^\s|\s$/.test(value) ||
-    value === 'true' ||
-    value === 'false' ||
-    value === 'null' ||
-    /^-?\d/.test(value)
-  ) {
-    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  // Retain the writer's readable plain spelling for simple identifiers/text.
+  if (/^[A-Za-z_][A-Za-z0-9_ ./-]*$/.test(value) && !/^(?:true|false|null)$/i.test(value)) {
+    return value;
   }
-  return value;
+  return JSON.stringify(value)
+    .replace(/\u0085/g, '\\u0085')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 export function recordSpecEvidence(
