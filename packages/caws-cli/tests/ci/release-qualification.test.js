@@ -70,7 +70,10 @@ test('a failed Bats suite retains raw bytes and does not suppress pytest evidenc
   const scopeProbe = steps.find(
     (step) => step.run === 'node --test packages/caws-cli/scripts/scope-runtime-smoke.test.mjs'
   );
-  expect(scopeProbe.if).toBe("${{ !cancelled() && steps.dependencies.outcome == 'success' }}");
+  expect(scopeProbe.if).toBe("${{ !cancelled() && steps.build.outcome == 'success' }}");
+  const build = steps.find((step) => step.id === 'build');
+  expect(build.run).toBe('npm run build -w @paths.design/caws-cli');
+  expect(build.if).toBe("${{ !cancelled() && steps.dependencies.outcome == 'success' }}");
   expect(scopeProbe.env.CAWS_TEST_ARTIFACT_DIR).toBe('${{ github.workspace }}/hook-artifacts');
   expect(steps.find((step) => step.name === 'Retain hook byte artifacts').if).toBe('always()');
 });

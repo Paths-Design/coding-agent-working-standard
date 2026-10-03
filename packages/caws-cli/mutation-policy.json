@@ -87,7 +87,9 @@
       "rationale": "Stateful, I/O, parsing, rendering, and orchestration code is exercised through fixture-driven behavior and replay tests.",
       "files": [
         "src/kernel/diagnostics/construct.ts",
+        "src/kernel/doctor/history.ts",
         "src/kernel/doctor/inspect.ts",
+        "src/kernel/doctor/projection.ts",
         "src/kernel/evidence/hash.ts",
         "src/kernel/evidence/prepare.ts",
         "src/kernel/evidence/validate.ts",
@@ -180,9 +182,11 @@
         "src/store/working-tree-overlap.ts",
         "src/store/worktree-artifacts.ts",
         "src/store/worktree-divergence.ts",
+        "src/store/worktree-reconciliation.ts",
         "src/store/worktrees-migration.ts",
         "src/store/worktrees-store.ts",
         "src/store/worktrees-writer.ts",
+        "src/store/yaml-evidence-spans.ts",
         "src/store/yaml-store.ts"
       ]
     }
@@ -194,16 +198,36 @@
       "threshold": 80,
       "coverageAnalysis": "perTest",
       "targets": [
-        { "source": "src/kernel/evidence/canonical-json.ts" },
-        { "source": "src/kernel/evidence/rederive.ts" },
-        { "source": "src/kernel/evidence/verify.ts" },
-        { "source": "src/kernel/result/combinators.ts" },
-        { "source": "src/kernel/scope/evaluate.ts" },
-        { "source": "src/kernel/spec/successors.ts" },
-        { "source": "src/kernel/spec/validate-semantics.ts" },
-        { "source": "src/kernel/spec/validate-shape.ts" },
-        { "source": "src/kernel/worktree/freshness.ts" },
-        { "source": "src/kernel/worktree/transitions.ts" }
+        {
+          "source": "src/kernel/evidence/canonical-json.ts"
+        },
+        {
+          "source": "src/kernel/evidence/rederive.ts"
+        },
+        {
+          "source": "src/kernel/evidence/verify.ts"
+        },
+        {
+          "source": "src/kernel/result/combinators.ts"
+        },
+        {
+          "source": "src/kernel/scope/evaluate.ts"
+        },
+        {
+          "source": "src/kernel/spec/successors.ts"
+        },
+        {
+          "source": "src/kernel/spec/validate-semantics.ts"
+        },
+        {
+          "source": "src/kernel/spec/validate-shape.ts"
+        },
+        {
+          "source": "src/kernel/worktree/freshness.ts"
+        },
+        {
+          "source": "src/kernel/worktree/transitions.ts"
+        }
       ],
       "tests": [
         "tests/kernel/unit/evidence-canonical-json.test.ts",
@@ -223,14 +247,24 @@
       "coverageAnalysis": "perTest",
       "buildCommand": "node scripts/build-cli.js",
       "targets": [
-        { "source": "src/store/apply-patch.ts" },
-        { "source": "src/store/atomic-write.ts" },
-        { "source": "src/store/events-store.ts" },
-        { "source": "src/store/messages-store.ts" },
-        { "source": "src/store/yaml-patch.ts" }
-    ],
-    "tests": [
-      "tests/store/apply-patch.test.js",
+        {
+          "source": "src/store/apply-patch.ts"
+        },
+        {
+          "source": "src/store/atomic-write.ts"
+        },
+        {
+          "source": "src/store/events-store.ts"
+        },
+        {
+          "source": "src/store/messages-store.ts"
+        },
+        {
+          "source": "src/store/yaml-patch.ts"
+        }
+      ],
+      "tests": [
+        "tests/store/apply-patch.test.js",
         "tests/store/atomic-write-sweep.test.js",
         "tests/store/atomic-write.test.js",
         "tests/store/events-store.test.js",
@@ -247,11 +281,21 @@
       "coverageAnalysis": "perTest",
       "buildCommand": "node scripts/build-cli.js",
       "targets": [
-        { "source": "src/shell/binding/resolve-binding.ts" },
-        { "source": "src/shell/commands/agents-conjoining.ts" },
-        { "source": "src/shell/gates/disposition.ts" },
-        { "source": "src/shell/gates/waiver-filter.ts" },
-        { "source": "src/shell/session/session-origin.ts" }
+        {
+          "source": "src/shell/binding/resolve-binding.ts"
+        },
+        {
+          "source": "src/shell/commands/agents-conjoining.ts"
+        },
+        {
+          "source": "src/shell/gates/disposition.ts"
+        },
+        {
+          "source": "src/shell/gates/waiver-filter.ts"
+        },
+        {
+          "source": "src/shell/session/session-origin.ts"
+        }
       ],
       "tests": [
         "tests/shell/agents-fork-identity.test.js",
