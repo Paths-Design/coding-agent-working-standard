@@ -2,9 +2,11 @@ id: CAWS-RECONCILIATION-ACTIVATION-001
 title: 'Install and qualify current-state reconciliation in the machine CLI'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: abandoned
+closure_notes: 'Administrative duplicate retired following user correction: installing an already-verified CLI is an operational action, not a new tiered implementation contract. Installation itself completed successfully from merged source d35198f6 using scripts/install-cli-snapshot.mjs; package b2a034908a2f7eafac033086f4672707ce91df0f2dd7846ea60220355d1b49a1. Runtime and both native configuration plans require no change. Installed Sterling status exhibits current-state reconciliation. Installation receipt and previous target are preserved under .archive/caws-reconciliation-20261003/activation-*. No acceptance claim is made through this unnecessary spec.'
 created_at: '2026-10-03T16:05:52.127Z'
-updated_at: '2026-10-03T16:05:52.127Z'
+updated_at: '2026-10-03T16:10:48.889Z'
 created_by_session: '01a10248-00dd-7601-bc4f-6b1696592c89'
 blast_radius:
   modules:
