@@ -45,3 +45,11 @@ non_functional: {}
 contracts:
   - name: 'tierless-spec-creation'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Built CLI preview/create/activation prove no tier in YAML, plan command or spec_created payload. Retired flags refuse without writes; malformed optional contracts still refuse. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/.archive/caws-tierless-20261003"
+    recorded_at: "2026-10-03T16:45:18.033Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-create-tierless.test.js::built CLI creates and activates a tierless spec and verifies its tierless event chain"
+    commit_sha: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
+    test_verified_at: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
