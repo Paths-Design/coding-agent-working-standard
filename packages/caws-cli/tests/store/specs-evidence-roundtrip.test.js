@@ -49,13 +49,14 @@ function mkRepo(prefix) {
 }
 
 /** createSpec always emits a default A1, so the seeded draft has one criterion. */
-function seedSpec(caws, id) {
+function seedSpec(caws, id, acceptance) {
   const r = createSpec(caws, {
     id,
     title: 'roundtrip fixture',
     mode: 'chore',
     riskTier: 3,
     actor: ACTOR,
+    acceptance,
   });
   if (!r.ok || r.value.kind !== 'success') {
     throw new Error('seed spec failed: ' + JSON.stringify(r));
@@ -89,6 +90,95 @@ const FULL = {
 };
 
 describe('evidence mechanical fields round-trip (A15)', () => {
+  test('multiline history survives append and repeat while rejection leaves spec and audit unchanged', () => {
+    const { caws } = mkRepo('ev-rt-multiline-');
+    const id = 'EV-RT-MULTILINE-001';
+    seedSpec(caws, id, [
+      { given: 'history', when: 'retained', then: 'unchanged' },
+      { given: 'new evidence', when: 'recorded', then: 'exact' },
+    ]);
+    const file = path.join(caws, 'specs', `${id}.yaml`);
+    const history = `evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "old narrative
+evidence:
+  - criterion_id: FAKE
+preserved"
+    recorded_at: "2026-10-02T00:00:00.000Z"
+`;
+    const before = fs.readFileSync(file, 'utf8') + history;
+    fs.writeFileSync(file, before);
+    const old = loadTyped(caws, id).evidence[0];
+    const eventPath = path.join(caws, 'events.jsonl');
+    const eventsBefore = fs.readFileSync(eventPath, 'utf8');
+    const evidenceRef =
+      'original execution: retained\nprivate generation; no deployment claim\r\nend';
+    const input = {
+      id,
+      criterionId: 'A2',
+      status: 'pass',
+      evidenceRef,
+      command: 'first\nsecond',
+      actor: ACTOR,
+      now: FIXED_NOW,
+    };
+    const recorded = recordSpecEvidence(caws, input);
+    expect(recorded.ok).toBe(true);
+    expect(recorded.value.kind).toBe('success');
+    expect(fs.readFileSync(file, 'utf8').startsWith(before)).toBe(true);
+    expect(loadTyped(caws, id).evidence).toEqual([
+      old,
+      {
+        criterion_id: 'A2',
+        status: 'pass',
+        evidence_ref: evidenceRef,
+        command: input.command,
+        recorded_at: FIXED_NOW().toISOString(),
+      },
+    ]);
+    const event = lastEvent(caws);
+    expect(event.event).toBe('ac_recorded');
+    expect(event.data).toMatchObject({
+      criterion_id: 'A2',
+      evidence_ref: evidenceRef,
+      command: input.command,
+      status: 'pass',
+    });
+    expect(fs.readFileSync(eventPath, 'utf8').startsWith(eventsBefore)).toBe(true);
+    const eventCount = loadEvents(caws).value.events.length;
+    expect(recordSpecEvidence(caws, { ...input, evidenceRef: 'replacement\nexact' }).ok).toBe(true);
+    expect(loadTyped(caws, id).evidence).toHaveLength(2);
+    expect(loadTyped(caws, id).evidence[0]).toEqual(old);
+    expect(loadTyped(caws, id).evidence[1].evidence_ref).toBe('replacement\nexact');
+    expect(fs.readFileSync(file, 'utf8').startsWith(before)).toBe(true);
+    expect(loadEvents(caws).value.events).toHaveLength(eventCount + 1);
+
+    const stableSpec = fs.readFileSync(file);
+    const stableEvents = fs.readFileSync(eventPath);
+    expect(recordSpecEvidence(caws, { ...input, criterionId: 'A999' }).ok).toBe(false);
+    expect(fs.readFileSync(file)).toEqual(stableSpec);
+    expect(fs.readFileSync(eventPath)).toEqual(stableEvents);
+    // A failure after patch planning (schema validation), not only preflight.
+    expect(recordSpecEvidence(caws, { ...input, status: 'invalid' }).ok).toBe(false);
+    expect(fs.readFileSync(file)).toEqual(stableSpec);
+    expect(fs.readFileSync(eventPath)).toEqual(stableEvents);
+    const previousFault = process.env.CAWS_TEST_INJECT_LIFECYCLE_FAULT;
+    try {
+      process.env.CAWS_TEST_INJECT_LIFECYCLE_FAULT = JSON.stringify({
+        eventMatch: 'ac_recorded',
+        cause: 'evidence-audit-append-failure',
+      });
+      const rolledBack = recordSpecEvidence(caws, { ...input, evidenceRef: 'must roll back' });
+      expect(rolledBack.ok).toBe(true);
+      expect(rolledBack.value.kind).toBe('partial_failure_recovered');
+      expect(fs.readFileSync(file)).toEqual(stableSpec);
+      expect(fs.readFileSync(eventPath)).toEqual(stableEvents);
+    } finally {
+      if (previousFault === undefined) delete process.env.CAWS_TEST_INJECT_LIFECYCLE_FAULT;
+      else process.env.CAWS_TEST_INJECT_LIFECYCLE_FAULT = previousFault;
+    }
+  });
   test('all five fields survive write -> YAML -> kernel parser with exact values', () => {
     const { caws } = mkRepo('ev-rt-full-');
     seedSpec(caws, 'EV-RT-001');
