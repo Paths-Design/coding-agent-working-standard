@@ -64,3 +64,11 @@ evidence:
     recorded_at: "2026-10-03T07:33:59.665Z"
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/tmp/evidence-qualification/01a10082/installed-reprieve-help.txt"
     commit_sha: "840656ece3dff04cb70d47fa37456e00db21c94f"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Compiled parser-derived shared spans qualify append/upsert/delete: 31 boundary cases passed on final source, asserting parsed meaning and untouched source spans for fake keys/items inside multiline quotes, escaped quotes, literal/folded scalars including keep-chomping blank lines, reordered fields, zero/two/four-space sequences, CRLF, inline empty/quoted keys, document terminators and unsupported shapes refusing. Original installed writer fails 23 of the initial 28 boundary cases (negative control, not a full mutation score). Unterminated final source requires one separating newline for an appended row; original bytes remain unchanged. All 16 neighboring spec-amend cases passed."
+    recorded_at: "2026-10-03T07:34:25.834Z"
+    command: node node_modules/jest/bin/jest.js --config packages/caws-cli/jest.config.js --selectProjects caws-cli --runInBand --runTestsByPath packages/caws-cli/tests/store/specs-evidence-boundaries.test.js
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/tmp/evidence-qualification/01a10082/caws-evidence-boundaries-final.json"
+    commit_sha: "840656ece3dff04cb70d47fa37456e00db21c94f"
