@@ -1,0 +1,54 @@
+id: CAWS-REPRIEVE-REASON-AND-EVIDENCE-BOUNDARIES-01
+title: 'Require bounded reprieve justifications and preserve YAML evidence boundaries'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-03T06:57:41.466Z'
+updated_at: '2026-10-03T06:57:41.466Z'
+created_by_session: '01a10082-452c-78e3-a0a2-7c6d87c48088'
+blast_radius:
+  modules:
+    - 'Reprieve help and agent guidance'
+    - 'Evidence YAML writer and transaction'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'AGENTS.md'
+    - 'docs/guides/hook-packs.md'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/src/shell/session/session-origin.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/store/yaml-evidence-spans.ts'
+    - 'packages/caws-cli/tests/store/specs-evidence-roundtrip.test.js'
+    - 'packages/caws-cli/tests/store/specs-evidence-boundaries.test.js'
+    - 'packages/caws-cli/tests/shell/reprieve-no-self-grant.test.js'
+    - 'packages/caws-cli/tests/shell/reprieve-command.test.js'
+  out: []
+invariants:
+  - 'Human grants remain prospective and specific; reason text is not machine-enforced path authority or reusable approval'
+  - 'Evidence changes preserve unrelated source bytes and historical parsed entries; rejection changes neither spec nor audit log'
+acceptance:
+  - id: A1
+    given: 'an agent preparing a reprieve request'
+    when: 'it reads CLI help and project guidance'
+    then: 'it must describe the blocked action, CAWS limitation, unavailable alternatives, exact bounds, verification and expiry without self-grant or authority reuse'
+  - id: A2
+    given: 'valid YAML evidence with multiline scalars and misleading key or item text'
+    when: 'append upsert or deletion executes'
+    then: 'actual structural entries change and all unrelated source spans and parsed history are preserved'
+  - id: A3
+    given: 'evidence strings with newlines and YAML special values'
+    when: 'evidence is recorded or rejected'
+    then: 'exact values round trip, success emits matching audit evidence, repeats keep one current row and rejection leaves both stores unchanged'
+  - id: A4
+    given: 'the qualified CLI build and Sterling failing specimen'
+    when: 'the installed CLI is resolved and exercised on an isolated copy'
+    then: 'the repaired writer records A20 without changing A19 and the installed implementation matches the qualified source'
+non_functional: {}
+contracts:
+  - name: 'bounded-human-grant'
+    type: behavior
+  - name: 'evidence-source-preservation'
+    type: behavior
