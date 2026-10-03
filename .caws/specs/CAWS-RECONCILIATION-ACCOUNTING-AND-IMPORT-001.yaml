@@ -136,3 +136,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/worktree-reconciliation.test.js::built CLI preview does not mutate; apply logs one exact receipt and discharges current diagnosis"
     commit_sha: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
     test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Current-state human/short/JSON projections distinguish actionable conditions from inventory/activity, retain errors and group hook maintenance. Dated Sterling hook audit documents upstream, retain and superseded candidates; native activation unchanged. Raw execution logs retained at /Users/darianrosebrook/Desktop/Projects/caws/.archive/caws-reconciliation-20261003"
+    recorded_at: "2026-10-03T15:51:33.916Z"
+    test_nodeid: "packages/caws-cli/tests/shell/doctor-current-state.test.js::inventory and owner availability remain inspectable without inflating health counts"
+    commit_sha: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
+    test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
