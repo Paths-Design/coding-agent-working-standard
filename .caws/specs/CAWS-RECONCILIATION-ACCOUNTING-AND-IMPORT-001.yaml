@@ -124,8 +124,8 @@ evidence:
     test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
   - criterion_id: A6
     status: pass
-    evidence_ref: "Prior 340-test regression and six killed manual controls remain applicable. Final human renderer addition passes build/types and 30 doctor/history tests plus staged gates; the cited held-plan test is executed at the current clean source revision. No Sterling writes or machine activation. Pre-existing template marker drift retained. Raw ignored logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/human-plan-final-validation.log; human-plan-staged-gates.log; final-regression.log."
-    recorded_at: "2026-09-27T06:49:11.593Z"
-    test_nodeid: "packages/caws-cli/tests/shell/doctor-plan.test.js::renders a human repair plan and preserves default doctor output when not requested"
-    commit_sha: "7c85393379c7de12263bf27ae04747afeaec14d5"
-    test_verified_at: "7c85393379c7de12263bf27ae04747afeaec14d5"
+    evidence_ref: "Build, production/test typecheck, ESLint and staged gates pass. Broad regression: 32 suites/314 tests; final projection: 43 tests; final receipt isolation delta: 13 tests. Doctor has baseline findings, no load errors. Three manual controls killed; absence-flag removal remained schema-protected, not independently sensitive. No Sterling or native activation writes. Raw execution logs retained at /Users/darianrosebrook/Desktop/Projects/caws/.archive/caws-reconciliation-20261003"
+    recorded_at: "2026-10-03T15:51:05.191Z"
+    test_nodeid: "packages/caws-cli/tests/shell/doctor-current-state.test.js::a severe or unknown condition is never hidden by the current-state projection"
+    commit_sha: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
+    test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
