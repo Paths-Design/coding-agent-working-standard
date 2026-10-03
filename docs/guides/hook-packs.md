@@ -72,10 +72,20 @@ agent authored.
   escalates through the shared guard-strikes mechanism: **strike 1 → warn**,
   **strike 2 → ask** (permission prompt), **strike 3 → block**. Strikes are
   per-session.
-- **What it flags:** incomplete-work markers (`TODO`, `FIXME`, `XXX`, `HACK`,
-  `TBD`), placeholder/not-implemented phrases (`not implemented`,
-  `implement later`, `coming soon`, `placeholder`), and explicit
-  `throw new Error("not implemented")` stub shapes.
+- **What it flags:** explicit `throw new Error("not implemented")` stub shapes;
+  incomplete-work markers (`TODO`, `FIXME`, `XXX`, `HACK`, `TBD`) in comment
+  text in any case, and in code only as uppercase `TODO`, `FIXME`, `HACK` or
+  `TBD`; the phrases `not implemented`, `implement later` and `coming soon`; and
+  `placeholder` in comment text beside a stub cue (`// placeholder`,
+  `just a placeholder`, `this is a placeholder`, `placeholder implementation`,
+  `placeholder for now`, or a deferral such as `fill in later`).
+- **What it leaves alone:** marker words used as vocabulary. `placeholder` in
+  code (the input attribute and prop, a `"placeholder"` union member,
+  `::placeholder`, `aria-placeholder`) or as a bare doc-comment prop description
+  never counts, nor does a descriptive comment such as "the skeleton is a
+  placeholder shown while loading". In code, `Todo`/`todo` identifiers and an
+  `XXX-XXX-XXXX` input mask never count. The advisory quotes the matched source
+  line with its number — counted within the edit for an Edit.
 - **Policy counterpart:** the `todo_detection` gate. The hook ships the
   high-signal subset of that vocabulary to stay single-file and fast.
 - **Doctrine:** enforces the CAWS key rule "No fake implementations — no
@@ -401,3 +411,31 @@ inactive record to suppress all legacy copies, including conflicting copies.
 `--json` emits one JSON value even when no earlier grant exists. Old, unadopted
 dispatchers may not read new machine records. Verify a grant through the actual
 target dispatcher before claiming it took effect.
+
+### Preparing a reprieve for a human
+
+Use a reprieve when a necessary, legitimate action exceeds what CAWS can
+currently adjudicate. The agent must first explain the observed refusal and the
+missing capability, then show why ordinary routes cannot accomplish the action.
+An owned binding, scope amendment or target-repository session that solves the
+problem removes the need for an exception.
+
+Before presenting the command, write a self-contained `--reason` naming the
+action, repository and paths, owning spec, refusal, alternatives considered and
+why each is unavailable, session and handlers, permitted extent and use count,
+exclusions, expiry, verification, recovery and revocation. "Unblock work", "the
+user requested it" and "safe repair" do not explain necessity or bounds. Keep
+the explanation in the record, not only in the surrounding chat. See the
+[agent requirements and worked example](../../AGENTS.md#reprieves).
+
+Explain that the actual skip is broader than any path restriction in that prose:
+it matches session, repository, handlers and expiry, and can fire on every
+matching call until expiry. The CLI does not evaluate the justification or
+enforce its path, operation and use-count bounds. The agent remains bound by the
+human's narrower grant. A past or peer grant is an example of reasoning, never
+standing permission; a new actor, action, extent or repetition needs its own
+applicable authorization. Disclose prior refusals and obtain approval before
+acting. Agents cannot grant their own reprieves or supply a human's identity as
+proof of approval;
+[failure-lineage Entry 40](../failure-lineage.md#entry-40-the-agent-signs-the-owners-name-on-a-waiver-it-grants-itself-the-approver-field-is-self-authenticating-and-the-only-detector-is-a-human-reading-the-ledger-august-2026)
+records why that separation matters.

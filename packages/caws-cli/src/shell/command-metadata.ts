@@ -144,7 +144,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/verify-acs/close/reopen/archive/prune-archive/migrate/validate/relocate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/commit/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/verify-acs/close/reopen/archive/prune-archive/migrate/validate/relocate)',
   options: [
     {
       flag: '--status <status>',
@@ -347,6 +347,18 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         { flag: '--json', description: 'Emit restore plan/apply result as JSON' },
         DATA_OPTION,
       ],
+    },
+    {
+      kind: 'leaf',
+      name: 'commit',
+      argument: {
+        name: 'id',
+        required: true,
+        description: 'Spec id whose pending audit state to commit',
+      },
+      description:
+        'Governed recovery for a spec mutation whose audit commit did not land (sandbox-protected .git, index.lock contention, or a pre-existing dirty tree). Stages and commits ONLY .caws/specs/<id>.yaml through the same path-scoped autoCommit discipline as lifecycle writers — never -A, never --no-verify, pre-commit hooks respected. A clean spec is a reported no-op; exit 1 surfaces the refusal reason. (CAWS-SPECS-COMMIT-PENDING-RECOVERY-001)',
+      options: [DATA_OPTION],
     },
     {
       kind: 'leaf',
@@ -1712,7 +1724,7 @@ export const GATES_COMMAND_META: GroupCommandMeta = {
         description: 'Spec id this gate run is about; alias for --spec <id>',
       },
       description:
-        'Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / report-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).',
+        'Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip (budget_limit is advisory: a risk-tier sizing goal that never blocks). Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / report-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).',
       options: [
         {
           flag: '--spec <id>',
@@ -2035,7 +2047,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'grant',
       description:
-        'Human-terminal operation: grant a reprieve under CAWS_HOME/state/sessions for the named handlers until expiry. Agents cannot grant their own reprieves. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). One session, one repo by default: the record is stamped with the repo it was granted from and guards elsewhere ignore it unless --all-repos was given. A grant covering part of a handler set that jointly enforces one boundary is refused. The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
+        'Human-terminal operation: grant a reprieve under CAWS_HOME/state/sessions for the named handlers until expiry. Agents cannot grant their own reprieves. Use for a necessary action CAWS cannot adequately adjudicate. Before asking the human, the agent must provide a self-contained reason: action and target/spec, observed refusal and CAWS limitation, ordinary alternatives and why none can accomplish it, session/handlers, extent/use count, exclusions, expiry, verification, recovery and revocation. Use an ordinary route when available. Disclose prior refusals; a past or peer grant is not reusable permission. Approval must precede the action. One session, one repo by default; other repos ignore the grant unless --all-repos was given. Partial grants over handlers enforcing one boundary are refused. The entire named handler is skipped on matching calls until expiry: paths, operations and use counts in the reason are agent obligations, not machine-enforced restrictions. The CLI does not assess the justification. The skip is logged when it fires.',
       options: [
         {
           flag: '--handlers <list>',
@@ -2045,7 +2057,8 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--reason <text>',
           required: true,
-          description: 'Why this reprieve is safe; recorded',
+          description:
+            'Self-contained justification: blocked action/target/spec, CAWS limitation, why ordinary alternatives cannot work, exact bounds, verification/recovery and revocation. Recorded for human review and future agents; not machine-enforced path authority.',
         },
         { flag: '--approved-by <id>', required: true, description: 'Approver identity' },
         {

@@ -449,7 +449,7 @@ export const DOCTOR_RULES = {
 
   // ---- policy posture (slice 7c.2) ---------------------------------------
   /**
-   * A critical gate (budget_limit, spec_completeness, scope_boundary) is
+   * A critical gate (spec_completeness, scope_boundary) is
    * disabled OR not in block mode. Doctor reports this as posture risk;
    * policy validation already emits its own semantic warning. The two
    * audiences are different (operator vs. config validator) and the

@@ -169,7 +169,7 @@ function formatRepair(e: ErrorObject): string | undefined {
       return 'Use "description" on the tier object instead of "label".';
     }
     if (additional === 'min_approvers_for_budget_raise' && e.instancePath === '/edit_rules') {
-      return 'Move min_approvers_for_budget_raise from edit_rules to waivers.';
+      return 'Remove min_approvers_for_budget_raise from edit_rules: it has no effect, because risk-tier budgets are an advisory sizing goal and are never raised by waiver.';
     }
     if (additional !== undefined && e.instancePath === '/gates') {
       return `Remove "${additional}" from gates. Allowed gates: budget_limit, spec_completeness, scope_boundary, god_object, todo_detection.`;

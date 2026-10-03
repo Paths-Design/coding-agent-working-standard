@@ -298,8 +298,9 @@ constraints.
 ```
 
 > **Removed in v11:** `change_budget` (with `max_files`/`max_loc`) is rejected
-> by the kernel. File and LOC budgets now derive from `.caws/policy.yaml`
-> risk-tier thresholds; the spec never encodes them directly.
+> by the kernel. File and LOC sizing goals come from `.caws/policy.yaml`
+> risk-tier thresholds; the spec never encodes them directly, and `budget_limit`
+> treats them as advisory — an overage is reported, never blocks.
 
 > **Rejected fields (kernel returns `spec.schema.violation`):** `change_budget`,
 > `acceptance_criteria`, `scope.include`, `scope.exclude`, `status` (use
@@ -535,72 +536,63 @@ that chains to the previous entry. The event schemas live at
 Users needing an audit trail wire their own hooks against `caws gates run`
 output; they do not consume a provenance manifest.
 
-## Tier Policy Configuration
+## Risk-Tier Policy (`risk_tiers` in `.caws/policy.yaml`)
 
-### JSON Schema
+Each tier carries a sizing goal for one slice. The `budget_limit` gate compares
+the staged change against the goal for the spec's `risk_tier` and reports an
+overage; it is advisory and never blocks, whatever `mode` policy declares (a
+declared `block` is reported as not honored). Do not trim, defer or stub work to
+fit the goal; if a change outgrows its plan, say so in the spec. Contract
+requirements are per tier in the spec schema (tiers 1 and 2 require at least one
+contract), not in this block. Coverage and mutation thresholds are not v11 CAWS
+gates.
+
+### JSON Schema (from `policy.v1.json`)
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CAWS Tier Policy",
-  "type": "object",
-  "patternProperties": {
-    "^[1-3]$": {
+  "risk_tiers": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["1", "2", "3"],
+    "properties": {
+      "1": { "$ref": "#/$defs/tierBudget" },
+      "2": { "$ref": "#/$defs/tierBudget" },
+      "3": { "$ref": "#/$defs/tierBudget" }
+    }
+  },
+  "$defs": {
+    "tierBudget": {
       "type": "object",
+      "additionalProperties": false,
+      "required": ["max_files", "max_loc"],
       "properties": {
-        "min_branch": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "min_mutation": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "requires_contracts": {
-          "type": "boolean"
-        },
-        "requires_manual_review": {
-          "type": "boolean"
-        },
-        "allowed_modes": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": ["feature", "refactor", "fix", "doc", "chore"]
-          }
-        }
-      },
-      "required": [
-        "min_branch",
-        "min_mutation",
-        "requires_contracts",
-        "allowed_modes"
-      ]
+        "max_files": { "type": "integer", "minimum": 0 },
+        "max_loc": { "type": "integer", "minimum": 0 },
+        "description": { "type": "string" }
+      }
     }
   }
 }
 ```
 
-> **Note:** `max_files` and `max_loc` are no longer part of the tier policy
-> schema. Change budgets were removed from the spec schema in v11; budget
-> enforcement derives entirely from `.caws/policy.yaml` risk-tier configuration.
+Tier goals must be monotonic (tier 1 ≤ tier 2 ≤ tier 3 for both fields); policy
+semantics rejects a policy that is not.
 
 ### TypeScript Interface
 
 ```typescript
-interface TierPolicy {
-  [tier: string]: {
-    min_branch: number; // 0-1
-    min_mutation: number; // 0-1
-    requires_contracts: boolean; // Contract requirement
-    requires_manual_review?: boolean; // Manual review needed
-    allowed_modes: Mode[]; // Allowed project modes
-  };
+interface RiskTierBudget {
+  max_files: number; // sizing goal, advisory
+  max_loc: number; // sizing goal, advisory
+  description?: string;
 }
 
-type Mode = 'feature' | 'refactor' | 'fix' | 'doc' | 'chore';
+interface RiskTiers {
+  '1': RiskTierBudget;
+  '2': RiskTierBudget;
+  '3': RiskTierBudget;
+}
 ```
 
 ## Tool Allowlist Schema

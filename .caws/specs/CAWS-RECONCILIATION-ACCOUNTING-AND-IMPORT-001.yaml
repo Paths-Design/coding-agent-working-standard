@@ -2,9 +2,10 @@ id: CAWS-RECONCILIATION-ACCOUNTING-AND-IMPORT-001
 title: 'Diagnose lifecycle history accurately and reconcile machine hook policy without discarding retained overrides'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: reconciliation-accounting
 created_at: '2026-09-27T05:40:45.320Z'
-updated_at: '2026-09-27T05:40:45.320Z'
+updated_at: '2026-09-27T06:24:40.199Z'
 created_by_session: '01a0e13e-18df-7803-a4fa-cd06d2225972'
 blast_radius:
   modules:
@@ -28,6 +29,9 @@ scope:
     - 'docs/architecture/repo-local-hook-policy.md'
     - 'docs/guides/sterling-machine-runtime-migration.md'
   out: []
+  support:
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/templates/agents.md
 invariants:
   - 'Doctor remains read-only and never converts unknown observation into absence or completion.'
   - 'Repository policy cannot disable or replace floor handlers; retained machine overrides survive selective migration.'
@@ -61,3 +65,46 @@ non_functional: {}
 contracts:
   - name: 'reconciliation'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Git coverage fixtures distinguish equivalent formatting, negation, indexed runtime files, local excludes and ignored authority; live Sterling comparison corrects the formatting warning. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
+    recorded_at: "2026-09-27T06:40:40.431Z"
+    test_nodeid: "packages/caws-cli/tests/init/gitignore-coverage.test.js::a negation defeats exact managed formatting and already-tracked files stay independently visible"
+    commit_sha: "25584e6972887075f33d9923a303b2faab12b5ed"
+    test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Ordered lifecycle tests cover untrack, destroy and recreate; waiver tests preserve every use and classify time, gate, spec and unknown bounds. Live Sterling use sequences 23654 and 23706 predate revocation. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
+    recorded_at: "2026-09-27T06:40:43.041Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/unit/doctor-history.test.ts::every occurrence keeps its temporal classification, including exact boundaries"
+    commit_sha: "25584e6972887075f33d9923a303b2faab12b5ed"
+    test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "JSON and human repair plans expose unmet criteria, status, requirement and HELD evidence while retaining read-only behavior and inspecting the spec before mutation. Raw ignored logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/human-plan-final-validation.log; human-plan-staged-gates.log; final-regression.log."
+    recorded_at: "2026-09-27T06:49:02.228Z"
+    test_nodeid: "packages/caws-cli/tests/shell/doctor-plan.test.js::renders a human repair plan and preserves default doctor output when not requested"
+    commit_sha: "7c85393379c7de12263bf27ae04747afeaec14d5"
+    test_verified_at: "7c85393379c7de12263bf27ae04747afeaec14d5"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Inventory and origin fixtures cover retained floor/library groups, unknown absorbed baselines and new upstream digests. Live Sterling preview inventories 33 groups and preserves all 12 chains; preview only. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
+    recorded_at: "2026-09-27T06:40:50.166Z"
+    test_nodeid: "packages/caws-cli/tests/init/hook-reconciliation.test.js::preview inventories every group and keeps floor, helper and ambiguous baseline dispositions explicit without writes"
+    commit_sha: "25584e6972887075f33d9923a303b2faab12b5ed"
+    test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Transaction and built-CLI suites cover exact selected keys, original extension order, retained floor/libraries/surfaces, changed inputs, foreign/live/dead locks, prepare/repo/machine failures and journal recovery. Launcher descriptions preserve handler paths/hashes and library resolution. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
+    recorded_at: "2026-09-27T06:40:56.403Z"
+    test_nodeid: "packages/caws-cli/tests/init/hook-import-transaction.test.js::selective apply clears only the selected group and preserves real launcher selection on every surface"
+    commit_sha: "25584e6972887075f33d9923a303b2faab12b5ed"
+    test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Prior 340-test regression and six killed manual controls remain applicable. Final human renderer addition passes build/types and 30 doctor/history tests plus staged gates; the cited held-plan test is executed at the current clean source revision. No Sterling writes or machine activation. Pre-existing template marker drift retained. Raw ignored logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/human-plan-final-validation.log; human-plan-staged-gates.log; final-regression.log."
+    recorded_at: "2026-09-27T06:49:11.593Z"
+    test_nodeid: "packages/caws-cli/tests/shell/doctor-plan.test.js::renders a human repair plan and preserves default doctor output when not requested"
+    commit_sha: "7c85393379c7de12263bf27ae04747afeaec14d5"
+    test_verified_at: "7c85393379c7de12263bf27ae04747afeaec14d5"

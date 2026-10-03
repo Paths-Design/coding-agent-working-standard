@@ -52,7 +52,12 @@ import { renderGatesRun } from '../render/gates';
 import { resolveSession } from '../session/resolve-session';
 import { buildActor } from '../session/actor';
 import { SHELL_RULES } from '../rules';
-import { deriveDispositions, type GateDisposition } from '../gates/disposition';
+import {
+  deriveDispositions,
+  effectiveGateMode,
+  isAdvisoryGate,
+  type GateDisposition,
+} from '../gates/disposition';
 import { runLocalEvaluators } from '../gates/local-evaluators';
 import { validateGatesReport, type GatesReport } from '../gates/gate-result-contract';
 import { filterWaivedViolations, type WaiverEvidence } from '../gates/waiver-filter';
@@ -116,7 +121,13 @@ interface GateDiscoverySnapshot {
 interface GateSummary {
   readonly gate_id: string;
   readonly enabled: boolean;
+  /** The mode `gates run` will apply — for an advisory gate declared
+   *  `block`, `warn`. */
   readonly mode: string;
+  /** Present only when policy declares a mode that is not honored. */
+  readonly declared_mode?: string;
+  /** True for a gate that never blocks whatever policy declares. */
+  readonly advisory: boolean;
   readonly description: string | null;
   readonly thresholds: Record<string, unknown>;
   readonly effective_waiver_ids: readonly string[];
@@ -178,15 +189,24 @@ function gateSummary(args: {
     ...(args.specId !== undefined ? { specId: args.specId } : {}),
     now: args.now,
   });
+  const mode = effectiveGateMode(args.gateId, args.config.mode);
   return {
     gate_id: args.gateId,
     enabled: args.config.enabled,
-    mode: args.config.mode,
+    mode,
+    ...(mode !== args.config.mode ? { declared_mode: args.config.mode } : {}),
+    advisory: isAdvisoryGate(args.gateId),
     description: args.config.description ?? null,
     thresholds: args.config.thresholds ?? {},
     effective_waiver_ids: effective.map((waiver) => waiver.id).sort(),
     effective_waiver_count: effective.length,
   };
+}
+
+function modeText(gate: GateSummary): string {
+  return gate.declared_mode === undefined
+    ? `mode=${gate.mode}`
+    : `mode=${gate.mode} (policy declares ${gate.declared_mode}; not honored)`;
 }
 
 function gateSummaries(args: {
@@ -246,11 +266,11 @@ export function runGatesListCommand(opts: GatesListCommandOptions = {}): number 
   out('  gates:');
   for (const gate of gates) {
     out(
-      `  - ${gate.gate_id}: enabled=${gate.enabled} mode=${gate.mode} ` +
-        `effective_waivers=${gate.effective_waiver_count}`
+      `  - ${gate.gate_id}: enabled=${gate.enabled} ${modeText(gate)}` +
+        `${gate.advisory ? ' advisory' : ''} effective_waivers=${gate.effective_waiver_count}`
     );
   }
-  out('  risk_tiers:');
+  out('  risk_tiers (sizing goals; budget_limit is advisory and never blocks):');
   for (const [tier, budget] of Object.entries(loaded.policy.risk_tiers)) {
     out(`  - ${tier}: max_files=${budget.max_files} max_loc=${budget.max_loc}`);
   }
@@ -302,7 +322,10 @@ export function runGatesExplainCommand(opts: GatesExplainCommandOptions): number
   out(`caws gates explain: ${summary.gate_id}`);
   if (opts.specId !== undefined) out(`  spec: ${opts.specId}`);
   out(`  enabled=${summary.enabled}`);
-  out(`  mode=${summary.mode}`);
+  out(`  ${modeText(summary)}`);
+  if (summary.advisory) {
+    out('  advisory: a risk-tier sizing goal; an overage is reported and never blocks');
+  }
   if (summary.description !== null) out(`  description=${summary.description}`);
   out(`  thresholds=${JSON.stringify(summary.thresholds)}`);
   out(

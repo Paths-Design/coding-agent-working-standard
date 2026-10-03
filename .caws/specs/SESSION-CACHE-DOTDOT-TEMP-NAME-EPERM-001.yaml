@@ -1,0 +1,72 @@
+id: SESSION-CACHE-DOTDOT-TEMP-NAME-EPERM-001
+title: 'Session-cache atomic temp files no longer use a dot-dot-prefixed name'
+risk_tier: 2
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-session-cache-dotdot at 21616a2ed1ff70af721aaf9d0c4e4d378ab3f4f1'
+created_at: '2026-09-28T17:20:00.000Z'
+updated_at: '2026-09-29T00:16:06.059Z'
+created_by_session: 'session-142f2855-d906-45e6-adb9-3d7a3df7651b'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-cache.sh'
+    - '.caws/hooks/lib/session-cache.sh'
+    - 'packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py'
+  data_migration: false
+scope:
+  in:
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-cache.sh
+    - .caws/hooks/lib/session-cache.sh
+    - packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py
+  out:
+    - packages/caws-cli/src
+    - packages/caws-cli/dist
+invariants:
+  - 'The atomic temp filename produced by atomic_json never begins with two dots, so sandbox proxies and path sanitizers that treat a leading .. as traversal-looking cannot deny the write.'
+  - 'The write protocol is preserved: exclusive creation (O_CREAT|O_EXCL|O_NOFOLLOW), directory-relative fds, and atomic os.replace to the final name — readers never observe a partial envelope.'
+  - 'Cache capture remains non-fatal and fail-open: any capture error still prints [caws session cache] capture skipped to stderr and returns success.'
+acceptance:
+  - id: A1
+    given: 'atomic_json writes an envelope named .session-envelope.json'
+    when: 'the temp filename is computed'
+    then: 'it does not start with two dots and is unique per call'
+  - id: A2
+    given: 'the shared hook pack template runs _caws_write_session_envelope for a stop event'
+    when: 'the session directory is inspected afterward'
+    then: '.session-envelope.json exists with valid JSON and no leftover temp file remains'
+  - id: A3
+    given: 'the installed project copy (.caws/hooks/lib/session-cache.sh) is compared to the template'
+    when: 'the temp-name line is read'
+    then: 'both use the same non-dot-dot temp naming scheme'
+observability:
+  - 'Successful captures write a complete envelope; failed captures still emit the existing capture-skipped stderr line.'
+rollback:
+  - 'Revert the implementation commit; the dot-dot temp naming returns; rerun the session-cache pytest suite plus a manual dispatch/stop.sh probe.'
+non_functional:
+  reliability:
+    - 'The fix is a one-line temp-name change with no new dependencies and no change to fd or error handling.'
+contracts:
+  - name: 'session-cache-temp-name'
+    type: 'contract-test'
+    path: 'packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py'
+    description: 'Temp name never dot-dot-prefixed and unique; end-to-end envelope write leaves valid JSON and no temp residue; installed copy matches the template scheme.'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "python3 -m pytest packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py::test_temp_name_is_not_dotdot_prefixed_and_is_unique[hook0]"
+    recorded_at: "2026-09-29T00:15:37.843Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py::test_temp_name_is_not_dotdot_prefixed_and_is_unique[hook0]"
+    test_verified_at: "1faf5641e2d07687511a47d877ae735a949d0a73"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "python3 -m pytest packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py::test_end_to_end_capture_writes_envelope_without_temp_residue[hook0]"
+    recorded_at: "2026-09-29T00:15:40.437Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py::test_end_to_end_capture_writes_envelope_without_temp_residue[hook0]"
+    test_verified_at: "1faf5641e2d07687511a47d877ae735a949d0a73"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "python3 -m pytest packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py::test_end_to_end_capture_writes_envelope_without_temp_residue[hook1]"
+    recorded_at: "2026-09-29T00:15:43.703Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_cache_temp_name.py::test_end_to_end_capture_writes_envelope_without_temp_residue[hook1]"
+    test_verified_at: "1faf5641e2d07687511a47d877ae735a949d0a73"

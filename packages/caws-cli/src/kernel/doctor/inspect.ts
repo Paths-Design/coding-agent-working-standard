@@ -1822,9 +1822,11 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
 
   if (input.policy !== undefined) {
     // 11a. Critical gates must be enabled AND in block mode. The set
-    //      ['budget_limit', 'spec_completeness', 'scope_boundary'] mirrors
-    //      `policy/rules.ts:CRITICAL_GATES` — kept in lockstep by reusing
-    //      that constant rather than duplicating.
+    //      ['spec_completeness', 'scope_boundary'] is
+    //      `policy/rules.ts:CRITICAL_GATES`, reused rather than duplicated.
+    //      budget_limit is advisory (ADVISORY_GATES) and is never posture
+    //      risk; a block declared on it reaches doctor through the policy
+    //      warnings relayed in section 6.
     for (const gateId of CRITICAL_GATES) {
       const cfg = (
         input.policy.gates as Record<string, { enabled: boolean; mode: string } | undefined>

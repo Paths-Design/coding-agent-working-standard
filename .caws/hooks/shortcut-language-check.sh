@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 88
+# hook_pack_version: 89
 # caws_min_major: 11
 # lineage_refs: 29
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -36,11 +36,19 @@
 # Test files (*.test.* / *.spec.*) are NOT strike-eligible: TODO/placeholder
 # language in tests is routine (describing pending cases, fixture stubs).
 #
-# Patterns (case-insensitive) — only the high-signal subset of the
-# todo-analyzer engine, kept to single-file grep for hook-time speed:
-#   \bTODO\b \bFIXME\b \bXXX\b \bHACK\b \bTBD\b
-#   "not implemented" "implement later" "coming soon" "placeholder"
-#   stub-return shapes: return null;? // TODO ; throw new Error("not implemented")
+# Patterns — only the high-signal subset of the todo-analyzer engine, kept to
+# one awk pass plus grep for hook-time speed. Shortcut language is prose, and
+# several marker words are also ordinary vocabulary in UI code ("placeholder"
+# is an HTML attribute, an RN prop and a CSS pseudo-element; "todo" names
+# things; "XXX-XXX-XXXX" is an input mask). So each pattern is scoped to where
+# it is unambiguous:
+#   an Error thrown with a not-implemented message   anywhere
+#   TODO FIXME XXX HACK TBD (any case)               comment text only
+#   TODO FIXME HACK TBD (uppercase)                  anywhere — a "TODO" string value
+#   "not implemented" "implement later" "coming soon"   anywhere
+#   placeholder beside a stub cue                    comment text only (see below)
+# (CAWS-DEFECT-SHORTCUT-LANG-DOMAIN-VOCABULARY-FP-01; the earlier token-only
+# narrowing was CAWS-SHORTCUT-LANG-PLACEHOLDER-TOKEN-FALSE-POSITIVE-002.)
 #
 # env: none (strike count fixed at 3 via guard-strikes.sh).
 
@@ -87,9 +95,15 @@ esac
 
 # The content to scan: prefer the tool payload (works on untracked files and
 # is exactly what the agent just wrote). Write -> .content; Edit -> .new_string.
+# An Edit payload is a fragment, so its line numbers count from the fragment's
+# first line, not the file's.
 CONTENT=""
+CONTENT_IS_FRAGMENT=0
 if [[ -n "${HOOK_TOOL_INPUT_JSON:-}" ]] && command -v jq >/dev/null 2>&1; then
   CONTENT=$(printf '%s' "$HOOK_TOOL_INPUT_JSON" | jq -r '.content // .new_string // empty' 2>/dev/null || printf '')
+  if [[ -n "$CONTENT" && "$TOOL_NAME" == Edit ]]; then
+    CONTENT_IS_FRAGMENT=1
+  fi
 fi
 # Fallback: read the file from disk if the payload had no content field.
 if [[ -z "$CONTENT" ]] && [[ -f "$FILE_PATH" ]]; then
@@ -97,82 +111,127 @@ if [[ -z "$CONTENT" ]] && [[ -f "$FILE_PATH" ]]; then
 fi
 [[ -z "$CONTENT" ]] && exit 0
 
-# Match the high-signal patterns. grep -nE on the content via a here-string;
-# -i case-insensitive. Word-boundary keywords first, then phrases, then
-# stub-return shapes.
-MATCH=""
-PATTERN_DESC=""
+# Every candidate is a record "<line-no>\t<kind>\t<text>". CODE_RECORDS are the
+# whole content lines (kind "code"). COMMENT_RECORDS carry only the text inside
+# comments: kind "doc" for /** … */ blocks and leading-star fragments, "note"
+# for every other comment.
+TAB=$'\t'
+CODE_RECORDS=$(printf '%s\n' "$CONTENT" | awk '{ print NR "\tcode\t" $0 }')
+
+# A lexer-lite, not a parser. It tracks /* */ and <!-- --> across lines and
+# takes the leftmost // /* <!-- # opener on each line. An opener must follow
+# whitespace or one of { } ( ) ; , so "https://" and the "/*" inside a
+# "src/*.ts" glob open nothing; "#" must be followed by whitespace or end of
+# line (shell, Python, YAML — not CSS colours or #private fields). A line
+# starting "-- " is a SQL/Lua comment, and a line starting "* " outside any
+# block is a JSDoc fragment, which is what an Edit's new_string often is.
+# String literals are not tracked, so "a // b" inside a string reads as a
+# comment.
+_COMMENT_AWK='
+function emit(k, text) { if (text ~ /[^ \t]/) print NR "\t" k "\t" text }
+{
+  rest = " " $0
+  if (!inblock) {
+    if (rest ~ /^[ \t]*--[ \t]/) { emit("note", substr(rest, index(rest, "--") + 2)); next }
+    if (rest ~ /^[ \t]*\*([ \t]|$)/) { emit("doc", substr(rest, index(rest, "*") + 1)); next }
+  }
+  while (rest != "") {
+    if (inblock) {
+      at = index(rest, closer)
+      if (at == 0) { emit(kind, rest); next }
+      emit(kind, substr(rest, 1, at - 1))
+      rest = substr(rest, at + length(closer))
+      inblock = 0
+      continue
+    }
+    if (!match(rest, /[ \t{}();,](\/\/|\/\*|<!--|#([ \t]|$))/)) next
+    opener = substr(rest, RSTART + 1, RLENGTH - 1)
+    rest = substr(rest, RSTART + RLENGTH)
+    if (opener == "//" || opener ~ /^#/) { emit("note", rest); next }
+    closer = "*/"
+    kind = "note"
+    if (opener == "<!--") closer = "-->"
+    else if (substr(rest, 1, 1) == "*" && substr(rest, 1, 2) != "*/") kind = "doc"
+    inblock = 1
+  }
+}'
+COMMENT_RECORDS=$(printf '%s\n' "$CONTENT" | awk "$_COMMENT_AWK" 2>/dev/null || true)
 
 # Determiner / preposition words that, immediately before a keyword, mark it as
 # a REFERENCED NOUN (a description of the concept) rather than an ACTIVE marker.
+# Word-anchored, so a word that merely ends in one ("data TODO") stays active.
 _REFERENCE_DETERMINERS='the|a|an|this|that|these|those|its|our|their|your|my|no|any|some|each|avoid|instead of|without|of|todo|fixme|xxx|hack|tbd'
 
-# active_keyword_hit PATTERN — echo the first content line that contains the
-# keyword PATTERN in ACTIVE (non-reference) position, or nothing.
-active_keyword_hit() {
-  local kw_pattern="$1"
-  printf '%s' "$CONTENT" \
-    | grep -niE "$kw_pattern" 2>/dev/null \
-    | grep -vniE "($_REFERENCE_DETERMINERS)[[:space:]]+($kw_pattern)" 2>/dev/null \
-    | head -1
+# first_active RECORDS GREP_CASE_FLAG ERE — the first record holding ERE in
+# ACTIVE (non-reference) position, or nothing. GREP_CASE_FLAG is -i, or -s to
+# stay case-sensitive.
+first_active() {
+  printf '%s\n' "$1" \
+    | grep "$2" -E "$3" 2>/dev/null \
+    | grep -viE "\\b($_REFERENCE_DETERMINERS)[[:space:]]+($3)" 2>/dev/null \
+    | head -1 || true
 }
 
-# 1. Keyword markers (word-boundary).
-if hit=$(active_keyword_hit '\b(TODO|FIXME|XXX|HACK|TBD)\b'); then
-  if [[ -n "$hit" ]]; then
-    MATCH="$hit"
-    PATTERN_DESC="incomplete-work marker (TODO/FIXME/XXX/HACK/TBD)"
-  fi
-fi
+# Placeholder: comment text only, and only beside a stub cue. The word alone
+# names the UI concept far more often than it marks a stub:
+#   the comment is nothing but the word        // placeholder
+#   a stub qualifier before it                 just a / temporary / this is a placeholder
+#   a stub head word after it                  placeholder implementation / for now / until
+#   a deferral cue elsewhere in the comment    // placeholder, fill in later
+# The qualifier "is" counts only after a self-referential subject (this, it,
+# that, which): "this is a placeholder" describes the code it sits in, while
+# "the skeleton is a placeholder" describes a UI element. A bare "placeholder"
+# in a /** doc comment */ is a prop description, not a stub. Joined forms
+# (placeholder-shown, ::placeholder, aria-placeholder, placeholder_text,
+# placeholderTextColor) never count. The reference-determiner layer is not
+# applied here: "This is just a placeholder" is the clearest stub phrasing
+# there is, and its "a" would suppress it.
+_PH_WORD='(^|[^A-Za-z0-9_:-])placeholder([^A-Za-z0-9_-]|$)'
+_PH_ALONE="^[0-9]+${TAB}note${TAB}[^A-Za-z0-9]*placeholder[^A-Za-z0-9]*\$"
+_PH_QUALIFIED="\\b((this|it|that|which)('s|’s|[[:space:]]+is)|just|temporary|temp|tmp|stub|dummy|fake)[[:space:]]+((just|only|merely)[[:space:]]+)?(an?[[:space:]]+)?placeholder([^A-Za-z0-9_-]|\$)"
+_PH_HEADED='(^|[^A-Za-z0-9_:-])placeholder[[:space:]]+(implementation|impl|logic|code|function|method|handler|body|stub|until|for now|pending)\b'
+_PH_DEFERRAL='\b(for now|later|fill (it |this )?in|replace (this|it|me)|real implementation)\b'
 
-# 2. Placeholder / not-implemented phrases.
-# The bare word "placeholder" is a real stub marker in prose ("// placeholder,
-# fill later") but ALSO a legitimate identifier/attribute/filename token in
-# normal code: the JSX/HTML `placeholder="..."` input attribute, an imported
-# asset (`placeholder.svg`, `placeholderUrl`), a kebab/snake identifier
-# (`placeholder-text`), or a path segment (`assets/placeholder`). Those are not
-# shortcut language. Match "placeholder" only when it is NOT followed by a token
-# continuation (`= . / - _ :` or an alphanumeric). The LEADING boundary is a
-# zero-width `\b`, not a consumed non-token char: a consumed leading char would
-# break composition with the _REFERENCE_DETERMINERS suppression layer, whose
-# `(determiner)[[:space:]]+(pattern)` test needs the pattern to start exactly
-# where the post-space word begins (so "avoid the TODO placeholder" and "the
-# placeholder line" stay suppressed as descriptive references).
-# (CAWS-SHORTCUT-LANG-PLACEHOLDER-TOKEN-FALSE-POSITIVE-002)
-_PLACEHOLDER_MARKER='\bplaceholder([^A-Za-z0-9=._/:-]|$)'
-if [[ -z "$MATCH" ]]; then
-  if hit=$(active_keyword_hit 'not implemented|implement later|coming soon'); then
-    if [[ -n "$hit" ]]; then
-      MATCH="$hit"
-      PATTERN_DESC="placeholder / not-implemented language"
-    fi
-  fi
-fi
-if [[ -z "$MATCH" ]]; then
-  if hit=$(active_keyword_hit "$_PLACEHOLDER_MARKER"); then
-    if [[ -n "$hit" ]]; then
-      MATCH="$hit"
-      PATTERN_DESC="placeholder / not-implemented language"
-    fi
-  fi
-fi
+placeholder_hit() {
+  {
+    printf '%s\n' "$COMMENT_RECORDS" | grep -iE "$_PH_ALONE|$_PH_QUALIFIED|$_PH_HEADED"
+    printf '%s\n' "$COMMENT_RECORDS" | grep -iE "$_PH_WORD" | grep -iE "$_PH_DEFERRAL"
+  } 2>/dev/null | sort -t "$TAB" -k1,1n | head -1 || true
+}
 
-# 3. Stub-return shapes.
-if [[ -z "$MATCH" ]]; then
-  if hit=$(printf '%s' "$CONTENT" | grep -niE 'throw new Error\(["'"'"']not implemented' 2>/dev/null | head -1); then
-    if [[ -n "$hit" ]]; then
-      MATCH="$hit"
-      PATTERN_DESC="explicit not-implemented stub throw"
-    fi
+# First match wins, most specific class first.
+MATCH=""
+PATTERN_DESC=""
+take() {
+  if [[ -z "$MATCH" && -n "$2" ]]; then
+    MATCH="$2"
+    PATTERN_DESC="$1"
   fi
-fi
+}
+
+take "explicit not-implemented stub throw" \
+  "$(printf '%s\n' "$CODE_RECORDS" | grep -iE 'throw new Error\(["'"'"'`]not implemented' 2>/dev/null | head -1 || true)"
+take "incomplete-work marker (TODO/FIXME/XXX/HACK/TBD)" \
+  "$(first_active "$COMMENT_RECORDS" -i '\b(TODO|FIXME|XXX|HACK|TBD)\b')"
+# Outside comments only the uppercase convention counts, and XXX not at all:
+# "Todo" is a type name and "XXX-XXX-XXXX" an input mask, but "TODO" is a stub.
+take "incomplete-work marker (TODO/FIXME/XXX/HACK/TBD)" \
+  "$(first_active "$CODE_RECORDS" -s '\b(TODO|FIXME|HACK|TBD)\b')"
+take "not-implemented / deferred-work language" \
+  "$(first_active "$CODE_RECORDS" -i 'not implemented|implement later|coming soon')"
+take "placeholder used as stub language in a comment" "$(placeholder_hit)"
 
 [[ -z "$MATCH" ]] && exit 0
 
-# Trim the matched line for the message (strip leading whitespace, cap length).
-LINE_TEXT=$(printf '%s' "$MATCH" | sed 's/^[0-9]*://; s/^[[:space:]]*//' | cut -c1-120)
+# Quote the whole source line (not just the comment fragment) so the message
+# shows where the stub sits; strip leading whitespace, cap length.
+LINE_NO="${MATCH%%"$TAB"*}"
+[[ "$LINE_NO" =~ ^[0-9]+$ ]] || exit 0
+LINE_TEXT=$(printf '%s\n' "$CONTENT" | sed -n "${LINE_NO}p" | sed 's/^[[:space:]]*//' | cut -c1-120)
+LINE_REF="line ${LINE_NO}"
+[[ "$CONTENT_IS_FRAGMENT" -eq 1 ]] && LINE_REF="line ${LINE_NO} of the edit"
 
-BASE="Shortcut-language advisory in ${FILE_PATH}: ${PATTERN_DESC} — \"${LINE_TEXT}\". CAWS doctrine (\"No fake implementations\") asks for complete code in committed source, not TODO/placeholder stubs."
+BASE="Shortcut-language advisory in ${FILE_PATH}: ${PATTERN_DESC} — ${LINE_REF}: \"${LINE_TEXT}\". CAWS doctrine (\"No fake implementations\") asks for complete code in committed source, not TODO/placeholder stubs."
 MSG1="${BASE} (strike 1 of 3 — advisory.)"
 MSG2="${BASE} (strike 2 of 3 — please resolve before continuing.)"
 MSG3="${BASE} (strike 3 — blocked. Replace the placeholder/stub with a real implementation, or move the work to a tracked spec.)"

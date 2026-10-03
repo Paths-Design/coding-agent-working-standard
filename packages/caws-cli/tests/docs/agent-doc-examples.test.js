@@ -229,11 +229,11 @@ describe('remediation text names real, runnable escape-hatch commands', () => {
     const blocked = {
       dispositions: [
         {
-          gate_id: 'budget_limit',
+          gate_id: 'scope_boundary',
           mode: 'block',
           outcome: 'fail',
           blocks: true,
-          violations: [{ gate: 'budget_limit', message: 'max_files exceeded' }],
+          violations: [{ gate: 'scope_boundary', message: 'src/x.ts is outside scope.in' }],
         },
       ],
       unmatchedViolations: [],
@@ -249,7 +249,13 @@ describe('remediation text names real, runnable escape-hatch commands', () => {
     // A clean run must NOT advertise the exception path.
     const clean = renderGatesRun({
       dispositions: [
-        { gate_id: 'budget_limit', mode: 'block', outcome: 'pass', blocks: false, violations: [] },
+        {
+          gate_id: 'scope_boundary',
+          mode: 'block',
+          outcome: 'pass',
+          blocks: false,
+          violations: [],
+        },
       ],
       unmatchedViolations: [],
       anyBlocks: false,

@@ -80,9 +80,10 @@ CODE_CHANGES=$(printf '%s\n' "$GUARDED" | grep -vE '^\.caws/' | grep -v '^$' || 
 if [ -n "$POLICY_CHANGES" ] && [ -n "$CODE_CHANGES" ]; then
   echo "BLOCKED: .caws/policy.yaml is staged together with code changes." >&2
   echo "  Commit the policy change on its own so it is reviewable as a governance change." >&2
-  echo "  For a budget exception use a waiver instead of editing policy:" >&2
+  echo "  For a blocking gate violation use a waiver instead of editing policy:" >&2
   echo "    caws waiver create <id> --title \"<title>\" --gate <gate> --reason \"...\" \\" >&2
   echo "      --approved-by \"...\" --expires-at <iso8601>" >&2
+  echo "  A budget overage needs neither: budget_limit is advisory and never blocks." >&2
   exit 1
 fi
 
@@ -95,9 +96,10 @@ if [ -n "$STAGED_SPECS" ]; then
     # removed spec cannot false-positive here.
     if git diff --cached -- "$spec" | grep -qE '^\+[[:space:]]*change_budget'; then
       echo "BLOCKED: $spec adds a change_budget key." >&2
-      echo "  Budgets are policy, not spec content. Use a waiver:" >&2
-      echo "    caws waiver create <id> --title \"<title>\" --gate budget_limit --reason \"...\" \\" >&2
-      echo "      --approved-by \"...\" --expires-at <iso8601>" >&2
+      echo "  change_budget is not a v11 spec field; remove it. Risk-tier budgets are an" >&2
+      echo "  advisory sizing goal in .caws/policy.yaml: an overage is reported, never" >&2
+      echo "  blocks, and needs no waiver. If the change is larger than planned, say so" >&2
+      echo "  in the spec instead of cutting work to fit." >&2
       exit 1
     fi
   done <<< "$STAGED_SPECS"
@@ -132,8 +134,16 @@ fi
 # With concurrent agents committing constantly, that is cross-agent work loss.
 # This repo's own doctrine forbids touching the shared stash stack for exactly
 # this reason.
+#
+# --workspaces=false is load-bearing too. The root .npmrc sets workspaces=true,
+# which makes npx run lint-staged — and so prettier — from the workspace
+# directory instead of the repo root. Prettier reads .prettierignore from its
+# cwd, so the root fence was never consulted and every file fenced there (the
+# populate-doc-markers targets, the managed hook-pack templates) was
+# reformatted on commit, breaking the generated marker regions the fence
+# exists to protect.
 if [ -n "$LINTABLE" ] && [ -f "$CAWS_ROOT/package.json" ] && command -v npx >/dev/null 2>&1; then
-  if ! npx --no-install lint-staged --no-stash; then
+  if ! npx --no-install --workspaces=false lint-staged --no-stash; then
     echo "BLOCKED: lint-staged failed." >&2
     echo "  Fix the reported lint/format errors, then re-stage." >&2
     echo "  Note: --no-stash means there is no automatic backup; your working tree" >&2
