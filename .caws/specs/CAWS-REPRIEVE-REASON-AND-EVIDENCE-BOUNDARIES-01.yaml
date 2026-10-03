@@ -59,9 +59,9 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Source review and installed reprieve grant help at 840656ec require the blocked action/target/spec, CAWS limitation, unavailable ordinary routes, actor/handlers/extent/use count/exclusions, expiry, verification/recovery/revocation and disclosure of prior refusals. AGENTS and hook-packs guidance distinguish a human prospective grant from reusable precedent and machine-enforced reach; reason semantics are not automatically adjudicated. 18 self-grant and 14 command tests passed, including whitespace-only reason refusal; boundary fixture now isolates every supported live-session identity. docs:check and scoped ESLint passed. Installed help captured from Sterling; no claim that prose alone changes agent behavior."
-    recorded_at: "2026-10-03T07:33:59.665Z"
-    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/tmp/evidence-qualification/01a10082/installed-reprieve-help.txt"
+    evidence_ref: "Source review and installed reprieve grant help at 840656ec require the blocked action/target/spec, CAWS limitation, unavailable ordinary routes, actor/handlers/extent/use count/exclusions, expiry, verification/recovery/revocation and disclosure of prior refusals. AGENTS and hook-packs guidance distinguish a human prospective grant from reusable precedent and machine-enforced reach; reason semantics are not automatically adjudicated. 18 self-grant and 14 command tests passed, including whitespace-only reason refusal; boundary fixture now isolates every supported live-session identity. docs:check and scoped ESLint passed. Installed help captured from Sterling; no claim that prose alone changes agent behavior. Execution receipt retained untracked at tmp/evidence-qualification/01a10082/installed-reprieve-help.txt. Generated receipts are not committed. The machine-checked citation names committed guidance/qualification source (A1/A4) or an executed regression (A2/A3); source presence alone does not establish runtime behavior. The preceding runtime observations were independently inspected in this session."
+    recorded_at: "2026-10-03T08:01:31.416Z"
+    artifact_path: AGENTS.md
     commit_sha: "840656ece3dff04cb70d47fa37456e00db21c94f"
   - criterion_id: A2
     status: pass
