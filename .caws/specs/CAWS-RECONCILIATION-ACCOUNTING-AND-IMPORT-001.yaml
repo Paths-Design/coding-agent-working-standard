@@ -110,11 +110,11 @@ evidence:
     test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
   - criterion_id: A4
     status: pass
-    evidence_ref: "Inventory and origin fixtures cover retained floor/library groups, unknown absorbed baselines and new upstream digests. Live Sterling preview inventories 33 groups and preserves all 12 chains; preview only. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
-    recorded_at: "2026-09-27T06:40:50.166Z"
+    evidence_ref: "Synthetic inventory tests and read-only Sterling preview inventory 33 entries and 12 equivalent chains; protected floor and dependency groups remain explicit. Raw execution logs retained at /Users/darianrosebrook/Desktop/Projects/caws/.archive/caws-reconciliation-20261003"
+    recorded_at: "2026-10-03T15:50:43.619Z"
     test_nodeid: "packages/caws-cli/tests/init/hook-reconciliation.test.js::preview inventories every group and keeps floor, helper and ambiguous baseline dispositions explicit without writes"
-    commit_sha: "25584e6972887075f33d9923a303b2faab12b5ed"
-    test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
+    commit_sha: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
+    test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
   - criterion_id: A5
     status: pass
     evidence_ref: "Transaction and built-CLI suites cover exact selected keys, original extension order, retained floor/libraries/surfaces, changed inputs, foreign/live/dead locks, prepare/repo/machine failures and journal recovery. Launcher descriptions preserve handler paths/hashes and library resolution. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
