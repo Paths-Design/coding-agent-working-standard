@@ -129,3 +129,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/doctor-current-state.test.js::a severe or unknown condition is never hidden by the current-state projection"
     commit_sha: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
     test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Built CLI preview is byte-preserving; apply logs identity-bound receipt and preserves unrelated bridge claims. Recreation, branch/directory presence and malformed/missing authority fail closed; tests inspect subsequent diagnosis. Raw execution logs retained at /Users/darianrosebrook/Desktop/Projects/caws/.archive/caws-reconciliation-20261003"
+    recorded_at: "2026-10-03T15:51:18.576Z"
+    test_nodeid: "packages/caws-cli/tests/store/worktree-reconciliation.test.js::built CLI preview does not mutate; apply logs one exact receipt and discharges current diagnosis"
+    commit_sha: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
+    test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
