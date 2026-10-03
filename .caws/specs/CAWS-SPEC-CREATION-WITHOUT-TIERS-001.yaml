@@ -62,8 +62,8 @@ evidence:
     test_verified_at: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
   - criterion_id: A3
     status: pass
-    evidence_ref: "Current help, guidance, scope remediation, templates and package examples remove tier selection. Build, typecheck, lint, generated-doc checks, runtime smoke and staged gates pass; final focused 44 tests and restored tierless 5 tests pass. Supplied optional operational fields retain content and order. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/.archive/caws-tierless-20261003"
-    recorded_at: "2026-10-03T16:45:34.914Z"
+    evidence_ref: "Current help, scope remediation, templates and examples omit tier selection. Optional operational-field round trips pass. Build, typecheck, lint, doc-generation checks, runtime smoke, staged gates and final focused regressions pass. Installed snapshot package SHA256 938c791ed82433f5d2a0d4b844b51640f241eb9ee9cf975029b9473044037b06 has byte-identical writer and schemas; installed CLI tierless plan is valid/read-only and help has no tier flags. Shared runtime unchanged. Raw logs and installation receipt: .archive/caws-tierless-20261003/"
+    recorded_at: "2026-10-03T16:48:34.316Z"
     test_nodeid: "packages/caws-cli/tests/docs/agent-doc-examples.test.js::current authoring surfaces use tierless creation commands"
     commit_sha: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
     test_verified_at: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
