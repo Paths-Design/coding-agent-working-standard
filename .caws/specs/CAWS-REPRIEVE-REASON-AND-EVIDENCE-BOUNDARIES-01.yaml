@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: reprieve-evidence-boundaries
 created_at: '2026-10-03T06:57:41.466Z'
-updated_at: '2026-10-03T07:15:13.689Z'
+updated_at: '2026-10-03T07:24:17.949Z'
 created_by_session: '01a10082-452c-78e3-a0a2-7c6d87c48088'
 blast_radius:
   modules:
@@ -27,7 +27,10 @@ scope:
     - 'packages/caws-cli/tests/shell/reprieve-no-self-grant.test.js'
     - 'packages/caws-cli/tests/shell/reprieve-command.test.js'
     - packages/caws-cli/tests/shell/reprieve-boundary-and-repo-scope.test.js
+    - packages/caws-cli/scripts/qualify-evidence-writer.cjs
   out: []
+  support:
+    - tmp/evidence-qualification/
 invariants:
   - 'Human grants remain prospective and specific; reason text is not machine-enforced path authority or reusable approval'
   - 'Evidence changes preserve unrelated source bytes and historical parsed entries; rejection changes neither spec nor audit log'
