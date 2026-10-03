@@ -1,9 +1,10 @@
 id: CAWS-RELEASE-AUDIT-REPAIRS-003
 title: 'Repair release qualification and truthful runtime contracts'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: release-audit-repairs
 created_at: '2026-10-03T21:37:19.652Z'
-updated_at: '2026-10-03T21:37:19.652Z'
+updated_at: '2026-10-03T21:38:02.156Z'
 created_by_session: '01a1039e-0b4e-7fd3-84b3-0684232a7628'
 blast_radius:
   modules:
