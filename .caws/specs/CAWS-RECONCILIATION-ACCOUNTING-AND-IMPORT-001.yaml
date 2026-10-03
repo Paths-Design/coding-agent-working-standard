@@ -2,10 +2,11 @@ id: CAWS-RECONCILIATION-ACCOUNTING-AND-IMPORT-001
 title: 'Diagnose lifecycle history accurately and reconcile machine hook policy without discarding retained overrides'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: reconciliation-accounting
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Integrated recovered hook reconciliation and selective-import transactions with event-driven worktree and waiver accounting, current-state status projection, and the dated Sterling hook audit. A1-A8 reverified at 0a3535b72588c09e665b449640e2d46e8ed1cac8 and read back from spec plus ac_recorded events. Build, typecheck, lint, staged gates and 314-test broad regression plus focused final deltas pass. Native activation, installed CLI and Sterling governance were not changed; selective import exercised only synthetic fixtures.'
 created_at: '2026-09-27T05:40:45.320Z'
-updated_at: '2026-10-03T15:18:07.569Z'
+updated_at: '2026-10-03T15:53:04.665Z'
 created_by_session: '01a0e13e-18df-7803-a4fa-cd06d2225972'
 blast_radius:
   modules:
