@@ -34,7 +34,7 @@
     "ts_end": { "type": "string", "format": "date-time" },
     "user": { "type": "string" },
     "user_ts": { "type": "string" },
-    "turn_summary": { "type": "string" },
+    "turn_summary": { "type": ["string", "null"] },
     "status": {
       "enum": ["ok", "error", "blocked", "rewound"],
       "description": "ok = normal completion; error = the turn ended in an error state; blocked = a blocking_issue stopped the turn; rewound = the user rewound past this turn and re-sent, so whatever it produced was discarded. rewound outranks the other three: a turn that errored and was then rewound past reports rewound, because that error belongs to abandoned work."
@@ -124,7 +124,19 @@
         "branch": { "type": "string" },
         "head_sha": { "type": "string" },
         "start_sha": { "type": "string" },
-        "dirty_files": { "type": "integer", "minimum": 0 }
+        "dirty_files": { "type": "integer", "minimum": 0 },
+        "lineage": {
+          "type": ["object", "null"],
+          "description": "Producer transcript lineage when available; operational provenance, never authority.",
+          "additionalProperties": false,
+          "required": ["parent_session_id", "source", "authority", "source_path"],
+          "properties": {
+            "parent_session_id": { "type": "string", "minLength": 1 },
+            "source": { "const": "transcript_metadata" },
+            "authority": { "const": "none" },
+            "source_path": { "type": "string", "minLength": 1 }
+          }
+        }
       }
     },
     "timelineItem": {

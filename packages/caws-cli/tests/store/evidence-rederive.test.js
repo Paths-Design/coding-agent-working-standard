@@ -530,6 +530,28 @@ describe('argv injection is refused before any spawn (A7)', () => {
     // the sentinel. It touches only this test's temporary repository.
     execFileSync('/bin/sh', ['-c', hostile], { cwd: root, stdio: 'pipe' });
     expect(fs.readFileSync(sentinel, 'utf8')).toBe('compromised');
+    if (process.env.CAWS_RELEASE_ARTIFACT_DIR) {
+      fs.mkdirSync(process.env.CAWS_RELEASE_ARTIFACT_DIR, { recursive: true });
+      fs.writeFileSync(
+        path.join(process.env.CAWS_RELEASE_ARTIFACT_DIR, 'injection-control.json'),
+        JSON.stringify(
+          {
+            nodeid: hostile,
+            safe_outcome: real.A1[0],
+            pytest_available: HAS_PYTEST,
+            sentinel_before: original,
+            sentinel_after_safe_runner: original,
+            unsafe_control: {
+              command: ['/bin/sh', '-c', hostile],
+              exit_status: 0,
+              sentinel_after: fs.readFileSync(sentinel, 'utf8'),
+            },
+          },
+          null,
+          2
+        ) + '\n'
+      );
+    }
   });
 });
 
