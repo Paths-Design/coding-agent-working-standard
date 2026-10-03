@@ -117,11 +117,11 @@ evidence:
     test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
   - criterion_id: A5
     status: pass
-    evidence_ref: "Transaction and built-CLI suites cover exact selected keys, original extension order, retained floor/libraries/surfaces, changed inputs, foreign/live/dead locks, prepare/repo/machine failures and journal recovery. Launcher descriptions preserve handler paths/hashes and library resolution. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/final-regression.log; mutation-controls.json; gates-final-staged.log. Generated logs remain ignored; their existence is not the verdict."
-    recorded_at: "2026-09-27T06:40:56.403Z"
+    evidence_ref: "Synthetic selective import covers exact selected keys, retained floor and dependencies, stale inputs, launcher equivalence and recoverable partial writes. No live import applied. Raw execution logs retained at /Users/darianrosebrook/Desktop/Projects/caws/.archive/caws-reconciliation-20261003"
+    recorded_at: "2026-10-03T15:50:54.911Z"
     test_nodeid: "packages/caws-cli/tests/init/hook-import-transaction.test.js::selective apply clears only the selected group and preserves real launcher selection on every surface"
-    commit_sha: "25584e6972887075f33d9923a303b2faab12b5ed"
-    test_verified_at: "25584e6972887075f33d9923a303b2faab12b5ed"
+    commit_sha: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
+    test_verified_at: "0a3535b72588c09e665b449640e2d46e8ed1cac8"
   - criterion_id: A6
     status: pass
     evidence_ref: "Prior 340-test regression and six killed manual controls remain applicable. Final human renderer addition passes build/types and 30 doctor/history tests plus staged gates; the cited held-plan test is executed at the current clean source revision. No Sterling writes or machine activation. Pre-existing template marker drift retained. Raw ignored logs: /Users/darianrosebrook/Desktop/Projects/caws/tmp/reconciliation-accounting-20260927/human-plan-final-validation.log; human-plan-staged-gates.log; final-regression.log."
