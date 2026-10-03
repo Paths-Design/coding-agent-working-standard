@@ -53,3 +53,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/specs-create-tierless.test.js::built CLI creates and activates a tierless spec and verifies its tierless event chain"
     commit_sha: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
     test_verified_at: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Existing tiered validation and chain fixtures pass. Tierless records validate and have null sizing goals with real policy. Broad 41-suite run: 473 passes and 13 failures caused by old guidance expectation or ambient fixture identity; corrected 4 affected suites pass in focused reruns. Three bounded controls detect event tier injection, restored event tier requirement and hidden budget tier; all restored. Raw logs: /Users/darianrosebrook/Desktop/Projects/caws/.archive/caws-tierless-20261003"
+    recorded_at: "2026-10-03T16:45:25.938Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-create-tierless.test.js::tierless validation and sizing never assign a hidden legacy tier"
+    commit_sha: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
+    test_verified_at: c33ea8ac2b59a2b3d51715cdaef58414e931d3bb
