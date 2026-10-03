@@ -778,7 +778,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     err('');
     err('  Ask the user to run this from a terminal OUTSIDE the agent session:');
     err(
-      `    caws reprieve grant --handlers ${opts.handlers} --reason "<why this is safe>" --approved-by "<their id>" --for 30m`
+      `    caws reprieve grant --handlers ${opts.handlers} --reason "<blocked action/target/spec; CAWS limitation; why ordinary alternatives cannot work; bounds; verification/recovery; revoke when done>" --approved-by "<their id>" --for 30m`
     );
     return 1;
   }
@@ -928,8 +928,10 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     err('caws reprieve grant: --approved-by is required.');
     return 1;
   }
-  if (!opts.reason || opts.reason.length === 0) {
-    err('caws reprieve grant: --reason is required.');
+  if (!opts.reason || opts.reason.trim().length === 0) {
+    err(
+      'caws reprieve grant: --reason is required. Describe the blocked action/target/spec, CAWS limitation, why ordinary alternatives cannot work, bounds, verification/recovery and revocation.'
+    );
     return 1;
   }
 

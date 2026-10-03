@@ -327,12 +327,45 @@ no reason or expiry). Reprieves are operational cache (gitignored, under
 `~/.caws/state/sessions/<session>/`), not governance state — they do not flow
 through `events.jsonl` or the kernel.
 
+A reprieve is a legitimate way to ask a human to adjudicate a necessary action
+that CAWS cannot adequately express or admit. Before handing the user a grant
+command, the agent **must write a descriptive `--reason`** that stands on its
+own for the operator and later agents. State:
+
+1. The requested action, target paths/repository, owning spec and observed
+   refusal; identify the CAWS limitation that makes this exception necessary.
+2. The ordinary routes considered (such as an owned binding, scope amendment, or
+   a session in the target repository), and concrete evidence of why none can
+   accomplish this action. If one can, use it. Convenience or a deadline alone
+   does not establish necessity.
+3. The exact session, handlers, operations, extent and number of uses requested,
+   exclusions, and shortest practical expiry. Disclose any earlier refusal;
+   seeking a different approver does not erase it.
+4. How the result will be checked, how unintended changes will be recovered, and
+   when the reprieve will be revoked.
+
+The reason is an accountable justification, not a self-issued permission. Later
+agents may learn the standard of explanation from it; they may not reuse its
+approval. A grant belongs to its named actor, action and prospective bounds: one
+bowl of ice cream does not authorize the tub, another bowl, or yesterday's bowl.
+Ambiguity calls for a narrower action or clarification from the grantor. The
+human must actually grant the exception before the action. Never invent an
+approver, copy a peer's grant, or grant your own; see
+[failure-lineage Entry 40](docs/failure-lineage.md#entry-40-the-agent-signs-the-owners-name-on-a-waiver-it-grants-itself-the-approver-field-is-self-authenticating-and-the-only-detector-is-a-human-reading-the-ledger-august-2026).
+
+**Explain the enforcement gap to the user:** the mechanism matches session,
+repository, handlers and expiry. It skips the entire named handler on matching
+calls until expiry. It does not enforce paths, operations or use counts written
+in `--reason`, nor assess the quality of that explanation. Those narrower bounds
+remain obligations of the agent and operator; a successful grant is not proof of
+necessity or permission for adjacent work.
+
 ```bash
 # Run this in a human terminal; agents cannot grant reprieves.
 caws reprieve grant --session <session-id> --surface codex \
   --handlers protected-paths.sh \
-  --reason "editing casr-context.sh under CASR-HOOK-LIVE-WIRING-OWNER-STEP-01" \
-  --approved-by "darian" \
+  --reason "Under CASR-HOOK-LIVE-WIRING-OWNER-STEP-01, repair only casr-context.sh in this repository: protected-paths.sh refuses the required hook edit even in the owned bound worktree; scope amendment and another session cannot lift this path protection. Request one repair and its validation for this session within 20m, excluding all other hooks. The handler skip is broader than this path restriction. Check the focused hook regression and diff, revert this repair if it fails, and revoke immediately after validation." \
+  --approved-by "<human-grantor>" \
   --for 20m
 
 caws reprieve show --current
