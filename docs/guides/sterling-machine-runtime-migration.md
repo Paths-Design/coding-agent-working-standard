@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Sterling machine runtime migration handoff
 owner: CAWS maintainers
-updated: 2026-09-07
+updated: 2026-10-03
 audience: contributor
 ---
 
@@ -15,6 +15,44 @@ session rendering, while Sterling retains its project-specific behavior. This
 guide does not certify or perform Sterling's migration. Recheck all dated
 observations before acting, and obtain authorization for the implementation
 scope in the receiving session.
+
+## October 3, 2026 investigation
+
+This is a read-only selection/source audit, not a migration or native execution
+qualification. Both Codex and Claude now register the machine launcher. The
+active runtime digest is
+`5ec110240096ef7dc31ceecf6b80e81ab5028325c4112366f6bc537098b4d0df`.
+`caws hooks list --surface <surface> --json` resolves each event and gives the
+selected path/hash, origin tier, and unselected local difference. The machine
+project policy contains 33 grouped handler/library entries across the surfaces.
+The candidate CLI preview inventories 29 transferable groups, two retained floor
+overrides and two retained library groups. All 12 proposed event chains preserve
+selection. Whole-import still refuses the floor replacements without writes;
+selective migration is the supported path. These observations supersede the
+September wiring inventory below.
+
+| Local behavior                                                | Current source/selection evidence                                                                                                                                                                                                                                                        | Disposition before any migration                                                                                                                       |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib/heredoc.sh`                                              | Selected library override; executable lines equal current CAWS after excluding comments/blank lines. CAWS identifies the earlier Sterling port in its header.                                                                                                                            | Superseded candidate: qualify helper resolution, then retire the redundant override.                                                                   |
+| `worktree-guard.sh`                                           | Selected on both surfaces. Local quote-sentinel regex handling predates stock `caws_bash_command_lines`, which preserves executable substitutions and fails closed if recognition helpers are unavailable.                                                                               | Prefer the current upstream recognizer after replaying Sterling false-positive fixtures; do not port the old parser back.                              |
+| `block-dangerous.sh`                                          | Selected on both surfaces. Local version lacks current surface-specific quarantine wording and cross-repository remediation selection.                                                                                                                                                   | Upstream replacement candidate with latch, approval and cross-repository behavioral qualification.                                                     |
+| `bash-write-guard.sh`                                         | Selected on both surfaces. Local version has an early message-command exemption and lacks current interpreter-target extraction, path canonicalization and shared ask-capability handling.                                                                                               | Reconcile against upstream boundary tests; retain no exemption solely because it exists locally.                                                       |
+| `scope-guard.sh`                                              | Selected only for Claude. Local shared-allowlist composition differs from stock; stock also has newer guard-config and path-normalization behavior.                                                                                                                                      | Upstream candidate for the shared semantic allowlist, combined with current containment behavior; whole-file replacement is not established safe.      |
+| `session-log.sh` and adjacent renderer/client                 | Selected across lifecycle events on both surfaces. Local features include a warm rendering daemon, fork transcript discovery and audit-log routing preservation. Current stock has newer transcript-store handling, symlink refusal and SessionEnd sealing absent from the local script. | Mixed lineage: extract and qualify useful local features against the current renderer contract. Do not replace either entire implementation blindly.   |
+| `rg-replace-guard.sh`                                         | Selected extension; not shipped by CAWS. Detects grep-style `rg -rn` replacement confusion and annotates explicit replacements.                                                                                                                                                          | General CAWS candidate after command-recognition and legitimate-replacement tests; its comment asserting near-zero false positives is not proof.       |
+| `worktree-venv-link-check.sh`                                 | Selected SessionStart extension; directly repairs `.venv` links using registered worktree paths.                                                                                                                                                                                         | General artifact-repair candidate, redesigned around CAWS artifact policy and ownership rather than automatically copying this Python-specific loop.   |
+| `test-run-guard.sh`                                           | Selected extension; directs execution through Sterling `scripts/test` worker admission and receipt contracts.                                                                                                                                                                            | Retain Sterling policy. A generic CAWS adapter could be considered separately.                                                                         |
+| `gitignore-track-guard.sh`                                    | Selected extension; enforces Sterling's foreign-data custody rule through live Git ignore decisions.                                                                                                                                                                                     | Retain Sterling policy. Gitignored does not universally mean forbidden-to-track in other projects.                                                     |
+| `casr-context.sh`                                             | Selected before `quiet-merge.sh`; calls Sterling context-authority projection and mutation-target contracts.                                                                                                                                                                             | Retain Sterling integration; do not introduce its semantic authority into generic CAWS.                                                                |
+| Documentation frontmatter, placement and ephemeral advisories | Three selected extensions depend on Sterling document schemas, molds and lifecycle rules.                                                                                                                                                                                                | Retain local data/contracts; generic mechanism extraction needs a separate contract.                                                                   |
+| `quality-check.sh`, `validate-spec.sh`, `audit.sh tool-use`   | Machine policy adds event positions, but the selected bodies are stock runtime files.                                                                                                                                                                                                    | Preserve chain placement while reviewing whether each extra registration remains necessary. A differing local copy is not the selected implementation. |
+
+No handler, policy, runtime pointer, native registration or Sterling file was
+changed by this investigation. Replacement candidates need success/refusal,
+quoted-data/substitution, missing-helper, cross-repository and lifecycle replay
+controls appropriate to their behavior. A policy transfer plan proves bounded
+selection equivalence, not that an override is obsolete or that a harness ran
+it.
 
 ## Verified handoff baseline
 

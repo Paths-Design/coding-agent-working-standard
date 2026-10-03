@@ -2805,7 +2805,9 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
     // AUTH-BINDING-BRIDGE-001: --apply also removes retired bridge bindings
     // (eventless hygiene — the retirement audit lives in spec_closed/
     // spec_archived, not here). Single merged JSON emit.
-    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, true);
+    // Exact creation receipts never carry unrelated bridge cleanup along.
+    const receiptOnly = opts.state?.length === 1 && opts.state[0] === 'verified-dead-creation';
+    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, !receiptOnly);
 
     if (opts.json === true) {
       out(

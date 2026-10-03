@@ -43,6 +43,12 @@ function apply(f, created = f.created) {
 }
 test('built CLI preview does not mutate; apply logs one exact receipt and discharges current diagnosis', () => {
   const f = setup();
+  const bridges = path.join(f.cawsDir, 'claims/bridge.json');
+  fs.mkdirSync(path.dirname(bridges), { recursive: true });
+  const bridgeBytes = JSON.stringify({
+    'RETIRED-01': { session_id: 'peer', acquired_at: '2026-01-01T00:00:00Z' },
+  });
+  fs.writeFileSync(bridges, bridgeBytes);
   const before = fs.readFileSync(path.join(f.cawsDir, 'events.jsonl'), 'utf8');
   const args = [
     'worktree',
@@ -62,6 +68,7 @@ test('built CLI preview does not mutate; apply logs one exact receipt and discha
     encoding: 'utf8',
   });
   expect(applied.status).toBe(0);
+  expect(fs.readFileSync(bridges, 'utf8')).toBe(bridgeBytes);
   expect(JSON.parse(applied.stdout).outcomes[0].action).toBe('applied');
   const events = loadEvents(f.cawsDir);
   expect(events.ok).toBe(true);

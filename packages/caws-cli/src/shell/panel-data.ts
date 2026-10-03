@@ -1,3 +1,4 @@
+import { projectDoctorFindings } from '../kernel';
 // Shared panel-data selectors for CAWS read-only dashboards.
 //
 // CAWS-TUI-DASHBOARD-001. Single source of panel assembly for every
@@ -163,10 +164,8 @@ export function buildStatusPanelPayload(input: StatusPanelPayloadInput): Record<
     };
   }
   if (jsonPanels.includes('doctor')) {
-    payload.doctor = {
-      counts: countDoctorFindings(input.doctorFindings),
-      findings: input.doctorFindings,
-    };
+    const projected = projectDoctorFindings(input.doctorFindings);
+    payload.doctor = { counts: countDoctorFindings(projected.findings), ...projected };
   }
   // CAWS-TELEMETRY-REPAIR-RESILIENCE-001: JSON consumers get the same
   // advisory the human path renders, as plain text under a stable field —

@@ -26,7 +26,7 @@
 // only place that wires this to Commander.
 
 import type { Diagnostic, DoctorFinding } from '../../kernel';
-import { DOCTOR_RULES, inspectProjectState } from '../../kernel';
+import { DOCTOR_RULES, inspectProjectState, projectDoctorFindings } from '../../kernel';
 
 import { inspectGitignoreCoverage } from '../../init/gitignore-drift';
 import { detectBuildStaleness } from '../build-freshness';
@@ -61,7 +61,8 @@ export interface DoctorRepairPlanItem {
   readonly message: string;
   readonly allowed_mutation: string | null;
   readonly refusal_reason?: string;
-  readonly next_command: string;
+  readonly next_command: string | null;
+  readonly action: 'repair_available' | 'decision_required' | 'investigation_required';
   readonly details?: Readonly<Record<string, unknown>>;
 }
 
@@ -101,13 +102,31 @@ function genericPlanItem(
             'No automatic repair command is declared for this finding; inspect the finding before mutating.',
         }
       : {}),
-    next_command: input.nextCommand ?? finding.narrowRepair ?? 'caws doctor --data',
+    next_command:
+      input.nextCommand &&
+      /^(caws|git|cd) /.test(input.nextCommand) &&
+      !/[<>]/.test(input.nextCommand)
+        ? input.nextCommand
+        : null,
+    action:
+      allowedMutation !== null
+        ? 'repair_available'
+        : /binding|owner|agent-cwd/.test(input.stateClass)
+          ? 'decision_required'
+          : 'investigation_required',
     ...(Object.keys(data).length > 0 ? { details: data } : {}),
   };
 }
 
 function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
   const data = (finding.data ?? {}) as Record<string, unknown>;
+  if (finding.rule.startsWith('doctor.hooks.'))
+    return genericPlanItem(finding, {
+      stateClass: finding.rule.replace('doctor.hooks.', 'hooks-'),
+      nextCommand: 'caws hooks list --json',
+      refusalReason:
+        'Inspect selected paths and their dependencies on every configured surface before choosing an upstream port, local retention, or retirement. A differing local file alone does not establish active drift.',
+    });
   switch (finding.rule) {
     case DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_STALE:
     case DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_TIMESTAMP_MISSING:
@@ -180,6 +199,13 @@ function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
       });
 
     case DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING:
+      if (data.verified_dead === true)
+        return genericPlanItem(finding, {
+          stateClass: 'verified-dead-creation',
+          allowedMutation:
+            'revalidate absence and append an identity-bound worktree_pruned receipt',
+          nextCommand: `caws worktree prune --state verified-dead-creation --include ${findingSubject(finding)} --apply`,
+        });
       return genericPlanItem(finding, {
         stateClass: 'event-orphan-refused',
         nextCommand: finding.narrowRepair ?? 'caws events show latest-rotation --json',
@@ -254,7 +280,8 @@ function renderRepairPlan(
   for (const item of items) {
     out(`- ${item.state_class} ${item.subject}`);
     out(`  source: ${item.source_rule} (${item.severity})`);
-    out(`  allowed: ${item.allowed_mutation ?? 'refused'}`);
+    out(`  action: ${item.action}`);
+    if (item.allowed_mutation !== null) out(`  allowed: ${item.allowed_mutation}`);
     if (item.refusal_reason !== undefined) out(`  refusal: ${item.refusal_reason}`);
     const unmet = item.details?.unmet_acceptance;
     if (Array.isArray(unmet)) {
@@ -266,7 +293,7 @@ function renderRepairPlan(
           out(`    evidence: ${obligation.evidence_ref}`);
       }
     }
-    out(`  next: ${item.next_command}`);
+    if (item.next_command !== null) out(`  next: ${item.next_command}`);
   }
 }
 
@@ -324,8 +351,10 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
     ...(buildStale ? [buildStale] : []),
     ...wedgedSessions,
   ];
-  const findings: DoctorFinding[] =
-    shellFindings.length > 0 ? [...report.findings, ...shellFindings] : [...report.findings];
+  const { findings, inventory, activity } = projectDoctorFindings([
+    ...report.findings,
+    ...shellFindings,
+  ]);
 
   // 4. Render store-load diagnostics — kept SEPARATE from doctor findings.
   const loadDiagnostics: Diagnostic[] = [
@@ -359,6 +388,8 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
             },
             counts_by_state: countsByState(items),
             items,
+            inventory,
+            activity,
             load_diagnostics: loadDiagnostics,
           },
           null,
@@ -392,6 +423,11 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
     out('  (none)');
   } else {
     out(renderFindings(findings, { showData }));
+  }
+
+  if (showData && (inventory.length || activity.length)) {
+    out('Current inventory and owner availability (no repair obligation):');
+    out(renderFindings([...inventory, ...activity], { showData: true }));
   }
 
   // 6. Exit code

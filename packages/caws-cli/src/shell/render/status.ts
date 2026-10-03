@@ -24,6 +24,7 @@
 //   Doctor
 //     error/warning/info counts; top findings, capped.
 
+import { projectDoctorFindings } from '../../kernel';
 import type {
   ActivitySummary,
   AgentLease,
@@ -99,7 +100,7 @@ export function renderShortStatus(input: StatusRenderInput): string {
           .map(([state, count]) => `${count} ${state}`)
           .join(', ');
   const worktreeCount = Object.keys(input.worktrees).length;
-  const counts = countFindingSeverities(input.doctorFindings);
+  const counts = countFindingSeverities(projectDoctorFindings(input.doctorFindings).findings);
   const leaseSummary = input.leaseSummary;
   const agentSummary =
     leaseSummary === undefined || leaseSummary.total === 0
@@ -334,9 +335,10 @@ function renderAgentsPanel(input: StatusRenderInput, lines: string[]): void {
 
 function renderDoctorPanel(input: StatusRenderInput, lines: string[]): void {
   lines.push('Doctor');
-  const counts = countFindingSeverities(input.doctorFindings);
+  const { findings } = projectDoctorFindings(input.doctorFindings);
+  const counts = countFindingSeverities(findings);
   lines.push(`  Summary:   ${counts.errors}E / ${counts.warnings}W / ${counts.infos}I`);
-  if (input.doctorFindings.length === 0) {
+  if (findings.length === 0) {
     lines.push('  (no findings)');
     return;
   }
@@ -346,12 +348,29 @@ function renderDoctorPanel(input: StatusRenderInput, lines: string[]): void {
     warning: 1,
     info: 2,
   };
-  const top = [...input.doctorFindings]
-    .sort((a, b) => rank[a.severity] - rank[b.severity])
-    .slice(0, cap);
+  const hooks = findings.filter((f) => f.rule.startsWith('doctor.hooks.'));
+  const display: DoctorFinding[] =
+    hooks.length > 1
+      ? [
+          ...findings.filter((f) => !f.rule.startsWith('doctor.hooks.')),
+          {
+            rule: 'doctor.hooks.maintenance',
+            authority: 'kernel/diagnostics',
+            severity: hooks.some((f) => f.severity === 'error')
+              ? 'error'
+              : hooks.some((f) => f.severity === 'warning')
+                ? 'warning'
+                : 'info',
+            message: `Hook maintenance: ${hooks.length} diagnostics (${hooks.map((f) => f.rule).join(', ')}). Inspect selected handlers before deciding what to port, retain or retire.`,
+            narrowRepair: 'caws hooks list --json; caws doctor --data',
+            data: { findings: hooks },
+          },
+        ]
+      : [...findings];
+  const top = [...display].sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, cap);
   lines.push(renderFindings(top, { suppressTakeoverHints: true }));
-  if (input.doctorFindings.length > cap) {
-    lines.push(`  … ${input.doctorFindings.length - cap} more — run \`caws doctor\` for full list`);
+  if (display.length > cap) {
+    lines.push(`  … ${display.length - cap} more — run \`caws doctor\` for full list`);
   }
 }
 

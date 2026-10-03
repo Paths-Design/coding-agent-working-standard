@@ -17,3 +17,5 @@ export { DOCTOR_RULES, DOCTOR_RULE_PREFIXES } from './rules';
 export type { DoctorRule } from './rules';
 
 export { inspectProjectState } from './inspect';
+
+export { projectDoctorFindings } from './projection';
