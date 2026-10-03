@@ -64,3 +64,11 @@ rollback:
   - 'Revert each logical source commit before publication; do not alter registry versions or installed shared runtime'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/scenarios/scope-lane.json; scope-staged.json; scope-empty-index.json; scope-invalid-base.json; scope-rename.json; scope-index-identity.json. Real CLI exits 1 for committed/staged violations, 2 for unavailable inputs; event records exact basis."
+    recorded_at: "2026-10-03T23:47:52.569Z"
+    test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::committed forbidden lane work is evaluated despite an empty canonical index; event carries its basis"
+    commit_sha: a6c9c5df
+    test_verified_at: a6c9c5df6e84a3e16bcfb6e06547b92b2a4e2c62
