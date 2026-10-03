@@ -44,8 +44,9 @@ Bridge claims (`caws claim --spec`) ship and bind active specs. Agent leases,
 messages and manual handoff records provide visibility and provenance, not
 additional authority. Only session lifecycle start/checkpoint/end and the
 `parallel` orchestrator remain deferred. Removed v10 commands such as top-level
-`validate`, `evaluate`, `iterate` and `hooks` are not restored by global
-adoption.
+`validate`, `evaluate` and `iterate` are not restored by global adoption. The
+current `caws hooks` group manages repository hook policy; the historical
+`caws hooks install` command remains retired.
 
 ## Command surface
 
@@ -145,8 +146,10 @@ If `.caws/working-spec.yaml` exists, plain init refuses. Use a reviewed
 
 ```bash
 # 1. Author a spec for your work
-caws specs create FEAT-1 --title "Short title" --mode feature
-$EDITOR .caws/specs/FEAT-1.yaml          # fill in scope / invariants / acceptance
+caws specs create FEAT-1 --title "Short title" --mode feature --scope-in src/foo.ts
+caws specs amend FEAT-1 --add-invariant "State the invariant"
+caws specs amend FEAT-1 --set-ac A1 --given "Initial state" --when "Action" --then "Observable result"
+# Use specs amend-scope for later scope changes; governance edits stay audited.
 
 # 2. Verify scope/structure
 caws doctor
@@ -154,7 +157,11 @@ caws scope show src/foo.ts                 # explain the scope decision
 caws scope check src/foo.ts                # enforce; exits 1 if refused
 
 # 3. Implement, run tests, then evaluate gates
+git add <changed-paths>                   # unstaged/untracked files are not evaluated
 caws gates run --spec FEAT-1               # policy decides block/warn/skip
+# Bound lanes include committed changes against their recorded base branch.
+# Elsewhere, pass --base <ref> to include committed work; empty staged input
+# without a branch basis is unavailable, not a passing scope check.
 
 # 4. Record typed evidence (test results, AC closures)
 caws evidence record --type test --spec FEAT-1 \

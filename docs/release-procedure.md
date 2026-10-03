@@ -96,11 +96,11 @@ publish.
 
 ## Dependency, coverage and fixture gates
 
-`npm run audit:dependencies` audits the committed lockfile, including
-development tools, and fails on any reported severity or registry error. Both PR
-CI and Release Qualification require it. The installed-package audit above is
-separate: a clean workspace lockfile does not establish a clean consumer
-installation.
+`npm run audit:dependencies --workspaces=false` audits the committed lockfile,
+including development tools, and fails on any reported severity or registry
+error. Both PR CI and Release Qualification require it. The installed-package
+audit above is separate: a clean workspace lockfile does not establish a clean
+consumer installation.
 
 The combined Jest run owns coverage selection and thresholds at the top level of
 `packages/caws-cli/jest.config.js`. It collects the compiled runtime and

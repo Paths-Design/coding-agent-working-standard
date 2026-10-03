@@ -1,3 +1,43 @@
+## [Unreleased]
+
+### Behavior and workflow changes since rc.2
+
+- Repository hook policy supports inspection, compilation, reviewed selective
+  machine imports and journaled recovery. `caws hooks` is a current command
+  group; it does not restore the retired `hooks install` command.
+- `caws goal set/show/clear` binds an optional acceptance check to session stop.
+  Consecutive refusals are bounded: budget exhaustion releases an unmet goal
+  with a warning and does not create acceptance evidence.
+- `caws tui` adds a read-only dashboard sharing status selectors. Doctor and
+  status distinguish current repairs from historical inventory and lease data.
+- Evidence re-derivation executes Node and Bats citations, rejects zero-test
+  Jest results, and uses the invoking linked worktree. `caws specs commit`
+  recovers lifecycle changes whose audit commit did not land.
+- New specs omit risk tiers and reject `--risk-tier`/`--tier`. Legacy tiered
+  specs remain readable. Budget sizing is advisory and never blocks.
+- Scope gates use the invoking registered lane's committed delta plus staged
+  changes, with a recorded base/head/checkout observation. Canonical committed
+  work requires `--base <ref>`; an empty index alone is not a scope pass.
+  Unstaged and untracked work remains outside this gate's stated basis.
+- Merge dry-run computes conflict preflight in the object database without
+  changing refs, indexes or working files. Readiness names the checked tips;
+  execution recomputes against the live base with compare-and-swap.
+- Invalid adapter invocation exits nonzero without being mistaken for a valid
+  lifecycle configuration failure. Valid lifecycle degradation remains distinct
+  from a handler refusal.
+- Qualification resolves root npm scripts explicitly, builds documentation
+  prerequisites, inventories new sources and uses a sensitive injection oracle.
+  Package contents exclude Python bytecode; turn-log schema accepts actual
+  nullable summaries and typed transcript lineage.
+- Remove unused runtime `micromatch` and `minimatch` dependencies, update
+  compatible transitive fixes, and upgrade Jest, lint-staged, ts-jest and
+  typescript-eslint to eliminate the vulnerable development-tool chain.
+  Dependency qualification requires both workspace and detached-consumer audits.
+
+Release qualification and publication are separate decisions. No version or
+channel is selected by this entry; see `docs/release-readiness.md` in the source
+repository for acceptance and evidence requirements.
+
 ## [12.2.0-rc.2] (2026-09-16)
 
 Second release candidate for the shared machine runtime; publishes to `next`.

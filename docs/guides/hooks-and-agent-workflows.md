@@ -113,7 +113,7 @@ Cascade enables structured development workflows invoked via `/[workflow-name]`.
 validation.
 
 1. **Author the spec**
-   - Create `.caws/specs/<id>.yaml` directly (v11 ships no spec generator)
+   - Run `caws specs create <id> --title "<title>" --mode feature`
    - Verify: `caws doctor` exits 0
 
 2. **Confirm scope before editing**
@@ -126,7 +126,11 @@ validation.
      `caws evidence record --type test --spec <id> --data '{...}'`
 
 4. **Quality gates**
-   - Run: `caws gates run --spec <id>` (exit 0 = pass)
+   - Stage intended changes, then run `caws gates run --spec <id>`. Bound
+     worktrees include committed changes against their recorded base. Outside a
+     bound worktree, use `--base <ref>` to include committed work. Unstaged and
+     untracked paths are not evaluated; an empty index without a branch basis
+     exits 2 instead of asserting a scope pass.
    - For acceptable violations, open a waiver:
      `caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
 
@@ -355,7 +359,10 @@ caws scope check <target-file>
 caws gates run --spec <id>
 
 ```
-*Exit 0 = pass. Hash-chained gate_evaluated event recorded per declared gate.*
+*Exit 0 = pass for the named change basis. Bound lanes include the committed
+delta against their recorded base plus staged changes; outside a bound lane,
+use `--base <ref>` to include committed work. Unstaged and untracked work is
+excluded. A hash-chained gate_evaluated event records the basis per declared gate.*
 
 5. **Address issues**
 - Fix failing gates, OR
@@ -369,8 +376,8 @@ caws gates run --spec <id>
 
 **Agent decision points**:
 - `caws gates run` exits 1 → fix or waive; do not proceed without addressing.
-- `caws gates run` exits 2 → composition failure; investigate environment, do not retry blindly.
-- T1-tier blocking gate failure → request human review before waiver.
+- `caws gates run` exits 2 → composition or change-basis failure; inspect the diagnostic before retrying.
+- A blocking gate needs a fix or a waiver with a named approver and expiry.
 - Spec scope changes needed → escalate to human.
 
 **Call other workflows**:
