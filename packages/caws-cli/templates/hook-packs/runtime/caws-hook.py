@@ -41,6 +41,10 @@ ENFORCING_EVENTS = {'pre_tool_use'}
 _DISPATCHED = False
 
 
+class InvocationError(ValueError):
+    """Invalid CLI syntax is not a failed native lifecycle event."""
+
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -514,7 +518,7 @@ def main():
     if (len(sys.argv) < 3 or len(flags) != len(set(flags)) or
             set(flags) - {'--system', '--describe'} or
             sys.argv[1] not in SURFACES or sys.argv[2] not in EVENTS):
-        raise ValueError('Usage: caws-hook <surface> <pre_tool_use|post_tool_use|session_start|stop|pre_compact|session_end> [--system] [--describe]')
+        raise InvocationError('Usage: caws-hook <surface> <pre_tool_use|post_tool_use|session_start|stop|pre_compact|session_end> [--system] [--describe]')
     surface, event = sys.argv[1:3]
     def inactive(reason):
         if describe:
@@ -715,6 +719,9 @@ def project_configuration(canonical, surface, event):
 if __name__ == '__main__':
     try:
         sys.exit(main())
+    except InvocationError as error:
+        print('[caws machine adapter] ' + str(error), file=sys.stderr)
+        sys.exit(2)
     except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
         message = 'CAWS machine adapter: ' + str(error)
         # stderr carries the diagnostic on every event, including the ones that

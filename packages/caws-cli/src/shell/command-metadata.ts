@@ -1718,6 +1718,11 @@ export const GATES_COMMAND_META: GroupCommandMeta = {
           description: 'Spec id this gate run is about; aliases positional <spec>',
         },
         {
+          flag: '--base <ref>',
+          description:
+            'Evaluate committed changes from the merge base of this ref and HEAD, plus staged changes. Registered lanes use their recorded base. Without a base only a nonempty staged index is evaluated; unstaged and untracked work is excluded.',
+        },
+        {
           flag: '--context <ctx>',
           description: 'Compatibility no-op retained from the former external quality package path',
           defaultValue: 'cli',

@@ -36,6 +36,10 @@
 // zero-disposition guard was absent entirely — a run with no policy-declared
 // known-gate intersections silently exited 0 with no audit trail.
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { runGit } from '../../store/repo-root';
+import { readGateChanges, type GateChangeBasis } from '../gates/local-evaluators/diff-helpers';
 import {
   type Actor,
   type Diagnostic,
@@ -342,6 +346,7 @@ function dispositionToEventBody(args: {
   ts: string;
   actor: Actor;
   specId: string;
+  changeBasis?: GateChangeBasis;
   waiverEvidence?: WaiverEvidence;
 }): EventBody {
   const violations = args.disposition.violations.slice(0, MAX_EVENT_VIOLATIONS).map((v) => ({
@@ -369,6 +374,7 @@ function dispositionToEventBody(args: {
       result: args.disposition.outcome === 'skipped' ? 'skipped' : args.disposition.outcome,
       violations,
       waived_count: waivedCount,
+      ...(args.changeBasis !== undefined ? { metrics: { change_basis: args.changeBasis } } : {}),
       ...(ev !== undefined && ev.waiver_ids.length > 0
         ? { waiver_ids: ev.waiver_ids.slice() }
         : {}),
@@ -378,6 +384,7 @@ function dispositionToEventBody(args: {
 
 export interface GatesRunCommandRequest {
   readonly specId: string;
+  readonly baseRef?: string;
 }
 
 export function runGatesRunCommand(
@@ -491,11 +498,40 @@ export function runGatesRunCommand(
     err(`(rule: ${SHELL_RULES.GATES_POLICY_REQUIRED})`);
     return 2;
   }
+  let changeSet: ReturnType<typeof readGateChanges>;
+  try {
+    const top = runGit(['rev-parse', '--show-toplevel'], cwd);
+    if (!top.ok) throw new Error(top.reason);
+    const checkout = fs.realpathSync(top.stdout.trim());
+    const lane = Object.entries(snapshot.worktrees).find(([name, entry]) => {
+      const lanePath = entry.path ?? path.join(cawsDir, 'worktrees', name);
+      return fs.existsSync(lanePath) && fs.realpathSync(lanePath) === checkout;
+    });
+    if (lane !== undefined && lane[1].specId !== request.specId) {
+      throw new Error('The invoking lane is not bound to the requested spec.');
+    }
+    if (
+      lane !== undefined &&
+      request.baseRef !== undefined &&
+      request.baseRef !== lane[1].baseBranch
+    ) {
+      throw new Error(
+        'A registered lane uses its recorded base branch; --base cannot narrow that basis.'
+      );
+    }
+    if (lane !== undefined && lane[1].baseBranch === undefined)
+      throw new Error('Registered lane has no base branch.');
+    changeSet = readGateChanges(checkout, lane?.[1].baseBranch ?? request.baseRef);
+  } catch (error) {
+    err(`caws gates run: change basis unavailable: ${(error as Error).message}`);
+    return 2;
+  }
   const localResult = runLocalEvaluators({
     spec: activeSpec,
     policy,
     repoRoot,
     nowIso: now.toISOString(),
+    stagedChanges: changeSet.changes,
   });
   const mergedReport: GatesReport = {
     ...report,
@@ -561,6 +597,7 @@ export function runGatesRunCommand(
       ts,
       actor,
       specId: request.specId,
+      changeBasis: changeSet.basis,
       ...(waiverFilter.waivedByGate[d.gate_id] !== undefined
         ? { waiverEvidence: waiverFilter.waivedByGate[d.gate_id] }
         : {}),
@@ -575,6 +612,10 @@ export function runGatesRunCommand(
   }
 
   // 8. Render summary (always — partial evidence is still operator-useful).
+  out(`Change basis: ${JSON.stringify(changeSet.basis)}`);
+  out(
+    'Scope covers the named committed/staged paths only; unstaged and untracked work is not evaluated.'
+  );
   out(renderGatesRun(dispositionResult));
 
   // 9. Exit code, in priority order:
