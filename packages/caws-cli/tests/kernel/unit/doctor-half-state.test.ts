@@ -225,7 +225,7 @@ describe('event-backed governance-half-state (A2/A6 — worktree_created orphan)
     expect(f?.data?.created_event_seq).toBe(2);
     expect(typeof f?.data?.created_event_hash).toBe('string');
     expect(f?.data?.spec_id).toBe('WT-SPEC');
-    // DIAGNOSE ONLY: no mutating command in the repair.
+    // Incomplete observations cannot authorize a reconciliation receipt.
     expect(f?.narrowRepair ?? '').not.toMatch(/\bcaws\s+\w|\bgit\s+\w/);
   });
 
@@ -333,7 +333,7 @@ describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DIS
     expect(f?.data?.branch_observed_absent).toBe('wt-tomb');
     expect(f?.data?.path_observed_absent).toBe('/fixture/absent/wt-tomb');
     // The tombstone names no command either — diagnose-only posture holds.
-    expect(f?.narrowRepair ?? '').not.toMatch(/\bcaws\s+\w|\bgit\s+\w/);
+    expect(f?.narrowRepair).toContain('caws worktree prune --state verified-dead-creation');
     // The tombstone contributes to infos, not warnings.
     expect(report.summary.warnings).toBe(0);
     expect(report.summary.infos).toBe(1);
@@ -448,4 +448,37 @@ describe('doctor is read-only (A5)', () => {
     // throw in strict mode (ts-jest runs ESM-strict). It must complete cleanly.
     expect(() => inspectProjectState(input)).not.toThrow();
   });
+});
+
+describe('ordered lifecycle accounting', () => {
+  test.each(['worktree_untracked', 'worktree_destroyed'])(
+    '%s accounts only for the preceding creation',
+    (terminal) => {
+      const events = chain([
+        { event: 'worktree_created', data: { name: 'salvage', path: '/old', branch: 'salvage' } },
+        { event: terminal, data: { worktree_name: 'salvage' } },
+      ]);
+      expect(
+        rules(
+          inspectProjectState({
+            now: NOW,
+            specs: [],
+            worktrees: {},
+            events,
+            localBranchRefs: ['refs/heads/salvage'],
+          })
+        )
+      ).not.toContain(DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
+      const reused = chain([
+        ...events.map((e) => ({ event: e.event, data: e.data })),
+        { event: 'worktree_created', data: { name: 'salvage', path: '/new', branch: 'salvage' } },
+      ]);
+      const f = findingFor(
+        inspectProjectState({ now: NOW, specs: [], worktrees: {}, events: reused }),
+        DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING
+      );
+      expect(f?.data?.created_event_seq).toBe(3);
+      expect(f?.severity).toBe('warning');
+    }
+  );
 });

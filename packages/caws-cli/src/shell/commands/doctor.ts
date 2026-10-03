@@ -26,9 +26,9 @@
 // only place that wires this to Commander.
 
 import type { Diagnostic, DoctorFinding } from '../../kernel';
-import { DOCTOR_RULES, inspectProjectState } from '../../kernel';
+import { DOCTOR_RULES, inspectProjectState, projectDoctorFindings } from '../../kernel';
 
-import { detectGitignoreDrift } from '../../init/gitignore-drift';
+import { inspectGitignoreCoverage } from '../../init/gitignore-drift';
 import { detectBuildStaleness } from '../build-freshness';
 import { AGENT_CWD_GONE_RULE, detectWedgedSessions } from '../cwd-recovery';
 import { composeDoctorSnapshot, resolveRepoRoot } from '../../store';
@@ -61,7 +61,8 @@ export interface DoctorRepairPlanItem {
   readonly message: string;
   readonly allowed_mutation: string | null;
   readonly refusal_reason?: string;
-  readonly next_command: string;
+  readonly next_command: string | null;
+  readonly action: 'repair_available' | 'decision_required' | 'investigation_required';
   readonly details?: Readonly<Record<string, unknown>>;
 }
 
@@ -101,23 +102,41 @@ function genericPlanItem(
             'No automatic repair command is declared for this finding; inspect the finding before mutating.',
         }
       : {}),
-    next_command: input.nextCommand ?? finding.narrowRepair ?? 'caws doctor --data',
+    next_command:
+      input.nextCommand &&
+      /^(caws|git|cd) /.test(input.nextCommand) &&
+      !/[<>]/.test(input.nextCommand)
+        ? input.nextCommand
+        : null,
+    action:
+      allowedMutation !== null
+        ? 'repair_available'
+        : /binding|owner|agent-cwd/.test(input.stateClass)
+          ? 'decision_required'
+          : 'investigation_required',
     ...(Object.keys(data).length > 0 ? { details: data } : {}),
   };
 }
 
 function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
   const data = (finding.data ?? {}) as Record<string, unknown>;
+  if (finding.rule.startsWith('doctor.hooks.'))
+    return genericPlanItem(finding, {
+      stateClass: finding.rule.replace('doctor.hooks.', 'hooks-'),
+      nextCommand: 'caws hooks list --json',
+      refusalReason:
+        'Inspect selected paths and their dependencies on every configured surface before choosing an upstream port, local retention, or retirement. A differing local file alone does not establish active drift.',
+    });
   switch (finding.rule) {
     case DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_STALE:
     case DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_TIMESTAMP_MISSING:
       return genericPlanItem(finding, {
         stateClass: 'active-spec-unbound',
         ...(typeof data.spec_id === 'string'
-          ? { nextCommand: `caws worktree create <name> --spec ${data.spec_id}` }
+          ? { nextCommand: `caws specs show ${data.spec_id}` }
           : {}),
         refusalReason:
-          'The active spec has no bound worktree; choose whether to bind work, close the spec, or leave it active.',
+          'The active spec has no bound worktree; inspect unmet criteria and recorded holds before choosing to bind, defer, demote or close. Closure requires completed obligations.',
       });
 
     case DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY:
@@ -180,6 +199,13 @@ function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
       });
 
     case DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING:
+      if (data.verified_dead === true)
+        return genericPlanItem(finding, {
+          stateClass: 'verified-dead-creation',
+          allowedMutation:
+            'revalidate absence and append an identity-bound worktree_pruned receipt',
+          nextCommand: `caws worktree prune --state verified-dead-creation --include ${findingSubject(finding)} --apply`,
+        });
       return genericPlanItem(finding, {
         stateClass: 'event-orphan-refused',
         nextCommand: finding.narrowRepair ?? 'caws events show latest-rotation --json',
@@ -254,9 +280,20 @@ function renderRepairPlan(
   for (const item of items) {
     out(`- ${item.state_class} ${item.subject}`);
     out(`  source: ${item.source_rule} (${item.severity})`);
-    out(`  allowed: ${item.allowed_mutation ?? 'refused'}`);
+    out(`  action: ${item.action}`);
+    if (item.allowed_mutation !== null) out(`  allowed: ${item.allowed_mutation}`);
     if (item.refusal_reason !== undefined) out(`  refusal: ${item.refusal_reason}`);
-    out(`  next: ${item.next_command}`);
+    const unmet = item.details?.unmet_acceptance;
+    if (Array.isArray(unmet)) {
+      for (const raw of unmet) {
+        if (raw === null || typeof raw !== 'object') continue;
+        const obligation = raw as Record<string, unknown>;
+        out(`  unmet: ${obligation.criterion_id} [${obligation.status}] ${obligation.then}`);
+        if (typeof obligation.evidence_ref === 'string')
+          out(`    evidence: ${obligation.evidence_ref}`);
+      }
+    }
+    if (item.next_command !== null) out(`  next: ${item.next_command}`);
   }
 }
 
@@ -300,7 +337,7 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
   // they are computed here and merged into the findings list alongside the
   // kernel report (CAWS-DOCTOR-GITIGNORE-DRIFT-001,
   // CAWS-GUARD-BUILD-FRESHNESS-001, CAWS-GUARD-CWD-RECOVERY-001).
-  const gitignoreDrift = detectGitignoreDrift(repoRoot, cawsDir);
+  const gitignoreFindings = inspectGitignoreCoverage(repoRoot, cawsDir);
   // The build-staleness check reasons about the running binary's OWN dist/
   // (where __dirname lives at runtime), not about the project's working
   // tree — so it keys off the compiled file path, not repoRoot.
@@ -310,12 +347,14 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
   // under them (the ENOENT wedge with no self-recovery path).
   const wedgedSessions = detectWedgedSessions(cawsDir);
   const shellFindings: DoctorFinding[] = [
-    ...(gitignoreDrift ? [gitignoreDrift] : []),
+    ...gitignoreFindings,
     ...(buildStale ? [buildStale] : []),
     ...wedgedSessions,
   ];
-  const findings: DoctorFinding[] =
-    shellFindings.length > 0 ? [...report.findings, ...shellFindings] : [...report.findings];
+  const { findings, inventory, activity } = projectDoctorFindings([
+    ...report.findings,
+    ...shellFindings,
+  ]);
 
   // 4. Render store-load diagnostics — kept SEPARATE from doctor findings.
   const loadDiagnostics: Diagnostic[] = [
@@ -349,6 +388,8 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
             },
             counts_by_state: countsByState(items),
             items,
+            inventory,
+            activity,
             load_diagnostics: loadDiagnostics,
           },
           null,
@@ -382,6 +423,11 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
     out('  (none)');
   } else {
     out(renderFindings(findings, { showData }));
+  }
+
+  if (showData && (inventory.length || activity.length)) {
+    out('Current inventory and owner availability (no repair obligation):');
+    out(renderFindings([...inventory, ...activity], { showData: true }));
   }
 
   // 6. Exit code

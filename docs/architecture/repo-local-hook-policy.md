@@ -98,6 +98,63 @@ operator affecting only their own box is the existing and correct escape hatch.
 `scope-guard.sh` is deliberately not on the floor — it is precisely the guard
 consumers have needed to change.
 
+### Reconcile machine overrides selectively
+
+`caws hooks import --from-machine --plan --json` includes a read-only
+`reconciliation` inventory, even when the legacy whole-surface import refuses a
+floor override. Each handler group includes its event references, target hash,
+baseline provenance, and disposition. Floor groups remain in machine state;
+libraries remain pending dependency review. A pre-existing named destination
+surface is retained rather than silently merged. Identical policies on two
+surfaces stay separate: the selective route never widens them into `default`.
+
+Select transferable groups by their exact inventory IDs. Repeat `--select` to
+review several groups in one plan, and save the JSON outside hook source trees:
+
+```bash
+caws hooks import --from-machine --plan --json
+caws hooks import --from-machine --plan --select codex:handler:example.sh --json > tmp/hooks-import-plan.json
+caws hooks import --from-machine --apply-plan tmp/hooks-import-plan.json
+```
+
+Apply reconstructs the candidate from live inputs and refuses a changed digest,
+non-transferable selection, missing or non-executable handler, unavailable
+runtime, or unequal resolved chains. Inputs bind the canonical root, machine
+home, policy bytes, reader/writer code, native registrations, active runtime and
+its verified payloads, surface configuration, targets, pristine records, and
+visible source siblings. Runtime selection is compared for every declared event
+on every registered machine surface. Dynamic loads of hidden files or non-source
+data still need separate review. Chain equivalence and hashes establish
+selection preservation; they do not establish the local handler's behavior or
+native execution.
+
+New install/port pristine baselines carry an origin record identifying the
+upstream-only writer and template digest. Older records have unknown origin,
+including a baseline that may already have absorbed local content. Equal bytes
+without this provenance are not evidence that the handler is stock.
+
+Selective application takes cooperative import, runtime-installation and system
+configuration locks, writes an on-disk recovery journal, writes repository
+policy first, then removes only the selected machine groups. Unselected
+surfaces, floor overrides and libraries remain. There is no atomic transaction
+across the two files: an interrupted import can temporarily duplicate extensions
+and fail closed. The reported journal supports continuation:
+
+```bash
+caws hooks import --from-machine --recover /absolute/machine/home/state/hooks-imports/<journal>.json
+```
+
+Recovery reconstructs the original candidate and dependency inventory. It
+accepts only the exact before/after policy states in the journal, refuses
+changed or added dependencies and live or foreign lock owners, and can reclaim
+its own dead process's locks. Generic locks from other operations are never
+reclaimed. External editors do not participate in these locks; observed
+concurrent edits are refused, but a filesystem compare-and-swap is not claimed.
+The legacy import without `--apply-plan` retains its existing whole-surface
+behavior and floor refusals. After an import, commit the reviewed repository
+policy under its own scope; run `caws hooks compile` where project wiring
+requires it, and verify native selection and execution separately.
+
 ## Tier 2 — what data a running guard uses
 
 The `command-adapters` rule "no key may name a decision" does not transplant

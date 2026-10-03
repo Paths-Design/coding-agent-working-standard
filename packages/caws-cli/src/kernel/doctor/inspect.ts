@@ -5,6 +5,7 @@
 // rules already enforced by spec, policy, scope, evidence, or worktree.
 
 import type { Diagnostic } from '../diagnostics/types';
+import { historicalWaiverUses, unmetObligations, worktreeHistory } from './history';
 import { verifyChain } from '../evidence/verify';
 import { CRITICAL_GATES, RISKY_ROOT_FILES } from '../policy/rules';
 import { waiverEffectiveness } from '../waiver/applicability';
@@ -144,7 +145,11 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           {
             subject: spec.id,
             narrowRepair: 'Set updated_at on the spec or bind a worktree to it.',
-            data: { spec_id: spec.id, lifecycle_state: spec.lifecycle_state },
+            data: {
+              spec_id: spec.id,
+              lifecycle_state: spec.lifecycle_state,
+              ...unmetObligations(spec),
+            },
           }
         )
       );
@@ -182,12 +187,13 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           `Active spec ${spec.id} has no bound worktree and has exceeded the unbound-active threshold.`,
           {
             subject: spec.id,
-            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — the slice never started), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
+            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — does not assert completion), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
             data: {
               spec_id: spec.id,
               age_ms: ageMs,
               threshold_ms: unboundActiveThresholdMs,
               updated_at: spec.updated_at,
+              ...unmetObligations(spec),
             },
           }
         )
@@ -612,13 +618,14 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     );
   }
 
+  const history = worktreeHistory(input.events ?? []);
   if (gitWorktrees !== undefined) {
     const registryPaths = new Set<string>();
     for (const record of Object.values(registry)) {
       if (typeof record?.path === 'string') registryPaths.add(record.path);
     }
     for (const wt of gitWorktrees) {
-      if (registryPaths.has(wt.path)) continue;
+      if (registryPaths.has(wt.path) || history.releasedPaths.has(wt.path)) continue;
       findings.push(
         finding(
           DOCTOR_RULES.WORKTREE_FOREIGN_PHYSICAL,
@@ -649,7 +656,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     does not reflect — governance-half-state.
   //
   //     Detection (read-only, events-backed): walk the chain in seq order. For
-  //     each `worktree_created`, take data.name. If a later `worktree_destroyed`
+  //     each `worktree_created`, take data.name. If a later `worktree_destroyed` or `worktree_untracked`
   //     for the same name closes the lifecycle, OR a live registry entry exists,
   //     OR a loaded spec carries a live `worktree:` binding to it, the worktree
   //     is accounted for — no finding. Otherwise the created-event is orphaned.
@@ -658,15 +665,6 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     iterate in array order, which loadEvents guarantees is chain order.
   // -------------------------------------------------------------------------
   if (input.events !== undefined && input.events.length > 0) {
-    // Names whose lifecycle a worktree_destroyed event has closed.
-    const destroyedNames = new Set<string>();
-    for (const ev of input.events) {
-      if (ev.event === 'worktree_destroyed') {
-        const d = ev.data as Record<string, unknown> | undefined;
-        const name = typeof d?.worktree_name === 'string' ? d.worktree_name : undefined;
-        if (name) destroyedNames.add(name);
-      }
-    }
     // Names that a live spec back-binds (any lifecycle_state — a binding is a
     // binding for accounting purposes here).
     const specBoundNames = new Set<string>();
@@ -677,15 +675,13 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
     // Avoid duplicate findings if the same name was created more than once.
     const reportedOrphans = new Set<string>();
-    for (const ev of input.events) {
-      if (ev.event !== 'worktree_created') continue;
+    for (const ev of history.pending.values()) {
       const d = ev.data as Record<string, unknown> | undefined;
       const name = typeof d?.name === 'string' ? d.name : undefined;
       if (name === undefined || reportedOrphans.has(name)) continue;
       const hasLiveRegistry = Object.prototype.hasOwnProperty.call(registry, name);
       const hasSpecBinding = specBoundNames.has(name);
-      const wasDestroyed = destroyedNames.has(name);
-      if (hasLiveRegistry || hasSpecBinding || wasDestroyed) continue;
+      if (hasLiveRegistry || hasSpecBinding) continue;
       // Orphan: created-event with no live control-plane representation.
       reportedOrphans.add(name);
       // CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01 — verifiable-tombstone
@@ -724,11 +720,10 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           finding(
             DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING,
             'info',
-            `Event log records worktree_created for "${name}" (event seq ${ev.seq}); the control plane rolled back and nothing verifiably remains — no registry entry, no spec binding, no branch "${recordedBranch}", and no directory or linked worktree at the recorded path. Informational tombstone of a rolled-back transaction; the creation record stays as honest audit history.`,
+            `Event log records worktree_created for "${name}" (event seq ${ev.seq}); no terminal lifecycle event was recorded and nothing verifiably remains — no registry entry, no spec binding, no branch "${recordedBranch}", and no directory or linked worktree at the recorded path. Reconcile this creation through a logged absence receipt; the creation record remains unchanged.`,
             {
               subject: name,
-              narrowRepair:
-                'Verified-dead residue: every control-plane and physical observation is absent, so there is nothing left to reconcile and no action to perform. The chained creation event is immutable audit history and intentionally stays; this informational finding records the verification.',
+              narrowRepair: `Preview with caws worktree prune --state verified-dead-creation --include ${name}; apply with --apply to recheck absence and append a receipt for this exact creation.`,
               data: {
                 worktree_name: name,
                 created_event_seq: ev.seq,
@@ -747,7 +742,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         finding(
           DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING,
           'warning',
-          `Event log records worktree_created for "${name}" (event seq ${ev.seq}), but no live registry entry or spec binding exists. The worktree's creation is in the audit chain but the control plane was rolled back (governance-half-state).`,
+          `Event log records worktree_created for "${name}" (event seq ${ev.seq}), but no live registry entry, spec binding, or terminal disposition accounts for this creation. Physical residue is present or observations are incomplete.`,
           {
             subject: name,
             // DIAGNOSE ONLY — no mutating command. caws worktree repair
@@ -755,7 +750,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
             // created-event is immutable audit history, so the only correct
             // "repair" is authority reconciliation, never a mechanical prune.
             narrowRepair:
-              'Governance residue from a partially-failed worktree creation. Automatic repair is intentionally refused for this class: the worktree_created event is immutable audit history, so no control-plane mutation is safe — reconcile authority manually (recreate the binding or accept the residue) rather than deleting the record. Residue that is verifiably dead everywhere (branch, directory, and worktree listing all observed absent) is reported separately as an informational tombstone.',
+              'No terminal disposition accounts for this creation. Physical residue or incomplete observations prevent an absence receipt. Establish its current ownership and disposition before changing bindings or removing anything.',
             data: {
               worktree_name: name,
               created_event_seq: ev.seq,
@@ -1125,57 +1120,23 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
   }
 
-  // 8d. revoked_referenced — walk gate_evaluated events for waiver_ids
-  //     that point at currently-revoked waivers. Skipped silently when
-  //     either side is absent: with no events we have nothing to cross-
-  //     reference; with no waivers we can't classify any reference.
-  if (
-    input.events !== undefined &&
-    input.events.length > 0 &&
-    input.waivers !== undefined &&
-    input.waivers.length > 0
-  ) {
-    const revokedById = new Map<string, (typeof input.waivers)[number]>();
-    for (const w of input.waivers) {
-      if (w.status === 'revoked') revokedById.set(w.id, w);
-    }
-    if (revokedById.size > 0) {
-      // Dedupe per (waiver_id, event_seq) pair so multiple identical
-      // events don't produce duplicate findings, but keep one finding
-      // per distinct waiver_id (the operator should see every revoked
-      // reference, not just the first).
-      const seenWaiverIds = new Set<string>();
-      for (const ev of input.events) {
-        if (ev.event !== 'gate_evaluated') continue;
-        const data = ev.data as { waiver_ids?: unknown };
-        const ids = data.waiver_ids;
-        if (!Array.isArray(ids)) continue;
-        for (const id of ids) {
-          if (typeof id !== 'string') continue;
-          if (!revokedById.has(id)) continue;
-          if (seenWaiverIds.has(id)) continue;
-          seenWaiverIds.add(id);
-          const revoked = revokedById.get(id)!;
-          findings.push(
-            finding(
-              DOCTOR_RULES.WAIVER_REVOKED_REFERENCED,
-              'warning',
-              `Waiver ${id} is currently revoked but was credited by at least one gate_evaluated event (seq ${ev.seq}).`,
-              {
-                subject: id,
-                narrowRepair:
-                  'No file repair — events are append-only. Audit whether the suppression remains acceptable historically.',
-                data: {
-                  waiver_id: id,
-                  first_event_seq: ev.seq,
-                  revoked_at: revoked.revocation?.revoked_at,
-                },
-              }
-            )
-          );
+  // Assess every historical use rather than the current status or first use.
+  for (const use of historicalWaiverUses(input.events ?? [], input.waivers ?? [])) {
+    if (use.classification === 'within_recorded_bounds') continue;
+    findings.push(
+      finding(
+        use.classification === 'post_revocation'
+          ? DOCTOR_RULES.WAIVER_REVOKED_REFERENCED
+          : 'doctor.waiver.historical_use',
+        'warning',
+        `Waiver ${use.waiver_id} use at event ${use.event_seq}: ${use.classification}. This checks recorded bounds, not independent authorization of the original exception.`,
+        {
+          subject: use.waiver_id,
+          narrowRepair: 'Inspect the cited use and waiver record; preserve append-only history.',
+          data: use,
         }
-      }
-    }
+      )
+    );
   }
 
   // -------------------------------------------------------------------------

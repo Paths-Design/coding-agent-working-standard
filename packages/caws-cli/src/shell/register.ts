@@ -695,11 +695,21 @@ export function registerShellCommands(
     }
   );
   defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'import')).action(
-    (opts: { fromMachine?: boolean; plan?: boolean; json?: boolean }) => {
+    (opts: {
+      fromMachine?: boolean;
+      plan?: boolean;
+      json?: boolean;
+      select?: string[];
+      applyPlan?: string;
+      recover?: string;
+    }) => {
       const code = runHooksImportCommand({
         fromMachine: opts.fromMachine === true,
         plan: opts.plan === true,
         json: opts.json === true,
+        ...(opts.select !== undefined ? { select: opts.select } : {}),
+        ...(opts.applyPlan !== undefined ? { applyPlan: opts.applyPlan } : {}),
+        ...(opts.recover !== undefined ? { recover: opts.recover } : {}),
       });
       exit(code);
     }

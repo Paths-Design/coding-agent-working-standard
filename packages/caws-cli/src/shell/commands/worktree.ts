@@ -68,6 +68,7 @@ import {
   untrackWorktree,
   type WorktreeListEntry,
 } from '../../store/worktrees-writer';
+import { reconcileWorktreeCreation } from '../../store/worktree-reconciliation';
 import { clearSpecBinding } from '../../store/specs-writer';
 import { pruneBridgeGhosts } from '../../store/bridge-store';
 import { buildActor } from '../session/actor';
@@ -2179,6 +2180,7 @@ export interface WorktreeRepairOptions extends BaseCommandOptions {
 
 export type WorktreePruneStateClass =
   | 'ghost-registry'
+  | 'verified-dead-creation'
   | 'dead-binding'
   | 'closed-spec-residue'
   | 'missing-spec-refused'
@@ -2347,6 +2349,7 @@ export function decideRepair(finding: DoctorFinding): RepairDecision {
  */
 export const WORKTREE_PRUNE_STATES: readonly WorktreePruneStateClass[] = [
   'ghost-registry',
+  'verified-dead-creation',
   'dead-binding',
   'closed-spec-residue',
   'missing-spec-refused',
@@ -2451,6 +2454,22 @@ function repairItemFromDecision(
 
 export function worktreePruneItemFromFinding(finding: DoctorFinding): WorktreePrunePlanItem | null {
   const data = (finding.data ?? {}) as Record<string, unknown>;
+  if (
+    finding.rule === DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING &&
+    data.verified_dead === true &&
+    typeof data.created_event_seq === 'number' &&
+    typeof data.created_event_hash === 'string'
+  ) {
+    return {
+      subject: findingSubject(finding, data),
+      state_class: 'verified-dead-creation',
+      source_rule: finding.rule,
+      severity: finding.severity,
+      allowed_mutation: 'revalidate absence and append an identity-bound worktree_pruned receipt',
+      next_command: `caws worktree prune --state verified-dead-creation --include ${findingSubject(finding, data)} --apply`,
+      details: data,
+    };
+  }
   const repairDecision = decideRepair(finding);
   const repairItem = repairItemFromDecision(finding, repairDecision);
   if (repairItem !== null) return repairItem;
@@ -2681,6 +2700,31 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
     const outcomes: WorktreePruneApplyOutcome[] = [];
 
     for (const item of plan.items) {
+      if (item.state_class === 'verified-dead-creation') {
+        const result = reconcileWorktreeCreation(ctx.cawsDir, {
+          name: item.subject,
+          createdEventSeq: item.details.created_event_seq as number,
+          createdEventHash: item.details.created_event_hash as string,
+          actor: id.actor,
+          now: nowFn,
+        });
+        outcomes.push(
+          isOk(result)
+            ? {
+                subject: item.subject,
+                state_class: item.state_class,
+                action: 'applied',
+                mutation: 'appended worktree_pruned absence receipt for the exact creation',
+              }
+            : {
+                subject: item.subject,
+                state_class: item.state_class,
+                action: 'failed',
+                reason: firstErrorMessage(result.errors),
+              }
+        );
+        continue;
+      }
       if (item.state_class === 'ghost-registry') {
         const result = pruneWorktree(ctx.cawsDir, {
           name: item.subject,
@@ -2761,7 +2805,9 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
     // AUTH-BINDING-BRIDGE-001: --apply also removes retired bridge bindings
     // (eventless hygiene — the retirement audit lives in spec_closed/
     // spec_archived, not here). Single merged JSON emit.
-    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, true);
+    // Exact creation receipts never carry unrelated bridge cleanup along.
+    const receiptOnly = opts.state?.length === 1 && opts.state[0] === 'verified-dead-creation';
+    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, !receiptOnly);
 
     if (opts.json === true) {
       out(
