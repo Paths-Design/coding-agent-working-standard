@@ -33,6 +33,22 @@ and artifact references belong in the canonical spec evidence.
 
 ## Execution and remaining release decisions
 
+The repair criteria above do not by themselves authorize a release. Functional
+release completion also requires these observations:
+
+| Release criterion         | Required evidence                                                                                                                                                                                                                                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact installed candidate | One complete ten-case detached qualification run, exit 0, with unchanged timeouts, retained tarball hash, command receipts and runtime output. Separate partial runs cannot be combined into this verdict.                                                                                                              |
+| Required quality gates    | Current candidate CI, coverage and every declared per-file mutation floor pass; any inherited result must identify its inputs and match the current source bytes.                                                                                                                                                       |
+| Native harness delivery   | Trusted registration, SessionStart, an admitted owned-lane operation, refused protected write with unchanged target bytes, Stop and rendered session output on each supported harness. Capture actual native payloads, including session cwd versus tool workdir; source fixtures cannot establish this correspondence. |
+| Publication identity      | A fresh npm version and intended channel identify the exact qualified artifact. Reusing a published version or qualifying different bytes does not meet this bar.                                                                                                                                                       |
+
+A handler's eventual exit 2 after its adapter timed out is not a delivered
+refusal. Preserve timeout status and interrupted execution journals, terminate
+owned fixture subprocesses before cleanup, and investigate handler latency
+before claiming the scenario passed. Do not increase a timeout merely to obtain
+green.
+
 Investigate registry version/channel disagreement using uncached registry
 metadata and historical publication receipts. Do not delete tags, republish an
 existing version, or move channels based on a single failed lookup.

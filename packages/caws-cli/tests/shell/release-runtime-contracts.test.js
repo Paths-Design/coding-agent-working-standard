@@ -176,9 +176,8 @@ test('index receipt distinguishes different staged bytes with identical line cou
   retain('scope-index-identity', { first, second });
 });
 
-test.each([false, true])(
-  'merge preview checks conflicts=%s without changing refs, indexes, files or events',
-  (conflicting) => {
+test('merge preview distinguishes clean and conflicting branches without changing refs, indexes, files or events', () => {
+  for (const conflicting of [false, true]) {
     const { root, caws, lane } = fixture(['conflict.txt', 'clean.txt']);
     commit(lane, conflicting ? 'conflict.txt' : 'clean.txt', 'lane\n');
     commit(root, 'conflict.txt', 'main\n');
@@ -210,4 +209,4 @@ test.each([false, true])(
     expect(after).toEqual(before);
     retain(conflicting ? 'merge-conflict' : 'merge-clean', { result, before, after });
   }
-);
+});

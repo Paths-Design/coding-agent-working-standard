@@ -16,7 +16,7 @@ const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 export function isolatedEnvironment(root, inherited = process.env) {
   const home = path.join(root, 'home');
   const env = Object.fromEntries(
-    ['PATH', 'SystemRoot', 'COMSPEC', 'PATHEXT', 'TMPDIR', 'TMP', 'TEMP']
+    ['PATH', 'SystemRoot', 'COMSPEC', 'PATHEXT']
       .filter((key) => inherited[key])
       .map((key) => [key, inherited[key]])
   );
@@ -25,6 +25,9 @@ export function isolatedEnvironment(root, inherited = process.env) {
     HOME: home,
     USERPROFILE: home,
     CAWS_HOME: path.join(home, '.caws'),
+    TMPDIR: path.join(root, 'tmp'),
+    TMP: path.join(root, 'tmp'),
+    TEMP: path.join(root, 'tmp'),
     GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig'),
     GIT_CONFIG_SYSTEM: '/dev/null',
     GIT_AUTHOR_NAME: 'Upgrade fixture',
@@ -42,7 +45,20 @@ export function isolatedEnvironment(root, inherited = process.env) {
 let receiptSequence = 0;
 export function observedSpawn(command, args, options) {
   const started = Date.now();
-  const result = spawnSync(command, args, options);
+  // The qualifier owns this process group. Killing only the adapter on timeout
+  // leaves its Bash handlers running while finally removes their repository.
+  const isolatedGroup = process.platform !== 'win32';
+  const result = spawnSync(command, args, { ...options, detached: isolatedGroup });
+  let timeoutCleanup = null;
+  if (result.error?.code === 'ETIMEDOUT' && isolatedGroup && result.pid) {
+    timeoutCleanup = { process_group: result.pid, signal: 'SIGKILL', result: 'signaled' };
+    try {
+      process.kill(-result.pid, 'SIGKILL');
+    } catch (error) {
+      timeoutCleanup.result = error.code === 'ESRCH' ? 'already_exited' : 'failed';
+      timeoutCleanup.error = error.message;
+    }
+  }
   const dir = options.env?.CAWS_QUALIFICATION_ARTIFACT_DIR;
   if (dir) {
     const receipt = {
@@ -54,6 +70,7 @@ export function observedSpawn(command, args, options) {
       signal: result.signal,
       error: result.error?.message ?? null,
       duration_ms: Date.now() - started,
+      timeout_cleanup: timeoutCleanup,
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
     };
@@ -122,6 +139,15 @@ export function retainFixtureDiagnostics(root, artifacts) {
       retained.push(path.relative(artifacts, destination));
     }
   }
+  const scratch = path.join(root, 'tmp');
+  if (fs.existsSync(scratch)) {
+    for (const entry of fs.readdirSync(scratch, { withFileTypes: true })) {
+      if (!entry.isFile() || !/^caws-hook-(execution|offers)-.+\.jsonl$/.test(entry.name)) continue;
+      const destination = path.join(artifacts, 'failure-traces/runtime-exchange', entry.name);
+      write(destination, fs.readFileSync(path.join(scratch, entry.name)));
+      retained.push(path.relative(artifacts, destination));
+    }
+  }
   return retained;
 }
 const governance = (repo) =>
@@ -151,6 +177,7 @@ export function qualify({
   }
   if (artifacts) env.CAWS_QUALIFICATION_ARTIFACT_DIR = artifacts;
   fs.mkdirSync(env.HOME, { recursive: true });
+  fs.mkdirSync(env.TMPDIR, { recursive: true });
   // Detached npm installation: no workspace dependencies or lifecycle repair.
   const consumer = path.join(root, 'consumer');
   write(path.join(consumer, 'package.json'), '{"private":true}');
