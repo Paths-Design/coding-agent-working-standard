@@ -16,7 +16,7 @@ const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 export function isolatedEnvironment(root, inherited = process.env) {
   const home = path.join(root, 'home');
   const env = Object.fromEntries(
-    ['PATH', 'SystemRoot', 'COMSPEC', 'PATHEXT']
+    ['PATH', 'SystemRoot', 'COMSPEC', 'PATHEXT', 'TMPDIR', 'TMP', 'TEMP']
       .filter((key) => inherited[key])
       .map((key) => [key, inherited[key]])
   );
@@ -25,9 +25,6 @@ export function isolatedEnvironment(root, inherited = process.env) {
     HOME: home,
     USERPROFILE: home,
     CAWS_HOME: path.join(home, '.caws'),
-    TMPDIR: path.join(root, 'tmp'),
-    TMP: path.join(root, 'tmp'),
-    TEMP: path.join(root, 'tmp'),
     GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig'),
     GIT_CONFIG_SYSTEM: '/dev/null',
     GIT_AUTHOR_NAME: 'Upgrade fixture',
@@ -168,7 +165,16 @@ export function qualify({
   if (json(path.join(candidate, 'package.json')).name !== packageName)
     throw new Error('Expected CAWS CLI candidate');
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-runtime-upgrade-')));
-  const env = isolatedEnvironment(root);
+  // This fixture owns creation and cleanup of its private exchange directory.
+  // Keep the reusable environment builder pure and usable by other callers
+  // which have not provisioned this fixture-specific scratch path.
+  const fixtureScratch = path.join(root, 'tmp');
+  const env = {
+    ...isolatedEnvironment(root),
+    TMPDIR: fixtureScratch,
+    TMP: fixtureScratch,
+    TEMP: fixtureScratch,
+  };
   let artifacts = null;
   if (reportPath) {
     const parent = `${path.resolve(reportPath)}.artifacts`;
@@ -181,6 +187,9 @@ export function qualify({
   // Detached npm installation: no workspace dependencies or lifecycle repair.
   const consumer = path.join(root, 'consumer');
   write(path.join(consumer, 'package.json'), '{"private":true}');
+  // Stock and custom handlers can invoke bare `caws`. Their CLI must come from
+  // this detached installation too, never from the developer's global PATH.
+  env.PATH = [path.join(consumer, 'node_modules/.bin'), env.PATH || ''].join(path.delimiter);
   const entry = path.join(consumer, 'node_modules', packageName, 'dist/index.js');
   const cli = (cwd, ...args) => run(process.execPath, [entry, ...args], cwd, env);
   const git = (cwd, ...args) =>
@@ -247,6 +256,15 @@ export function qualify({
     }
     run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', tarball], consumer, env);
     assert.equal(cli(consumer, '--version').trim(), report.candidateVersion);
+    const resolvedCli = run('/bin/bash', ['-c', 'command -v caws'], consumer, env).trim();
+    assert.equal(fs.realpathSync(resolvedCli), fs.realpathSync(entry));
+    const hookCliVersion = run('caws', ['--version'], consumer, env).trim();
+    assert.equal(hookCliVersion, report.candidateVersion);
+    report.hookCli = {
+      resolvedPath: resolvedCli,
+      entrySha256: hash(fs.readFileSync(entry)),
+      version: hookCliVersion,
+    };
     // Consumer resolution does not inherit workspace overrides or its lockfile.
     // Audit the actual upgraded installation before trusting the package check.
     const audit = JSON.parse(
