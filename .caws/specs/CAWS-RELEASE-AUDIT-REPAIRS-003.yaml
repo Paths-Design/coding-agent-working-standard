@@ -79,3 +79,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/release-hardening.test.js::release qualification requires the same dependency audit as PR CI"
     commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
     test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/bootstrap-final.log: 18 installed-bootstrap and activation-race checks pass. scenarios/installed-invocation-*.json retain seven actual malformed-input usage refusals (exit 2). Selected test re-derives PreToolUse=2/block and Stop=0 on bootstrap failure. Packaged bootstrap boundary passed in qualification-final.json; that overall run failed later on a separate 60-second hook timeout."
+    recorded_at: "2026-10-04T01:07:58.575Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a bootstrap-scope fault refuses the tool call but never the session exit"
+    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
