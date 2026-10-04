@@ -1,9 +1,10 @@
 id: CAWS-CLI-HUMAN-DURATION-FLAGS-01
 title: 'Age and TTL flags accept human durations (--older-than 10m, --stale-ttl 30m) via the reprieve --for parser'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: human-duration-flags
 created_at: '2026-10-04T23:05:44.393Z'
-updated_at: '2026-10-04T23:05:44.393Z'
+updated_at: '2026-10-04T23:06:15.685Z'
 created_by_session: '@darianrosebrook'
 blast_radius:
   modules:
