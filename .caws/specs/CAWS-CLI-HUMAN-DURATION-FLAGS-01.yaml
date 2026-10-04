@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: human-duration-flags
 created_at: '2026-10-04T23:05:44.393Z'
-updated_at: '2026-10-04T23:06:15.685Z'
+updated_at: '2026-10-04T23:18:50.331Z'
 created_by_session: '@darianrosebrook'
 blast_radius:
   modules:
@@ -27,6 +27,8 @@ scope:
     - 'packages/caws-cli/tests/docs/cli-help-context.test.js'
     - 'docs/agents/full-guide.md'
     - 'docs/architecture/caws-vnext-command-surface.md'
+    - packages/caws-cli/tests/shell/message-retention-prune.test.js
+    - packages/caws-cli/tests/shell/specs-prune-drafts.test.js
   out: []
 invariants:
   - 'Every existing --older-than-ms / --stale-ttl-ms invocation with a valid non-negative integer keeps its exact current meaning (hooks and docs call these flags)'
