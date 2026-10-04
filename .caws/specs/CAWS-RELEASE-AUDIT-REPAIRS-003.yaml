@@ -86,3 +86,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a bootstrap-scope fault refuses the tool call but never the session exit"
     commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
     test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/scenarios/injection-control.json. Actual pytest receives the hostile nodeid as one operand and preserves sentinel bytes; deliberate shell control overwrites it and is detected."
+    recorded_at: "2026-10-04T01:08:47.957Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a shell metacharacter string reaches pytest as one operand after --, never a shell"
+    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
