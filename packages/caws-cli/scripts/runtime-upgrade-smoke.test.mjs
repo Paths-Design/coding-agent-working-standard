@@ -3,7 +3,31 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { observedSpawn } from './runtime-upgrade-smoke.mjs';
+import { observedSpawn, retainFixtureDiagnostics } from './runtime-upgrade-smoke.mjs';
+
+test('failed qualification preserves fixture telemetry through cleanup without following links', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-traces-'));
+  try {
+    const fixture = path.join(root, 'fixture');
+    const artifacts = path.join(root, 'artifacts');
+    const logs = path.join(fixture, 'claude-code-custom/.caws/sessions/probe');
+    fs.mkdirSync(logs, { recursive: true });
+    fs.writeFileSync(path.join(logs, 'hook-events.jsonl'), '{"event":"observed"}\n');
+    fs.writeFileSync(path.join(root, 'unrelated'), 'must not copy');
+    fs.symlinkSync(path.join(root, 'unrelated'), path.join(logs, 'external-link'));
+    retainFixtureDiagnostics(fixture, artifacts);
+    fs.rmSync(fixture, { recursive: true });
+    const retained = path.join(artifacts, 'failure-traces/claude-code-custom/.caws/sessions/probe');
+    assert.equal(
+      fs.readFileSync(path.join(retained, 'hook-events.jsonl'), 'utf8'),
+      '{"event":"observed"}\n'
+    );
+    assert.equal(fs.existsSync(path.join(retained, 'external-link')), false);
+    assert.equal(fs.existsSync(path.join(artifacts, 'unrelated')), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 for (const missing of [false, true]) {
   test(`upgrade evidence retains ${missing ? 'spawn failure' : 'failed child output and input'}`, () => {
