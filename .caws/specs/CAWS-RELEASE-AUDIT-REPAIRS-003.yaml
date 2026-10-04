@@ -59,6 +59,14 @@ acceptance:
     given: 'current implementation and registry observations'
     when: 'release guidance and notes are inspected'
     then: 'docs describe shipped commands and bounded goals, registry discrepancy is accounted for, and missing remote or native evidence is explicit'
+  - id: A9
+    given: 'repository agent instructions, contributor guidance and shipped agent templates'
+    when: 'the coding-rigor standard is read and consumer docs are staged'
+    then: >-
+      each entry point carries acceptance, falsification, evidence and authorization
+      requirements; the detailed guide is reachable through repo links and shipped
+      consumer docs; documentation checks pass without claiming native adoption or
+      release qualification
 observability:
   - 'Retain commands, exit statuses, logs, fixture state and checksums under ignored canonical evidence storage'
 rollback:
