@@ -1,0 +1,69 @@
+id: CAWS-CLI-HUMAN-DURATION-FLAGS-01
+title: 'Age and TTL flags accept human durations (--older-than 10m, --stale-ttl 30m) via the reprieve --for parser'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-04T23:05:44.393Z'
+updated_at: '2026-10-04T23:05:44.393Z'
+created_by_session: '@darianrosebrook'
+blast_radius:
+  modules:
+    - 'caws-cli shell: register.ts option parsing for specs prune-drafts/archive, agents list/show/prune, session prune, message status/prune'
+    - 'caws-cli shell: shared duration parser (extracted from reprieve --for)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/duration.ts'
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/src/shell/commands/message.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/store/messages-store.ts'
+    - 'packages/caws-cli/tests/shell/duration-flags.test.js'
+    - 'packages/caws-cli/tests/docs/cli-help-context.test.js'
+    - 'docs/agents/full-guide.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+  out: []
+invariants:
+  - 'Every existing --older-than-ms / --stale-ttl-ms invocation with a valid non-negative integer keeps its exact current meaning (hooks and docs call these flags)'
+  - 'A duration flag never guesses a unit: a bare number is refused, as reprieve --for refuses it'
+  - 'An unparseable age or TTL value is refused loudly with exit 1; it never silently falls back to the default'
+  - 'reprieve --for and the age/TTL flags share one parser, so their accepted grammar cannot drift'
+acceptance:
+  - id: A1
+    given: 'a repo with closed specs, draft specs, leases, session logs and messages'
+    when: 'specs prune-drafts, specs archive, agents prune, session prune, message status and message prune run through the real CLI with --older-than 10m'
+    then: 'each selects exactly what the same command selects with --older-than-ms 600000'
+  - id: A2
+    given: 'agents list and agents show'
+    when: 'run through the real CLI with --stale-ttl 30m'
+    then: 'the stale classification uses 1800000 ms, identical to --stale-ttl-ms 1800000'
+  - id: A3
+    given: '--older-than or --stale-ttl with a bare number (30), an unknown unit (10x), a negative (-5m) or an empty value'
+    when: 'any covered command runs'
+    then: 'it exits 1, stderr names the flag, echoes the value, lists the accepted units with an example, and no file, event or lease is changed'
+  - id: A4
+    given: 'both --older-than and --older-than-ms (or --stale-ttl and --stale-ttl-ms) on one invocation'
+    when: 'the command runs'
+    then: 'it exits 1 naming both flags rather than picking one'
+  - id: A5
+    given: 'an invalid --stale-ttl-ms or message status --older-than-ms value (abc, -1, 1.5)'
+    when: 'the command runs'
+    then: 'it exits 1 naming the flag instead of silently using the default TTL or window'
+  - id: A6
+    given: '--help for each covered leaf'
+    when: 'rendered'
+    then: 'it lists --older-than <duration> (or --stale-ttl <duration>) with the accepted units, alongside the retained -ms flag'
+  - id: A7
+    given: 'specs archive --status closed --older-than 10m in dry-run'
+    when: 'it prints the apply command'
+    then: 'the echoed command uses --older-than 10m, not --older-than-ms 600000'
+  - id: A8
+    given: 'reprieve grant --for'
+    when: 'the duration parser moves to the shared module'
+    then: 'the existing reprieve relative-expiry tests pass unchanged'
+non_functional: {}
+contracts: []
