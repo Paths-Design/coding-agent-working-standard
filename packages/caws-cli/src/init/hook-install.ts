@@ -2890,7 +2890,7 @@ export function planQwenSettingsExample(repoRoot: string): SettingsExamplePlanRe
 // contract concise, merge it only inside bounded markers, and leave the full
 // adapter reference at .codex/CAWS.md.
 
-export const CODEX_INSTRUCTION_BLOCK_VERSION = 1;
+export const CODEX_INSTRUCTION_BLOCK_VERSION = 2;
 export const CODEX_INSTRUCTION_BEGIN_MARKER = `<!-- >>> caws codex instructions (managed, v${CODEX_INSTRUCTION_BLOCK_VERSION}) >>> -->`;
 export const CODEX_INSTRUCTION_END_MARKER = '<!-- <<< caws codex instructions <<< -->';
 const CODEX_INSTRUCTION_BEGIN_PREFIX = '<!-- >>> caws codex instructions';
@@ -2918,6 +2918,26 @@ export const CODEX_INSTRUCTION_BLOCK = [
   '- If a dangerous-command guard blocks or asks, stop at the human boundary;',
   '  do not rephrase the command to bypass it.',
   '',
+  '### Coding rigor',
+  '',
+  '- Define acceptance as observable behavior with a specific check and a',
+  '  counterexample that must fail. Rank failures by trigger, cost and',
+  '  resolve-now/defer decision, including irreversible choices.',
+  '- Trace the real entry point to consumer-visible behavior. Assert semantic',
+  '  values and state; use negative controls or mutation checks for consequential',
+  '  logic. Scale checks to risk and never lower declared floors to pass.',
+  '- Cite commands, cwd/revision, exit status, selected tests, output and runtime',
+  '  artifacts. Preserve failed/skipped/interrupted attempts and artifact identity.',
+  '- Distinguish source review, tests, installed packages, native execution,',
+  '  acceptance records, CI, merge and deployment. Passing gates alone do not',
+  '  establish completion. State what could still be wrong, what was not verified',
+  '  and the exact additional observation needed to close each material gap.',
+  '- Review authorizes inspection and findings; fixes, evidence recording and',
+  '  publication need corresponding authorization. Lead with the highest-impact',
+  '  finding; give investigate / implement / change actions with where and why.',
+  '  Name the strongest objection when changing course; say when the plan is sound.',
+  '',
+  'Full method: `docs/guides/coding-rigor.md` in the installed CLI package.',
   'Detailed Codex hook and recovery reference: `.codex/CAWS.md`.',
   'Codex builds its instruction chain at session start; restart after init.',
   CODEX_INSTRUCTION_END_MARKER,
