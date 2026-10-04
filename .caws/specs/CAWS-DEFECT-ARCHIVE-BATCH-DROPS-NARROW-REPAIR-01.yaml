@@ -1,0 +1,30 @@
+id: CAWS-DEFECT-ARCHIVE-BATCH-DROPS-NARROW-REPAIR-01
+title: 'specs archive batch mode prints each failure reason but drops its narrowRepair, so the --replace remedy for a stale archived body is never shown'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-04T23:45:37.201Z'
+updated_at: '2026-10-04T23:45:37.201Z'
+created_by_session: '@darianrosebrook'
+blast_radius:
+  modules:
+    - 'caws-cli shell: specs archive / prune-drafts batch failure rendering'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/tests/shell/specs-archive-batch.test.js'
+  out: []
+invariants:
+  - 'Every refusal a batch command reports carries the same remedy the single-item command would print'
+acceptance:
+  - id: A1
+    given: 'a closed spec whose id already has an older archived body'
+    when: 'caws specs archive --status closed --apply runs'
+    then: 'the failed line for that spec is followed by the narrowRepair text naming caws specs archive <id> --replace'
+  - id: A2
+    given: 'the same batch run with --json'
+    when: 'it emits the failure'
+    then: 'the failed entry carries the narrowRepair remedy as a field'
+non_functional: {}
+contracts: []
