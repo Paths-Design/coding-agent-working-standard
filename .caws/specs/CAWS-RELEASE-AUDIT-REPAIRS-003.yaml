@@ -107,3 +107,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::merge preview distinguishes clean and conflicting branches without changing refs, indexes, files or events"
     commit_sha: "09fa09d3"
     test_verified_at: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Manually inspected actual command receipts: reports/release-audit-003/audit-command-comparison.json (both workspace routes exit 0, 817 dependencies, zero findings); qualification-pinned.json (all 10 cases pass, detached production audit total 0, exact candidate ea563eec9a74b103f45501e1b297ab692c628d8816b7381b84c9c9cd3641cb7f). Not a --verify re-execution. Generated receipts intentionally untracked."
+    recorded_at: "2026-10-04T02:20:57.598Z"
+    command: "npm run audit:dependencies --workspaces=false -- --json; node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-pinned.json"
+    exit_code: 0
+    commit_sha: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
