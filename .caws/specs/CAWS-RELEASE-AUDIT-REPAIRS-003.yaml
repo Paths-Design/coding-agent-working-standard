@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: release-audit-repairs
 created_at: '2026-10-03T21:37:19.652Z'
-updated_at: '2026-10-03T21:38:02.156Z'
+updated_at: '2026-10-04T04:09:13.987Z'
 created_by_session: '01a1039e-0b4e-7fd3-84b3-0684232a7628'
 blast_radius:
   modules:
@@ -21,6 +21,7 @@ scope:
     - 'docs'
     - 'AGENTS.md'
     - 'CLAUDE.md'
+    - CONTRIBUTING.md
   out: []
 invariants:
   - 'No lowered gate floors, fabricated evidence, publication, foreign ownership takeover, or weakened guarded-write enforcement'
