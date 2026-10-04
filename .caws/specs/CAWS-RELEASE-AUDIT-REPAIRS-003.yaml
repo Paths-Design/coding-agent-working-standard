@@ -114,3 +114,10 @@ evidence:
     command: "npm run audit:dependencies --workspaces=false -- --json; node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-pinned.json"
     exit_code: 0
     commit_sha: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Manually inspected docs-final.log, merge-help-final.log, registry-final.json, goal-bats-final.log, and docs/release-readiness.md. Current npm latest 12.1.0 and next 12.2.0-rc.2 accounted; earlier RC lookup failure is not publication failure. Local package ten-case qualification passes; remote CI, supported platform matrix, actual native trust/delivery, and fresh publication version remain separate release requirements. No native/global adoption or publication performed. Not a --verify semantic re-execution."
+    recorded_at: "2026-10-04T02:22:15.221Z"
+    command: "npm run docs:check --workspace @paths.design/caws-cli; npm view @paths.design/caws-cli dist-tags --json --prefer-online; node packages/caws-cli/dist/index.js worktree merge --help"
+    exit_code: 0
+    commit_sha: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
