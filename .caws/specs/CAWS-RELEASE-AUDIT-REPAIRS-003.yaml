@@ -72,3 +72,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::committed forbidden lane work is evaluated despite an empty canonical index; event carries its basis"
     commit_sha: a6c9c5df
     test_verified_at: a6c9c5df6e84a3e16bcfb6e06547b92b2a4e2c62
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/audit-routing.json; mutation-inventory.log; entrypoint-final.log. Actual npm root routing preserves exits 0 and 17; all 160 sources classified once; fresh source-only installed entrypoint builds and executes. Parameter-expanded citation was refused without writes; this stable workflow test is re-derived and routing runtime receipts were inspected separately."
+    recorded_at: "2026-10-04T01:07:07.946Z"
+    test_nodeid: "packages/caws-cli/tests/ci/release-hardening.test.js::release qualification requires the same dependency audit as PR CI"
+    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
