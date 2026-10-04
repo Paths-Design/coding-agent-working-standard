@@ -103,10 +103,20 @@ Follow these guidelines when making changes:
 
 #### Testing Requirements
 
-- **Unit Tests**: Test individual functions and components
-- **Integration Tests**: Test component interactions
-- **Edge Cases**: Include tests for error conditions and boundary cases
-- **Property Tests**: Use property-based testing where appropriate
+Follow the [coding-rigor procedure](docs/guides/coding-rigor.md) for acceptance,
+test design, review and evidence. It applies to human and agent contributions.
+
+- Pin intended behavior with semantic assertions and relevant unit, integration
+  or property tests. Include rejection, boundaries, partial failure and cleanup
+  where the change affects them; mocks must not replace the behavior claimed.
+- Establish that consequential checks detect a meaningful wrong result with a
+  negative control or mutation test. Keep declared per-file mutation floors.
+- Verify installed artifacts and native delivery when the claim crosses those
+  boundaries. Documentation-only changes use documentation and link checks;
+  small changes need focused checks, while releases retain all required gates.
+- Retain commands, cwd/revision, exit statuses, selected tests and concrete
+  output or state. State what could still be wrong and what remains unverified.
+  A passing test summary alone does not establish functional completion.
 
 #### Documentation Updates
 
