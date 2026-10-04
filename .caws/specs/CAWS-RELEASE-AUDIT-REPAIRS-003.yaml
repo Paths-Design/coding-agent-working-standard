@@ -130,3 +130,10 @@ evidence:
     command: "npm run docs:check --workspace @paths.design/caws-cli; npm view @paths.design/caws-cli dist-tags --json --prefer-online; node packages/caws-cli/dist/index.js worktree merge --help"
     exit_code: 0
     commit_sha: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+  - criterion_id: A9
+    status: pass
+    evidence_ref: "Manual content/link review across root CLAUDE.md, AGENTS.md, CONTRIBUTING.md, legacy templates, shipped Claude hook guide and Codex managed block. docs:check stages 10 consumer documents; guide strict metadata valid, staged bytes SHA256 ba87c6744feffe9877311c13db68552f0da85d5967ab5f8f78c303f7d96581af match author; actual npm preview contains guide, Claude hook guide and compiled instruction carrier. Five suites/70 tests pass (reports/coding-rigor-docs/tests.log). instructions-runtime.json shows v1-to-v2 updated, second merge unchanged and outside bytes preserved. --verify checks tracked guide custody; semantic conclusions were inspected manually. Initial wrong-cwd test invocation, restricted default npm cache and excluded legacy template assumptions were corrected; stale-version fixture was repaired. No native/global adoption or current release qualification claim."
+    recorded_at: "2026-10-04T04:33:17.396Z"
+    command: "npm run docs:check --workspace @paths.design/caws-cli; npm run typecheck --workspace @paths.design/caws-cli; jest selected instruction/doc suites; npm pack --dry-run --json --ignore-scripts with owned cache; managed-block runtime fixture"
+    exit_code: 0
+    artifact_path: docs/guides/coding-rigor.md
