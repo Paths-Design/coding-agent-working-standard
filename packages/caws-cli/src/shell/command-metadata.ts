@@ -954,7 +954,8 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       options: [
         {
           flag: '--dry-run',
-          description: 'Validate prerequisites only; no git, no file writes, no events',
+          description:
+            'Check prerequisites and Git merge readiness; no ref, index, working-tree or event updates (may write unreachable Git objects)',
         },
         {
           flag: '--apply',
