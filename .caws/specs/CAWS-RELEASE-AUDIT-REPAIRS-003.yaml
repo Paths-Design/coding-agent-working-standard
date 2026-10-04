@@ -100,3 +100,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/artifact-contracts.test.js::real renderer bytes validate with nullable summary and lineage; malformed shapes are rejected"
     commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
     test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "reports/release-audit-003/scenarios/merge-cli-clean.json and merge-cli-conflict.json: actual public CLI exits 0/1 and prints ready/NOT ready; before/after refs, indexes, files and events are identical. The store merge_check also distinguishes clean from conflict_or_error. scope-merge-cli-final.log exit 0. Generated artifacts remain ignored; this named test re-derives both scenarios."
+    recorded_at: "2026-10-04T02:00:32.462Z"
+    test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::merge preview distinguishes clean and conflicting branches without changing refs, indexes, files or events"
+    commit_sha: "09fa09d3"
+    test_verified_at: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
