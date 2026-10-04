@@ -23,6 +23,33 @@ teardown_file() {
   caws_teardown_pack
 }
 
+# Keep raw guard bytes and process observations, including on an assertion
+# failure. Cleanup only PIDs whose command still names this unique fixture.
+teardown() {
+  local pointer dir pid command sid sentinel child
+  for pointer in "$BATS_TEST_TMPDIR"/agent-*.path; do
+    [[ -f "$pointer" ]] || continue
+    dir="$(cat "$pointer")"
+    if [[ -f "$dir/identity.json" ]]; then
+      sid="$(jq -r '.session_id' "$dir/identity.json")"
+      sentinel="$(_sentinel_for "$sid")"
+      [[ ! -f "$sentinel" ]] || cp "$sentinel" "$dir/sentinel.json"
+    fi
+    [[ ! -f "$CAWS_TEST_REPO/.claude/logs/danger-latch-escalations.log" ]] || \
+      cp "$CAWS_TEST_REPO/.claude/logs/danger-latch-escalations.log" "$dir/escalations.jsonl"
+    for child in "$dir/pid" "$dir"/child-*.pid; do
+      [[ -f "$child" ]] || continue
+      pid="$(cat "$child")"
+      command="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+      case "$command" in
+        *"$dir/agent.py"*|*"$CAWS_TEST_HOOKS_DIR/block-dangerous.sh"*)
+          kill -9 "$pid" 2>/dev/null || true ;;
+      esac
+    done
+    printf 'trap fixture receipts: %s\n' "$dir"
+  done
+}
+
 @test "block-dangerous: a safe everyday command (git status) passes" {
   run_guard block-dangerous.sh "$(hook_envelope Bash '' 'git status')"
   assert_success
@@ -395,23 +422,73 @@ _arm_trap() {
 # way to exercise the verified-kill path. The match set carries BOTH comm
 # spellings: Homebrew's python3 runs as comm "Python" (framework binary),
 # while Linux distros report "python3"/"python3.11".
-# Args: kill mode (1 | dryrun | 0), then envelope files to feed the guard in
+# Args: kill mode (1 | dryrun | 0 | suppressed), then envelope files to feed the guard in
 # order. Prints the wrapper PID.
 _run_under_sacrificial_agent() {
   local mode="$1"; shift
-  local scriptfile
-  scriptfile="$(mktemp "${TMPDIR:-/tmp}/caws-trap-agent-XXXXXX")"
-  cat > "$scriptfile" <<PYEOF
-import os, subprocess, sys
-guard, proj = sys.argv[1], sys.argv[2]
+  local dir base pid
+  base="${CAWS_TEST_ARTIFACT_DIR:-$BATS_TEST_TMPDIR}"
+  mkdir -p "$base"
+  dir="$(mktemp -d "$base/trap-agent-XXXXXX")"
+  cat > "$dir/agent.py" <<'PYEOF'
+import json, os, signal, subprocess, sys, time
+from pathlib import Path
+receipt, mode, guard, proj = sys.argv[1:5]
+root = Path(receipt)
+started = time.monotonic()
+def record(name, value):
+    (root / name).write_text(json.dumps(value, indent=2) + '\n')
+def terminated(signum, frame):
+    record('signal.json', {'pid': os.getpid(), 'signal': signum,
+                          'elapsed_seconds': time.monotonic() - started})
+    os._exit(128 + signum)
+signal.signal(signal.SIGTERM, terminated)
 env = dict(os.environ)
 env.update(CAWS_PROJECT_DIR=proj, CAWS_AGENT_SURFACE="claude-code",
-           CAWS_TRAP_KILL="$mode", CAWS_AGENT_PROCESS_NAMES="python3 python3.11 Python", HOOK_CWD=proj)
-for f in sys.argv[3:]:
-    subprocess.run(["bash", guard], input=open(f, "rb").read(), env=env)
+           CAWS_TRAP_KILL='1' if mode == 'suppressed' else mode,
+           CAWS_AGENT_PROCESS_NAMES="python3 python3.11 Python", HOOK_CWD=proj)
+if mode == 'suppressed':
+    # Test-only mutation: preserve target checks and escalation stamps while
+    # suppressing the signal. The receipt oracle must reject this false proof.
+    env['CAWS_TEST_SIGNAL_CONTROL_RECEIPT'] = str(root / 'suppressed-pid')
+    env['BASH_FUNC_kill%%'] = '''() { if [ "$1" = "-TERM" ]; then
+      printf '%s' "$2" > "$CAWS_TEST_SIGNAL_CONTROL_RECEIPT"; return 0;
+      fi; builtin kill "$@";
+    }'''
+for index, f in enumerate(sys.argv[5:]):
+    payload = Path(f).read_bytes()
+    (root / f'input-{index}.json').write_bytes(payload)
+    record('identity.json', {'pid': os.getpid(), 'mode': mode,
+                            'session_id': json.loads(payload)['session_id']})
+    child = subprocess.Popen(['bash', guard], stdin=subprocess.PIPE, env=env)
+    (root / f'child-{index}.pid').write_text(str(child.pid))
+    child.communicate(payload)
+    record(f'step-{index}.json', {'exit_status': child.returncode,
+                                'elapsed_seconds': time.monotonic() - started})
+record('complete.json', {'pid': os.getpid(), 'elapsed_seconds': time.monotonic() - started})
+# Natural exit must not masquerade as a delivered signal. The bounded backup
+# lifetime is longer than the assertion deadline; teardown owns normal cleanup.
+time.sleep(120)
 PYEOF
-  python3 "$scriptfile" "$CAWS_TEST_HOOKS_DIR/block-dangerous.sh" "$CAWS_TEST_REPO" "$@" >/dev/null 2>&1 &
-  printf '%s\n' $!
+  python3 "$dir/agent.py" "$dir" "$mode" "$CAWS_TEST_HOOKS_DIR/block-dangerous.sh" "$CAWS_TEST_REPO" "$@" >"$dir/stdout" 2>"$dir/stderr" &
+  pid=$!
+  printf '%s' "$pid" > "$dir/pid"
+  printf '%s' "$dir" > "$BATS_TEST_TMPDIR/agent-$pid.path"
+  printf '%s\n' "$pid"
+}
+
+_wait_for_receipt() {
+  local file="$1" deadline=$((SECONDS + 60))
+  while (( SECONDS < deadline )); do
+    [[ ! -s "$file" ]] || return 0
+    sleep 0.2
+  done
+  return 1
+}
+
+_has_signal_receipt() {
+  [[ -s "$1/signal.json" ]] &&
+    jq -e --argjson pid "$2" '.signal == 15 and .pid == $pid' "$1/signal.json" >/dev/null
 }
 
 # Wait (bounded) until a sentinel file exists and carries a non-empty agent_pid
@@ -437,15 +514,10 @@ _wait_for_sentinel_stamp() {
   _cmd_envelope_sid "$sid" 'git commit -m chore' > "$attempt_env"
   local kpid
   kpid="$(_run_under_sacrificial_agent "1" "$arm_env" "$attempt_env")"
-  local i
-  for i in $(seq 1 50); do
-    kill -0 "$kpid" 2>/dev/null || break
-    sleep 0.2
-  done
-  if kill -0 "$kpid" 2>/dev/null; then
-    kill -9 "$kpid" 2>/dev/null || true
-    fail "sacrificial agent process survived the denied attempt"
-  fi
+  local receipt
+  receipt="$(cat "$BATS_TEST_TMPDIR/agent-$kpid.path")"
+  _wait_for_receipt "$receipt/signal.json" || fail "no SIGTERM receipt from the sacrificial agent; inspect $receipt"
+  assert _has_signal_receipt "$receipt" "$kpid"
   # The wrapper can die at SIGTERM before the guard finishes writing the
   # escalation record — poll for the record before asserting on it. Gate on
   # the SENTINEL stamp (the asserted state), never the log: the guard writes
@@ -464,8 +536,26 @@ _wait_for_sentinel_stamp() {
     fail "escalation stamp never appeared on the sentinel"
   fi
   grep -q '"verdict":"escalated"' "$CAWS_TEST_REPO/.claude/logs/danger-latch-escalations.log"
-  # The log + sentinel stamps are the oracle: they exist only on a FIRED kill.
+  # A stamp is corroboration, not the signal oracle: the process receipt above
+  # distinguishes a delivered SIGTERM from a no-op signal followed by exit.
   [ "$(jq -r '.trap_escalated_pid // ""' "$sentinel")" = "$kpid" ]
+}
+
+@test "trap: a suppressed signal with successful escalation stamps fails the receipt oracle" {
+  local sid="trap-signal-control-$$" arm_env attempt_env kpid receipt sentinel
+  arm_env="$BATS_TEST_TMPDIR/control-arm.json"
+  attempt_env="$BATS_TEST_TMPDIR/control-attempt.json"
+  _cmd_envelope_sid "$sid" 'sudo rm -rf /private/tmp/trap-arm-probe' > "$arm_env"
+  _cmd_envelope_sid "$sid" 'git commit -m chore' > "$attempt_env"
+  kpid="$(_run_under_sacrificial_agent suppressed "$arm_env" "$attempt_env")"
+  receipt="$(cat "$BATS_TEST_TMPDIR/agent-$kpid.path")"
+  _wait_for_receipt "$receipt/complete.json" || fail "control did not complete; inspect $receipt"
+  assert kill -0 "$kpid"
+  assert_equal "$(cat "$receipt/suppressed-pid")" "$kpid"
+  sentinel="$(_sentinel_for "$sid")"
+  assert_equal "$(jq -r '.trap_escalated_pid' "$sentinel")" "$kpid"
+  refute _has_signal_receipt "$receipt" "$kpid"
+  jq -n --argjson pid "$kpid" '{pid:$pid,alive_after_completion:true,signal_oracle:false,escalation_stamp_present:true}' > "$receipt/observation.json"
 }
 
 @test "trap: unresolved agent identity holds the kill (A8)" {
@@ -646,6 +736,12 @@ _edit_env() { jq -nc --arg s "$1" --arg f "$2" '{tool_name:"Edit",tool_input:{fi
   _cmd_envelope_sid "$sid" 'git commit -m chore' > "$attempt_env"
   local kpid
   kpid="$(_run_under_sacrificial_agent "dryrun" "$arm_env" "$attempt_env")"
+  local receipt
+  receipt="$(cat "$BATS_TEST_TMPDIR/agent-$kpid.path")"
+  _wait_for_receipt "$receipt/complete.json" || fail "guard sequence did not complete; inspect $receipt"
+  assert kill -0 "$kpid"
+  refute [ -f "$receipt/signal.json" ]
+  jq -n --argjson pid "$kpid" '{pid:$pid,alive_after_completion:true,signal_receipt_present:false}' > "$receipt/observation.json"
   local i
   # Gate on the SENTINEL stamp, not the escalations log: the guard writes the
   # dryrun log event BEFORE jq-rewriting trap_dryrun_pid onto the sentinel
@@ -660,7 +756,7 @@ _edit_env() { jq -nc --arg s "$1" --arg f "$2" '{tool_name:"Edit",tool_input:{fi
   [ "$(jq -r '.trap_dryrun_pid // ""' "$sentinel")" = "$kpid" ]
   [ "$(jq -r '.trap_escalated_pid // ""' "$sentinel")" = "" ]
   grep -q '"verdict":"dryrun"' "$CAWS_TEST_REPO/.claude/logs/danger-latch-escalations.log"
-  kill -0 "$kpid" 2>/dev/null && kill -9 "$kpid" 2>/dev/null || true
+  # teardown rechecks the unique script identity before cleaning up the wrapper.
 }
 
 @test "trap: dry-run holds with the real reason when identity is unresolvable (DRYRUN A2)" {
