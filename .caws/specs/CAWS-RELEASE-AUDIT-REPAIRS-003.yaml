@@ -93,3 +93,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a shell metacharacter string reaches pytest as one operand after --, never a shell"
     commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
     test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/scenarios/renderer-receipt.json; rendered-turn-001.json; pack-policy.json; qualification-final.json packageFiles. Actual Python renderer validates with AJV, malformed shapes fail, real npm pack excludes planted bytecode and installed candidate has 911 files with zero bytecode paths."
+    recorded_at: "2026-10-04T01:09:41.385Z"
+    test_nodeid: "packages/caws-cli/tests/ci/artifact-contracts.test.js::real renderer bytes validate with nullable summary and lineage; malformed shapes are rejected"
+    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
