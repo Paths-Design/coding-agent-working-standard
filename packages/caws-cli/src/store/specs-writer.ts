@@ -2895,7 +2895,7 @@ export function retireDraftSpecs(
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        'caws specs prune-drafts --apply requires --include or an explicit --older-than-ms selector.',
+        'caws specs prune-drafts --apply requires --include or an explicit --older-than <duration> / --older-than-ms selector.',
         { subject: 'prune-drafts' }
       )
     );

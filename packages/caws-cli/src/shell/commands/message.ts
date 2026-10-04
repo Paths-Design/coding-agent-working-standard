@@ -1000,7 +1000,7 @@ export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): n
     );
   } else {
     out(
-      'No changes written. Pass --apply with --older-than-ms or --include to prune selected delivered chat records.'
+      'No changes written. Pass --apply with --older-than <duration> (or --older-than-ms) or --include to prune selected delivered chat records.'
     );
   }
   for (const candidate of result.value.candidates) {

@@ -191,7 +191,7 @@ describe('caws specs prune-drafts', () => {
 
     expect(unfiltered.code).toBe(1);
     expect(unfiltered.err).toContain(
-      '--apply requires --include or an explicit --older-than-ms selector'
+      '--apply requires --include or an explicit --older-than <duration> / --older-than-ms selector'
     );
     expect(git(root, ['rev-parse', 'HEAD'])).toBe(beforeHead);
     expect(fs.existsSync(path.join(caws, 'specs', 'DRAFT-OLD-001.yaml'))).toBe(true);

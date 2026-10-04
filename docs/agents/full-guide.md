@@ -517,8 +517,9 @@ caws scope contention <path>
 caws agents list          # list active/stale/stopped agents (read-only; operational cache)
 caws agents show <id>     # show one lease by session id
 caws agents prune --dead  # dry-run cleanup for dead local process leases
-caws agents prune --status stopped --older-than-ms 604800000 --apply
+caws agents prune --status stopped --older-than 7d --apply
                           # retention cleanup; operator-invoked, never hook-invoked
+                          # (--older-than takes s/m/h/d; --older-than-ms <ms> is the exact form)
 ```
 
 ### Directed messages
