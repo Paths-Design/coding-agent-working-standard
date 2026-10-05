@@ -33,5 +33,17 @@ acceptance:
     given: 'a surface confirmed NOT to carry cwd'
     when: 'the change lands'
     then: 'its adapter is made to send cwd, or the carve-out stays with the reason recorded'
+  - id: A4
+    given: >-
+      Codex hooks documentation (developers.openai.com/codex/hooks, redirected to
+      learn.chatgpt.com/docs/hooks, read 2026-10-05) lists cwd (string) among the
+      common PreToolUse input fields and states permissionDecision ask is parsed but
+      not supported; no live Codex payload has been captured
+    when: 'a relative-path Bash write runs in a real Codex session after the CLI and runtime are activated'
+    then: >-
+      the captured payload shows cwd present and naming the session directory, the
+      write is adjudicated against it with no cwd-unresolved deny, and the
+      hook-pack-shared-core.md codex row is updated from assumed to the evidence
+      actually held
 non_functional: {}
 contracts: []
