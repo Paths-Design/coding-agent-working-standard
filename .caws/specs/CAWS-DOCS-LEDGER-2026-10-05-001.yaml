@@ -58,3 +58,9 @@ evidence:
     recorded_at: "2026-10-05T08:24:28.584Z"
     artifact_path: docs/architecture/hook-pack-shared-core.md
     commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "hook-packs.md 'Testing hooks > Hook-test isolation': run hooks inside the fixture repo; caws_enter_fixture / caws_session_isolation_begin / caws_assert_session_state_isolated"
+    recorded_at: "2026-10-05T08:24:31.154Z"
+    artifact_path: docs/guides/hook-packs.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
