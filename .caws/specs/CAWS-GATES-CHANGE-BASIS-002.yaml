@@ -22,9 +22,12 @@ invariants:
   - 'a gate that reports PASS must have measured the change set the caller believes it measured; when it cannot, the disposition must name the basis it used rather than emitting an unqualified PASS'
 acceptance:
   - id: A1
-    given: 'a linked worktree whose branch carries committed changes exceeding the risk-tier budget'
+    given: 'a linked worktree whose branch carries committed changes exceeding the declared budget'
     when: 'caws gates run --spec <id> is invoked from inside that worktree'
-    then: 'budget_limit reports the branch''s cumulative delta against its base ref and blocks, rather than reporting PASS from the canonical checkout''s index'
+    then: >-
+      budget_limit measures and reports the branch cumulative delta against its base
+      ref as an advisory overage, rather than reporting PASS from the canonical
+      index (budget_limit never blocks; see the advisory-budget doctrine)
   - id: A2
     given: 'a canonical checkout where all work is committed and the index is empty'
     when: 'caws gates run is invoked'
