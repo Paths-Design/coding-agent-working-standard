@@ -130,3 +130,9 @@ contracts: []
 # was. The npm package remains on the registry for archaeological consumers.
 # Either deletion or archive satisfies A1; the implementer chooses based on
 # whether any internal tool still imports the source.
+evidence:
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "registry untouched: npm view @paths.design/quality-gates on 2026-10-05 lists 1.0.1-1.0.4, 2.0.0, 2.1.0, dist-tag latest=2.1.0, not deprecated, bin caws-quality-gates -> run-quality-gates.mjs. No repo test can prove a registry property; commit citation only"
+    recorded_at: "2026-10-05T06:09:04.657Z"
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
