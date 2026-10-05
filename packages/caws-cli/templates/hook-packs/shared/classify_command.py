@@ -1799,6 +1799,22 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
                 return None
             if any(t in ("-b", "-B") for t in tokens):
                 return ("allow", "")
+            # A path restore whose EVERY target is a package-manager lockfile
+            # is regenerable by the package manager, so it is admitted.
+            if _is_lockfile_only_restore(tokens):
+                return ("allow", "")
+            return None
+        # `git restore --staged <path>` changes only the index and discards no
+        # working-tree content; a lockfile-only `git restore <lockfile>` is
+        # regenerable. Any other restore (a non-lockfile path, --worktree,
+        # --source, --patch, mixed targets) falls through to "ask".
+        if sub == "restore":
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            if _is_index_only_restore(tokens) or _is_lockfile_only_restore(tokens):
+                return ("allow", "")
             return None
         # Special-case `git switch` — admit the branch-creating form
         # (-c / -C). Plain `git switch <branch>` refuses to move when the
@@ -1964,8 +1980,16 @@ def classify_governed_family_default(segment: str) -> tuple[str, str] | None:
                 return (
                     "ask",
                     "git checkout to an existing branch/path can discard "
-                    "uncommitted work; only `checkout -b` is auto-admitted; "
+                    "uncommitted work; only `checkout -b` and a restore of "
+                    "package-manager lockfiles are auto-admitted; "
                     "ask before invoking",
+                )
+            if sub == "restore":
+                return (
+                    "ask",
+                    "git restore of a path other than a package-manager "
+                    "lockfile discards uncommitted work (only `--staged` and "
+                    "lockfile-only restores are auto-admitted); ask before invoking",
                 )
             return (
                 "ask",
@@ -1985,6 +2009,104 @@ def classify_governed_family_default(segment: str) -> tuple[str, str] | None:
         return ("ask", "unknown npm invocation — ask before invoking")
 
     return None
+
+
+
+_LOCKFILE_BASENAMES = frozenset(
+    {
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "bun.lockb",
+        "Cargo.lock",
+        "poetry.lock",
+        "uv.lock",
+        "Gemfile.lock",
+        "composer.lock",
+        "go.sum",
+    }
+)
+_RESTORE_PATH_RE = re.compile(r"^[A-Za-z0-9._/@+-]+$")
+_RESTORE_TREEISH_RE = re.compile(r"^[A-Za-z0-9._/@^~+][A-Za-z0-9._/@^~+-]*$")
+
+
+def _restore_targets(tokens):
+    """Split `git checkout|restore ...` tokens into (flags, targets).
+
+    Returns None when a target is not a plain path word (glob, pathspec magic,
+    shell metacharacter, or empty), so such commands are never admitted.
+    """
+    flags = []
+    targets = []
+    for tok in tokens[2:]:
+        if tok == "--":
+            continue
+        if tok.startswith("-"):
+            flags.append(tok)
+            continue
+        if not _RESTORE_PATH_RE.match(tok):
+            return None
+        targets.append(tok)
+    return flags, targets
+
+
+def _is_lockfile_only_restore(tokens):
+    """`git checkout|restore [--] <paths>` where EVERY path is a lockfile.
+
+    Matched by basename at any depth. Any flag (e.g. -f, --source, -p, -b) or
+    any non-lockfile target, including a tree-ish, disqualifies the command.
+    """
+    parsed = _restore_targets(tokens)
+    if parsed is None:
+        return False
+    flags, targets = parsed
+    if flags or not targets:
+        return False
+    return all(
+        t.rsplit("/", 1)[-1] in _LOCKFILE_BASENAMES and not t.endswith("/")
+        for t in targets
+    )
+
+
+def _is_index_only_restore(tokens):
+    """`git restore --staged [--source=<t> | --source <t> | -s <t>] [--] <paths>`.
+
+    The index is the only thing it changes. `--source` without `--staged`
+    writes the working tree and is not admitted; neither is any other flag
+    (--worktree/-W, -p, -f, --overlay, --ignore-unmerged, an unknown flag, or a
+    clustered short such as -SW).
+    """
+    staged = False
+    targets = 0
+    past_sep = False
+    expect_source = False
+    for tok in tokens[2:]:
+        if expect_source:
+            if not _RESTORE_TREEISH_RE.match(tok):
+                return False
+            expect_source = False
+            continue
+        if not past_sep:
+            if tok == "--":
+                past_sep = True
+                continue
+            if tok in ("--staged", "-S"):
+                staged = True
+                continue
+            if tok in ("--source", "-s"):
+                expect_source = True
+                continue
+            if tok.startswith("--source="):
+                if not _RESTORE_TREEISH_RE.match(tok[len("--source="):]):
+                    return False
+                continue
+            if tok.startswith("-"):
+                return False
+        if not _RESTORE_PATH_RE.match(tok):
+            return False
+        targets += 1
+    return staged and not expect_source and targets >= 1
 
 
 def _trusted_git_init_token_path(repo_root: Path) -> Path | None:

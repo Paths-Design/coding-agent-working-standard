@@ -7,7 +7,8 @@
 # (`git checkout package-lock.json`) was reported as a branch switch, naming a
 # hazard that was not in play. The refusal stays (a path restore overwrites
 # uncommitted work, the same hazard class as `checkout -- <path>`); only the
-# label is corrected, and a real ref is still labeled a branch switch.
+# label is corrected. The refused tracked file here is a source file: a
+# package-manager lockfile is admitted (worktree-guard-lockfile-restore.bats), and a real ref is still labeled a branch switch.
 #
 # Both directions are load-bearing: the path cases assert the path-restore label
 # AND the absence of the branch-switch label; the ref cases assert the inverse;
@@ -34,8 +35,9 @@ setup_file() {
   fi
   git -C "$CAWS_TEST_REPO" config commit.gpgsign false
   printf '{}\n' >"$CAWS_TEST_REPO/package-lock.json"
-  git -C "$CAWS_TEST_REPO" add package-lock.json
-  git -C "$CAWS_TEST_REPO" commit -q -m 'add lockfile'
+  printf 'source\n' >"$CAWS_TEST_REPO/tracked.txt"
+  git -C "$CAWS_TEST_REPO" add package-lock.json tracked.txt
+  git -C "$CAWS_TEST_REPO" commit -q -m 'add lockfile and tracked file'
   git -C "$CAWS_TEST_REPO" branch feature-x
   git -C "$CAWS_TEST_REPO" update-ref refs/remotes/origin/remote-only HEAD
   printf 'scratch\n' >"$CAWS_TEST_REPO/scratch.txt"
@@ -70,7 +72,7 @@ _checkout() {
 
 @test "worktree-guard: checkout of a tracked file is refused as a path restore, not a branch switch" {
   _active_worktree
-  _checkout 'git checkout package-lock.json'
+  _checkout 'git checkout tracked.txt'
   assert_equal "$status" 2
   assert_output --partial "$PATH_LABEL"
   assert_output --partial "overwrites uncommitted changes to the named path(s)"
@@ -95,7 +97,7 @@ _checkout() {
 
 @test "worktree-guard: checkout of a tree-ish plus a path is refused as a path restore" {
   _active_worktree
-  _checkout 'git checkout main package-lock.json'
+  _checkout 'git checkout main tracked.txt'
   assert_equal "$status" 2
   assert_output --partial "$PATH_LABEL"
   refute_output --partial "git checkout (branch switch)"
@@ -103,7 +105,7 @@ _checkout() {
 
 @test "worktree-guard: the explicit double-dash form keeps its working-tree discard label" {
   _active_worktree
-  _checkout 'git checkout -- package-lock.json'
+  _checkout 'git checkout -- tracked.txt'
   assert_equal "$status" 2
   assert_output --partial "$DISCARD_LABEL"
   refute_output --partial "git checkout (branch switch)"

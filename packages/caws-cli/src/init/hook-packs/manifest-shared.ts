@@ -573,7 +573,14 @@ import { isAdapterCoveredSurface } from './types';
 // use a CAWS waiver, but a waiver only filters `caws gates run` and never lifts
 // a hook. The refusal now names the path that does: an Edit under an active spec
 // whose scope admits the file.
-export const SHARED_PACK_VERSION = 93;
+// 94 closes
+// CAWS-DEFECT-CANONICAL-GUARD-NO-SANCTIONED-LOCKFILE-RESTORE-01. The
+// canonical-checkout guard refused a lockfile restore and `git restore
+// --staged <path>`, and its remedy named an owning worktree no lane fills. A
+// path restore whose every target is a package-manager lockfile and
+// `git restore --staged` are admitted by the guard and the classifier, and a
+// remaining refusal asks the user to run the restore instead.
+export const SHARED_PACK_VERSION = 94;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
