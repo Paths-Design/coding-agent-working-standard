@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Shared hook runtime and native adapter contract
 owner: CAWS maintainers
-updated: 2026-09-07
+updated: 2026-10-05
 audience: consumer
 ---
 
@@ -286,6 +286,66 @@ Backward-compatibility: the resolver falls back to the legacy env var
 (`CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR`) when `CAWS_PROJECT_DIR` is unset,
 so a not-yet-migrated wiring keeps working during the transition.
 
+## Payload `cwd` contract
+
+Guards learn where the agent is from the payload's `cwd`. `lib/parse-input.sh`
+sets `HOOK_CWD` from it, and to empty when the field is absent — overwriting any
+value already exported — so an absent `cwd` is always seen as absent, never
+inherited.
+
+Two questions use that value, and they need different things:
+
+- **Which repository's state?** Repo-wide state (`.caws/sessions/`, leases) is
+  located by repository identity: `lib/session-cache.sh` runs
+  `git rev-parse --git-common-dir` from `${HOOK_CWD:-$PWD}`, which names the
+  canonical `.git` from the canonical checkout and from every linked worktree.
+  The `$PWD` step is the hook process's directory, chosen by whoever launched
+  the hook. A test that runs a real hook from inside a real checkout therefore
+  writes that checkout's state; hook tests must enter a fixture root first
+  ([hook-test isolation](../guides/hook-packs.md#hook-test-isolation)).
+- **Which file does a relative path name?** That needs a location, and
+  repository identity is not one. Only a payload `cwd` naming an existing
+  directory counts as resolved (`_CWD_RESOLVED` in `bash-write-guard.sh`).
+  Without it, on a surface whose contract carries `cwd`, a relative mutation
+  target goes to the ownership oracle flagged unresolved
+  (`CAWS_ORACLE_CWD_UNRESOLVED`) and the answer is
+  `ask_uncertain:cwd-unresolved:<path>`. On any other surface the guard keeps
+  resolving against the canonical root, because there an absent `cwd` is the
+  normal case and asking would refuse every relative write.
+
+Which surfaces carry `cwd` is a per-surface fact, recorded here with its
+evidence. `_CWD_CONTRACT_SURFACES` in `bash-write-guard.sh` is the enforcing
+copy of the "fail closed" column; the two change together.
+
+| Surface        | Payload carries `cwd`    | Evidence                                                                                                                                                         | Absent `cwd`                                |
+| -------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `claude-code`  | yes                      | `cwd` is a common field of the harness's hook input                                                                                                              | fail closed (`ask`)                         |
+| `codex`        | assumed                  | the vendor parser reads it (`codex/hooks/lib/parse-input.sh`); no captured payload                                                                               | fail closed (`ask` → `deny`)                |
+| `opencode`     | yes, built by the plugin | `opencode/plugin.ts` `resolveAgentCwd`: the Bash call's `workdir` when given, else `ctx.directory`; never `ctx.worktree`, which differs in a subdirectory launch | fail closed (block — opencode has no `ask`) |
+| `qwen-code`    | yes, documented          | payload row in `qwen-code/CAWS-HOOKS.md`; `caws-qwen-hook.sh` header                                                                                             | fail closed (`ask`)                         |
+| `kimi-code`    | yes, documented          | payload row in `kimi-code/AGENTS.md`; `caws-kimi-hook.sh` header                                                                                                 | fail closed (`ask` → `deny`)                |
+| `zcode`        | unverified               | `zcode/hooks/caws-bridge.sh` passes the harness payload through unchanged                                                                                        | resolve against the canonical root          |
+| `dsh`          | unverified               | external adapter                                                                                                                                                 | resolve against the canonical root          |
+| (unrecognized) | —                        | —                                                                                                                                                                | resolve against the canonical root          |
+
+Rules for changing it:
+
+- **Absence is decided per surface, from evidence.** Failing closed on a surface
+  that never sends `cwd` refuses every relative write there; failing open on one
+  that does turns a degraded payload into a confident wrong answer. Neither is a
+  safe global default.
+- **Adding a surface to the fail-closed set** is a one-word change to
+  `_CWD_CONTRACT_SURFACES`, made together with this table's evidence and the
+  retirement of that surface's prior-behavior control test in
+  `tests/hooks/bats/claim-oracle-cwd-relative.bats`.
+- **A new vendor adapter** declares its row before it ships. If its harness
+  supplies no `cwd`, the adapter builds one from the harness's own notion of the
+  session directory, as `plugin.ts` does, rather than leaving the guards to
+  guess.
+- **Present is not current.** The table records whether the field is sent, not
+  whether each harness updates it after the agent changes directory inside its
+  shell; that is unverified per surface.
+
 ## Dispatcher resolution
 
 Vendor wiring points harness commands at the shared
@@ -459,6 +519,32 @@ Full mechanism, precedence and safety floor:
   in any tree fails until that tree's version is bumped and a history entry
   appended — same propagation guarantee as before, but a shared-logic change
   touches one tree.
+
+### Concurrent changes to one pack
+
+Two lanes that both change the shared core both need a version bump, and the
+version is a single integer (`SHARED_PACK_VERSION` in `manifest-shared.ts`) with
+a single fingerprint entry (`tests/init/pack-fingerprints.json`). They cannot
+both land the same number, and a fingerprint computed on either branch alone is
+wrong for the merged tree. Integrate them serially:
+
+1. Each lane bumps provisionally to the next version above the base it forked
+   from, refreshes its fingerprint, and runs its suites. The number is a
+   placeholder until integration.
+2. Lanes merge into the base one at a time. Before its governed merge, the next
+   lane merges the current base in (`git merge`, never rebase or cherry-pick),
+   takes the next free version above the base's, keeps every version comment
+   from both sides (each comment names the spec it closes), and recomputes the
+   fingerprint over the merged templates.
+3. It reruns the fingerprint test, its own guard suites and the suites of the
+   lanes already merged, because two individually correct guard changes can
+   compose into a dead end — one lane's refusal remedy can name a command
+   another lane's classifier still refuses.
+4. Only then is evidence recorded, from inside the lane, and the governed merge
+   run.
+
+Vendor packs version independently (`manifest-<surface>.ts`). A lane that
+changes only a vendor tree does not contend for the shared version.
 
 ## Install behavior (preserved invariants)
 

@@ -4553,3 +4553,264 @@ A's outcome was right and B's would have been catastrophic with an identical
 process shape, so the refusal sequence carries zero bits about correctness and
 what stopped B was a classifier class that happened not to route, not
 judgment.**
+
+## Entry 44: Five refusals named a remedy that could not complete the refused action; the tests pinned the refusal and never ran the remedy (October 2026)
+
+**Severity:** High (each dead-end remedy left a blocked agent the two routes
+this repository exists to remove — bypass the guard, or hand the blocker to a
+human who reaches past the governed path — and in one specimen the sanctioned
+alternative to `rebase` could only be concluded with `--no-verify`) **Era:**
+v12.x; found in one orchestration session on 2026-10-04/05 while landing more
+than twenty governed lanes **Agents:** caws-repo orchestrator session
+`3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1` and its lane subagents; one independent
+side-agent review relayed by the maintainer
+
+### What happened
+
+A refusal carries two parts: the verdict (block, ask, refuse) and the remedy —
+the sentence telling the blocked agent what to do instead. In one session five
+remedies turned out not to work on the case they were printed for.
+
+1. **The canonical path-restore refusal named an exit that does not exist in
+   canonical.** `CAWS-WORKTREE-GUARD-CHECKOUT-PATHSPEC-MISCLASSIFY-001` required
+   that `git checkout package-lock.json` in the canonical checkout be "admitted
+   or refused with an alternative that applies." The fix (`c2ec7b0f`) relabeled
+   the refusal correctly as a path restore and printed "Commit first, or restore
+   the file from a session rooted in the owning worktree." Lockfile churn in
+   canonical has no owning worktree, and committing churn you meant to discard
+   is not a remedy for wanting to discard it. The criterion was recorded `pass`
+   with `--verify`: the cited test ran and passed, because it asserted the
+   label. The orchestrator reviewed the diff and accepted it without running the
+   named alternative. A side agent, reviewing independently, tried it and found
+   nothing to run.
+
+2. **Pack copy told blocked agents a waiver lifts a hook block.** The kimi-code
+   and qwen-code pack docs read: "fix the cause, create a waiver
+   (`caws waiver create`), or take a session-scoped reprieve
+   (`caws reprieve grant --current`)." A waiver filters `caws gates run`
+   violations and nothing else; no hook reads one. A reprieve is not the agent's
+   to take — `caws reprieve grant --help` opens with "Agents cannot grant their
+   own reprieves." The same waiver remedy appeared in `classify_command.py`'s
+   refusal of a naked `rm`/`mv` on `.caws/policy.yaml` ("use Edit and a CAWS
+   waiver"), in this repository's own `CLAUDE.md` as the "Legitimate escape,"
+   and in `.husky/pre-commit` Guard 2. The maintainer, meeting one of them: "ha
+   we removed waivers."
+
+3. **The sanctioned alternative to rebase could not be concluded.** Doctrine
+   forbids rebasing an active lane and says to merge the base in instead.
+   Merging `main` into `wt-merge-provenance-routing`, 2268 commits behind,
+   staged 73 deletions and a `.caws/policy.yaml` byte-identical to `main`. Two
+   guards read the incoming base changes as authored by the lane. The
+   commit-deletions guard refused the bare `git commit`, and its remedy —
+   "commit with the paths named explicitly: `git commit -m <msg> -- <paths>`" —
+   is a partial commit, which git refuses while `MERGE_HEAD` exists ("cannot do
+   a partial commit during a merge"). Guard 2 refused the policy file and
+   offered a waiver. With both remedies dead, the only completion left was
+   `--no-verify`, which doctrine also forbids. The maintainer ended up running
+   `git commit` in the lane by hand.
+
+4. **The merge-time lane-provenance refusal was routed to two surfaces that do
+   not touch it.** `caws worktree merge` refuses a lane whose history touches a
+   path outside its lane scope. The operator copy — the waiver-create notice and
+   the waiver and reprieve help — presented exceptions as a partition (hook
+   block → reprieve, `gates run` violation → waiver), so the reader of this
+   refusal was sent to one or the other. Neither changes merge readiness. The
+   remedy that does is `caws specs amend-scope <spec> --add-support <path>`; the
+   fix's acceptance ran one fixture through both arms and showed the reprieve
+   leaving readiness unchanged while `--add-support` flipped it.
+
+5. **The recovery for a known commit hazard was refused.** After a commit with
+   an explicit pathspec, lint-staged reformats the working-tree file and leaves
+   the pre-format blob staged (`MM`). The natural recovery,
+   `git restore --staged <path>`, touches only the index; worktree-guard refused
+   it as a working-tree discard. The session recovered three times by checking
+   `git diff --quiet HEAD -- <path>` and re-adding the file — a workaround no
+   refusal names.
+
+### Root cause
+
+A remedy is a claim: _from this state, this command completes the action you
+were refused, or a named substitute for it._ It is as falsifiable as anything
+else in the guard, and nothing falsified it. Every guard here had tests. The
+tests pinned the verdict (exit status, `permissionDecision`) and sometimes the
+exact message text. None ran the remedy in the fixture that produced the
+refusal. A test that asserts the message pins the remedy's wording, not its
+truth, so a remedy that stopped being true — or never was — stays green.
+
+The five share an authoring pattern: the remedy was written for the guard's
+common case and printed on every case it refuses. "Restore from the owning
+worktree" is right for a lane-owned path and empty for canonical churn.
+`git commit -- <paths>` is right outside a merge and fails inside one. "Use a
+waiver" was right for the one surface waivers ever governed and was copied onto
+surfaces they never did. Each guard's refused set grew; its remedy string did
+not branch with it.
+
+Entry 42 recorded the inverse: a remedy that taught an escape (lower the risk
+tier). This entry is a remedy that teaches a dead end. The release stance says
+why the dead end is not the safer of the two — an agent that follows it
+faithfully and fails has only the routes around the guard left, and specimen 3
+shows a human taking one.
+
+Specimen 1 also bounds what acceptance recording proves. `--verify` established
+that the cited test passed at the cited commit. It cannot establish that the
+test exercised the criterion: the criterion said "an alternative that applies,"
+and the test checked a label. The reviewer was the last check able to tell the
+difference, and read the label instead of running the alternative.
+
+### What it doesn't catch / state at time of writing
+
+- Fixes by specimen: 1 and 5 under
+  `CAWS-DEFECT-CANONICAL-GUARD-NO-SANCTIONED-LOCKFILE-RESTORE-01` (lockfile-only
+  restores and index-only `git restore --staged` are admitted; the canonical
+  path-restore refusals that remain say to ask the user and never name an owning
+  worktree); 2 under `CAWS-DEFECT-GUARD-COPY-OFFERS-WAIVER-FOR-HOOK-BLOCKS-01`;
+  3 under `CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01` (during a merge,
+  only paths whose staged content equals a merge parent count as incoming); 4
+  under `CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01`. Removing
+  the waiver surface, whose only reader is `caws gates run`, is
+  `CAWS-WAIVER-SURFACE-REMOVAL-001`.
+- **No census of remedies exists.** These five were found by agents walking into
+  them, not by enumerating refusal strings. How many other remedies are written
+  for a common case and printed on a rare one is unknown.
+- **"Ask the user" always applies, and it is a cost transfer.** It is the right
+  remedy for a discard that genuinely needs judgment. It is a defect when it
+  becomes the default for cases a governed command could complete.
+- Each fix adds remedy-execution tests for its own guard. No shared harness runs
+  every guard's remedy against the fixture that refused.
+
+### Doctrine
+
+> A refusal's remedy is part of the guard and is tested like the verdict: in the
+> fixture that produced the refusal, run the remedy literally and assert that
+> the refused action, or its named substitute, completes. A test that asserts
+> the remedy's text pins its wording, not its truth. When a guard's refused set
+> grows, its remedy branches with it; a remedy written for the common case and
+> printed on a rare one is a dead end with a sanctioned look. A reviewer
+> accepting a criterion of the form "refused with an alternative that applies"
+> runs the alternative — reading it is not checking it.
+
+### Single-line synthesis
+
+**Entry 44: in one session five refusals printed remedies that could not
+complete the case they refused — the canonical path-restore refusal sent
+lockfile churn to an "owning worktree" no lane had, kimi and qwen pack copy (and
+the classifier, `CLAUDE.md` and `.husky` Guard 2) offered a waiver that no hook
+reads and a reprieve no agent may grant itself, the commit-deletions guard
+prescribed `git commit -- <paths>` to conclude a merge of `main` into a lane
+although git refuses a partial commit while `MERGE_HEAD` exists, the
+lane-provenance merge refusal was routed to reprieve or waiver when only
+`amend-scope --add-support` moves merge readiness, and the index-only
+`git restore --staged` that recovers lint-staged residue was refused as a
+discard; every guard was tested on its verdict and some on their wording, none
+by running the remedy in the refusing fixture, and the first specimen was
+recorded `pass` under `--verify` because the test checked a label the criterion
+did not ask about — so the remedy is part of the guard, it is executed in the
+test, and a reviewer runs the alternative rather than reading it.**
+
+## Entry 45: A missing payload `cwd` was answered with a guess that always named the canonical checkout; the first fail-closed fix would have refused every relative write on a surface that never sent one (October 2026)
+
+**Severity:** High (a relative Bash write from a lane was adjudicated as a write
+to the canonical checkout's copy of the file, so the ownership answer was about
+the wrong file; the same fallback left 737 entries in the real
+`.caws/sessions/`, most of them fixture-shaped) **Era:** v12.x **Agents:**
+caws-repo orchestrator session `3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1` and its
+lane subagents
+
+### What happened
+
+Hooks learn where the agent is from the payload's `cwd`. `lib/parse-input.sh`
+sets `HOOK_CWD` from it, or to empty when it is absent. With `HOOK_CWD` empty,
+`lib/session-cache.sh` falls back to `${HOOK_CWD:-$PWD}` and then to
+`git rev-parse --git-common-dir`. That last step names the repository, not a
+location: from the canonical checkout and from every linked worktree alike it
+resolves to the canonical `.git`. Each step is a reasonable default alone.
+Composed, the answer to "where is the agent" was "canonical," from everywhere.
+
+Three consequences surfaced in one session:
+
+1. **Relative targets were judged against the wrong root.**
+   `bash-write-guard.sh` resolves a relative mutation target
+   (`echo x > file.txt`) against the agent's directory and asks the ownership
+   oracle who owns the result. With no `cwd`, it resolved against the canonical
+   root, so a lane agent's relative write was evaluated as a write to
+   canonical's copy of the file. Whatever the oracle answered, it answered about
+   a different file (`CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01`).
+
+2. **The first fix inverted the failure without asking who sends `cwd`.** As
+   first written, it made an unresolved `cwd` fail closed: relative targets went
+   to the oracle flagged unresolved and came back
+   `ask_uncertain:cwd-unresolved:<path>`. Review found that the opencode
+   plugin's payload builder sent no `cwd` at all, and opencode has no ask — an
+   ask is a block there. Every relative Bash write on that surface would have
+   been refused. The fix went back: the plugin now sends `ctx.directory` (or a
+   Bash call's own `workdir` when given, and deliberately never `ctx.worktree`,
+   which differs in a subdirectory launch), and fail-closed is scoped to the
+   surfaces whose payload is known to carry `cwd`.
+
+3. **Tests wrote fixture sessions into the developer's real checkout.** Bats
+   suites ran real hook scripts with synthetic payloads that carried no `cwd`,
+   from a working directory inside the repository. The fallback found the real
+   canonical root, and session state landed in the real `.caws/sessions/`. At
+   the time of the fix it held 737 entries, among them 246 `quar-*`, 292
+   `drift-a*`, 47 `caws-bats-fixture-*` and 4 `agent-pid-*`. Those prefixes are
+   attributed to test fixtures by their shape, not traced writer by writer. Each
+   entry is a candidate the session resolver weighs in a real session.
+
+### Root cause
+
+`cwd` is a per-surface payload field, and the guards treated it as universal in
+both directions: first as always present, so its absence went unnoticed and a
+fallback silently answered; then its absence as always a degraded payload, so
+asking was always right. Neither assumption was written down per surface, so
+neither could be checked. The fallback chain compounded it. `$PWD` is the hook
+process's directory, chosen by the harness or the test runner, not by the agent.
+`--git-common-dir` is an identity, and no correct `$PWD` turns it into a
+location.
+
+### What it doesn't catch / state at time of writing
+
+- The fail-closed set is `_CWD_CONTRACT_SURFACES` in `bash-write-guard.sh`:
+  claude-code, codex, opencode, qwen-code and kimi-code. The evidence behind
+  each entry is uneven; the contract table in
+  [`hook-pack-shared-core.md`](architecture/hook-pack-shared-core.md#payload-cwd-contract)
+  records it. Codex is in the set because the parser reads the field, not
+  because a payload was captured.
+- zcode and dsh keep the prior behavior, resolving against the guess, until
+  `CAWS-SURFACE-PAYLOAD-CWD-CONTRACT-01` records whether their payloads carry
+  `cwd`. Specimen 1 stays open on those two surfaces.
+- **Present is not current.** A payload `cwd` reports where the harness says the
+  agent is. Whether each harness updates it after the agent changes directory
+  inside its shell was not verified surface by surface.
+- The entries already in the real `.caws/sessions/` were not deleted. They are
+  local, gitignored state, and removing them is the maintainer's call. The
+  test-side fix (`caws_enter_fixture`, `caws_session_isolation_begin` and
+  `caws_assert_session_state_isolated` in `tests/hooks/bats/helpers.bash`) keeps
+  bats from adding more. A jest or pytest suite that runs a hook script outside
+  a fixture root is not covered by those helpers.
+
+### Doctrine
+
+> A guard input that a surface may omit has a per-surface contract, written down
+> with its evidence, and the guard's behavior when the input is absent is chosen
+> per surface from that contract — not once, globally, in whichever direction
+> the latest incident pointed. Never answer a location question with an identity
+> (`--git-common-dir`) or with the hook process's own `$PWD`; when the agent's
+> location is unknown, report it as unknown and let the guard decide. A test
+> that runs a real hook runs inside a fixture root and asserts the real state
+> roots unchanged: a hook that cannot tell a test from a session writes the test
+> into the session.
+
+### Single-line synthesis
+
+**Entry 45: hooks locate the agent from the payload `cwd`, and when it was
+absent `session-cache.sh` fell back through `$PWD` to `--git-common-dir`, which
+names the canonical checkout from every worktree — so a lane agent's relative
+Bash write was judged as a write to canonical's copy of the file, and bats
+suites running real hooks with `cwd`-less payloads wrote 737 mostly
+fixture-shaped entries into the developer's real `.caws/sessions/`; the first
+fix made a missing `cwd` fail closed everywhere and would have refused every
+relative write on opencode, whose plugin sent no `cwd` and has no ask, so it was
+sent back to make opencode send `ctx.directory` and to scope fail-closed to the
+five surfaces whose payloads carry the field — the lesson being that an input a
+surface may omit needs a written per-surface contract with evidence, absence is
+decided per surface from it, and an identity is never a location.**

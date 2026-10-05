@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: CAWS shared runtime setup and hook maintenance
 owner: CAWS maintainers
-updated: 2026-09-07
+updated: 2026-10-05
 audience: consumer
 ---
 
@@ -439,3 +439,71 @@ acting. Agents cannot grant their own reprieves or supply a human's identity as
 proof of approval;
 [failure-lineage Entry 40](../failure-lineage.md#entry-40-the-agent-signs-the-owners-name-on-a-waiver-it-grants-itself-the-approver-field-is-self-authenticating-and-the-only-detector-is-a-human-reading-the-ledger-august-2026)
 records why that separation matters.
+
+## Testing hooks
+
+### Hook-test isolation
+
+A hook test that runs a real guard script can write into the developer's real
+checkout. Hooks locate repo-wide state (`.caws/sessions/`, leases) with
+`git rev-parse --git-common-dir`, run from `${HOOK_CWD:-$PWD}`.
+`lib/parse-input.sh` overwrites `HOOK_CWD` with the payload's `cwd`, and with
+empty when the payload has none, so a `HOOK_CWD` the test exports does not
+survive. A synthetic payload without `cwd` leaves the test runner's working
+directory to decide — and inside this repository, or any of its worktrees, that
+resolves to the real canonical `.caws/sessions/`. Fixture session ids then sit
+there as candidates the session resolver weighs in real sessions
+([failure-lineage Entry 45](../failure-lineage.md#entry-45-a-missing-payload-cwd-was-answered-with-a-guess-that-always-named-the-canonical-checkout-the-first-fail-closed-fix-would-have-refused-every-relative-write-on-a-surface-that-never-sent-one-october-2026)).
+
+In bats, `tests/hooks/bats/helpers.bash` provides the isolation:
+
+```bash
+setup() {
+  caws_session_isolation_begin   # timestamp marker for this test
+  caws_enter_fixture             # cd into $CAWS_TEST_REPO
+}
+
+teardown() {
+  # fails if any listed id gained state under the REAL .caws/sessions/
+  caws_assert_session_state_isolated my-session other-session
+}
+```
+
+`run_guard` also runs the guard from inside the fixture repo. The real roots the
+assertion checks are derived from `BATS_TEST_DIRNAME` — the checkout holding the
+suite and the canonical repository behind it — never from the environment, so a
+test cannot redirect the check along with the leak. The assertion covers the
+session ids it is given and state written after the marker; a suite that writes
+an id it does not list is not caught.
+
+Outside bats the same rule holds: a jest or pytest test that executes a hook
+script runs it with its working directory inside a temporary fixture repository,
+or passes a payload `cwd` naming one.
+
+### Testing a refusal's remedy
+
+A refusal has two parts, the verdict and the remedy, and both are behavior. A
+test that asserts the remedy's text pins its wording, not whether it works
+([failure-lineage Entry 44](../failure-lineage.md#entry-44-five-refusals-named-a-remedy-that-could-not-complete-the-refused-action-the-tests-pinned-the-refusal-and-never-ran-the-remedy-october-2026)).
+For a guard that names a remedy:
+
+- **Run the remedy in the refusing fixture.** Produce the refusal, execute the
+  remedy's commands literally in that state, and assert that the refused action
+  — or the substitute the remedy names — completes.
+- **Run it through the agent's path, not only git's.** An agent following the
+  remedy passes through the PreToolUse classifier and the write guards first.
+  Assert that each command the remedy names is admitted there; a remedy the
+  classifier asks on is a block wherever `ask` cannot be answered.
+- **Branch the remedy with the refused set.** When a guard refuses more than one
+  kind of case — canonical checkout and lane, inside a merge and outside — test
+  the remedy printed for each. A remedy written for the common case and printed
+  on the rare one is the usual failure.
+- **Name only surfaces that govern the block.** A waiver filters
+  `caws gates run` and lifts no hook. A reprieve lifts a hook handler, is
+  granted by a human, and does not change merge readiness. A merge-time
+  lane-provenance refusal is lifted by
+  `caws specs amend-scope <spec> --add-support <path>`.
+- **Prove the hook ran.** `tests/helpers/git-repo-factory.js` sets
+  `core.hooksPath=/dev/null` on every repository it creates, so a git hook under
+  test never fires there unless the test points `core.hooksPath` back at the
+  hooks it installs. A refusal test in such a fixture passes vacuously.
