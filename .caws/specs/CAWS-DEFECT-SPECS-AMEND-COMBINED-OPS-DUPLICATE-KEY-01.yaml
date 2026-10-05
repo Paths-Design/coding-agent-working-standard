@@ -1,9 +1,10 @@
 id: CAWS-DEFECT-SPECS-AMEND-COMBINED-OPS-DUPLICATE-KEY-01
 title: 'specs amend refuses a valid single call that combines invariant edits with --add-ac (duplicated mapping key), though each succeeds alone'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: amend-combined-ops
 created_at: '2026-10-05T03:22:34.549Z'
-updated_at: '2026-10-05T03:22:34.549Z'
+updated_at: '2026-10-05T05:32:35.810Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
