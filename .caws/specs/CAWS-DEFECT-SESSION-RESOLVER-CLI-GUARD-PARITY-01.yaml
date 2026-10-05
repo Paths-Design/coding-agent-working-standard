@@ -75,3 +75,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::resolves CODEX_THREAD_ID and names the ignored value once"
     commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
     test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "reprieve show/revoke share harnessOverCanonicalSession with the resolver; revoke tombstones the harness session's grant and the table test pins show == CLI resolver across 4 env shapes"
+    recorded_at: "2026-10-05T05:37:43.066Z"
+    test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::show looks up the harness session the guards consult, not the stray CAWS_SESSION_ID"
+    commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
+    test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
