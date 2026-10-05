@@ -42,3 +42,11 @@ non_functional: {}
 contracts:
   - name: 'claim-oracle-path-classification'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "already held on main (passed before the fix); owner gets status 0, empty output, for both spellings; non-owner control blocks both"
+    recorded_at: "2026-10-05T07:46:16.633Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats::claim-oracle-cwd: the owner writing its worktree file passes cwd-relative and worktree-absolute alike"
+    commit_sha: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+    test_verified_at: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
