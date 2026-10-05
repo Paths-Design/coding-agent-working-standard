@@ -1,10 +1,11 @@
 id: CAWS-DEFECT-ARCHIVE-BATCH-DROPS-NARROW-REPAIR-01
 title: 'specs archive batch mode prints each failure reason but drops its narrowRepair, so the --replace remedy for a stale archived body is never shown'
 mode: fix
-lifecycle_state: active
-worktree: archive-batch-remedy
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge archive-batch-remedy at 0d574fd7cf1a0088ec77760195f3f23550de6af4'
 created_at: '2026-10-04T23:45:37.201Z'
-updated_at: '2026-10-05T04:59:57.665Z'
+updated_at: '2026-10-05T05:31:54.265Z'
 created_by_session: '@darianrosebrook'
 blast_radius:
   modules:
