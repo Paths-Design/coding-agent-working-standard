@@ -541,7 +541,16 @@ import { isAdapterCoveredSurface } from './types';
 // where they are unambiguous: the placeholder word counts only in comment text
 // beside a stub cue, and in code only the uppercase marker convention counts.
 // The advisory names the line it quotes, counted within the edit for an Edit.
-export const SHARED_PACK_VERSION = 89;
+// 90 closes CAWS-DEFECT-SHORTCUT-LANG-REFERENCE-FP-01. The marker scan struck
+// identifiers and data rather than unfinished work: a spec id that carries a
+// marker word between hyphens (a defect about scaffold text mints exactly
+// such ids) and a quoted string constant whose value is scaffold text. An
+// id-shaped marker (joined by - or _ to an uppercase alphanumeric) and a
+// marker inside a quoted literal that closes on its line are now exempt, and
+// an opener inside such a literal no longer starts a comment. A bare comment
+// marker, an uppercase marker used as a code value and the not-implemented
+// throw still strike.
+export const SHARED_PACK_VERSION = 90;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

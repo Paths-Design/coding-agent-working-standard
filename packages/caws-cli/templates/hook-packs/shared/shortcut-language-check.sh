@@ -125,12 +125,34 @@ CODE_RECORDS=$(printf '%s\n' "$CONTENT" | awk '{ print NR "\tcode\t" $0 }')
 # line (shell, Python, YAML — not CSS colours or #private fields). A line
 # starting "-- " is a SQL/Lua comment, and a line starting "* " outside any
 # block is a JSDoc fragment, which is what an Edit's new_string often is.
-# String literals are not tracked, so "a // b" inside a string reads as a
-# comment.
+# An opener that sits inside a quoted literal that closes on the same line
+# ("a // b", '# note: x') opens nothing: it is data, not a comment. A quote
+# with no closing partner on the line is an ordinary character, so a stray
+# apostrophe never hides a real comment that follows it.
 _COMMENT_AWK='
 function emit(k, text) { if (text ~ /[^ \t]/) print NR "\t" k "\t" text }
+function mask(s,   n, i, j, k, c, d) {
+  delete instr
+  n = length(s); i = 1
+  while (i <= n) {
+    c = substr(s, i, 1)
+    if (c == "\"" || c == "\047" || c == "`") {
+      j = i + 1
+      while (j <= n) {
+        d = substr(s, j, 1)
+        if (d == "\\") { j += 2; continue }
+        if (d == c) break
+        j++
+      }
+      if (j <= n) { for (k = i; k <= j; k++) instr[k] = 1; i = j + 1; continue }
+    }
+    i++
+  }
+}
 {
   rest = " " $0
+  base = 0
+  if (inblock) delete instr; else mask(rest)
   if (!inblock) {
     if (rest ~ /^[ \t]*--[ \t]/) { emit("note", substr(rest, index(rest, "--") + 2)); next }
     if (rest ~ /^[ \t]*\*([ \t]|$)/) { emit("doc", substr(rest, index(rest, "*") + 1)); next }
@@ -140,19 +162,29 @@ function emit(k, text) { if (text ~ /[^ \t]/) print NR "\t" k "\t" text }
       at = index(rest, closer)
       if (at == 0) { emit(kind, rest); next }
       emit(kind, substr(rest, 1, at - 1))
+      base += at + length(closer) - 1
       rest = substr(rest, at + length(closer))
       inblock = 0
       continue
     }
-    if (!match(rest, /[ \t{}();,](\/\/|\/\*|<!--|#([ \t]|$))/)) next
-    opener = substr(rest, RSTART + 1, RLENGTH - 1)
-    rest = substr(rest, RSTART + RLENGTH)
+    skip = 0
+    while (1) {
+      if (!match(substr(rest, skip + 1), /[ \t{}();,](\/\/|\/\*|<!--|#([ \t]|$))/)) next
+      rs = skip + RSTART
+      rl = RLENGTH
+      if (!instr[base + rs + 1]) break
+      skip = rs
+    }
+    opener = substr(rest, rs + 1, rl - 1)
+    base += rs + rl - 1
+    rest = substr(rest, rs + rl)
     if (opener == "//" || opener ~ /^#/) { emit("note", rest); next }
     closer = "*/"
     kind = "note"
     if (opener == "<!--") closer = "-->"
     else if (substr(rest, 1, 1) == "*" && substr(rest, 1, 2) != "*/") kind = "doc"
     inblock = 1
+    delete instr
   }
 }'
 COMMENT_RECORDS=$(printf '%s\n' "$CONTENT" | awk "$_COMMENT_AWK" 2>/dev/null || true)
@@ -211,12 +243,51 @@ take() {
 
 take "explicit not-implemented stub throw" \
   "$(printf '%s\n' "$CODE_RECORDS" | grep -iE 'throw new Error\(["'"'"'`]not implemented' 2>/dev/null | head -1 || true)"
-take "incomplete-work marker (TODO/FIXME/XXX/HACK/TBD)" \
-  "$(first_active "$COMMENT_RECORDS" -i '\b(TODO|FIXME|XXX|HACK|TBD)\b')"
-# Outside comments only the uppercase convention counts, and XXX not at all:
-# "Todo" is a type name and "XXX-XXX-XXXX" an input mask, but "TODO" is a stub.
-take "incomplete-work marker (TODO/FIXME/XXX/HACK/TBD)" \
-  "$(first_active "$CODE_RECORDS" -s '\b(TODO|FIXME|HACK|TBD)\b')"
+# The marker words are assembled from halves so this file never carries the
+# bare tokens it hunts for. Two kinds of occurrence are data, not unfinished
+# work, and are removed before the marker scan:
+#   - an id-shaped token: a marker joined by - or _ to an uppercase
+#     alphanumeric (a spec id such as CAWS-DEFECT-<marker>-SCAFFOLD-01, a
+#     ticket ref such as <marker>-123). A marker followed by lowercase prose
+#     ("<marker>-fix this"), or joined to lowercase text, still counts.
+#   - a quoted string literal in code: the marker is the value the code owns
+#     (scaffold text a CLI writes), not a stub it leaves behind. A string never
+#     closing on its line is left alone, so a stray quote hides nothing.
+_MK_COMMENT='TO''DO|FIX''ME|XX''X|HA''CK|TB''D'
+_MK_CODE='TO''DO|FIX''ME|HA''CK|TB''D'
+_STRIP_STRINGS_AWK='
+{
+  s = $0; n = length(s); out = ""; i = 1
+  while (i <= n) {
+    c = substr(s, i, 1)
+    if (c == "\"" || c == "\047" || c == "`") {
+      j = i + 1
+      while (j <= n) {
+        d = substr(s, j, 1)
+        if (d == "\\") { j += 2; continue }
+        if (d == c) break
+        j++
+      }
+      if (j <= n) { out = out c c; i = j + 1; continue }
+    }
+    out = out c
+    i++
+  }
+  print out
+}'
+strip_id_shaped() {
+  sed -E -e "s/[A-Z0-9][-_]($1)/ID/g" -e "s/($1)[-_][A-Z0-9]/ID/g"
+}
+COMMENT_SCAN=$(printf '%s\n' "$COMMENT_RECORDS" | strip_id_shaped "$_MK_COMMENT")
+CODE_SCAN=$(printf '%s\n' "$CONTENT" | awk "$_STRIP_STRINGS_AWK" | awk '{ print NR "\tcode\t" $0 }' | strip_id_shaped "$_MK_CODE")
+
+take "incomplete-work marker (TO""DO/FIX""ME/XX""X/HA""CK/TB""D)" \
+  "$(first_active "$COMMENT_SCAN" -i "\\b($_MK_COMMENT)\\b")"
+# Outside comments only the uppercase convention counts, and the triple-X marker
+# not at all: a type name or an input mask shares the word, but the uppercase form
+# in code is a stub.
+take "incomplete-work marker (TO""DO/FIX""ME/XX""X/HA""CK/TB""D)" \
+  "$(first_active "$CODE_SCAN" -s "\\b($_MK_CODE)\\b")"
 take "not-implemented / deferred-work language" \
   "$(first_active "$CODE_RECORDS" -i 'not implemented|implement later|coming soon')"
 take "placeholder used as stub language in a comment" "$(placeholder_hit)"

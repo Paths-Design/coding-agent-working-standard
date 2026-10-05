@@ -217,6 +217,46 @@ const todo = loadTasks(pattern);'
   assert_silent
 }
 
+# --- a marker that is an identifier or data, not unfinished work: silent ----
+#
+# The marker word is assembled at runtime ($T) so this suite never carries the
+# bare token it exercises.
+
+T="TO""DO"
+
+@test "shortcut-language: a spec id containing the marker in a comment is an identifier" {
+  scan Write /repo/src/specs.ts "// see CAWS-DEFECT-SPECS-CREATE-${T}-SCAFFOLD-01 for the scaffold contract"
+  assert_silent
+}
+
+@test "shortcut-language: id-shaped marker joins with a leading or trailing uppercase segment are identifiers" {
+  scan Write /repo/src/specs.ts "// tracked as ${T}-123 and ${T}_SCAFFOLD and SCAFFOLD-${T}.
+export const SCAFFOLD_${T}_LINE = buildLine();"
+  assert_silent
+}
+
+@test "shortcut-language: a double-quoted constant whose value starts with the marker is data" {
+  scan Write /repo/src/scaffold.ts "export const SCAFFOLD_LINE = \"${T}: describe the change\";"
+  assert_silent
+}
+
+@test "shortcut-language: single-quoted and template-literal constants holding the marker are data" {
+  scan Write /repo/src/scaffold.ts "const a = '${T}: fill in the title';
+const b = \`${T}: fill in \${name}\`;"
+  assert_silent
+}
+
+@test "shortcut-language: a scaffold string that embeds a hash comment holding the marker is data" {
+  scan Write /repo/src/scaffold.ts "const YAML_SCAFFOLD = 'name: x # ${T}: describe the scope';
+const URL_SCAFFOLD = \"a // ${T}: b\";"
+  assert_silent
+}
+
+@test "shortcut-language: a string with an escaped quote before the marker stays one literal" {
+  scan Write /repo/src/scaffold.ts "const s = \"say \\\\\"hi\\\\\" then ${T}\";"
+  assert_silent
+}
+
 # --- placeholder as stub language in a comment: strikes ---------------------
 
 @test "shortcut-language: a bare '// placeholder' comment strikes" {
@@ -313,9 +353,52 @@ const b = 2;
   assert_strike "$KW" "line 1" "// load the data TODO"
 }
 
-@test "shortcut-language: an uppercase TODO as a code value strikes" {
-  scan Write /repo/src/api.ts 'const label = "TODO";'
-  assert_strike "$KW" "line 1" 'const label = "TODO";'
+@test "shortcut-language: an uppercase marker used as a bare code value strikes" {
+  scan Write /repo/src/api.ts "const label = ${T};"
+  assert_strike "$KW" "line 1" "const label = ${T};"
+}
+
+@test "shortcut-language: a bare marker comment strikes even beside an id-shaped one" {
+  scan Write /repo/src/api.ts "// see CAWS-DEFECT-SPECS-CREATE-${T}-SCAFFOLD-01
+// ${T}: wire the real handler"
+  assert_strike "$KW" "line 2" "// ${T}: wire the real handler"
+}
+
+@test "shortcut-language: a marker followed by lowercase prose after a hyphen is not an id and strikes" {
+  scan Write /repo/src/api.ts "// ${T}-fix the handler"
+  assert_strike "$KW" "line 1" "// ${T}-fix the handler"
+}
+
+@test "shortcut-language: a marker joined to a lowercase word by a hyphen is not an id and strikes" {
+  scan Write /repo/src/api.ts "// fix-${T} later"
+  assert_strike "$KW" "line 1" "// fix-${T} later"
+}
+
+@test "shortcut-language: a trailing marker comment after a complete string literal strikes" {
+  scan Write /repo/src/api.ts "const a = 'ok'; // ${T}: replace the literal"
+  assert_strike "$KW" "line 1" "const a = 'ok'; // ${T}: replace the literal"
+}
+
+@test "shortcut-language: a bare marker after a string literal on the same code line strikes" {
+  scan Write /repo/src/api.ts "const a = \"ok\"; const b = ${T};"
+  assert_strike "$KW" "line 1" "const a = \"ok\"; const b = ${T};"
+}
+
+@test "shortcut-language: a marker after an unterminated string quote still strikes" {
+  scan Write /repo/src/api.ts "const a = \"unterminated ${T}"
+  assert_strike "$KW" "line 1" "const a = \"unterminated ${T}"
+}
+
+@test "shortcut-language: a stray apostrophe before a line comment does not hide the marker" {
+  scan Write /repo/src/deploy.sh "echo don't panic; # ${T}: handle failure"
+  assert_strike "$KW" "line 1" "echo don't panic; # ${T}: handle failure"
+}
+
+@test "shortcut-language: a single-quoted not-implemented throw still strikes" {
+  scan Write /repo/src/api.ts "export function save() {
+  throw new Error('not implemented');
+}"
+  assert_strike "$THROW" "line 2" "throw new Error('not implemented');"
 }
 
 @test "shortcut-language: a not-implemented throw reports the throw class" {
