@@ -43,3 +43,11 @@ contracts:
   - name: 'gate-change-basis'
     type: contract-test
     path: 'packages/caws-cli/tests/kernel/unit/policy-derive-budget.test.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "from inside the lane with an empty canonical index: 35 files / 1750 lines vs tier goals 30/1500 -> 'OVER budget_limit (mode=warn, 2 violations) [advisory - never blocks]', exit 0, change_basis branch_and_staged files_evaluated 35 base_ref main; a staged-index evaluator mutant fails it; under-budget control passes"
+    recorded_at: "2026-10-05T06:33:45.802Z"
+    test_nodeid: "packages/caws-cli/tests/shell/gates-change-basis-budget.test.js::a worktree branch whose committed work exceeds the budget reports an advisory overage measured from its base, not a PASS from the canonical index"
+    commit_sha: "6141a61d1ae4348e362d6fa8c3ab26d2b4d0815f"
+    test_verified_at: "6141a61d1ae4348e362d6fa8c3ab26d2b4d0815f"
