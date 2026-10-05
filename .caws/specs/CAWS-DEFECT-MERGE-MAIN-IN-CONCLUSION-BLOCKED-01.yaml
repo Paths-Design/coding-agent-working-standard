@@ -1,9 +1,10 @@
 id: CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01
 title: 'A conflicted merge of base into a lane cannot be concluded: two guards treat incoming base changes as authored, and their pathspec remedy fails mid-merge'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: hp-merge-main-in
 created_at: '2026-10-05T03:50:13.205Z'
-updated_at: '2026-10-05T03:50:13.205Z'
+updated_at: '2026-10-05T07:22:27.063Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
