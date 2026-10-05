@@ -2,9 +2,11 @@ id: QUALITY-GATES-PACKAGE-REMOVE-001
 title: 'Remove deprecated quality-gates batch scanner package'
 risk_tier: 3
 mode: chore
-lifecycle_state: draft
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge h-qg-orphans at 72046136d6143606aee2c71469889b40c17f3b95'
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-29T00:30:00.000Z'
+updated_at: '2026-10-05T06:11:59.428Z'
 blast_radius:
   modules:
     - 'packages/quality-gates'
@@ -32,6 +34,7 @@ scope:
     - .caws/duplication-exceptions.yaml
     - .caws/refactor-baselines.yaml
     - .caws/refactor-targets.yaml
+    - packages/caws-cli/tests/ci/quality-gates-removed.test.js
   out:
     - packages/caws-cli/templates/hook-packs
     - packages/caws-cli/src/shell/commands/gates.ts
@@ -64,7 +67,7 @@ acceptance:
     when: 'They are read.'
     then: 'They point users to hook-pack safety checks and caws evidence/doctor surfaces; no doc still recommends running caws-quality-gates as a current tool.'
   - id: A6
-    given: 'Any past consumer that pinned @paths.design/caws-quality-gates@2.x.'
+    given: 'Any past consumer that pinned @paths.design/quality-gates@2.x (bin caws-quality-gates).'
     when: 'They install that version from npm.'
     then: 'The installation still works as it did before this slice; this slice does not touch the registry.'
   - id: A7
@@ -128,3 +131,51 @@ contracts: []
 # was. The npm package remains on the registry for archaeological consumers.
 # Either deletion or archive satisfies A1; the implementer chooses based on
 # whether any internal tool still imports the source.
+evidence:
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "registry untouched: npm view @paths.design/quality-gates on 2026-10-05 lists 1.0.1-1.0.4, 2.0.0, 2.1.0, dist-tag latest=2.1.0, not deprecated, bin caws-quality-gates -> run-quality-gates.mjs. No repo test can prove a registry property; commit citation only"
+    recorded_at: "2026-10-05T06:09:04.657Z"
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "package deleted in 7901223e; no tracked file under packages/quality-gates"
+    recorded_at: "2026-10-05T06:09:48.791Z"
+    test_nodeid: "packages/caws-cli/tests/ci/quality-gates-removed.test.js::packages/quality-gates is not a workspace package"
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+    test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "root and packages/*/package.json parsed: no caws-quality-gates bin, no @paths.design/quality-gates dependency, no quality-gates workspace"
+    recorded_at: "2026-10-05T06:10:00.098Z"
+    test_nodeid: "packages/caws-cli/tests/ci/quality-gates-removed.test.js::no manifest declares the caws-quality-gates bin or depends on the removed package"
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+    test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "package-lock.json packages{} has no quality-gates entry"
+    recorded_at: "2026-10-05T06:10:07.792Z"
+    test_nodeid: "packages/caws-cli/tests/ci/quality-gates-removed.test.js::the lockfile installs no copy of the removed package"
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+    test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+  - criterion_id: A4
+    status: pass
+    evidence_ref: ".github/workflows: no run-quality-gates or caws-quality-gates"
+    recorded_at: "2026-10-05T06:10:25.092Z"
+    test_nodeid: "packages/caws-cli/tests/ci/quality-gates-removed.test.js::no CI workflow invokes the removed runner or bin"
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+    test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "docs/guides, README.md, AGENTS.md, caws-cli README: no mention; the scan is anchored on docs/guides/hook-packs.md, where users are sent"
+    recorded_at: "2026-10-05T06:10:47.006Z"
+    test_nodeid: "packages/caws-cli/tests/ci/quality-gates-removed.test.js::no guide or agent entry point presents caws-quality-gates as a current tool"
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+    test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "five configs deleted in this commit; reader scan over shipped src, templates, scripts, .caws/hooks, .husky, .github finds none, with policy.yaml as positive control (a policy.yaml mutant listed 50 real readers)"
+    recorded_at: "2026-10-05T06:11:12.738Z"
+    test_nodeid: packages/caws-cli/tests/ci/quality-gates-removed.test.js
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+    test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac

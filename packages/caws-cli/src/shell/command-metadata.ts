@@ -961,7 +961,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       name: 'merge',
       argument: { name: 'name', required: true, description: 'Worktree name' },
       description:
-        'Merge a worktree branch into its base. Auto-closes the bound spec via caws specs close.',
+        'Merge a worktree branch into its base. Auto-closes the bound spec via caws specs close. Refuses on lane provenance when the branch carries a commit touching a path outside the spec scope; the remedy is `caws specs amend-scope <spec> --add-support <path>`, and the refusal names that command for each offending path.',
       options: [
         {
           flag: '--dry-run',
@@ -2045,7 +2045,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'reprieve',
   description:
-    'Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.',
+    'Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array. A reprieve covers hook guards only and does not change `caws worktree merge` readiness: a lane-provenance merge refusal is remedied with `caws specs amend-scope <spec> --add-support <path>`.',
   subcommands: [
     {
       kind: 'leaf',

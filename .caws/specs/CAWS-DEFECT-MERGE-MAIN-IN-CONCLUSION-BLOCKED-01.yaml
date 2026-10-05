@@ -36,6 +36,9 @@ acceptance:
   - id: A4
     given: 'the Guard 2 refusal text'
     when: 'rendered'
-    then: 'it presents caws waiver create as a remedy only if waivers remain a supported surface'
+    then: >-
+      it does not present caws waiver create as a remedy: a waiver never cleared
+      this commit-shape guard, and the waiver surface is being removed
+      (CAWS-WAIVER-SURFACE-REMOVAL-001)
 non_functional: {}
 contracts: []

@@ -2,10 +2,11 @@ id: CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01
 title: 'Waiver create notice and waiver/reprieve help route every non-gates-run block to reprieve, omitting the merge-time lane-provenance surface whose remedy is --add-support'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-merge-provenance-routing
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-merge-provenance-routing at ebfccbc99847c2335aac7ee87d5beb93bbd096d7'
 created_at: '2026-09-01T22:19:12.252Z'
-updated_at: '2026-09-01T23:03:35.159Z'
+updated_at: '2026-10-05T06:29:17.463Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/waiver.ts'
@@ -27,8 +28,8 @@ scope:
 invariants:
   - 'The operator-facing copy must not present the enforcement surfaces as an exhaustive taxonomy of any size. What the shipped copy currently ships is not a missing exception but an ONTOLOGY delivered through help text: hook-dispatch-time exception maps to reprieve, gate-policy-run-time exception maps to waiver, presented as a clean partition. verifyLaneProvenance falsifies it, because enforcement mechanism, lifecycle point, and remediation authority are at least partially INDEPENDENT coordinates - it is neither the gates-run waiver consumer nor a PreToolUse hook, and its remedy changes lane support standing rather than suppressing an evaluator. Replacing a two-term claim with a three-term claim would recreate the same closed-world error one level later.'
   - 'The remedy named for a merge-time lane-provenance refusal is caws specs amend-scope <spec> --add-support <path>. A waiver and a reprieve both leave that refusal unchanged, so the copy must not route the operator to either for this class.'
-  - 'Authority boundaries stay separate. Adding a scope.support entry must not lift a PreToolUse hook refusal, and granting a reprieve must not change merge readiness. The repair must not blur the distinctions CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01 was written to draw.'
   - 'NOT a waiver change. Waiver removal belongs to CAWS-WAIVER-SURFACE-REMOVAL-001; this slice repairs only the operator routing for the merge-time lane-provenance refusal and changes no enforcement behavior. verifyLaneProvenance keeps ignoring reprieves, and hooks keep ignoring scope.support.'
+  - 'Authority boundaries stay separate. scope.support is a scope-standing grant: it admits a path through the scope check (the kernel evaluate step and scope-guard.sh, which delegates to caws scope check) by design, and lifts no other PreToolUse guard, such as protected-paths.sh. Granting a reprieve never changes merge readiness. The repair must not blur these distinctions.'
 acceptance:
   - id: A2
     given: 'a session blocked by a real PreToolUse hook guard'
@@ -66,3 +67,39 @@ acceptance:
     then: 'the hook refusal is UNCHANGED, because scope.support does not lift a hook guard. This is a NON-INTERFERENCE control, not a remediation test: if scope.support ever became consulted by hook machinery, A4 could stay green while the authority boundaries had silently fused, which is the successful-but-architecturally-wrong repair this criterion exists to catch'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "real protected-paths.sh through the --system dispatcher: exit 2 BLOCKED before; exit 0 '[reprieve] protected-paths.sh skipped for session sess-hook-a' after grant; a different session still blocked"
+    recorded_at: "2026-10-05T06:25:03.494Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::A2: a real PreToolUse guard refuses, is skipped after caws reprieve grant for that session, and still refuses another session"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "refusal now carries 'remedy: admit the path(s) with caws specs amend-scope <spec> --add-support foreign.txt' and the repair line leads with it; neither caws reprieve nor caws waiver appears; reverting the wiring leaves only generic diagnostics (4 A3 tests fail)"
+    recorded_at: "2026-10-05T06:25:33.218Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::the real merge refusal names amend-scope --add-support for the offending path"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "one fixture: checkpoint exit1/not-ready; after reprieve exit1/not-ready (dry-run text byte-identical); reset with reprieve revoked and spec bytes identical; after --add-support exit0/ready with scope.support [foreign.txt]"
+    recorded_at: "2026-10-05T06:26:07.781Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::one fixture, reset to a common checkpoint between arms"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "sentence-level census over command-metadata.ts, packages/caws-cli/README.md, docs/api/cli.md, docs/command-reference.md, waiver.ts; asserts >=4 provenance sentences found; rendered worktree merge and reprieve --help name --add-support (sibling tests)"
+    recorded_at: "2026-10-05T06:26:54.178Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::no sentence on any surface that discusses a lane-provenance refusal points at a waiver or a reprieve grant"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "non-scope guard boundary: protected-paths.sh stdout/stderr byte-identical before and after the support entry landed (read back from the spec); scope-guard admits support by design per the amended invariant"
+    recorded_at: "2026-10-05T06:28:20.165Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::A6: adding the blocked path to scope.support leaves the hook refusal byte-identical"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
