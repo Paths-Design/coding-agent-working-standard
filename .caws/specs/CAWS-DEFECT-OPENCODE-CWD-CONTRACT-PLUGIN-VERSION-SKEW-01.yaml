@@ -1,0 +1,40 @@
+id: CAWS-DEFECT-OPENCODE-CWD-CONTRACT-PLUGIN-VERSION-SKEW-01
+title: 'RELEASE-BLOCKING: refreshing the shared guards without the opencode plugin makes opencode refuse every relative Bash write; the fail-closed cwd rule keys on a plugin version the shared pack cannot see'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T13:05:59.364Z'
+updated_at: '2026-10-05T13:05:59.364Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'shared hook pack bash-write-guard.sh cwd-contract gate; opencode vendor plugin payload; init plan output for cross-pack dependencies'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/opencode/plugin.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-opencode.ts'
+    - 'packages/caws-cli/tests/init'
+    - 'packages/caws-cli/tests/hooks'
+    - 'docs/architecture/hook-pack-shared-core.md'
+  out: []
+invariants:
+  - 'For a surface whose hook payload is built by a CAWS-shipped adapter rather than the harness (opencode), the cwd fail-closed rule applies only when the payload itself declares the adapter sends cwd; the surface name alone is not evidence, because the shared pack and the adapter version independently.'
+  - 'No supported combination of installed shared-pack and adapter versions refuses every relative write on a surface; version skew degrades to the prior behavior, never to total refusal.'
+acceptance:
+  - id: A1
+    given: 'this repo on 2026-10-05 with the installed opencode plugin at pack 5 (no cwd in its payload; 0 matches for payload.cwd/resolveAgentCwd) and a shared bash-write-guard refreshed to 95, which a qwen-code-surface ''caws init --overwrite <shared paths> --force'' does without listing .opencode/plugins/caws.ts'
+    when: 'opencode runs a relative Bash write'
+    then: 'it is not refused as cwd-unresolved (prior behavior)'
+  - id: A2
+    given: 'the current opencode plugin with an unknown directory (cwd omitted) and the payload''s contract marker present'
+    when: 'a relative Bash write is adjudicated'
+    then: 'it still fails closed, so the fix does not reopen the wrong-root class'
+  - id: A3
+    given: 'an init plan or apply that refreshes shared-pack files while an older opencode adapter is installed'
+    when: 'rendered'
+    then: 'it names the opencode plugin as a co-dependent path to refresh in the same operation'
+non_functional: {}
+contracts: []
