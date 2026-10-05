@@ -47,3 +47,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/guard-copy-no-waiver-for-hook-blocks.test.js::names the human-granted reprieve and says a waiver does not lift a hook"
     commit_sha: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
     test_verified_at: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "classify_command.py policy.yaml deny text names Edit under an active spec, no waiver; shared pack 93"
+    recorded_at: "2026-10-05T08:04:09.052Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_classify_command.py::TestDenyClass::test_naked_rm_mv_on_policy_yaml_names_the_spec_path_and_no_waiver"
+    commit_sha: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
+    test_verified_at: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
