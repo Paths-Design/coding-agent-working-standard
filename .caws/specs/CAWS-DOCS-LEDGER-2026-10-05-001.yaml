@@ -45,3 +45,10 @@ acceptance:
     then: 'it states the caller-identity precedence (harness payload id over a disagreeing CAWS_SESSION_ID inside a harness session) and why'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "failure-lineage Entry 44: five dead-end remedies, root cause (remedy is a claim nothing falsified), doctrine: run the remedy literally in the refusing fixture"
+    recorded_at: "2026-10-05T08:24:25.999Z"
+    artifact_path: docs/failure-lineage.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
