@@ -100,3 +100,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
     commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
     test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Built binary at 6090be30. agents list --stale-ttl-ms abc, agents show --stale-ttl-ms -1, message status --older-than-ms 1.5 and agents prune --older-than-ms abc each exit 1 with '<flag>-ms must be a non-negative integer' (before: agents list/show and message status dropped a non-finite value and used the default; agents prune accepted negatives and fractions). Valid --older-than-ms 86400000 still selects the 48h-old stopped lease, so the -ms form keeps its meaning."
+    recorded_at: "2026-10-05T00:22:55.868Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
