@@ -24,3 +24,10 @@ acceptance:
     then: 'it states the idle-SSH-connection mechanism at correlation strength, gives the keepalive invocation, and keeps ''compare ls-remote with rev-parse'' as the proof'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "full-guide.md 'Commit and push traps': idle-SSH SIGPIPE mechanism at correlation strength, keepalive invocation, ls-remote vs rev-parse as proof; trial 2026-10-05 plain push exit 141 remote cfcff17e unchanged, keepalive push cfcff17e..0a3382c9"
+    recorded_at: "2026-10-05T08:57:20.737Z"
+    artifact_path: docs/agents/full-guide.md
+    commit_sha: "59f84edac15ab7cdfbed88562eeb0962fec8f9d0"
