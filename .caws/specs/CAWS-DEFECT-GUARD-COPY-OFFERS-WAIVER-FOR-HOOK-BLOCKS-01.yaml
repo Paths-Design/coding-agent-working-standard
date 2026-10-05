@@ -1,10 +1,11 @@
 id: CAWS-DEFECT-GUARD-COPY-OFFERS-WAIVER-FOR-HOOK-BLOCKS-01
 title: 'Shipped guard and pack copy tells a blocked agent a waiver will clear a hook, scope or policy block; waivers only filter caws gates run'
 mode: fix
-lifecycle_state: active
-worktree: hp-guard-copy-waiver
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hp-guard-copy-waiver at d8c64730375a60e4837c4382a984150f1bc31e47'
 created_at: '2026-10-05T06:32:31.872Z'
-updated_at: '2026-10-05T07:22:33.777Z'
+updated_at: '2026-10-05T08:04:57.056Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
