@@ -821,7 +821,10 @@ export function amendSpecBody(
   let resetEvidence: Array<{ criterion_id: string; previous_status: EvidenceStatus }> = [];
   let removedEvidence: Array<{ criterion_id: string; previous_status: EvidenceStatus }> = [];
   if (acPlan !== null) {
-    const block = locateAcceptanceBlock(originalBytes.split('\n'));
+    // Locate against the CURRENT lines: the module/invariant patches above may
+    // have added or removed lines, so offsets from the original bytes would
+    // splice the acceptance edit at the wrong place in a combined call.
+    const block = locateAcceptanceBlock(lines);
     if (block === null) {
       return err(
         storeDiagnostic(

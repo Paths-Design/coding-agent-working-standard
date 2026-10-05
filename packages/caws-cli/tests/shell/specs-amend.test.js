@@ -451,3 +451,53 @@ describe('acceptance-criteria flags reach the writer through the CLI hop (CAWS-S
     expect(validate.stdout).toContain('is valid');
   });
 });
+
+describe('combined invariant and acceptance edits in one amend call', () => {
+  const AC = { addAc: 'A3', given: 'a draft', when: 'amend runs', then: 'A3 is appended' };
+
+  test('one combined call yields the same spec as the invariant edits and --add-ac run as two calls', () => {
+    const combined = setupRepo('AMEND-COMBO-001', 'draft', ['m1'], ['keep', 'drop']);
+    const sequential = setupRepo('AMEND-COMBO-001', 'draft', ['m1'], ['keep', 'drop']);
+    const invariantEdits = { removeInvariant: ['drop'], addInvariant: ['new one', 'new two'] };
+
+    const one = runAmend(combined.root, 'AMEND-COMBO-001', { ...invariantEdits, ...AC });
+    expect(one.err).not.toContain('plan_rejected');
+    expect(one.code).toBe(0);
+
+    expect(runAmend(sequential.root, 'AMEND-COMBO-001', invariantEdits).code).toBe(0);
+    expect(runAmend(sequential.root, 'AMEND-COMBO-001', AC).code).toBe(0);
+
+    const combinedYaml = fs.readFileSync(combined.specPath, 'utf8');
+    expect(combinedYaml).toBe(fs.readFileSync(sequential.specPath, 'utf8'));
+    expect(combinedYaml.match(/^acceptance:/gm)).toHaveLength(1);
+    expect(combinedYaml.match(/^invariants:/gm)).toHaveLength(1);
+    expect(combinedYaml).toContain("  - id: A3\n    given: 'a draft'");
+    expect(combinedYaml).toContain("  - 'new two'");
+    expect(combinedYaml).not.toContain("'drop'");
+  });
+
+  test('the 2026-10-04 shape (remove one invariant, add a long folded one, add-ac) does not fail with duplicated mapping key', () => {
+    const longInvariant =
+      'Every adapter stop-block decision is bounded by an explicit retry budget so that a stuck session can never be blocked forever by the guard';
+    const { root, specPath } = setupRepo(
+      'AMEND-COMBO-002',
+      'draft',
+      ['m1'],
+      ['old invariant', 'second']
+    );
+
+    const result = runAmend(root, 'AMEND-COMBO-002', {
+      removeInvariant: ['old invariant'],
+      addInvariant: [longInvariant],
+      ...AC,
+    });
+
+    expect(result.err).not.toContain('duplicated mapping key');
+    expect(result.err).not.toContain('plan_rejected');
+    expect(result.code).toBe(0);
+    const yaml = fs.readFileSync(specPath, 'utf8');
+    expect(yaml.match(/^acceptance:/gm)).toHaveLength(1);
+    expect(yaml).toContain('  - id: A3');
+    expect(yaml).not.toContain('old invariant');
+  });
+});
