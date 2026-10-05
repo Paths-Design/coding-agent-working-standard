@@ -62,3 +62,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/merge-main-in-conclusion.test.js::an authored policy.yaml edit that matches neither parent is still refused, naming the path"
     commit_sha: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
     test_verified_at: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "agent pipeline: each remedy step admitted by classify_command mid-merge and executed in a real merge (diff listing -> restore --staged -> bare commit concludes -> pathspec commit after merge); also Guard 2 literal-remedy jest test and 3 block-dangerous.bats mid-merge cases; break check (restore admission off) failed 4"
+    recorded_at: "2026-10-05T09:07:11.257Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_classify_command.py::TestConcludingMergeOfBase::test_the_whole_commit_deletions_remedy_is_admitted_and_completes_A3"
+    commit_sha: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
+    test_verified_at: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
