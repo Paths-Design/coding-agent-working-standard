@@ -1,0 +1,40 @@
+id: CAWS-DOCS-DEAD-REFERENCES-FOLLOWUP-01
+title: 'Remaining dead references found by the docs lane: smoke-tests release-check.mjs, release.yml kernel wording, orphan COMMIT_CONVENTIONS template, --older-than-ms in agent-heartbeat escalation'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-05T07:18:20.003Z'
+updated_at: '2026-10-05T07:18:20.003Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'release scripts and workflow wording, unshipped template, heartbeat escalation copy'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/smoke-tests.mjs'
+    - '.github/workflows/release.yml'
+    - 'packages/caws-cli/templates/COMMIT_CONVENTIONS.md'
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh'
+  out: []
+invariants:
+  - 'Each finding is re-verified against the live tree before it is changed; a template is removed only after proving no reader.'
+acceptance:
+  - id: A1
+    given: 'scripts/smoke-tests.mjs runs scripts/release-check.mjs, which is not tracked'
+    when: 'fixed'
+    then: 'the smoke run exits 0 or the step names a script that exists'
+  - id: A2
+    given: '.github/workflows/release.yml:64 calls the kernel CI publish deferred while the kernel ships inside caws-cli'
+    when: 'fixed'
+    then: 'it says there is no separate kernel publish'
+  - id: A3
+    given: 'templates/COMMIT_CONVENTIONS.md has no reader beyond prose and a corpus fixture'
+    when: 'no reader is proven'
+    then: 'it is removed'
+  - id: A4
+    given: 'agent-heartbeat.sh:311 escalation names --older-than-ms 3600000'
+    when: 'fixed (with a shared pack bump)'
+    then: 'it names --older-than 1h'
+non_functional: {}
+contracts: []
