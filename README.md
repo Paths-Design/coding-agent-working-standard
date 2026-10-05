@@ -165,7 +165,7 @@ from `scope.in`/`scope.out`; ownership lives in `.caws/worktrees.json`.
 
 ```bash
 # One spec + one worktree per agent (loop this per agent; there is no
-# `caws parallel setup` — that surface is deferred to v11.3+)
+# `caws parallel setup`; it does not exist and is not planned)
 # Declare the boundary this change must preserve.
 caws specs create FEAT-AUTH-001 --title "Auth" --mode feature \
   --contract "auth-api:behavior"

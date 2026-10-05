@@ -87,7 +87,7 @@ Cross-cutting or architectural → multiple specs with non-overlapping `scope.in
 
 - [ ] Minimal failing test reproduces bug
 - [ ] Root cause noted; guard test added
-- [ ] Risk tier confirmed; scope confined to `scope.in`
+- [ ] Scope confined to `scope.in`
 
 ---
 

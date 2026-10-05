@@ -228,8 +228,8 @@ When multiple agents work on the same project, each agent **must** work in its
 own git worktree. CAWS's model is to **partition authority, not add channels
 between agents**: one spec + one bound worktree per agent, scope enforced from
 `scope.in`/`scope.out`, ownership in `.caws/worktrees.json`. There is no
-`caws parallel setup` (deferred to v11.3+) — loop `caws worktree create` per
-spec.
+`caws parallel setup`; it does not exist and is not planned. Loop
+`caws worktree create <name> --spec <id>` per spec.
 
 ```bash
 # Create an isolated worktree bound to your spec (writes the binding atomically,

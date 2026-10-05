@@ -9,7 +9,7 @@
  * V1 scope:
  *   - ACCEPTS: caws-cli-vX.Y.Z
  *   - REFUSES: bare v* tags (no legacy publish path)
- *   - REFUSES: caws-kernel-v* tags (kernel CI publish is a follow-up slice)
+ *   - REFUSES: caws-kernel-v* tags (the kernel is absorbed into caws-cli; no separate package)
  *
  * Asymmetric failure invariant:
  *   - Pre-publish failure (validation, build, smoke): delete the pushed tag
@@ -81,7 +81,7 @@ const REFUSED_TAG_PREFIXES = [
   {
     prefix: 'caws-kernel-v',
     reason:
-      'kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/release-procedure.md',
+      'the kernel is absorbed into caws-cli and ships inside its tarball, so there is no separate caws-kernel package to publish; see docs/release-procedure.md (The absorbed kernel)',
   },
 ];
 
@@ -458,9 +458,9 @@ function main() {
   //
   // Refused tags that matched a release trigger pattern are DELETED. Leaving
   // a refused tag in place creates "tag exists, package does not" state —
-  // the same ambiguity class this slice removes. A future kernel CI publish
-  // path can introduce caws-kernel-v* as accepted; until then the prefix is
-  // RESERVED, not valid.
+  // the same ambiguity class this slice removes. The kernel ships inside the
+  // caws-cli tarball, so the caws-kernel-v* prefix has nothing to publish and
+  // is refused.
   // ---------------------------------------------------------------------------
   const parsed = parseTag(tag);
   if (!parsed.ok) {

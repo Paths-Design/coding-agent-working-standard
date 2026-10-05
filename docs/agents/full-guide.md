@@ -61,7 +61,9 @@ When you encounter a CAWS project, follow this sequence:
 
 1. **Find your spec**: Look for `.caws/specs/<id>.yaml` for your feature.
 2. **Understand the scope**: Read `scope.in` and `scope.out` for the boundaries.
-3. **Check risk tier**: T1 (critical), T2 (standard), T3 (low risk).
+3. **Read the requirements**: the spec's `mode`, contracts and `non_functional`
+   requirements. New specs carry no risk tier; an older spec may still carry a
+   legacy `risk_tier` field, which stays readable.
 4. **Review acceptance criteria**: These are your implementation targets
    (Given/When/Then).
 5. **Verify project health**: Run `caws doctor` and `caws status`.
@@ -80,22 +82,19 @@ When you encounter a CAWS project, follow this sequence:
 
 ## Core Concepts
 
-### Risk Tiers - Your Quality Contract
+### Requirements - Your Quality Contract
 
-Risk tiers drive rigor and determine quality gates:
-
-| Tier   | Use Case                    | Coverage | Mutation | Contracts | Review   |
-| ------ | --------------------------- | -------- | -------- | --------- | -------- |
-| **T1** | Auth, billing, migrations   | 90%+     | 70%+     | Required  | Manual   |
-| **T2** | Features, APIs, data writes | 80%+     | 50%+     | Required  | Optional |
-| **T3** | UI, internal tools          | 70%+     | 30%+     | Optional  | Optional |
+New specs do not select, infer or inherit a risk tier. The spec's contracts and
+`non_functional` requirements (`accessibility`, `performance`, `reliability`,
+`security`) describe the rigor the work needs. Older specs may still carry a
+`risk_tier`; it stays readable, and the `risk_tiers` sizing goal in policy
+(checked by `budget_limit`) is advisory, never a cap.
 
 **As an agent, you must:**
 
-- Infer and declare the tier in your plan
-- Meet or exceed tier requirements
+- Meet the contracts and `non_functional` requirements the spec declares
 - Request human review for security-sensitive or irreversible changes
-- Never downgrade a tier without human approval
+- Never weaken a declared requirement without human approval
 
 ### Key Invariants (Never Violate These)
 
@@ -1192,7 +1191,7 @@ in this repo's own `.caws/specs/` or the kernel schema at
 Before starting any work:
 
 - [ ] feature spec exists and validates
-- [ ] Risk tier is appropriate
+- [ ] Contracts and `non_functional` requirements describe the work
 - [ ] Acceptance criteria are clear
 - [ ] Scope boundaries are defined
 - [ ] Test plan is documented

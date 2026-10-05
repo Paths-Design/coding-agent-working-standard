@@ -48,20 +48,20 @@ function main() {
       desc: 'CLI help command',
     },
     {
-      cmd: 'node packages/caws-cli/dist/index.js validate --help',
-      desc: 'CLI validate command',
+      cmd: 'node packages/caws-cli/dist/index.js specs validate --help',
+      desc: 'CLI specs validate command',
     },
     {
       cmd: 'node packages/caws-cli/dist/index.js status --help',
       desc: 'CLI status command',
     },
     {
-      cmd: 'node packages/caws-cli/dist/index.js waivers --help',
-      desc: 'CLI waivers command',
+      cmd: 'node packages/caws-cli/dist/index.js waiver --help',
+      desc: 'CLI waiver command',
     },
     {
-      cmd: 'node packages/caws-cli/dist/index.js waivers list',
-      desc: 'CLI waivers list',
+      cmd: 'node packages/caws-cli/dist/index.js waiver list',
+      desc: 'CLI waiver list',
     },
     {
       cmd: 'node scripts/release-check.mjs',
