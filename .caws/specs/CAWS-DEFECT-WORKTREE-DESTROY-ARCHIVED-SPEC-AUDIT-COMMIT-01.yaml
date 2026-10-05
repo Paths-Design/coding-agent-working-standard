@@ -8,8 +8,8 @@ created_at: '2026-08-15T17:51:59.734Z'
 updated_at: '2026-10-05T03:35:09.014Z'
 blast_radius:
   modules:
-    - packages/caws-cli/src/store/git-autocommit.ts (vanished-path handling in the trackable filter)
-    - packages/caws-cli/src/store/worktrees-writer.ts (destroy transition audit path set)
+    - 'packages/caws-cli/src/store/git-autocommit.ts (vanished-path handling in the trackable filter)'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts (destroy transition audit path set)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -25,13 +25,6 @@ scope:
       composition and autoCommit's tolerance for vanished paths change.
 invariants:
   - >-
-    autoCommit never feeds `git add` a path that does not exist on disk. A
-    vanished path (moved, archived, or deleted by an earlier transition) is
-    dropped from the trackable set exactly like an intentionally-gitignored
-    path, because `git add -- <nonexistent>` fails fatally and converts an
-    otherwise-clean transition into a refused_dirty "NOT committed" surface.
-    Vanished is filtered by existence, never force-added or recreated.
-  - >-
     A destroy of a worktree whose bound spec is ARCHIVED
     (.caws/specs/.archive/<id>.yaml) composes its audit set from paths that
     actually changed in THIS transition: the registry entry
@@ -39,6 +32,7 @@ invariants:
     spec YAML is included only at its real .archive/ path and only if the
     destroy mutated it. When nothing tracked changed, destroy reports the
     clean committed no-op (kind committed, sha '') — never a failure.
+  - 'autoCommit never feeds `git add` an UNTRACKED path that does not exist on disk: it is dropped exactly like a gitignored path, because `git add -- <nonexistent untracked>` fails fatally and turns a clean transition into refused_dirty. A path still TRACKED in the index but absent on disk is a deletion or move the transition itself made (archive, retire, restore), so it stays in the set and git add stages the removal. Vanished paths are never force-added or recreated.'
 acceptance:
   - id: A1
     given: >-
