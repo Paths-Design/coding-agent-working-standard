@@ -49,3 +49,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/specs-archive-batch.test.js::A1: a stale-shadow failure prints the --replace remedy under its failed line"
     commit_sha: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
     test_verified_at: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "--json failed[0].narrowRepair carries the --replace command"
+    recorded_at: "2026-10-05T05:30:54.942Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-archive-batch.test.js::A2: --json failed entry carries narrowRepair as a field"
+    commit_sha: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
+    test_verified_at: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
