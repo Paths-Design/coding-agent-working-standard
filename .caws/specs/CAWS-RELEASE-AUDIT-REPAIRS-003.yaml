@@ -83,11 +83,11 @@ evidence:
     test_verified_at: a6c9c5df6e84a3e16bcfb6e06547b92b2a4e2c62
   - criterion_id: A1
     status: pass
-    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/audit-routing.json; mutation-inventory.log; entrypoint-final.log. Actual npm root routing preserves exits 0 and 17; all 160 sources classified once; fresh source-only installed entrypoint builds and executes. Parameter-expanded citation was refused without writes; this stable workflow test is re-derived and routing runtime receipts were inspected separately."
-    recorded_at: "2026-10-04T01:07:07.946Z"
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:24:25.159Z"
     test_nodeid: "packages/caws-cli/tests/ci/release-hardening.test.js::release qualification requires the same dependency audit as PR CI"
-    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
-    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
   - criterion_id: A4
     status: pass
     evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/bootstrap-final.log: 18 installed-bootstrap and activation-race checks pass. scenarios/installed-invocation-*.json retain seven actual malformed-input usage refusals (exit 2). Selected test re-derives PreToolUse=2/block and Stop=0 on bootstrap failure. Packaged bootstrap boundary passed in qualification-final.json; that overall run failed later on a separate 60-second hook timeout."
