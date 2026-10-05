@@ -71,3 +71,8 @@ evidence:
     test_nodeid: packages/caws-cli/tests/shell/message-retention-prune.test.js
     commit_sha: "7bacc170b59919da193cd3e6e567aa40d62ebfdd"
     test_verified_at: "7bacc170b59919da193cd3e6e567aa40d62ebfdd"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "full caws-cli jest (2 projects) on main@e2906cca with harness env intact (CLAUDE_CODE_SESSION_ID set): 286/286 suites, 3855/3855 tests, 0 'rooted in another repository' refusals; verdict sha256 215a2f31e7ca03313d116610716a978ad56fa2ce36995a5faf1b2b49e6a8f4ba"
+    recorded_at: "2026-10-05T09:28:53.484Z"
+    commit_sha: e2906cca86f37f48a98e79f883c0fd4cce17103e
