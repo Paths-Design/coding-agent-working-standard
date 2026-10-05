@@ -140,7 +140,7 @@ caws worktree bind <name> --spec <id>
 
 1. Run `caws scope show <path>` (positional `<path>` is required in v11)
 2. If union mode: `caws worktree bind <name> --spec <id>`
-3. If authoritative but blocked: update your spec's `scope.in`, or request a waiver via `caws waiver create`
+3. If authoritative but blocked: widen your spec's scope with `caws specs amend-scope <id> --add <path>`, or stop and ask the user (a waiver does not lift a scope block)
 4. Do NOT edit another spec's `scope.out` to unblock yourself
 
 ## Multi-Agent Claims

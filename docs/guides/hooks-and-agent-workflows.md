@@ -350,7 +350,7 @@ caws scope check <target-file>
 
 3. **Implement changes**
 - Author tests first, then implementation.
-- Use appropriate risk tier and quality standards from your spec.
+- Meet the contracts and `non_functional` requirements declared in your spec.
 - Run project test suite locally as usual.
 
 4. **Quality gates**

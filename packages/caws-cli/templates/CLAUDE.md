@@ -152,7 +152,7 @@ The scope guard enforces file edit boundaries based on your spec's `scope.in` an
 
 1. Run `caws scope show <some-path-you-plan-to-edit>` — the positional `<path>` arg is required in v11. The output reports whether your binding is authoritative or union mode and surfaces the responsible spec.
 2. If union mode: bind your spec with `caws worktree bind <name> --spec <id>`
-3. If authoritative but still blocked: the file is genuinely outside your spec's scope. If it should be in scope, run `caws specs amend-scope <id> --add <path>` (the sanctioned widening — canonical write, no cherry-pick, takes effect immediately). Otherwise request a waiver via `caws waiver create`.
+3. If authoritative but still blocked: the file is genuinely outside your spec's scope. If it should be in scope, run `caws specs amend-scope <id> --add <path>` (the sanctioned widening — canonical write, no cherry-pick, takes effect immediately). Otherwise stop and ask the user: a scope block is not a gate violation, so a waiver does not lift it.
 4. Do NOT modify another spec's `scope.out` to unblock yourself — that defeats the isolation
 
 ### Multi-Agent Coordination
