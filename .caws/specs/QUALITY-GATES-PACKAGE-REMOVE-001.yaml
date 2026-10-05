@@ -171,3 +171,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/quality-gates-removed.test.js::no guide or agent entry point presents caws-quality-gates as a current tool"
     commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
     test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "five configs deleted in this commit; reader scan over shipped src, templates, scripts, .caws/hooks, .husky, .github finds none, with policy.yaml as positive control (a policy.yaml mutant listed 50 real readers)"
+    recorded_at: "2026-10-05T06:11:12.738Z"
+    test_nodeid: packages/caws-cli/tests/ci/quality-gates-removed.test.js
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+    test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
