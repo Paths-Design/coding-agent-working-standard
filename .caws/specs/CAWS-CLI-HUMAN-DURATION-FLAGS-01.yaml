@@ -114,3 +114,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::help lists each duration flag beside its -ms flag"
     commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
     test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Built binary at 6090be30: specs archive --status closed --older-than 10m prints 'apply: caws specs archive --status closed --older-than 10m --apply' and no --older-than-ms; a threshold that is not whole seconds (--older-than-ms 1500) is echoed exactly as --older-than-ms 1500 rather than rounded."
+    recorded_at: "2026-10-05T00:29:00.624Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: archive dry-run echoes the duration form"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
