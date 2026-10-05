@@ -72,3 +72,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js::A1: destroy of a worktree bound to an archived spec"
     commit_sha: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
     test_verified_at: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 964491b8b90b5404f8a126d9ebc46ddd9d997351: an absent untracked path is dropped and the existing changed path commits alone (commit contains only tracked.txt; no gone/ dir created); an existing non-ignored archived-style body is staged and committed; a TRACKED path deleted on disk is kept so the commit records 'D tracked.txt' (the archive/retire/restore contract; dropping it broke 7 tests in specs-writer-archive-move, specs-restore, specs-prune-drafts on the first attempt). Break-the-fix restored the fatal pathspec failure."
+    recorded_at: "2026-10-05T04:55:24.091Z"
+    test_nodeid: "packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js::autoCommit input paths that are absent on disk"
+    commit_sha: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
+    test_verified_at: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
