@@ -46,3 +46,11 @@ acceptance:
     then: 'it uses the same order as the CLI resolver, so a grant and its lookup cannot target different sessions'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "built CLI + real worktree-write-guard.sh: owner stamped as the CLAUDE_CODE_SESSION_ID with platform claude-code, one stderr notice naming the ignored CAWS_SESSION_ID; guard exit 0 for that session, exit 2 for another; resolver break reproduces the @-owner incident"
+    recorded_at: "2026-10-05T05:35:46.725Z"
+    test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::worktree create stamps the Claude Code session, claim recognizes it, and the write guard admits that owner"
+    commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
+    test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
