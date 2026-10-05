@@ -2,10 +2,11 @@ id: QUALITY-GATES-PACKAGE-REMOVE-001
 title: 'Remove deprecated quality-gates batch scanner package'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: h-qg-orphans
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge h-qg-orphans at 72046136d6143606aee2c71469889b40c17f3b95'
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-10-05T06:01:27.731Z'
+updated_at: '2026-10-05T06:11:59.428Z'
 blast_radius:
   modules:
     - 'packages/quality-gates'
