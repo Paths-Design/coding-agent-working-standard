@@ -39,3 +39,11 @@ acceptance:
     then: 'the section names what actually lifts each block (reprieve for a hook handler, a spec for policy.yaml) and offers no waiver'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "kimi-code/AGENTS.md and qwen-code/CAWS-HOOKS.md name caws reprieve grant --handlers (human) and state a waiver never lifts a hook; packs kimi 10, qwen 3"
+    recorded_at: "2026-10-05T08:04:01.126Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/guard-copy-no-waiver-for-hook-blocks.test.js::names the human-granted reprieve and says a waiver does not lift a hook"
+    commit_sha: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
+    test_verified_at: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
