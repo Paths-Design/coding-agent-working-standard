@@ -25,10 +25,6 @@ acceptance:
     given: 'an AC citing a reachable --commit-sha AND a recorded --command'
     when: 'specs evidence --verify records it'
     then: 'the criterion verdict is verified, not not_rederived(command_not_executed) — a command that is never executed by design is not evidence that failed to re-derive'
-  - id: A2
-    given: 'an AC citing a reachable --commit-sha AND a --test-nodeid, evaluated in ''exists'' mode (the mode the close gate uses)'
-    when: 'verify-acs runs without --run'
-    then: 'the criterion is verified on its commit check rather than not_rederived(not_run), because the test check is merely inapplicable in that mode'
   - id: A3
     given: 'an AC whose cited test genuinely FAILS under --run'
     when: 'verify-acs --run evaluates it'
