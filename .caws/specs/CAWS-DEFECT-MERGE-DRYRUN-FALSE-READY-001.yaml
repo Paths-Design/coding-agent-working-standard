@@ -40,3 +40,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/worktree-merge-dry-run-conflict.test.js::a conflicting preview names the conflicting path, and the real merge refuses leaving base unchanged"
     commit_sha: "7944927c2f361438ceb0708992c1286507102054"
     test_verified_at: "7944927c2f361438ceb0708992c1286507102054"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "clean preview ready; real merge lands commit whose parents are old base + branch tip and whose tree equals the preview tree_sha; payload.txt present on base; always-ready and base-vs-base mutants killed"
+    recorded_at: "2026-10-05T07:10:09.537Z"
+    test_nodeid: "packages/caws-cli/tests/store/worktree-merge-dry-run-conflict.test.js::a clean preview reports ready and the real merge then lands the previewed commit"
+    commit_sha: "7944927c2f361438ceb0708992c1286507102054"
+    test_verified_at: "7944927c2f361438ceb0708992c1286507102054"
