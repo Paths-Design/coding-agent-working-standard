@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: CAWS Agent Workflow Guide
 owner: vNext rewrite team
-updated: 2026-08-19
+updated: 2026-10-05
 ---
 
 # CAWS — Agent Workflow Guide
@@ -405,6 +405,53 @@ caws evidence record --type gate --spec <id> --data '{...}'
 All append hash-chained events through the store's `appendEvent`. There is no
 other writer.
 
+#### Verified acceptance evidence (`--verify`)
+
+`--verify` re-derives a citation before recording it: it checks that a cited
+commit exists and is reachable, and it runs a cited test through the detected
+runner. A test that executes and passes stamps the entry with `test_verified_at`
+(the HEAD it ran at), which `caws specs close` later reports as the recorded
+execution — close itself never runs tests.
+
+```bash
+# from INSIDE the bound worktree, with a clean tree
+caws specs evidence <id> --ac A1 --status pass --verify \
+  --test-nodeid "packages/caws-cli/tests/foo.test.js::rejects an unbound path" \
+  --commit-sha "$(git rev-parse HEAD)" \
+  --evidence-ref "what the test pins, in one line"
+```
+
+The details that decide whether it works:
+
+- **Run it from the lane.** The re-derivation runs against the checkout you are
+  in. From the canonical checkout a test that exists only on the lane's branch
+  is reported missing. Inside a linked worktree it refuses when the tree has
+  uncommitted changes, so commit first.
+- **The node id is `<repo-relative file>::<name>`, and the name is matched
+  literally against the file.** For jest the name is the leaf test title,
+  without any `describe` prefix: a prefixed name never appears verbatim in the
+  source and is reported missing. A `test.each` title with `%s` cannot be cited
+  as written; cite the literal row value that appears in the file (for example
+  `scripts/verify.sh` for `'%s names no dead mechanism'`), which also selects
+  the generated title. Jest's name match is unanchored, so a short name can
+  select more tests than intended; the output reports how many executed.
+- **pytest** takes `file::Class::test_fn`. Without a `[param]` suffix every
+  parametrization runs.
+- **bats** takes the full test name, matched exactly.
+- **A file with no `::name` runs the whole file.**
+- **`--command` is recorded but never executed**, so a criterion citing only a
+  command stays `not_rederived`. Cite a test or commit, and put the command in
+  `--evidence-ref`.
+- **`--evidence-ref` is single-valued**: a second flag replaces the first.
+- **Any later re-record of the criterion drops its `test_verified_at`.** Re-run
+  with `--verify` rather than recording over it plainly.
+
+What `--verify` proves is that the cited test passed at the cited commit. It
+does not prove the test exercises the criterion. A criterion that says "refused
+with an alternative that applies" is not met by a test that checks the refusal's
+label — run the alternative
+([failure-lineage Entry 44](../failure-lineage.md#entry-44-five-refusals-named-a-remedy-that-could-not-complete-the-refused-action-the-tests-pinned-the-refusal-and-never-ran-the-remedy-october-2026)).
+
 ### Spec lifecycle
 
 ```bash
@@ -531,11 +578,41 @@ caws message poll --wait 60000
 
 There is no pre-push range check: provenance is enforced at the merge boundary
 by `caws worktree merge`, which refuses a lane carrying commits outside its
-bound spec's scope and records the landing as a `worktree_merged` event.
+bound spec's scope and records the landing as a `worktree_merged` event. The
+remedy for that refusal is `caws specs amend-scope <id> --add-support <path>`
+for each path the lane legitimately touched; a reprieve or a waiver leaves merge
+readiness unchanged.
 
 (v11 does not ship `caws hooks install` or `caws provenance` commands. The
-hash-chained `events.jsonl` is the audit trail; record evidence with
-`caws evidence record`.)
+hash-chained `events.jsonl` is the audit trail; record acceptance evidence with
+`caws specs evidence`.)
+
+### Commit and push traps
+
+**lint-staged leaves a stale blob staged after a pathspec commit.** The
+pre-commit hook formats staged files. After `git commit -m <msg> -- <file>`, the
+commit and the working tree carry the formatted content while the index can keep
+the pre-format blob, so `git status --short` shows `MM` for a file you just
+committed. Nothing is lost, but the next commit would revert the formatting.
+Reset the index entry: `git restore --staged -- <file>` (index only), or, once
+`git diff --quiet HEAD -- <file>` confirms the working tree matches the commit,
+`git add -- <file>`. Check before re-adding; a real unstaged edit would be
+staged along with it.
+
+**A merge of the base into a lane is concluded with a bare commit.** Doctrine
+replaces rebase with `git merge <base>` inside the lane. While `MERGE_HEAD`
+exists git refuses a partial commit, so `git commit -- <paths>` cannot conclude
+it. Conclude with `git commit` or `git commit --no-edit`; never `--no-verify`.
+If a guard refuses the conclusion, follow its merge-specific remedy.
+
+**The pre-push hook runs the full suite under a fixed time budget.**
+`.husky/pre-push` builds and runs `npm test` with a 900-second limit. With other
+agents running jest on the same machine the suite can exceed it, and the push is
+refused as a timeout with no test failing. Push when no lane is running tests;
+never `--no-verify`. **Judge a push by the remote, not the exit code.**
+`git push` can exit 141 (SIGPIPE) when the hook's output pipe closes, whether or
+not anything was refused. Compare `git ls-remote origin refs/heads/<branch>`
+with `git rev-parse <branch>`; they match only if the push landed.
 
 ---
 
