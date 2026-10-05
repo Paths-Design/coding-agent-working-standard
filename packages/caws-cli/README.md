@@ -53,7 +53,10 @@ Work in the created worktree, surface ownership with `caws claim`, and use
 `caws gates run --spec FEAT-001`. Record acceptance evidence through
 `caws specs evidence`; tests and lease visibility never substitute for authority.
 From the canonical checkout, review and merge the finished lane through
-`caws worktree review` and `caws worktree merge`.
+`caws worktree review` and `caws worktree merge`. When the merge refuses
+because the branch carries a commit touching a path outside the spec's scope
+(lane provenance), admit the path with
+`caws specs amend-scope <spec> --add-support <path>`.
 
 ## Maintenance
 
@@ -76,7 +79,9 @@ repo. Records live under `~/.caws/state/sessions/<session>/`; that store is
 machine-wide but the grant's reach is not — `--all-repos` is what widens it.
 `--surface` identifies the harness and legacy lookup context, not a separate grant
 store. A waiver affects policy
-quality gates and never lifts a hook guard.
+quality gates and never lifts a hook guard. A reprieve does not change merge
+readiness either; a lane-provenance merge refusal is remedied with
+`caws specs amend-scope <spec> --add-support <path>`.
 
 Legacy `init diff`, `init port`, `--overwrite`, and `--adopt` remain available for
 unmigrated project packs. They are not the update workflow for system projects.

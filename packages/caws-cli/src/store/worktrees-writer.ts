@@ -397,6 +397,39 @@ function getCurrentBranch(repoRoot: string): string | null {
   return r.stdout.trim();
 }
 
+/** The distinct out-of-scope paths across a lane-provenance refusal, sorted. */
+function laneProvenancePaths(foreignCommits: readonly LaneForeignCommit[]): string[] {
+  return [...new Set(foreignCommits.flatMap((fc) => fc.outOfScopePaths))].sort();
+}
+
+/**
+ * The remedy line for a lane-provenance refusal.
+ *
+ * The refusal has to carry its own remedy, because an operator who goes
+ * looking for one will not find it among the generic diagnostics. This check
+ * is a merge-readiness check, so its remedy changes the lane's support
+ * standing (scope.support) rather than suppressing an evaluator or skipping
+ * a hook guard. This line also surfaces candidateSpecIds, which the verifier already
+ * computes and which previously reached only the structured `--data`
+ * payload, where a human reading the refusal never sees it.
+ * [CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01]
+ */
+function laneProvenanceRemedy(
+  specId: string,
+  foreignCommits: readonly LaneForeignCommit[]
+): string {
+  const paths = laneProvenancePaths(foreignCommits);
+  const candidates = [...new Set(foreignCommits.flatMap((fc) => fc.candidateSpecIds))].sort();
+  const remedy =
+    `remedy: admit the path(s) with \`caws specs amend-scope ${specId} ` +
+    `${paths.map((p) => `--add-support ${p}`).join(' ')}\` — support admits a path ` +
+    `this lane's history touched without claiming ownership of it`;
+  return candidates.length > 0
+    ? `${remedy}. If the commit belongs to a different lane instead, these ` +
+        `active specs already admit the path: ${candidates.join(', ')}`
+    : remedy;
+}
+
 function mergeRecoveryNextCommands(
   name: string,
   entry:
@@ -404,14 +437,26 @@ function mergeRecoveryNextCommands(
         readonly branch?: string;
         readonly baseBranch?: string;
         readonly path?: string;
+        readonly specId?: string;
       }
-    | undefined
+    | undefined,
+  foreignCommits: readonly LaneForeignCommit[] = []
 ): string[] {
-  const commands = [
+  const commands: string[] = [];
+  // A lane-provenance refusal has a specific remedy, and it is not among the
+  // generic diagnostics below — those are the same list for every refusal
+  // reason, so they tell an operator how to look harder, never what to do.
+  // Lead with the remedy. [CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01]
+  if (foreignCommits.length > 0 && entry?.specId !== undefined) {
+    for (const path of laneProvenancePaths(foreignCommits)) {
+      commands.push(`caws specs amend-scope ${entry.specId} --add-support ${path}`);
+    }
+  }
+  commands.push(
     `caws worktree merge ${name} --dry-run --data`,
     'caws worktree list --data',
-    `caws worktree cleanup-plan --include ${name} --json`,
-  ];
+    `caws worktree cleanup-plan --include ${name} --json`
+  );
   if (entry?.branch !== undefined && entry.baseBranch !== undefined) {
     commands.push(`git rev-list --left-right --count ${entry.baseBranch}...${entry.branch}`);
     commands.push(`git merge-tree --write-tree ${entry.baseBranch} ${entry.branch}`);
@@ -429,10 +474,12 @@ function mergeRepairHint(
         readonly branch?: string;
         readonly baseBranch?: string;
         readonly path?: string;
+        readonly specId?: string;
       }
-    | undefined
+    | undefined,
+  foreignCommits: readonly LaneForeignCommit[] = []
 ): string {
-  return `Run ${mergeRecoveryNextCommands(name, entry)
+  return `Run ${mergeRecoveryNextCommands(name, entry, foreignCommits)
     .map((command) => `\`${command}\``)
     .join('; ')}.`;
 }
@@ -2435,6 +2482,9 @@ export function mergeWorktree(
         `lane branch contains commit ${fc.sha.slice(0, 12)} outside spec scope: ${fc.outOfScopePaths.join(', ')}`
       );
     }
+    if (foreignCommits.length > 0) {
+      findings.push(laneProvenanceRemedy(entry.specId, foreignCommits));
+    }
   }
 
   // Dry-run: report and return without mutation.
@@ -2476,7 +2526,7 @@ export function mergeWorktree(
         merge_check: mergeCheck,
         can_proceed: findings.length === 0,
         findings,
-        next_commands: mergeRecoveryNextCommands(input.name, entry),
+        next_commands: mergeRecoveryNextCommands(input.name, entry, foreignCommits),
         worktree: {
           name: input.name,
           path: wtPath,
@@ -2495,10 +2545,10 @@ export function mergeWorktree(
         `caws worktree merge ${input.name}: prerequisites unmet (${findings.join('; ')}).`,
         {
           subject: input.name,
-          narrowRepair: mergeRepairHint(input.name, entry),
+          narrowRepair: mergeRepairHint(input.name, entry, foreignCommits),
           data: {
             findings,
-            next_commands: mergeRecoveryNextCommands(input.name, entry),
+            next_commands: mergeRecoveryNextCommands(input.name, entry, foreignCommits),
             // A2: name the offending commits, their out-of-scope paths, and
             // the lanes they might belong to (empty for non-provenance
             // refusals).
