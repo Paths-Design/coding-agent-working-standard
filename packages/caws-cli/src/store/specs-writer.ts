@@ -437,6 +437,8 @@ export interface ArchiveClosedSpecsArchived {
 export interface ArchiveClosedSpecsFailed {
   readonly id: string;
   readonly reason: string;
+  /** Remedy carried by the per-spec diagnostic(s), when any had one. */
+  readonly narrowRepair?: string;
 }
 
 export interface ArchiveClosedSpecsOutcome {
@@ -518,6 +520,8 @@ export interface RetireDraftSpecsRetired {
 export interface RetireDraftSpecsFailed {
   readonly id: string;
   readonly reason: string;
+  /** Remedy carried by the per-spec diagnostic(s), when any had one. */
+  readonly narrowRepair?: string;
 }
 
 export interface RetireDraftSpecsOutcome {
@@ -2613,6 +2617,16 @@ export function selectClosedSpecsForArchive(
   return ok({ candidates, skipped });
 }
 
+/** Collapse the distinct narrowRepair strings of a diagnostic list into an optional field. */
+function narrowRepairField(diagnostics: readonly { readonly narrowRepair?: string }[]): {
+  narrowRepair?: string;
+} {
+  const repairs = [
+    ...new Set(diagnostics.map((d) => d.narrowRepair).filter((r): r is string => r !== undefined)),
+  ];
+  return repairs.length > 0 ? { narrowRepair: repairs.join(' ') } : {};
+}
+
 export function archiveClosedSpecs(
   cawsDir: string,
   input: ArchiveClosedSpecsInput
@@ -2644,6 +2658,7 @@ export function archiveClosedSpecs(
       failed.push({
         id: candidate.id,
         reason: result.errors.map((d) => d.message).join('; '),
+        ...narrowRepairField(result.errors),
       });
       continue;
     }
@@ -2651,6 +2666,7 @@ export function archiveClosedSpecs(
       failed.push({
         id: candidate.id,
         reason: result.value.cause.map((d) => d.message).join('; '),
+        ...narrowRepairField(result.value.cause),
       });
       continue;
     }
@@ -2937,6 +2953,7 @@ export function retireDraftSpecs(
       failed.push({
         id: candidate.id,
         reason: result.errors.map((d) => d.message).join('; '),
+        ...narrowRepairField(result.errors),
       });
       continue;
     }
@@ -2944,6 +2961,7 @@ export function retireDraftSpecs(
       failed.push({
         id: candidate.id,
         reason: result.value.cause.map((d) => d.message).join('; '),
+        ...narrowRepairField(result.value.cause),
       });
       continue;
     }
@@ -3055,7 +3073,11 @@ export function retireDraftSpec(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `Spec "${input.id}" is not tracked at HEAD. Cannot retire: blob_sha is the authoritative recovery target, and without it the retirement event would have no recovery path. Commit the draft first, then re-run retire-draft.`,
-        { subject: input.id, data: { from_path: fromRel } }
+        {
+          subject: input.id,
+          narrowRepair: `Commit ${fromRel}, then re-run the retirement.`,
+          data: { from_path: fromRel },
+        }
       )
     );
   }
