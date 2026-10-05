@@ -52,3 +52,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts::accepts context.lineage populated from transcript metadata"
     commit_sha: b8789dab9dc6d31caef25ad366712423b7ebe9ec
     test_verified_at: b8789dab9dc6d31caef25ad366712423b7ebe9ec
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "fixtures nullSummaryPayload and lineagePayload in the contract set, plus negatives for non-string summary, authority-claiming lineage and missing parent id (37 tests)"
+    recorded_at: "2026-10-05T05:50:40.437Z"
+    test_nodeid: packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts
+    commit_sha: b8789dab9dc6d31caef25ad366712423b7ebe9ec
+    test_verified_at: b8789dab9dc6d31caef25ad366712423b7ebe9ec
