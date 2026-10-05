@@ -41,3 +41,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/init/init-hook-pack-render.test.js::the plan of a byte-identical install proposes nothing: every destination is unchanged"
     commit_sha: ed1b3a7be98996c09f9f03d731f7bee00d2d4b1f
     test_verified_at: ed1b3a7be98996c09f9f03d731f7bee00d2d4b1f
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "stale stamp + identical body -> {action:updated, restampOnly:true}; stale stamp + edited body -> refused without restampOnly"
+    recorded_at: "2026-10-05T05:51:02.445Z"
+    test_nodeid: "packages/caws-cli/tests/init/init-hook-pack-render.test.js::the plan labels a stamp-only-behind hook as a re-stamp, and a content change is not one"
+    commit_sha: ed1b3a7be98996c09f9f03d731f7bee00d2d4b1f
+    test_verified_at: ed1b3a7be98996c09f9f03d731f7bee00d2d4b1f
