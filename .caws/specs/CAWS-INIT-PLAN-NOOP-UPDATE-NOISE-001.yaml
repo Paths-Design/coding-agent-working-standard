@@ -33,3 +33,11 @@ acceptance:
     then: 'it asserts the rendered stamp equals SHARED_PACK_VERSION, pinning the placeholder-vs-stamp contract that currently has no coverage'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "plan of a byte-identical install reports unchanged for every destination; making planOne report updated breaks it"
+    recorded_at: "2026-10-05T05:50:51.092Z"
+    test_nodeid: "packages/caws-cli/tests/init/init-hook-pack-render.test.js::the plan of a byte-identical install proposes nothing: every destination is unchanged"
+    commit_sha: ed1b3a7be98996c09f9f03d731f7bee00d2d4b1f
+    test_verified_at: ed1b3a7be98996c09f9f03d731f7bee00d2d4b1f
