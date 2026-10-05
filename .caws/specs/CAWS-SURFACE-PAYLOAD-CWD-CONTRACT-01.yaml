@@ -45,5 +45,16 @@ acceptance:
       write is adjudicated against it with no cwd-unresolved deny, and the
       hook-pack-shared-core.md codex row is updated from assumed to the evidence
       actually held
+  - id: A5
+    given: >-
+      Codex's shell tool can take a per-call workdir, and no parser or
+      bash-write-guard reads tool_input.workdir (grep: zero matches in shared and
+      codex parse-input.sh and bash-write-guard.sh), while the payload cwd is the
+      session cwd
+    when: 'a Codex Bash call runs with a workdir that differs from the session cwd and writes a relative target'
+    then: >-
+      it is recorded whether Codex puts workdir in tool_input; if it does, the guard
+      resolves the relative target against that workdir (as opencode's plugin does)
+      and a test pins it; if it does not, the gap is recorded as not reachable
 non_functional: {}
 contracts: []
