@@ -50,3 +50,11 @@ acceptance:
     then: 'they pass exactly as they do with CAWS_SESSION_ID unset'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "explicit per-test session id sess_test_creator is stamped under shared isolation; passed with foreign and unset runner env"
+    recorded_at: "2026-10-05T05:48:26.152Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-create-session-provenance.test.js::the session id the resolver picked is rendered into the spec body"
+    commit_sha: "7bacc170b59919da193cd3e6e567aa40d62ebfdd"
+    test_verified_at: "7bacc170b59919da193cd3e6e567aa40d62ebfdd"
