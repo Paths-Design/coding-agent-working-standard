@@ -79,3 +79,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js::autoCommit input paths that are absent on disk"
     commit_sha: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
     test_verified_at: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "At 964491b8b90b5404f8a126d9ebc46ddd9d997351: when every input path is absent or gitignored, autoCommit returns the committed no-op {kind:'committed', sha:''}, matching the all-ignored contract (test 'A3: every path absent or gitignored is the committed no-op'). Full caws-cli jest on the lane: 274/274 suites, 3746/3746 tests."
+    recorded_at: "2026-10-05T04:55:47.436Z"
+    test_nodeid: "packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js::autoCommit input paths that are absent on disk"
+    commit_sha: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
+    test_verified_at: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
