@@ -28,5 +28,9 @@ acceptance:
     given: 'the same batch run with --json'
     when: 'it emits the failure'
     then: 'the failed entry carries the narrowRepair remedy as a field'
+  - id: A3
+    given: 'archiveClosedSpecs (store) fails one selected spec whose diagnostic carries a narrowRepair'
+    when: 'the batch outcome is returned'
+    then: 'the failed entry for that spec carries the narrowRepair text, so no renderer can lose it'
 non_functional: {}
 contracts: []
