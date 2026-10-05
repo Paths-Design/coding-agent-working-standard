@@ -59,8 +59,10 @@ YAML
 _run_bwg_nojsyaml() {
   local command="$1" sid="${2:-my-session}"
   local envelope
-  envelope="$(jq -nc --arg c "$command" --arg s "$sid" \
-    '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s}')"
+  # The payload names its cwd: a relative target is only adjudicated against a
+  # known cwd (an absent one makes the guard ask instead).
+  envelope="$(jq -nc --arg c "$command" --arg s "$sid" --arg d "$CAWS_TEST_REPO" \
+    '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s, cwd:$d}')"
   run env \
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_SURFACE="claude-code" \
@@ -168,8 +170,8 @@ YAML
   # than a hard block; with js-yaml present the same path would block. Either
   # way the redirect-pipe guard correctly prevented the early exit.)
   local envelope
-  envelope="$(jq -nc --arg c 'caws message send --to sess-abc --text hi && echo done > engine/Assets/RC/Tests/out.log' --arg s "my-session" \
-    '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s}')"
+  envelope="$(jq -nc --arg c 'caws message send --to sess-abc --text hi && echo done > engine/Assets/RC/Tests/out.log' --arg s "my-session" --arg d "$CAWS_TEST_REPO" \
+    '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s, cwd:$d}')"
   run_guard bash-write-guard.sh "$envelope"
   # The oracle ran (advisory present) => the exemption did NOT fire.
   assert_output --partial 'scope.in claim check'

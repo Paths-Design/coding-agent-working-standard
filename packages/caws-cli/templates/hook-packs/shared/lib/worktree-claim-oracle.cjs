@@ -43,6 +43,9 @@
  *   CAWS_ORACLE_REL_PATH  candidate path. May be canonical-absolute, a
  *                         .caws/worktrees/<name>/<rest> path, or already
  *                         repo-relative; this helper normalizes all three.
+ *   CAWS_ORACLE_CWD_UNRESOLVED  non-empty when the caller could not resolve
+ *                         the operating cwd. A non-absolute candidate then
+ *                         yields ask_uncertain:cwd-unresolved:<path>.
  *   CAWS_ORACLE_SESSION_ID  operating session id (HOOK_SESSION_ID). Compared
  *                           by DIRECT STRING MATCH to the worktree owner.
  *
@@ -314,6 +317,14 @@ function main() {
 
   if (worktrees.length === 0) {
     emit('pass', 'no-active-worktrees');
+  }
+
+  // A relative candidate means something only against the operating cwd. The
+  // caller sets CWD_UNRESOLVED when it could not establish that cwd; treating
+  // the path as repo-relative then would classify a file that may belong to
+  // another worktree as an unclaimed canonical one (fail OPEN). Ask instead.
+  if (process.env.CAWS_ORACLE_CWD_UNRESOLVED && !path.isAbsolute(candidate)) {
+    emit('ask_uncertain', 'cwd-unresolved:' + candidate);
   }
 
   var cls;

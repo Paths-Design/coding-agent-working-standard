@@ -131,6 +131,15 @@ PROJECT_DIR="$(_realpath "$PROJECT_DIR")"
 
 AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 
+# The operating cwd is KNOWN only when the payload named a directory that
+# exists. Otherwise AGENT_CWD above is a guess (the canonical root), and a
+# relative mutation target resolved against a guess carries no ownership answer:
+# `echo x > file.txt` may really mean another worktree's file. Relative targets
+# are then handed to the oracle UNRESOLVED, flagged, so it answers
+# ask_uncertain instead of classifying them as canonical paths.
+_CWD_RESOLVED=0
+[[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]] && _CWD_RESOLVED=1
+
 # CAWS-BASH-GUARD-BOUNDARY-DIVERGENCE-01: the cross-repository boundary.
 #
 # scope-guard hard-blocks a Write/Edit whose target is in a different repository
@@ -329,9 +338,18 @@ while IFS= read -r cand; do
       _CAND_ALLOWLISTED=1
     fi
   fi
+  _ORACLE_PATH="$abs"
+  _CWD_UNRESOLVED=""
+  if [[ "$_CWD_RESOLVED" != "1" ]]; then
+    case "$cand" in
+      /*) ;;
+      *) _ORACLE_PATH="$cand"; _CWD_UNRESOLVED=1 ;;
+    esac
+  fi
   out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
-    CAWS_ORACLE_REL_PATH="$abs" \
+    CAWS_ORACLE_REL_PATH="$_ORACLE_PATH" \
+    CAWS_ORACLE_CWD_UNRESOLVED="$_CWD_UNRESOLVED" \
     CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
     node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
   _first="${out%%$'\n'*}"
@@ -359,7 +377,9 @@ while IFS= read -r cand; do
       # ownership must not block a docs/** or .caws/** coordination edit.
       # Only a positive claim (block_claimed/block_foreign_worktree, handled
       # above) overrides the allowlist. Non-allowlisted paths escalate normally.
-      if [[ "$_CAND_ALLOWLISTED" == "1" ]]; then
+      # An unresolved cwd is the exception: the allowlist names paths relative
+      # to the project, which a guessed root cannot establish.
+      if [[ "$_CAND_ALLOWLISTED" == "1" && "$detail" != cwd-unresolved:* ]]; then
         :
       else
         escalate ask "$detail" "$outcome"
@@ -512,6 +532,12 @@ case "$WORST" in
     exit 2 ;;
   ask)
     case "$WORST_KIND" in
+      ask_uncertain)
+        if [[ "$WORST_DETAIL" == cwd-unresolved:* ]]; then
+          _REASON="[$_BG_ID] ask_uncertain: the operating cwd could not be resolved for the relative path '${WORST_DETAIL#cwd-unresolved:}', so which file it names (this checkout or another worktree's payload) cannot be decided. Approve only if you know the target is yours to mutate, or rerun with an absolute path."
+        else
+          _REASON="[$_BG_ID] This Bash command targets a worktree-claimed or worktree-payload path and ownership could not be confirmed ($WORST_KIND:$WORST_DETAIL). Approve only if you own the target worktree; otherwise route the mutation through the owning worktree's session."
+        fi ;;
       error_fail_closed)
         # A toolchain fault (oracle spawn failure, registry parse error, etc.) —
         # NOT an ownership conflict. Name it as such so the user is not misled

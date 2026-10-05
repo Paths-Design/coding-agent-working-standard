@@ -557,7 +557,14 @@ import { isAdapterCoveredSurface } from './types';
 // or given alongside a tree-ish) is now refused under its own label naming the
 // uncommitted-work overwrite; a ref is still a branch switch and branch
 // creation (-b/-B) is still admitted.
-export const SHARED_PACK_VERSION = 91;
+// 92 closes CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01. bash-write-guard
+// resolved a relative mutation target against the canonical root whenever the
+// payload carried no usable cwd, so a target that really named another
+// worktree's file was classified as an unclaimed canonical path and passed. The
+// guard now hands such a target to the claim oracle unresolved, flagged by
+// CAWS_ORACLE_CWD_UNRESOLVED, and the oracle answers ask_uncertain; absolute
+// targets and targets with a resolved cwd are adjudicated as before.
+export const SHARED_PACK_VERSION = 92;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
