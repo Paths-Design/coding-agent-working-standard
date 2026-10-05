@@ -1,10 +1,11 @@
 id: CAWS-DEFECT-CANONICAL-GUARD-NO-SANCTIONED-LOCKFILE-RESTORE-01
 title: 'Canonical-checkout guard offers no sanctioned way to discard lockfile churn or unstage a path while lanes are active'
 mode: fix
-lifecycle_state: active
-worktree: hp-lockfile-restore
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hp-lockfile-restore at 96bc684c5f613c63241fa24a6ba37fb1568ca38c'
 created_at: '2026-10-05T06:14:50.905Z'
-updated_at: '2026-10-05T07:22:22.052Z'
+updated_at: '2026-10-05T08:30:23.872Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
@@ -43,3 +44,32 @@ acceptance:
     then: 'it is still refused, and the message names an alternative that applies (for example asking the user to run it) rather than an owning worktree'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "worktree-guard admits checkout/checkout --/restore of lockfile-only targets in canonical with lanes active (bats cases L70-80); classifier leg: test_classify_lockfile_restore.py::test_lockfile_only_restore_is_allowed (3 forms -> allow)"
+    recorded_at: "2026-10-05T08:29:20.667Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: git restore of a lockfile is admitted from canonical with lanes active"
+    commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+    test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "lockfile+source is refused with the path-restore label; classifier leg: test_lockfile_exemption_does_not_widen"
+    recorded_at: "2026-10-05T08:29:33.438Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: checkout of a lockfile plus source is refused with the path-restore label"
+    commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+    test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "index-only restore admitted, including the Guard 2 remedy git restore --staged --source=MERGE_HEAD -- .caws/policy.yaml (bats L192); classifier leg: test_index_only_restore_is_allowed"
+    recorded_at: "2026-10-05T08:29:46.516Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: git restore --staged of a source file is admitted with no discard label"
+    commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+    test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "remaining canonical path-restore refusals name asking the user, never an owning worktree; classifier leg: test_restore_of_source_is_ask_with_an_applicable_alternative"
+    recorded_at: "2026-10-05T08:30:04.243Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: a refused source checkout asks the user rather than naming an owning worktree"
+    commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+    test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0

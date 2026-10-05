@@ -332,6 +332,65 @@ What this slice MUST do for the takeover slice's benefit:
    (`applyRegistryPatch`'s `refresh_agent` branch) is unchanged by this slice
    and remains frozen under `MULTI-AGENT-ACTIVITY-REGISTRY-001`.
 
+## Caller identity: one session, two resolvers
+
+Ownership is stamped by one resolver and checked by another. The CLI
+(`src/shell/session/resolve-session.ts`) resolves the caller's session id when
+`caws worktree create`, `caws claim` and the other lifecycle commands write an
+owner. The hook guards (`lib/session-id.sh`) resolve the caller's id when they
+decide whether a write lands in a lane the caller owns. If the two resolve
+different ids for the same agent, the agent's own lane reads as foreign and its
+owner-self writes are refused — the failure behind Entry 43's first specimen,
+where `dsh` had no tier in the CLI resolver.
+
+The guards (`resolve_caws_session_id`) take a live agent-PID record for the
+calling process first when one exists — the trust anchor, which wins over any
+disagreeing source and names both ids on stderr — then the tool payload's
+`session_id`, then the surface pin, then `CAWS_SESSION_ID`, then the per-surface
+variables. The CLI's order, with the authoritative list in the header of
+`resolve-session.ts`, is: the surface pin (when `CAWS_AGENT_SURFACE` names a
+surface with a pinned variable), then `CAWS_SESSION_ID`, then the per-harness
+variables (`CLAUDE_SESSION_ID`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`,
+`DSH_SESSION_ID`), then `HOOK_SESSION_ID`, then a durable hook envelope, then
+the session capsule, then `CURSOR_TRACE_ID`, and a new capsule only for callers
+that pass `allowMint`.
+
+**The harness id wins over a disagreeing `CAWS_SESSION_ID` inside the harness's
+own shell** (`harnessOverCanonicalSession`). A harness exports its session id
+into every tool subprocess and stamps the same id on every hook payload, so in
+an agent's shell that variable is the CLI's only view of the id the guards will
+check. Stamping `CAWS_SESSION_ID` instead would create an owner the guards treat
+as foreign. The override applies only when the environment describes exactly one
+harness session:
+
+- `CAWS_SESSION_ID` is set and differs from the harness id;
+- `HOOK_SESSION_ID` is absent — inside a hook process the dispatcher has already
+  normalized `CAWS_SESSION_ID` from the guards' own resolution;
+- exactly one of `CLAUDE_CODE_SESSION_ID` or `CODEX_THREAD_ID` is set, and no
+  other surface's session variable is — a process nested inside another harness
+  inherits both, and the environment cannot say which is the caller;
+- `CAWS_AGENT_SURFACE` and `CAWS_PLATFORM_FLAG`, when set, name that harness.
+
+When it applies, the CLI prints one notice per process naming the ignored value
+(`caws: CAWS_SESSION_ID=<x> was not used. ...`). When any condition fails, the
+prior order stands. `caws reprieve show|revoke` resolve through the same
+function, so the reprieve surface and the ownership surface cannot disagree.
+`dsh` and `qwen-code` keep the prior order: their identity rides
+`DSH_SESSION_ID` / `CAWS_SESSION_ID` or the surface pin.
+
+**The durable-envelope tier refuses rather than guesses.** It reads
+`.caws/sessions/<id>/.session-envelope.json` files for the same repository root
+seen within 24 hours, and two or more matches are an ambiguity diagnostic, never
+newest-wins. Every stray envelope in the real `.caws/sessions/` is therefore a
+candidate that can turn a resolvable session into a refusal, which is why hook
+tests must not write there
+([failure-lineage Entry 45](../failure-lineage.md#entry-45-a-missing-payload-cwd-was-answered-with-a-guess-that-always-named-the-canonical-checkout-the-first-fail-closed-fix-would-have-refused-every-relative-write-on-a-surface-that-never-sent-one-october-2026)).
+
+**Changing either resolver.** A new identity source, or a new position for an
+existing one, is added to both resolvers or shown to be unreachable from the
+other. `tests/shell/session-resolver-parity.test.js` runs the CLI and the guard
+library on the same environments and asserts they agree.
+
 ## Q4 — Path normalization
 
 Spec status: locked at draft — **verbatim storage**. Normalization is the

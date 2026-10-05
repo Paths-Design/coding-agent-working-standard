@@ -1,0 +1,38 @@
+id: CAWS-DEFECT-SHORTCUT-LANG-PREEXISTING-LINE-STRIKE-01
+title: 'Shortcut-language guard strikes agents on a pre-existing ''# placeholder'' comment in classify_command.py they did not write'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T08:26:31.631Z'
+updated_at: '2026-10-05T08:26:31.631Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'shared hook pack: shortcut-language-check.sh content selection; classify_command.py heredoc-blanking comment'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/shortcut-language-check.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks'
+  out: []
+invariants:
+  - 'A strike is charged only for content the agent authored in the tool call being judged; a line already present in the file is never charged to the editor.'
+  - 'The fix does not widen what an authored stub marker may say: an authored ''// placeholder'' stub comment still strikes.'
+acceptance:
+  - id: A1
+    given: 'classify_command.py carrying the pre-existing line ''result.append(" ")  # placeholder'' (heredoc-body blanking, observed 2026-10-05 by the merge-main-in lane as ''strike 3 - blocked'' on edits that did not touch it)'
+    when: 'the payload path that put that line into the scanned content is identified (an Edit new_string that contained it, or the disk fallback taken when the payload has neither .content nor .new_string)'
+    then: 'the cause is recorded with a reproducing test'
+  - id: A2
+    given: 'an edit to that file whose authored content contains no stub marker'
+    when: 'the guard runs on every payload shape the surfaces send'
+    then: 'no strike is recorded'
+  - id: A3
+    given: 'an authored ''# placeholder'' stub comment in a non-test source file'
+    when: 'the guard runs'
+    then: 'it still strikes (negative control)'
+non_functional: {}
+contracts: []

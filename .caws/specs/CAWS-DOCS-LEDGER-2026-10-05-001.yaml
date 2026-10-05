@@ -1,0 +1,79 @@
+id: CAWS-DOCS-LEDGER-2026-10-05-001
+title: 'Pay forward the 2026-10-05 clean-base lessons: remedies that do not open, the payload cwd contract, hook-test isolation and evidence mechanics'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge docs-ledger-1005 at 70d848d651cf2c6071252d605bb35b172d3e802a'
+created_at: '2026-10-05T07:54:40.553Z'
+updated_at: '2026-10-05T08:24:57.214Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'doctrine and contributor docs: failure lineage, hook-pack architecture, hook test authoring, agent evidence workflow, session identity'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/failure-lineage.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/guides/hook-packs.md'
+    - 'docs/agents/full-guide.md'
+    - 'docs/architecture/session-ownership-metadata.md'
+  out: []
+invariants:
+  - 'Docs carry present-tense what/how/why; lineage and incident narrative live in failure-lineage.md entries, not as status barnacles in reference docs.'
+  - 'Every mechanism a doc asserts is verified against live code at writing time and cited by path; nothing is restated from an agent report without re-checking it.'
+acceptance:
+  - id: A1
+    given: 'tonight F2 relabeled a refusal without an exit, guard copy offered waivers for hook blocks, and merge-main-in remedies prescribed a commit git rejects mid-merge'
+    when: 'failure-lineage.md is read'
+    then: 'an entry states the shared shape (a refusal remedy that does not complete is a missing guard contract) and the test rule (follow the remedy literally on the refused case)'
+  - id: A2
+    given: 'F3 would have refused every relative write on opencode and absent payload cwd wrote fixture sessions into canonical'
+    when: 'failure-lineage.md and hook-pack-shared-core.md are read'
+    then: 'an entry states the lesson and the architecture doc carries a per-surface payload contract table with the fail-closed rule'
+  - id: A3
+    given: 'hook tests resolve session state from payload cwd then PWD'
+    when: 'hook-packs.md is read'
+    then: 'it tells hook-test authors to run hooks from inside the fixture repo and points at the bats isolation helpers'
+  - id: A4
+    given: 'evidence --verify re-derives against the invoking checkout'
+    when: 'full-guide.md is read'
+    then: 'it states verify-from-the-bound-worktree, the node-id shape (literal leaf name; test.each rows by label; bats full name), the lint-staged staged-leftover recovery, and that a git push exit status is not proof of the remote ref'
+  - id: A5
+    given: 'the resolver parity change'
+    when: 'session-ownership-metadata.md is read'
+    then: 'it states the caller-identity precedence (harness payload id over a disagreeing CAWS_SESSION_ID inside a harness session) and why'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "failure-lineage Entry 44: five dead-end remedies, root cause (remedy is a claim nothing falsified), doctrine: run the remedy literally in the refusing fixture"
+    recorded_at: "2026-10-05T08:24:25.999Z"
+    artifact_path: docs/failure-lineage.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Entry 45 in failure-lineage.md plus hook-pack-shared-core.md 'Payload cwd contract': per-surface table with evidence and the absent-cwd fail-closed rule mirrored by _CWD_CONTRACT_SURFACES"
+    recorded_at: "2026-10-05T08:24:28.584Z"
+    artifact_path: docs/architecture/hook-pack-shared-core.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "hook-packs.md 'Testing hooks > Hook-test isolation': run hooks inside the fixture repo; caws_enter_fixture / caws_session_isolation_begin / caws_assert_session_state_isolated"
+    recorded_at: "2026-10-05T08:24:31.154Z"
+    artifact_path: docs/guides/hook-packs.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "full-guide.md 'Verified acceptance evidence (--verify)' (run from the lane; leaf-name, test.each row literal, pytest, bats full-name node ids) and 'Commit and push traps' (lint-staged MM recovery; push exit 141 vs ls-remote)"
+    recorded_at: "2026-10-05T08:24:33.644Z"
+    artifact_path: docs/agents/full-guide.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "session-ownership-metadata.md 'Caller identity: one session, two resolvers': guard and CLI orders, harnessOverCanonicalSession conditions and why"
+    recorded_at: "2026-10-05T08:24:36.100Z"
+    artifact_path: docs/architecture/session-ownership-metadata.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c

@@ -1,9 +1,10 @@
 id: CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01
 title: 'A conflicted merge of base into a lane cannot be concluded: two guards treat incoming base changes as authored, and their pathspec remedy fails mid-merge'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: hp-merge-main-in
 created_at: '2026-10-05T03:50:13.205Z'
-updated_at: '2026-10-05T03:50:13.205Z'
+updated_at: '2026-10-05T08:13:45.438Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
@@ -15,6 +16,10 @@ scope:
   in:
     - '.husky/pre-commit'
     - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/hooks
+    - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
   out: []
 invariants:
   - 'Merging the base branch into a lane (the sanctioned alternative to rebase) can always be concluded through the governed path without --no-verify'

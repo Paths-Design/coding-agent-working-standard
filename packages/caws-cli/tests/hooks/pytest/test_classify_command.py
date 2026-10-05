@@ -211,6 +211,18 @@ class TestDenyClass:
         # Bypassing `caws specs close|archive` via naked rm is a deny.
         assert decision_of(classify("rm .caws/specs/FOO-1.yaml")) == "deny"
 
+    @pytest.mark.parametrize("cmd", ["rm .caws/policy.yaml", "mv .caws/policy.yaml /tmp/p.yaml"])
+    def test_naked_rm_mv_on_policy_yaml_names_the_spec_path_and_no_waiver(self, classify, cmd):
+        # A waiver only filters `caws gates run`; it never lifts this hook deny.
+        # The refusal must name the path that does: an Edit under a spec.
+        decision, reason, _source, _enforcement = classify(cmd)
+        assert decision == "deny"
+        assert reason == (
+            "naked rm/mv on .caws/policy.yaml — policy is governed; "
+            "change it with Edit under an active spec whose scope admits it"
+        )
+        assert "waiver" not in reason.lower()
+
 
 # ---------------------------------------------------------------------------
 # Pipe-to-local-script carve-out
@@ -864,6 +876,57 @@ class TestConcludingMergeOfBase:
         decision, reason, _, _ = classify("git commit -m 'merge main'", cwd=merge_in_progress)
         assert decision == "ask", (decision, reason)
         assert "lane-only.txt" in reason
+
+    @pytest.mark.parametrize(
+        "remedy",
+        [
+            # The two exact strings pre-commit Guard 2 prints mid-merge / outside one.
+            "git restore --staged --source=MERGE_HEAD -- .caws/policy.yaml",
+            "git restore --staged -- .caws/policy.yaml",
+            # Steps (1) and (2) of the commit-deletions remedy.
+            "git diff --cached --diff-filter=D --name-only MERGE_HEAD",
+            "git restore --staged -- shared.txt",
+        ],
+    )
+    def test_remedy_commands_are_admitted_by_the_agent_pipeline_A3(
+        self, classify, merge_in_progress, remedy
+    ):
+        # An ask is a block in bypassPermissions mode, so a remedy the classifier
+        # does not admit dead-ends for an agent however well git accepts it.
+        decision, reason, _, _ = classify(remedy, cwd=merge_in_progress)
+        assert decision == "allow", (remedy, decision, reason)
+
+    def test_the_whole_commit_deletions_remedy_is_admitted_and_completes_A3(
+        self, classify, merge_in_progress
+    ):
+        repo = merge_in_progress
+        _git(repo, "rm", "-q", "-f", "shared.txt")  # the authored deletion
+        # The refusal that starts the remedy.
+        assert classify("git commit -m merge", cwd=repo)[0] == "ask"
+
+        # (1) list the authored deletions; (2) unstage them.
+        assert classify(
+            "git diff --cached --diff-filter=D --name-only MERGE_HEAD", cwd=repo
+        )[0] == "allow"
+        listed = _git(repo, "diff", "--cached", "--diff-filter=D", "--name-only", "MERGE_HEAD")
+        assert listed.stdout.split() == ["shared.txt"]
+        step2 = "git restore --staged -- shared.txt"
+        assert classify(step2, cwd=repo)[0] == "allow"
+        _git(repo, "restore", "--staged", "--", "shared.txt")
+        assert not (repo / "shared.txt").exists()
+
+        # (3) only incoming deletions remain staged, so the bare commit is admitted.
+        decision, reason, _, _ = classify("git commit -m merge", cwd=repo)
+        assert decision == "allow", (decision, reason)
+        _git(repo, "commit", "-q", "-m", "merge main")
+        assert not (repo / ".git" / "MERGE_HEAD").exists()
+
+        # (4) the deletion is committed on its own, outside the merge.
+        step4 = "git commit -m remove-shared -- shared.txt"
+        assert classify(step4, cwd=repo)[0] == "allow"
+        _git(repo, "commit", "-q", "-m", "remove-shared", "--", "shared.txt")
+        tree = _git(repo, "ls-tree", "-r", "--name-only", "HEAD").stdout.split()
+        assert "shared.txt" not in tree and "gone-a.txt" not in tree
 
     def test_outside_a_merge_the_same_deletions_still_ask(self, classify, commit_repo):
         _git(commit_repo, "rm", "-q", "tracked.txt")
