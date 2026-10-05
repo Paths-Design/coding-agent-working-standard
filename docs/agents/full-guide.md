@@ -609,10 +609,24 @@ If a guard refuses the conclusion, follow its merge-specific remedy.
 `.husky/pre-push` builds and runs `npm test` with a 900-second limit. With other
 agents running jest on the same machine the suite can exceed it, and the push is
 refused as a timeout with no test failing. Push when no lane is running tests;
-never `--no-verify`. **Judge a push by the remote, not the exit code.**
-`git push` can exit 141 (SIGPIPE) when the hook's output pipe closes, whether or
-not anything was refused. Compare `git ls-remote origin refs/heads/<branch>`
-with `git rev-parse <branch>`; they match only if the push landed.
+never `--no-verify`.
+
+**A push can pass every pre-push check and still not land.** Git opens the SSH
+connection and reads the remote's refs before it runs `pre-push`; during a hook
+that runs for several minutes the remote can close the idle connection, and
+git's first write to it fails with SIGPIPE — exit 141, nothing transferred,
+right after `pre-push: all checks passed`. The evidence is correlation, not a
+traced mechanism: in two paired trials the plain push exited 141 and the same
+push with an SSH keepalive landed. Push with the keepalive:
+
+```bash
+GIT_SSH_COMMAND="ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=120" \
+  git push origin <branch>
+```
+
+**Judge a push by the remote, not the exit code.** Compare
+`git ls-remote origin refs/heads/<branch>` with `git rev-parse <branch>`; they
+match only if the push landed.
 
 ---
 
