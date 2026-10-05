@@ -557,7 +557,12 @@ import { isAdapterCoveredSurface } from './types';
 // or given alongside a tree-ish) is now refused under its own label naming the
 // uncommitted-work overwrite; a ref is still a branch switch and branch
 // creation (-b/-B) is still admitted.
-export const SHARED_PACK_VERSION = 91;
+// v92 (CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01): classify_command.py's
+// bare-commit staged-deletions guard exempts deletions that arrive from the
+// branch being merged while MERGE_HEAD exists (staged state equals a merge
+// parent that changed the path against the merge base), and its remedy during
+// a merge no longer prescribes `git commit -- <paths>`, which git rejects.
+export const SHARED_PACK_VERSION = 92;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

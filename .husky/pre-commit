@@ -77,13 +77,69 @@ fi
 # (not LINTABLE) is the correct input here.
 POLICY_CHANGES=$(printf '%s\n' "$GUARDED" | grep -E '^\.caws/policy\.yaml$' || true)
 CODE_CHANGES=$(printf '%s\n' "$GUARDED" | grep -vE '^\.caws/' | grep -v '^$' || true)
+
+# While a merge is being concluded (MERGE_HEAD exists), a staged policy.yaml
+# that equals a merged-in parent's blob AND that parent changed relative to the
+# merge base arrived with the merge: it is incoming, not authored, and cannot be
+# split out (git rejects a pathspec commit during a merge). Anything else —
+# content matching neither parent, or a parent that left the file untouched — is
+# an authored change and still trips this guard.
+MERGE_HEAD_FILE=$(git rev-parse --git-path MERGE_HEAD 2>/dev/null || echo "")
+MERGE_SHAS=""
+if [ -n "$MERGE_HEAD_FILE" ] && [ -f "$MERGE_HEAD_FILE" ]; then
+  MERGE_SHAS=$(grep -E '^[0-9a-f]{40,64}$' "$MERGE_HEAD_FILE" || true)
+fi
+merge_parent_changed() {
+  # $1 = merged-in commit, $2 = path. True when that commit changed the path
+  # relative to the merge base shared with HEAD.
+  local base
+  base=$(git merge-base HEAD "$1" 2>/dev/null) || return 1
+  ! git diff --quiet "$base" "$1" -- "$2"
+}
+POLICY_INCOMING_FROM=""
+if [ -n "$POLICY_CHANGES" ] && [ -n "$MERGE_SHAS" ]; then
+  while IFS= read -r _sha; do
+    [ -n "$_sha" ] || continue
+    if git diff --cached --quiet "$_sha" -- .caws/policy.yaml 2>/dev/null \
+      && merge_parent_changed "$_sha" .caws/policy.yaml; then
+      POLICY_INCOMING_FROM="$_sha"
+      break
+    fi
+  done <<< "$MERGE_SHAS"
+  if [ -n "$POLICY_INCOMING_FROM" ]; then
+    POLICY_CHANGES=""
+  fi
+fi
+
 if [ -n "$POLICY_CHANGES" ] && [ -n "$CODE_CHANGES" ]; then
   echo "BLOCKED: .caws/policy.yaml is staged together with code changes." >&2
-  echo "  Commit the policy change on its own so it is reviewable as a governance change." >&2
-  echo "  For a blocking gate violation use a waiver instead of editing policy:" >&2
-  echo "    caws waiver create <id> --title \"<title>\" --gate <gate> --reason \"...\" \\" >&2
-  echo "      --approved-by \"...\" --expires-at <iso8601>" >&2
-  echo "  A budget overage needs neither: budget_limit is advisory and never blocks." >&2
+  if [ -n "$MERGE_SHAS" ]; then
+    # A merge commit cannot be split and git rejects `git commit -- <paths>`
+    # during a merge, so the remedy is to unstage the authored policy edit
+    # (it stays in the working tree), conclude the merge, then commit it alone.
+    _MERGE_SHA=$(printf '%s\n' "$MERGE_SHAS" | head -n 1)
+    _HEAD_CHANGED=1
+    _BASE=$(git merge-base HEAD "$_MERGE_SHA" 2>/dev/null || echo "")
+    if [ -n "$_BASE" ] && git diff --quiet "$_BASE" HEAD -- .caws/policy.yaml; then _HEAD_CHANGED=0; fi
+    echo "  A merge is in progress: the commit cannot be split, and git rejects a pathspec" >&2
+    echo "  commit during a merge. Your edit to .caws/policy.yaml matches neither parent." >&2
+    echo "  Unstage it (it stays in your working tree), conclude the merge, then commit" >&2
+    echo "  the policy change on its own:" >&2
+    if merge_parent_changed "$_MERGE_SHA" .caws/policy.yaml && [ "$_HEAD_CHANGED" -eq 0 ]; then
+      echo "    git restore --staged --source=MERGE_HEAD -- .caws/policy.yaml" >&2
+    elif ! merge_parent_changed "$_MERGE_SHA" .caws/policy.yaml; then
+      echo "    git restore --staged --source=HEAD -- .caws/policy.yaml" >&2
+    else
+      echo "    git restore --staged --source=<HEAD or MERGE_HEAD> -- .caws/policy.yaml" >&2
+      echo "  (both sides changed policy.yaml: choose the side the merge should carry)" >&2
+    fi
+    echo "  then: git commit" >&2
+  else
+    echo "  Commit the policy change on its own so it is reviewable as a governance change:" >&2
+    echo "  unstage it, commit the code, then commit the policy file by itself." >&2
+    echo "    git restore --staged -- .caws/policy.yaml" >&2
+    echo "  A budget overage needs no policy edit: budget_limit is advisory and never blocks." >&2
+  fi
   exit 1
 fi
 

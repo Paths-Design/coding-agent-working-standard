@@ -1371,6 +1371,73 @@ def _commit_stages_all(commit_args: list[str]) -> bool:
     return False
 
 
+def _merge_parent_shas(check_dir: Path) -> list[str]:
+    """Commit ids recorded in MERGE_HEAD (one per merged-in parent), or []."""
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--git-path", "MERGE_HEAD"],
+            cwd=str(check_dir),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if proc.returncode != 0:
+            return []
+        merge_head = Path(proc.stdout.strip())
+        if not merge_head.is_absolute():
+            merge_head = Path(check_dir) / merge_head
+        return [ln.strip() for ln in merge_head.read_text().splitlines() if ln.strip()]
+    except (OSError, subprocess.SubprocessError):
+        return []
+
+
+def _staged_paths_equal_to_merge_parent(check_dir: Path, shas: list[str], paths: list[str]) -> set[str]:
+    """Of `paths`, those whose STAGED state (content, or absence) equals the
+    state in a merge parent AND that the parent actually changed relative to the
+    merge base. Such a path is incoming from the merged branch, not authored by
+    the person concluding the merge. A path whose content matches neither
+    parent is authored, and so is one the parent left untouched (staged equal to
+    an unchanged parent means the author reverted their own side) — neither is
+    ever returned."""
+
+    def names(*git_args: str) -> set[str] | None:
+        try:
+            proc = subprocess.run(
+                ["git", "-c", "core.quotePath=false", *git_args],
+                cwd=str(check_dir),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if proc.returncode != 0:
+            return None
+        return {p for p in proc.stdout.split("\0") if p}
+
+    incoming: set[str] = set()
+    for sha in shas:
+        differs = names("diff", "--cached", "--name-only", "-z", sha)
+        base_proc = None
+        try:
+            base_proc = subprocess.run(
+                ["git", "merge-base", "HEAD", sha],
+                cwd=str(check_dir),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass
+        if differs is None or base_proc is None or base_proc.returncode != 0:
+            continue
+        parent_changed = names("diff", "--name-only", "-z", base_proc.stdout.strip(), sha)
+        if parent_changed is None:
+            continue
+        incoming |= {p for p in paths if p not in differs and p in parent_changed}
+    return incoming
+
+
 def classify_commit_deletions(segment: str, cwd: Path | None) -> tuple[str, str] | None:
     """Ask before a bare `git commit` that would sweep staged deletions.
 
@@ -1482,6 +1549,22 @@ def classify_commit_deletions(segment: str, cwd: Path | None) -> tuple[str, str]
     deleted = [p for p in proc.stdout.split("\0") if p]
     if not deleted:
         return None  # additions/modifications only — ordinary work, admitted
+    # Concluding a merge: a deletion that equals the merged-in parent's state
+    # came from the branch being merged, not from the author. Only those are
+    # exempt; a deletion matching neither parent is authored and still asks.
+    merge_shas = [] if _commit_stages_all(commit_args) else _merge_parent_shas(check_dir)
+    if merge_shas:
+        incoming = _staged_paths_equal_to_merge_parent(check_dir, merge_shas, deleted)
+        deleted = [p for p in deleted if p not in incoming]
+        if not deleted:
+            return None  # every staged deletion is incoming from the merge
+        remediation = (
+            "a merge is in progress, and git rejects a pathspec commit during a "
+            "merge — so do not use `-- <paths>`. List the deletions the merge did "
+            "not bring in with: git diff --cached --diff-filter=D --name-only "
+            "MERGE_HEAD; if they are intended, conclude the merge with a bare "
+            "git commit -m <msg> and confirm this prompt"
+        )
     shown = ", ".join(deleted[:3]) + (", …" if len(deleted) > 3 else "")
     return (
         "ask",
