@@ -223,6 +223,22 @@ describe('autoCommit input paths that are absent on disk', () => {
     expect(filesInCommit(repo, outcome.sha)).toEqual(['.caws/specs/.archive/S.yaml']);
   });
 
+  test('a tracked path deleted on disk is kept so the audit commit records the removal', () => {
+    const repo = plainRepo('daa-del-');
+    fs.rmSync(path.join(repo, 'tracked.txt'));
+
+    const outcome = autoCommit({
+      repoRoot: repo,
+      paths: ['tracked.txt', 'gone/missing.yaml'],
+      message: 'chore(caws): delete',
+      wasDirtyBeforeWrite: false,
+    });
+
+    expect(outcome.kind).toBe('committed');
+    expect(git(repo, ['show', '--name-status', '--format=', outcome.sha])).toBe('D\ttracked.txt');
+    expect(stagedPaths(repo)).toBe('');
+  });
+
   test('A3: every path absent or gitignored is the committed no-op', () => {
     const repo = plainRepo('daa-a3-');
     fs.writeFileSync(path.join(repo, '.gitignore'), 'ignored.txt\n');

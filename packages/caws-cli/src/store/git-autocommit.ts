@@ -171,9 +171,14 @@ export function autoCommit(input: AutoCommitInput): AutoCommitOutcome {
   // earlier step of the transition) is dropped the same way: `git add --
   // <missing>` fails fatally with "pathspec did not match", which would turn
   // an otherwise-clean transition into a refused_dirty "NOT committed".
-  // Vanished paths are filtered, never force-added or recreated.
+  // Vanished paths are filtered, never force-added or recreated. The one
+  // exception is a path still tracked in the index: its absence is a deletion
+  // or move the transition made (archive, retire), and `git add` stages that
+  // removal, so the audit commit must keep it.
   const trackablePaths = input.paths.filter((p) => {
-    if (!fs.existsSync(path.resolve(input.repoRoot, p))) return false;
+    if (!fs.existsSync(path.resolve(input.repoRoot, p))) {
+      return runGit(['ls-files', '--error-unmatch', '--', p], input.repoRoot).ok;
+    }
     // `git check-ignore -q <path>` exits 0 when the path IS ignored.
     const ignored = runGit(['check-ignore', '-q', '--', p], input.repoRoot);
     return !ignored.ok;
