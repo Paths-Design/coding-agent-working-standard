@@ -204,7 +204,7 @@ test('merge preview distinguishes clean and conflicting branches without changin
     expect(result.ok).toBe(true);
     expect(result.value.kind).toBe('dry_run');
     expect(result.value.canProceed).toBe(!conflicting);
-    expect(result.value.data.merge_check.status).toBe(conflicting ? 'conflict_or_error' : 'clean');
+    expect(result.value.data.merge_check.status).toBe(conflicting ? 'conflict' : 'clean');
     const command = ['worktree', 'merge', 'lane', '--dry-run', '--data'];
     const preview = cli(lane, command);
     const after = snapshot();
@@ -221,6 +221,11 @@ test('merge preview distinguishes clean and conflicting branches without changin
       conflicting ? 'NOT ready to merge' : ': ready to merge.'
     );
     expect(preview.stdout + preview.stderr).toContain('"merge_check"');
+    if (conflicting) {
+      const output = preview.stdout + preview.stderr;
+      expect(output).toContain('"conflicting_paths": [\n');
+      expect(output).toContain('merge preflight found conflicts in 1 path(s): conflict.txt');
+    }
     expect(after).toEqual(before);
     retain(conflicting ? 'merge-conflict' : 'merge-clean', { result, before, after });
   }

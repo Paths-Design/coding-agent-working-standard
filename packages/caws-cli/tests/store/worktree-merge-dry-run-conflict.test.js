@@ -20,7 +20,11 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { createSpec } = require('../../dist/store/specs-writer');
-const { createWorktree, mergeWorktree } = require('../../dist/store/worktrees-writer');
+const {
+  createWorktree,
+  mergeWorktree,
+  classifyMergeTree,
+} = require('../../dist/store/worktrees-writer');
 const { initProject } = require('../../dist/store/init-store');
 
 const SESSION_ID = 'sess-dryrun-conflict';
@@ -144,7 +148,7 @@ describe('merge --dry-run readiness agrees with the real merge', () => {
     );
   });
 
-  test('a conflicting preview reports not ready with a qualified finding, and the real merge refuses leaving base unchanged', () => {
+  test('a conflicting preview names the conflicting path, and the real merge refuses leaving base unchanged', () => {
     const { root, caws, lane } = fixture('dryrun-a1-', 'DRYRUN-A1-001');
     fs.writeFileSync(path.join(lane, 'conflict.txt'), 'lane side\n');
     commitAll(lane, 'feat: lane edits conflict.txt');
@@ -159,15 +163,19 @@ describe('merge --dry-run readiness agrees with the real merge', () => {
     expect(preview.value.kind).toBe('dry_run');
     expect(preview.value.canProceed).toBe(false);
     const check = preview.value.data.merge_check;
-    expect(check.status).toBe('conflict_or_error');
-    // The preview qualifies its verdict instead of reporting an unqualified
-    // ready: the finding states the preflight failed on conflict or Git error.
-    expect(preview.value.findings).toHaveLength(1);
-    expect(preview.value.findings[0]).toContain('merge preflight failed (conflict or Git error)');
+    expect(check.status).toBe('conflict');
+    expect(check.conflicting_paths).toEqual(['conflict.txt']);
+    expect(check.detail).toBeUndefined();
+    // The preview names the exact conflicting path rather than an unqualified
+    // ready or a generic git failure.
+    expect(preview.value.findings).toEqual([
+      'merge preflight found conflicts in 1 path(s): conflict.txt',
+    ]);
 
     const real = merge(caws, false);
     expect(real.ok).toBe(false);
-    expect(real.errors[0].message).toContain('conflicting changes');
+    expect(real.errors[0].message).toContain('conflicting changes in 1 path(s):\n  - conflict.txt');
+    expect(real.errors[0].message).not.toContain('Command failed');
 
     expect(git(root, ['rev-parse', 'main'])).toBe(baseBefore);
     expect(git(lane, ['rev-parse', 'HEAD'])).toBe(branchBefore);
@@ -182,5 +190,19 @@ describe('merge --dry-run readiness agrees with the real merge', () => {
         base_after: git(root, ['rev-parse', 'main']),
       })
     );
+  });
+
+  test('a git failure that is not a conflict is reported as an error, not as a conflict with zero paths', () => {
+    const { root } = fixture('dryrun-err-', 'DRYRUN-ERR-001');
+    const head = git(root, ['rev-parse', 'main']);
+    const outcome = classifyMergeTree(head, 'refs/heads/no-such-branch', root);
+    expect(outcome.kind).toBe('error');
+    expect(outcome.paths).toBeUndefined();
+    expect(outcome.reason).toMatch(/no-such-branch/);
+    // And a genuine clean merge of identical tips is neither.
+    expect(classifyMergeTree(head, head, root)).toEqual({
+      kind: 'clean',
+      treeSha: git(root, ['rev-parse', `${head}^{tree}`]),
+    });
   });
 });

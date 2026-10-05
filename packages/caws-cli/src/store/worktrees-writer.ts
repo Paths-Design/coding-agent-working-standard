@@ -26,6 +26,7 @@
 //   - Mutate worktrees.json without going through applyRegistryPatch.
 //   - Run rm -rf on any path.
 
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -63,6 +64,7 @@ import { runLifecycleTransaction } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
 import { admitsOwner, describeCandidateTrace } from '../shell/session/resolve-session';
 import type { SessionCandidates } from '../shell/session/types';
+import { resolveGitBinary } from './git-binary';
 import { repoRootFromCawsDir, runGit, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
 import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
@@ -390,6 +392,65 @@ function autoCommitTransition(
 
 // ─── Git helpers ─────────────────────────────────────────────────────────
 // (CAWS-REFACTOR-SHARED-UTILS-001) runGit consolidated into store/repo-root.ts.
+
+/** Outcome of `git merge-tree --write-tree`, with conflict and error kept apart. */
+export type MergeTreeOutcome =
+  | { readonly kind: 'clean'; readonly treeSha: string }
+  | { readonly kind: 'conflict'; readonly paths: readonly string[] }
+  | { readonly kind: 'error'; readonly reason: string };
+
+const OBJECT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/**
+ * Compute a merge in the object database and classify the result.
+ *
+ * A conflict is exit 1 WITH a tree object id as the first output field
+ * (`--name-only -z`: `<oid>\0<path>\0...\0\0<messages>`). Exit 1 alone is not
+ * enough: git also exits 1 for an unresolvable ref ("not something we can
+ * merge"), which prints no tree id. That and every other failure is an
+ * `error` carrying git's own stderr, never a conflict with zero paths.
+ */
+export function classifyMergeTree(base: string, branch: string, cwd: string): MergeTreeOutcome {
+  let stdout = '';
+  let stderr = '';
+  let status: number | null = 0;
+  try {
+    stdout = execFileSync(
+      resolveGitBinary(),
+      ['merge-tree', '--write-tree', '--name-only', '-z', base, branch],
+      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+  } catch (e) {
+    const cause = e as {
+      status?: number | null;
+      stdout?: Buffer | string;
+      stderr?: Buffer | string;
+    };
+    status = typeof cause.status === 'number' ? cause.status : null;
+    stdout = cause.stdout === undefined ? '' : cause.stdout.toString();
+    stderr = cause.stderr === undefined ? '' : cause.stderr.toString();
+    if (status !== 1) {
+      const message = e instanceof Error ? e.message : '';
+      return { kind: 'error', reason: (stderr || message || 'unknown git error').trim() };
+    }
+  }
+  const fields = stdout.split('\0');
+  const oid = (fields[0] ?? '').trim();
+  if (status === 0) {
+    return OBJECT_ID.test(oid)
+      ? { kind: 'clean', treeSha: oid }
+      : { kind: 'error', reason: `unexpected git merge-tree output: ${stdout.slice(0, 200)}` };
+  }
+  if (!OBJECT_ID.test(oid)) {
+    return { kind: 'error', reason: (stderr || stdout || 'git merge-tree failed').trim() };
+  }
+  const paths: string[] = [];
+  for (const field of fields.slice(1)) {
+    if (field === '') break;
+    if (!paths.includes(field)) paths.push(field);
+  }
+  return { kind: 'conflict', paths };
+}
 
 function getCurrentBranch(repoRoot: string): string | null {
   const r = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);
@@ -2254,30 +2315,32 @@ function mergeViaCompareAndSwap(
     // Compute the merged tree in the object database. No working tree, no
     // index, no HEAD — so a dirty canonical checkout cannot corrupt the
     // result and a conflict cannot strand a half-merged tree on disk.
-    const treeResult = runGit(['merge-tree', '--write-tree', baseBefore, branch], repoRoot);
-    if (!treeResult.ok) {
-      // merge-tree exits non-zero on conflict and prints the conflicted
-      // paths. This is a genuine conflict, not contention: retrying cannot
-      // help, and the working tree is still clean.
+    const treeResult = classifyMergeTree(baseBefore, branch, repoRoot);
+    if (treeResult.kind === 'conflict') {
+      // A genuine conflict, not contention: retrying cannot help, and the
+      // working tree is still clean.
       return {
         ok: false,
         message:
-          `Cannot merge ${branch} into ${baseBranch}: conflicting changes.\n` +
-          `${treeResult.reason}`,
+          `Cannot merge ${branch} into ${baseBranch}: conflicting changes in ` +
+          `${treeResult.paths.length} path(s):\n` +
+          treeResult.paths.map((p) => `  - ${p}`).join('\n'),
         contention: false,
         repairSuffix:
           'No merge was started and the working tree is untouched. Resolve by ' +
           `merging ${baseBranch} into ${branch} inside the worktree, then re-run.`,
       };
     }
-    const mergedTree = treeResult.stdout.trim().split('\n')[0]?.trim() ?? '';
-    if (!/^[0-9a-f]{40}$/.test(mergedTree)) {
+    if (treeResult.kind === 'error') {
       return {
         ok: false,
-        message: `Unexpected tree SHA from git merge-tree: ${mergedTree}`,
+        message:
+          `Cannot merge ${branch} into ${baseBranch}: git merge-tree failed ` +
+          `(a Git error, not a conflict): ${treeResult.reason}`,
         contention: false,
       };
     }
+    const mergedTree = treeResult.treeSha;
 
     // Build the merge commit. Two parents, base first, matching the shape
     // `git merge --no-ff` would have produced.
@@ -2504,15 +2567,22 @@ export function mergeWorktree(
       } else {
         const baseSha = base.stdout.trim();
         const branchSha = branch.stdout.trim();
-        const tree = runGit(['merge-tree', '--write-tree', baseSha, branchSha], repo);
+        const tree = classifyMergeTree(baseSha, branchSha, repo);
         mergeCheck = {
-          status: tree.ok ? 'clean' : 'conflict_or_error',
+          status: tree.kind === 'error' ? 'error' : tree.kind,
           base_sha: baseSha,
           branch_sha: branchSha,
-          ...(tree.ok ? { tree_sha: tree.stdout.trim().split('\n')[0] } : { detail: tree.reason }),
+          ...(tree.kind === 'clean' ? { tree_sha: tree.treeSha } : {}),
+          ...(tree.kind === 'conflict' ? { conflicting_paths: tree.paths } : {}),
+          ...(tree.kind === 'error' ? { detail: tree.reason } : {}),
         };
-        if (!tree.ok)
-          findings.push(`merge preflight failed (conflict or Git error): ${tree.reason}`);
+        if (tree.kind === 'conflict') {
+          findings.push(
+            `merge preflight found conflicts in ${tree.paths.length} path(s): ${tree.paths.join(', ')}`
+          );
+        } else if (tree.kind === 'error') {
+          findings.push(`merge preflight failed (Git error, not a conflict): ${tree.reason}`);
+        }
       }
     }
     return ok({
