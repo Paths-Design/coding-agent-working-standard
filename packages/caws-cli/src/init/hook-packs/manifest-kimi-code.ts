@@ -45,7 +45,7 @@ import type { HookPackV1 } from './types';
 // adopts per-session advisory suppression keyed on exact text while retaining
 // its exit-1-to-2 promotion and deny precedence.
 // Hook port qualification: shared execution records and session-cache custody.
-export const KIMI_CODE_PACK_VERSION = 9;
+export const KIMI_CODE_PACK_VERSION = 10;
 
 export const KIMI_CODE_PACK: HookPackV1 = {
   id: 'kimi-code',

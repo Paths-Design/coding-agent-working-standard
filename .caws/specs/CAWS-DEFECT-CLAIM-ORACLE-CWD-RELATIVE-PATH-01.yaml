@@ -2,10 +2,11 @@ id: CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01
 title: 'Claim oracle hard-blocks a worktree owner from its own file when the path is cwd-relative'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: hp-claim-oracle-cwd
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hp-claim-oracle-cwd at 2c01084b40a5757a708f4189d2b660256f0b8647'
 created_at: '2026-08-19T00:59:18.669Z'
-updated_at: '2026-10-05T07:11:03.551Z'
+updated_at: '2026-10-05T07:48:03.775Z'
 blast_radius:
   modules:
     - 'caws-cli/templates/hook-packs/shared (worktree-claim-oracle.cjs, bash-write-guard.sh)'
@@ -24,7 +25,7 @@ scope:
 invariants:
   - 'The oracle''s answer must not depend on how the caller SPELLS the path. The same file, same session, same owner must produce the same outcome whether the path is given cwd-relative, canonical-absolute, or worktree-absolute.'
   - 'The fix must not weaken block_claimed for a genuine canonical-root write by a non-owner. A canonical-checkout session writing a path claimed by someone else''s worktree must still block, and the repair must carry a regression control proving that.'
-  - 'Fail closed on ambiguity. If the operating session''s cwd cannot be resolved, the oracle must NOT assume worktree-relative — an unresolvable cwd is ask/error_fail_closed, never a silent pass.'
+  - 'Fail closed on ambiguity where the payload contract promises a cwd. For surfaces whose PreToolUse payload carries cwd (claude-code, codex, opencode, qwen-code, kimi-code), an unresolvable cwd for a relative target is ask_uncertain, never a silent pass. For surfaces whose payload is not confirmed to carry cwd (zcode, dsh, unknown), the prior resolution stands: failing closed there would refuse every relative write, the false-refusal class the release stance ranks worse. Decided 2026-10-05; the unverified surfaces are tracked by CAWS-SURFACE-PAYLOAD-CWD-CONTRACT-01.'
 acceptance:
   - id: A1
     given: 'session S owns worktree W and the path P is in the bound spec''s scope.in'
@@ -42,3 +43,25 @@ non_functional: {}
 contracts:
   - name: 'claim-oracle-path-classification'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "already held on main (passed before the fix); owner gets status 0, empty output, for both spellings; non-owner control blocks both"
+    recorded_at: "2026-10-05T07:46:16.633Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats::claim-oracle-cwd: the owner writing its worktree file passes cwd-relative and worktree-absolute alike"
+    commit_sha: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+    test_verified_at: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "status 2 'BLOCKED: ... mutates wt-seed:packages/seed/src, claimed by an active worktree scope.in' for relative and canonical-absolute spellings"
+    recorded_at: "2026-10-05T07:46:32.567Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats::claim-oracle-cwd: a canonical-checkout session writing a path the worktree claims is still blocked"
+    commit_sha: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+    test_verified_at: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "before: HOOK_CWD unset -> status 0, empty output (silent pass). after: permissionDecision ask 'ask_uncertain: the operating cwd could not be resolved for the relative path scratch.txt'. Scoped to cwd-contract surfaces (claude-code, codex, opencode, qwen-code, kimi-code) per the amended invariant; zcode/dsh/unknown keep prior behavior (controls in the same suite); opencode payload now carries cwd (opencode-plugin-payload-cwd.test.js)"
+    recorded_at: "2026-10-05T07:47:04.586Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats::claim-oracle-cwd: a relative target with no cwd asks instead of passing as a canonical path"
+    commit_sha: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+    test_verified_at: b8f5fe6cdd935414138cd439ab15c8f5f40e056e

@@ -1,9 +1,11 @@
 id: CAWS-DEFECT-GUARD-COPY-OFFERS-WAIVER-FOR-HOOK-BLOCKS-01
 title: 'Shipped guard and pack copy tells a blocked agent a waiver will clear a hook, scope or policy block; waivers only filter caws gates run'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hp-guard-copy-waiver at d8c64730375a60e4837c4382a984150f1bc31e47'
 created_at: '2026-10-05T06:32:31.872Z'
-updated_at: '2026-10-05T06:32:31.872Z'
+updated_at: '2026-10-05T08:04:57.056Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
@@ -38,3 +40,25 @@ acceptance:
     then: 'the section names what actually lifts each block (reprieve for a hook handler, a spec for policy.yaml) and offers no waiver'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "kimi-code/AGENTS.md and qwen-code/CAWS-HOOKS.md name caws reprieve grant --handlers (human) and state a waiver never lifts a hook; packs kimi 10, qwen 3"
+    recorded_at: "2026-10-05T08:04:01.126Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/guard-copy-no-waiver-for-hook-blocks.test.js::names the human-granted reprieve and says a waiver does not lift a hook"
+    commit_sha: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
+    test_verified_at: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "classify_command.py policy.yaml deny text names Edit under an active spec, no waiver; shared pack 93"
+    recorded_at: "2026-10-05T08:04:09.052Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_classify_command.py::TestDenyClass::test_naked_rm_mv_on_policy_yaml_names_the_spec_path_and_no_waiver"
+    commit_sha: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
+    test_verified_at: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "CLAUDE.md Governed paths: reprieve for a hook handler, Edit under a spec for policy.yaml, nothing for --no-verify; no waiver escape"
+    recorded_at: "2026-10-05T08:04:17.359Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/guard-copy-no-waiver-for-hook-blocks.test.js::names what lifts each block: reprieve for a hook, a spec for policy.yaml, nothing for --no-verify"
+    commit_sha: "0d518167b88922671790f8ff3e4fb43a3fa9744e"
+    test_verified_at: "0d518167b88922671790f8ff3e4fb43a3fa9744e"

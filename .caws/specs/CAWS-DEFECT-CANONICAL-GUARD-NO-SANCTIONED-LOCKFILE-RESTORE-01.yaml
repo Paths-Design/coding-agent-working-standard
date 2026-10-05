@@ -1,9 +1,10 @@
 id: CAWS-DEFECT-CANONICAL-GUARD-NO-SANCTIONED-LOCKFILE-RESTORE-01
 title: 'Canonical-checkout guard offers no sanctioned way to discard lockfile churn or unstage a path while lanes are active'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: hp-lockfile-restore
 created_at: '2026-10-05T06:14:50.905Z'
-updated_at: '2026-10-05T06:14:50.905Z'
+updated_at: '2026-10-05T07:22:22.052Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:

@@ -227,7 +227,7 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     (r"\b(rm|mv)\b[^\n]*\.caws/specs/[^\s'\"]*\.ya?ml\b",
      "naked rm/mv on .caws/specs/*.yaml — use `caws specs close|archive <id>`"),
     (r"\b(rm|mv)\b[^\n]*\.caws/policy\.ya?ml\b",
-     "naked rm/mv on .caws/policy.yaml — policy is governed; use Edit and a CAWS waiver"),
+     "naked rm/mv on .caws/policy.yaml — policy is governed; change it with Edit under an active spec whose scope admits it"),
     (r"\b(rm|mv)\b[^\n]*\.caws/waivers/[^\s'\"]*\.ya?ml\b",
      "naked rm/mv on .caws/waivers/*.yaml — use `caws waiver revoke <id>`"),
 ]
