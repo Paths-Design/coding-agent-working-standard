@@ -2028,6 +2028,7 @@ _LOCKFILE_BASENAMES = frozenset(
     }
 )
 _RESTORE_PATH_RE = re.compile(r"^[A-Za-z0-9._/@+-]+$")
+_RESTORE_TREEISH_RE = re.compile(r"^[A-Za-z0-9._/@^~+][A-Za-z0-9._/@^~+-]*$")
 
 
 def _restore_targets(tokens):
@@ -2069,12 +2070,43 @@ def _is_lockfile_only_restore(tokens):
 
 
 def _is_index_only_restore(tokens):
-    """`git restore --staged <paths>` with no --worktree/--source/--patch."""
-    parsed = _restore_targets(tokens)
-    if parsed is None:
-        return False
-    flags, targets = parsed
-    return bool(targets) and flags in (["--staged"], ["-S"])
+    """`git restore --staged [--source=<t> | --source <t> | -s <t>] [--] <paths>`.
+
+    The index is the only thing it changes. `--source` without `--staged`
+    writes the working tree and is not admitted; neither is any other flag
+    (--worktree/-W, -p, -f, --overlay, --ignore-unmerged, an unknown flag, or a
+    clustered short such as -SW).
+    """
+    staged = False
+    targets = 0
+    past_sep = False
+    expect_source = False
+    for tok in tokens[2:]:
+        if expect_source:
+            if not _RESTORE_TREEISH_RE.match(tok):
+                return False
+            expect_source = False
+            continue
+        if not past_sep:
+            if tok == "--":
+                past_sep = True
+                continue
+            if tok in ("--staged", "-S"):
+                staged = True
+                continue
+            if tok in ("--source", "-s"):
+                expect_source = True
+                continue
+            if tok.startswith("--source="):
+                if not _RESTORE_TREEISH_RE.match(tok[len("--source="):]):
+                    return False
+                continue
+            if tok.startswith("-"):
+                return False
+        if not _RESTORE_PATH_RE.match(tok):
+            return False
+        targets += 1
+    return staged and not expect_source and targets >= 1
 
 
 def _trusted_git_init_token_path(repo_root: Path) -> Path | None:

@@ -160,8 +160,8 @@ checkout_args_are_pathspec() {
 #   * a path restore whose EVERY target is a package-manager lockfile — the
 #     content is regenerable by the package manager, and no lane owns lockfile
 #     churn in the canonical checkout;
-#   * `git restore --staged <path>`, which only touches the index and discards
-#     no working-tree content.
+#   * `git restore --staged [--source=<tree-ish>] <path>`, which only touches the
+#     index and discards no working-tree content.
 # Both are matched word-by-word against a strict path charset, so any shell
 # metacharacter, extra flag, tree-ish or non-lockfile target leaves the command
 # to the refusals below.
@@ -218,12 +218,42 @@ lockfile_only_restore() {
   return 0
 }
 
-# index_only_restore COMMAND — `git restore --staged <paths>` with no
-# --worktree/--source/--patch: the index is the only thing it changes.
+# index_only_restore COMMAND — `git restore --staged [--source=<t> | --source <t>
+# | -s <t>] [--] <paths>`: the index is the only thing it changes. --source
+# without --staged writes the working tree and is not admitted. Any other flag
+# (--worktree/-W, -p, -f, --overlay, --ignore-unmerged, an unknown flag, or a
+# clustered short such as -SW) refuses; the command is read word by word so no
+# shell metacharacter survives the path/tree-ish charsets.
 index_only_restore() {
-  restore_command_targets "$1" || return 1
-  [[ "$RESTORE_SUB" == "restore" ]] || return 1
-  [[ "$RESTORE_FLAGS" == " --staged" || "$RESTORE_FLAGS" == " -S" ]]
+  local cmd="$1" word staged=0 targets=0 expect_source=0 past_sep=0
+  local -a words=()
+  [[ "$cmd" == *$'\n'* ]] && return 1
+  read -r -a words <<<"$cmd" || return 1
+  [[ "${#words[@]}" -ge 4 && "${words[0]}" == "git" && "${words[1]}" == "restore" ]] || return 1
+  for word in "${words[@]:2}"; do
+    if [[ "$expect_source" -eq 1 ]]; then
+      [[ "$word" =~ ^[A-Za-z0-9._/@^~+][A-Za-z0-9._/@^~+-]*$ ]] || return 1
+      expect_source=0
+      continue
+    fi
+    if [[ "$past_sep" -eq 0 ]]; then
+      case "$word" in
+        --) past_sep=1; continue ;;
+        --staged | -S) staged=1; continue ;;
+        --source | -s) expect_source=1; continue ;;
+        --source=*)
+          [[ "${word#--source=}" =~ ^[A-Za-z0-9._/@^~+][A-Za-z0-9._/@^~+-]*$ ]] || return 1
+          continue ;;
+        -*) return 1 ;;
+      esac
+    fi
+    if [[ "$word" =~ ^\"(.*)\"$ || "$word" =~ ^\'(.*)\'$ ]]; then
+      word="${BASH_REMATCH[1]}"
+    fi
+    [[ "$word" =~ ^[A-Za-z0-9._/@+-]+$ ]] || return 1
+    targets=$((targets + 1))
+  done
+  [[ "$staged" -eq 1 && "$expect_source" -eq 0 && "$targets" -ge 1 ]]
 }
 
 if index_only_restore "$COMMAND"; then

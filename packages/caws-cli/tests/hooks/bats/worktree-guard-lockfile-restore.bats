@@ -189,11 +189,59 @@ _assert_admitted() {
   assert_output --partial "$RESTORE_LABEL"
 }
 
-@test "worktree-guard: git restore --staged --source from another revision is refused" {
+@test "worktree-guard: the exact merge-conflict remedy for a staged policy file is admitted" {
   _active_worktree
-  _guard 'git restore --staged --source=HEAD~1 tracked.txt'
+  _assert_admitted 'git restore --staged --source=MERGE_HEAD -- .caws/policy.yaml'
+  _assert_admitted 'git restore --staged -- .caws/policy.yaml'
+}
+
+@test "worktree-guard: the --source and -s spellings of an index-only restore are admitted" {
+  _active_worktree
+  _assert_admitted 'git restore --staged --source HEAD~1 tracked.txt'
+  _assert_admitted 'git restore -S -s HEAD tracked.txt'
+  _assert_admitted 'git restore -s origin/main --staged -- tracked.txt'
+}
+
+@test "worktree-guard: --source without --staged writes the working tree and is refused" {
+  _active_worktree
+  _guard 'git restore --source=MERGE_HEAD -- .caws/policy.yaml'
   assert_equal "$status" 2
   assert_output --partial "$RESTORE_LABEL"
+  _guard 'git restore -s HEAD tracked.txt'
+  assert_equal "$status" 2
+  assert_output --partial "$RESTORE_LABEL"
+}
+
+@test "worktree-guard: --staged --worktree --source also writes the working tree and is refused" {
+  _active_worktree
+  _guard 'git restore --staged --worktree --source=HEAD -- tracked.txt'
+  assert_equal "$status" 2
+  assert_output --partial "$RESTORE_LABEL"
+}
+
+@test "worktree-guard: a clustered short flag cannot smuggle --worktree past the index-only rule" {
+  _active_worktree
+  _guard 'git restore -SW tracked.txt'
+  assert_equal "$status" 2
+  assert_output --partial "$RESTORE_LABEL"
+}
+
+@test "worktree-guard: --staged with -p, -f, --overlay or an unknown flag is refused" {
+  _active_worktree
+  local flag
+  for flag in -p -f --overlay --ignore-unmerged --bogus; do
+    _guard "git restore --staged $flag tracked.txt"
+    assert_equal "$status" 2
+    assert_output --partial "$RESTORE_LABEL"
+  done
+}
+
+@test "worktree-guard: a --source value that is a flag or shell syntax is refused" {
+  _active_worktree
+  _guard 'git restore --staged --source=-x tracked.txt'
+  assert_equal "$status" 2
+  _guard 'git restore --staged --source=HEAD;rm tracked.txt'
+  assert_equal "$status" 2
 }
 
 # --- A4: a remaining refusal names an alternative that applies ----------------

@@ -86,6 +86,9 @@ def test_lockfile_restore_chained_to_a_dangerous_command_takes_the_worst(classif
         "git restore -S src/index.ts",
         "git restore --staged -- src/index.ts",
         "git restore --staged .",
+        "git restore --staged --source=MERGE_HEAD -- .caws/policy.yaml",
+        "git restore --staged --source HEAD~1 src/index.ts",
+        "git restore -S -s origin/main src/index.ts",
     ],
 )
 def test_index_only_restore_is_allowed(classify, command):
@@ -96,8 +99,16 @@ def test_index_only_restore_is_allowed(classify, command):
     "command",
     [
         "git restore --staged --worktree src/index.ts",
-        "git restore --staged --source=HEAD~1 src/index.ts",
         "git restore --staged -p src/index.ts",
+        "git restore --staged -f src/index.ts",
+        "git restore --staged --overlay src/index.ts",
+        "git restore --staged --ignore-unmerged src/index.ts",
+        "git restore --staged --worktree --source=HEAD -- src/index.ts",
+        "git restore -SW src/index.ts",
+        "git restore --staged --source=-x src/index.ts",
+        "git restore --staged --source",
+        "git restore --source=MERGE_HEAD -- .caws/policy.yaml",
+        "git restore -s HEAD src/index.ts",
     ],
 )
 def test_staged_restore_with_other_effects_is_ask(classify, command):
