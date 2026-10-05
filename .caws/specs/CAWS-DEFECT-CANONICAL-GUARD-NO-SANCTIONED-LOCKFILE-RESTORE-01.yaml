@@ -1,0 +1,44 @@
+id: CAWS-DEFECT-CANONICAL-GUARD-NO-SANCTIONED-LOCKFILE-RESTORE-01
+title: 'Canonical-checkout guard offers no sanctioned way to discard lockfile churn or unstage a path while lanes are active'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T06:14:50.905Z'
+updated_at: '2026-10-05T06:14:50.905Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'hook-packs shared: worktree-guard canonical path-restore branch and the command classifier'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks'
+  out: []
+invariants:
+  - 'CAWS-WORKTREE-GUARD-CHECKOUT-PATHSPEC-MISCLASSIFY-001 invariant 2 required a lockfile restore to be admitted or refused with an alternative that applies; c2ec7b0f refused it naming commit-first or the owning worktree, neither of which fits churn in canonical that no lane owns. A refusal with no applicable exit pushes agents to route around the guard.'
+  - 'A path restore whose EVERY target is a package-manager lockfile (package-lock.json, npm-shrinkwrap.json, yarn.lock, pnpm-lock.yaml, bun.lockb, Cargo.lock, poetry.lock, uv.lock, Gemfile.lock, composer.lock, go.sum) is admitted from the canonical checkout while lanes are active, by the worktree guard and by the classifier: the content is regenerable by the package manager. A target list mixing a lockfile with any other path stays refused.'
+  - 'git restore --staged <path> changes only the index and is never labeled or refused as a working-tree discard.'
+  - 'Every remaining canonical path-restore refusal names an alternative that applies to the refused case; it never names an owning worktree for a path no lane owns.'
+acceptance:
+  - id: A1
+    given: 'active lanes and the canonical checkout'
+    when: 'git checkout package-lock.json, git checkout -- package-lock.json and git restore package-lock.json are each classified'
+    then: 'each is admitted (exit 0, no block or ask) by worktree-guard and the classifier'
+  - id: A2
+    given: 'the same context'
+    when: 'git checkout package-lock.json src/index.ts runs'
+    then: 'it is refused with the path-restore label, so the lockfile exemption never widens to source'
+  - id: A3
+    given: 'the same context'
+    when: 'git restore --staged src/index.ts runs'
+    then: 'worktree-guard admits it and labels nothing as a working-tree discard'
+  - id: A4
+    given: 'the same context'
+    when: 'a tracked source file that no lane owns is restored by path'
+    then: 'it is still refused, and the message names an alternative that applies (for example asking the user to run it) rather than an owning worktree'
+non_functional: {}
+contracts: []
