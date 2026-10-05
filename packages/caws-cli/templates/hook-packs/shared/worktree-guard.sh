@@ -117,6 +117,9 @@ canonical_guard_emit_block() {
   local first_active="$2"
   echo "BLOCKED: $action from the canonical checkout while CAWS worktrees are active." >&2
   echo "Active worktree(s) detected (e.g. '$first_active' in .caws/worktrees.json)." >&2
+  # A path restore is not a worktree-switching problem: the hint would send the
+  # agent into a lane that does not own the path, so the caller prints its own.
+  [[ "${3:-}" == "no-switch-hint" ]] && return 0
   echo "Switch into your worktree before mutating: cd .caws/worktrees/$first_active" >&2
   echo "Or destroy any worktree that is genuinely abandoned: caws worktree destroy <name>" >&2
 }
@@ -152,6 +155,85 @@ checkout_args_are_pathspec() {
   return 1
 }
 
+# ─── Sanctioned path restores ────────────────────────────────────────
+# Two restores have an exit that does not route through another session:
+#   * a path restore whose EVERY target is a package-manager lockfile — the
+#     content is regenerable by the package manager, and no lane owns lockfile
+#     churn in the canonical checkout;
+#   * `git restore --staged <path>`, which only touches the index and discards
+#     no working-tree content.
+# Both are matched word-by-word against a strict path charset, so any shell
+# metacharacter, extra flag, tree-ish or non-lockfile target leaves the command
+# to the refusals below.
+CAWS_LOCKFILE_BASENAMES=" package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml bun.lockb Cargo.lock poetry.lock uv.lock Gemfile.lock composer.lock go.sum "
+
+# restore_command_targets COMMAND — sets RESTORE_SUB (checkout|restore),
+# RESTORE_FLAGS (space-joined flags before any `--`) and RESTORE_TARGETS (array).
+# Returns 1 when COMMAND is not a single plain `git checkout|restore ...` line
+# made only of path-charset words.
+restore_command_targets() {
+  local cmd="$1" word
+  local -a words=()
+  RESTORE_SUB=""
+  RESTORE_FLAGS=""
+  RESTORE_TARGETS=()
+  [[ "$cmd" == *$'\n'* ]] && return 1
+  read -r -a words <<<"$cmd" || return 1
+  [[ "${#words[@]}" -ge 3 && "${words[0]}" == "git" ]] || return 1
+  case "${words[1]}" in
+    checkout | restore) RESTORE_SUB="${words[1]}" ;;
+    *) return 1 ;;
+  esac
+  for word in "${words[@]:2}"; do
+    if [[ "$word" == -- ]]; then
+      continue
+    elif [[ "$word" == -* ]]; then
+      RESTORE_FLAGS="$RESTORE_FLAGS $word"
+      continue
+    fi
+    if [[ "$word" =~ ^\"(.*)\"$ || "$word" =~ ^\'(.*)\'$ ]]; then
+      word="${BASH_REMATCH[1]}"
+    fi
+    [[ "$word" =~ ^[A-Za-z0-9._/@+-]+$ ]] || return 1
+    RESTORE_TARGETS+=("$word")
+  done
+  [[ "${#RESTORE_TARGETS[@]}" -ge 1 ]]
+}
+
+# lockfile_only_restore COMMAND DIR — every target of a flag-free
+# `git checkout|restore [--] <paths>` is a lockfile (matched by basename at any
+# depth). A checkout argument that resolves as a ref is a branch switch, not a
+# restore, and is not admitted.
+lockfile_only_restore() {
+  local cmd="$1" dir="$2" target
+  restore_command_targets "$cmd" || return 1
+  [[ -z "$RESTORE_FLAGS" ]] || return 1
+  for target in "${RESTORE_TARGETS[@]}"; do
+    [[ "$target" != */ ]] || return 1
+    [[ "$CAWS_LOCKFILE_BASENAMES" == *" ${target##*/} "* ]] || return 1
+  done
+  if [[ "$RESTORE_SUB" == "checkout" ]]; then
+    checkout_args_are_pathspec "$cmd" "$dir" || return 1
+  fi
+  return 0
+}
+
+# index_only_restore COMMAND — `git restore --staged <paths>` with no
+# --worktree/--source/--patch: the index is the only thing it changes.
+index_only_restore() {
+  restore_command_targets "$1" || return 1
+  [[ "$RESTORE_SUB" == "restore" ]] || return 1
+  [[ "$RESTORE_FLAGS" == " --staged" || "$RESTORE_FLAGS" == " -S" ]]
+}
+
+if index_only_restore "$COMMAND"; then
+  exit 0
+fi
+if lockfile_only_restore "$COMMAND" "${HOOK_CWD:-$PROJECT_DIR}"; then
+  exit 0
+fi
+# ─── /Sanctioned path restores ───────────────────────────────────────────
+
 CANONICAL_GUARD_CHECK_CWD="${HOOK_CWD:-$PROJECT_DIR}"
 if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
     WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
@@ -175,9 +257,10 @@ if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
             # checkout; only the label differs. Branch creation (-b/-B) starts
             # with a flag and never reaches this match.
             if checkout_args_are_pathspec "$COMMAND" "$CANONICAL_GUARD_CHECK_CWD"; then
-              canonical_guard_emit_block "git checkout <path> (working-tree path restore, not a branch switch)" "$FIRST_ACTIVE_WT"
+              canonical_guard_emit_block "git checkout <path> (working-tree path restore, not a branch switch)" "$FIRST_ACTIVE_WT" no-switch-hint
               echo "This overwrites uncommitted changes to the named path(s) — the same work-loss hazard as git checkout -- <path>." >&2
-              echo "Commit first, or restore the file from a session rooted in the owning worktree." >&2
+              echo "No lane owns a path in the canonical checkout. To keep the changes, commit them first; to discard them, ask the user to run this command themselves." >&2
+              echo "Admitted from here: a restore whose every target is a package-manager lockfile, and git restore --staged <path>." >&2
             else
               canonical_guard_emit_block "git checkout (branch switch)" "$FIRST_ACTIVE_WT"
             fi
@@ -308,14 +391,14 @@ if echo "$COMMAND" | grep -qE '^git\s+restore\b'; then
   echo "git restore DISCARDS uncommitted changes by path — the same work-loss hazard as git reset --hard." >&2
   echo "This is a path/working-tree restore, NOT a branch switch." >&2
   echo "Commit the work you want to keep first; to intentionally drop a specific file's changes," >&2
-  echo "do it from a session rooted in the owning worktree, not from a shared/foreign checkout." >&2
+  echo "ask the user to run the restore themselves. Admitted: a restore whose every target is a package-manager lockfile, and git restore --staged <path>." >&2
   exit 2
 fi
 
 if echo "$COMMAND" | grep -qE '^git\s+checkout\s+--\s'; then
   echo "BLOCKED: git checkout -- <path> (working-tree discard) is not allowed while worktrees are active." >&2
   echo "This discards uncommitted changes to the named path(s) — a work-loss hazard while parallel work exists." >&2
-  echo "Commit first, or operate from the owning worktree's session." >&2
+  echo "Commit first to keep the changes; to discard them, ask the user to run this command themselves. A lockfile-only restore is admitted." >&2
   exit 2
 fi
 
