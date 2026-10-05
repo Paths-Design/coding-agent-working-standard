@@ -2,9 +2,11 @@ id: CAWS-DEFECT-SHORTCUT-LANG-REFERENCE-FP-01
 title: 'shortcut-language guard strikes on TODO tokens that are identifiers or data, not incomplete work'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hp-shortcut-fp at 7e558c46203ff8f7cbdbbbf0927627f4a0be5f03'
 created_at: '2026-08-12T19:48:48.623Z'
-updated_at: '2026-09-17T02:24:09.116Z'
+updated_at: '2026-10-05T04:59:22.506Z'
 blast_radius:
   modules:
     - 'caws-cli shared hook pack (shortcut-language guard)'
@@ -15,6 +17,7 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/shared/shortcut-language-check.sh'
     - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats
   out: []
 invariants:
   - 'A guard strikes on incomplete work, never on a reference to it.'
@@ -34,3 +37,25 @@ acceptance:
     then: 'a strike IS still recorded — the narrowing must not disarm the guard, proven by a positive control rather than only by absence of false positives'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At 457b9e5998a8b7884ad82bb47755f7dac7490e5b: shortcut-language-check.sh strips a marker joined by - or _ to an uppercase alphanumeric (either side) before the comment scan; a spec id carrying the marker no longer strikes and writes no strike file. Companion test 'id-shaped marker joins with a leading or trailing uppercase segment are identifiers'. Break-the-fix via SHORTCUT_GUARD_MUTATE_FROM/_TO: disabling id-stripping failed tests 18, 19, 40; each half alone failed 19. Shared pack 89->90 with refreshed pack-fingerprints.json; full caws-cli jest 273/273 suites, 3739 tests. Installed ~/.caws copy not updated until adapters reinstall."
+    recorded_at: "2026-10-05T04:58:52.781Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats::shortcut-language: a spec id containing the marker in a comment is an identifier"
+    commit_sha: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+    test_verified_at: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 457b9e5998a8b7884ad82bb47755f7dac7490e5b: quoted literals (double, single, backtick) closing on their line are blanked before the code-line scan, and a comment opener inside such a literal no longer starts a comment record. Companion tests: single-quoted and template-literal constants, a scaffold string embedding a hash comment, an escaped quote before the marker. Break-the-fix: disabling string-stripping failed 20-23; disabling the opener mask failed 22. The old test pinning a double-quoted marker as a strike was changed to the unquoted form, which still strikes, because A2 defines quoted content as data. Gaps: regex-literal quotes and multi-line template literals untested."
+    recorded_at: "2026-10-05T04:59:02.681Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats::shortcut-language: a double-quoted constant whose value starts with the marker is data"
+    commit_sha: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+    test_verified_at: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "At 457b9e5998a8b7884ad82bb47755f7dac7490e5b: genuine stubs still strike - bare comment marker beside an id-shaped one, uppercase marker as a code value, marker followed by lowercase prose, marker after a complete or unterminated string, stray apostrophe before a line comment, and both not-implemented throw forms. Break-the-fix: disarming the code scan failed 39, 44, 45; disarming the comment scan failed 37; stripping unterminated strings failed 45. Suite 35 -> 49 tests, all pass."
+    recorded_at: "2026-10-05T04:59:17.374Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats::shortcut-language: a bare marker comment strikes even beside an id-shaped one"
+    commit_sha: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+    test_verified_at: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"

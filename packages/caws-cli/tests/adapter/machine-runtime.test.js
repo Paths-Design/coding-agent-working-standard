@@ -473,6 +473,135 @@ test.each(['{"decision":', 'null', '[]', 'true'])(
   }
 );
 
+/** A Stop handler whose answer is chosen per stop by the content of a mode file:
+ *  malformed (unparseable JSON), ok (informational success), or block (a
+ *  well-formed, dischargeable refusal). */
+function modalStopRepository(mode) {
+  const modeFile = path.join(root, 'stop-mode');
+  fs.writeFileSync(modeFile, mode);
+  const body = [
+    `case "$(cat '${modeFile}')" in`,
+    `  malformed) printf '{"decision":\\n' ;;`,
+    `  ok) printf 'stopped cleanly\\n' ;;`,
+    `  block) printf '{"decision":"block","reason":"goal AC unmet"}\\n'; exit 2 ;;`,
+    'esac',
+    '',
+  ].join('\n');
+  const repo = eventRepository('stop', body);
+  return { repo, setMode: (value) => fs.writeFileSync(modeFile, value) };
+}
+
+function stopBudget(home, session) {
+  const file = path.join(home, 'state/sessions', session, 'stop-undeliverable.json');
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+}
+
+function stopOutcomes(home, repo, session, count) {
+  return Array.from({ length: count }, () => {
+    const r = invoke(home, repo, session, 'stop');
+    return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+  });
+}
+
+const RELEASE = 'releasing this stop over an unmet, undeliverable condition';
+
+test('an undeliverable Stop result is refused a finite number of consecutive times, then released explicitly', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const { repo } = modalStopRepository('malformed');
+  const runs = stopOutcomes(home, repo, 'budget-session', 5);
+
+  // Refused exactly three times, each with a block decision.
+  expect(runs.slice(0, 3).map((r) => r.status)).toEqual([2, 2, 2]);
+  for (const r of runs.slice(0, 3)) expect(JSON.parse(r.stdout).decision).toBe('block');
+  // The fourth stop is released, and says so in the transcript-visible channel.
+  expect(runs[3].status).toBe(0);
+  const released = JSON.parse(runs[3].stdout);
+  expect(Object.keys(released)).toEqual(['systemMessage']);
+  expect(released.systemMessage).toContain(RELEASE);
+  expect(runs[3].stderr).toContain(RELEASE);
+  // Release restarts the budget: the next failure is refused again, not silently passed.
+  expect(runs[4].status).toBe(2);
+  expect(stopBudget(home, 'budget-session')).toEqual({ consecutive_undeliverable: 1 });
+});
+
+test('the Stop budget is per session: one session exhausting it does not release another', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const { repo } = modalStopRepository('malformed');
+  stopOutcomes(home, repo, 'session-a', 3);
+  expect(invoke(home, repo, 'session-b', 'stop').status).toBe(2);
+  expect(stopBudget(home, 'session-a')).toEqual({ consecutive_undeliverable: 3 });
+  expect(stopBudget(home, 'session-b')).toEqual({ consecutive_undeliverable: 1 });
+});
+
+test('a successful Stop resets the consecutive counter so the budget is per run of failures', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const { repo, setMode } = modalStopRepository('malformed');
+  expect(stopOutcomes(home, repo, 'reset-session', 2).map((r) => r.status)).toEqual([2, 2]);
+  expect(stopBudget(home, 'reset-session')).toEqual({ consecutive_undeliverable: 2 });
+
+  setMode('ok');
+  const ok = invoke(home, repo, 'reset-session', 'stop');
+  expect({ status: ok.status, stdout: JSON.parse(ok.stdout) }).toEqual({
+    status: 0,
+    stdout: { systemMessage: 'stopped cleanly' },
+  });
+  expect(stopBudget(home, 'reset-session')).toEqual({ consecutive_undeliverable: 0 });
+
+  // Three fresh refusals before any release: a lifetime cap would release at once.
+  setMode('malformed');
+  const after = stopOutcomes(home, repo, 'reset-session', 4);
+  expect(after.map((r) => r.status)).toEqual([2, 2, 2, 0]);
+  expect(JSON.parse(after[3].stdout).systemMessage).toContain(RELEASE);
+});
+
+test('a well-formed dischargeable Stop block keeps refusing past the budget and leaves the counter unchanged', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const { repo, setMode } = modalStopRepository('malformed');
+  stopOutcomes(home, repo, 'gate-session', 2);
+  expect(stopBudget(home, 'gate-session')).toEqual({ consecutive_undeliverable: 2 });
+
+  setMode('block');
+  const blocks = stopOutcomes(home, repo, 'gate-session', 6);
+  for (const r of blocks) {
+    expect(r.status).toBe(2);
+    expect(JSON.parse(r.stdout)).toEqual({ decision: 'block', reason: 'goal AC unmet' });
+    expect(r.stderr).toContain('goal AC unmet');
+    expect(r.stderr).not.toContain(RELEASE);
+  }
+  expect(stopBudget(home, 'gate-session')).toEqual({ consecutive_undeliverable: 2 });
+
+  // The seeded count survives the gate's blocks: one more failure is the third refusal.
+  setMode('malformed');
+  const tail = stopOutcomes(home, repo, 'gate-session', 2);
+  expect(tail.map((r) => r.status)).toEqual([2, 0]);
+});
+
+test('a Stop budget that cannot be persisted releases instead of refusing without bound', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const { repo } = modalStopRepository('malformed');
+  // A regular file where the per-session directory must be makes every write fail.
+  fs.mkdirSync(path.join(home, 'state/sessions'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'state/sessions/blocked-session'), 'not a directory');
+  const r = invoke(home, repo, 'blocked-session', 'stop');
+  expect(r.status).toBe(0);
+  expect(JSON.parse(r.stdout).systemMessage).toContain(RELEASE);
+});
+
+test('an undeliverable result on a non-Stop event is not charged to the Stop budget', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const repo = repository('non-stop', { 'g.sh': 'echo not-json\nexit 0\n' });
+  for (let i = 0; i < 5; i += 1) {
+    expect(invoke(home, repo, 'pre-session', 'pre_tool_use').status).toBe(0);
+  }
+  expect(stopBudget(home, 'pre-session')).toBeNull();
+});
+
 test('one runtime update reaches two projects without project edits; rollback restores the digest', () => {
   const home = path.join(root, 'home');
   const sources = path.join(root, 'templates');

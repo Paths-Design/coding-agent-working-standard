@@ -2,9 +2,10 @@ id: CAWS-WORKTREE-GUARD-CHECKOUT-PATHSPEC-MISCLASSIFY-001
 title: 'worktree-guard misclassifies git checkout <pathspec> as a branch switch (false-positive + mislabeled diagnostic)'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: hp-checkout-pathspec
 created_at: '2026-06-14T00:00:00.000Z'
-updated_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-10-05T05:03:05.719Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh
@@ -15,8 +16,9 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh
     - packages/caws-cli/tests/hooks
     - .caws/specs/CAWS-WORKTREE-GUARD-CHECKOUT-PATHSPEC-MISCLASSIFY-001.yaml
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
   out:
-    - packages/caws-cli/src
     - packages/caws-kernel
     - .caws/policy.yaml
     - CODEOWNERS

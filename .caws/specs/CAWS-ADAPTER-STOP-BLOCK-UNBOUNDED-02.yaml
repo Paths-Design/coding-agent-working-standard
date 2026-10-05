@@ -2,9 +2,11 @@ id: CAWS-ADAPTER-STOP-BLOCK-UNBOUNDED-02
 title: 'A repeatedly-blocking Stop handler has no budget, so a broken handler result still traps the session'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge adapter-stop-budget at 69f5d313d1d669c97ffc031fdcdacce8a8d41398'
 created_at: '2026-09-19T03:03:41.343Z'
-updated_at: '2026-09-19T03:03:41.343Z'
+updated_at: '2026-10-05T04:57:20.532Z'
 created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
 blast_radius:
   modules:
@@ -39,3 +41,25 @@ non_functional: {}
 contracts:
   - name: 'stop-block-budget'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At 46875fdb67ca0e451404739449c9051d7db6ab66 (templates/hook-packs/runtime/caws-hook.py, STOP_UNDELIVERABLE_BUDGET=3, counter at $CAWS_HOME/state/sessions/<sid>/stop-undeliverable.json): five consecutive malformed Stop results exit [2,2,2,0,2]; the three refusals carry decision:block, the 4th prints a systemMessage stating it releases over an unmet, undeliverable condition (also on stderr) and resets the counter. Break-the-fix (release disabled) failed with Expected 0, Received 2 at the 4th stop. Not observed in a native Claude/Codex session; the runtime needs caws init adapters install to take effect."
+    recorded_at: "2026-10-05T04:56:07.151Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::an undeliverable Stop result is refused a finite number of consecutive times, then released explicitly"
+    commit_sha: "46875fdb67ca0e451404739449c9051d7db6ab66"
+    test_verified_at: "46875fdb67ca0e451404739449c9051d7db6ab66"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 46875fdb67ca0e451404739449c9051d7db6ab66: after two malformed stops the state is 2; an exit-0 Stop result sets it to 0, after which three fresh refusals precede a release (a lifetime cap would not). Break-the-fix (reset disabled) failed the state-0 assertion."
+    recorded_at: "2026-10-05T04:56:37.347Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a successful Stop resets the consecutive counter so the budget is per run of failures"
+    commit_sha: "46875fdb67ca0e451404739449c9051d7db6ab66"
+    test_verified_at: "46875fdb67ca0e451404739449c9051d7db6ab66"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "At 46875fdb67ca0e451404739449c9051d7db6ab66: with the counter seeded at 2, six well-formed blocks each exit 2 with exactly {decision:block, reason:'goal AC unmet'} and no release text, and the state stays 2; only the next malformed stop is charged. Break-the-fix (charge on exit 2) failed the unchanged-state assertion. Also pinned: per-session isolation, release when the counter cannot be persisted, non-Stop events uncharged. Full jest on the lane 273/273 suites, 3745 tests."
+    recorded_at: "2026-10-05T04:57:16.366Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a well-formed dischargeable Stop block keeps refusing past the budget and leaves the counter unchanged"
+    commit_sha: "46875fdb67ca0e451404739449c9051d7db6ab66"
+    test_verified_at: "46875fdb67ca0e451404739449c9051d7db6ab66"

@@ -2,9 +2,10 @@ id: CAWS-INIT-PLAN-NOOP-UPDATE-NOISE-001
 title: 'init plan reports Would update for byte-identical files whose only delta is the version stamp'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: g-init-plan-stamp
 created_at: '2026-07-25T07:31:27.942Z'
-updated_at: '2026-09-17T02:24:08.045Z'
+updated_at: '2026-10-05T05:00:08.007Z'
 blast_radius:
   modules:
     - 'caws-cli init: hook-install.ts plan classification and tests/init/init-hook-pack-render.test.js'

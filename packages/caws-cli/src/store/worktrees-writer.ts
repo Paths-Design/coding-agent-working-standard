@@ -316,7 +316,14 @@ function registryRelPath(cawsDir: string, repoRoot: string): string {
   return path.relative(repoRoot, path.join(cawsDir, 'worktrees.json'));
 }
 function specRelPath(cawsDir: string, specId: string, repoRoot: string): string {
-  return path.relative(repoRoot, specPath(cawsDir, specId));
+  const live = specPath(cawsDir, specId);
+  if (fs.existsSync(live)) return path.relative(repoRoot, live);
+  // The bound spec may have been archived by its own merge: its body then
+  // lives at specs/.archive/<id>.yaml with no live copy. Audit that real
+  // path; autoCommit drops it if it is gitignored or absent.
+  const archived = path.join(cawsDir, 'specs', '.archive', `${specId}.yaml`);
+  if (fs.existsSync(archived)) return path.relative(repoRoot, archived);
+  return path.relative(repoRoot, live);
 }
 
 // ─── Auto-commit helper ──────────────────────────────────────────────────

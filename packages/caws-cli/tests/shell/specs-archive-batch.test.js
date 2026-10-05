@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { initProject } = require('../../dist/store/init-store');
+const { archiveClosedSpecs } = require('../../dist/store/specs-writer');
 const { runSpecsArchiveCommand } = require('../../dist/shell/commands/specs');
 const { cleanupAll, git, makeTempRepo } = require('../helpers/git-repo-factory');
 
@@ -70,6 +71,22 @@ function runArchive(root, opts) {
     ...opts,
   });
   return { code, out: out.join('\n'), err: err.join('\n') };
+}
+
+const REPLACE_REMEDY = (id) => `caws specs archive ${id} --replace`;
+
+/** Seed a closed spec whose id already has an OLDER archived body (the stale shadow). */
+function seedStaleShadow(caws, id) {
+  writeSpec(caws, id, 'closed', { updatedAt: '2026-07-04T00:00:00.000Z' });
+  const archiveDir = path.join(caws, 'specs', '.archive');
+  fs.mkdirSync(archiveDir, { recursive: true });
+  const live = fs.readFileSync(path.join(caws, 'specs', `${id}.yaml`), 'utf8');
+  fs.writeFileSync(
+    path.join(archiveDir, `${id}.yaml`),
+    live
+      .replace('lifecycle_state: closed', 'lifecycle_state: archived')
+      .replace("updated_at: '2026-07-04T00:00:00.000Z'", "updated_at: '2026-06-01T00:00:00.000Z'")
+  );
 }
 
 describe('caws specs archive batch mode', () => {
@@ -191,6 +208,69 @@ describe('caws specs archive batch mode', () => {
     expect(payload.skipped).toEqual([]);
     expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-OLD-001.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-FRESH-001.yaml'))).toBe(true);
+  });
+
+  test('A1: a stale-shadow failure prints the --replace remedy under its failed line', () => {
+    const { root, caws } = mkRepo();
+    seedStaleShadow(caws, 'ARCHIVE-BATCH-STALE-001');
+    commitAll(root, 'stale shadow fixture');
+
+    const result = runArchive(root, {
+      status: 'closed',
+      include: ['ARCHIVE-BATCH-STALE-001'],
+      apply: true,
+    });
+
+    expect(result.code).toBe(1);
+    const lines = result.out.split('\n');
+    const failedIdx = lines.findIndex((l) => l.startsWith('  failed ARCHIVE-BATCH-STALE-001:'));
+    expect(failedIdx).toBeGreaterThanOrEqual(0);
+    // The remedy line follows the failed entry's (multi-line) reason, indented as a child.
+    const nextLines = lines.filter((l) => l.startsWith('    next: '));
+    expect(nextLines).toHaveLength(1);
+    expect(lines.indexOf(nextLines[0])).toBeGreaterThan(failedIdx);
+    expect(nextLines[0]).toContain(REPLACE_REMEDY('ARCHIVE-BATCH-STALE-001'));
+  });
+
+  test('A2: --json failed entry carries narrowRepair as a field', () => {
+    const { root, caws } = mkRepo();
+    seedStaleShadow(caws, 'ARCHIVE-BATCH-STALE-002');
+    commitAll(root, 'stale shadow fixture');
+
+    const result = runArchive(root, {
+      status: 'closed',
+      include: ['ARCHIVE-BATCH-STALE-002'],
+      apply: true,
+      json: true,
+    });
+
+    expect(result.code).toBe(1);
+    const payload = JSON.parse(result.out);
+    expect(payload.failed).toHaveLength(1);
+    expect(payload.failed[0].id).toBe('ARCHIVE-BATCH-STALE-002');
+    expect(payload.failed[0].reason).toContain('already has an archived body');
+    expect(payload.failed[0].narrowRepair).toContain(REPLACE_REMEDY('ARCHIVE-BATCH-STALE-002'));
+  });
+
+  test('A3: archiveClosedSpecs failed entry carries the diagnostic narrowRepair', () => {
+    const { root, caws } = mkRepo();
+    seedStaleShadow(caws, 'ARCHIVE-BATCH-STALE-003');
+    writeSpec(caws, 'ARCHIVE-BATCH-OK-003', 'closed');
+    commitAll(root, 'mixed batch fixture');
+
+    const outcome = archiveClosedSpecs(caws, {
+      actor: { kind: 'agent', id: 'jest', platform: 'jest' },
+      include: ['ARCHIVE-BATCH-STALE-003', 'ARCHIVE-BATCH-OK-003'],
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(outcome.value.kind).toBe('success');
+    expect(outcome.value.archived.map((e) => e.id)).toEqual(['ARCHIVE-BATCH-OK-003']);
+    expect(outcome.value.failed).toHaveLength(1);
+    expect(outcome.value.failed[0].id).toBe('ARCHIVE-BATCH-STALE-003');
+    expect(outcome.value.failed[0].narrowRepair).toContain(
+      REPLACE_REMEDY('ARCHIVE-BATCH-STALE-003')
+    );
   });
 
   test('rejects invalid older-than before composing archive state', () => {

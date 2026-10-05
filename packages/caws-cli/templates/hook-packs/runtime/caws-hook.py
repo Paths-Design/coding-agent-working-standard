@@ -39,6 +39,16 @@ ENFORCING_EVENTS = {'pre_tool_use'}
 # So the carve-out applies to the first class only; the second keeps its prior
 # blocking behavior on every event.
 _DISPATCHED = False
+# A Stop refusal that no actor can discharge -- the handler's answer was
+# malformed, unparseable, or the adapter crashed reading it -- has no condition
+# the agent can satisfy, so repeating it only holds the session. The adapter
+# refuses it this many consecutive times and then releases the stop, saying so.
+# A well-formed block from a guard whose condition the agent CAN satisfy (the
+# goal-ac-gate Stop hook) is a designed gate: it never touches this counter and
+# is never released by it.
+STOP_UNDELIVERABLE_BUDGET = 3
+# (state file, surface) once a Stop dispatch has begun; None otherwise.
+_STOP_BUDGET_FILE = None
 
 
 class InvocationError(ValueError):
@@ -70,6 +80,68 @@ def git(directory, *args):
     if result.returncode:
         raise ValueError(f'Cannot resolve project: {result.stderr.strip()}')
     return result.stdout.strip()
+
+
+def stop_budget_file(home, canonical, payload):
+    """Per-session counter location under the machine state tree."""
+    sid = payload.get('session_id')
+    if not isinstance(sid, str) or not re.fullmatch(r'[A-Za-z0-9_.@:-]+', sid) or sid in {'.', '..'}:
+        # No safe session identity: key by project so the budget still bounds
+        # the refusal rather than leaving an unkeyed trap.
+        sid = 'unkeyed-' + digest(str(canonical).encode())[:16]
+    return confined(home, f'state/sessions/{sid}/stop-undeliverable.json')
+
+
+def read_stop_budget(path):
+    try:
+        count = json.loads(Path(path).read_bytes()).get('consecutive_undeliverable')
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return count if isinstance(count, int) and not isinstance(count, bool) and count > 0 else 0
+
+
+def write_stop_budget(path, count):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + f'.{os.getpid()}.tmp')
+    try:
+        temporary.write_text(json.dumps({'consecutive_undeliverable': count}))
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+
+
+def reset_stop_budget():
+    """A well-formed, non-blocking Stop result ends the run of failures."""
+    if _STOP_BUDGET_FILE is None or read_stop_budget(_STOP_BUDGET_FILE) == 0:
+        return
+    try:
+        write_stop_budget(_STOP_BUDGET_FILE, 0)
+    except OSError as error:
+        print('[caws machine adapter] could not reset the Stop budget: ' + str(error), file=sys.stderr)
+
+
+def charge_stop_budget():
+    """Count one undischargeable Stop refusal; True means refuse, False release."""
+    if _STOP_BUDGET_FILE is None:
+        return True
+    count = read_stop_budget(_STOP_BUDGET_FILE)
+    if count >= STOP_UNDELIVERABLE_BUDGET:
+        try:
+            write_stop_budget(_STOP_BUDGET_FILE, 0)
+        except OSError:
+            pass
+        return False
+    try:
+        write_stop_budget(_STOP_BUDGET_FILE, count + 1)
+    except OSError:
+        # A budget that cannot be recorded cannot bound anything, and an
+        # unbounded undischargeable refusal is the trap. Release.
+        return False
+    return True
 
 
 def emit_codex_result(event, result, identity):
@@ -661,7 +733,12 @@ def main():
     payload['hook_event_name'] = EVENTS[event]
     result = None
     adapter_handoff = False
-    global _DISPATCHED
+    global _DISPATCHED, _STOP_BUDGET_FILE
+    if event == 'stop':
+        try:
+            _STOP_BUDGET_FILE = stop_budget_file(home, canonical, payload)
+        except ValueError:
+            _STOP_BUDGET_FILE = None
     _DISPATCHED = True
     try:
         result = subprocess.run(['/bin/bash', str(runtime / 'dispatch.sh'), surface, event, str(hooks), *handlers],
@@ -673,6 +750,8 @@ def main():
             sys.stdout.buffer.write(result.stdout)
         sys.stdout.buffer.flush()
         adapter_handoff = True
+        if event == 'stop' and result.returncode == 0:
+            reset_stop_budget()
     finally:
         retain_execution_records(execution_file.name, canonical, selection, invocation_id, raw, result)
         if result is not None:
@@ -731,6 +810,13 @@ if __name__ == '__main__':
         # argv may itself be what failed, so read the event defensively rather
         # than trusting the parse that raised.
         if not _DISPATCHED and (sys.argv[2] if len(sys.argv) > 2 else '') not in ENFORCING_EVENTS:
+            sys.exit(0)
+        if _DISPATCHED and sys.argv[2] == 'stop' and not charge_stop_budget():
+            release = ('CAWS machine adapter is releasing this stop over an unmet, undeliverable '
+                       f'condition: the Stop handler result was unusable on {STOP_UNDELIVERABLE_BUDGET} '
+                       'consecutive stops and no actor can discharge it. ' + message)
+            print('[caws machine adapter] ' + release, file=sys.stderr)
+            print(json.dumps({'systemMessage': release}))
             sys.exit(0)
         print(json.dumps({'decision': 'block', 'reason': message}))
         sys.exit(2)

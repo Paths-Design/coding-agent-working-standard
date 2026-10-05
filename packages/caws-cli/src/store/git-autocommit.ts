@@ -42,6 +42,7 @@
 // reading git twice (race-prone and ambiguous: a dirty file with the
 // writer's change applied looks identical to a dirty file without).
 
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { runGit, sleepSyncMs } from './repo-root';
@@ -165,7 +166,19 @@ export function autoCommit(input: AutoCommitInput): AutoCommitOutcome {
   // remaining TRACKED authority paths (e.g. the spec binding). If every path
   // is ignored, there is nothing tracked to commit — a clean no-op, not a
   // failure. (CAWS-LATCH-READONLY-AND-WORKTREE-GITIGNORE-001 A5/A6)
+  //
+  // A path that does not exist on disk (moved, archived, or deleted by an
+  // earlier step of the transition) is dropped the same way: `git add --
+  // <missing>` fails fatally with "pathspec did not match", which would turn
+  // an otherwise-clean transition into a refused_dirty "NOT committed".
+  // Vanished paths are filtered, never force-added or recreated. The one
+  // exception is a path still tracked in the index: its absence is a deletion
+  // or move the transition made (archive, retire), and `git add` stages that
+  // removal, so the audit commit must keep it.
   const trackablePaths = input.paths.filter((p) => {
+    if (!fs.existsSync(path.resolve(input.repoRoot, p))) {
+      return runGit(['ls-files', '--error-unmatch', '--', p], input.repoRoot).ok;
+    }
     // `git check-ignore -q <path>` exits 0 when the path IS ignored.
     const ignored = runGit(['check-ignore', '-q', '--', p], input.repoRoot);
     return !ignored.ok;

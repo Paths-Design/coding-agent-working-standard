@@ -218,4 +218,31 @@ describe('caws specs prune-drafts', () => {
     expect(fs.existsSync(path.join(caws, 'specs', 'DRAFT-BOUND-001.yaml'))).toBe(true);
     expect(fs.existsSync(eventsPath(caws))).toBe(false);
   });
+
+  test('A4: a retirement failure carrying narrowRepair surfaces it in text and --json', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'DRAFT-TRACKED-001', 'draft', '2026-06-01T00:00:00.000Z');
+    commitAll(root, 'tracked draft');
+    // Untracked at HEAD: selection admits it, retirement refuses (no recovery blob).
+    writeSpec(caws, 'DRAFT-UNTRACKED-001', 'draft', '2026-06-01T00:00:00.000Z');
+
+    const text = runPrune(root, { include: ['DRAFT-UNTRACKED-001'], apply: true });
+    expect(text.code).toBe(1);
+    const lines = text.out.split('\n');
+    const failedIdx = lines.findIndex((l) => l.startsWith('  failed DRAFT-UNTRACKED-001:'));
+    expect(failedIdx).toBeGreaterThanOrEqual(0);
+    const nextLines = lines.filter((l) => l.startsWith('    next: '));
+    expect(nextLines).toEqual([
+      '    next: Commit .caws/specs/DRAFT-UNTRACKED-001.yaml, then re-run the retirement.',
+    ]);
+    expect(lines.indexOf(nextLines[0])).toBeGreaterThan(failedIdx);
+
+    const json = runPrune(root, { include: ['DRAFT-UNTRACKED-001'], apply: true, json: true });
+    const payload = JSON.parse(json.out);
+    expect(payload.failed).toHaveLength(1);
+    expect(payload.failed[0].id).toBe('DRAFT-UNTRACKED-001');
+    expect(payload.failed[0].narrowRepair).toBe(
+      'Commit .caws/specs/DRAFT-UNTRACKED-001.yaml, then re-run the retirement.'
+    );
+  });
 });
