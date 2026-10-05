@@ -68,3 +68,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::resolves CAWS_SESSION_ID as the caws_env source with no notice"
     commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
     test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "codex: resolves {codex-thread-a4, codex} from codex_thread_env, one notice over two resolutions"
+    recorded_at: "2026-10-05T05:37:14.551Z"
+    test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::resolves CODEX_THREAD_ID and names the ignored value once"
+    commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
+    test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
