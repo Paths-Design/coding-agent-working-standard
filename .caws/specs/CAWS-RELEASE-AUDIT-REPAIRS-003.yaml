@@ -104,11 +104,11 @@ evidence:
     test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
   - criterion_id: A6
     status: pass
-    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/scenarios/renderer-receipt.json; rendered-turn-001.json; pack-policy.json; qualification-final.json packageFiles. Actual Python renderer validates with AJV, malformed shapes fail, real npm pack excludes planted bytecode and installed candidate has 911 files with zero bytecode paths."
-    recorded_at: "2026-10-04T01:09:41.385Z"
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:26:24.376Z"
     test_nodeid: "packages/caws-cli/tests/ci/artifact-contracts.test.js::real renderer bytes validate with nullable summary and lineage; malformed shapes are rejected"
-    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
-    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
   - criterion_id: A3
     status: pass
     evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
