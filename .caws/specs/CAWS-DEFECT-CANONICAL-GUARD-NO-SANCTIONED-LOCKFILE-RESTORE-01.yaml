@@ -65,3 +65,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: git restore --staged of a source file is admitted with no discard label"
     commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
     test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "remaining canonical path-restore refusals name asking the user, never an owning worktree; classifier leg: test_restore_of_source_is_ask_with_an_applicable_alternative"
+    recorded_at: "2026-10-05T08:30:04.243Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: a refused source checkout asks the user rather than naming an owning worktree"
+    commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+    test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
