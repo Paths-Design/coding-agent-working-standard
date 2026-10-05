@@ -36,3 +36,11 @@ acceptance:
     then: 'a strike IS still recorded — the narrowing must not disarm the guard, proven by a positive control rather than only by absence of false positives'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At 457b9e5998a8b7884ad82bb47755f7dac7490e5b: shortcut-language-check.sh strips a marker joined by - or _ to an uppercase alphanumeric (either side) before the comment scan; a spec id carrying the marker no longer strikes and writes no strike file. Companion test 'id-shaped marker joins with a leading or trailing uppercase segment are identifiers'. Break-the-fix via SHORTCUT_GUARD_MUTATE_FROM/_TO: disabling id-stripping failed tests 18, 19, 40; each half alone failed 19. Shared pack 89->90 with refreshed pack-fingerprints.json; full caws-cli jest 273/273 suites, 3739 tests. Installed ~/.caws copy not updated until adapters reinstall."
+    recorded_at: "2026-10-05T04:58:52.781Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats::shortcut-language: a spec id containing the marker in a comment is an identifier"
+    commit_sha: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+    test_verified_at: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
