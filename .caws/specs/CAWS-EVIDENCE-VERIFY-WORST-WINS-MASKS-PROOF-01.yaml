@@ -35,3 +35,11 @@ non_functional: {}
 contracts:
   - name: 'ac-rederivation'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "fixed by 4fa88358: a never-executed command no longer dilutes a verified commit; ranking commands with executable checks fails this test"
+    recorded_at: "2026-10-05T05:52:21.511Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts::a passing citation beside a command is verified; the command is still listed, unexecuted"
+    commit_sha: ae4758261358bb0c0827ea9af310126b0c8bc683
+    test_verified_at: ae4758261358bb0c0827ea9af310126b0c8bc683
