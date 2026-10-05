@@ -94,9 +94,10 @@ these hooks to grow your governance is expected and welcome.**
 
 There is exactly **one** edit that is out of bounds: editing a hook to
 **bypass, delete, or locally weaken a guard** in order to dodge a block. If a
-hook blocks work you believe is legitimate, fix the cause, create a waiver
-(`caws waiver create`), or take a session-scoped reprieve (`caws reprieve
-grant --current`) — do not defang the guard.
+hook blocks work you believe is legitimate, fix the cause, or ask a human to
+grant a session-scoped reprieve (`caws reprieve grant --handlers <handler>`;
+agents cannot grant their own). A waiver does not apply: it only filters
+`caws gates run` and never lifts a hook. Do not defang the guard.
 
 **Your edits are preserved — `caws init` will not clobber them.** An edited
 managed hook is classified as *drift* and `caws init` refuses to overwrite it:

@@ -568,7 +568,12 @@ import { isAdapterCoveredSurface } from './types';
 // codex, opencode, qwen-code, kimi-code); zcode, dsh and unrecognized surfaces
 // keep the prior behavior because their payloads are unverified and asking
 // would refuse every relative write there.
-export const SHARED_PACK_VERSION = 92;
+// 93 closes CAWS-DEFECT-GUARD-COPY-OFFERS-WAIVER-FOR-HOOK-BLOCKS-01. The
+// classifier's refusal of a naked rm/mv on .caws/policy.yaml told the agent to
+// use a CAWS waiver, but a waiver only filters `caws gates run` and never lifts
+// a hook. The refusal now names the path that does: an Edit under an active spec
+// whose scope admits the file.
+export const SHARED_PACK_VERSION = 93;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
