@@ -74,3 +74,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::A2: a real PreToolUse guard refuses, is skipped after caws reprieve grant for that session, and still refuses another session"
     commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
     test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "refusal now carries 'remedy: admit the path(s) with caws specs amend-scope <spec> --add-support foreign.txt' and the repair line leads with it; neither caws reprieve nor caws waiver appears; reverting the wiring leaves only generic diagnostics (4 A3 tests fail)"
+    recorded_at: "2026-10-05T06:25:33.218Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::the real merge refusal names amend-scope --add-support for the offending path"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
