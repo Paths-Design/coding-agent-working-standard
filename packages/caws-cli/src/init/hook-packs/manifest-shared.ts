@@ -550,7 +550,14 @@ import { isAdapterCoveredSurface } from './types';
 // an opener inside such a literal no longer starts a comment. A bare comment
 // marker, an uppercase marker used as a code value and the not-implemented
 // throw still strike.
-export const SHARED_PACK_VERSION = 90;
+// 91 closes CAWS-WORKTREE-GUARD-CHECKOUT-PATHSPEC-MISCLASSIFY-001. The
+// canonical-checkout guard labeled every `git checkout <non-flag arg>` a branch
+// switch, so restoring a churned lockfile was refused for a hazard that was not
+// in play. A path restore (not a commit-ish, naming a tracked or existing path,
+// or given alongside a tree-ish) is now refused under its own label naming the
+// uncommitted-work overwrite; a ref is still a branch switch and branch
+// creation (-b/-B) is still admitted.
+export const SHARED_PACK_VERSION = 91;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

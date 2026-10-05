@@ -121,6 +121,37 @@ canonical_guard_emit_block() {
   echo "Or destroy any worktree that is genuinely abandoned: caws worktree destroy <name>" >&2
 }
 
+# checkout_args_are_pathspec COMMAND DIR — success when `git checkout <args>`
+# restores paths rather than switching to a ref. It is a pathspec when the
+# first argument is not a commit-ish (git resolves a name that is both a ref and
+# a path as the ref) and it names a tracked or existing path, or when more than
+# one non-flag argument is given (`git checkout <tree> <path>`). Anything else,
+# including a remote-tracking name git would turn into a local branch, stays
+# labeled a branch switch, the conservative reading.
+checkout_args_are_pathspec() {
+  local cmd="$1" dir="$2" word arg="" count=0
+  local -a words=()
+  read -r -a words <<<"$cmd" || true
+  for word in "${words[@]:2}"; do
+    case "$word" in
+      '&&' | '||' | ';' | '|' | *';' ) break ;;
+      -*) continue ;;
+    esac
+    word="${word//[\"\']/}"
+    count=$((count + 1))
+    [[ -z "$arg" ]] && arg="$word"
+  done
+  [[ -z "$arg" ]] && return 1
+  [[ "$count" -gt 1 ]] && return 0
+  if git -C "$dir" rev-parse --verify --quiet "${arg}^{commit}" >/dev/null 2>&1; then
+    return 1
+  fi
+  if git -C "$dir" ls-files --error-unmatch -- "$arg" >/dev/null 2>&1 || [[ -e "$dir/$arg" ]]; then
+    return 0
+  fi
+  return 1
+}
+
 CANONICAL_GUARD_CHECK_CWD="${HOOK_CWD:-$PROJECT_DIR}"
 if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
     WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
@@ -139,7 +170,17 @@ if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
         " 2>/dev/null || echo "")
         if [[ -n "$FIRST_ACTIVE_WT" ]]; then
           if echo "$COMMAND" | grep -qE '^git\s+checkout\s+[^[:space:]-]'; then
-            canonical_guard_emit_block "git checkout (branch switch)" "$FIRST_ACTIVE_WT"
+            # A non-flag argument is a ref (branch switch) or a path (restore
+            # from the index/a tree). Both stay refused from the canonical
+            # checkout; only the label differs. Branch creation (-b/-B) starts
+            # with a flag and never reaches this match.
+            if checkout_args_are_pathspec "$COMMAND" "$CANONICAL_GUARD_CHECK_CWD"; then
+              canonical_guard_emit_block "git checkout <path> (working-tree path restore, not a branch switch)" "$FIRST_ACTIVE_WT"
+              echo "This overwrites uncommitted changes to the named path(s) — the same work-loss hazard as git checkout -- <path>." >&2
+              echo "Commit first, or restore the file from a session rooted in the owning worktree." >&2
+            else
+              canonical_guard_emit_block "git checkout (branch switch)" "$FIRST_ACTIVE_WT"
+            fi
             exit 2
           fi
           if echo "$COMMAND" | grep -qE '^git\s+switch\s+[^[:space:]-]'; then
