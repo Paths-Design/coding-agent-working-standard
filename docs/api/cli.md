@@ -95,7 +95,10 @@ policy and waivers. Hook exceptions use human-granted reprieves stored under
 `~/.caws/state/sessions/<id>/` and reaching one session in one repo unless
 granted `--all-repos`; `--surface` supplies harness provenance and legacy
 lookup, not a new per-vendor grant directory. See `caws reprieve grant --help`
-for required identity, handler, reason, approver, and expiry flags.
+for required identity, handler, reason, approver, and expiry flags. A reprieve
+does not change merge readiness: when `caws worktree merge` (or `--dry-run`)
+refuses because the branch carries a commit touching a path outside the spec's
+scope, the remedy is `caws specs amend-scope <spec> --add-support <path>`.
 
 Most commands use exit 0 for success, 1 for domain failure, and 2 for
 composition or usage errors. Some integrity gates have additional codes; consult

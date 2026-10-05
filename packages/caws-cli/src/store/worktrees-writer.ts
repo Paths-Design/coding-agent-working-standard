@@ -398,23 +398,18 @@ function getCurrentBranch(repoRoot: string): string | null {
 }
 
 /** The distinct out-of-scope paths across a lane-provenance refusal, sorted. */
-function laneProvenancePaths(
-  foreignCommits: readonly LaneForeignCommit[]
-): string[] {
-  return [
-    ...new Set(foreignCommits.flatMap((fc) => fc.outOfScopePaths)),
-  ].sort();
+function laneProvenancePaths(foreignCommits: readonly LaneForeignCommit[]): string[] {
+  return [...new Set(foreignCommits.flatMap((fc) => fc.outOfScopePaths))].sort();
 }
 
 /**
  * The remedy line for a lane-provenance refusal.
  *
  * The refusal has to carry its own remedy, because an operator who goes
- * looking for one will not find it. This check is neither the `caws gates
- * run` waiver filter nor a PreToolUse hook guard, so neither a waiver nor a
- * reprieve reaches it — and the waiver/reprieve help presents those two as
- * the choice available, which routes the operator somewhere that cannot
- * help. This line also surfaces candidateSpecIds, which the verifier already
+ * looking for one will not find it among the generic diagnostics. This check
+ * is a merge-readiness check, so its remedy changes the lane's support
+ * standing (scope.support) rather than suppressing an evaluator or skipping
+ * a hook guard. This line also surfaces candidateSpecIds, which the verifier already
  * computes and which previously reached only the structured `--data`
  * payload, where a human reading the refusal never sees it.
  * [CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01]
@@ -424,16 +419,11 @@ function laneProvenanceRemedy(
   foreignCommits: readonly LaneForeignCommit[]
 ): string {
   const paths = laneProvenancePaths(foreignCommits);
-  const candidates = [
-    ...new Set(foreignCommits.flatMap((fc) => fc.candidateSpecIds)),
-  ].sort();
+  const candidates = [...new Set(foreignCommits.flatMap((fc) => fc.candidateSpecIds))].sort();
   const remedy =
     `remedy: admit the path(s) with \`caws specs amend-scope ${specId} ` +
-    `--add-support ${paths.join(' --add-support ')}\` — support admits a path ` +
-    `this lane's history touched without claiming ownership of it. This is a ` +
-    `merge-readiness check: a waiver does not reach it (waivers filter ` +
-    `\`caws gates run\` only) and neither does a reprieve (those skip ` +
-    `PreToolUse hook guards)`;
+    `${paths.map((p) => `--add-support ${p}`).join(' ')}\` — support admits a path ` +
+    `this lane's history touched without claiming ownership of it`;
   return candidates.length > 0
     ? `${remedy}. If the commit belongs to a different lane instead, these ` +
         `active specs already admit the path: ${candidates.join(', ')}`
@@ -459,9 +449,7 @@ function mergeRecoveryNextCommands(
   // Lead with the remedy. [CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01]
   if (foreignCommits.length > 0 && entry?.specId !== undefined) {
     for (const path of laneProvenancePaths(foreignCommits)) {
-      commands.push(
-        `caws specs amend-scope ${entry.specId} --add-support ${path}`
-      );
+      commands.push(`caws specs amend-scope ${entry.specId} --add-support ${path}`);
     }
   }
   commands.push(
@@ -2494,6 +2482,9 @@ export function mergeWorktree(
         `lane branch contains commit ${fc.sha.slice(0, 12)} outside spec scope: ${fc.outOfScopePaths.join(', ')}`
       );
     }
+    if (foreignCommits.length > 0) {
+      findings.push(laneProvenanceRemedy(entry.specId, foreignCommits));
+    }
   }
 
   // Dry-run: report and return without mutation.
@@ -2535,7 +2526,7 @@ export function mergeWorktree(
         merge_check: mergeCheck,
         can_proceed: findings.length === 0,
         findings,
-        next_commands: mergeRecoveryNextCommands(input.name, entry),
+        next_commands: mergeRecoveryNextCommands(input.name, entry, foreignCommits),
         worktree: {
           name: input.name,
           path: wtPath,
@@ -2554,10 +2545,10 @@ export function mergeWorktree(
         `caws worktree merge ${input.name}: prerequisites unmet (${findings.join('; ')}).`,
         {
           subject: input.name,
-          narrowRepair: mergeRepairHint(input.name, entry),
+          narrowRepair: mergeRepairHint(input.name, entry, foreignCommits),
           data: {
             findings,
-            next_commands: mergeRecoveryNextCommands(input.name, entry),
+            next_commands: mergeRecoveryNextCommands(input.name, entry, foreignCommits),
             // A2: name the offending commits, their out-of-scope paths, and
             // the lanes they might belong to (empty for non-provenance
             // refusals).
