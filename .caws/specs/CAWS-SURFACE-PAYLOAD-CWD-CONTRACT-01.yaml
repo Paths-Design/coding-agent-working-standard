@@ -3,7 +3,7 @@ title: 'Confirm whether zcode and dsh PreToolUse payloads carry cwd, then extend
 mode: fix
 lifecycle_state: draft
 created_at: '2026-10-05T07:33:07.921Z'
-updated_at: '2026-10-05T07:33:07.921Z'
+updated_at: '2026-10-05T09:28:23.249Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
@@ -17,6 +17,7 @@ scope:
     - 'packages/caws-cli/src/init/hook-packs'
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
     - 'packages/caws-cli/tests/hooks'
+    - docs/architecture/hook-pack-shared-core.md
   out: []
 invariants:
   - 'A surface joins the cwd fail-closed set only with evidence that its payload carries cwd: a captured live payload or the harness documentation, cited in the change.'
