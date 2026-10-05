@@ -1,9 +1,10 @@
 id: CAWS-DOCS-DEAD-MECHANISM-REFERENCES-01
 title: 'Docs, scripts and orphan templates name commands and flows that no longer exist (caws validate, waivers plural, risk tiers for new specs, parallel setup v11.3+)'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: docs-dead-mechanisms
 created_at: '2026-10-05T06:31:04.620Z'
-updated_at: '2026-10-05T06:31:04.620Z'
+updated_at: '2026-10-05T06:36:44.251Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
