@@ -50,3 +50,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats::claim-oracle-cwd: the owner writing its worktree file passes cwd-relative and worktree-absolute alike"
     commit_sha: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
     test_verified_at: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "status 2 'BLOCKED: ... mutates wt-seed:packages/seed/src, claimed by an active worktree scope.in' for relative and canonical-absolute spellings"
+    recorded_at: "2026-10-05T07:46:32.567Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats::claim-oracle-cwd: a canonical-checkout session writing a path the worktree claims is still blocked"
+    commit_sha: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+    test_verified_at: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
