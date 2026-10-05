@@ -43,3 +43,11 @@ acceptance:
     then: 'it is still refused, and the message names an alternative that applies (for example asking the user to run it) rather than an owning worktree'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "worktree-guard admits checkout/checkout --/restore of lockfile-only targets in canonical with lanes active (bats cases L70-80); classifier leg: test_classify_lockfile_restore.py::test_lockfile_only_restore_is_allowed (3 forms -> allow)"
+    recorded_at: "2026-10-05T08:29:20.667Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: git restore of a lockfile is admitted from canonical with lanes active"
+    commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+    test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
