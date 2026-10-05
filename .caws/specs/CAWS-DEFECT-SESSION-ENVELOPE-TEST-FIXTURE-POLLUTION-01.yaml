@@ -46,12 +46,13 @@ acceptance:
       .session-envelope.json files. The suites redirect session state to
       their temp fixtures.
   - id: A2
-    given: 'A session resolving identity in this repo alongside only real live sessions.'
-    when: 'resolveSessionCandidates scans durable envelopes.'
+    given: >-
+      the hook bats suites that resolve or record session identity (reprieve,
+      bash-write-guard, parse-input, session-id-agent-pid)
+    when: 'each runs'
     then: >-
-      The admitted candidate list contains only real session ids — none of
-      the known fixture ids — so the durable_hook_envelope admitted count
-      observed on 2026-08-15 (19 candidates) reflects real sessions only.
+      every session-state write lands under the suite temp dir, asserted inside the
+      suite, so a later suite that regresses to the canonical .caws/sessions/ fails
 non_functional: {}
 contracts:
   - name: 'session-envelope-hygiene'
