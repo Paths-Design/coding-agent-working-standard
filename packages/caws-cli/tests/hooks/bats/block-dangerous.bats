@@ -262,6 +262,114 @@ _mk_staged_deletion_repo() {
   rm -rf "$repo"
 }
 
+# --- concluding a merge of base into a lane (CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01) ---
+#
+# A bare commit refusal is a HARD BLOCK in every mode (never a confirmable ask),
+# and git rejects `git commit -- <paths>` while MERGE_HEAD exists. Mid-merge the
+# refusal must therefore print a remedy that completes with no prompt and no
+# pathspec commit, and outside a merge the fixed text must stay byte-identical.
+
+# A lane mid-`git merge main`, conflict resolved. main deleted gone-a.txt (an
+# INCOMING deletion); the index also stages an AUTHORED deletion of shared.txt,
+# which exists on both parents.
+_mk_merge_with_authored_deletion_repo() {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-mergerepo-XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.name 'CAWS Test'
+  git -C "$repo" config user.email 'test@caws.invalid'
+  git -C "$repo" config commit.gpgsign false
+  printf 'base\n' > "$repo/shared.txt"
+  printf 'a\n' > "$repo/gone-a.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit -q -m base
+  git -C "$repo" checkout -q -b lane
+  printf 'lane\n' > "$repo/shared.txt"
+  git -C "$repo" commit -q -am 'lane work'
+  git -C "$repo" checkout -q main
+  git -C "$repo" rm -q gone-a.txt
+  printf 'main\n' > "$repo/shared.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit -q -m 'main work'
+  git -C "$repo" checkout -q lane
+  git -C "$repo" merge --no-commit main >/dev/null 2>&1 || true
+  git -C "$repo" rm -q -f shared.txt
+  printf '%s' "$repo"
+}
+
+# Substring assertions as plain functions: a bare `[[ ... ]]` does not trip
+# errexit under bash 3.2 (macOS), which makes it a vacuous assertion.
+_reason_has() {
+  case "$1" in *"$2"*) return 0 ;; esac
+  echo "expected reason to contain: $2" >&2
+  return 1
+}
+_reason_lacks() {
+  case "$1" in *"$2"*) echo "reason must not contain: $2" >&2; return 1 ;; esac
+  return 0
+}
+
+@test "block-dangerous: mid-merge, authored deletions get a remedy that completes without a prompt or a pathspec commit" {
+  local sid="mergedel-$$"
+  local repo; repo="$(_mk_merge_with_authored_deletion_repo)"
+  [ -f "$repo/.git/MERGE_HEAD" ]
+  run_guard_in_dir "$repo" "$(_cmd_envelope_sid "$sid" 'git commit -m merge')"
+  assert_output --partial '"decision": "block"'
+  local reason; reason="$(printf '%s' "$output" | jq -r '.reason')"
+  # Only the authored deletion is counted; the incoming one is not.
+  _reason_has "$reason" 'stages 1 deletion(s) of tracked files (shared.txt)'
+  _reason_lacks "$reason" 'gone-a.txt'
+  # The four steps, in a form that needs no confirmation.
+  _reason_has "$reason" '(1) List the deletions the merge did not bring in: git diff --cached --diff-filter=D --name-only MERGE_HEAD.'
+  _reason_has "$reason" '(2) Unstage them; the files stay deleted in the working tree: git restore --staged -- <those paths>.'
+  _reason_has "$reason" '(3) Conclude the merge with a bare git commit (or git commit --no-edit)'
+  _reason_has "$reason" '(4) After the merge, commit those deletions on their own: git commit -m <msg> -- <deleted paths>.'
+  _reason_has "$reason" 'NOT armed'
+  # The fixed pathspec step is rejected by git mid-merge and must not appear.
+  _reason_lacks "$reason" '-- <paths>'
+  _reason_lacks "$reason" 'Do this instead'
+  refute _latch_exists_for "$sid"
+  rm -rf "$repo"
+}
+
+@test "block-dangerous: outside a merge the staged-deletion refusal text is byte-identical to the fixed remedy" {
+  local sid="mergedel-plain-$$"
+  local repo; repo="$(_mk_staged_deletion_repo)"
+  run_guard_in_dir "$repo" "$(_cmd_envelope_sid "$sid" 'git commit -m sweep')"
+  local reason; reason="$(printf '%s' "$output" | jq -r '.reason')"
+  local ap="'" expected
+  expected="CAWS command-safety: bare git commit (no pathspec) would commit the ENTIRE index, which currently stages 1 deletion(s) of tracked files (tracked.txt) — a stale or foreign index sweeps content you did not intend under your message; inspect the staged set first (git status; git diff --cached --stat), then commit with the paths named explicitly: git commit -m <msg> -- <paths>. This command was refused — the session danger latch was NOT armed. Do this instead: (1) inspect what is actually staged: git status && git diff --cached --stat; (2) if the staged set is exactly what you intend, commit it with the paths named explicitly: git commit -m \"<msg>\" -- <paths>; (3) if the staged set contains work that is NOT yours (another session${ap}s files, a half-applied revert), STOP and ask the user before unstaging anything. Do NOT rephrase the same bare commit to evade this. Command was: git commit -m sweep"
+  assert_equal "$reason" "$expected"
+  rm -rf "$repo"
+}
+
+@test "block-dangerous: following the mid-merge remedy literally concludes the merge and leaves both deletions committed" {
+  local sid="mergedel-follow-$$"
+  local repo; repo="$(_mk_merge_with_authored_deletion_repo)"
+  # Step 1 is read-only and admitted; it lists exactly the authored deletion.
+  run_guard_in_dir "$repo" "$(_cmd_envelope_sid "$sid" 'git diff --cached --diff-filter=D --name-only MERGE_HEAD')"
+  refute_output --partial '"decision": "block"'
+  local authored; authored="$(git -C "$repo" diff --cached --diff-filter=D --name-only MERGE_HEAD)"
+  assert_equal "$authored" "shared.txt"
+  # Step 2 (git itself; the agent-pipeline admission of restore is pinned in pytest).
+  git -C "$repo" restore --staged -- $authored
+  [ ! -f "$repo/shared.txt" ]
+  # Step 3: the bare commit is no longer refused, and git concludes the merge.
+  run_guard_in_dir "$repo" "$(_cmd_envelope_sid "$sid" 'git commit -m merge')"
+  refute_output --partial '"decision": "block"'
+  git -C "$repo" commit -q -m merge
+  [ ! -f "$repo/.git/MERGE_HEAD" ]
+  [ "$(git -C "$repo" log -1 --pretty=%P | wc -w | tr -d ' ')" = "2" ]
+  # Step 4: outside a merge the pathspec commit works and is admitted.
+  run_guard_in_dir "$repo" "$(_cmd_envelope_sid "$sid" 'git commit -m remove -- shared.txt')"
+  refute_output --partial '"decision": "block"'
+  git -C "$repo" commit -q -m remove -- shared.txt
+  run git -C "$repo" ls-tree -r --name-only HEAD
+  refute_output --partial 'shared.txt'
+  refute_output --partial 'gone-a.txt'
+  rm -rf "$repo"
+}
+
 # --- missing load-bearing lib must fail LOUD, not silently disarm the latch ---
 # CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001. The danger latch lives in this guard;
 # block-dangerous sources lib/agent-surface.sh for CAWS_VENDOR_DIR / caws_source_lib

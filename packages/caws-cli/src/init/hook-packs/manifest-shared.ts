@@ -580,7 +580,15 @@ import { isAdapterCoveredSurface } from './types';
 // path restore whose every target is a package-manager lockfile and
 // `git restore --staged` are admitted by the guard and the classifier, and a
 // remaining refusal asks the user to run the restore instead.
-export const SHARED_PACK_VERSION = 94;
+// 95 closes CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01.
+// classify_command.py's bare-commit staged-deletions guard exempts deletions
+// that arrive from the branch being merged while MERGE_HEAD exists (staged
+// state equals a merge parent that changed the path against the merge base),
+// and its remedy during a merge no longer prescribes `git commit -- <paths>`,
+// which git rejects. block-dangerous.sh prints that merge-aware reason as the
+// single source of truth for a mid-merge commit_deletions refusal instead of
+// the fixed pathspec text; the non-merge refusal text is unchanged.
+export const SHARED_PACK_VERSION = 95;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

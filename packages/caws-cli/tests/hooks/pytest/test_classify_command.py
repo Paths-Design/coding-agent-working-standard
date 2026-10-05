@@ -780,3 +780,158 @@ def test_pattern_taking_tools_are_not_credential_reads(classify, command):
     )
 
 
+# ---------------------------------------------------------------------------
+# CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01 — concluding `git merge main`
+# ---------------------------------------------------------------------------
+
+def _git_ok(repo, *args):
+    """Like _git but tolerates a non-zero exit (a conflicted merge exits 1)."""
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"}
+    return subprocess.run(["git", *args], cwd=repo, env=env, capture_output=True, text=True)
+
+
+@pytest.fixture
+def merge_in_progress(tmp_path):
+    """A lane mid-merge with main (MERGE_HEAD = main), conflict resolved.
+
+    main deleted gone-a.txt and gone-b.txt and edited policy; the lane added
+    lane-only.txt and conflicted with main on shared.txt. After resolving, the
+    index stages: two deletions that came from main, and no authored change.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.name", "CAWS Test")
+    _git(repo, "config", "user.email", "test@caws.invalid")
+    _git(repo, "config", "commit.gpgsign", "false")
+    (repo / ".caws").mkdir()
+    for name, body in (
+        ("shared.txt", "base\n"),
+        ("gone-a.txt", "a\n"),
+        ("gone-b.txt", "b\n"),
+        (".caws/policy.yaml", "gates: base\n"),
+    ):
+        (repo / name).write_text(body)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    _git(repo, "checkout", "-q", "-b", "lane")
+    (repo / "shared.txt").write_text("lane\n")
+    (repo / "lane-only.txt").write_text("lane work\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "lane work")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "rm", "-q", "gone-a.txt", "gone-b.txt")
+    (repo / "shared.txt").write_text("main\n")
+    (repo / ".caws/policy.yaml").write_text("gates: main\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "main work")
+    _git(repo, "checkout", "-q", "lane")
+    merged = _git_ok(repo, "merge", "--no-commit", "main")
+    assert merged.returncode != 0 and "CONFLICT" in merged.stdout, merged.stdout
+    (repo / "shared.txt").write_text("resolved\n")
+    _git(repo, "add", "shared.txt")
+    assert (repo / ".git" / "MERGE_HEAD").exists()
+    return repo
+
+
+class TestConcludingMergeOfBase:
+    def test_incoming_deletions_do_not_trip_the_guard_A1(self, classify, merge_in_progress):
+        staged = _git(merge_in_progress, "diff", "--cached", "--diff-filter=D", "--name-only").stdout
+        assert sorted(staged.split()) == ["gone-a.txt", "gone-b.txt"]
+        decision, reason, _, _ = classify("git commit -m 'merge main'", cwd=merge_in_progress)
+        assert decision == "allow", (decision, reason)
+
+    def test_authored_deletion_during_merge_still_asks_and_remedy_completes_A2_A3(
+        self, classify, merge_in_progress
+    ):
+        # shared.txt exists on both parents: removing it matches neither.
+        _git(merge_in_progress, "rm", "-q", "-f", "shared.txt")
+        decision, reason, source, _ = classify("git commit -m 'merge main'", cwd=merge_in_progress)
+        assert decision == "ask", (decision, reason)
+        assert source == "commit_deletions"
+        # Only the authored deletion is counted and named; the two incoming ones are not.
+        assert "1 deletion" in reason
+        assert "shared.txt" in reason
+        assert "gone-a.txt" not in reason
+        # The prescribed pathspec form is rejected by git during a merge, so the
+        # remedy must not offer it as the way out.
+        assert "-- <paths>" not in reason
+        assert "confirm this prompt" not in reason  # no prompt exists in bypass mode
+        for step in (
+            "git diff --cached --diff-filter=D --name-only MERGE_HEAD",
+            "git restore --staged -- <those paths>",
+            "bare git commit (or git commit --no-edit)",
+            "git commit -m <msg> -- <deleted paths>",
+        ):
+            assert step in reason, step
+        # Following the remedy literally: git itself concludes the merge.
+        done = _git_ok(merge_in_progress, "commit", "-q", "-m", "merge main")
+        assert done.returncode == 0, done.stderr
+        assert not (merge_in_progress / ".git" / "MERGE_HEAD").exists()
+
+    def test_deleting_lane_only_work_is_authored_not_incoming_A2(self, classify, merge_in_progress):
+        # lane-only.txt is absent from main too, but main never changed it
+        # relative to the merge base: staged==parent must not make it incoming.
+        _git(merge_in_progress, "rm", "-q", "-f", "lane-only.txt")
+        decision, reason, _, _ = classify("git commit -m 'merge main'", cwd=merge_in_progress)
+        assert decision == "ask", (decision, reason)
+        assert "lane-only.txt" in reason
+
+    @pytest.mark.parametrize(
+        "remedy",
+        [
+            # The two exact strings pre-commit Guard 2 prints mid-merge / outside one.
+            "git restore --staged --source=MERGE_HEAD -- .caws/policy.yaml",
+            "git restore --staged -- .caws/policy.yaml",
+            # Steps (1) and (2) of the commit-deletions remedy.
+            "git diff --cached --diff-filter=D --name-only MERGE_HEAD",
+            "git restore --staged -- shared.txt",
+        ],
+    )
+    def test_remedy_commands_are_admitted_by_the_agent_pipeline_A3(
+        self, classify, merge_in_progress, remedy
+    ):
+        # An ask is a block in bypassPermissions mode, so a remedy the classifier
+        # does not admit dead-ends for an agent however well git accepts it.
+        decision, reason, _, _ = classify(remedy, cwd=merge_in_progress)
+        assert decision == "allow", (remedy, decision, reason)
+
+    def test_the_whole_commit_deletions_remedy_is_admitted_and_completes_A3(
+        self, classify, merge_in_progress
+    ):
+        repo = merge_in_progress
+        _git(repo, "rm", "-q", "-f", "shared.txt")  # the authored deletion
+        # The refusal that starts the remedy.
+        assert classify("git commit -m merge", cwd=repo)[0] == "ask"
+
+        # (1) list the authored deletions; (2) unstage them.
+        assert classify(
+            "git diff --cached --diff-filter=D --name-only MERGE_HEAD", cwd=repo
+        )[0] == "allow"
+        listed = _git(repo, "diff", "--cached", "--diff-filter=D", "--name-only", "MERGE_HEAD")
+        assert listed.stdout.split() == ["shared.txt"]
+        step2 = "git restore --staged -- shared.txt"
+        assert classify(step2, cwd=repo)[0] == "allow"
+        _git(repo, "restore", "--staged", "--", "shared.txt")
+        assert not (repo / "shared.txt").exists()
+
+        # (3) only incoming deletions remain staged, so the bare commit is admitted.
+        decision, reason, _, _ = classify("git commit -m merge", cwd=repo)
+        assert decision == "allow", (decision, reason)
+        _git(repo, "commit", "-q", "-m", "merge main")
+        assert not (repo / ".git" / "MERGE_HEAD").exists()
+
+        # (4) the deletion is committed on its own, outside the merge.
+        step4 = "git commit -m remove-shared -- shared.txt"
+        assert classify(step4, cwd=repo)[0] == "allow"
+        _git(repo, "commit", "-q", "-m", "remove-shared", "--", "shared.txt")
+        tree = _git(repo, "ls-tree", "-r", "--name-only", "HEAD").stdout.split()
+        assert "shared.txt" not in tree and "gone-a.txt" not in tree
+
+    def test_outside_a_merge_the_same_deletions_still_ask(self, classify, commit_repo):
+        _git(commit_repo, "rm", "-q", "tracked.txt")
+        decision, reason, _, _ = classify("git commit -m 'x'", cwd=commit_repo)
+        assert decision == "ask", (decision, reason)
+        assert "-- <paths>" in reason
+
+
