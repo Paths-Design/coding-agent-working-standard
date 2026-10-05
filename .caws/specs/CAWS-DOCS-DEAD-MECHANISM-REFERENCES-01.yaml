@@ -61,3 +61,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/ci/dead-mechanism-references.test.js
     commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
     test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "test.each row 'scripts/verify.sh names no dead mechanism'. verify.sh loops caws specs validate over .caws/specs/*.yaml (dist: 'is valid', exit 0; old 'caws validate' -> Unknown command); smoke-tests.mjs uses singular waiver and specs validate ('waiver command passed', 'waiver list passed'). smoke still fails on untracked scripts/release-check.mjs, a separate dead reference"
+    recorded_at: "2026-10-05T07:17:10.953Z"
+    test_nodeid: "packages/caws-cli/tests/ci/dead-mechanism-references.test.js::scripts/verify.sh"
+    commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+    test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
