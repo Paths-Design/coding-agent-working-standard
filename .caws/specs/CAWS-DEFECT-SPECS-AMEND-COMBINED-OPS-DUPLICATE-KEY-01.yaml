@@ -30,3 +30,11 @@ acceptance:
     then: 'it does not fail with store.lifecycle.plan_rejected duplicated mapping key'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "combined vs sequential YAML byte-identical, one acceptance: and one invariants: key; specs-body-writer.ts locates the acceptance block on post-patch lines; reverting fails with plan_rejected duplicated mapping key (29:5)"
+    recorded_at: "2026-10-05T05:57:46.861Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-amend.test.js::one combined call yields the same spec as the invariant edits and --add-ac run as two calls"
+    commit_sha: "843286d15e2a1021a7f2e539ef8ae788936919f9"
+    test_verified_at: "843286d15e2a1021a7f2e539ef8ae788936919f9"
