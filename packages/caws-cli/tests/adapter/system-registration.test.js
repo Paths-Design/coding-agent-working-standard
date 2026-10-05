@@ -1,0 +1,378 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
+const { installMachineRuntime } = require('../../dist/init/machine-adapters');
+const {
+  configureSystemRuntime,
+  migrateSystemProject,
+  systemProjectPath,
+} = require('../../dist/init/system-runtime');
+const {
+  isCawsNativeCommand,
+  adoptMachineAdapter,
+} = require('../../dist/init/machine-adapter-policy');
+let root, repo, home, user, options;
+const templates = path.resolve(__dirname, '../../templates/hook-packs');
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-system-registration-'));
+  repo = path.join(root, 'repo');
+  home = path.join(root, 'machine');
+  user = path.join(root, 'user');
+  fs.mkdirSync(path.join(repo, '.caws/specs'), { recursive: true });
+  fs.mkdirSync(path.join(repo, '.codex'), { recursive: true });
+  fs.mkdirSync(user);
+  fs.writeFileSync(path.join(repo, '.caws/policy.yaml'), 'version: 1\n');
+  fs.cpSync(path.join(templates, 'shared'), path.join(repo, '.caws/hooks'), { recursive: true });
+  for (const name of fs.readdirSync(path.join(repo, '.caws/hooks')))
+    if (name.endsWith('.sh')) fs.chmodSync(path.join(repo, '.caws/hooks', name), 0o755);
+  expect(spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: repo }).status).toBe(0);
+  fs.writeFileSync(
+    path.join(repo, '.codex/hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Bash',
+            hooks: [
+              { type: 'command', command: `"${repo}/.caws/hooks/dispatch/pre_tool_use.sh"` },
+              { type: 'command', command: `"${repo}/.codex/hooks/custom-lint.sh"` },
+            ],
+          },
+        ],
+      },
+    })
+  );
+  installMachineRuntime({ home });
+  options = { repo, home, userHome: user, surface: 'codex' };
+});
+afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+const blank = () => ({ disabled: {}, extensions: {}, handlers: {}, libraries: {} });
+
+test('an explicit user-managed native-config target preserves the symlink and refuses a later redirect', () => {
+  const managed = path.join(user, 'managed');
+  fs.mkdirSync(managed);
+  const target = path.join(managed, 'hooks.json');
+  fs.writeFileSync(target, '{"hooks":{}}');
+  const native = path.join(user, '.codex/hooks.json');
+  fs.mkdirSync(path.dirname(native));
+  fs.symlinkSync(target, native);
+  expect(() => configureSystemRuntime(options)).toThrow(/symlink/);
+  const selected = { ...options, nativeConfigTarget: target };
+  expect(configureSystemRuntime({ ...selected, plan: true }).changed).toBe(true);
+  expect(fs.readFileSync(target, 'utf8')).toBe('{"hooks":{}}');
+  configureSystemRuntime(selected);
+  expect(fs.lstatSync(native).isSymbolicLink()).toBe(true);
+  expect(JSON.parse(fs.readFileSync(target)).hooks.PreToolUse[0].hooks[0].command).toContain(
+    '--system'
+  );
+  expect(configureSystemRuntime(options).changed).toBe(false);
+  const elsewhere = path.join(managed, 'elsewhere.json');
+  fs.writeFileSync(elsewhere, '{"hooks":{}}');
+  fs.unlinkSync(native);
+  fs.symlinkSync(elsewhere, native);
+  expect(() => configureSystemRuntime(options)).toThrow(/target changed/);
+  expect(fs.readFileSync(elsewhere, 'utf8')).toBe('{"hooks":{}}');
+});
+
+test('an explicitly enabled optional stock hook survives migration as an inherited-code extension', () => {
+  const native = path.join(repo, '.codex/hooks.json');
+  const config = JSON.parse(fs.readFileSync(native));
+  config.hooks.PostToolUse = [
+    { hooks: [{ command: `"${repo}/.caws/hooks/dispatch/post_tool_use.sh"` }] },
+  ];
+  fs.writeFileSync(native, JSON.stringify(config));
+  const dispatch = path.join(repo, '.caws/hooks/dispatch/post_tool_use.sh');
+  fs.writeFileSync(
+    dispatch,
+    fs.readFileSync(dispatch, 'utf8').replace('# "quality-check.sh"', '"quality-check.sh"')
+  );
+  const result = migrateSystemProject({ ...options, plan: true });
+  expect(result.policy.extensions.post_tool_use).toContainEqual({
+    handler: 'quality-check.sh',
+    before: 'naming-check.sh',
+  });
+  expect(result.policy.handlers['quality-check.sh']).toBeUndefined();
+});
+test('unrelated native hook scripts are not classified as CAWS transports', () => {
+  expect(isCawsNativeCommand('/home/u/.claude/hooks/stop-kokoro-voicemail.sh')).toBe(false);
+  expect(isCawsNativeCommand('/home/u/.claude/hooks/instructions-loaded-logger.sh')).toBe(false);
+  expect(isCawsNativeCommand('/home/u/.codex/hooks/custom-lint.sh')).toBe(false);
+  expect(isCawsNativeCommand(`'${repo}/.codex/hooks/caws_dispatch/pre_tool_use.sh'`)).toBe(true);
+  expect(isCawsNativeCommand('python3 /home/u/.caws/bin/caws-hook codex stop')).toBe(true);
+});
+test('system configure preserves unrelated user settings and hooks, is read-only in plan and idempotent on repeat', () => {
+  const file = path.join(user, '.codex/hooks.json');
+  fs.mkdirSync(path.dirname(file));
+  const original = {
+    theme: 'local',
+    hooks: {
+      Stop: [
+        { hooks: [{ type: 'command', command: '/home/u/.codex/hooks/voicemail.sh', timeout: 8 }] },
+      ],
+    },
+  };
+  fs.writeFileSync(file, JSON.stringify(original));
+  const prior = fs.readFileSync(file, 'utf8');
+  const plan = configureSystemRuntime({ ...options, plan: true });
+  expect(plan.changed).toBe(true);
+  expect(fs.readFileSync(file, 'utf8')).toBe(prior);
+  expect(fs.existsSync(path.join(home, 'surfaces/codex/settings.json'))).toBe(false);
+  configureSystemRuntime(options);
+  const after = JSON.parse(fs.readFileSync(file));
+  expect(after.theme).toBe('local');
+  expect(after.hooks.Stop[0]).toEqual(original.hooks.Stop[0]);
+  expect(after.hooks.PreToolUse[0].matcher).toBe('.*');
+  expect(after.hooks.PreToolUse[0].hooks[0].command).toContain('/bin/caws-hook');
+  expect(configureSystemRuntime({ ...options, plan: true }).changed).toBe(false);
+});
+test('an unrelated user hook does not block project adapter adoption', () => {
+  const file = path.join(user, '.codex/hooks.json');
+  fs.mkdirSync(path.dirname(file));
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ command: '/u/.codex/hooks/user-notification.sh' }] }] },
+    })
+  );
+  const plan = adoptMachineAdapter({ ...options, plan: true });
+  expect(plan.changed).toBe(true);
+  expect(plan.policy.surfaces.codex.events.pre_tool_use.handlers).toContain('scope-guard.sh');
+});
+test('one-time migration preserves executable bytes and unrelated hooks, writes machine settings and stops freezing stock handler lists', () => {
+  configureSystemRuntime(options);
+  const hook = path.join(repo, '.caws/hooks/scope-guard.sh');
+  const before = fs.readFileSync(hook, 'utf8');
+  const native = path.join(repo, '.codex/hooks.json');
+  const nativeBefore = fs.readFileSync(native, 'utf8');
+  const plan = migrateSystemProject({ ...options, plan: true });
+  expect(plan.policy).toEqual(blank());
+  expect(fs.readFileSync(native, 'utf8')).toBe(nativeBefore);
+  expect(fs.existsSync(systemProjectPath(home, repo))).toBe(false);
+  const applied = migrateSystemProject(options);
+  expect(applied.changed).toBe(true);
+  expect(JSON.parse(fs.readFileSync(native)).hooks.PreToolUse[0].hooks).toEqual([
+    { type: 'command', command: `"${repo}/.codex/hooks/custom-lint.sh"` },
+  ]);
+  expect(fs.readFileSync(hook, 'utf8')).toBe(before);
+  expect(JSON.parse(fs.readFileSync(systemProjectPath(home, repo))).surfaces.codex).toEqual(
+    blank()
+  );
+  expect(migrateSystemProject(options).changed).toBe(false);
+  const backups = fs
+    .readdirSync(path.join(home, 'state/adoption-backups'))
+    .map((n) => JSON.parse(fs.readFileSync(path.join(home, 'state/adoption-backups', n))));
+  expect(
+    backups.some((b) =>
+      b.changes.some((c) => c.path === fs.realpathSync(native) && c.before === nativeBefore)
+    )
+  ).toBe(true);
+});
+test('custom renderer growth is refused before any mutation and explicit reviewed policy can reconcile it', () => {
+  configureSystemRuntime(options);
+  fs.appendFileSync(
+    path.join(repo, '.caws/hooks/session_log_renderer.py'),
+    '\n# locally maintained renderer\n'
+  );
+  const before = fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8');
+  expect(() => migrateSystemProject(options)).toThrow(
+    /Custom helper requires explicit reconciliation/
+  );
+  expect(fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8')).toBe(before);
+  expect(fs.existsSync(systemProjectPath(home, repo))).toBe(false);
+  const reviewed = path.join(root, 'reviewed.json');
+  fs.writeFileSync(reviewed, JSON.stringify(blank()));
+  expect(migrateSystemProject({ ...options, fromFile: reviewed }).changed).toBe(true);
+});
+test('malformed and symlinked machine project settings are refused before native hooks change', () => {
+  configureSystemRuntime(options);
+  const file = systemProjectPath(home, repo);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{');
+  const prior = fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8');
+  expect(() => migrateSystemProject(options)).toThrow();
+  expect(fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8')).toBe(prior);
+  fs.unlinkSync(file);
+  fs.symlinkSync(path.join(repo, '.caws/policy.yaml'), file);
+  expect(() => migrateSystemProject(options)).toThrow(/symlink/);
+  expect(fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8')).toBe(prior);
+});
+test('migration cannot remove project guards before system registration exists', () => {
+  const prior = fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8');
+  expect(() => migrateSystemProject(options)).toThrow(/Configure system registration first/);
+  expect(fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8')).toBe(prior);
+});
+
+test('the prerequisite refusal also names the step that finishes the migration', () => {
+  // This refusal is the SECOND one an operator meets: the adapter's block sent
+  // them to `migrate`, and `migrate` sends them here. If it names only the
+  // prerequisite, the chain dead-ends at a command that was never the goal --
+  // the operator is left holding a configured machine and the original block.
+  expect(() => migrateSystemProject(options)).toThrow(
+    /then re-run: caws init adapters migrate --agent-surface codex/
+  );
+});
+
+test('new project init inherits user registration without recreating project hook code or native wiring', () => {
+  configureSystemRuntime(options);
+  const fresh = path.join(root, 'fresh');
+  fs.mkdirSync(fresh);
+  expect(spawnSync('git', ['init', '-q'], { cwd: fresh }).status).toBe(0);
+  const result = spawnSync(
+    process.execPath,
+    [path.resolve(__dirname, '../../dist/index.js'), 'init', '--agent-surface', 'codex'],
+    {
+      cwd: fresh,
+      encoding: 'utf8',
+      env: { ...process.env, HOME: user, CAWS_HOME: home },
+    }
+  );
+  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+  expect(result.stdout).toContain('System runtime configured');
+  expect(fs.existsSync(path.join(fresh, '.caws/policy.yaml'))).toBe(true);
+  expect(fs.existsSync(path.join(fresh, '.caws/hooks'))).toBe(false);
+  expect(fs.existsSync(path.join(fresh, '.codex/hooks.json'))).toBe(false);
+});
+
+test('concurrent configuration is refused and a failed migration rolls back its first write from exact backups', () => {
+  configureSystemRuntime(options);
+  const lock = path.join(home, 'state/system-configuration.lock');
+  fs.mkdirSync(lock);
+  const native = fs.realpathSync(path.join(repo, '.codex/hooks.json'));
+  const prior = fs.readFileSync(native, 'utf8');
+  expect(() => migrateSystemProject(options)).toThrow(/configuration is locked/);
+  expect(fs.readFileSync(native, 'utf8')).toBe(prior);
+  fs.rmdirSync(lock);
+  const rename = fs.renameSync;
+  const injection = jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+    if (to === native) throw new Error('injected native write failure');
+    return rename(from, to);
+  });
+  try {
+    expect(() => migrateSystemProject(options)).toThrow(/injected native write failure/);
+  } finally {
+    injection.mockRestore();
+  }
+  expect(fs.readFileSync(native, 'utf8')).toBe(prior);
+  expect(fs.existsSync(systemProjectPath(home, repo))).toBe(false);
+  expect(fs.existsSync(lock)).toBe(false);
+});
+
+test('doctor observes the effective machine runtime and identifies corruption without writing state', () => {
+  const { observeSystemRuntime } = require('../../dist/store/system-runtime-observation');
+  configureSystemRuntime(options);
+  migrateSystemProject(options);
+  const previous = process.env.CAWS_HOME;
+  process.env.CAWS_HOME = home;
+  const homedir = jest.spyOn(os, 'homedir').mockReturnValue(user);
+  try {
+    const observed = observeSystemRuntime(repo);
+    expect(observed.error).toBeUndefined();
+    expect(observed.surfaces).toEqual(['codex']);
+    expect(observed.legacySurfaces).toEqual([]);
+    fs.appendFileSync(
+      path.join(home, 'lib/runtimes', observed.digest, 'scope-guard.sh'),
+      '\n# corruption\n'
+    );
+    expect(observeSystemRuntime(repo).error).toContain('scope-guard.sh');
+  } finally {
+    homedir.mockRestore();
+    if (previous === undefined) delete process.env.CAWS_HOME;
+    else process.env.CAWS_HOME = previous;
+  }
+});
+
+// ── SYSTEM-SURFACE-REGISTRATION-REFUSAL-LOCK-001 ────────────────────────────
+// The machine runtime makes a project's copied hook pack inert ONLY for a
+// surface CAWS has registered in that harness's native config. vendorFor admits
+// exactly codex, claude-code and qwen-code. Registering any other harness would
+// be a silent governance downgrade: systemSurfaceEnabled() would then report
+// true, `caws init` would plan NO local hook pack (init.ts:886-887), and the
+// harness would keep executing whichever copy it already had. The adapter-wired
+// DSH bridge runs <repoRoot>/.caws/hooks/dispatch/<event>.sh and has no runtime
+// path at all, so a fresh repo would end up with no guards whatsoever.
+//
+// This locks that boundary. It is a REGRESSION LOCK, not a bug fix: the refusal
+// already exists and is correct. Falsify it by widening the allowed list inside
+// vendorFor — both tests below go red.
+
+/** Sorted [relativePath, size] pairs for every file under dir. */
+function snapshotTree(dir) {
+  const out = [];
+  const walk = (current) => {
+    const entries = fs
+      .readdirSync(current, { withFileTypes: true })
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else out.push([path.relative(dir, full), fs.statSync(full).size]);
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return out;
+}
+
+test('registration REFUSES surfaces with no verified harness adapter', () => {
+  const before = snapshotTree(user);
+  // dsh is the adapter-wired harness (a cordis plugin, not native hook config);
+  // opencode and zcode have implemented PACKS but no verified native
+  // registration. All three must refuse, which is what proves the boundary is
+  // keyed to registration capability rather than special-casing dsh.
+  for (const surface of ['dsh', 'opencode', 'zcode']) {
+    expect(() => configureSystemRuntime({ ...options, surface })).toThrow(
+      /requires an adapter authored and verified in that harness/
+    );
+    // The refusal routes: it names the supported set rather than just failing.
+    expect(() => configureSystemRuntime({ ...options, surface })).toThrow(
+      /codex, claude-code, qwen-code/
+    );
+  }
+  // Nothing was written. The refusal must precede any settings mutation, or a
+  // half-registered surface could make init stop maintaining the real pack.
+  expect(snapshotTree(user)).toEqual(before);
+  for (const surface of ['dsh', 'opencode', 'zcode']) {
+    expect(fs.existsSync(path.join(home, `surfaces/${surface}`))).toBe(false);
+  }
+});
+
+test('registration still SUCCEEDS for the supported surfaces (no over-refusal)', () => {
+  for (const surface of ['codex', 'claude-code', 'qwen-code']) {
+    const surfaceUser = fs.mkdtempSync(path.join(root, `user-${surface}-`));
+    const result = configureSystemRuntime({ ...options, surface, userHome: surfaceUser });
+    expect(result.changed).toBe(true);
+    expect(fs.existsSync(path.join(home, `surfaces/${surface}`))).toBe(true);
+  }
+});
+
+test('the registration-disagreement refusal names the step that is actually stale', () => {
+  // This message had no test at all, which is how it stayed unfollowable. It
+  // fires when a NEWER build finds registration written by an older one, so
+  // the thing it tells you to run is the thing that already ran and reported
+  // OK. Following it verbatim cannot resolve it -- the stale step is the CLI
+  // snapshot upstream, and the message has to say so or the operator loops.
+  const { systemSurfaceEnabled } = require('../../dist/init/system-runtime');
+  fs.mkdirSync(path.join(home, 'surfaces/codex'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, 'surfaces/codex/settings.json'),
+    JSON.stringify({ version: 1, enabled: true })
+  );
+
+  // The user home must be passed, not inherited: os.homedir() is cached by
+  // libuv, so swapping process.env.HOME does NOT isolate this call. The first
+  // draft of this test did exactly that and ran against the developer's own
+  // ~/.codex -- the non-vacuity assertion below is what caught it.
+  let thrown;
+  try {
+    systemSurfaceEnabled('codex', home, user);
+  } catch (error) {
+    thrown = error;
+  }
+  // Non-vacuity: this must actually be the disagreement path, not some other
+  // failure that happens to throw.
+  expect(thrown && thrown.message).toContain('native registration disagree');
+  expect(thrown.message).toContain('caws init adapters configure --agent-surface codex');
+  expect(thrown.message).toContain('caws init adapters install');
+  expect(thrown.message).toMatch(/caws on PATH is a pinned/);
+});

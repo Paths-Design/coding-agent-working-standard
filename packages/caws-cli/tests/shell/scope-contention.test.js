@@ -46,7 +46,8 @@ function mkRepo() {
 
 function writeSpec(caws, id, scopeIn, { state = 'active', worktree } = {}) {
   const wtLine = worktree !== undefined ? `worktree: ${worktree}\n` : '';
-  const resolutionLine = state === 'closed' || state === 'archived' ? 'resolution: superseded\n' : '';
+  const resolutionLine =
+    state === 'closed' || state === 'archived' ? 'resolution: superseded\n' : '';
   const inLines = scopeIn.map((p) => `    - ${p}`).join('\n');
   const body = `id: ${id}
 title: 'Contention fixture spec'
@@ -107,7 +108,11 @@ describe('caws scope contention --json: claim detection (A4)', () => {
     writeSpec(caws, 'OWNER-001', ['packages/owned'], { worktree: 'wt-owner' });
     makeWorktreeDir(caws, 'wt-owner');
     writeRegistry(caws, {
-      'wt-owner': { specId: 'OWNER-001', baseBranch: 'main', path: path.join(caws, 'worktrees', 'wt-owner') },
+      'wt-owner': {
+        specId: 'OWNER-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-owner'),
+      },
     });
 
     const { code, json } = runJson(root, 'packages/owned/file.ts');
@@ -123,7 +128,11 @@ describe('caws scope contention --json: claim detection (A4)', () => {
     writeSpec(caws, 'OWNER-001', ['packages/owned'], { worktree: 'wt-owner' });
     makeWorktreeDir(caws, 'wt-owner');
     writeRegistry(caws, {
-      'wt-owner': { specId: 'OWNER-001', baseBranch: 'main', path: path.join(caws, 'worktrees', 'wt-owner') },
+      'wt-owner': {
+        specId: 'OWNER-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-owner'),
+      },
     });
 
     const { json } = runJson(root, 'packages/unrelated/file.ts');
@@ -136,7 +145,11 @@ describe('caws scope contention --json: claim detection (A4)', () => {
     writeSpec(caws, 'OLD-001', ['packages/owned'], { state: 'closed', worktree: 'wt-old' });
     makeWorktreeDir(caws, 'wt-old');
     writeRegistry(caws, {
-      'wt-old': { specId: 'OLD-001', baseBranch: 'main', path: path.join(caws, 'worktrees', 'wt-old') },
+      'wt-old': {
+        specId: 'OLD-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-old'),
+      },
     });
 
     const { json } = runJson(root, 'packages/owned/file.ts');

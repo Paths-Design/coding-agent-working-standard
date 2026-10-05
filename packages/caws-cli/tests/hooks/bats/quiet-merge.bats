@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# quiet-merge updatedInput envelope contract (CAWS-DEFECT-CLI-ERROR-PATH-FIXES-01).
+# quiet-merge updatedInput runtime contract (CAWS-CODEX-HOOK-RUNTIME-CONTRACT-001).
 #
 # quiet-merge rewrites `caws worktree merge|destroy` commands via an
 # updatedInput envelope on surfaces with CAWS_SUPPORTS_UPDATED_INPUT=1. Hosts
@@ -7,7 +7,9 @@
 # decision (observed live: "PreToolUse hook returned updatedInput without
 # permissionDecision:allow"). These tests pin the envelope shape:
 # permissionDecision "allow" + reason + updatedInput, and the no-rewrite
-# behavior on opted-out surfaces stays intact.
+# behavior on opted-out surfaces stays intact. The emitted command is executed
+# against a failing stand-in so a trailing successful command, a pipeline that
+# loses the governed status, or stderr suppression makes this suite fail.
 
 load helpers
 
@@ -16,6 +18,30 @@ setup_file() {
 }
 teardown_file() {
   caws_teardown_pack
+}
+
+assert_rewrite_preserves_governed_failure() {
+  local governed_command="$1"
+  local rewritten fake_bin
+
+  run_guard "quiet-merge.sh" "$(hook_envelope 'Bash' '' "$governed_command")"
+  assert_success
+  rewritten="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.updatedInput.command')"
+
+  fake_bin="$(mktemp -d "${TMPDIR:-/tmp}/caws-quiet-merge-bin-XXXXXX")"
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'printf "governed stdout: %s\\n" "$*"' \
+    'printf "governed stderr: %s\\n" "$*" >&2' \
+    'exit 23' > "$fake_bin/caws"
+  chmod +x "$fake_bin/caws"
+
+  run env PATH="$fake_bin:$PATH" bash -c "$rewritten"
+  rm -rf "$fake_bin"
+
+  assert_failure 23
+  assert_output --partial "governed stdout:"
+  assert_output --partial "governed stderr:"
 }
 
 @test "quiet-merge: rewrite envelope carries permissionDecision allow alongside updatedInput" {
@@ -29,7 +55,17 @@ teardown_file() {
   decision="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')"
   [[ "$decision" == "allow" ]]
   rewritten="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.updatedInput.command')"
-  [[ "$rewritten" == cd\ \"$CAWS_TEST_REPO\"*'caws worktree merge wt-x'* ]]
+  [[ "$rewritten" == "cd \"$CAWS_TEST_REPO\" && caws worktree merge wt-x" ]]
+  [[ "$rewritten" != *'2>/dev/null'* ]]
+  [[ "$rewritten" != *'git log'* ]]
+}
+
+@test "quiet-merge: rewritten merge preserves a governed failure status and diagnostics" {
+  assert_rewrite_preserves_governed_failure 'caws worktree merge wt-x'
+}
+
+@test "quiet-merge: rewritten destroy preserves a governed failure status and diagnostics" {
+  assert_rewrite_preserves_governed_failure 'caws worktree destroy wt-x'
 }
 
 @test "quiet-merge: destroy commands get the same allow+rewrite envelope" {

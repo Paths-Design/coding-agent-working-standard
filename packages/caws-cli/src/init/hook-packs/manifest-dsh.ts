@@ -1,17 +1,25 @@
 // DeepSeek Harness (DSH) hook pack manifest.
 //
-// DSH's lifecycle interposition is an in-process Cordis plugin surface (the
-// harness's canonical interception points: tools/pre-execute,
-// tools/post-execute, agent/session-start, agent/turn-stopping). The CAWS
-// adapter is the `@deepseek-ai/dsh-hooks-caws` plugin, which ships in the DSH
-// package tree and is loaded from the DSH profile — NOT a repo-local
-// auto-discovered file like opencode's `.opencode/plugins/*.ts`.
+// DSH's interposition is a harness-loaded plugin (the harness's canonical
+// interception points: tools/pre-execute, tools/post-execute,
+// agent/session-start, agent/turn-stopping). Per-surface facts live in
+// surfaces/registry.json; `dsh` carries hookMechanism: 'harness-plugin'. The
+// CAWS reference adapter is the `@caws/dsh-bundle` bundle (repo
+// `caws-dsh-bundle`), which composes three plugins — caws-hooks (policy
+// dispatch), caws-session-log (turn-log fold), and caws-agents-lifecycle
+// (CLI-mediated leases) — and is loaded from the DSH profile's bundle list.
+// A profile composes each bundle's OWN patch (declared as dsh.bundle.patch in
+// that bundle's package.json) before its own cordis.patch.yml, so the CAWS
+// plugin ids arrive from the bundle's patch; the profile's own patch is an
+// additional layer and is empty on a stock profile. It is NOT a repo-local
+// auto-discovered file like opencode's `.opencode/plugins/*.ts`, and it is NOT
+// wired by a settings key.
 //
 // So this vendor pack installs only the surface doctrine (`.dsh/AGENTS.md`).
-// The interposition shim is a harness plugin; the shared bash dispatchers it
-// invokes are installed unchanged by the `shared` pack under `.caws/hooks/`.
-// The plugin resolves the repo root at runtime from the session cwd (walking
-// up to the nearest `.caws/`), sets CAWS_AGENT_SURFACE=dsh and
+// The interposition plugin is loaded from the profile; the shared bash
+// dispatchers it invokes are installed unchanged by the `shared` pack under
+// `.caws/hooks/`. The plugin resolves the repo root at runtime from the session
+// cwd (walking up to the nearest `.caws/`), sets CAWS_AGENT_SURFACE=dsh and
 // CAWS_PROJECT_DIR=<root>, and translates DSH tool names to the Claude Code
 // canonical names the guards self-filter on (bash→Bash, write→Write,
 // edit→Edit, …).
@@ -22,12 +30,15 @@
 // confirmation prompt, not a silent allow.
 //
 // Activation: DSH loads plugins at profile start. Installing the pack
-// mid-session does NOT activate the plugin until the profile is restarted —
-// hence activation: 'restart_required'.
+// mid-session does NOT activate the plugin until the profile is reloaded —
+// hence activation: 'restart_required'. Whether a given machine is wired is a
+// property of the live profile (its bundle list plus each bundle's patch),
+// never of a settings key.
 
 import type { HookPackV1 } from './types';
+import { SURFACE_HOOK_MECHANISMS } from './surfaces.generated';
 
-export const DSH_PACK_VERSION = 1;
+export const DSH_PACK_VERSION = 3;
 
 export const DSH_PACK: HookPackV1 = {
   id: 'dsh',
@@ -35,10 +46,10 @@ export const DSH_PACK: HookPackV1 = {
   packVersion: DSH_PACK_VERSION,
   cawsMinMajor: 11,
   summary:
-    'DeepSeek Harness vendor adapter: surface doctrine only; the interposition ' +
-    'plugin (@deepseek-ai/dsh-hooks-caws) ships in the harness profile and ' +
-    'invokes the shared CAWS dispatchers. Shared hook logic is in the `shared` ' +
-    'pack under .caws/hooks/.',
+    'DeepSeek Harness vendor adapter: surface doctrine only; the CAWS ' +
+    `interposition plugin is harness-loaded (hookMechanism: ${SURFACE_HOOK_MECHANISMS.dsh}) ` +
+    'from the DSH profile bundle list and invokes the shared CAWS dispatchers. ' +
+    'Shared hook logic is in the `shared` pack under .caws/hooks/.',
   activation: 'restart_required',
   lifecycleEvents: ['pre_bash', 'pre_write', 'pre_edit', 'session_start', 'stop'],
   stateModel: {

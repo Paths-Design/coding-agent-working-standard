@@ -7,12 +7,7 @@
 export { STORE_RULES, STORE_RULE_PREFIXES } from './rules';
 export type { StoreRule } from './rules';
 
-export type {
-  EventsLoadResult,
-  PolicyLoadResult,
-  SpecsLoadResult,
-  StoreSnapshot,
-} from './types';
+export type { EventsLoadResult, PolicyLoadResult, SpecsLoadResult, StoreSnapshot } from './types';
 
 export {
   defaultGitRunner,
@@ -68,12 +63,14 @@ export {
   releaseBridge,
   pruneBridgeGhosts,
 } from './bridge-store';
-export type {
-  BridgeEntry,
-  BridgeRegistry,
-  BridgeGhostCandidate,
-} from './bridge-store';
+export type { BridgeEntry, BridgeRegistry, BridgeGhostCandidate } from './bridge-store';
 export { loadWorktrees } from './worktrees-store';
+
+// Lane divergence (WORKTREE-LANE-DIVERGENCE-SURFACE-001) — read-only git
+// plumbing shared by `caws worktree list` and `caws status` so the two
+// surfaces cannot disagree about how far a lane has moved from its base.
+export { computeLaneDivergence, formatLaneCounts } from './worktree-divergence';
+export type { LaneDivergence } from './worktree-divergence';
 export { loadAgents } from './agents-store';
 export { appendEvent, loadEvents, rotateEvents } from './events-store';
 export type { RotateEventsOptions } from './events-store';
@@ -114,15 +111,8 @@ export type {
   InitProjectResult,
 } from './init-store';
 
-export {
-  composeDoctorSnapshot,
-  composeStoreSnapshot,
-} from './doctor-snapshot';
-export type {
-  ComposeDoctorOptions,
-  ComposeDoctorResult,
-  ComposeOptions,
-} from './doctor-snapshot';
+export { composeDoctorSnapshot, composeStoreSnapshot } from './doctor-snapshot';
+export type { ComposeDoctorOptions, ComposeDoctorResult, ComposeOptions } from './doctor-snapshot';
 
 // ─── messages (AGENT-MESSAGE-CHANNEL-001) ───────────────────────────────
 // Inter-agent message channel over .caws/messages.jsonl — separate from the
@@ -132,6 +122,7 @@ export type {
 export {
   sendMessage,
   pollMessage,
+  settleMessageOffer,
   inboxCount,
   inboxMessages,
   inboxAllMessages,
@@ -156,6 +147,8 @@ export type {
   HistoryEntry,
   PollResult,
   PollOptions,
+  MessageOffer,
+  MessageOfferSettlement,
   MessagePruneOptions,
   MessagePruneEntry,
   MessagePrunePlan,

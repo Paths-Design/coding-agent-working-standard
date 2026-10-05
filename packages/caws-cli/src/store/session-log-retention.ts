@@ -51,7 +51,12 @@ export interface SessionLogRetentionPlan {
  */
 export function planSessionLogRetention(
   cawsDir: string,
-  opts: { readonly retentionMs: number; readonly now: number; readonly currentSessionId?: string; readonly liveSessionIds?: ReadonlySet<string> }
+  opts: {
+    readonly retentionMs: number;
+    readonly now: number;
+    readonly currentSessionId?: string;
+    readonly liveSessionIds?: ReadonlySet<string>;
+  }
 ): SessionLogRetentionPlan {
   const sessionsDir = path.join(cawsDir, 'sessions');
   if (!fs.existsSync(sessionsDir)) {
@@ -127,9 +132,7 @@ export function planSessionLogRetention(
  * and every other path in the dir are preserved. Returns the count removed.
  * Never writes events.jsonl or any governed state.
  */
-export function applySessionLogRetention(
-  candidates: readonly SessionLogCandidate[]
-): number {
+export function applySessionLogRetention(candidates: readonly SessionLogCandidate[]): number {
   let removed = 0;
   for (const candidate of candidates) {
     for (const file of candidate.turnFiles) {

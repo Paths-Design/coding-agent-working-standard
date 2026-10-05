@@ -76,7 +76,9 @@ describe('parseWorktreePorcelain: parses the porcelain record format', () => {
 
   test('blank line while currentPath is undefined is a no-op', () => {
     // Multiple blank lines between records must not produce phantom entries.
-    const out = parseWorktreePorcelain('worktree /a\nbranch main\n\n\nworktree /b\nbranch feat\n\n');
+    const out = parseWorktreePorcelain(
+      'worktree /a\nbranch main\n\n\nworktree /b\nbranch feat\n\n'
+    );
     expect(out).toHaveLength(2);
     expect(out[0]).toEqual({ path: '/a', branch: 'main' });
     expect(out[1]).toEqual({ path: '/b', branch: 'feat' });
@@ -309,12 +311,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/wts/shared/subdir',
       registry: {
-        'alpha': { specId: 'SPEC-A', path: '/fake/wts/shared' },
-        'beta':  { specId: 'SPEC-B', path: '/fake/wts/shared' },
+        alpha: { specId: 'SPEC-A', path: '/fake/wts/shared' },
+        beta: { specId: 'SPEC-B', path: '/fake/wts/shared' },
       },
       specs: [
         { id: 'SPEC-A', worktree: 'alpha', lifecycle_state: 'active' },
-        { id: 'SPEC-B', worktree: 'beta',  lifecycle_state: 'active' },
+        { id: 'SPEC-B', worktree: 'beta', lifecycle_state: 'active' },
       ],
       gitWorktreeList: () => [],
     });
@@ -329,11 +331,11 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/outer/inner/code',
       registry: {
         'wt-outer': { specId: 'SPEC-OUT', path: '/fake/outer' },
-        'wt-inner': { specId: 'SPEC-IN',  path: '/fake/outer/inner' },
+        'wt-inner': { specId: 'SPEC-IN', path: '/fake/outer/inner' },
       },
       specs: [
         { id: 'SPEC-OUT', worktree: 'wt-outer', lifecycle_state: 'active' },
-        { id: 'SPEC-IN',  worktree: 'wt-inner', lifecycle_state: 'active' },
+        { id: 'SPEC-IN', worktree: 'wt-inner', lifecycle_state: 'active' },
       ],
       gitWorktreeList: () => [],
     });
@@ -347,7 +349,7 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
     const r = resolveBinding({
       repoRoot: '/fake/repo',
       cwd: '/fake/exact-wt',
-      registry: { 'exact': { specId: 'SPEC-E', path: '/fake/exact-wt' } },
+      registry: { exact: { specId: 'SPEC-E', path: '/fake/exact-wt' } },
       specs: [{ id: 'SPEC-E', worktree: 'exact', lifecycle_state: 'active' }],
       gitWorktreeList: () => [],
     });
@@ -389,10 +391,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
   test('cwd outside any wt but absolute targetPath is inside a registered wt -> target_worktree_location', () => {
     const r = resolveBinding({
       repoRoot: '/fake/repo',
-      cwd: '/fake/elsewhere',  // not inside any registered wt
+      cwd: '/fake/elsewhere', // not inside any registered wt
       registry: { 'wt-target': { specId: 'SPEC-T', path: '/fake/wt-target' } },
-      specs: [{ id: 'SPEC-T', worktree: 'wt-target', lifecycle_state: 'active', scope: { in: ['src'] } }],
-      targetPath: '/fake/wt-target/src/foo.ts',  // absolute, inside wt
+      specs: [
+        { id: 'SPEC-T', worktree: 'wt-target', lifecycle_state: 'active', scope: { in: ['src'] } },
+      ],
+      targetPath: '/fake/wt-target/src/foo.ts', // absolute, inside wt
       gitWorktreeList: () => [],
     });
     expect(r.binding.kind).toBe('bound');
@@ -437,7 +441,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/elsewhere',
       registry: { 'wt-claim': { specId: 'SPEC-C', path: '/fake/nonexistent-wt' } },
       specs: [
-        { id: 'SPEC-C', worktree: 'wt-claim', lifecycle_state: 'active', scope: { in: ['src/foo.ts'] } },
+        {
+          id: 'SPEC-C',
+          worktree: 'wt-claim',
+          lifecycle_state: 'active',
+          scope: { in: ['src/foo.ts'] },
+        },
       ],
       targetPath: 'src/foo.ts',
       gitWorktreeList: () => [],
@@ -492,8 +501,18 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
         'wt-b': { specId: 'SPEC-B', path: '/fake/nonexistent-b' },
       },
       specs: [
-        { id: 'SPEC-A', worktree: 'wt-a', lifecycle_state: 'active', scope: { in: ['src/shared.ts'] } },
-        { id: 'SPEC-B', worktree: 'wt-b', lifecycle_state: 'active', scope: { in: ['src/shared.ts'] } },
+        {
+          id: 'SPEC-A',
+          worktree: 'wt-a',
+          lifecycle_state: 'active',
+          scope: { in: ['src/shared.ts'] },
+        },
+        {
+          id: 'SPEC-B',
+          worktree: 'wt-b',
+          lifecycle_state: 'active',
+          scope: { in: ['src/shared.ts'] },
+        },
       ],
       targetPath: 'src/shared.ts',
       gitWorktreeList: () => [],
@@ -514,8 +533,18 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
         'wt-y': { specId: 'SPEC-Y', path: '/fake/nonexistent-y' },
       },
       specs: [
-        { id: 'SPEC-X', worktree: 'wt-x', lifecycle_state: 'active', scope: { in: ['src/shared'] } },
-        { id: 'SPEC-Y', worktree: 'wt-y', lifecycle_state: 'active', scope: { in: ['src/shared'] } },
+        {
+          id: 'SPEC-X',
+          worktree: 'wt-x',
+          lifecycle_state: 'active',
+          scope: { in: ['src/shared'] },
+        },
+        {
+          id: 'SPEC-Y',
+          worktree: 'wt-y',
+          lifecycle_state: 'active',
+          scope: { in: ['src/shared'] },
+        },
       ],
       targetPath: 'src/shared/utils.ts',
       gitWorktreeList: () => [],
@@ -544,8 +573,18 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
         'wt-q': { specId: 'SPEC-Q', path: '/fake/nope-q' },
       },
       specs: [
-        { id: 'SPEC-P', worktree: 'wt-p', lifecycle_state: 'active', scope: { in: ['src/shared.ts'] } },
-        { id: 'SPEC-Q', worktree: 'wt-q', lifecycle_state: 'active', scope: { in: ['src/shared.ts'] } },
+        {
+          id: 'SPEC-P',
+          worktree: 'wt-p',
+          lifecycle_state: 'active',
+          scope: { in: ['src/shared.ts'] },
+        },
+        {
+          id: 'SPEC-Q',
+          worktree: 'wt-q',
+          lifecycle_state: 'active',
+          scope: { in: ['src/shared.ts'] },
+        },
       ],
       targetPath: './src/shared.ts',
       gitWorktreeList: () => [],
@@ -607,9 +646,7 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/elsewhere',
       registry: { 'wt-es': { specId: '', path: '/fake/nonexistent' } },
-      specs: [
-        { id: '', worktree: 'wt-es', lifecycle_state: 'active', scope: { in: ['src'] } },
-      ],
+      specs: [{ id: '', worktree: 'wt-es', lifecycle_state: 'active', scope: { in: ['src'] } }],
       targetPath: 'src/foo.ts',
       gitWorktreeList: () => [],
     });
@@ -716,7 +753,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/elsewhere',
       registry: { 'wt-glob': { specId: 'SPEC-GL', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-GL', worktree: 'wt-glob', lifecycle_state: 'active', scope: { in: ['src/*.ts'] } },
+        {
+          id: 'SPEC-GL',
+          worktree: 'wt-glob',
+          lifecycle_state: 'active',
+          scope: { in: ['src/*.ts'] },
+        },
       ],
       targetPath: 'src/foo.ts',
       gitWorktreeList: () => [],
@@ -730,7 +772,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/elsewhere',
       registry: { 'wt-gnm': { specId: 'SPEC-GNM', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-GNM', worktree: 'wt-gnm', lifecycle_state: 'active', scope: { in: ['src/*.ts'] } },
+        {
+          id: 'SPEC-GNM',
+          worktree: 'wt-gnm',
+          lifecycle_state: 'active',
+          scope: { in: ['src/*.ts'] },
+        },
       ],
       targetPath: 'tests/foo.ts',
       gitWorktreeList: () => [],
@@ -744,7 +791,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/elsewhere',
       registry: { 'wt-qmark': { specId: 'SPEC-QM', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-QM', worktree: 'wt-qmark', lifecycle_state: 'active', scope: { in: ['src/fo?.ts'] } },
+        {
+          id: 'SPEC-QM',
+          worktree: 'wt-qmark',
+          lifecycle_state: 'active',
+          scope: { in: ['src/fo?.ts'] },
+        },
       ],
       targetPath: 'src/foo.ts',
       gitWorktreeList: () => [],
@@ -760,9 +812,14 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/elsewhere',
       registry: { 'wt-dot': { specId: 'SPEC-DOT', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-DOT', worktree: 'wt-dot', lifecycle_state: 'active', scope: { in: ['src/foo.test.ts'] } },
+        {
+          id: 'SPEC-DOT',
+          worktree: 'wt-dot',
+          lifecycle_state: 'active',
+          scope: { in: ['src/foo.test.ts'] },
+        },
       ],
-      targetPath: 'src/fooXtestYts',  // dots replaced with other chars -> no match
+      targetPath: 'src/fooXtestYts', // dots replaced with other chars -> no match
       gitWorktreeList: () => [],
     });
     expect(r.binding.kind).toBe('unbound');
@@ -774,7 +831,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/elsewhere',
       registry: { 'wt-dotx': { specId: 'SPEC-DOTX', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-DOTX', worktree: 'wt-dotx', lifecycle_state: 'active', scope: { in: ['src/foo.test.ts'] } },
+        {
+          id: 'SPEC-DOTX',
+          worktree: 'wt-dotx',
+          lifecycle_state: 'active',
+          scope: { in: ['src/foo.test.ts'] },
+        },
       ],
       targetPath: 'src/foo.test.ts',
       gitWorktreeList: () => [],
@@ -841,12 +903,10 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
     // porcelainReal === repoRootReal -> skip; no candidate -> unbound
     const r = resolveBinding({
       repoRoot: '/fake/main-repo',
-      cwd: '/fake/main-repo/subdir',  // NOT in registry
+      cwd: '/fake/main-repo/subdir', // NOT in registry
       registry: {},
       specs: [],
-      gitWorktreeList: () => [
-        { path: '/fake/main-repo', branch: 'main' },
-      ],
+      gitWorktreeList: () => [{ path: '/fake/main-repo', branch: 'main' }],
     });
     expect(r.binding.kind).toBe('unbound');
     expect(r.source).toBe('none');
@@ -913,7 +973,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-tsic': { specId: 'SPEC-TSIC', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-TSIC', worktree: 'wt-tsic', lifecycle_state: 'active', scope: { in: ['src'] } }],
+      specs: [
+        { id: 'SPEC-TSIC', worktree: 'wt-tsic', lifecycle_state: 'active', scope: { in: ['src'] } },
+      ],
       targetPath: 'src/foo.ts',
       gitWorktreeList: () => [],
     });
@@ -941,7 +1003,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/outside',
       registry: { 'wt-bs': { specId: 'SPEC-BS', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-BS', worktree: 'wt-bs', lifecycle_state: 'active', scope: { in: ['src/foo.ts'] } },
+        {
+          id: 'SPEC-BS',
+          worktree: 'wt-bs',
+          lifecycle_state: 'active',
+          scope: { in: ['src/foo.ts'] },
+        },
       ],
       targetPath: 'src/foo.ts',
       gitWorktreeList: () => [],
@@ -1040,8 +1107,15 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-ex': { specId: 'SPEC-EX', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-EX', worktree: 'wt-ex', lifecycle_state: 'active', scope: { in: ['src/exact.ts'] } }],
-      targetPath: 'src/exact.ts',  // exact match -> e === t
+      specs: [
+        {
+          id: 'SPEC-EX',
+          worktree: 'wt-ex',
+          lifecycle_state: 'active',
+          scope: { in: ['src/exact.ts'] },
+        },
+      ],
+      targetPath: 'src/exact.ts', // exact match -> e === t
       gitWorktreeList: () => [],
     });
     expect(r.binding.kind).toBe('bound');
@@ -1053,7 +1127,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-ng': { specId: 'SPEC-NG', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-NG', worktree: 'wt-ng', lifecycle_state: 'active', scope: { in: ['src'] } }],
+      specs: [
+        { id: 'SPEC-NG', worktree: 'wt-ng', lifecycle_state: 'active', scope: { in: ['src'] } },
+      ],
       targetPath: 'src-extra/file.ts',
       gitWorktreeList: () => [],
     });
@@ -1066,7 +1142,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-sw': { specId: 'SPEC-SW', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-SW', worktree: 'wt-sw', lifecycle_state: 'active', scope: { in: ['src'] } }],
+      specs: [
+        { id: 'SPEC-SW', worktree: 'wt-sw', lifecycle_state: 'active', scope: { in: ['src'] } },
+      ],
       targetPath: 'src/utils/helper.ts',
       gitWorktreeList: () => [],
     });
@@ -1079,7 +1157,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-sep': { specId: 'SPEC-SEP', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-SEP', worktree: 'wt-sep', lifecycle_state: 'active', scope: { in: ['src'] } }],
+      specs: [
+        { id: 'SPEC-SEP', worktree: 'wt-sep', lifecycle_state: 'active', scope: { in: ['src'] } },
+      ],
       targetPath: 'src-extra/component.ts',
       gitWorktreeList: () => [],
     });
@@ -1094,7 +1174,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-nrl': { specId: 'SPEC-NRL', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-NRL', worktree: 'wt-nrl', lifecycle_state: 'active', scope: { in: ['./src'] } }],
+      specs: [
+        { id: 'SPEC-NRL', worktree: 'wt-nrl', lifecycle_state: 'active', scope: { in: ['./src'] } },
+      ],
       targetPath: 'src/foo.ts',
       gitWorktreeList: () => [],
     });
@@ -1108,7 +1190,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-ts2': { specId: 'SPEC-TS2', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-TS2', worktree: 'wt-ts2', lifecycle_state: 'active', scope: { in: ['src//'] } }],
+      specs: [
+        { id: 'SPEC-TS2', worktree: 'wt-ts2', lifecycle_state: 'active', scope: { in: ['src//'] } },
+      ],
       targetPath: 'src/foo.ts',
       gitWorktreeList: () => [],
     });
@@ -1123,7 +1207,14 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-star': { specId: 'SPEC-STAR', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-STAR', worktree: 'wt-star', lifecycle_state: 'active', scope: { in: ['src/*.ts'] } }],
+      specs: [
+        {
+          id: 'SPEC-STAR',
+          worktree: 'wt-star',
+          lifecycle_state: 'active',
+          scope: { in: ['src/*.ts'] },
+        },
+      ],
       targetPath: 'src/multiple-chars.ts',
       gitWorktreeList: () => [],
     });
@@ -1136,7 +1227,14 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-qm': { specId: 'SPEC-QM', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-QM', worktree: 'wt-qm', lifecycle_state: 'active', scope: { in: ['src/f?.ts'] } }],
+      specs: [
+        {
+          id: 'SPEC-QM',
+          worktree: 'wt-qm',
+          lifecycle_state: 'active',
+          scope: { in: ['src/f?.ts'] },
+        },
+      ],
       targetPath: 'src/fa.ts',
       gitWorktreeList: () => [],
     });
@@ -1148,8 +1246,15 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-qno': { specId: 'SPEC-QNO', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-QNO', worktree: 'wt-qno', lifecycle_state: 'active', scope: { in: ['src/f?.ts'] } }],
-      targetPath: 'src/foo.ts',  // 'oo' is 2 chars, '?' should only match 1
+      specs: [
+        {
+          id: 'SPEC-QNO',
+          worktree: 'wt-qno',
+          lifecycle_state: 'active',
+          scope: { in: ['src/f?.ts'] },
+        },
+      ],
+      targetPath: 'src/foo.ts', // 'oo' is 2 chars, '?' should only match 1
       gitWorktreeList: () => [],
     });
     expect(r.binding.kind).toBe('unbound');
@@ -1161,8 +1266,15 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-esc': { specId: 'SPEC-ESC', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-ESC', worktree: 'wt-esc', lifecycle_state: 'active', scope: { in: ['src/foo.ts'] } }],
-      targetPath: 'src/fooXts',  // 'X' instead of '.' -- unescaped '.' would match; escaped '.' won't
+      specs: [
+        {
+          id: 'SPEC-ESC',
+          worktree: 'wt-esc',
+          lifecycle_state: 'active',
+          scope: { in: ['src/foo.ts'] },
+        },
+      ],
+      targetPath: 'src/fooXts', // 'X' instead of '.' -- unescaped '.' would match; escaped '.' won't
       gitWorktreeList: () => [],
     });
     expect(r.binding.kind).toBe('unbound');
@@ -1190,7 +1302,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-loc': { specId: 'SPEC-LOC', path: '/fake/wt-loc' } },
-      specs: [{ id: 'SPEC-LOC', worktree: 'wt-loc', lifecycle_state: 'active', scope: { in: ['src'] } }],
+      specs: [
+        { id: 'SPEC-LOC', worktree: 'wt-loc', lifecycle_state: 'active', scope: { in: ['src'] } },
+      ],
       targetPath: '/fake/wt-loc/src/file.ts',
       gitWorktreeList: () => [],
     });
@@ -1204,7 +1318,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-sc2': { specId: 'SPEC-SC2', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-SC2', worktree: 'wt-sc2', lifecycle_state: 'active', scope: { in: ['lib'] } }],
+      specs: [
+        { id: 'SPEC-SC2', worktree: 'wt-sc2', lifecycle_state: 'active', scope: { in: ['lib'] } },
+      ],
       targetPath: 'lib/util.ts',
       gitWorktreeList: () => [],
     });
@@ -1218,7 +1334,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-1c': { specId: 'SPEC-1C', path: '/fake/nonexistent' } },
-      specs: [{ id: 'SPEC-1C', worktree: 'wt-1c', lifecycle_state: 'active', scope: { in: ['src'] } }],
+      specs: [
+        { id: 'SPEC-1C', worktree: 'wt-1c', lifecycle_state: 'active', scope: { in: ['src'] } },
+      ],
       targetPath: 'src/component.ts',
       gitWorktreeList: () => [],
     });
@@ -1236,8 +1354,18 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
         'wt-2b': { specId: 'SPEC-2B', path: '/fake/nonexistent-b' },
       },
       specs: [
-        { id: 'SPEC-2A', worktree: 'wt-2a', lifecycle_state: 'active', scope: { in: ['shared/api.ts'] } },
-        { id: 'SPEC-2B', worktree: 'wt-2b', lifecycle_state: 'active', scope: { in: ['shared/api.ts'] } },
+        {
+          id: 'SPEC-2A',
+          worktree: 'wt-2a',
+          lifecycle_state: 'active',
+          scope: { in: ['shared/api.ts'] },
+        },
+        {
+          id: 'SPEC-2B',
+          worktree: 'wt-2b',
+          lifecycle_state: 'active',
+          scope: { in: ['shared/api.ts'] },
+        },
       ],
       targetPath: 'shared/api.ts',
       gitWorktreeList: () => [],
@@ -1258,8 +1386,18 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
         'wt-am2': { specId: 'SPEC-AM2', path: '/fake/y' },
       },
       specs: [
-        { id: 'SPEC-AM1', worktree: 'wt-am1', lifecycle_state: 'active', scope: { in: ['shared'] } },
-        { id: 'SPEC-AM2', worktree: 'wt-am2', lifecycle_state: 'active', scope: { in: ['shared'] } },
+        {
+          id: 'SPEC-AM1',
+          worktree: 'wt-am1',
+          lifecycle_state: 'active',
+          scope: { in: ['shared'] },
+        },
+        {
+          id: 'SPEC-AM2',
+          worktree: 'wt-am2',
+          lifecycle_state: 'active',
+          scope: { in: ['shared'] },
+        },
       ],
       targetPath: 'shared/config.ts',
       gitWorktreeList: () => [],
@@ -1433,7 +1571,7 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
     const r = resolveBinding({
       repoRoot,
       cwd: cwdInWt,
-      registry: {},   // empty -> no registry match for the wt path either
+      registry: {}, // empty -> no registry match for the wt path either
       specs: [],
       gitWorktreeList: () => [
         { path: repoRoot, branch: 'main' },
@@ -1666,11 +1804,11 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/deep/nested/dir/cwd',
       registry: {
         'wt-z-shallow': { specId: 'SPEC-SH', path: '/fake/deep' },
-        'wt-a-deep':    { specId: 'SPEC-DP', path: '/fake/deep/nested/dir' },
+        'wt-a-deep': { specId: 'SPEC-DP', path: '/fake/deep/nested/dir' },
       },
       specs: [
         { id: 'SPEC-SH', worktree: 'wt-z-shallow', lifecycle_state: 'active' },
-        { id: 'SPEC-DP', worktree: 'wt-a-deep',    lifecycle_state: 'active' },
+        { id: 'SPEC-DP', worktree: 'wt-a-deep', lifecycle_state: 'active' },
       ],
       gitWorktreeList: () => [],
     });
@@ -1686,11 +1824,11 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/levels/a/b/c/src',
       registry: {
         'aaa-shallow': { specId: 'SPEC-AAA', path: '/fake/levels' },
-        'zzz-deep':    { specId: 'SPEC-ZZZ', path: '/fake/levels/a/b/c' },
+        'zzz-deep': { specId: 'SPEC-ZZZ', path: '/fake/levels/a/b/c' },
       },
       specs: [
         { id: 'SPEC-AAA', worktree: 'aaa-shallow', lifecycle_state: 'active' },
-        { id: 'SPEC-ZZZ', worktree: 'zzz-deep',    lifecycle_state: 'active' },
+        { id: 'SPEC-ZZZ', worktree: 'zzz-deep', lifecycle_state: 'active' },
       ],
       gitWorktreeList: () => [],
     });
@@ -1707,12 +1845,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/level1/shared/cwd',
       registry: {
-        'beta':  { specId: 'SPEC-B', path: '/fake/level1/shared' },
-        'alpha': { specId: 'SPEC-A', path: '/fake/level1/shared' },
+        beta: { specId: 'SPEC-B', path: '/fake/level1/shared' },
+        alpha: { specId: 'SPEC-A', path: '/fake/level1/shared' },
       },
       specs: [
         { id: 'SPEC-A', worktree: 'alpha', lifecycle_state: 'active' },
-        { id: 'SPEC-B', worktree: 'beta',  lifecycle_state: 'active' },
+        { id: 'SPEC-B', worktree: 'beta', lifecycle_state: 'active' },
       ],
       gitWorktreeList: () => [],
     });
@@ -1731,7 +1869,7 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
         'a-second': { specId: 'SPEC-A', path: '/fake/level1/common' },
       },
       specs: [
-        { id: 'SPEC-Z', worktree: 'z-first',  lifecycle_state: 'active' },
+        { id: 'SPEC-Z', worktree: 'z-first', lifecycle_state: 'active' },
         { id: 'SPEC-A', worktree: 'a-second', lifecycle_state: 'active' },
       ],
       gitWorktreeList: () => [],
@@ -1749,12 +1887,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       registry: {
         'cc-third': { specId: 'SPEC-C', path: '/fake/level1/plateau' },
         'bb-second': { specId: 'SPEC-B', path: '/fake/level1/plateau' },
-        'aa-first':  { specId: 'SPEC-A', path: '/fake/level1/plateau' },
+        'aa-first': { specId: 'SPEC-A', path: '/fake/level1/plateau' },
       },
       specs: [
-        { id: 'SPEC-C', worktree: 'cc-third',  lifecycle_state: 'active' },
+        { id: 'SPEC-C', worktree: 'cc-third', lifecycle_state: 'active' },
         { id: 'SPEC-B', worktree: 'bb-second', lifecycle_state: 'active' },
-        { id: 'SPEC-A', worktree: 'aa-first',  lifecycle_state: 'active' },
+        { id: 'SPEC-A', worktree: 'aa-first', lifecycle_state: 'active' },
       ],
       gitWorktreeList: () => [],
     });
@@ -1769,9 +1907,9 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/level1/flat/sub',
       registry: {
-        'mmm': { specId: 'SPEC-M', path: '/fake/level1/flat' },
-        'aaa': { specId: 'SPEC-A', path: '/fake/level1/flat' },
-        'zzz': { specId: 'SPEC-Z', path: '/fake/level1/flat' },
+        mmm: { specId: 'SPEC-M', path: '/fake/level1/flat' },
+        aaa: { specId: 'SPEC-A', path: '/fake/level1/flat' },
+        zzz: { specId: 'SPEC-Z', path: '/fake/level1/flat' },
       },
       specs: [
         { id: 'SPEC-M', worktree: 'mmm', lifecycle_state: 'active' },
@@ -1793,7 +1931,7 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/wt/src',
       registry: {
-        'wt-null-record': null,  // null record itself
+        'wt-null-record': null, // null record itself
         'wt-real': { specId: 'SPEC-R', path: '/fake/wt' },
       },
       specs: [{ id: 'SPEC-R', worktree: 'wt-real', lifecycle_state: 'active' }],
@@ -1814,7 +1952,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/outside',
       registry: { 'wt-midpath': { specId: 'SPEC-MP', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-MP', worktree: 'wt-midpath', lifecycle_state: 'active', scope: { in: ['src/./sub'] } },
+        {
+          id: 'SPEC-MP',
+          worktree: 'wt-midpath',
+          lifecycle_state: 'active',
+          scope: { in: ['src/./sub'] },
+        },
       ],
       targetPath: 'src/sub/file.ts',
       gitWorktreeList: () => [],
@@ -1829,7 +1972,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/outside',
       registry: { 'wt-dotslash': { specId: 'SPEC-DS', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-DS', worktree: 'wt-dotslash', lifecycle_state: 'active', scope: { in: ['./src'] } },
+        {
+          id: 'SPEC-DS',
+          worktree: 'wt-dotslash',
+          lifecycle_state: 'active',
+          scope: { in: ['./src'] },
+        },
       ],
       targetPath: 'src/main.ts',
       gitWorktreeList: () => [],
@@ -1847,7 +1995,7 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: {
-        'wt-null2': null,  // null record
+        'wt-null2': null, // null record
         'wt-valid': { specId: 'SPEC-V', path: '/fake/nonexistent' },
       },
       specs: [
@@ -1869,7 +2017,7 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       repoRoot: '/fake/repo',
       cwd: '/fake/outside',
       registry: { 'wt-nospec2': { specId: 'SPEC-NOSPEC', path: '/fake/nonexistent' } },
-      specs: [],  // no specs -> find returns undefined
+      specs: [], // no specs -> find returns undefined
       targetPath: 'src/file.ts',
       gitWorktreeList: () => [],
     });
@@ -1884,7 +2032,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/outside',
       registry: { 'wt-arch': { specId: 'SPEC-ARCH', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-ARCH', worktree: 'wt-arch', lifecycle_state: 'archived', scope: { in: ['src'] } },
+        {
+          id: 'SPEC-ARCH',
+          worktree: 'wt-arch',
+          lifecycle_state: 'archived',
+          scope: { in: ['src'] },
+        },
       ],
       targetPath: 'src/file.ts',
       gitWorktreeList: () => [],
@@ -1935,7 +2088,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/outside',
       registry: { 'wt-nullscope': { specId: 'SPEC-NSC', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-NSC', worktree: 'wt-nullscope', lifecycle_state: 'active', scope: { in: null } },
+        {
+          id: 'SPEC-NSC',
+          worktree: 'wt-nullscope',
+          lifecycle_state: 'active',
+          scope: { in: null },
+        },
       ],
       targetPath: 'src/file.ts',
       gitWorktreeList: () => [],
@@ -1954,7 +2112,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/outside',
       registry: { 'wt-pathval': { specId: 'SPEC-PV', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-PV', worktree: 'wt-pathval', lifecycle_state: 'active', scope: { in: ['lib'] } },
+        {
+          id: 'SPEC-PV',
+          worktree: 'wt-pathval',
+          lifecycle_state: 'active',
+          scope: { in: ['lib'] },
+        },
       ],
       targetPath: 'lib/module.ts',
       gitWorktreeList: () => [],
@@ -1980,10 +2143,14 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       },
       specs: [
         { id: 'SPEC-CWD', worktree: 'wt-cwd-spec', lifecycle_state: 'active' },
-        { id: 'SPEC-OTHER', worktree: 'wt-other-spec', lifecycle_state: 'active',
-          scope: { in: ['src'] } },
+        {
+          id: 'SPEC-OTHER',
+          worktree: 'wt-other-spec',
+          lifecycle_state: 'active',
+          scope: { in: ['src'] },
+        },
       ],
-      targetPath: 'src/file.ts',  // SPEC-OTHER's scope covers this
+      targetPath: 'src/file.ts', // SPEC-OTHER's scope covers this
       gitWorktreeList: () => [],
     });
     expect(r.binding.kind).toBe('bound');
@@ -1999,7 +2166,12 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
       cwd: '/fake/completely-elsewhere',
       registry: { 'wt-only-scope': { specId: 'SPEC-OS2', path: '/fake/nonexistent' } },
       specs: [
-        { id: 'SPEC-OS2', worktree: 'wt-only-scope', lifecycle_state: 'active', scope: { in: ['api'] } },
+        {
+          id: 'SPEC-OS2',
+          worktree: 'wt-only-scope',
+          lifecycle_state: 'active',
+          scope: { in: ['api'] },
+        },
       ],
       targetPath: 'api/endpoint.ts',
       gitWorktreeList: () => [],

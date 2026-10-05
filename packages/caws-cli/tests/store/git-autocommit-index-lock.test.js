@@ -159,11 +159,9 @@ describe('A3: a non-contention failure is NOT retried', () => {
     // Install a pre-commit hook that refuses with a distinctive message.
     const hook = path.join(root, '.git', 'hooks', 'pre-commit');
     fs.mkdirSync(path.dirname(hook), { recursive: true });
-    fs.writeFileSync(
-      hook,
-      '#!/bin/sh\n\necho "REFUSED-BY-TEST-HOOK" >&2\nexit 7\n',
-      { mode: 0o755 }
-    );
+    fs.writeFileSync(hook, '#!/bin/sh\n\necho "REFUSED-BY-TEST-HOOK" >&2\nexit 7\n', {
+      mode: 0o755,
+    });
 
     const outcome = autoCommit({
       repoRoot: root,

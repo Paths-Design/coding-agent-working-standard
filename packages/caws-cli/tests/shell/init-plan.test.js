@@ -45,6 +45,16 @@ function initMeta() {
   return COMMAND_SURFACE_METADATA.find((command) => command.name === 'init');
 }
 
+let priorMachineHome;
+beforeEach(() => {
+  priorMachineHome = process.env.CAWS_HOME;
+  process.env.CAWS_HOME = path.join(makeTempRepo(), 'machine-home');
+});
+afterEach(() => {
+  if (priorMachineHome === undefined) delete process.env.CAWS_HOME;
+  else process.env.CAWS_HOME = priorMachineHome;
+});
+
 describe('caws init --plan', () => {
   test('help metadata lists read-only plan and JSON options', () => {
     const init = initMeta();

@@ -40,10 +40,7 @@ function severityOf(d: Diagnostic): Severity {
   return d.severity ?? 'error';
 }
 
-export function renderDiagnostic(
-  d: Diagnostic,
-  opts: RenderDiagnosticsOptions = {}
-): string {
+export function renderDiagnostic(d: Diagnostic, opts: RenderDiagnosticsOptions = {}): string {
   const sev = severityOf(d);
   const lines: string[] = [`${SEVERITY_LABEL[sev]} ${d.rule}: ${d.message}`];
   if (typeof d.subject === 'string' && d.subject.length > 0) {
@@ -64,9 +61,7 @@ export function renderDiagnostics(
 ): string {
   const min = opts.minSeverity ?? 'info';
   const minRank = SEVERITY_RANK[min];
-  const kept = diagnostics.filter(
-    (d) => SEVERITY_RANK[severityOf(d)] >= minRank
-  );
+  const kept = diagnostics.filter((d) => SEVERITY_RANK[severityOf(d)] >= minRank);
   if (kept.length === 0) return '';
   return kept.map((d) => renderDiagnostic(d, opts)).join('\n');
 }

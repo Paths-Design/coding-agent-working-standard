@@ -6,11 +6,7 @@
 // at the store level — doctor decides whether to emit `POLICY_MISSING`.
 
 import * as path from 'path';
-import {
-  isOk,
-  parseAndValidatePolicy,
-  type Diagnostic,
-} from '../kernel';
+import { isOk, parseAndValidatePolicy, type Diagnostic } from '../kernel';
 import { STORE_RULES } from './rules';
 import { readYamlSource } from './yaml-store';
 import type { PolicyLoadResult } from './types';

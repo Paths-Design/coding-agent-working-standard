@@ -2,7 +2,7 @@
 //
 // CLI-SPECS-001: the canonical replacement for manual lifecycle YAML
 // edits. Five subcommands:
-//   - caws specs create <id> --title <title> --mode <mode> --risk-tier <n>
+//   - caws specs create <id> --title <title> --mode <mode>
 //   - caws specs list [--archived]
 //   - caws specs show <id>
 //   - caws specs close <id> --resolution <r> [--reason <text>] [--merge-commit <sha>] [--superseded-by <id>]
@@ -28,11 +28,14 @@ import {
   type Diagnostic,
 } from '../../kernel';
 
-import { composeDoctorSnapshot, loadWorktrees, resolveRepoRoot, runSpecsMigrateApply } from '../../store';
-import type {
-  MigrationReport,
-  SpecsMigrateApplyResult,
+import {
+  composeDoctorSnapshot,
+  loadWorktrees,
+  resolveRepoRoot,
+  runSpecsMigrateApply,
 } from '../../store';
+import { autoCommit, isPathDirty } from '../../store/git-autocommit';
+import type { MigrationReport, SpecsMigrateApplyResult } from '../../store';
 import {
   activateSpec,
   amendScopeSpec,
@@ -59,13 +62,28 @@ import {
   type SpecsListStatus,
 } from '../../store/specs-writer';
 import { amendSpecBody } from '../../store/specs-body-writer';
-import type { LifecycleMapping } from '../../kernel';
+import {
+  describeMigratableSourceVersions,
+  isMigratableSourceVersion,
+} from '../../store/migration-versions';
+import {
+  AGENT_CITED_LEGEND,
+  describeVerdict,
+  rederiveSpecEvidence,
+  resolveVerificationTree,
+  type VerificationTree,
+  SELECTABLE_TEST_RUNNERS,
+  type TestRunner,
+} from '../../store/evidence-rederive';
+import type { LifecycleMapping, RederivationSummary, Spec } from '../../kernel';
 import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS, type EvidenceStatus } from '../../kernel';
 import * as fs from 'node:fs';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
+import { lifecycleContainmentAdmits } from '../session/session-origin';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
+import { formatDurationMs } from '../duration';
 
 // --mode / --resolution validation reads the kernel's single enum source
 // (SPEC_MODES / SPEC_RESOLUTIONS) rather than re-declaring the values here.
@@ -121,16 +139,22 @@ function emitJson(out: (line: string) => void, payload: unknown): void {
  */
 function surfaceAuditCommit(
   auditCommit: { readonly kind: string; readonly reason?: string } | undefined,
-  err: (s: string) => void
+  err: (s: string) => void,
+  specId?: string
 ): void {
   if (auditCommit !== undefined && auditCommit.kind === 'refused_dirty') {
     err('caws specs: the lifecycle change was applied but NOT committed.');
     if (auditCommit.reason !== undefined && auditCommit.reason.length > 0) {
       err(`  reason: ${auditCommit.reason}`);
     }
+    const recovery =
+      specId !== undefined && specId.length > 0
+        ? `caws specs commit ${specId}`
+        : 'caws specs commit <id>';
     err(
       '  The spec YAML is changed in your working tree but the audit commit ' +
-        'did not land. Commit it manually (git add <spec> && git commit), ' +
+        `did not land. Run \`${recovery}\` to land the pending audit state ` +
+        'through the governed recovery path (CAWS-SPECS-COMMIT-PENDING-RECOVERY-001), ' +
         'then verify with git log.'
     );
   }
@@ -211,9 +235,6 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
   readonly idOption?: string;
   readonly title?: string;
   readonly mode?: string;
-  readonly riskTier?: number | string;
-  /** Alias for --risk-tier; writes the canonical risk_tier YAML field. */
-  readonly tier?: number | string;
   readonly legacyType?: string;
   /**
    * Repeatable --scope-in <path>. When supplied, scope.in is written with the
@@ -228,19 +249,9 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
    * "given: ...; when: ...; then: ..." value seeds all v11 fields.
    */
   readonly acceptance?: readonly string[];
-  /**
-   * Repeatable --contract "name:type[:path]". Tier-1/2 specs require at least
-   * one contract; supplying it here creates the spec valid in one command
-   * (FIX-SPECS-CONTRACT-ORIENTATION-001).
-   */
+  /** Optional repeatable contract declarations. */
   readonly contract?: readonly string[];
-  /**
-   * The three fields validate-semantics REQUIRES non-empty on risk_tier 1
-   * (CAWS-DEFECT-SPECS-CREATE-AUTHORING-01, Sterling ledger N15). Each is
-   * repeatable. Before these existed, a tier-1 spec was uncreatable through
-   * this command — the validator demanded fields no flag could supply, so
-   * hand-written YAML was the only route.
-   */
+  /** Optional repeatable operational requirements. */
   readonly observability?: readonly string[];
   readonly rollback?: readonly string[];
   readonly security?: readonly string[];
@@ -317,7 +328,9 @@ function parseContractFlags(
     const typeRaw = (secondColon === -1 ? rest : rest.slice(0, secondColon)).trim();
     const path = secondColon === -1 ? undefined : rest.slice(secondColon + 1).trim();
     if (name.length === 0) {
-      return { error: `invalid --contract "${entry}": contract name is empty. ${CONTRACT_SHAPE_HINT}` };
+      return {
+        error: `invalid --contract "${entry}": contract name is empty. ${CONTRACT_SHAPE_HINT}`,
+      };
     }
     if (!CONTRACT_TYPES.includes(typeRaw as ContractType)) {
       return {
@@ -369,7 +382,11 @@ function parseStructuredAcceptance(
   // a delimiter.
   const anchors: { key: 'given' | 'when' | 'then'; bodyStart: number; matchStart: number }[] = [];
   ACCEPTANCE_LABEL_ANCHOR.lastIndex = 0;
-  for (let m = ACCEPTANCE_LABEL_ANCHOR.exec(value); m !== null; m = ACCEPTANCE_LABEL_ANCHOR.exec(value)) {
+  for (
+    let m = ACCEPTANCE_LABEL_ANCHOR.exec(value);
+    m !== null;
+    m = ACCEPTANCE_LABEL_ANCHOR.exec(value)
+  ) {
     anchors.push({
       key: m[1]!.toLowerCase() as 'given' | 'when' | 'then',
       bodyStart: m.index + m[0].length,
@@ -396,7 +413,8 @@ function parseStructuredAcceptance(
     });
     // Text before the first label is unlabeled leader prose — still a
     // malformation, and still refused.
-    const hasLeader = anchors.length > 0 && value.slice(0, anchors[0]!.matchStart).trim().length > 0;
+    const hasLeader =
+      anchors.length > 0 && value.slice(0, anchors[0]!.matchStart).trim().length > 0;
     if (missing.length > 0 || hasLeader) {
       return {
         error:
@@ -425,19 +443,16 @@ function parseStructuredAcceptance(
 
 const SPECS_CREATE_USAGE = [
   'Usage:',
-  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--tier <1|2|3>] [--scope-in <path>]... [--scope.in <path>]... [--acceptance <text>]... [--contract "name:type[:path]"]... [--plan] [--json]',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> [--scope-in <path>]... [--scope.in <path>]... [--acceptance <text>]... [--contract "name:type[:path]"]... [--plan] [--json]',
   '',
   'Example:',
-  '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
-  '  caws specs create FEAT-002 --title "Render slice" --mode feature --risk-tier 3 --scope-in src/render.js --scope-in tests/render.test.js',
-  '  caws specs create FEAT-003 --title "Tier-2 cross-package" --mode feature --risk-tier 2 --contract "core-api:behavior"',
+  '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore',
+  '  caws specs create FEAT-002 --title "Render slice" --mode feature --scope-in src/render.js --scope-in tests/render.test.js',
+  '  caws specs create FEAT-003 --title "Cross-package change" --mode feature --contract "core-api:behavior"',
   '',
   'Notes:',
   '  --type is not supported in v11. Use --mode instead.',
-  '  --tier is an alias for --risk-tier; both write the canonical risk_tier field.',
-  '  Risk tier 3 is appropriate for docs, tests, harnesses, and low-blast-radius slices.',
-  '  Tier 1/2 specs require at least one contract: pass --contract "name:type[:path]"',
-  '    (repeatable); type is one of api|schema|contract-test|behavior. Or use --risk-tier 3 / --mode chore.',
+  '  --contract optionally declares a behavior, schema, API or contract-test boundary.',
   '  --scope-in (repeatable) writes scope.in at creation time, so you never hand-edit it.',
   '  --scope.in is an alias for --scope-in; both write the canonical scope.in field.',
   '  --acceptance is repeatable; free text becomes then, or pass "given: ...; when: ...; then: ...".',
@@ -450,7 +465,6 @@ function createCommandPreview(opts: {
   readonly id: string;
   readonly title: string;
   readonly mode: ValidMode;
-  readonly riskTier: 1 | 2 | 3;
   readonly scopeIn?: readonly string[];
   readonly acceptance?: readonly string[];
   readonly contract?: readonly string[];
@@ -467,8 +481,6 @@ function createCommandPreview(opts: {
     shellQuote(opts.title),
     '--mode',
     shellQuote(opts.mode),
-    '--risk-tier',
-    String(opts.riskTier),
   ];
   for (const p of opts.scopeIn ?? []) {
     parts.push('--scope-in', shellQuote(p));
@@ -480,7 +492,7 @@ function createCommandPreview(opts: {
     parts.push('--contract', shellQuote(c));
   }
   // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: the preview must reproduce the
-  // candidate it previewed. Omitting the tier-1 trio printed a command that is
+  // candidate it previewed. Omitting optional fields printed a command that is
   // REFUSED when copied — which is worse than printing nothing, because the
   // operator trusts a preview whose entire purpose is to be pasted.
   for (const o of opts.observability ?? []) {
@@ -500,14 +512,9 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-const SPEC_PARSE_RULE_PREFIXES = [
-  'spec.yaml.',
-  'spec.schema.',
-] as const;
+const SPEC_PARSE_RULE_PREFIXES = ['spec.yaml.', 'spec.schema.'] as const;
 
-function hasSpecParseOrSchemaDiagnostics(
-  diagnostics: readonly Diagnostic[]
-): boolean {
+function hasSpecParseOrSchemaDiagnostics(diagnostics: readonly Diagnostic[]): boolean {
   return diagnostics.some((d) =>
     SPEC_PARSE_RULE_PREFIXES.some((prefix) => d.rule.startsWith(prefix))
   );
@@ -533,7 +540,10 @@ function renderSpecParseGuidance(filePath: string): string {
 }
 
 function semanticFieldsFromPlanDiagnostics(
-  diagnostics: readonly { readonly data?: Readonly<Record<string, unknown>>; readonly message: string }[]
+  diagnostics: readonly {
+    readonly data?: Readonly<Record<string, unknown>>;
+    readonly message: string;
+  }[]
 ): string[] {
   const fields = diagnostics
     .map((d) => d.data?.['source_pointer'])
@@ -542,11 +552,7 @@ function semanticFieldsFromPlanDiagnostics(
 }
 
 const SEMANTIC_FIELD_EXAMPLES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  '/contracts': [
-    'contracts:',
-    "  - name: 'core-api'",
-    '    type: behavior',
-  ],
+  '/contracts': ['contracts:', "  - name: 'core-api'", '    type: behavior'],
   '/observability': [
     'observability:',
     "  - 'Log the decision path and refusal reason for each governed operation.'",
@@ -562,7 +568,9 @@ const SEMANTIC_FIELD_EXAMPLES: Readonly<Record<string, readonly string[]>> = Obj
   ],
 });
 
-function semanticFieldExamples(missingFields: readonly string[]): Record<string, readonly string[]> {
+function semanticFieldExamples(
+  missingFields: readonly string[]
+): Record<string, readonly string[]> {
   const examples: Record<string, readonly string[]> = {};
   for (const field of missingFields) {
     const example = SEMANTIC_FIELD_EXAMPLES[field];
@@ -591,7 +599,6 @@ function diagnosticJson(
   }));
 }
 
-
 // ─── CANONICAL-DRIFT-GUARDS-001: lifecycle auto-commit target check ────────
 
 /**
@@ -608,7 +615,11 @@ function lifecycleCommitTargetAdmits(
   err: (line: string) => void
 ): boolean {
   if (opts.allowForeignBranch === true) return true;
-  const snapshot = composeDoctorSnapshot({ repoRoot: ctx.repoRoot, cawsDir: ctx.cawsDir, now: new Date() });
+  const snapshot = composeDoctorSnapshot({
+    repoRoot: ctx.repoRoot,
+    cawsDir: ctx.cawsDir,
+    now: new Date(),
+  });
   const cbo = snapshot.doctorInput.canonicalBranchObservation;
   if (cbo === undefined) return true; // observation unavailable -> inert
   if (cbo.currentBranch === cbo.baseBranch) return true; // healthy state
@@ -621,7 +632,9 @@ function lifecycleCommitTargetAdmits(
       if (record?.branch === cbo.currentBranch) {
         // The parked branch IS a governed lane's branch; a lifecycle commit
         // onto another lane is exactly the Entry 37 cross-contamination.
-        err(`caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"), and that branch belongs to a CAWS worktree lane.`);
+        err(
+          `caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"), and that branch belongs to a CAWS worktree lane.`
+        );
         err('  Spec lifecycle auto-commits would land on this lane, not the base branch.');
         err('  Fix: un-park the checkout (owner merges/switches it back to base), or');
         err('  pass --allow-foreign-branch to deliberately author on this branch.');
@@ -629,7 +642,9 @@ function lifecycleCommitTargetAdmits(
       }
     }
   }
-  err(`caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"); lifecycle auto-commits would land there.`);
+  err(
+    `caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"); lifecycle auto-commits would land there.`
+  );
   err('  Fix: un-park the checkout (switch it back to the base branch), or pass');
   err('  --allow-foreign-branch to deliberately author on this branch.');
   return false;
@@ -639,9 +654,27 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
 
   // CANONICAL-DRIFT-GUARDS-001: commit-target check BEFORE any write.
+  // CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01: and the cross-repo check with
+  // it — both adjudicate WHERE this mutation would land, so both run before
+  // argument validation has a chance to write anything.
   {
     const ctxProbe = resolveCawsCtx(cwd, err, showData, 'create');
     if (ctxProbe !== null && !lifecycleCommitTargetAdmits(ctxProbe, opts, err)) {
+      return 1;
+    }
+    if (
+      ctxProbe !== null &&
+      !lifecycleContainmentAdmits({
+        command: 'specs create',
+        repoRoot: ctxProbe.repoRoot,
+        cawsDir: ctxProbe.cawsDir,
+        cwd,
+        env,
+        now: nowFn,
+        out,
+        err,
+      })
+    ) {
       return 1;
     }
   }
@@ -662,7 +695,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     specId === undefined ? '<id> or --id' : undefined,
     opts.title === undefined ? '--title' : undefined,
     opts.mode === undefined ? '--mode' : undefined,
-    opts.riskTier === undefined && opts.tier === undefined ? '--risk-tier' : undefined,
   ].filter((v): v is string => v !== undefined);
   if (missing.length > 0) {
     err(`caws specs create: missing required options: ${missing.join(', ')}`);
@@ -672,13 +704,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
 
   const title = opts.title;
   const mode = opts.mode;
-  if (opts.riskTier !== undefined && opts.tier !== undefined) {
-    err('caws specs create: --risk-tier and --tier both write risk_tier; pass only one.');
-    return 1;
-  }
-
-  const rawRiskTier = opts.riskTier ?? opts.tier;
-  if (specId === undefined || title === undefined || mode === undefined || rawRiskTier === undefined) {
+  if (specId === undefined || title === undefined || mode === undefined) {
     err('caws specs create: missing required options.');
     err(SPECS_CREATE_USAGE);
     return 1;
@@ -691,32 +717,26 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const scopeIn = opts.scopeIn ?? opts.scopeInDot;
 
   if (!VALID_MODES.includes(mode as ValidMode)) {
-    err(
-      `caws specs create: invalid --mode "${mode}". Expected one of: ${VALID_MODES.join(', ')}.`
-    );
+    err(`caws specs create: invalid --mode "${mode}". Expected one of: ${VALID_MODES.join(', ')}.`);
     return 1;
   }
-  const riskTier = typeof rawRiskTier === 'string'
-    ? Number.parseInt(rawRiskTier, 10)
-    : rawRiskTier;
-  if (riskTier !== 1 && riskTier !== 2 && riskTier !== 3) {
-    err(
-      `caws specs create: invalid risk tier "${rawRiskTier}". Expected 1, 2, or 3.`
-    );
-    return 1;
-  }
-
   const ctx = resolveCawsCtx(cwd, err, showData, 'create');
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'create'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'create'
   );
   if (actor === null) return 2;
 
   // FIX-SPECS-CONTRACT-ORIENTATION-001: parse repeatable --contract into
-  // structured entries (validating the type enum) BEFORE the writer, so a
-  // tier-1/2 spec is created valid in one command.
+  // structured entries (validating the type enum) before any write.
   let parsedContracts: { name: string; type: ContractType; path?: string }[] | undefined;
   if (opts.contract !== undefined && opts.contract.length > 0) {
     const parsed = parseContractFlags(opts.contract);
@@ -741,34 +761,31 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     id: specId,
     title,
     mode: mode as ValidMode,
-    riskTier: riskTier as 1 | 2 | 3,
     now: nowFn,
     actor,
-    ...(scopeIn !== undefined && scopeIn.length > 0
-      ? { scopeIn }
+    // SPEC-CREATED-BY-SESSION-001: the actor's session id is already resolved
+    // for the event envelope; mirror it into the spec body as provenance so
+    // the creator is answerable from the spec alone.
+    ...(actor.session_id !== undefined && actor.session_id.length > 0
+      ? { createdBySession: actor.session_id }
       : {}),
+    ...(scopeIn !== undefined && scopeIn.length > 0 ? { scopeIn } : {}),
     ...(parsedAcceptance !== undefined && parsedAcceptance.length > 0
       ? { acceptance: parsedAcceptance }
       : {}),
     ...(parsedContracts !== undefined && parsedContracts.length > 0
       ? { contracts: parsedContracts }
       : {}),
-    // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: the tier-1 trio.
+    // Preserve optional operational requirements.
     ...(opts.observability !== undefined && opts.observability.length > 0
       ? { observability: opts.observability }
       : {}),
-    ...(opts.rollback !== undefined && opts.rollback.length > 0
-      ? { rollback: opts.rollback }
-      : {}),
-    ...(opts.security !== undefined && opts.security.length > 0
-      ? { security: opts.security }
-      : {}),
+    ...(opts.rollback !== undefined && opts.rollback.length > 0 ? { rollback: opts.rollback } : {}),
+    ...(opts.security !== undefined && opts.security.length > 0 ? { security: opts.security } : {}),
     // Sterling ledger N16: the two scaffolded fields. Both are schema-required
     // non-empty, so before these flags the renderer had to invent a value and
     // no flag could replace it.
-    ...(opts.module !== undefined && opts.module.length > 0
-      ? { modules: opts.module }
-      : {}),
+    ...(opts.module !== undefined && opts.module.length > 0 ? { modules: opts.module } : {}),
     ...(opts.invariant !== undefined && opts.invariant.length > 0
       ? { invariants: opts.invariant }
       : {}),
@@ -794,10 +811,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       id: specId,
       title,
       mode: mode as ValidMode,
-      riskTier: riskTier as 1 | 2 | 3,
-      ...(scopeIn !== undefined && scopeIn.length > 0
-        ? { scopeIn }
-        : {}),
+      ...(scopeIn !== undefined && scopeIn.length > 0 ? { scopeIn } : {}),
       ...(opts.acceptance !== undefined && opts.acceptance.length > 0
         ? { acceptance: opts.acceptance }
         : {}),
@@ -829,7 +843,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         candidate: {
           title,
           mode,
-          risk_tier: riskTier,
           lifecycle_state: opts.activate === true ? 'active' : 'draft',
           scope_in: scopeIn ?? [],
           acceptance: parsedAcceptance ?? [],
@@ -838,7 +851,9 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         command,
       });
     } else {
-      out(`caws specs create --plan: ${plan.value.valid ? 'valid' : 'needs changes'} candidate for ${plan.value.id}`);
+      out(
+        `caws specs create --plan: ${plan.value.valid ? 'valid' : 'needs changes'} candidate for ${plan.value.id}`
+      );
       out(`  target: ${relSpecPath}`);
       out('  read_only: true');
       out(`  would_write: ${plan.value.valid ? 'yes' : 'no'}`);
@@ -871,65 +886,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   if (!isOk(result)) {
     err('caws specs create: failed.');
     err(renderDiagnostics(result.errors, { showData }));
-    // CAWS-DEFECT-MSG-ENRICHMENT-01 (DEFECT-02): the kernel's narrowRepair says
-    // "Add at least one contract" but does not name the --contract flag, and the
-    // prior hint only fired when parsedContracts === undefined (so a malformed
-    // contract suppressed the shape hint). Fire on the rejection RULE instead —
-    // the writer wraps kernel diagnostics with data.source_rule — and lead with
-    // the runnable retry command so the operator never has to look up the shape.
-    const TIER_CONTRACT_RULES = new Set([
-      'spec.semantic.tier1.contracts_required',
-      'spec.semantic.tier2.contracts_required',
-    ]);
-    const rejectedForMissingContracts = result.errors.some(
-      (d) => typeof d.data?.source_rule === 'string' && TIER_CONTRACT_RULES.has(d.data.source_rule as string)
-    );
-    if ((riskTier === 1 || riskTier === 2) && rejectedForMissingContracts) {
-      err('');
-      err(`  ${CONTRACT_SHAPE_HINT}`);
-      err(
-        `  Retry: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} --contract "core-api:behavior"`
-      );
-    }
-    // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01 (Sterling ledger N15): the kernel
-    // narrowRepair says "Add at least one observability item" without naming a
-    // flag — and until this slice there WAS no flag, so an operator reading it
-    // concluded the requirement was unsatisfiable from the CLI and hand-wrote
-    // the YAML. Name the flag that satisfies each rule, and prescribe only the
-    // ones still missing (re-listing a flag the operator already passed sends
-    // them to re-pass it).
-    const TIER1_FIELD_FLAGS: readonly { rule: string; flag: string; example: string }[] = [
-      {
-        rule: 'spec.semantic.tier1.observability_required',
-        flag: '--observability',
-        example: 'Log the decision path and refusal reason for each governed operation.',
-      },
-      {
-        rule: 'spec.semantic.tier1.rollback_required',
-        flag: '--rollback',
-        example: 'Revert the implementation commit and rerun caws doctor plus focused tests.',
-      },
-      {
-        rule: 'spec.semantic.tier1.security_required',
-        flag: '--security',
-        example: 'No new secret material is logged, persisted, or exposed in diagnostics.',
-      },
-    ];
-    const rejectedRules = new Set(
-      result.errors
-        .map((d) => d.data?.source_rule)
-        .filter((r): r is string => typeof r === 'string')
-    );
-    const missingTier1 = TIER1_FIELD_FLAGS.filter((f) => rejectedRules.has(f.rule));
-    if (missingTier1.length > 0) {
-      err('');
-      err('  Tier-1 specs require these fields; each flag is repeatable:');
-      for (const f of missingTier1) err(`    ${f.flag} "${f.example}"`);
-      err(
-        `  Retry: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} ` +
-          missingTier1.map((f) => `${f.flag} "..."`).join(' ')
-      );
-    }
     return 1;
   }
   const outcome = result.value;
@@ -986,10 +942,8 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   // edits on main are NOT rejected by scope-guard. scope.in enforcement is
   // authoritative inside the spec's bound worktree; base-branch writes are
   // governed by the worktree-write-guard, not scope-guard. State that truth.
-  const scopeInWasPopulated =
-    scopeIn !== undefined && scopeIn.length > 0;
-  const acceptanceWasPopulated =
-    parsedAcceptance !== undefined && parsedAcceptance.length > 0;
+  const scopeInWasPopulated = scopeIn !== undefined && scopeIn.length > 0;
+  const acceptanceWasPopulated = parsedAcceptance !== undefined && parsedAcceptance.length > 0;
   const invariantsWasPopulated = opts.invariant !== undefined && opts.invariant.length > 0;
   const modulesWasPopulated = opts.module !== undefined && opts.module.length > 0;
   const remainingToFill = [
@@ -997,9 +951,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(acceptanceWasPopulated ? [] : ['acceptance']),
   ];
   const fillGuidance =
-    remainingToFill.length === 0
-      ? 'Review the body'
-      : `Fill in ${remainingToFill.join(' + ')}`;
+    remainingToFill.length === 0 ? 'Review the body' : `Fill in ${remainingToFill.join(' + ')}`;
 
   // Sterling ledger N16 (A3): report the fields still carrying a scaffolded
   // default, and name the flags that would have filled them.
@@ -1018,26 +970,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       `caws advisory (non-blocking): ${outcome.id} was created with scaffolded defaults in ` +
         `${scaffolded.join(', ')}. These fields are schema-required non-empty, so create had to ` +
         `write a value. Supply them at creation next time — both flags are repeatable.`
-    );
-  }
-  // CAWS-SPECS-CREATE-SUCCESS-CONTRACT-HINT-001: the contract orientation is
-  // inlined here (docs/guides/caws-contracts.md is NOT shipped in the published
-  // package, so pointing at it dangles in a consumer install — FIX-SPECS-
-  // CONTRACT-ORIENTATION-001 A3), but it is emitted only where it is TRUE.
-  // A non-chore tier-1/2 create is refused without contracts, so on the success
-  // path they are already present; tier 3 is not governed by the rule at all.
-  // That leaves one reachable success state with `contracts: []` on a tier-1/2
-  // spec — mode: chore — and that spec is EXEMPT, not deficient. It also must
-  // not be the last line: whatever prints last is the whole result to a reader
-  // piping through `tail`, and a caveat there reads as a verdict.
-  if (
-    (riskTier === 1 || riskTier === 2) &&
-    (parsedContracts === undefined || parsedContracts.length === 0)
-  ) {
-    out(
-      `  Note: this spec has no contracts. mode: ${mode} waives the tier-1/2 contract ` +
-        `requirement; a tier-${riskTier} spec in any other mode is refused without one. ` +
-        `Supply one at create time — ${CONTRACT_EXAMPLE_HINT}.`
     );
   }
   out('');
@@ -1070,19 +1002,19 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         outcome.id +
         ' --add <path> --add <path>   (writes canonical, appends an audit event)'
     );
-    out(`  2. ${fillGuidance}, then inspect with \`caws specs show ` +
+    out(
+      `  2. ${fillGuidance}, then inspect with \`caws specs show ` +
         outcome.id +
-        '` (or `caws doctor`).');
+        '` (or `caws doctor`).'
+    );
     out(`  3. ${commitStep}`);
     out(
       `  4. caws worktree create <name> --spec ${outcome.id}   (activates the draft and binds it)`
     );
-    out(
-      '  (scope.in is authoritative inside that worktree; base-branch writes are'
-    );
+    out('  (scope.in is authoritative inside that worktree; base-branch writes are');
     out('  governed by the worktree-write-guard, not scope.in.)');
   }
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -1107,9 +1039,7 @@ export interface SpecsListOptions extends BaseCommandOptions {
 
 function parseSpecsListStatus(raw: string | undefined): SpecsListStatus | undefined | null {
   if (raw === undefined) return undefined;
-  return (SPECS_LIST_STATUSES as readonly string[]).includes(raw)
-    ? (raw as SpecsListStatus)
-    : null;
+  return (SPECS_LIST_STATUSES as readonly string[]).includes(raw) ? (raw as SpecsListStatus) : null;
 }
 
 function renderSpecsStatusError(status: string, err: (line: string) => void): void {
@@ -1182,9 +1112,10 @@ export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
     out('');
     out('-- archived (recoverable from history) --');
     for (const entry of archived) {
-      const blobDisplay = entry.blob_sha !== null
-        ? `blob ${entry.blob_sha.slice(0, 8)}`
-        : 'legacy (no blob_sha; use git log --follow)';
+      const blobDisplay =
+        entry.blob_sha !== null
+          ? `blob ${entry.blob_sha.slice(0, 8)}`
+          : 'legacy (no blob_sha; use git log --follow)';
       out(`${entry.id.padEnd(28)} archived ${entry.archived_at}  ${blobDisplay}`);
       out(`  recover: caws specs recover ${entry.id}`);
     }
@@ -1314,11 +1245,7 @@ export function runSpecsRecoverCommand(opts: SpecsRecoverOptions): number {
  * one body has existed for that id, silence about the others is what turns a
  * visible divergence into an invisible one.
  */
-function warnSupersededSnapshots(
-  cawsDir: string,
-  id: string,
-  err: (line: string) => void
-): void {
+function warnSupersededSnapshots(cawsDir: string, id: string, err: (line: string) => void): void {
   const snapshots = supersededArchiveSnapshots(cawsDir, id);
   if (snapshots.length === 0) return;
   err(
@@ -1339,15 +1266,7 @@ export interface SpecsRestoreOptions extends BaseCommandOptions {
 }
 
 function restoreCommandPreview(id: string, targetState: 'draft' | 'active'): string {
-  return [
-    'caws',
-    'specs',
-    'restore',
-    shellQuote(id),
-    '--as',
-    targetState,
-    '--apply',
-  ].join(' ');
+  return ['caws', 'specs', 'restore', shellQuote(id), '--as', targetState, '--apply'].join(' ');
 }
 
 export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
@@ -1362,7 +1281,14 @@ export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'restore'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'restore'
   );
   if (actor === null) return 2;
 
@@ -1423,7 +1349,9 @@ export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
     out(`    ${command}`);
     out('  No files, events, or worktree registry entries were written.');
   } else {
-    out(`restored ${plan.id} to ${plan.restoredPath} (lifecycle_state: ${plan.targetLifecycleState})`);
+    out(
+      `restored ${plan.id} to ${plan.restoredPath} (lifecycle_state: ${plan.targetLifecycleState})`
+    );
   }
 
   if (result.value.kind === 'applied') {
@@ -1433,9 +1361,64 @@ export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
       err(renderDiagnostics(outcome.cause, { showData }));
       return 1;
     }
-    surfaceAuditCommit(outcome.data?.audit_commit, err);
+    surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   }
   return plan.valid ? 0 : 1;
+}
+
+// ─── caws specs commit (CAWS-SPECS-COMMIT-PENDING-RECOVERY-001) ───────────
+//
+// Governed recovery for "spec mutation succeeded, audit commit did not
+// land". A harness sandbox can protect .git (index.lock denial) so the
+// AGENT cannot run the manual `git add <spec> && git commit` the old
+// remediation named — canonical main stayed dirty and the next session
+// inherited ambiguous state. This command runs the commit through the
+// SAME autoCommit discipline as the lifecycle writers: pathspec-scoped
+// to the one spec YAML, never -A, never --no-verify, pre-commit hooks
+// respected. Here the commit IS the operation, so the exit code reflects
+// it (0 resolved, 1 refused, 2 composition failure).
+
+export interface SpecsCommitOptions extends BaseCommandOptions {
+  readonly id: string;
+}
+
+export function runSpecsCommitCommand(opts: SpecsCommitOptions): number {
+  const { cwd, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'commit');
+  if (ctx === null) return 2;
+
+  const relPath = path.join('.caws', 'specs', `${opts.id}.yaml`);
+  if (!fs.existsSync(path.join(ctx.repoRoot, relPath))) {
+    err(`caws specs commit: no spec file at ${relPath} (id: ${opts.id}).`);
+    return 1;
+  }
+
+  if (!isPathDirty(ctx.repoRoot, relPath)) {
+    out(`caws specs commit: ${opts.id} is already committed — no pending audit state.`);
+    return 0;
+  }
+
+  const outcome = autoCommit({
+    repoRoot: ctx.repoRoot,
+    paths: [relPath],
+    message: `chore(caws): commit pending audit state for ${opts.id}`,
+    wasDirtyBeforeWrite: false,
+  });
+
+  if (outcome.kind === 'committed') {
+    const sha = outcome.sha !== undefined && outcome.sha.length > 0 ? ` ${outcome.sha}` : '';
+    out(`committed pending audit state for ${opts.id}${sha}`);
+    return 0;
+  }
+  if (outcome.kind === 'skipped_no_git') {
+    err('caws specs commit: repo root is not inside a git working tree.');
+    return 2;
+  }
+  err(`caws specs commit: refused for ${opts.id}.`);
+  if (outcome.reason !== undefined) {
+    err(`  reason: ${outcome.reason}`);
+  }
+  return 1;
 }
 
 // ─── caws specs prune-drafts ──────────────────────────────────────────────
@@ -1484,7 +1467,14 @@ export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): 
 
   if (opts.apply === true) {
     const actor = buildActorOrError(
-      ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'prune-drafts'
+      ctx.cawsDir,
+      cwd,
+      env,
+      nowFn,
+      opts.actorKind,
+      err,
+      showData,
+      'prune-drafts'
     );
     if (actor === null) return 2;
 
@@ -1539,7 +1529,7 @@ export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): 
         out(`  failed ${entry.id}: ${entry.reason}`);
       }
     }
-    surfaceAuditCommit(outcome.data?.audit_commit, err);
+    surfaceAuditCommit(outcome.data?.audit_commit, err, undefined);
     return ok ? 0 : 1;
   }
 
@@ -1619,7 +1609,14 @@ export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
   if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'activate'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'activate'
   );
   if (actor === null) return 2;
 
@@ -1650,7 +1647,7 @@ export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
     return 1;
   }
   out(`activated ${outcome.id}`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -1672,10 +1669,103 @@ export interface SpecsEvidenceOptions extends BaseCommandOptions {
   readonly exitCode?: number;
   readonly artifactPath?: string;
   readonly commitSha?: string;
+  /** Re-derive the cited evidence before recording; refuse a refuted `pass`. */
+  readonly verify?: boolean;
 }
 
 function isEvidenceStatus(value: unknown): value is EvidenceStatus {
   return typeof value === 'string' && (EVIDENCE_STATUSES as readonly string[]).includes(value);
+}
+
+// ─── --verify: re-derive before recording ─────────────────────────────────
+//
+// The record-time half of CAWS-SPECS-VERIFY-ACS-REDERIVE-001. The expensive
+// path (running the cited test) belongs here — the operation is already
+// deliberate and single-criterion, and it is the moment the claim is made.
+// A `pass` whose citation is refuted is refused and nothing is written. A
+// citation that cannot be re-derived is still recorded, but named as
+// self-reported on stderr so the ledger never reads it as verified.
+
+type PendingEvidence = NonNullable<Spec['evidence']>[number];
+
+type VerifyGate =
+  | { readonly kind: 'refuse'; readonly lines: readonly string[] }
+  | {
+      readonly kind: 'verified';
+      readonly lines: readonly string[];
+      /** HEAD the cited test executed and passed at; absent when no test ran. */
+      readonly testVerifiedAt?: string;
+    }
+  | { readonly kind: 'unverifiable'; readonly lines: readonly string[] };
+
+function treeLine(tree: VerificationTree): string {
+  return `worktree ${tree.root} at ${tree.head ?? '(HEAD unreadable)'}`;
+}
+
+function verifyPendingEvidence(
+  tree: VerificationTree,
+  spec: Spec,
+  pending: PendingEvidence
+): VerifyGate {
+  if (tree.linked && tree.dirty.length > 0) {
+    return {
+      kind: 'refuse',
+      lines: [
+        `caws specs evidence --verify: refusing to verify from worktree ${tree.root} — it has uncommitted changes, so a verified result would not name committed code:`,
+        ...tree.dirty.map((l) => `  ${l}`),
+        '  Nothing was written. Commit the work in the worktree, then record again.',
+      ],
+    };
+  }
+  // Project the entry being recorded over the spec as it will be after the
+  // write, so re-derivation targets exactly this claim.
+  const others = (spec.evidence ?? []).filter((e) => e.criterion_id !== pending.criterion_id);
+  const projected: Spec = { ...spec, evidence: [...others, pending] };
+  const result = rederiveSpecEvidence(tree.root, projected, {
+    classes: ['citation', 'artifact', 'test'],
+    runTests: true,
+  });
+  const verdict = result.verdicts.find((v) => v.id === pending.criterion_id);
+  if (verdict === undefined) {
+    return {
+      kind: 'refuse',
+      lines: [
+        `caws specs evidence --verify: ${pending.criterion_id} is not a declared acceptance criterion of ${spec.id}.`,
+      ],
+    };
+  }
+  const line = `  ${describeVerdict(verdict)}`;
+  if (verdict.verdict === 'refuted' && pending.status === 'pass') {
+    return {
+      kind: 'refuse',
+      lines: [
+        `caws specs evidence --verify: refusing to record status pass for ${pending.criterion_id} — the cited evidence does not re-derive.`,
+        line,
+        '  Nothing was written. Fix the citation (or the code it cites) and record again; use --status fail if the criterion genuinely fails.',
+      ],
+    };
+  }
+  if (verdict.verdict === 'verified') {
+    // Close never runs tests, so this is the only moment the test's result is
+    // observed; keep the revision it was observed at for the close advisory.
+    const testRan = verdict.checks.some((c) => c.class === 'test' && c.verdict === 'verified');
+    return {
+      kind: 'verified',
+      ...(testRan && tree.head !== null ? { testVerifiedAt: tree.head } : {}),
+      lines: [
+        'verified before recording:',
+        line,
+        ...(tree.linked ? [`  re-derived against ${treeLine(tree)}`] : []),
+      ],
+    };
+  }
+  return {
+    kind: 'unverifiable',
+    lines: [
+      `caws specs evidence --verify: ${pending.criterion_id} could not be mechanically re-derived; recording as self-reported.`,
+      line,
+    ],
+  };
 }
 
 export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
@@ -1694,9 +1784,59 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'evidence'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'evidence'
   );
   if (actor === null) return 2;
+
+  let testVerifiedAt: string | undefined;
+  if (opts.verify === true) {
+    if (
+      opts.testNodeid === undefined &&
+      opts.artifactPath === undefined &&
+      opts.commitSha === undefined
+    ) {
+      err(
+        'caws specs evidence --verify: nothing to verify. Supply at least one of --test-nodeid, --artifact-path, --commit-sha ' +
+          '(a --command is recorded but never executed, so it cannot be verified).'
+      );
+      return 1;
+    }
+    const shown = showSpec(ctx.cawsDir, opts.id);
+    if (!isOk(shown)) {
+      err('caws specs evidence: failed.');
+      err(renderDiagnostics(shown.errors, { showData }));
+      return 1;
+    }
+    const pending: PendingEvidence = {
+      criterion_id: opts.ac,
+      status: opts.status,
+      recorded_at: nowFn().toISOString(),
+      ...(opts.evidenceRef !== undefined ? { evidence_ref: opts.evidenceRef } : {}),
+      ...(opts.testNodeid !== undefined ? { test_nodeid: opts.testNodeid } : {}),
+      ...(opts.command !== undefined ? { command: opts.command } : {}),
+      ...(opts.exitCode !== undefined ? { exit_code: opts.exitCode } : {}),
+      ...(opts.artifactPath !== undefined ? { artifact_path: opts.artifactPath } : {}),
+      ...(opts.commitSha !== undefined ? { commit_sha: opts.commitSha } : {}),
+    };
+    const gate = verifyPendingEvidence(
+      resolveVerificationTree(ctx.repoRoot, cwd),
+      shown.value.spec,
+      pending
+    );
+    if (gate.kind === 'refuse') {
+      for (const l of gate.lines) err(l);
+      return 1;
+    }
+    for (const l of gate.lines) (gate.kind === 'verified' ? out : err)(l);
+    if (gate.kind === 'verified') testVerifiedAt = gate.testVerifiedAt;
+  }
 
   const result = recordSpecEvidence(ctx.cawsDir, {
     id: opts.id,
@@ -1709,6 +1849,7 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
     ...(opts.exitCode !== undefined ? { exitCode: opts.exitCode } : {}),
     ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
     ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
+    ...(testVerifiedAt !== undefined ? { testVerifiedAt } : {}),
     now: nowFn,
     actor,
   });
@@ -1726,8 +1867,139 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
   out(
     `recorded evidence for ${opts.id} AC ${opts.ac} (status: ${opts.status}) — dual-write: spec evidence block + ac_recorded event`
   );
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
+}
+
+// ─── caws specs verify-acs ───────────────────────────────────────────────
+//
+// CAWS-SPECS-VERIFY-ACS-REDERIVE-001. Re-derives the spec's recorded
+// acceptance evidence against reality instead of trusting its `status`
+// field. Read-only: writes no spec bytes and appends no event. The kernel
+// decides what to check and how to read the outcomes, the store executes,
+// this command renders.
+//
+// Three verdicts, never collapsed. v10.2's verify-acs mapped "the test was
+// collected" straight to PASS; here a collected-but-unexecuted test is
+// `not_rederived`, and existence-only mode (the default) can never print
+// verified. The summary keeps v10.2's honest qualifier — "all
+// mechanically-verifiable ACs passed" — with the unverifiable count printed
+// beside it, never folded in.
+
+export const VERIFY_ACS_SCHEMA = 'verify-acs.v1';
+
+export interface SpecsVerifyAcsOptions extends BaseCommandOptions {
+  readonly id: string;
+  /** Execute cited tests. Default: existence check only, which reports not_rederived. */
+  readonly run?: boolean;
+  /** Exit 1 on any not_rederived criterion. Default: exit 1 only on refuted. */
+  readonly strict?: boolean;
+  readonly json?: boolean;
+  readonly runner?: string;
+}
+
+function isSelectableRunner(value: string): value is TestRunner {
+  return (SELECTABLE_TEST_RUNNERS as readonly string[]).includes(value);
+}
+
+export function verifyAcsExitCode(summary: RederivationSummary, strict: boolean): number {
+  if (summary.refuted > 0) return 1;
+  if (strict && summary.not_rederived > 0) return 1;
+  return 0;
+}
+
+/**
+ * The one-line verdict. Says "passed" only when something was verified and
+ * nothing was refuted, and always prints the unverifiable count beside it.
+ */
+export function verifyAcsVerdictLine(summary: RederivationSummary): string {
+  const unverifiable = `unverifiable: ${summary.not_rederived} (not counted as pass)`;
+  if (summary.refuted > 0) {
+    return `verdict: REFUTED — ${summary.refuted} criterion/criteria cite evidence that does not re-derive; ${unverifiable}`;
+  }
+  if (summary.verified === 0) {
+    return `verdict: nothing was mechanically verified; ${unverifiable}`;
+  }
+  return `verdict: all mechanically-verifiable ACs passed (${summary.verified} verified); ${unverifiable}`;
+}
+
+export function runSpecsVerifyAcsCommand(opts: SpecsVerifyAcsOptions): number {
+  const { cwd, out, err, showData } = setupIO(opts);
+
+  if (opts.runner !== undefined && !isSelectableRunner(opts.runner)) {
+    err(
+      `caws specs verify-acs: invalid --runner. Got ${JSON.stringify(opts.runner)}; expected one of ${SELECTABLE_TEST_RUNNERS.join('|')}.`
+    );
+    return 1;
+  }
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'verify-acs');
+  if (ctx === null) return 2;
+
+  const shown = showSpec(ctx.cawsDir, opts.id);
+  if (!isOk(shown)) {
+    err('caws specs verify-acs: failed.');
+    err(renderDiagnostics(shown.errors, { showData }));
+    return 1;
+  }
+
+  const run = opts.run === true;
+  const strict = opts.strict === true;
+  const tree = resolveVerificationTree(ctx.repoRoot, cwd);
+  const result = rederiveSpecEvidence(tree.root, shown.value.spec, {
+    classes: ['citation', 'artifact', 'test'],
+    runTests: run,
+    ...(opts.runner !== undefined && isSelectableRunner(opts.runner)
+      ? { runner: opts.runner }
+      : {}),
+  });
+  const code = verifyAcsExitCode(result.summary, strict);
+
+  if (opts.json === true) {
+    emitJson(out, {
+      schema: VERIFY_ACS_SCHEMA,
+      id: opts.id,
+      mode: run ? 'run' : 'exists',
+      strict,
+      exit_code: code,
+      summary: result.summary,
+      criteria: result.verdicts,
+    });
+    return code;
+  }
+
+  out(
+    `caws specs verify-acs ${opts.id} (mode: ${
+      run
+        ? 'run — cited tests executed'
+        : 'exists — cited tests located, not executed; pass --run to execute'
+    })`
+  );
+  if (tree.linked) {
+    out(
+      `tree: ${treeLine(tree)}` +
+        (tree.dirty.length > 0
+          ? ` (uncommitted changes in ${tree.dirty.length} path(s): this reflects the working tree, not HEAD)`
+          : '')
+    );
+  }
+  for (const v of result.verdicts) out(`  ${describeVerdict(v)}`);
+  const s = result.summary;
+  out(
+    `summary: ${s.total} criteria — verified ${s.verified}, refuted ${s.refuted}, not_rederived ${s.not_rederived} ` +
+      `(narrative-only ${s.narrative_only}, agent-cited ${s.self_reported}, command declared ${s.command_declared})`
+  );
+  out(verifyAcsVerdictLine(s));
+  if (s.self_reported > 0) out(`note: ${AGENT_CITED_LEGEND}`);
+  if (strict && s.not_rederived > 0) {
+    out(`strict: ${s.not_rederived} not_rederived criterion/criteria → exit 1`);
+  }
+  if (s.command_declared > 0) {
+    out(
+      `note: ${s.command_declared} criterion/criteria declare a command; a recorded command is never executed by CAWS`
+    );
+  }
+  return code;
 }
 
 // ─── caws specs amend-scope ──────────────────────────────────────────────
@@ -1755,7 +2027,14 @@ export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number 
   if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'amend-scope'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'amend-scope'
   );
   if (actor === null) return 2;
 
@@ -1789,7 +2068,7 @@ export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number 
   for (const w of outcome.warnings ?? []) {
     err(`caws advisory (non-blocking): ${w}`);
   }
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -1840,6 +2119,22 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
   // CANONICAL-DRIFT-GUARDS-001: commit-target check BEFORE any write.
   if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
 
+  // CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01: cross-repo check BEFORE any write.
+  if (
+    !lifecycleContainmentAdmits({
+      command: 'specs close',
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      cwd,
+      env,
+      now: nowFn,
+      out,
+      err,
+    })
+  ) {
+    return 1;
+  }
+
   // CAWS-GUARD-ALLOWLIST-SYNC-001 (Defect 2): a spec must not close without
   // closure notes. The store-layer closeSpec enforces the same contract
   // (defense in depth); this shell guard gives the better message and avoids
@@ -1861,7 +2156,14 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
   }
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'close'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'close'
   );
   if (actor === null) return 2;
 
@@ -1872,8 +2174,10 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
     actor,
   };
   if (closureNotes !== undefined) (input as { reason?: string }).reason = closureNotes;
-  if (opts.mergeCommit !== undefined) (input as { mergeCommit?: string }).mergeCommit = opts.mergeCommit;
-  if (opts.supersededBy !== undefined) (input as { supersededBy?: string }).supersededBy = opts.supersededBy;
+  if (opts.mergeCommit !== undefined)
+    (input as { mergeCommit?: string }).mergeCommit = opts.mergeCommit;
+  if (opts.supersededBy !== undefined)
+    (input as { supersededBy?: string }).supersededBy = opts.supersededBy;
 
   const result = closeSpec(ctx.cawsDir, input);
   if (!isOk(result)) {
@@ -1898,7 +2202,7 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
   for (const w of outcome.warnings ?? []) {
     err(`caws advisory (non-blocking): ${w}`);
   }
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -1920,7 +2224,14 @@ export function runSpecsReopenCommand(opts: SpecsReopenOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'reopen'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'reopen'
   );
   if (actor === null) return 2;
 
@@ -1944,7 +2255,7 @@ export function runSpecsReopenCommand(opts: SpecsReopenOptions): number {
     return 1;
   }
   out(`reopened ${outcome.id} (lifecycle_state: active)`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -1956,12 +2267,27 @@ export interface SpecsAmendOptions extends BaseCommandOptions {
   readonly removeModule?: readonly string[];
   readonly addInvariant?: readonly string[];
   readonly removeInvariant?: readonly string[];
+  /** Rewrite given/when/then of this existing criterion (partial update). */
+  readonly setAc?: string;
+  /** Append a new criterion; requires --given/--when/--then. */
+  readonly addAc?: string;
+  /** Remove a criterion and its evidence entry. */
+  readonly removeAc?: string;
+  readonly given?: string;
+  readonly when?: string;
+  readonly then?: string;
+  /** Optional operator rationale, recorded verbatim on spec_body_amended. */
+  readonly reason?: string;
 }
 
 // Sterling ledger N16: the discharge path. `caws specs create --module/
 // --invariant` only helps specs that do not exist yet; this is what an
 // already-created spec uses to replace a scaffolded default without a
-// hand-edit that bypasses the audit trail.
+// hand-edit that bypasses the audit trail. The acceptance flags
+// (CAWS-SPEC-AMEND-ACCEPTANCE-001) extend the same governed path to AC text:
+// the scenario agents kept resolving by encoding the correction as an
+// invariant or spinning a successor spec, because no command could fix a
+// wrong claim on an existing spec.
 export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
 
@@ -1969,7 +2295,14 @@ export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'amend'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'amend'
   );
   if (actor === null) return 2;
 
@@ -1981,6 +2314,13 @@ export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
     ...(opts.removeModule !== undefined ? { removeModules: opts.removeModule } : {}),
     ...(opts.addInvariant !== undefined ? { addInvariants: opts.addInvariant } : {}),
     ...(opts.removeInvariant !== undefined ? { removeInvariants: opts.removeInvariant } : {}),
+    ...(opts.setAc !== undefined ? { setAc: opts.setAc } : {}),
+    ...(opts.addAc !== undefined ? { addAc: opts.addAc } : {}),
+    ...(opts.removeAc !== undefined ? { removeAc: opts.removeAc } : {}),
+    ...(opts.given !== undefined ? { acGiven: opts.given } : {}),
+    ...(opts.when !== undefined ? { acWhen: opts.when } : {}),
+    ...(opts.then !== undefined ? { acThen: opts.then } : {}),
+    ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
   });
   if (!isOk(result)) {
     err('caws specs amend: failed.');
@@ -1994,7 +2334,7 @@ export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
     return 1;
   }
   out(`amended ${outcome.id}`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2017,7 +2357,14 @@ export function runSpecsDeactivateCommand(opts: SpecsDeactivateOptions): number 
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'deactivate'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'deactivate'
   );
   if (actor === null) return 2;
 
@@ -2041,7 +2388,7 @@ export function runSpecsDeactivateCommand(opts: SpecsDeactivateOptions): number 
     return 1;
   }
   out(`deactivated ${outcome.id} (lifecycle_state: draft)`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2086,7 +2433,9 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     opts.json === true;
   if (opts.id !== undefined && batchFlagsPresent) {
     err('caws specs archive: <id> cannot be combined with batch flags.');
-    err('  Use `caws specs archive <id>` for one spec, or `caws specs archive --status closed` for batch dry-run.');
+    err(
+      '  Use `caws specs archive <id>` for one spec, or `caws specs archive --status closed` for batch dry-run.'
+    );
     return 1;
   }
 
@@ -2145,25 +2494,42 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
           out(`  would-archive ${candidate.id}`);
         }
         for (const skipped of selected.value.skipped) {
-          const state = skipped.lifecycle_state !== undefined ? ` (${skipped.lifecycle_state})` : '';
+          const state =
+            skipped.lifecycle_state !== undefined ? ` (${skipped.lifecycle_state})` : '';
           out(`  skipped ${skipped.id}: ${skipped.reason}${state}`);
         }
         const includeArg =
           selector.include.length > 0 ? ` --include ${selector.include.join(',')}` : '';
         const excludeArg =
           selector.exclude.length > 0 ? ` --exclude ${selector.exclude.join(',')}` : '';
+        // Echo the threshold in the duration form when it round-trips exactly,
+        // so the apply line reads `--older-than 10m`, not `--older-than-ms 600000`.
+        const olderDuration = olderThanMs !== undefined ? formatDurationMs(olderThanMs) : null;
         const olderArg =
-          olderThanMs !== undefined ? ` --older-than-ms ${olderThanMs}` : '';
+          olderThanMs === undefined
+            ? ''
+            : olderDuration !== null
+              ? ` --older-than ${olderDuration}`
+              : ` --older-than-ms ${olderThanMs}`;
         const updatedBeforeArg =
           opts.updatedBefore !== undefined ? ` --updated-before ${opts.updatedBefore}` : '';
         const withoutWorktreeArg = opts.withoutWorktree === true ? ' --without-worktree' : '';
-        out(`apply: caws specs archive --status closed${includeArg}${excludeArg}${olderArg}${updatedBeforeArg}${withoutWorktreeArg} --apply`);
+        out(
+          `apply: caws specs archive --status closed${includeArg}${excludeArg}${olderArg}${updatedBeforeArg}${withoutWorktreeArg} --apply`
+        );
       }
       return selected.value.skipped.length === 0 ? 0 : 1;
     }
 
     const actor = buildActorOrError(
-      ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'archive'
+      ctx.cawsDir,
+      cwd,
+      env,
+      nowFn,
+      opts.actorKind,
+      err,
+      showData,
+      'archive'
     );
     if (actor === null) return 2;
 
@@ -2211,12 +2577,19 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     for (const warning of outcome.warnings ?? []) {
       err(`caws advisory (non-blocking): ${warning}`);
     }
-    surfaceAuditCommit(outcome.data?.audit_commit, err);
+    surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
     return ok ? 0 : 1;
   }
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'archive'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'archive'
   );
   if (actor === null) return 2;
 
@@ -2244,7 +2617,7 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
   for (const w of outcome.warnings ?? []) {
     err(`caws advisory (non-blocking): ${w}`);
   }
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2255,16 +2628,21 @@ export interface SpecsRetireDraftOptions extends BaseCommandOptions {
   readonly reason?: string;
 }
 
-export function runSpecsRetireDraftCommand(
-  opts: SpecsRetireDraftOptions
-): number {
+export function runSpecsRetireDraftCommand(opts: SpecsRetireDraftOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
 
   const ctx = resolveCawsCtx(cwd, err, showData, 'retire-draft');
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'retire-draft'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'retire-draft'
   );
   if (actor === null) return 2;
 
@@ -2288,7 +2666,7 @@ export function runSpecsRetireDraftCommand(
     return 1;
   }
   out(`retired draft ${outcome.id} (recoverable via caws specs show ${outcome.id} --archived)`);
-  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  surfaceAuditCommit(outcome.data?.audit_commit, err, opts.id);
   return 0;
 }
 
@@ -2305,7 +2683,7 @@ export function runSpecsRetireDraftCommand(
 // not auto-default.
 //
 // Per the spec (CAWS-MIGRATE-V10-SPECS-001 A12 / Sterling smoke):
-//   - --from v10 is the only supported source in v11.2.
+//   - --from accepts exactly the versions in MIGRATABLE_SOURCE_VERSIONS.
 //   - default is dry-run (no writes); --apply opts into mutation.
 //   - --apply alone refuses on any 'refused' verdict.
 //   - --apply --partial writes migratable, skips refused, emits report.
@@ -2329,10 +2707,11 @@ export interface SpecsMigrateOptions extends BaseCommandOptions {
 export function runSpecsMigrateCommand(opts: SpecsMigrateOptions): number {
   const { cwd, nowFn, out, err, showData } = setupIO(opts);
 
-  // --from must be exactly 'v10' (matches caws events migrate semantics).
-  if (opts.from !== 'v10') {
+  // The accepted set comes from MIGRATABLE_SOURCE_VERSIONS, which the `--from`
+  // help reads too, so this guard cannot refuse a value the help advertises.
+  if (!isMigratableSourceVersion(opts.from)) {
     err(
-      `caws specs migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.`,
+      `caws specs migrate: --from accepts ${describeMigratableSourceVersions()}; got ${JSON.stringify(opts.from)}.`
     );
     return 1;
   }
@@ -2377,8 +2756,8 @@ export function runSpecsMigrateCommand(opts: SpecsMigrateOptions): number {
             })),
           },
           null,
-          2,
-        ),
+          2
+        )
       );
     } else {
       err('caws specs migrate: failed.');
@@ -2417,7 +2796,7 @@ export function runSpecsMigrateCommand(opts: SpecsMigrateOptions): number {
 }
 
 function loadLifecycleMappingFile(
-  filePath: string,
+  filePath: string
 ): { ok: true; mapping: LifecycleMapping } | { ok: false; message: string } {
   let raw: string;
   try {
@@ -2437,7 +2816,7 @@ function loadLifecycleMappingFile(
     return {
       ok: false,
       message: renderLifecycleMappingFileFailure(
-        `Cannot parse ${filePath} as JSON: ${cause.message ?? 'unknown error'}.`,
+        `Cannot parse ${filePath} as JSON: ${cause.message ?? 'unknown error'}.`
       ),
     };
   }
@@ -2445,7 +2824,7 @@ function loadLifecycleMappingFile(
     return {
       ok: false,
       message: renderLifecycleMappingFileFailure(
-        `Lifecycle mapping file ${filePath} must be a JSON object keyed by spec id; got ${typeof parsed === 'object' ? 'array' : typeof parsed}.`,
+        `Lifecycle mapping file ${filePath} must be a JSON object keyed by spec id; got ${typeof parsed === 'object' ? 'array' : typeof parsed}.`
       ),
     };
   }
@@ -2457,7 +2836,7 @@ function loadLifecycleMappingFile(
       return {
         ok: false,
         message: renderLifecycleMappingFileFailure(
-          `Lifecycle mapping entry "${specId}" is not an object.`,
+          `Lifecycle mapping entry "${specId}" is not an object.`
         ),
       };
     }
@@ -2466,7 +2845,7 @@ function loadLifecycleMappingFile(
       return {
         ok: false,
         message: renderLifecycleMappingFileFailure(
-          `Lifecycle mapping entry "${specId}" is missing required string field "lifecycle_state".`,
+          `Lifecycle mapping entry "${specId}" is missing required string field "lifecycle_state".`
         ),
       };
     }
@@ -2505,13 +2884,13 @@ function renderApplyHuman(
   result: SpecsMigrateApplyResult,
   repoRoot: string,
   applied: boolean,
-  out: (line: string) => void,
+  out: (line: string) => void
 ): void {
   const tag = applied ? '[apply]' : '[dry-run]';
   const r: MigrationReport = result.report;
   out(`${tag} caws specs migrate --from v10`);
   out(
-    `  distribution: migrated=${r.distribution.migrated} migrated_with_warnings=${r.distribution.migrated_with_warnings} refused=${r.distribution.refused} post_write_validation_failed=${r.distribution.post_write_validation_failed} total=${r.distribution.total}`,
+    `  distribution: migrated=${r.distribution.migrated} migrated_with_warnings=${r.distribution.migrated_with_warnings} refused=${r.distribution.refused} post_write_validation_failed=${r.distribution.post_write_validation_failed} total=${r.distribution.total}`
   );
   if (r.non_yaml_observations.length > 0) {
     out(`  non_yaml observations:`);
@@ -2558,10 +2937,7 @@ function entryTag(verdict: string): string {
   }
 }
 
-function renderApplyJson(
-  result: SpecsMigrateApplyResult,
-  out: (line: string) => void,
-): void {
+function renderApplyJson(result: SpecsMigrateApplyResult, out: (line: string) => void): void {
   // Preserve the store's report shape verbatim (per the contract
   // spec-v10-migration-output). Do not invent a second report shape.
   out(
@@ -2574,8 +2950,8 @@ function renderApplyJson(
         report: result.report,
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 }
 
@@ -2598,7 +2974,9 @@ export function runSpecsPruneArchiveCommand(opts: SpecsPruneArchiveOptions): num
 
   void opts.apply;
   void ctx;
-  out('caws specs prune-archive: no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS.');
+  out(
+    'caws specs prune-archive: no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS.'
+  );
   out('  To archive closed specs: caws specs archive --status closed');
   out('  To restore an archived spec: caws specs restore <id> --as draft');
   out('  To recover the archived body: caws specs recover <id> --out <path>');
@@ -2620,6 +2998,22 @@ export function runSpecsPruneArchiveCommand(opts: SpecsPruneArchiveOptions): num
 // and does NOT mutate anything. Exit code is the verdict (0 valid / non-zero
 // invalid|unreadable). A missing/unreadable file produces an honest error —
 // never a false "YAML syntax error" for a file that was never parsed.
+
+/**
+ * CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: the authority this command
+ * applied, printed with every verdict.
+ *
+ * A bare "is valid" arbitrates nothing when the project also carries a
+ * legacy `working-spec.schema.json`: the operator sees a passing verdict
+ * and a local schema that rejects the same shape, and has no way to learn
+ * which one governs. Naming the schema on BOTH the pass and the fail path
+ * matters — a failure is where someone is most likely to blame the wrong
+ * authority and start "fixing" a spec against a dead file.
+ */
+const SPEC_SCHEMA_AUTHORITY_NOTE =
+  'Authority: the kernel spec schema (spec.v1). Project-local schema files ' +
+  'under .caws/ (e.g. working-spec.schema.json) are legacy residue and are ' +
+  'NOT consulted.';
 
 export interface SpecsValidateOptions extends BaseCommandOptions {
   readonly file: string;
@@ -2646,6 +3040,7 @@ export function runSpecsValidateCommand(opts: SpecsValidateOptions): number {
   const result = parseAndValidateSpec(source, { sourcePath: filePath });
   if (!isOk(result)) {
     err(`caws specs validate: ${filePath} is invalid.`);
+    err(`  ${SPEC_SCHEMA_AUTHORITY_NOTE}`);
     err(renderDiagnostics(result.errors, { showData }));
     if (hasSpecParseOrSchemaDiagnostics(result.errors)) {
       err(renderSpecParseGuidance(filePath));
@@ -2654,6 +3049,7 @@ export function runSpecsValidateCommand(opts: SpecsValidateOptions): number {
   }
 
   out(`caws specs validate: ${filePath} is valid (${result.value.id}).`);
+  out(`  ${SPEC_SCHEMA_AUTHORITY_NOTE}`);
   return 0;
 }
 
@@ -2698,11 +3094,15 @@ export function runSpecsRelocateCommand(opts: SpecsRelocateOptions): number {
     if (record && typeof record.baseBranch === 'string') baseBranches.add(record.baseBranch);
   }
   if (baseBranches.size === 0) {
-    err('caws specs relocate: no registered worktrees — cannot infer the base branch. Relocation targets base by definition.');
+    err(
+      'caws specs relocate: no registered worktrees — cannot infer the base branch. Relocation targets base by definition.'
+    );
     return 1;
   }
   if (baseBranches.size > 1) {
-    err(`caws specs relocate: worktrees declare multiple base branches (${Array.from(baseBranches).join(', ')}); CAWS will not guess.`);
+    err(
+      `caws specs relocate: worktrees declare multiple base branches (${Array.from(baseBranches).join(', ')}); CAWS will not guess.`
+    );
     return 1;
   }
   const baseBranch = Array.from(baseBranches)[0]!;
@@ -2722,19 +3122,27 @@ export function runSpecsRelocateCommand(opts: SpecsRelocateOptions): number {
   const o = result.value;
 
   if (o.alreadyOnBase) {
-    out(`caws specs relocate: ${opts.id} — canonical HEAD already sits on the base branch "${o.baseBranch}"; nothing to relocate.`);
+    out(
+      `caws specs relocate: ${opts.id} — canonical HEAD already sits on the base branch "${o.baseBranch}"; nothing to relocate.`
+    );
     return 0;
   }
   if (!o.applied) {
     out(`caws specs relocate: ${opts.id} (dry-run)`);
     out(`  source branch: ${o.sourceBranch} (canonical HEAD is parked here)`);
     out(`  target branch: ${o.baseBranch}`);
-    out('  planned: read the parked copy, graft it onto base, commit "chore(caws): relocate ...", CAS the base ref.');
+    out(
+      '  planned: read the parked copy, graft it onto base, commit "chore(caws): relocate ...", CAS the base ref.'
+    );
     out('  Working trees are never touched. Pass --apply to perform.');
     return 0;
   }
-  out(`caws specs relocate: ${opts.id} relocated onto ${o.baseBranch} (commit ${o.relocatedCommit}).`);
-  out(`  The parked checkout "${o.sourceBranch}" still shows the file (its tree is untouched); base now carries it too.`);
+  out(
+    `caws specs relocate: ${opts.id} relocated onto ${o.baseBranch} (commit ${o.relocatedCommit}).`
+  );
+  out(
+    `  The parked checkout "${o.sourceBranch}" still shows the file (its tree is untouched); base now carries it too.`
+  );
   out('  Audit: the relocation commit on base names the spec, the source branch, and this slice.');
   return 0;
 }

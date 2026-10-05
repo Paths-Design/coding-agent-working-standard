@@ -61,7 +61,7 @@ export function all<T>(results: readonly Result<T>[]): Result<readonly T[]> {
 
 function mergeWarnings(
   a: readonly Diagnostic[] | undefined,
-  b: readonly Diagnostic[] | undefined,
+  b: readonly Diagnostic[] | undefined
 ): readonly Diagnostic[] | undefined {
   if (!a || a.length === 0) return b;
   if (!b || b.length === 0) return a;

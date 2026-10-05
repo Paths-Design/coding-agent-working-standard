@@ -47,7 +47,10 @@ function writeSessionLog(cawsDir, sessionId, turnCount, ageMs) {
     // Age the turn file so its mtime reflects "last activity".
     fs.utimesSync(f, new Date(NOW - ageMs), new Date(NOW - ageMs));
   }
-  fs.writeFileSync(path.join(dir, '.session-envelope.json'), JSON.stringify({ session_id: sessionId }));
+  fs.writeFileSync(
+    path.join(dir, '.session-envelope.json'),
+    JSON.stringify({ session_id: sessionId })
+  );
   fs.writeFileSync(path.join(dir, '.meta.json'), JSON.stringify({ started: 1 }));
   return dir;
 }
@@ -66,7 +69,12 @@ function writeLiveLease(cawsDir, sessionId, lastActiveIso) {
   fs.mkdirSync(leasesDir, { recursive: true });
   fs.writeFileSync(
     path.join(leasesDir, `${sessionId}.json`),
-    JSON.stringify({ session_id: sessionId, platform: 'dsh', status: 'active', last_active: lastActiveIso })
+    JSON.stringify({
+      session_id: sessionId,
+      platform: 'dsh',
+      status: 'active',
+      last_active: lastActiveIso,
+    })
   );
 }
 
@@ -97,7 +105,10 @@ describe('SESSION-LOG-RETENTION-SCOPE-001', () => {
     writeSessionLog(cawsDir, 'stale-sess', 3, 40 * DAY);
     writeSessionLog(cawsDir, 'fresh-sess', 2, 1 * DAY);
 
-    const before = fs.readFileSync(path.join(sessionsDir(cawsDir), 'stale-sess', 'turn-001.json'), 'utf8');
+    const before = fs.readFileSync(
+      path.join(sessionsDir(cawsDir), 'stale-sess', 'turn-001.json'),
+      'utf8'
+    );
     const r = runPrune(root, { olderThanMs: RETENTION });
     expect(r.code).toBe(0);
     const text = r.out;
@@ -108,7 +119,9 @@ describe('SESSION-LOG-RETENTION-SCOPE-001', () => {
     expect(text).not.toContain('fresh-sess  ');
     // Nothing deleted (dry-run).
     expect(exists(path.join(sessionsDir(cawsDir), 'stale-sess', 'turn-001.json'))).toBe(true);
-    expect(fs.readFileSync(path.join(sessionsDir(cawsDir), 'stale-sess', 'turn-001.json'), 'utf8')).toBe(before);
+    expect(
+      fs.readFileSync(path.join(sessionsDir(cawsDir), 'stale-sess', 'turn-001.json'), 'utf8')
+    ).toBe(before);
 
     // JSON carries candidate paths.
     const jr = runPrune(root, { olderThanMs: RETENTION, json: true });

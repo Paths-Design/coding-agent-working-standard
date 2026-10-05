@@ -1,27 +1,31 @@
 {
   "shared": {
-    "fingerprint": "5837ea093a6f30a3d0a9a472e2359a5e806bb93f202df38fb3f536701c2924fa",
-    "version": 51
+    "version": 89,
+    "fingerprint": "c9c997288a3e4f9954f27d48c7bc503e83c393b813661d02ac1051dcbee93ccd"
   },
   "claude-code": {
-    "version": 22,
-    "fingerprint": "9c3d62f5642a0eea245abed1f02a98c814e4e82ee18e3c83d9eb8f3e61e94100"
+    "version": 25,
+    "fingerprint": "ea39627b0c3d0a9d3737d2591a9671bd644dd851cac393e1e97a84c0c2f484ee"
   },
   "codex": {
-    "version": 13,
-    "fingerprint": "702fb8eb0112185813b7accbfd2dda07ce16dc3414c6df000264575125096007"
+    "version": 26,
+    "fingerprint": "a8b3c8cdb90e46187f83cfdf8f326b2d5a74df25fb94addd6e87b8da31e9e567"
+  },
+  "dsh": {
+    "version": 3,
+    "fingerprint": "e2c1aafe6f10ecb283c59e77888624bf69ecf5619cef2ae50dc992e46e498ca6"
   },
   "opencode": {
-    "version": 6,
-    "fingerprint": "5e2cf4dc7205e481a480883812ae80a689697f3858c0dd6456ea811e191eb27f"
+    "version": 7,
+    "fingerprint": "f45c119624d0b7ae326b092b7c97fda150b50b078928c81fc21386dc1f46957c"
   },
   "zcode": {
     "version": 2,
     "fingerprint": "15a8a3b26f677446a99de21734732decc0ef692ebbac8c8f10fd50519d0c10aa"
   },
   "kimi-code": {
-    "version": 2,
-    "fingerprint": "9fd158977853e2d359455b2f3b593df3f517f73ed6241944169375f89e7d8ed7"
+    "version": 9,
+    "fingerprint": "ad3188ae43992ae61d0b69915c5223fe02f3d0301e54f628329053fbcb907414"
   },
   "qwen-code": {
     "version": 2,

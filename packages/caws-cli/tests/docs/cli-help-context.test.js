@@ -27,7 +27,9 @@ function loadMetadata() {
     }
   }
   if (!fs.existsSync(metadataPath)) {
-    throw new Error(`command metadata not found at ${LOCAL_METADATA_PATH}; run npm run build first`);
+    throw new Error(
+      `command metadata not found at ${LOCAL_METADATA_PATH}; run npm run build first`
+    );
   }
   return require(metadataPath).COMMAND_SURFACE_METADATA;
 }
@@ -37,9 +39,7 @@ function escapeRegExp(value) {
 }
 
 function namesCommand(description, name) {
-  return new RegExp(`(^|[^a-z0-9-])${escapeRegExp(name)}($|[^a-z0-9-])`, 'i').test(
-    description
-  );
+  return new RegExp(`(^|[^a-z0-9-])${escapeRegExp(name)}($|[^a-z0-9-])`, 'i').test(description);
 }
 
 function findGroup(metadata, groupName) {
@@ -70,7 +70,7 @@ const CLEANUP_LEAF_EXPECTATIONS = [
   {
     group: 'specs',
     leaf: 'prune-drafts',
-    options: ['--older-than-ms', '--include', '--exclude', '--apply', '--json'],
+    options: ['--older-than', '--older-than-ms', '--include', '--exclude', '--apply', '--json'],
     terms: ['dry-run by default', 'include/exclude selectors', '--apply', 'candidate drafts'],
   },
   {
@@ -80,6 +80,7 @@ const CLEANUP_LEAF_EXPECTATIONS = [
       '--status',
       '--include',
       '--exclude',
+      '--older-than',
       '--older-than-ms',
       '--updated-before',
       '--without-worktree',
@@ -92,13 +93,23 @@ const CLEANUP_LEAF_EXPECTATIONS = [
     group: 'worktree',
     leaf: 'untrack',
     options: ['--reason', '--apply', '--json'],
-    terms: ['dry-run by default', 'requires --reason', '--apply removes only the control-plane binding'],
+    terms: [
+      'dry-run by default',
+      'requires --reason',
+      '--apply removes only the control-plane binding',
+    ],
   },
   {
     group: 'worktree',
     leaf: 'prune',
     options: ['--state', '--status', '--include', '--exclude', '--apply', '--json'],
-    terms: ['dry-run by default', 'with --apply', 'ghost-registry', 'dead-binding', 'closed-spec-residue'],
+    terms: [
+      'dry-run by default',
+      'with --apply',
+      'ghost-registry',
+      'dead-binding',
+      'closed-spec-residue',
+    ],
   },
   {
     group: 'worktree',
@@ -127,14 +138,25 @@ const CLEANUP_LEAF_EXPECTATIONS = [
   {
     group: 'agents',
     leaf: 'prune',
-    options: ['--dead', '--status', '--older-than-ms', '--apply', '--json'],
+    options: ['--dead', '--status', '--older-than', '--older-than-ms', '--apply', '--json'],
     terms: ['defaults to dry-run', 'pass --apply', '--dead', '--status'],
   },
   {
     group: 'message',
     leaf: 'prune',
-    options: ['--status', '--older-than-ms', '--include', '--exclude', '--apply', '--json'],
-    terms: ['dry-run by default', 'delivered', 'undelivered inbox messages are preserved'],
+    options: [
+      '--status',
+      '--older-than',
+      '--older-than-ms',
+      '--include',
+      '--exclude',
+      '--apply',
+      '--json',
+    ],
+    // cb2a364a reworded prune help to the dead-recipient-proof guarantee;
+    // the preservation claim now reads "every recipient that could still
+    // consume ... is preserved" — pin the current wording, not the old phrase.
+    terms: ['dry-run by default', 'delivered', 'every recipient that could still consume'],
   },
 ];
 
@@ -151,7 +173,9 @@ describe('CLI help context metadata', () => {
       'events',
       'evidence',
       'gates',
+      'goal',
       'handoff',
+      'init',
       'message',
       'session',
       'specs',

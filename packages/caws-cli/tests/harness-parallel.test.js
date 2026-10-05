@@ -36,7 +36,9 @@ describe('harness: parallel install contention (A4)', () => {
     // Fire all installs concurrently. The old corpus would deadlock here if
     // the repos shared on-disk state; isolated repos let them truly overlap.
     const results = await Promise.all(
-      repos.map((repo) => Promise.resolve().then(() => runInit(repo, { agentSurface: 'claude-code' })))
+      repos.map((repo) =>
+        Promise.resolve().then(() => runInit(repo, { agentSurface: 'claude-code' }))
+      )
     );
 
     // Every install succeeded.

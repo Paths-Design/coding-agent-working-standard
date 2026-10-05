@@ -17,6 +17,25 @@ teardown_file() {
   caws_teardown_pack
 }
 
+@test "scan-secrets: Codex PreToolUse advisory names its invoking event and redacts the value" {
+  local synthetic_key envelope event context
+  synthetic_key='AKIAIOSFODNN7EXAMPLE'
+  envelope="$(hook_envelope_content Write 'src/cfg.ts' "const key = '$synthetic_key';")"
+
+  run env -i PATH="$PATH" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="codex" \
+    HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/scan-secrets.sh'"
+
+  assert_success
+  event="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.hookEventName')"
+  context="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')"
+  [[ "$event" == "PreToolUse" ]]
+  [[ "$context" == *"possible AWS access key"* ]]
+  [[ "$context" != *"$synthetic_key"* ]]
+}
+
 @test "scan-secrets: a synthetic AWS access key triggers the advisory" {
   # AKIA + 16 uppercase/digits — fake but matches the AKIA[0-9A-Z]{16} pattern.
   run_guard scan-secrets.sh "$(hook_envelope_content Write 'src/cfg.ts' 'const k = "AKIAIOSFODNN7EXAMPLE";')"

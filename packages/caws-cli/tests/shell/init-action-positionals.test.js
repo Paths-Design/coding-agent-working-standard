@@ -42,7 +42,20 @@ function spawnCli(root, args) {
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'init-action-positionals-test' },
+    // `init diff` against a repo with no installed pack prints the WHOLE shared
+    // pack as a diff, so this output grows with every file added to the pack.
+    // spawnSync's default maxBuffer is 1 MiB, and exceeding it does not surface
+    // as a readable failure: node SIGTERMs the child and returns status null
+    // with error ENOBUFS, so `expect(result.status).toBe(0)` reports a killed
+    // process as if the CLI had misbehaved. The pack crossed 1 MiB when
+    // goal-ac-gate.sh landed; without this the next file added would break it
+    // again, and the next reader would debug the CLI instead of the harness.
+    maxBuffer: 64 * 1024 * 1024,
+    env: {
+      ...process.env,
+      CAWS_HOME: path.join(root, 'machine-home'),
+      CLAUDE_CODE_SESSION_ID: 'init-action-positionals-test',
+    },
   });
 }
 
@@ -58,7 +71,7 @@ describe('caws init action positionals (full CLI parse path)', () => {
     expect(output).toContain('Hook pack diff');
   });
 
-  test('A2: `init port <path>` without --from reaches port\'s own usage error, not the excess-args refusal', () => {
+  test("A2: `init port <path>` without --from reaches port's own usage error, not the excess-args refusal", () => {
     const root = mkRepo();
     const result = spawnCli(root, ['init', 'port', '.caws/hooks/scope-guard.sh']);
     const output = `${result.stdout}${result.stderr}`;
@@ -68,14 +81,14 @@ describe('caws init action positionals (full CLI parse path)', () => {
     expect(output).toContain('caws init port: --from <staging-file> is required.');
   });
 
-  test('A3: `init a b c` (three positionals) is still refused, naming the excess token "c"', () => {
+  test('A3: unknown init subcommands are refused without silently dropping arguments', () => {
     const root = mkRepo();
     const result = spawnCli(root, ['init', 'a', 'b', 'c']);
     const output = `${result.stdout}${result.stderr}`;
 
     expect(result.status).not.toBe(0);
-    expect(output).toContain('unexpected extra argument(s): c');
-    expect(output).toContain('at most 2 positional arguments');
+    expect(output).toContain('unknown subcommand a b c');
+    expect(output).toContain('nothing was applied');
   });
 
   test('A4 control: a leaf with no declared positionals (specs list) still refuses a stray positional — the guard is not weakened globally', () => {
@@ -87,4 +100,17 @@ describe('caws init action positionals (full CLI parse path)', () => {
     expect(output).toContain('unexpected extra argument(s): stray-token');
     expect(output).toContain('This command takes no positional arguments');
   });
+});
+
+test('machine adapter operations reach the actual CLI parser and reject incompatible options without writes', () => {
+  const fs = require('node:fs');
+  const root = mkRepo();
+  const plan = spawnCli(root, ['init', 'adapters', 'install', '--plan', '--json']);
+  expect(plan.status).toBe(0);
+  expect(JSON.parse(plan.stdout).launcher).toBe(path.join(root, 'machine-home/bin/caws-hook'));
+  expect(fs.existsSync(path.join(root, 'machine-home'))).toBe(false);
+  const incompatible = spawnCli(root, ['init', 'adapters', 'install', '--overwrite', '--force']);
+  expect(incompatible.status).toBe(2);
+  expect(incompatible.stderr).toMatch(/incompatible/);
+  expect(fs.existsSync(path.join(root, 'machine-home'))).toBe(false);
 });

@@ -9,30 +9,42 @@ function flattenLeaves(group, prefix = []) {
   if (!Array.isArray(group.subcommands)) {
     return [{ command: [...prefix, group.name].join(' '), options: group.options || [] }];
   }
-  return group.subcommands.flatMap((subcommand) =>
-    flattenLeaves(subcommand, [...prefix, group.name])
-  );
+  return [
+    ...(group.defaultAction
+      ? [{ command: [...prefix, group.name].join(' '), options: group.options || [] }]
+      : []),
+    ...group.subcommands.flatMap((subcommand) =>
+      flattenLeaves(subcommand, [...prefix, group.name])
+    ),
+  ];
 }
 
 function jsonLikeOptions() {
-  return COMMAND_SURFACE_METADATA.flatMap((group) => flattenLeaves(group))
-    .flatMap((leaf) =>
-      leaf.options
-        .filter((option) =>
-          /--json|<json>|JSON|lifecycle-mapping/.test(
-            `${option.flag} ${option.description}`
-          )
-        )
-        .map((option) => ({
-          command: leaf.command,
-          flag: option.flag,
-          description: option.description,
-        }))
-    );
+  return COMMAND_SURFACE_METADATA.flatMap((group) => flattenLeaves(group)).flatMap((leaf) =>
+    leaf.options
+      .filter((option) =>
+        /--json|<json>|JSON|lifecycle-mapping/.test(`${option.flag} ${option.description}`)
+      )
+      .map((option) => ({
+        command: leaf.command,
+        flag: option.flag,
+        description: option.description,
+      }))
+  );
 }
 
 function isOperatorSuppliedJsonInput(option) {
+  if (
+    ['init adapters migrate', 'init adapters adopt', 'init migrate', 'init migrate apply'].includes(
+      option.command
+    ) &&
+    option.flag === '--from <file>'
+  )
+    return true;
   if (option.command === 'evidence record' && option.flag === '--data <json>') {
+    return true;
+  }
+  if (option.command === 'hooks import' && option.flag === '--apply-plan <path>') {
     return true;
   }
   if (option.command === 'specs migrate' && option.flag === '--lifecycle-mapping <path>') {
@@ -50,6 +62,11 @@ describe('CLI JSON input surface reconciliation', () => {
 
     expect(inputs).toEqual([
       'evidence record --data <json>',
+      'hooks import --apply-plan <path>',
+      'init adapters adopt --from <file>',
+      'init adapters migrate --from <file>',
+      'init migrate --from <file>',
+      'init migrate apply --from <file>',
       'specs migrate --lifecycle-mapping <path>',
     ]);
   });

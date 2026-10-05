@@ -29,11 +29,25 @@ source "$SCRIPT_DIR/lib/parse-input.sh"
 source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # shellcheck source=lib/emit.sh
 caws_source_lib emit.sh 2>/dev/null || true
+# shellcheck source=lib/guard-config.sh
+# Provides caws_guard_threshold. Optional: absent lib means the shipped
+# default below, which is what this guard did before the config existed.
+[[ -f "$SCRIPT_DIR/lib/guard-config.sh" ]] && source "$SCRIPT_DIR/lib/guard-config.sh"
+if declare -F caws_guard_config_load >/dev/null 2>&1; then
+  caws_guard_config_load "${CAWS_PROJECT_DIR:-.}" || true
+fi
 parse_hook_input
 
 TOOL_NAME="$HOOK_TOOL_NAME"
 FILE_PATH="$HOOK_FILE_PATH"
-THRESHOLD="${CAWS_LOC_DELTA_WARN_THRESHOLD:-300}"
+# Precedence: ENV > CONFIG > SHIPPED DEFAULT — see god-object-check.sh for why
+# env outranks the committed file (existing settings.json tuning must keep
+# working, and a session override is the more current intent).
+THRESHOLD="${CAWS_LOC_DELTA_WARN_THRESHOLD:-}"
+if [[ -z "$THRESHOLD" ]] && declare -F caws_guard_threshold >/dev/null 2>&1; then
+  THRESHOLD="$(caws_guard_threshold loc-delta-check.sh delta 300)"
+fi
+THRESHOLD="${THRESHOLD:-300}"
 
 [[ "$TOOL_NAME" == "Edit" ]] || exit 0
 [[ -z "$FILE_PATH" ]] && exit 0

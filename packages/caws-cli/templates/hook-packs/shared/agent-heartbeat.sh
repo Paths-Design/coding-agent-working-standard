@@ -242,25 +242,37 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
 # (NOT gated by the heartbeat write-throttle above) and inject waiting messages
 # into context, so a working agent sees mail at its next tool call.
 #
-# consume + inject, up to 5 messages per tool call via --drain (deliver-once is
-# preserved — one delivery record per consumed message). A backlog drains in
-# ONE call instead of one-per-call (CAWS-MESSAGE-DELIVERY-ECONOMICS-001); the
-# poll CONSUMES before we format — an accepted tradeoff (favor
-# delivery-happens over perfect transactionality; matches the prior relay).
+# In the machine adapter, reserve up to 5 messages as an expiring offer. The
+# adapter settles that exact occurrence only after writing the composed result.
+# Legacy project dispatchers without the settlement channel retain immediate
+# consume-on-poll behavior for compatibility.
 # Critical messages poll first regardless of age, so a STOP-class warning can
 # never queue behind status broadcasts.
 #
 # FAIL-CLOSED-NON-BLOCKING: any error (CLI absent/erroring, malformed JSON, no
 # message) emits nothing and never blocks the tool call. Independent of the peer
 # notice above — both can fire on the same call.
-_MSG_OUT="$(
-  caws_run_cli message poll \
-    --me "$HOOK_SESSION_ID" \
-    --receipt auto \
-    --drain 5 \
-    --json \
-  2>/dev/null
-)" || _MSG_OUT=""
+if [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
+  _MSG_OUT="$(
+    caws_run_cli message poll \
+      --me "$HOOK_SESSION_ID" \
+      --receipt auto \
+      --drain 5 \
+      --offer \
+      --offer-ttl-ms "${CAWS_MESSAGE_OFFER_TTL_MS:-30000}" \
+      --json \
+    2>/dev/null
+  )" || _MSG_OUT=""
+else
+  _MSG_OUT="$(
+    caws_run_cli message poll \
+      --me "$HOOK_SESSION_ID" \
+      --receipt auto \
+      --drain 5 \
+      --json \
+    2>/dev/null
+  )" || _MSG_OUT=""
+fi
 
 if [[ -n "$_MSG_OUT" ]]; then
   _MSG_CTX="$(printf '%s' "$_MSG_OUT" | HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl" HEARTBEAT_ESCALATION_STATE="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-escalation-state.json" node -e '
@@ -275,6 +287,7 @@ if [[ -n "$_MSG_OUT" ]]; then
       let entries = Array.isArray(parsed.messages) ? parsed.messages
         : (m && typeof m.text === "string" ? [{ message: m, ...(parsed.sender ? { sender: parsed.sender } : {}) }] : []);
       entries = entries.filter((e) => e && e.message && typeof e.message.text === "string");
+      const offer = parsed && parsed.offer;
       // Dead-letter escalation (CAWS-MESSAGE-BEHAVIOR-001): surfaced even when
       // there is no inbound mail. Throttled by a dedicated emit-state file —
       // re-emits only when the queued count changes or 60 minutes elapse.
@@ -335,8 +348,9 @@ if [[ -n "$_MSG_OUT" ]]; then
           "\n\n" + CLAIM + " Full text: caws message status <id> (or caws message history --with <sender>). " +
           "Reply with caws message reply <id> --text \"...\".";
       }
-      if (Number.isFinite(waiting) && waiting > 0) {
-        ctx += "\n(" + waiting + " more message(s) waiting — run caws message poll, " +
+      const remaining = offer ? Math.max(0, waiting - entries.length) : waiting;
+      if (Number.isFinite(remaining) && remaining > 0) {
+        ctx += "\n(" + remaining + " more message(s) waiting — run caws message poll, " +
           "or continue and the next will surface on your following tool call.)";
       }
       if (entries.length === 0) { ctx = escalation.replace(/^\n/, ""); }
@@ -356,6 +370,21 @@ if [[ -n "$_MSG_OUT" ]]; then
           }) + "\n");
         }
       } catch (_) { /* best-effort telemetry — never blocks the injection */ }
+      // Hand the exact occurrence identity back to run-handlers. Writing this
+      // file does not settle it; the machine adapter decides selected/released
+      // membership and claims only its later stdout handoff.
+      try {
+        const offerFile = process.env.CAWS_HANDLER_OFFER_FILE;
+        if (
+          offerFile && entries.length > 0 && offer &&
+          typeof offer.id === "string" && typeof offer.recipient === "string"
+        ) {
+          require("fs").writeFileSync(offerFile, JSON.stringify({
+            id: offer.id,
+            recipient: offer.recipient,
+          }) + "\n");
+        }
+      } catch (_) { /* expiry preserves retry eligibility */ }
       process.stdout.write(ctx);
     });
   ' 2>/dev/null)" || _MSG_CTX=""

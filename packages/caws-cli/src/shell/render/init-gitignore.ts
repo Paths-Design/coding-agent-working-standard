@@ -35,9 +35,7 @@ export function renderGitignore(result: GitignoreManageResult): string {
       );
       break;
     case 'unchanged':
-      lines.push(
-        '  OK — the CAWS ephemeral-state block is already current. No change.'
-      );
+      lines.push('  OK — the CAWS ephemeral-state block is already current. No change.');
       break;
     case 'adopted':
       lines.push(

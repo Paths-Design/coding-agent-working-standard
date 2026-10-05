@@ -25,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractFrontMatter } from './validate-docs.mjs';
 import yaml from 'js-yaml';
+import { renderReference, loadMetadata } from './generate-command-reference.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(__dirname, '..');
@@ -39,7 +40,8 @@ function listMarkdown(dir, relativeTo) {
     for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
       const abs = path.join(d, entry.name);
       if (entry.isDirectory()) walk(abs);
-      else if (entry.isFile() && entry.name.endsWith('.md')) out.push(path.relative(relativeTo, abs));
+      else if (entry.isFile() && entry.name.endsWith('.md'))
+        out.push(path.relative(relativeTo, abs));
     }
   };
   walk(dir);
@@ -85,8 +87,14 @@ function main() {
     fs.copyFileSync(path.join(REPO_ROOT, rel), dest);
   }
 
+  // Replace the authored reference landing page with the complete generated
+  // catalogue in the transport artifact, never in tracked documentation.
+  fs.writeFileSync(path.join(STAGED_DOCS, 'command-reference.md'), renderReference(loadMetadata()));
+
   // 6. Assert the copied set exactly equals the derived set.
-  const staged = listMarkdown(STAGED_DOCS, STAGED_DOCS).map((p) => `docs/${p}`).sort();
+  const staged = listMarkdown(STAGED_DOCS, STAGED_DOCS)
+    .map((p) => `docs/${p}`)
+    .sort();
   const expected = consumer.map((r) => r).sort();
   const missing = expected.filter((e) => !staged.includes(e));
   const extra = staged.filter((s) => !expected.includes(s));
@@ -99,7 +107,9 @@ function main() {
   // 7. Assert known exclusions are absent from the staged tree.
   const stagedAbs = (rel) => path.join(STAGED_DOCS, rel.replace(/^docs\//, ''));
   if (fs.existsSync(stagedAbs('docs/DOCUMENTATION_STANDARDS.md'))) {
-    throw new Error('DOCUMENTATION_STANDARDS.md (audience: maintainer) leaked into the staged docs.');
+    throw new Error(
+      'DOCUMENTATION_STANDARDS.md (audience: maintainer) leaked into the staged docs.'
+    );
   }
   for (const rel of staged) {
     const aud = audienceOf(stagedAbs(rel));
@@ -116,7 +126,7 @@ function main() {
   return 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     process.exit(main());
   } catch (err) {

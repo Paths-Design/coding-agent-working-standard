@@ -2,10 +2,25 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const { initProject } = require('../../dist/store/init-store');
 const { runDoctorCommand } = require('../../dist/shell/commands/doctor');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
+
+let fixture, previousHome;
+beforeEach(() => {
+  fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-doctor-plan-'));
+  previousHome = process.env.CAWS_HOME;
+  // This suite describes a project with no machine installation. Adoption
+  // and configured native surfaces are exercised in their own fixtures.
+  process.env.CAWS_HOME = path.join(fixture, 'absent-machine');
+});
+afterEach(() => {
+  if (previousHome === undefined) delete process.env.CAWS_HOME;
+  else process.env.CAWS_HOME = previousHome;
+  fs.rmSync(fixture, { recursive: true, force: true });
+});
 
 afterAll(() => {
   cleanupAll();
@@ -111,9 +126,12 @@ describe('caws doctor repair-plan', () => {
       // condition can no longer dominate the warning tier.
       severity: 'info',
       allowed_mutation: null,
-      next_command: 'caws worktree create <name> --spec DOCTOR-PLAN-STALE-001',
+      next_command: 'caws specs show DOCTOR-PLAN-STALE-001',
     });
-    expect(item.refusal_reason).toContain('choose whether to bind work');
+    expect(item.refusal_reason).toContain('inspect unmet criteria');
+    expect(item.details.unmet_acceptance).toEqual([
+      { criterion_id: 'A1', then: 'fixture', status: 'unrecorded', evidence_ref: null },
+    ]);
     expect(fs.readFileSync(specPath, 'utf8')).toBe(beforeSpec);
     expect(fs.existsSync(path.join(caws, 'events.jsonl'))).toBe(beforeEventsExists);
   });
@@ -121,12 +139,18 @@ describe('caws doctor repair-plan', () => {
   test('renders a human repair plan and preserves default doctor output when not requested', () => {
     const { root, caws } = mkRepo();
     writeSpec(caws, 'DOCTOR-PLAN-STALE-001', '2026-07-03T00:00:00.000Z');
+    fs.appendFileSync(
+      path.join(caws, 'specs/DOCTOR-PLAN-STALE-001.yaml'),
+      '\nevidence:\n  - criterion_id: A1\n    status: unchecked\n    evidence_ref: "HELD awaiting deployment authority"\n    recorded_at: "2026-07-03T00:00:00.000Z"\n'
+    );
 
     const plan = runDoctor(root, { repairPlan: true });
     expect(plan.code).toBe(0);
     expect(plan.out).toContain('caws doctor repair-plan:');
     expect(plan.out).toContain('- active-spec-unbound DOCTOR-PLAN-STALE-001');
-    expect(plan.out).toContain('next: caws worktree create <name> --spec DOCTOR-PLAN-STALE-001');
+    expect(plan.out).toContain('next: caws specs show DOCTOR-PLAN-STALE-001');
+    expect(plan.out).toContain('unmet: A1 [unchecked] fixture');
+    expect(plan.out).toContain('evidence: HELD awaiting deployment authority');
 
     const normal = runDoctor(root, {});
     expect(normal.code).toBe(0);

@@ -67,7 +67,7 @@ describe('caws gates run positional spec id', () => {
   test('spawned CLI accepts a positional spec id as an alias for --spec', () => {
     const root = mkRepo();
 
-    const result = runCli(root, ['gates', 'run', 'GATES-RUN-001']);
+    const result = runCli(root, ['gates', 'run', 'GATES-RUN-001', '--base', 'HEAD']);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
@@ -80,13 +80,7 @@ describe('caws gates run positional spec id', () => {
     const root = mkRepo();
     const before = readEvents(root);
 
-    const result = runCli(root, [
-      'gates',
-      'run',
-      'GATES-RUN-001',
-      '--spec',
-      'GATES-RUN-OTHER-001',
-    ]);
+    const result = runCli(root, ['gates', 'run', 'GATES-RUN-001', '--spec', 'GATES-RUN-OTHER-001']);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('positional <spec> and --spec both name the spec id');

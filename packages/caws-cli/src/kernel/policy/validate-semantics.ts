@@ -2,7 +2,7 @@ import { diagnostic } from '../diagnostics';
 import type { Diagnostic } from '../diagnostics/types';
 import { err, ok } from '../result';
 import type { Result } from '../result/types';
-import { CRITICAL_GATES, POLICY_RULES, RISKY_ROOT_FILES } from './rules';
+import { ADVISORY_GATES, CRITICAL_GATES, POLICY_RULES, RISKY_ROOT_FILES } from './rules';
 import type { Policy } from './types';
 
 export interface SemanticOptions {
@@ -18,10 +18,15 @@ export interface SemanticOptions {
  *
  * Warnings (returned as Ok with warnings, not Err):
  *  - non_governed_zones_force: true is in effect
- *  - critical gates (budget_limit, spec_completeness, scope_boundary) not in block mode
+ *  - critical gates (spec_completeness, scope_boundary) not in block mode
+ *  - an advisory gate (budget_limit) declared in block mode, which is not honored
+ *  - waivers.min_approvers_for_budget_raise, which has no effect
  *  - root_passthrough entries that match high-blast-radius file names
  */
-export function validatePolicySemantics(policy: Policy, options: SemanticOptions = {}): Result<Policy> {
+export function validatePolicySemantics(
+  policy: Policy,
+  options: SemanticOptions = {}
+): Result<Policy> {
   const errors: Diagnostic[] = [];
   const warnings: Diagnostic[] = [];
   const subjectBase = options.sourcePath ?? '.caws/policy.yaml';
@@ -43,7 +48,7 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
         location: { pointer: '/risk_tiers' },
         narrowRepair:
           'Order tiers from strict to permissive: max_files must increase or stay equal as risk_tier rises.',
-      }),
+      })
     );
   }
 
@@ -55,8 +60,9 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
         message: `Risk-tier max_loc must be monotonic: T1 (${t1.max_loc}) ≤ T2 (${t2.max_loc}) ≤ T3 (${t3.max_loc}).`,
         subject: subjectBase,
         location: { pointer: '/risk_tiers' },
-        narrowRepair: 'Order tiers from strict to permissive: max_loc must increase or stay equal as risk_tier rises.',
-      }),
+        narrowRepair:
+          'Order tiers from strict to permissive: max_loc must increase or stay equal as risk_tier rises.',
+      })
     );
   }
 
@@ -75,9 +81,45 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
           location: { pointer: `/gates/${gateId}/mode` },
           narrowRepair: `Set gates.${gateId}.mode to "block" unless the deviation is intentional and documented.`,
           severity: 'warning',
-        }),
+        })
       );
     }
+  }
+
+  // Advisory gates never block; a declared block is not honored, so say so
+  // rather than let the config read as enforcement.
+  for (const gateId of ADVISORY_GATES) {
+    const gate = policy.gates[gateId];
+    if (gate && gate.mode === 'block') {
+      warnings.push(
+        diagnostic({
+          rule: POLICY_RULES.ADVISORY_GATE_BLOCK_NOT_HONORED,
+          authority: 'kernel/policy',
+          message: `Gate "${gateId}" is advisory: risk-tier budgets are a sizing goal, not a limit, so mode "block" is not honored and the gate never blocks.`,
+          subject: subjectBase,
+          location: { pointer: `/gates/${gateId}/mode` },
+          narrowRepair: `Set gates.${gateId}.mode to "warn".`,
+          severity: 'warning',
+        })
+      );
+    }
+  }
+
+  // A budget-raise approver count reads as a process for buying a bigger
+  // budget. No such process exists, so name the key as inert.
+  if (policy.waivers?.min_approvers_for_budget_raise !== undefined) {
+    warnings.push(
+      diagnostic({
+        rule: POLICY_RULES.BUDGET_RAISE_APPROVERS_INERT,
+        authority: 'kernel/policy',
+        message:
+          'waivers.min_approvers_for_budget_raise has no effect: risk-tier budgets are an advisory sizing goal and are never raised by waiver.',
+        subject: subjectBase,
+        location: { pointer: '/waivers/min_approvers_for_budget_raise' },
+        narrowRepair: 'Remove waivers.min_approvers_for_budget_raise.',
+        severity: 'warning',
+      })
+    );
   }
 
   // non_governed_zones_force is a deliberate authority-relinquishing flag.
@@ -93,7 +135,7 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
         narrowRepair:
           'Remove non_governed_zones_force unless authority relinquishment is reviewed and documented in policy.',
         severity: 'warning',
-      }),
+      })
     );
   }
 
@@ -110,7 +152,7 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
             location: { pointer: `/root_passthrough/${idx}` },
             narrowRepair: `Remove "${entry}" from root_passthrough and list it explicitly in scope.in of any spec that needs to edit it.`,
             severity: 'warning',
-          }),
+          })
         );
       }
     }

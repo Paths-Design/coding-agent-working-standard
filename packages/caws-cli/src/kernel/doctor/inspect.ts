@@ -5,6 +5,7 @@
 // rules already enforced by spec, policy, scope, evidence, or worktree.
 
 import type { Diagnostic } from '../diagnostics/types';
+import { historicalWaiverUses, unmetObligations, worktreeHistory } from './history';
 import { verifyChain } from '../evidence/verify';
 import { CRITICAL_GATES, RISKY_ROOT_FILES } from '../policy/rules';
 import { waiverEffectiveness } from '../waiver/applicability';
@@ -105,8 +106,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     input.unboundActiveThresholdMs ?? DEFAULT_UNBOUND_ACTIVE_THRESHOLD_MS;
   const unboundActiveErrorCount =
     input.unboundActiveErrorCount ?? DEFAULT_UNBOUND_ACTIVE_ERROR_COUNT;
-  const priorOwnersThreshold =
-    input.priorOwnersGrowthThreshold ?? DEFAULT_PRIOR_OWNERS_THRESHOLD;
+  const priorOwnersThreshold = input.priorOwnersGrowthThreshold ?? DEFAULT_PRIOR_OWNERS_THRESHOLD;
 
   // -------------------------------------------------------------------------
   // 1. Spec lifecycle: active+unbound, thresholded.
@@ -128,8 +128,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   for (const spec of specs) {
     if (spec.lifecycle_state !== 'active') continue;
     const hasRegistryBinding = registrySpecIds.has(spec.id);
-    const hasSpecPointer =
-      typeof spec.worktree === 'string' && spec.worktree.length > 0;
+    const hasSpecPointer = typeof spec.worktree === 'string' && spec.worktree.length > 0;
     if (hasRegistryBinding || hasSpecPointer) {
       // Either side claims a binding — binding-integrity checks below handle
       // the asymmetric and orphan cases. unbound_active only fires when
@@ -146,7 +145,11 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           {
             subject: spec.id,
             narrowRepair: 'Set updated_at on the spec or bind a worktree to it.',
-            data: { spec_id: spec.id, lifecycle_state: spec.lifecycle_state },
+            data: {
+              spec_id: spec.id,
+              lifecycle_state: spec.lifecycle_state,
+              ...unmetObligations(spec),
+            },
           }
         )
       );
@@ -184,12 +187,13 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           `Active spec ${spec.id} has no bound worktree and has exceeded the unbound-active threshold.`,
           {
             subject: spec.id,
-            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — the slice never started), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
+            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — does not assert completion), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
             data: {
               spec_id: spec.id,
               age_ms: ageMs,
               threshold_ms: unboundActiveThresholdMs,
               updated_at: spec.updated_at,
+              ...unmetObligations(spec),
             },
           }
         )
@@ -357,9 +361,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       // terminal). Unknown lifecycle_state values default to ERROR per the
       // fail-safe rule: treat unknown as governance-relevant.
       const missingRegistrySeverity: FindingSeverity =
-        spec.lifecycle_state === 'closed' || spec.lifecycle_state === 'archived'
-          ? 'info'
-          : 'error';
+        spec.lifecycle_state === 'closed' || spec.lifecycle_state === 'archived' ? 'info' : 'error';
       findings.push(
         finding(
           DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY,
@@ -448,9 +450,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   const gitWorktrees = input.gitWorktrees;
   if (worktreeDirByName !== undefined) {
     const gitWorktreePaths =
-      gitWorktrees !== undefined
-        ? new Set<string>(gitWorktrees.map((w) => w.path))
-        : undefined;
+      gitWorktrees !== undefined ? new Set<string>(gitWorktrees.map((w) => w.path)) : undefined;
     for (const [worktreeName, record] of Object.entries(registry)) {
       // Defensive: skip entries that aren't plain object records. A
       // legacy v10.2-format worktrees.json wraps entries inside a
@@ -462,11 +462,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       // no specId gate (legitimate ghosts can lack one), so we filter
       // explicitly on record shape. Real ghosts always have an
       // object-shaped record.
-      if (
-        record === null ||
-        typeof record !== 'object' ||
-        Array.isArray(record)
-      ) {
+      if (record === null || typeof record !== 'object' || Array.isArray(record)) {
         continue;
       }
       // Skip entries where the dir IS present — those are not ghosts.
@@ -507,8 +503,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
               canonical_dir_present: false,
               // null (not false) when git observation was unavailable — the
               // refinement could not run, the flag is on the dir fact alone.
-              git_worktree_listed:
-                gitWorktreePaths === undefined ? null : false,
+              git_worktree_listed: gitWorktreePaths === undefined ? null : false,
             },
           }
         )
@@ -536,7 +531,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     -001 was superseded by the Decide slice).
   // -------------------------------------------------------------------------
 
-  const specsByWorktreeClaim = new Map<string, Array<typeof specs[number]>>();
+  const specsByWorktreeClaim = new Map<string, Array<(typeof specs)[number]>>();
   for (const s of specs) {
     if (typeof s.worktree === 'string' && s.worktree.length > 0) {
       const list = specsByWorktreeClaim.get(s.worktree) ?? [];
@@ -612,8 +607,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         `Canonical checkout HEAD is parked on "${cbo.currentBranch}" (not the base branch "${cbo.baseBranch}") while ${activeWorktreeCount} CAWS worktree(s) are active — spec lifecycle auto-commits will land on the parked branch.`,
         {
           subject: cbo.currentBranch,
-          narrowRepair:
-            `Un-park before lifecycle writes: have the branch's owner merge/switch it back, or relocate an already-mis-landed spec with \`caws specs relocate <id> --to-base\`. To deliberately author on this branch, pass --allow-foreign-branch to the lifecycle command. The canonical checkout is the base branch's home; feature work lives in worktrees.`,
+          narrowRepair: `Un-park before lifecycle writes: have the branch's owner merge/switch it back, or relocate an already-mis-landed spec with \`caws specs relocate <id> --to-base\`. To deliberately author on this branch, pass --allow-foreign-branch to the lifecycle command. The canonical checkout is the base branch's home; feature work lives in worktrees.`,
           data: {
             current_branch: cbo.currentBranch,
             base_branch: cbo.baseBranch,
@@ -624,13 +618,14 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     );
   }
 
+  const history = worktreeHistory(input.events ?? []);
   if (gitWorktrees !== undefined) {
     const registryPaths = new Set<string>();
     for (const record of Object.values(registry)) {
       if (typeof record?.path === 'string') registryPaths.add(record.path);
     }
     for (const wt of gitWorktrees) {
-      if (registryPaths.has(wt.path)) continue;
+      if (registryPaths.has(wt.path) || history.releasedPaths.has(wt.path)) continue;
       findings.push(
         finding(
           DOCTOR_RULES.WORKTREE_FOREIGN_PHYSICAL,
@@ -661,7 +656,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     does not reflect — governance-half-state.
   //
   //     Detection (read-only, events-backed): walk the chain in seq order. For
-  //     each `worktree_created`, take data.name. If a later `worktree_destroyed`
+  //     each `worktree_created`, take data.name. If a later `worktree_destroyed` or `worktree_untracked`
   //     for the same name closes the lifecycle, OR a live registry entry exists,
   //     OR a loaded spec carries a live `worktree:` binding to it, the worktree
   //     is accounted for — no finding. Otherwise the created-event is orphaned.
@@ -670,15 +665,6 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     iterate in array order, which loadEvents guarantees is chain order.
   // -------------------------------------------------------------------------
   if (input.events !== undefined && input.events.length > 0) {
-    // Names whose lifecycle a worktree_destroyed event has closed.
-    const destroyedNames = new Set<string>();
-    for (const ev of input.events) {
-      if (ev.event === 'worktree_destroyed') {
-        const d = ev.data as Record<string, unknown> | undefined;
-        const name = typeof d?.worktree_name === 'string' ? d.worktree_name : undefined;
-        if (name) destroyedNames.add(name);
-      }
-    }
     // Names that a live spec back-binds (any lifecycle_state — a binding is a
     // binding for accounting purposes here).
     const specBoundNames = new Set<string>();
@@ -689,22 +675,74 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
     // Avoid duplicate findings if the same name was created more than once.
     const reportedOrphans = new Set<string>();
-    for (const ev of input.events) {
-      if (ev.event !== 'worktree_created') continue;
+    for (const ev of history.pending.values()) {
       const d = ev.data as Record<string, unknown> | undefined;
       const name = typeof d?.name === 'string' ? d.name : undefined;
       if (name === undefined || reportedOrphans.has(name)) continue;
       const hasLiveRegistry = Object.prototype.hasOwnProperty.call(registry, name);
       const hasSpecBinding = specBoundNames.has(name);
-      const wasDestroyed = destroyedNames.has(name);
-      if (hasLiveRegistry || hasSpecBinding || wasDestroyed) continue;
+      if (hasLiveRegistry || hasSpecBinding) continue;
       // Orphan: created-event with no live control-plane representation.
       reportedOrphans.add(name);
+      // CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01 — verifiable-tombstone
+      // downgrade. A warning nobody can discharge (destroy/prune/repair
+      // refuse this class by design; hand-forging chain events is tampering)
+      // trains operators to ignore doctor. When EVERY physical residue
+      // observation is present-and-absent — the recorded branch is absent
+      // from the observed local refs, the recorded path is observed absent,
+      // no linked worktree is listed at the recorded path — the orphan is a
+      // verified-dead tombstone and renders as INFO. The predicate is
+      // conjunctive over observations that must ALL be available: undefined
+      // observations, a name missing from the path map, or a created-event
+      // without a recorded branch/path keep the warning (unobserved is not
+      // absent — the §2f degrade-elsewhere pattern). A linked worktree still
+      // listed at the recorded path (un-pruned git metadata for a directory
+      // that is gone) also keeps the warning: something physical remains.
+      const recordedBranch = typeof d?.branch === 'string' && d.branch.length > 0 ? d.branch : name;
+      const recordedPath = typeof d?.path === 'string' && d.path.length > 0 ? d.path : undefined;
+      const branchObservedAbsent =
+        input.localBranchRefs !== undefined &&
+        !input.localBranchRefs.includes(`refs/heads/${recordedBranch}`);
+      const pathObservedAbsent =
+        recordedPath !== undefined &&
+        input.filesystem?.createdWorktreePathExistsByName !== undefined &&
+        input.filesystem.createdWorktreePathExistsByName[name] === false;
+      const noLinkedWorktreeAtRecordedPath =
+        input.gitWorktrees !== undefined &&
+        (recordedPath === undefined || !input.gitWorktrees.some((wt) => wt.path === recordedPath));
+      const verifiablyDead =
+        recordedPath !== undefined &&
+        branchObservedAbsent &&
+        pathObservedAbsent &&
+        noLinkedWorktreeAtRecordedPath;
+      if (verifiablyDead) {
+        findings.push(
+          finding(
+            DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING,
+            'info',
+            `Event log records worktree_created for "${name}" (event seq ${ev.seq}); no terminal lifecycle event was recorded and nothing verifiably remains — no registry entry, no spec binding, no branch "${recordedBranch}", and no directory or linked worktree at the recorded path. Reconcile this creation through a logged absence receipt; the creation record remains unchanged.`,
+            {
+              subject: name,
+              narrowRepair: `Preview with caws worktree prune --state verified-dead-creation --include ${name}; apply with --apply to recheck absence and append a receipt for this exact creation.`,
+              data: {
+                worktree_name: name,
+                created_event_seq: ev.seq,
+                created_event_hash: ev.event_hash,
+                ...(typeof ev.spec_id === 'string' ? { spec_id: ev.spec_id } : {}),
+                verified_dead: true,
+                branch_observed_absent: recordedBranch,
+                path_observed_absent: recordedPath,
+              },
+            }
+          )
+        );
+        continue;
+      }
       findings.push(
         finding(
           DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING,
           'warning',
-          `Event log records worktree_created for "${name}" (event seq ${ev.seq}), but no live registry entry or spec binding exists. The worktree's creation is in the audit chain but the control plane was rolled back (governance-half-state).`,
+          `Event log records worktree_created for "${name}" (event seq ${ev.seq}), but no live registry entry, spec binding, or terminal disposition accounts for this creation. Physical residue is present or observations are incomplete.`,
           {
             subject: name,
             // DIAGNOSE ONLY — no mutating command. caws worktree repair
@@ -712,7 +750,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
             // created-event is immutable audit history, so the only correct
             // "repair" is authority reconciliation, never a mechanical prune.
             narrowRepair:
-              'Governance residue from a partially-failed worktree creation. Automatic repair is intentionally refused for this class: the worktree_created event is immutable audit history, so no control-plane mutation is safe — reconcile authority manually (recreate the binding or accept the residue) rather than deleting the record.',
+              'No terminal disposition accounts for this creation. Physical residue or incomplete observations prevent an absence receipt. Establish its current ownership and disposition before changing bindings or removing anything.',
             data: {
               worktree_name: name,
               created_event_seq: ev.seq,
@@ -736,18 +774,14 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     ghosts."
   // -------------------------------------------------------------------------
 
-  if (
-    typeof input.gitObservationFailure === 'string' &&
-    input.gitObservationFailure.length > 0
-  ) {
+  if (typeof input.gitObservationFailure === 'string' && input.gitObservationFailure.length > 0) {
     findings.push(
       finding(
         DOCTOR_RULES.WORKTREE_GIT_OBSERVATION_UNAVAILABLE,
         'info',
         'git worktree observation unavailable; H1/H6 half-state detection skipped.',
         {
-          narrowRepair:
-            'Verify git is installed and the repository is intact; rerun caws doctor.',
+          narrowRepair: 'Verify git is installed and the repository is intact; rerun caws doctor.',
           data: { reason: input.gitObservationFailure },
         }
       )
@@ -955,16 +989,11 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   } else if (input.policyWarnings && input.policyWarnings.length > 0) {
     for (const w of input.policyWarnings) {
       findings.push(
-        finding(
-          DOCTOR_RULES.POLICY_VALID_WITH_WARNINGS,
-          'warning',
-          w.message,
-          {
-            ...(w.subject !== undefined ? { subject: w.subject } : {}),
-            ...(w.narrowRepair !== undefined ? { narrowRepair: w.narrowRepair } : {}),
-            data: { source_rule: w.rule, ...(w.data ?? {}) },
-          }
-        )
+        finding(DOCTOR_RULES.POLICY_VALID_WITH_WARNINGS, 'warning', w.message, {
+          ...(w.subject !== undefined ? { subject: w.subject } : {}),
+          ...(w.narrowRepair !== undefined ? { narrowRepair: w.narrowRepair } : {}),
+          data: { source_rule: w.rule, ...(w.data ?? {}) },
+        })
       );
     }
   }
@@ -977,12 +1006,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     for (const t of input.templates) {
       pushTemplateDiagnostics(findings, t, t.errors, DOCTOR_RULES.TEMPLATE_DRIFT);
       if (t.warnings && t.warnings.length > 0) {
-        pushTemplateDiagnostics(
-          findings,
-          t,
-          t.warnings,
-          DOCTOR_RULES.TEMPLATE_WARNING
-        );
+        pushTemplateDiagnostics(findings, t, t.warnings, DOCTOR_RULES.TEMPLATE_WARNING);
       }
     }
   }
@@ -1083,75 +1107,36 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     for (const d of input.waiverDiagnostics) {
       const severity: FindingSeverity = d.severity ?? 'error';
       findings.push(
-        finding(
-          DOCTOR_RULES.WAIVER_MALFORMED_LOADED,
-          severity,
-          d.message,
-          {
-            ...(d.subject !== undefined ? { subject: d.subject } : {}),
-            ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
-            data: {
-              source_rule: d.rule,
-              source_authority: d.authority,
-              ...(d.data ?? {}),
-            },
-          }
-        )
+        finding(DOCTOR_RULES.WAIVER_MALFORMED_LOADED, severity, d.message, {
+          ...(d.subject !== undefined ? { subject: d.subject } : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
+          data: {
+            source_rule: d.rule,
+            source_authority: d.authority,
+            ...(d.data ?? {}),
+          },
+        })
       );
     }
   }
 
-  // 8d. revoked_referenced — walk gate_evaluated events for waiver_ids
-  //     that point at currently-revoked waivers. Skipped silently when
-  //     either side is absent: with no events we have nothing to cross-
-  //     reference; with no waivers we can't classify any reference.
-  if (
-    input.events !== undefined &&
-    input.events.length > 0 &&
-    input.waivers !== undefined &&
-    input.waivers.length > 0
-  ) {
-    const revokedById = new Map<string, (typeof input.waivers)[number]>();
-    for (const w of input.waivers) {
-      if (w.status === 'revoked') revokedById.set(w.id, w);
-    }
-    if (revokedById.size > 0) {
-      // Dedupe per (waiver_id, event_seq) pair so multiple identical
-      // events don't produce duplicate findings, but keep one finding
-      // per distinct waiver_id (the operator should see every revoked
-      // reference, not just the first).
-      const seenWaiverIds = new Set<string>();
-      for (const ev of input.events) {
-        if (ev.event !== 'gate_evaluated') continue;
-        const data = ev.data as { waiver_ids?: unknown };
-        const ids = data.waiver_ids;
-        if (!Array.isArray(ids)) continue;
-        for (const id of ids) {
-          if (typeof id !== 'string') continue;
-          if (!revokedById.has(id)) continue;
-          if (seenWaiverIds.has(id)) continue;
-          seenWaiverIds.add(id);
-          const revoked = revokedById.get(id)!;
-          findings.push(
-            finding(
-              DOCTOR_RULES.WAIVER_REVOKED_REFERENCED,
-              'warning',
-              `Waiver ${id} is currently revoked but was credited by at least one gate_evaluated event (seq ${ev.seq}).`,
-              {
-                subject: id,
-                narrowRepair:
-                  'No file repair — events are append-only. Audit whether the suppression remains acceptable historically.',
-                data: {
-                  waiver_id: id,
-                  first_event_seq: ev.seq,
-                  revoked_at: revoked.revocation?.revoked_at,
-                },
-              }
-            )
-          );
+  // Assess every historical use rather than the current status or first use.
+  for (const use of historicalWaiverUses(input.events ?? [], input.waivers ?? [])) {
+    if (use.classification === 'within_recorded_bounds') continue;
+    findings.push(
+      finding(
+        use.classification === 'post_revocation'
+          ? DOCTOR_RULES.WAIVER_REVOKED_REFERENCED
+          : 'doctor.waiver.historical_use',
+        'warning',
+        `Waiver ${use.waiver_id} use at event ${use.event_seq}: ${use.classification}. This checks recorded bounds, not independent authorization of the original exception.`,
+        {
+          subject: use.waiver_id,
+          narrowRepair: 'Inspect the cited use and waiver record; preserve append-only history.',
+          data: use,
         }
-      }
-    }
+      )
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -1203,6 +1188,499 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     );
   }
 
+  // CAWS-HARNESS-TELEMETRY-ADAPTER-001: vendored telemetry rows left on disk
+  // for an adapter-covered surface are stale dual-writers over the same
+  // .caws/sessions/ + .caws/leases/ state the surface's telemetry adapter
+  // owns. Both observations must be present and non-empty: rows without an
+  // installed adapter pack are the LEGITIMATE non-covered install (silent);
+  // no rows is absence, never staleness (silent); either field undefined is
+  // "unobserved" (silent) — matching the hookPackInstalled convention.
+  const staleTelemetryRows = input.filesystem?.managedTelemetryRowPaths;
+  const adapterSurfaces = input.filesystem?.adapterPackSurfaceMarkers;
+  // CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: a co-installed surface
+  // whose install set still contains these rows makes them load-bearing,
+  // not stale — its dispatchers invoke them. Firing anyway would prescribe
+  // a repair that deletes a live surface's telemetry. Undefined is
+  // "unobserved" and preserves the prior behavior, matching the
+  // hookPackInstalled convention used throughout this file.
+  const telemetryClaimants = input.filesystem?.telemetryRowClaimantSurfaces;
+  if (
+    staleTelemetryRows !== undefined &&
+    staleTelemetryRows.length > 0 &&
+    adapterSurfaces !== undefined &&
+    adapterSurfaces.length > 0 &&
+    (telemetryClaimants === undefined || telemetryClaimants.length === 0)
+  ) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK,
+        'warning',
+        `Vendored CAWS telemetry rows (${staleTelemetryRows.join(', ')}) are still installed under .caws/hooks/ while an adapter-covered agent surface pack (${adapterSurfaces.join(', ')}) is also installed. The telemetry plane for that surface (turn logs under .caws/sessions/, agent leases under .caws/leases/) is owned by its harness adapter; the vendored rows are stale dual-writers over the same state.`,
+        {
+          subject: '.caws/hooks',
+          narrowRepair:
+            'Re-run `caws init` with the covered surface selected (e.g. `caws init --agent-surface dsh`): init for an adapter-covered surface omits these rows from the install set and retires managed stale copies. Unmanaged files at those paths are never touched.',
+          data: {
+            stale_rows: [...staleTelemetryRows],
+            adapter_surfaces: [...adapterSurfaces],
+          },
+        }
+      )
+    );
+  }
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface wired at BOTH
+  // scopes double-fires every dispatcher. Both observations must be present;
+  // the rule fires per surface that appears in BOTH lists. Either list
+  // undefined is unobserved (silent) — one-sided wiring is the CORRECT state
+  // for gated surfaces, never a finding.
+  const userScopeWiring = input.filesystem?.userScopeCawsWiringBySurface;
+  const gatedProjectEntries = input.filesystem?.gatedProjectHookEntriesBySurface;
+  if (userScopeWiring !== undefined && gatedProjectEntries !== undefined) {
+    const dual = userScopeWiring.filter((s) => gatedProjectEntries.includes(s));
+    if (dual.length > 0) {
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_USER_SCOPE_DUAL_WIRING,
+          'warning',
+          `Trust-gated agent surface(s) ${dual.join(', ')} carry CAWS hook wiring at BOTH user scope and project scope. The harness runs both additively, so every CAWS dispatcher fires twice (doubled audit events, SessionStart hangs).`,
+          {
+            subject: '.qwen/.zcode',
+            narrowRepair:
+              'Keep ONE scope: preserve the user-scope wiring (immune to the qwen workspace-trust gate and the zcode project-hook strip) and remove the CAWS hook entries from the project-scope settings/config. `caws init` for these surfaces no longer adds them; entries from a pre-guard init need manual removal.',
+            data: {
+              dual_wired_surfaces: [...dual],
+              user_scope_surfaces: [...userScopeWiring],
+              project_scope_surfaces: [...gatedProjectEntries],
+            },
+          }
+        )
+      );
+    }
+  }
+
+  // CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: a repo enforcing with a
+  // pack older than the code that ships is running guard code its own repo
+  // no longer contains. Both observations must be present; matching or
+  // newer-installed versions are silent.
+  const systemRuntime = input.filesystem?.systemRuntime;
+  if (systemRuntime) {
+    findings.push(
+      finding(
+        systemRuntime.error
+          ? DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME_INVALID
+          : DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME,
+        systemRuntime.error ? 'error' : 'info',
+        systemRuntime.error
+          ? `System runtime configuration failure: ${systemRuntime.error}`
+          : `System runtime ${systemRuntime.digest} configured for ${systemRuntime.surfaces.join(', ')}; ${systemRuntime.overrides.length} explicit extension/override entries. Native activation is verified separately.`,
+        {
+          subject: '~/.caws',
+          data: { ...systemRuntime },
+          narrowRepair:
+            'Inspect caws init adapters install --plan and configure/migrate previews. Update the machine runtime once; native hook trust and execution require harness verification.',
+        }
+      )
+    );
+    if (systemRuntime.legacySurfaces.length > 0)
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_SYSTEM_LEGACY_WIRING,
+          'warning',
+          `Project CAWS hook registrations remain for ${systemRuntime.legacySurfaces.join(', ')}; these surfaces still need one-time system migration.`,
+          {
+            subject: '.caws/hooks',
+            data: { surfaces: [...systemRuntime.legacySurfaces] },
+            narrowRepair:
+              'Use caws init adapters migrate --agent-surface <surface> --plan after configuring that native harness. Preserve reviewed extensions; do not refresh copied packs.',
+          }
+        )
+      );
+  }
+  const installedPack = input.filesystem?.installedSharedPackVersion;
+  const shippingPack = input.filesystem?.shippingSharedPackVersion;
+  // HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001: a machine runtime does NOT
+  // suppress this. The execution plane is per surface — claude-code/codex wire
+  // the launcher, the DSH bridge runs the repo's own dispatcher — so
+  // "systemRuntime present" cannot stand in for "the copied pack is inert".
+  // Suppressing on it made doctor silent about a live, 11-version-old guard
+  // plane in this very repo.
+  //
+  // CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: severity is
+  // conditional on the baseline-classified drift rows. When drift exists and
+  // EVERY row is verified local growth (installed differs from its baseline),
+  // the divergence is deliberate repo-owned surface — the lag is fully
+  // explained and refresh would destroy the growth — so the finding renders
+  // as INFO (retrofit owed, not staleness). Any row WITHOUT verified growth
+  // (baseline-less, clean-baseline, or no drift rows at all) keeps the
+  // warning: clean-baseline drift is ambiguous (a port may have absorbed
+  // growth into the baseline), and a pure stamp lag is refreshable.
+  const bodyDriftRows = input.filesystem?.installedSharedPackBodyDrift;
+  const growthRows = (bodyDriftRows ?? []).filter((r) => r.baselinePresent && r.localGrowth);
+  const staleRows = (bodyDriftRows ?? []).filter((r) => !(r.baselinePresent && r.localGrowth));
+  const lagFullyExplainedByGrowth =
+    bodyDriftRows !== undefined &&
+    bodyDriftRows.length > 0 &&
+    staleRows.length === 0 &&
+    growthRows.length === bodyDriftRows.length;
+  if (installedPack !== undefined && shippingPack !== undefined && installedPack < shippingPack) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.HOOKS_INSTALLED_PACK_VERSION_LAG,
+        lagFullyExplainedByGrowth ? 'info' : 'warning',
+        lagFullyExplainedByGrowth
+          ? `The installed CAWS shared hook pack is version ${installedPack} while the CLI ships version ${shippingPack}, and every drifted file's pristine baseline proves deliberate local growth — the divergence is verified repo-owned surface, not staleness. Refreshing would replace that growth; the reconciliation is the retrofit (absorb the growth upstream, then re-init).`
+          : `The installed CAWS shared hook pack is version ${installedPack} while the CLI ships version ${shippingPack}. The hooks enforcing this repo are runtime code the repo no longer contains — the guard plane must never silently run stale. A project-wired surface (for example the DSH bridge, which runs .caws/hooks/dispatch/*.sh directly) executes THIS copy, so an installed machine runtime does not make it inert.`,
+        {
+          subject: '.caws/hooks',
+          narrowRepair: lagFullyExplainedByGrowth
+            ? 'Informational: the lag is fully explained by baseline-verified local growth (see doctor.hooks.pack_local_growth). Run `caws init diff` to review the deltas; reconcile by absorbing the growth into the shared pack upstream and re-initializing. Do not refresh wholesale — that replaces the growth.'
+            : 'Run `caws init diff` to inspect per-file drift. Refresh with `caws init --overwrite --force` only after confirming every drifted file is template-stale — a file whose local growth went through a port shows no baseline edit but is still growth. Files with baseline-verified NEW growth are reported separately as informational.',
+          data: {
+            installed_version: installedPack,
+            shipping_version: shippingPack,
+            ...(bodyDriftRows !== undefined
+              ? { growth_rows: growthRows.length, stale_rows: staleRows.length }
+              : {}),
+          },
+        }
+      )
+    );
+  }
+
+  // HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001: body drift is the gap the version
+  // comparison structurally cannot see — the version stamp is not a freshness
+  // proxy (manifest-shared.ts records content changes that landed without a
+  // bump). Undefined or empty observation = silent (house convention).
+  //
+  // CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: rows split by
+  // baseline classification. Growth rows (baselinePresent && localGrowth) are
+  // deliberate repo-owned surface — HOOKS_PACK_LOCAL_GROWTH at INFO, because
+  // the only wholesale remedy (refresh) would destroy them. Stale rows (no
+  // baseline, or installed matches baseline) keep the warning — refresh is
+  // safe and honest for exactly that class.
+  const bodyDrift = input.filesystem?.installedSharedPackBodyDrift;
+  if (bodyDrift !== undefined && bodyDrift.length > 0) {
+    const MAX_NAMED = 5;
+    if (staleRows.length > 0) {
+      const stalePaths = staleRows.map((r) => r.destPath);
+      const named = stalePaths.slice(0, MAX_NAMED).join(', ');
+      const remainder =
+        stalePaths.length > MAX_NAMED ? ` (+${staleRows.length - MAX_NAMED} more)` : '';
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_PACK_BODY_DRIFT,
+          'warning',
+          `${stalePaths.length} installed CAWS shared hook file(s) differ from the shipping template while showing no edit over their recorded baseline: ${named}${remainder}. This shape is AMBIGUOUS: it is either a refreshable stale copy, or a file whose local growth was absorbed into its baseline by a port run under CLI 12.0.0 or 12.1.0, which baselined the reconciled body it landed. Ports from 12.2.0 onward baseline the upstream template instead, so newly ported paths report growth correctly — but an already-absorbed baseline is not healed retroactively. Refreshing before distinguishing the two would destroy growth in the second case.`,
+          {
+            subject: '.caws/hooks',
+            narrowRepair:
+              'Run `caws init diff` and READ the deltas before refreshing: content that looks repo-specific (banners, repo-named handlers) is growth even when the baseline matches. Only refresh with `caws init --overwrite --force` once every listed file is confirmed template-stale — that discards local content. Where the delta turns out to hold work worth keeping, reconcile by hand into a staging file outside the hooks tree and land it with `caws init port <path> --from <staging-file>`: it keeps both sides, rewrites the baseline from the current template and resumes drift tracking, which also clears an absorbed baseline left by an older port. Files with baseline-verified NEW growth are reported separately as informational.',
+            data: {
+              drift_count: staleRows.length,
+              drift_paths: stalePaths,
+            },
+          }
+        )
+      );
+    }
+    if (growthRows.length > 0) {
+      const growthPaths = growthRows.map((r) => r.destPath);
+      const named = growthPaths.slice(0, MAX_NAMED).join(', ');
+      const remainder =
+        growthPaths.length > MAX_NAMED ? ` (+${growthPaths.length - MAX_NAMED} more)` : '';
+      const upstreamAlso = growthRows.filter((r) => r.upstreamChange).map((r) => r.destPath);
+      const upstreamNote =
+        upstreamAlso.length > 0
+          ? ` ${upstreamAlso.length} of them also carry upstream template changes since their baseline was recorded — the retrofit must port those too.`
+          : '';
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_PACK_LOCAL_GROWTH,
+          'info',
+          `${growthPaths.length} installed CAWS shared hook file(s) carry deliberate local growth over their recorded pristine baseline (verified — not staleness): ${named}${remainder}.${upstreamNote} Refreshing would replace this growth; the divergence is repo-owned surface awaiting reconciliation.`,
+          {
+            subject: '.caws/hooks',
+            narrowRepair:
+              'No refresh required — the growth is baseline-verified and intentional. Run `caws init diff` to review the deltas, then reconcile by absorbing the growth into the shared pack upstream and re-initializing so the shipped template carries it. Nothing is overwritten automatically.',
+            data: {
+              growth_count: growthRows.length,
+              growth_paths: growthPaths,
+              upstream_changed_paths: upstreamAlso,
+            },
+          }
+        )
+      );
+      // CAWS-DOCTOR-FORK-LAG-UPSTREAM-MOVED-01: growth alone is a discharged
+      // state; growth whose upstream ALSO moved is an outstanding obligation —
+      // the fork is running without fixes the template has since received, and
+      // before this rule existed nothing said so above INFO. Deliberately a
+      // separate rule rather than an escalation of the version lag: that rule's
+      // warning branch prescribes `caws init --overwrite --force`, which would
+      // destroy the very growth this names.
+      if (upstreamAlso.length > 0) {
+        const forkNamed = upstreamAlso.slice(0, MAX_NAMED).join(', ');
+        const forkRemainder =
+          upstreamAlso.length > MAX_NAMED ? ` (+${upstreamAlso.length - MAX_NAMED} more)` : '';
+        findings.push(
+          finding(
+            DOCTOR_RULES.HOOKS_PACK_FORK_UPSTREAM_MOVED,
+            'warning',
+            `${upstreamAlso.length} locally grown CAWS hook file(s) were forked from a template that has since moved upstream: ${forkNamed}${forkRemainder}. The growth is deliberate, but these guards are running without the upstream changes made after their baseline was recorded — a fork does not stop aging, and customizing a guard must not be the thing that hides its staleness.`,
+            {
+              subject: '.caws/hooks',
+              narrowRepair:
+                'Discharge with a three-way port, never a refresh: `caws init diff` to read each delta, then `caws init port <path> --from <staging-file>` to land the upstream change on top of your growth and re-baseline. Do NOT run `caws init --overwrite --force` for these paths — it discards the local growth instead of reconciling it.',
+              data: {
+                fork_count: upstreamAlso.length,
+                fork_paths: upstreamAlso,
+              },
+            }
+          )
+        );
+      }
+    }
+  }
+
+  // ── CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy ────────
+  // Undefined = the repo carries no .caws/hooks/hook-policy.json. That is not
+  // a degraded state and produces nothing, so a repo that never opted in sees
+  // byte-identical findings to before this slice existed.
+  const repoPolicy = input.filesystem?.repoHookPolicy;
+  if (repoPolicy !== undefined && repoPolicy.kind === 'invalid') {
+    findings.push(
+      finding(
+        DOCTOR_RULES.HOOKS_REPO_POLICY_INVALID,
+        'error',
+        `.caws/hooks/hook-policy.json is present but not usable: ${repoPolicy.error}. The hook ` +
+          'launcher is fail-CLOSED on an invalid policy — it blocks with exit 2 rather than ' +
+          'guessing — so this is not a configuration nit, it is every routed tool call in this ' +
+          'repo being refused until the document parses.',
+        {
+          subject: '.caws/hooks/hook-policy.json',
+          narrowRepair:
+            'Run `caws hooks validate` — it names the offending key and, for a floor violation, ' +
+            'the handler that may not be disabled or replaced. Fix the document at that key; do ' +
+            'not delete the file to clear the error unless the repo genuinely intends to drop ' +
+            'every local hook extension it declares.',
+          data: { error: repoPolicy.error },
+        }
+      )
+    );
+  }
+  if (repoPolicy !== undefined && repoPolicy.kind === 'valid') {
+    // Severity is led by the evidence, not by the existence of a fork. A fork
+    // whose upstream has not moved is a standing decision with nothing owed;
+    // one that cannot be measured is unobserved. Only a MOVED upstream is an
+    // outstanding retrofit, and only that fires.
+    const movedForks = repoPolicy.forks.filter((row) => row.upstreamChange === true);
+    if (movedForks.length > 0) {
+      const MAX_NAMED = 5;
+      const described = movedForks.map(
+        (row) =>
+          `${row.handler} (forked from ${row.recordedPack}@${row.recordedPackVersion}, shipping ` +
+          `${row.shippingPackVersion}, ${row.shippingPackVersion - row.recordedPackVersion} behind)`
+      );
+      const named = described.slice(0, MAX_NAMED).join('; ');
+      const remainder =
+        described.length > MAX_NAMED ? ` (+${described.length - MAX_NAMED} more)` : '';
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_REPO_POLICY_FORK_LAG,
+          'warning',
+          `${movedForks.length} hook fork(s) recorded in .caws/hooks/hook-policy.json were taken ` +
+            `from a template that has since changed: ${named}${remainder}. The fork is a ` +
+            'deliberate, reviewed decision — the lag is not. These guards are running without ' +
+            'upstream fixes made after the fork was recorded, and because a forked handler lives ' +
+            'outside .caws/hooks/ it has no pristine baseline, so nothing else in doctor can see ' +
+            'it age.',
+          {
+            subject: '.caws/hooks/hook-policy.json',
+            narrowRepair:
+              'For each handler, diff your fork against the shipped template and port the ' +
+              'upstream change onto it, then re-record the provenance with ' +
+              '`caws hooks replace <handler> --with <path> --reason "<why>"` so the new baseline ' +
+              'is the template you actually reconciled against. If the upstream change makes the ' +
+              'fork unnecessary, `caws hooks restore <handler> --event <event>` drops it entirely.',
+            data: {
+              fork_count: movedForks.length,
+              forks: movedForks.map((row) => ({
+                surface: row.surface,
+                handler: row.handler,
+                recorded_pack: row.recordedPack,
+                recorded_pack_version: row.recordedPackVersion,
+                shipping_pack_version: row.shippingPackVersion,
+                distance: row.shippingPackVersion - row.recordedPackVersion,
+                reason: row.reason,
+              })),
+            },
+          }
+        )
+      );
+    }
+
+    if (repoPolicy.staleChains.length > 0) {
+      const described = repoPolicy.staleChains.map((row) => `${row.event} (${row.reason})`);
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_REPO_POLICY_CHAIN_STALE,
+          'warning',
+          `${repoPolicy.staleChains.length} compiled hook chain(s) disagree with ` +
+            `.caws/hooks/hook-policy.json: ${described.join('; ')}. The project-wired surfaces ` +
+            '(qwen-code, kimi-code, opencode, zcode, dsh) exec the dispatcher directly and read ' +
+            'these sidecars, so they are running a chain the committed policy no longer ' +
+            'describes. Machine-routed surfaces resolve the policy live and are unaffected — ' +
+            'which is why this cannot be noticed from a Claude Code session.',
+          {
+            subject: '.caws/hooks/dispatch',
+            narrowRepair:
+              'Run `caws hooks compile` to rewrite the sidecars from the current policy, then ' +
+              'commit them — they are git-tracked on purpose, so every clone and CI run gets the ' +
+              'same chain. `caws hooks compile --check` reports the same verdict without writing.',
+            data: {
+              stale_count: repoPolicy.staleChains.length,
+              stale_events: repoPolicy.staleChains.map((row) => ({
+                event: row.event,
+                reason: row.reason,
+              })),
+            },
+          }
+        )
+      );
+    }
+  }
+
+  if (input.filesystem?.legacyAdapterPolicyPresent === true) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.HOOKS_LEGACY_ADAPTER_POLICY,
+        'info',
+        'This repo still carries .caws/hooks/adapter-policy.json, the superseded repo-local hook ' +
+          'policy. Its shape is a frozen full copy of the stock chain, so it does not age: a copy ' +
+          'taken before an event or a handler existed keeps pinning the old set, silently, for as ' +
+          'long as it is present. The replacement (.caws/hooks/hook-policy.json) is additive — it ' +
+          'records what this repo CHANGES, so upstream additions keep arriving.',
+        {
+          subject: '.caws/hooks/adapter-policy.json',
+          narrowRepair:
+            'Run `caws hooks import --from-machine --plan` to see what the additive policy would ' +
+            'carry, then import it and remove the legacy file. Nothing breaks while both exist; ' +
+            'the frozen copy is still read.',
+        }
+      )
+    );
+  }
+
+  // CAWS-DEFECT-LEASE-TMP-STRANDING-01: a lease write crashed mid-rename and
+  // left its sibling tmp behind. Visible-but-inert litter; the next write
+  // self-heals. Undefined observation = silent (house convention).
+  const strandedTmp = input.filesystem?.strandedLeaseTmpFiles;
+  if (strandedTmp !== undefined && strandedTmp.length > 0) {
+    const names = strandedTmp.map((f) => f.name).join(', ');
+    findings.push(
+      finding(
+        DOCTOR_RULES.LEASES_STRANDED_TMP,
+        'warning',
+        `Stranded atomic-write tmp file(s) in .caws/leases/ from an interrupted lease write: ${names}. The loader ignores them; the next lease write sweeps them automatically.`,
+        {
+          subject: '.caws/leases',
+          narrowRepair:
+            'No action needed for correctness — the next lease write removes dead-owner or hard-aged tmps. To clean now, delete only files matching <lease>.tmp.<pid>.<counter>.',
+          data: { stranded: strandedTmp.map((f) => ({ name: f.name, age_ms: f.ageMs })) },
+        }
+      )
+    );
+  }
+
+  // Absent and unobserved homes require no repair. Present observations
+  // distinguish initialization from integrity and preserve the actual root.
+  const globalHome = input.filesystem?.globalHomeObservation;
+  if (globalHome?.kind === 'unreadable') {
+    findings.push(
+      finding(
+        DOCTOR_RULES.GLOBAL_HOME_UNREADABLE,
+        'error',
+        `Cannot inspect machine global home ${globalHome.root}: ${globalHome.error.message}`,
+        {
+          subject: globalHome.root,
+          narrowRepair:
+            'Check that CAWS_HOME names an absolute readable directory and resolve the reported path or permission error, then rerun caws doctor.',
+          data: { code: globalHome.error.code },
+        }
+      )
+    );
+  }
+  if (globalHome?.kind === 'present') {
+    const known = new Set(['state', 'surfaces', 'lib', 'bin']);
+    // CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: entries the CLI itself
+    // wrote in a PRIOR generation are recognized legacy output, not unmanaged
+    // state. `sessions` is pre-v11 machine-home session-log output; current
+    // session logs are repo-local (.caws/sessions/). Warning on it demands a
+    // review the current CLI cannot perform and buries genuinely unknown
+    // entries. If a future CLI generation writes ~/.caws/sessions again, it
+    // belongs in `known`, not here.
+    const recognizedLegacy = new Set(['sessions']);
+    const foreign = globalHome.entries.filter((e) => !known.has(e) && !recognizedLegacy.has(e));
+    const legacy = globalHome.entries.filter((e) => recognizedLegacy.has(e));
+    if (globalHome.runtime.status === 'invalid') {
+      findings.push(
+        finding(
+          DOCTOR_RULES.GLOBAL_HOME_RUNTIME_INVALID,
+          'error',
+          `Machine runtime at ${globalHome.root} could not be verified: ${globalHome.runtime.error}`,
+          {
+            subject: globalHome.root,
+            narrowRepair:
+              'Preserve any local runtime changes and reconcile the reported state. Preview installation with caws init adapters install --plan before applying a repair.',
+          }
+        )
+      );
+    } else if (!globalHome.stampPresent && globalHome.runtime.status === 'absent') {
+      findings.push(
+        finding(
+          DOCTOR_RULES.GLOBAL_HOME_STAMP_MISSING,
+          'info',
+          `The machine global home (${globalHome.root}) exists but has neither an installed runtime nor a legacy migration stamp.`,
+          {
+            subject: globalHome.root,
+            narrowRepair:
+              'Review any existing contents, then run caws init adapters install with this same CAWS_HOME to install the machine runtime; preview with --plan. Configure and verify the native harness separately.',
+          }
+        )
+      );
+    }
+    if (foreign.length > 0) {
+      findings.push(
+        finding(
+          DOCTOR_RULES.GLOBAL_HOME_UNMANAGED_STATE,
+          'warning',
+          `Unmanaged entries in the global home (${globalHome.root}): ${foreign.join(', ')}. CAWS manages state/, surfaces/, lib/, bin/; these other entries require review.`,
+          {
+            subject: globalHome.root,
+            narrowRepair:
+              'Review and preserve the named entries before moving them outside the managed home; do not delete unknown data.',
+            data: { foreign_entries: [...foreign] },
+          }
+        )
+      );
+    }
+    if (legacy.length > 0) {
+      findings.push(
+        finding(
+          DOCTOR_RULES.GLOBAL_HOME_RECOGNIZED_LEGACY_STATE,
+          'info',
+          `Recognized legacy entries in the global home (${globalHome.root}): ${legacy.join(', ')}. These are session-log output written by a prior CLI generation — the current CLI keeps session logs repo-local under .caws/sessions/ and no longer writes them here.`,
+          {
+            subject: globalHome.root,
+            narrowRepair:
+              'No defect — recognized legacy residue with known provenance. Keeping it is safe; the current CLI neither reads nor writes it. If the history matters, review the contents and archive them outside the managed home; otherwise leave them in place.',
+            data: { legacy_entries: [...legacy] },
+          }
+        )
+      );
+    }
+  }
+
   if (input.initResidue !== undefined) {
     if (input.initResidue.workingSpecYaml) {
       findings.push(
@@ -1218,16 +1696,23 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         )
       );
     }
-    if (input.initResidue.workingSpecSchemaJson) {
+    // CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: fire per path actually found,
+    // so the message and the repair name the file on disk rather than the
+    // canonical location. Falls back to the root-only boolean when the
+    // richer observation is absent, which keeps an older snapshot writer
+    // producing exactly the finding it produced before.
+    const legacySpecSchemaPaths =
+      input.initResidue.legacySpecSchemaPaths ??
+      (input.initResidue.workingSpecSchemaJson ? ['.caws/working-spec.schema.json'] : []);
+    for (const relPath of legacySpecSchemaPaths) {
       findings.push(
         finding(
           DOCTOR_RULES.INIT_LEGACY_WORKING_SPEC_SCHEMA_PRESENT,
           'error',
-          '.caws/working-spec.schema.json is present. vNext does not consume this schema; it is legacy single-spec residue.',
+          `${relPath} is present. vNext does not consume this schema; it is legacy single-spec residue.`,
           {
-            subject: '.caws/working-spec.schema.json',
-            narrowRepair:
-              'Remove or archive .caws/working-spec.schema.json. vNext validates specs through the kernel, not a project-local JSON schema.',
+            subject: relPath,
+            narrowRepair: `Remove or archive ${relPath}. vNext validates specs through the kernel, not a project-local JSON schema.`,
           }
         )
       );
@@ -1301,20 +1786,15 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     for (const d of input.registryDiagnostics) {
       const severity: FindingSeverity = d.severity ?? 'error';
       findings.push(
-        finding(
-          DOCTOR_RULES.REGISTRY_MALFORMED_LOADED,
-          severity,
-          d.message,
-          {
-            ...(d.subject !== undefined ? { subject: d.subject } : {}),
-            ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
-            data: {
-              source_rule: d.rule,
-              source_authority: d.authority,
-              ...(d.data ?? {}),
-            },
-          }
-        )
+        finding(DOCTOR_RULES.REGISTRY_MALFORMED_LOADED, severity, d.message, {
+          ...(d.subject !== undefined ? { subject: d.subject } : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
+          data: {
+            source_rule: d.rule,
+            source_authority: d.authority,
+            ...(d.data ?? {}),
+          },
+        })
       );
     }
   }
@@ -1331,11 +1811,15 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
 
   if (input.policy !== undefined) {
     // 11a. Critical gates must be enabled AND in block mode. The set
-    //      ['budget_limit', 'spec_completeness', 'scope_boundary'] mirrors
-    //      `policy/rules.ts:CRITICAL_GATES` — kept in lockstep by reusing
-    //      that constant rather than duplicating.
+    //      ['spec_completeness', 'scope_boundary'] is
+    //      `policy/rules.ts:CRITICAL_GATES`, reused rather than duplicated.
+    //      budget_limit is advisory (ADVISORY_GATES) and is never posture
+    //      risk; a block declared on it reaches doctor through the policy
+    //      warnings relayed in section 6.
     for (const gateId of CRITICAL_GATES) {
-      const cfg = (input.policy.gates as Record<string, { enabled: boolean; mode: string } | undefined>)[gateId];
+      const cfg = (
+        input.policy.gates as Record<string, { enabled: boolean; mode: string } | undefined>
+      )[gateId];
       if (cfg === undefined) {
         // Required-by-schema; if it's missing the schema validator already
         // refused. Skip silently — doctor doesn't double-report schema
@@ -1362,19 +1846,15 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     //      no clever subsumption, just exact-match. Severity escalates to
     //      error when `non_governed_zones_force === true` because the
     //      operator has explicitly armed the dangerous pattern.
-    const DANGEROUS_NON_GOVERNED_PATTERNS = [
-      '*',
-      '**',
-      '**/*',
-      '.',
-      './',
-      '/',
-      '/*',
-    ] as const;
+    const DANGEROUS_NON_GOVERNED_PATTERNS = ['*', '**', '**/*', '.', './', '/', '/*'] as const;
     const zones = input.policy.non_governed_zones ?? [];
     const force = input.policy.non_governed_zones_force === true;
     for (const z of zones) {
-      if (DANGEROUS_NON_GOVERNED_PATTERNS.includes(z as typeof DANGEROUS_NON_GOVERNED_PATTERNS[number])) {
+      if (
+        DANGEROUS_NON_GOVERNED_PATTERNS.includes(
+          z as (typeof DANGEROUS_NON_GOVERNED_PATTERNS)[number]
+        )
+      ) {
         findings.push(
           finding(
             DOCTOR_RULES.POLICY_NON_GOVERNED_ZONE_BROAD,
@@ -1426,11 +1906,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // would be noise in either count.
   // -------------------------------------------------------------------------
 
-  if (
-    input.waivers !== undefined &&
-    input.waivers.length > 0 &&
-    input.policy !== undefined
-  ) {
+  if (input.waivers !== undefined && input.waivers.length > 0 && input.policy !== undefined) {
     const cap = input.policy.waivers?.max_active_waivers_per_gate;
     if (typeof cap === 'number' && cap >= 0) {
       // Tally effective waivers per gate id they cover.

@@ -2,6 +2,17 @@
 
 This project uses CAWS (Coding Agent Working Standard) for quality-assured AI-assisted development. CAWS v11.1+ ships a small set of governed commands; the per-project doctrine below tracks that surface.
 
+## Runtime setup
+
+Project `.caws/` owns governance. Shared executable hooks, dispatch and renderers
+live under `~/.caws` (absolute `CAWS_HOME` overrides it). Install once with
+`caws init adapters install`, configure the native harness with `adapters configure`,
+and retire reviewed legacy project registrations with `adapters migrate`.
+Preview each operation with `--plan`; consult its dedicated `--help`.
+New projects inherit configured system behavior through `caws init --agent-surface`.
+Agents in each harness must verify native lifecycle, guards and session rendering.
+Reprieves are human-granted exceptions covering one session in one repo (`--all-repos` widens); leases remain visibility.
+
 ## Build & Test
 
 ```bash
@@ -30,7 +41,7 @@ The governed command groups are:
 
 <!-- command-groups:start -->
 ```
-init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree
+init  doctor  status  tui  scope  hooks  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree  goal
 ```
 <!-- command-groups:end -->
 
@@ -50,7 +61,7 @@ caws status
 # 2. Create a feature spec (v11 takes --mode from a closed enum, not --type).
 #    It is created as a DRAFT: `active` means a worktree is bound and the slice
 #    is being worked, so step 4 is what activates it. `--activate` opts out.
-caws specs create FEAT-001 --title "description" --mode feature --risk-tier 3
+caws specs create FEAT-001 --title "description" --mode feature
 
 # 3. Edit .caws/specs/FEAT-001.yaml to populate scope.in / scope.out / invariants /
 #    acceptance / non_functional / contracts. Commit it before creating the worktree —
@@ -73,7 +84,9 @@ caws gates run --spec FEAT-001
 
 The following v10 commands were removed in v11.0 and are not coming back:
 
-`scaffold`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive` (the command — `caws specs archive` is the replacement), `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`.
+`scaffold`, `validate` (the top-level command — `caws specs validate <file>` checks one spec file), `evaluate`, `iterate`, `diagnose`, `burnup`, `archive` (the command — `caws specs archive` is the replacement), `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`.
+
+One exception, and it is the only one: `verify-acs` was on this list and came back. `caws specs verify-acs <id>` re-derives a spec's recorded acceptance evidence against reality — the cited commit, artifact and test — instead of trusting its `status` field. Use it; the rest of the list above still stands.
 
 Their behaviors fold into `doctor`, `gates run`, `status`, `specs`, and `evidence record`. The hash-chained `.caws/events.jsonl` is the audit surface; users wire their own hooks against `caws gates run`.
 
@@ -88,32 +101,34 @@ If you see a `caws validate` or `caws iterate` invocation in any project doctrin
 - `caws doctor` — project-wide drift detection. Exits 0 (clean) / 1 (findings) / 2 (composition failure).
 - `caws status` — read-only dashboard. Never mutates.
 - `caws scope show <path>` / `caws scope check <path>` — explain (always exit 0) or enforce (exit 0 admit / 1 reject) the scope decision for one path.
-- `caws claim [--takeover]` — surface or take worktree ownership. `--takeover` writes a `prior_owners` audit on the registry entry.
+- `caws claim [--takeover] [--paths <path>] [--spec <id>] [--release]` — surface or take worktree ownership. `--takeover` writes a `prior_owners` audit on the registry entry; `--paths` declares working-tree ownership metadata on the current lease; `--spec`/`--release` acquire/release a BRIDGE binding (session↔spec authority for non-worktree contexts).
 - `caws gates run --spec <id>` — run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. No `--quiet`, no `--json`; capture combined output and inspect exit code.
 - `caws evidence record --type <test|gate|ac> --spec <id> --data <json>` — append a typed evidence event.
 - `caws events migrate | rotate | verify-archive` — maintain `.caws/events.jsonl`.
 - `caws waiver create | list | show | revoke` — manage waiver records (singular `waiver`, not plural).
-- `caws specs create | list | show | activate | amend-scope | close | archive | retire-draft | recover | prune-archive` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`. There is no `--type` flag. **Lifecycle exits by current state:** active → `close`; closed → `archive`; never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`). **`amend-scope <id> --add <path>... [--remove <path>] [--add-out <path>]`** mutates an active/draft spec's `scope.in`/`scope.out` on the canonical control plane and appends `spec_scope_amended` — the sanctioned way to widen scope mid-slice (no `git cherry-pick`, no danger latch; the worktree sees the change immediately).
-- `caws worktree create | list | bind | destroy | untrack | merge | migrate-registry | repair-sparse | repair | prune | cleanup-plan` — worktree lifecycle. `untrack` releases the registry binding while keeping the directory; `prune` and `cleanup-plan` are dry-run-by-default cleanup planners (registry and physical, respectively). `create <name> --spec <id>` writes the bidirectional worktree↔spec binding and emits the `worktree_created` + `worktree_bound` events. `destroy <name>` is non-forceful and does NOT auto-delete the branch (run `git branch -d <branch>` manually).
-- `caws agents register | heartbeat | stop | list | show | prune` — agent liveness substrate. `list/show` are read-only; ownership decisions still use `claim`/`worktree`.
+- `caws specs create | list | show | recover | restore | retire-draft | prune-drafts | activate | deactivate | amend-scope | amend | evidence | close | reopen | archive | prune-archive | migrate | validate | relocate` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore>`. There is no `--type` flag. **Lifecycle exits by current state:** active → `close`; closed → `archive`; never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`). **`amend-scope <id> --add <path>... [--remove <path>] [--add-out <path>]`** mutates an active/draft spec's `scope.in`/`scope.out` on the canonical control plane and appends `spec_scope_amended` — the sanctioned way to widen scope mid-slice (no `git cherry-pick`, no danger latch; the worktree sees the change immediately). `reopen` reverses a premature `close` (closed→active); `evidence` is the only writer of the AC-closure `evidence:` block the close gate reads.
+- `caws worktree create | list | ensure | bind | destroy | untrack | merge | review | migrate-registry | repair-sparse | repair | prune | cleanup-plan` — worktree lifecycle. `ensure <name> --spec <id>` is the idempotent create-or-admit form; `review <name>` is a read-only pre-merge gate (commit list, per-commit scope-provenance, AC evidence status — never mutates); `untrack` releases the registry binding while keeping the directory; `prune` and `cleanup-plan` are dry-run-by-default cleanup planners (registry and physical, respectively). `create <name> --spec <id>` writes the bidirectional worktree↔spec binding and emits the `worktree_created` + `worktree_bound` events. `destroy <name>` is non-forceful and does NOT auto-delete the branch (run `git branch -d <branch>` manually).
+- `caws agents register | heartbeat | stop | list | show | work-state | prune` — agent liveness substrate. `list/show` are read-only; `work-state` is a visibility-only annotation (`working|blocked_awaiting_human|review_ready|done`) a session sets on its own lease; ownership decisions still use `claim`/`worktree`.
+- `caws session prune | pickup` — dry-run-default retention for `.caws/sessions/` turn logs, and a `manual_pickup` event when one session continues another's paused work. The full session lifecycle (`start`/`checkpoint`/`end`) remains deferred.
+- `caws working-tree check | ack` — working-tree provenance advisory: `check` reports uncommitted overlap with another session's declared ownership metadata; `ack` acknowledges it. Visibility only.
+- `caws handoff export | import` — portable handoff briefs for session-to-session continuity, written under `.caws/handoffs/`. Provenance only, never authority.
 
 Run `caws <group> --help` for full options.
 
 ### Specs
 
-Specs live exclusively at `.caws/specs/<id>.yaml`. **There is no project-level working spec** — every spec is per-feature. v11 spec shape:
+Specs live exclusively at `.caws/specs/<id>.yaml`. **There is no project-level working spec** — every spec is per-feature. New specs have no risk tier; optional contracts and operational requirements describe the actual work. Existing tiered specs remain readable. Spec shape:
 
 - `id` (matches `^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$`)
 - `title` (≤200 chars)
-- `risk_tier` (integer 1|2|3 — string forms like `"T3"` are rejected)
 - `mode` (one of `feature|refactor|fix|doc|chore` — v10 `development` is rejected)
 - `lifecycle_state` (one of `draft|active|closed|archived` — replaces v10 `status:`)
 - `blast_radius.modules` (non-empty string array)
 - `scope.in` (non-empty array; `scope.out` cannot contain glob patterns — directory paths only)
 - `invariants` (non-empty array of strings)
 - `acceptance` (array of `{id: ^A\d+$, given, when, then}` — v10 `acceptance_criteria:` is rejected)
-- `non_functional` (object; admits exactly four subkeys — `accessibility`, `performance`, `reliability`, `security` — per `packages/caws-kernel/src/schemas/spec.v1.json`)
-- `contracts` (array of `{name, type: api|schema|contract-test|behavior, path?, description?}`; tier-1/2 require non-empty)
+- `non_functional` (object; admits exactly four subkeys — `accessibility`, `performance`, `reliability`, `security` — per the kernel's `spec.v1.json` schema)
+- `contracts` (array of `{name, type: api|schema|contract-test|behavior, path?, description?}`; optional entries)
 
 v10 fields **removed** from the schema: `type:`, `description:`, `notes:`, `non_goals:`, `bounded_claim:`, `dependencies:`, `status_rationale:`, `change_budget:`, `created:`. Migrate any v10 spec via the v10→v11 migration recipe (see `docs/migration-v10-to-v11.md` if you're on the upstream caws repo).
 
@@ -127,6 +142,7 @@ The scope guard enforces file edit boundaries based on your spec's `scope.in` an
 - **Union mode** (no binding): The guard checks ALL active specs. Any `scope.out` from any spec can block you, even unrelated ones. This is the common source of "why is spec X blocking me?" confusion.
 
 **The mutual binding** requires both sides:
+
 1. The worktree registry (`.caws/worktrees.json`) must have `spec_id` (v11) or `specId` (v10 carryover) pointing to your spec
 2. Your spec (`.caws/specs/<id>.yaml`) must have `worktree: <name>` pointing to your worktree
 
@@ -155,35 +171,65 @@ Use `caws specs close <id>` to close an active spec, then `caws specs archive <i
 
 If you try `caws specs create <id>` for an id that already exists in `.archive/`, the command refuses. Resurrect old ids only when you genuinely intend a continuation, and via spec authoring (not by deleting the archive entry).
 
-> **Budget note**: `change_budget:` is no longer accepted as a top-level spec field in v11.
-> Budgets derive from `.caws/policy.yaml` `risk_tiers`. Adjust thresholds via `policy.yaml`,
-> not via spec edits.
+> **Budget note**: `change_budget:` is not a v11 spec field. Legacy risk-tier budgets live in
+> `.caws/policy.yaml` `risk_tiers` as an advisory sizing goal: `budget_limit` reports an
+> overage and never blocks, and no waiver is needed. Do not trim, defer or stub work to fit
+> one; if a change outgrows its plan, say so in the spec. New tierless specs have no legacy sizing goal.
+
+### Coding rigor: acceptance, review and evidence
+
+Apply this standard to reviews and implementation; scale verification to risk.
+The full guide is `docs/guides/coding-rigor.md` in the CAWS repository and in the
+installed CLI package. These requirements also apply without a local guide copy.
+
+- **Context and authority:** identify revision, actual diff/base, owned
+  worktree/spec and consumer contract. Review authorizes inspection and findings;
+  fixes, evidence recording and publication need corresponding authorization.
+- **Acceptance:** define observable results, specific tests/checks and a
+  counterexample that must fail. Rank failures by trigger, cost and resolve-now
+  or defer decision; identify irreversible choices and growing dependencies.
+- **Falsification:** trace the actual entry point to consumer-visible behavior,
+  including rejection, partial failure and cleanup. Assert semantic values and
+  state. Use meaningful negative controls or mutation checks for consequential
+  logic; never lower declared floors. Ask what could be wrong while tests pass.
+- **Evidence:** cite commands, cwd/revision, exit status, selected tests, output
+  and runtime artifacts. Inspect before/after state for side effects. Preserve
+  failed/skipped/interrupted attempts and artifact identity. Keep generated
+  receipts out of source commits.
+- **Bounded claims:** distinguish source review, tests, installed packages,
+  native execution, acceptance records, CI, merge and deployment. Passing gates
+  or exit zero alone do not establish completion. State unverified behavior and
+  the exact additional observation needed to close each material gap.
+- **Report:** lead with the highest-impact finding, its concrete trigger,
+  incorrect result, impact and correction. Separate next actions into
+  investigate / implement / change with where and why. Name the strongest
+  objection when changing course; say plainly when the plan is sound.
 
 ### Quality Gates
 
 v11 declares gates in `.caws/policy.yaml` as a flat object, each with a `mode` (`block | warn | skip`). The five admissible gate names:
 
-| Gate | Typical mode | Purpose |
-|------|--------------|---------|
-| `budget_limit` | block | Enforce change_budget limits (max_files, max_loc) per `risk_tiers` |
-| `spec_completeness` | block | Refuse load on schema-invalid specs |
-| `scope_boundary` | block | Refuse edits outside the bound spec's `scope.in` |
-| `god_object` | warn | Flag large/responsibility-overloaded modules (observability) |
-| `todo_detection` | warn | Flag TODOs/placeholders/dangling promises in committed code |
+| Gate                | Typical mode | Purpose                                                                         |
+| ------------------- | ------------ | ------------------------------------------------------------------------------- |
+| `budget_limit`      | warn         | Report a change over the `risk_tiers` sizing goal; advisory, never blocks       |
+| `spec_completeness` | block        | Refuse load on schema-invalid specs                                             |
+| `scope_boundary`    | block        | Refuse edits outside the bound spec's `scope.in`                                |
+| `god_object`        | warn         | Flag large/responsibility-overloaded modules (observability)                    |
+| `todo_detection`    | warn         | Flag TODOs/placeholders/dangling promises in committed code                     |
 
-Risk tier governs change-budget thresholds (max_files / max_loc) but does not directly set per-gate enforcement levels — the gate `mode` is global. v10's "T1 90% coverage / T2 80% / T3 70%" table is gone. Coverage and mutation gates were not ported into v11's gate vocabulary; if you need them, run them outside CAWS as part of CI.
+On legacy specs, risk tier selects the sizing goal (max_files / max_loc) but does not set per-gate enforcement — the gate `mode` is global, and `budget_limit` runs as advisory whatever mode is declared (a declared `block` is reported as not honored). v10's "T1 90% coverage / T2 80% / T3 70%" table is gone. Coverage and mutation gates were not ported into v11's gate vocabulary; if you need them, run them outside CAWS as part of CI.
 
 Run `caws gates run --spec <id>` to evaluate all declared gates. Each evaluation appends a `gate_evaluated` event to `.caws/events.jsonl`.
 
 ### Key Rules
 
 1. **Stay in scope** — only edit files admitted by `scope.in`, never touch `scope.out`
-2. **Respect change budgets** — stay within `max_files` and `max_loc` limits derived from `risk_tier`
+2. **Treat budgets as a sizing goal** — legacy `max_files` / `max_loc` goals are advisory; never trim, defer or stub work to fit them, and say so in the spec when a change outgrows its plan
 3. **No shadow files** — edit in place, never create `*-enhanced.*`, `*-new.*`, `*-v2.*`, `*-final.*` copies
-4. **Tests first** — write failing tests before implementation
+4. **Pin behavior first** — behavior changes need tests that fail for the right reason; documentation-only changes use documentation checks
 5. **Deterministic code** — inject time, random, and UUID generators for testability
 6. **No fake implementations** — no placeholder stubs, no `TODO` in committed code, no in-memory arrays pretending to be persistence, no hardcoded mock responses
-7. **Prove claims** — never assert "production-ready", "complete", or "battle-tested" without passing gates. Provide evidence, not assertions.
+7. **Support claims** — cite observed behavior and its limits; passing gates alone do not establish completion or production readiness
 8. **No marketing language in docs** — avoid "revolutionary", "cutting-edge", "state-of-the-art", "enterprise-grade"
 9. **Ask first for risky changes** — changes touching >10 files, >300 LOC, crossing package boundaries, or affecting security/infrastructure require discussion first
 10. **Conventional commits** — use `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:` prefixes
@@ -198,8 +244,8 @@ Author via:
 
 ```bash
 caws waiver create WV-1234 \
-  --title "RZPACK-1 budget extension" \
-  --gate budget_limit \
+  --title "Experimental mode past expiry during rollout" \
+  --gate spec_completeness \
   --reason "..." \
   --approved-by "@you" \
   --expires-at 2026-06-30T00:00:00Z
@@ -213,7 +259,7 @@ Repeat `--gate` for multiple gates. The CLI validates against the kernel before 
 .caws/
   specs/              # Per-feature specs (canonical; the only spec location)
   specs/.archive/     # Archived specs (filesystem-authoritative)
-  policy.yaml         # Gates + risk_tier change budgets
+  policy.yaml         # Gates + legacy sizing goals (advisory)
   waivers/            # Per-id waiver files
   agents.json         # Session registry (gitignored runtime cache)
   leases/             # Per-session liveness leases (gitignored)
@@ -239,7 +285,7 @@ This project has Claude Code hooks configured in `.claude/settings.json`:
 
 See `.claude/hooks/CLAUDE.md` for the canonical pack lineage map (which hook covers which incident class) and `.claude/README.md` for project-specific extension wiring.
 
-**These hooks are a starting point you grow, not a frozen baseline.** CAWS ships them from its failure lineage as a sensible default; CAWS owns the *why/what* (the failure class and the invariant each guard enforces — do not weaken those to dodge a block), and your repo owns the *how* (thresholds, env tuning, repo-specific checks). Editing a managed hook to grow your governance is expected and welcome. Your edits are preserved: as long as a hook keeps its `CAWS-MANAGED-HOOK` header, `caws init` classifies a changed hook as drift and refuses to overwrite it (re-run with `--adopt` to keep yours, `--overwrite` to pull the upstream baseline). The only out-of-bounds edit is one that bypasses or weakens a guard.
+**These hooks are a starting point you grow, not a frozen baseline.** CAWS ships them from its failure lineage as a sensible default; CAWS owns the _why/what_ (the failure class and the invariant each guard enforces — do not weaken those to dodge a block), and your repo owns the _how_ (thresholds, env tuning, repo-specific checks). Editing a managed hook to grow your governance is expected and welcome. Your edits are preserved: as long as a hook keeps its `CAWS-MANAGED-HOOK` header, `caws init` classifies a changed hook as drift and refuses to overwrite it (re-run with `--adopt` to keep yours, `--overwrite` to pull the upstream baseline). The only out-of-bounds edit is one that bypasses or weakens a guard.
 
 ### Dangerous-command latch
 
@@ -274,12 +320,12 @@ the `git init` bootstrap family (including flag-split variants like
 `git --bare init`). When the hook returns `block` or `ask`:
 
 1. **Stop.** Do not rephrase, wrap, reorder, or alias the command. Do not retry with `command git ...`, `env ... git ...`, `bash -lc '...'`, or `git --bare init`. The hook recognizes those variants and will block them too.
-2. The hook writes a per-session latch at `.claude/hooks/state/danger-latch-<session>.json`. **Every subsequent Bash tool call in this session will block** until a human clears the latch. The block message names which command first engaged the latch — if it is not the command you just ran, the latch is sticky from an earlier command, not a problem with the current one.
-3. **You cannot clear the latch yourself** — the reset is human-only by design. The block message prints the exact command with your session id already resolved; hand that to the user verbatim. It has the shape:
+2. The hook writes a per-session trap sentinel at `.claude/hooks/state/danger-latch-<session>.json` and the session is **QUARANTINED**. Only fixed read-only single commands run (ls, cat, head, tail, wc, pwd, echo, printf, grep, rg, diff, stat, file, jq; `git status|diff|log|show|rev-parse`; read-only `caws` verbs such as `caws status` or `caws specs list`) and the reset invocation itself. **Everything else blocks — including `git commit`, the `caws` CLI, and every Write/Edit:** the trap covers the file tools too, so there is no read-only file mutation and no routing a write around the shell boundary. Each blocked attempt is recorded as a strike. On surfaces where kill escalation is enabled (per-session CLI harnesses; server-shaped hosts ship it off), the FIRST blocked attempt terminates the session's agent process with an identity-verified SIGTERM. `caws message send` / `caws message reply` are refused with a dedicated reason so a trapped session cannot enlist a peer. The block message names which command first engaged the trap — if it is not the command you just ran, the trap was set by an earlier command, not a problem with the current one.
+3. **You cannot clear the trap yourself** — the reset is human-only by design, and the reset itself fails closed: an invocation that cannot resolve the project (a machine snapshot without its env prefix, or a search that locates zero vendor state dirs) exits non-zero with the corrected command instead of reporting success while the trap stays armed. The block message prints the exact command with your session id already resolved; hand that to the user verbatim. It has the shape:
    ```bash
    bash .caws/hooks/reset-danger-latch.sh --session <id> --reason "<why this is safe>"
    ```
-   Note the two different directories: the latch **state** is vendor-scoped
+   Note the two different directories: the trap **state** is vendor-scoped
    (`.claude/hooks/state/`, per harness), but the reset **scripts** are shared
    and live in `.caws/hooks/`. Reconstructing the path from the state location
    yields a command that does not exist.

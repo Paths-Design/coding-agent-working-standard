@@ -15,12 +15,7 @@
 //     If the heartbeat is "stale" by the configured TTL, we say so
 //     in parentheses but we DO NOT imply this authorizes takeover.
 
-import type {
-  AgentRecord,
-  PriorOwner,
-  SessionIdentity,
-  WorktreeRecord,
-} from '../../kernel';
+import type { AgentRecord, PriorOwner, SessionIdentity, WorktreeRecord } from '../../kernel';
 import { heartbeatAge, isStaleByTTL } from '../../kernel';
 
 export type OwnershipRelation = 'you' | 'foreign' | 'unowned';
@@ -75,17 +70,11 @@ export function renderClaimPanel(input: ClaimPanelInput): string {
 
   switch (rel) {
     case 'you':
-      lines.push(
-        `  Owner:     OWNED (you) — ${fmtSessionTag(input.worktreeRecord.owner!)}`
-      );
+      lines.push(`  Owner:     OWNED (you) — ${fmtSessionTag(input.worktreeRecord.owner!)}`);
       break;
     case 'foreign':
-      lines.push(
-        `  Owner:     OWNED (foreign) — ${fmtSessionTag(input.worktreeRecord.owner!)}`
-      );
-      lines.push(
-        `             your session:   ${fmtSessionTag(input.currentSession)}`
-      );
+      lines.push(`  Owner:     OWNED (foreign) — ${fmtSessionTag(input.worktreeRecord.owner!)}`);
+      lines.push(`             your session:   ${fmtSessionTag(input.currentSession)}`);
       break;
     case 'unowned':
       lines.push('  Owner:     UNOWNED (no recorded owner)');

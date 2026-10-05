@@ -2,18 +2,38 @@
 doc_id: agent-integration-guide
 authority: reference
 status: active
-title: Agent integration guide (v11)
+title: Agent integration guide
 owner: vNext rewrite team
 updated: 2026-05-28
 ---
 
-# Agent integration guide (v11)
+# Agent integration guide
 
-This guide explains how to integrate an AI agent runtime (Claude Code, Cursor, custom orchestrator, etc.) with CAWS v11 as a quality and audit substrate.
+This guide explains how to integrate an AI agent runtime (Claude Code, Cursor, custom orchestrator, etc.) with CAWS as a quality and audit substrate.
 
-> **v11 surface.** The v11 line ships fourteen command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). The legacy `caws evaluate`, `caws iterate`, `caws diagnose`, `caws agent evaluate` surfaces are removed. The integration patterns below use only the v11 surface.
+> The command tree is reported by `caws --help`. The installed CLI includes its
+> kernel. Project specs and bindings own authority; machine installation and
+> liveness records do not. Removed v10 commands remain removed.
 >
 > Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md).
+
+## Native setup and adapter ownership
+
+Install the runtime once with `caws init adapters install`; configure a supported
+native user registration with `caws init adapters configure --agent-surface <name>`.
+Use `--plan` for previews. Retire reviewed project registrations through
+`caws init adapters migrate`; new projects then inherit shared hooks and renderers.
+JSON registration helpers currently support Codex, Claude Code and Qwen Code.
+Other native configurations require adapters authored and verified by agents in
+those harnesses. Pack-template availability is a separate compatibility fact.
+
+Native evidence must include fresh lifecycle execution, a forbidden-write control,
+and session rendering. Fixtures establish protocol behavior, not native loading or
+trust. Keep harness-specific parsers in `~/.caws/surfaces/<surface>/lib/`; preserve
+project customizations through reviewed extension policy. See the
+[runtime guide](hook-packs.md#machine-adapter-installation) for exact commands,
+configuration symlinks, backups and rollback. Project specs, policy, scope and
+worktree authority remain under canonical project `.caws/`.
 
 ## What CAWS v11 gives an agent
 
@@ -35,9 +55,9 @@ All commands are scriptable. Exit codes are uniform: 0 success/observation, 1 do
 
 ## Prerequisites
 
-- v11 CLI installed: `npm install -g @paths.design/caws-cli@^11.5.0` (or `@latest`)
+- CLI installed: `npm install -g @paths.design/caws-cli`
 - Project initialized: `caws init` (idempotent; refuses legacy `.caws/working-spec.yaml` residue)
-- At least one spec created: `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier 1 --contract "<name>:<behavior|api|schema|contract-test>"`
+- At least one spec created: `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --contract "<name>:<behavior|api|schema|contract-test>"`
 
 ## Pre-implementation checks
 
@@ -96,7 +116,7 @@ caws specs evidence <id> --ac A1 --status pass \
 ```
 
 **The `--data` payload is not free-form.** Each `--type` has a closed kernel
-schema (`packages/caws-kernel/src/schemas/events/*.v1.json`) with
+schema (`packages/caws-cli/src/kernel/schemas/events/*.v1.json`) with
 `additionalProperties: false`, so an invented field is rejected rather than
 stored. `status` is a closed enum (`pass | fail | unchecked | waived`), and
 `criterion_id` must match `^A\d+$` — matching the `id` of an entry in the spec's
@@ -142,7 +162,7 @@ caws waiver show <id>-w
 caws waiver revoke <id>-w
 ```
 
-Waivers are the legitimate escape. Hand-editing `change_budget` in the spec or editing `policy.yaml` directly will be rejected by CI and is a violation of the governed-paths discipline.
+Waivers are the legitimate escape from a blocking gate. Editing `policy.yaml` directly will be rejected by CI and is a violation of the governed-paths discipline. Risk-tier budgets need neither: `budget_limit` is an advisory sizing goal that reports an overage and never blocks, so do not trim, defer or stub work to fit it.
 
 ## Worktree ownership (multi-agent)
 
@@ -151,7 +171,7 @@ When multiple agents work in parallel, each agent's runtime should:
 1. Create the worktree via `caws worktree create <name> --spec <id>` (writes binding + emits events).
 2. Have the agent run `caws claim` to surface ownership.
 3. Refuse to mutate state if `caws claim` exits non-zero with a foreign-claim message.
-4. Read `tmp/<sessionId>/` (the prior session's log) before deciding to take over.
+4. Read `.caws/sessions/<sessionId>/` (the prior session's log) before deciding to take over.
 5. Use `caws claim --takeover` only with explicit user authorization. Takeover writes a durable `prior_owners` audit on the worktree entry.
 6. Use `caws agents list` to inspect liveness of all registered sessions (observability only — not authority).
 
@@ -190,7 +210,7 @@ caws doctor && \
 
 - **No agent guidance API** (`caws iterate`, `caws workflow guidance` are removed). The runtime decides the loop.
 - **No quality scoring API** (`caws evaluate` is removed). Use `caws gates run` exit code + the per-gate event in `events.jsonl`.
-- **No git-hook installer** (`caws hooks install` is removed). <!-- agent-surfaces-prose:start --> Use `caws init --agent-surface <claude-code | codex | opencode | zcode | kimi-code | qwen-code | dsh | cursor | windsurf | none>` to install a hook pack. `claude-code`, `codex`, `opencode`, `zcode`, `kimi-code`, `qwen-code`, `dsh` are implemented; `cursor`, `windsurf` are declared surfaces but not implemented. <!-- agent-surfaces-prose:end -->
+- **No git-hook installer** (`caws hooks install` is removed). <!-- agent-surfaces-prose:start --> Use `caws init --agent-surface <claude-code | codex | opencode | zcode | kimi-code | qwen-code | dsh | cursor | windsurf | none>` to initialize a project. Configured system surfaces inherit machine hooks without project copies. Use `caws init adapters install` for shared updates and `configure`/`migrate` for one-time native setup. Legacy pack templates for `claude-code`, `codex`, `opencode`, `zcode`, `kimi-code`, `qwen-code`, `dsh` are implemented; `cursor`, `windsurf` are declared surfaces but not implemented. <!-- agent-surfaces-prose:end -->
 - **No provenance subsystem** (`caws provenance` is removed). The hash-chained `events.jsonl` is the audit surface.
 - **No `caws parallel setup`** (deferred to v11.3+). Loop `caws worktree create` per spec instead.
 
@@ -200,7 +220,7 @@ A v11-shaped CI step:
 
 ```yaml
 - name: Setup CAWS
-  run: npm install -g @paths.design/caws-cli@^11.5.0
+  run: npm install -g @paths.design/caws-cli
 
 - name: CAWS health check
   run: caws doctor
@@ -220,10 +240,10 @@ Legacy `.caws/working-spec.yaml` is present. Migrate to per-feature `.caws/specs
 Run `caws scope show <path>` to see the decision. Likely the file is not in `scope.in`. If it should be, edit the spec; if it shouldn't, the agent is out of bounds.
 
 **`caws gates run --spec <id>` returned 1 and the failing gate seems wrong.**
-Read the diagnostic output. If the violation is genuinely acceptable, open a waiver. Do not edit `policy.yaml` or the spec's `change_budget` to bypass.
+Read the diagnostic output. If the violation is genuinely acceptable, open a waiver. Do not edit `policy.yaml` to bypass. (`budget_limit` is never the cause: it is advisory and does not affect the exit code.)
 
 **`caws claim` refused with a foreign owner.**
-Another session id owns the worktree. Read their `tmp/<sessionId>/` log. Take over only with explicit user authorization.
+Another session id owns the worktree. Read their `.caws/sessions/<sessionId>/` log. Take over only with explicit user authorization.
 
 ## See also
 

@@ -133,7 +133,7 @@ function getShippedFiles() {
     if (!Array.isArray(files)) {
       throw new Error('npm pack --dry-run output missing .files[]');
     }
-    return files.map((f) => f.path);
+    return files.map(f => f.path);
   } catch (err) {
     console.error(`[check-removed-commands] composition failure: ${err.message}`);
     process.exit(2);
@@ -172,9 +172,7 @@ function scanFile(relPath) {
       const re = new RegExp(`\\bcaws\\s+${cmd.replace(/[-]/g, '[-]')}\\b`);
       const m = line.match(re);
       if (m) {
-        const allowed = ALLOWLIST.some(
-          (a) => a.file === relPath && line.includes(a.needle)
-        );
+        const allowed = ALLOWLIST.some(a => a.file === relPath && line.includes(a.needle));
         if (allowed) continue;
         results.push({
           line: i + 1,
@@ -189,7 +187,9 @@ function scanFile(relPath) {
 
 function main() {
   const shipped = getShippedFiles();
-  console.log(`[check-removed-commands] scanning ${shipped.length} shipped files in @paths.design/caws-cli`);
+  console.log(
+    `[check-removed-commands] scanning ${shipped.length} shipped files in @paths.design/caws-cli`
+  );
 
   const findings = [];
   for (const relPath of shipped) {
@@ -204,17 +204,25 @@ function main() {
     process.exit(0);
   }
 
-  console.error('[check-removed-commands] BLOCKED — removed-command references found in shipped tarball content:');
+  console.error(
+    '[check-removed-commands] BLOCKED — removed-command references found in shipped tarball content:'
+  );
   console.error('');
   for (const f of findings) {
     console.error(`  ${f.file}:${f.line}  [matched: ${f.matched}]`);
     console.error(`    ${f.text}`);
   }
   console.error('');
-  console.error(`Total: ${findings.length} reference(s) across ${new Set(findings.map((f) => f.file)).size} file(s).`);
+  console.error(
+    `Total: ${findings.length} reference(s) across ${new Set(findings.map(f => f.file)).size} file(s).`
+  );
   console.error('');
-  console.error('Doctrine: docs/architecture/caws-vnext-command-surface.md §3 lists removed commands.');
-  console.error('Fix: remove the reference, OR if v11.2+ restored the command, update REMOVED_COMMANDS in this script in the same commit as the doctrine update.');
+  console.error(
+    'Doctrine: docs/architecture/caws-vnext-command-surface.md §3 lists removed commands.'
+  );
+  console.error(
+    'Fix: remove the reference, OR if v11.2+ restored the command, update REMOVED_COMMANDS in this script in the same commit as the doctrine update.'
+  );
   process.exit(1);
 }
 

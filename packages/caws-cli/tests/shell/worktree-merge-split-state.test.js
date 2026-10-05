@@ -65,7 +65,6 @@ function seedBoundableSpec(caws, id) {
     id,
     title: 'Split-state recovery fixture',
     mode: 'chore',
-    riskTier: 3,
     actor: ACTOR,
     scopeIn: ['payload.txt'],
   });

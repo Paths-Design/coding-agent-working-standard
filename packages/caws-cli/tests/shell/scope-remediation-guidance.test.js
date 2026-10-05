@@ -6,10 +6,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { runScopeCommand } = require('../../dist/shell/index');
-const {
-  buildScopeDecisionJson,
-  renderDecision,
-} = require('../../dist/shell/render/decision');
+const { buildScopeDecisionJson, renderDecision } = require('../../dist/shell/render/decision');
 const { initProject } = require('../../dist/store/init-store');
 
 const repos = [];
@@ -187,8 +184,16 @@ describe('caws scope check --json remediation behavior', () => {
     writeSpec(caws, 'OWNER-A-001', ['packages/shared'], { worktree: 'wt-a' });
     writeSpec(caws, 'OWNER-B-001', ['packages/shared'], { worktree: 'wt-b' });
     writeRegistry(caws, {
-      'wt-a': { specId: 'OWNER-A-001', baseBranch: 'main', path: path.join(caws, 'worktrees', 'wt-a') },
-      'wt-b': { specId: 'OWNER-B-001', baseBranch: 'main', path: path.join(caws, 'worktrees', 'wt-b') },
+      'wt-a': {
+        specId: 'OWNER-A-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-a'),
+      },
+      'wt-b': {
+        specId: 'OWNER-B-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-b'),
+      },
     });
 
     const { code, json } = runCheckJson(root, 'packages/shared/file.ts');

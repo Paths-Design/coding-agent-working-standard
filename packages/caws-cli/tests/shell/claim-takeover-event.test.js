@@ -217,9 +217,7 @@ describe('A1: a successful takeover appends claim_taken_over', () => {
     // The kernel derives prior_owner.last_seen from the REGISTRY entry's
     // last_heartbeat (ownership.ts), not from the lease file — ownership
     // authority and liveness display are deliberately separate surfaces.
-    expect(takenOverEvents(cawsDir)[0].data.prior_owner.last_seen).toBe(
-      '2026-08-12T11:45:00.000Z'
-    );
+    expect(takenOverEvents(cawsDir)[0].data.prior_owner.last_seen).toBe('2026-08-12T11:45:00.000Z');
   });
 
   test('last_seen is explicit null when the prior owner entry has no heartbeat', () => {

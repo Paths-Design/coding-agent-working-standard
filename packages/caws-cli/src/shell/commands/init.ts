@@ -26,11 +26,18 @@
 //       target
 
 import { execFileSync } from 'child_process';
-import { resolveGitBinary } from '../../store/git-binary';
+import { adoptLegacyProject } from '../../store/legacy-adoption';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { installMachineRuntime, rollbackMachineRuntime } from '../../init/machine-adapters';
 import {
-  detectAgentHarness,
-  type HarnessDetectionResult,
-} from '../../init/harness-detect';
+  configureSystemRuntime,
+  migrateSystemProject,
+  systemSurfaceEnabled,
+} from '../../init/system-runtime';
+import { adoptMachineAdapter } from '../../init/machine-adapter-policy';
+import { resolveGitBinary } from '../../store/git-binary';
+import { detectAgentHarness, type HarnessDetectionResult } from '../../init/harness-detect';
 import {
   detectOrphanedDispatchDir,
   inspectClaudeSettings,
@@ -40,11 +47,13 @@ import {
   diffHookPack,
   installHookPack,
   mergeClaudeSettings,
+  mergeCodexProjectInstructions,
   mergeKimiUserConfig,
   mergeQwenInstructionImport,
   mergeQwenSettings,
   mergeZcodeConfig,
   planClaudeSettingsMerge,
+  planCodexProjectInstructions,
   planHookPackInstall,
   portHookFile,
   planKimiConfigExample,
@@ -59,36 +68,28 @@ import {
   writeQwenSettingsExample,
   writeSettingsExample,
   writeZcodeConfigExample,
+  retireStaleTelemetryRows,
+  planTelemetryRetirement,
 } from '../../init/hook-install';
+import type { TelemetryRetirePlan } from '../../init/hook-install';
 import {
   IMPLEMENTED_SURFACES,
   KNOWN_SURFACES,
   isKnownSurface,
   resolveHookPack,
 } from '../../init/hook-packs/register';
-import { SHARED_PACK } from '../../init/hook-packs/manifest-shared';
-import type {
-  AgentSurface,
-  HookPackInstallResult,
-  HookPackV1,
-} from '../../init/hook-packs/types';
+import { SHARED_PACK, sharedPackForSurface } from '../../init/hook-packs/manifest-shared';
+import type { AgentSurface, HookPackInstallResult, HookPackV1 } from '../../init/hook-packs/types';
+import { isAdapterCoveredSurface } from '../../init/hook-packs/types';
 import { autoCommit } from '../../store/git-autocommit';
 import {
   manageGitignore,
   planGitignore,
   type GitignorePlanResult,
 } from '../../init/gitignore-manage';
-import {
-  initProject,
-  planInitProject,
-  resolveRepoRoot,
-  type InitProjectPlan,
-} from '../../store';
+import { initProject, planInitProject, resolveRepoRoot, type InitProjectPlan } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
-import {
-  renderGitignore,
-  renderGitignoreSkippedNotGit,
-} from '../render/init-gitignore';
+import { renderGitignore, renderGitignoreSkippedNotGit } from '../render/init-gitignore';
 import { renderInit } from '../render/init';
 import {
   renderCodexHookTrust,
@@ -100,6 +101,8 @@ import {
   renderZcodeSettingsWiring,
 } from '../render/init-hook-pack';
 import type {
+  CodexInstructionMergeResult,
+  CodexInstructionPlanResult,
   InstructionImportPlanResult,
   SettingsMergeResult,
   SettingsMergePlanResult,
@@ -150,7 +153,7 @@ export interface InitCommandOptions {
   readonly wireUserConfig?: boolean;
   /** Positional subcommand: 'diff' (read-only pack diff) or 'port'
    *  (CLI-mediated retrofit landing). (CAWS-HOOKPACK-UPGRADE-RETROFIT-001.) */
-  readonly action?: 'diff' | 'port';
+  readonly action?: 'diff' | 'port' | 'adapters' | 'migrate';
   /** port: the managed destination path being retrofitted. */
   readonly actionArg?: string;
   /** diff: restrict the three-way decomposition to this pack path. */
@@ -158,6 +161,15 @@ export interface InitCommandOptions {
   /** port: staging file OUTSIDE the protected hooks tree carrying the
    *  ported content. */
   readonly fromFile?: string;
+  /** Migrate direct canonical projects together; never recurse into worktrees. */
+  readonly projectsRoot?: string;
+  readonly nativeConfigTarget?: string;
+  /** Override for the machine-runtime home consulted by systemSurfaceEnabled
+   *  (default: CAWS_HOME env var, else ~/.caws). Callers that invoke
+   *  runInitCommand in-process (not via a spawned CLI subprocess, where the
+   *  CAWS_HOME env var already suffices) use this to sandbox against a
+   *  developer/agent machine that has genuinely adopted the system runtime. */
+  readonly home?: string;
 }
 
 function chooseSurface(
@@ -212,7 +224,7 @@ function checkOverwriteTargets(
   targets: readonly string[] | undefined
 ): { readonly unknown: readonly string[]; readonly valid: readonly string[] } {
   const valid = new Set<string>(
-    SHARED_PACK.installedFiles.map((f) => f.destPath)
+    sharedPackForSurface(surface ?? 'none').installedFiles.map((f) => f.destPath)
   );
   if (surface !== null && surface !== 'none') {
     const resolution = resolveHookPack(surface);
@@ -290,8 +302,48 @@ function performHookPackStep(
     ...hookPackPolicyOptions(options),
   };
 
-  const sharedResult = installHookPack(SHARED_PACK, installOpts);
+  const sharedResult = installHookPack(sharedPackForSurface(surface), installOpts);
   const vendorResult = installHookPack(resolution.pack, installOpts);
+
+  // CAWS-HARNESS-TELEMETRY-ADAPTER-001: on adapter-covered surfaces the
+  // telemetry rows are no longer in the install set, so managed copies left
+  // on disk by an earlier init are stale dual-writers over state the
+  // surface's telemetry adapter now owns. Retire them (managed files only —
+  // unmanaged local growth is never touched) right after install, so the
+  // "re-run caws init" remediation named by the advisory and doctor finding
+  // actually performs the repair. Quiet when there is nothing to retire.
+  const telemetryRetire = isAdapterCoveredSurface(surface)
+    ? retireStaleTelemetryRows(repoRoot)
+    : null;
+  if (telemetryRetire && telemetryRetire.retired.length > 0) {
+    process.stdout.write(
+      'Retired stale telemetry rows (CAWS-HARNESS-TELEMETRY-ADAPTER-001): ' +
+        telemetryRetire.retired.join(', ') +
+        '\n'
+    );
+  }
+  // CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: say so when rows were kept
+  // BECAUSE another surface still installs them. Silence here would read as
+  // "nothing to retire" and hide the reason the plane survived.
+  if (telemetryRetire && telemetryRetire.retained.length > 0) {
+    process.stdout.write(
+      'Kept telemetry rows still installed by ' +
+        telemetryRetire.retainedFor.join(', ') +
+        ' (CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001): ' +
+        telemetryRetire.retained.join(', ') +
+        '\n'
+    );
+  }
+  // A failed unlink is a loud per-path degradation, never an abort: init
+  // finished its installs; the row stays managed on disk and the next run
+  // (or a permission fix) retries it. Doctor keeps flagging the drift.
+  if (telemetryRetire && telemetryRetire.failed.length > 0) {
+    process.stderr.write(
+      'Warning: could not remove stale telemetry rows (check file permissions, then re-run `caws init`): ' +
+        telemetryRetire.failed.join(', ') +
+        '\n'
+    );
+  }
 
   return mergeHookPackResults(sharedResult, vendorResult);
 }
@@ -357,10 +409,7 @@ function planHookPackStep(
   const resolution = resolveHookPack(surface);
   if (resolution.kind !== 'pack') {
     return {
-      outcome:
-        resolution.kind === 'none'
-          ? 'skipped_explicit_none'
-          : 'skipped_ambiguous',
+      outcome: resolution.kind === 'none' ? 'skipped_explicit_none' : 'skipped_ambiguous',
       pack: null,
       actions: [],
       activation: 'not_applicable',
@@ -372,7 +421,7 @@ function planHookPackStep(
     ...hookPackPolicyOptions(options),
   };
 
-  const sharedResult = planHookPackInstall(SHARED_PACK, planOpts);
+  const sharedResult = planHookPackInstall(sharedPackForSurface(surface), planOpts);
   const vendorResult = planHookPackInstall(resolution.pack, planOpts);
   return mergeHookPackResults(sharedResult, vendorResult);
 }
@@ -413,7 +462,13 @@ interface InitPlanDocument {
     readonly settings_example: SettingsExamplePlanResult;
     readonly instruction_import: InstructionImportPlanResult;
   };
+  readonly codex_instructions?: CodexInstructionPlanResult;
   readonly codex_trust_note?: string;
+  /** CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: the telemetry rows apply
+   *  would unlink. Present only for an adapter-covered surface, because no
+   *  other surface retires anything — an always-present empty section would
+   *  read as a promise the command never makes. */
+  readonly telemetry_retirement?: TelemetryRetirePlan;
   readonly next_apply_command: string;
 }
 
@@ -457,7 +512,10 @@ function resolveDiffPacks(
   if (resolution.kind !== 'pack') {
     return { packs: [SHARED_PACK], surface: null };
   }
-  return { packs: [SHARED_PACK, resolution.pack], surface: chosen.surface };
+  return {
+    packs: [sharedPackForSurface(chosen.surface), resolution.pack],
+    surface: chosen.surface,
+  };
 }
 
 function indentBlock(text: string, pad: string): string[] {
@@ -480,9 +538,7 @@ function runInitSubcommand(
       out('  Pass --agent-surface <name> to include the vendor pack.');
     }
 
-    const diffs = packs.flatMap((pack) => [
-      ...diffHookPack(pack, { repoRoot }),
-    ]);
+    const diffs = packs.flatMap((pack) => [...diffHookPack(pack, { repoRoot })]);
 
     if (opts.threeWayPath !== undefined) {
       const target = diffs.find((d) => d.destPath === opts.threeWayPath);
@@ -491,13 +547,17 @@ function runInitSubcommand(
         return 2;
       }
       if (target.threeWay.available) {
-        out(`Three-way decomposition for ${target.destPath} (baseline: pristine ${target.packId} install):`);
+        out(
+          `Three-way decomposition for ${target.destPath} (baseline: pristine ${target.packId} install):`
+        );
         out('  LOCAL GROWTH (your repo vs the pristine install):');
         for (const l of indentBlock(target.threeWay.localGrowthDiff, '    ')) out(l);
-        if (target.threeWay.localGrowthDiff === '') out('    (none — the installed file is the pristine install)');
+        if (target.threeWay.localGrowthDiff === '')
+          out('    (none — the installed file is the pristine install)');
         out('  UPSTREAM (new template vs the pristine install):');
         for (const l of indentBlock(target.threeWay.upstreamDiff, '    ')) out(l);
-        if (target.threeWay.upstreamDiff === '') out('    (none — the template has not changed since your install)');
+        if (target.threeWay.upstreamDiff === '')
+          out('    (none — the template has not changed since your install)');
       } else {
         out(`Three-way decomposition for ${target.destPath}: unavailable.`);
         out(`  ${target.threeWay.reason}`);
@@ -540,9 +600,7 @@ function runInitSubcommand(
     return 2;
   }
   const destPath = opts.actionArg;
-  const owningPack = packs.find((p) =>
-    p.installedFiles.some((f) => f.destPath === destPath)
-  );
+  const owningPack = packs.find((p) => p.installedFiles.some((f) => f.destPath === destPath));
   if (owningPack === undefined) {
     err(`caws init port: "${destPath}" is not a pack path of the resolved packs.`);
     err('  List paths with: caws init diff');
@@ -576,7 +634,9 @@ function runInitSubcommand(
     return 1;
   }
 
-  out(`Ported ${result.destPath} → ${result.packId} v${result.packVersion} (baseline recorded, drift tracking resumed).`);
+  out(
+    `Ported ${result.destPath} → ${result.packId} v${result.packVersion} (baseline recorded, drift tracking resumed).`
+  );
 
   if (isInsideGitWorkingTree(repoRoot)) {
     const commit = autoCommit({
@@ -597,9 +657,7 @@ function runInitSubcommand(
   return 0;
 }
 
-function renderActionList(
-  actions: readonly HookPackInstallResult['actions'][number][]
-): string[] {
+function renderActionList(actions: readonly HookPackInstallResult['actions'][number][]): string[] {
   const lines: string[] = [];
   const groups: Record<string, string[]> = {
     created: [],
@@ -608,9 +666,18 @@ function renderActionList(
     unchanged: [],
     refused: [],
   };
+  // Refusals are split by WHICH SIDE moved. A bare "Would refuse" cannot tell
+  // an operator whether the file holds edits worth preserving or is simply a
+  // stale copy, so both used to route to --overwrite --force — the flag that
+  // discards growth. (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.)
+  groups.refused_upstream_only = [];
+  groups.refused_local_growth = [];
+  groups.refused_unobserved = [];
   for (const action of actions) {
     if (action.action === 'updated' && action.restampOnly === true) {
       groups.restamped?.push(action.destPath);
+    } else if (action.action === 'refused' && action.driftClass !== undefined) {
+      groups[`refused_${action.driftClass}`]?.push(action.destPath);
     } else {
       groups[action.action]?.push(action.destPath);
     }
@@ -621,12 +688,51 @@ function renderActionList(
     restamped: 'Would re-stamp (version-only, content identical)',
     unchanged: 'Unchanged',
     refused: 'Would refuse',
+    refused_local_growth: 'Would refuse — edited here since install (growth to preserve)',
+    refused_upstream_only: 'Would refuse — template moved; no local edit recorded over baseline',
+    refused_unobserved: 'Would refuse — drift unclassified (no recorded baseline)',
   };
-  for (const key of ['created', 'updated', 'restamped', 'unchanged', 'refused']) {
+  for (const key of [
+    'created',
+    'updated',
+    'restamped',
+    'unchanged',
+    'refused',
+    'refused_local_growth',
+    'refused_upstream_only',
+    'refused_unobserved',
+  ]) {
     const values = groups[key] ?? [];
     if (values.length === 0) continue;
     lines.push(`  ${labels[key]} (${values.length}):`);
     for (const value of values) lines.push(`    - ${value}`);
+  }
+  if ((groups.refused_upstream_only ?? []).length > 0) {
+    lines.push('');
+    lines.push('  The upstream-only files match the body this installer last wrote, so no');
+    lines.push('  local edit is recorded against them — the template grew and this copy');
+    lines.push('  did not. Read the delta before refreshing anyway: `caws init port` in');
+    lines.push('  12.0.0 and 12.1.0 baselined the body it landed, so a path ported by');
+    lines.push('  those versions still reads this way. Ports from this version do not.');
+    lines.push('  Inspect with `caws init diff`, then refresh the');
+    lines.push('  confirmed-stale paths with `caws init --overwrite <path...> --force`.');
+  }
+  const driftRefusals =
+    (groups.refused_local_growth ?? []).length +
+    (groups.refused_upstream_only ?? []).length +
+    (groups.refused_unobserved ?? []).length;
+  if (driftRefusals > 0) {
+    // The refusal is the only surface read at the moment of the block, so the
+    // non-destructive discharge has to be named HERE. Without it the menu is
+    // "destroy your edits" or "stop tracking drift", and neither reconciles.
+    // (CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01.)
+    lines.push('');
+    lines.push('  To take upstream WITHOUT discarding local edits, reconcile the two into');
+    lines.push('  a staging file outside the hooks tree and land it:');
+    lines.push('    caws init port <path> --from <staging-file>');
+    lines.push('  That validates, version-stamps, records a new baseline and audit-commits,');
+    lines.push('  so drift tracking resumes on the path. `--adopt` is the opposite trade:');
+    lines.push('  it keeps your file and stops tracking drift there.');
   }
   return lines;
 }
@@ -666,20 +772,14 @@ function renderInitPlan(plan: InitPlanDocument): string {
     lines.push('.claude settings wiring:');
     lines.push(`  settings.json: ${plan.claude_settings.settings_json.kind}`);
     if (plan.claude_settings.settings_json.kind === 'merged') {
-      lines.push(
-        `  would add: ${plan.claude_settings.settings_json.added.join(', ')}`
-      );
+      lines.push(`  would add: ${plan.claude_settings.settings_json.added.join(', ')}`);
     }
     if (plan.claude_settings.settings_json.kind === 'invalid') {
       lines.push(`  error: ${plan.claude_settings.settings_json.error}`);
     }
-    lines.push(
-      `  settings.json.example: ${plan.claude_settings.settings_example.action}`
-    );
+    lines.push(`  settings.json.example: ${plan.claude_settings.settings_example.action}`);
     if (plan.claude_settings.orphaned_dispatch_dir) {
-      lines.push(
-        `  orphaned dispatch dir: ${plan.claude_settings.orphaned_dispatch_dir}`
-      );
+      lines.push(`  orphaned dispatch dir: ${plan.claude_settings.orphaned_dispatch_dir}`);
     }
   }
 
@@ -688,16 +788,12 @@ function renderInitPlan(plan: InitPlanDocument): string {
     lines.push('.zcode config wiring:');
     lines.push(`  config.json: ${plan.zcode_settings.config_json.kind}`);
     if (plan.zcode_settings.config_json.kind === 'merged') {
-      lines.push(
-        `  would add: ${plan.zcode_settings.config_json.added.join(', ')}`
-      );
+      lines.push(`  would add: ${plan.zcode_settings.config_json.added.join(', ')}`);
     }
     if (plan.zcode_settings.config_json.kind === 'invalid') {
       lines.push(`  error: ${plan.zcode_settings.config_json.error}`);
     }
-    lines.push(
-      `  config.json.example: ${plan.zcode_settings.config_example.action}`
-    );
+    lines.push(`  config.json.example: ${plan.zcode_settings.config_example.action}`);
   }
 
   if (plan.kimi_settings) {
@@ -708,18 +804,14 @@ function renderInitPlan(plan: InitPlanDocument): string {
         `  config.toml (${plan.kimi_settings.user_config.path}): ${plan.kimi_settings.user_config.kind}`
       );
       if (plan.kimi_settings.user_config.kind === 'merged') {
-        lines.push(
-          `  would add: ${plan.kimi_settings.user_config.added.join(', ')}`
-        );
+        lines.push(`  would add: ${plan.kimi_settings.user_config.added.join(', ')}`);
       }
     } else {
       lines.push(
         '  config.toml: not merged (re-run with --wire-user-config to consent to the user-level write)'
       );
     }
-    lines.push(
-      `  caws-hooks.toml.example: ${plan.kimi_settings.config_example.action}`
-    );
+    lines.push(`  caws-hooks.toml.example: ${plan.kimi_settings.config_example.action}`);
   }
 
   if (plan.qwen_settings) {
@@ -738,17 +830,49 @@ function renderInitPlan(plan: InitPlanDocument): string {
     if (plan.qwen_settings.settings_json.kind === 'invalid') {
       lines.push(`  error: ${plan.qwen_settings.settings_json.error}`);
     }
-    lines.push(
-      `  settings.json.example: ${plan.qwen_settings.settings_example.action}`
-    );
-    lines.push(
-      `  QWEN.md doctrine import: ${plan.qwen_settings.instruction_import.kind}`
-    );
+    lines.push(`  settings.json.example: ${plan.qwen_settings.settings_example.action}`);
+    lines.push(`  QWEN.md doctrine import: ${plan.qwen_settings.instruction_import.kind}`);
+  }
+
+  if (plan.codex_instructions) {
+    lines.push('');
+    lines.push('Codex project instructions:');
+    lines.push(`  target: ${plan.codex_instructions.target}`);
+    lines.push(`  outcome: ${plan.codex_instructions.kind}`);
+    if (plan.codex_instructions.kind === 'refused') {
+      lines.push(`  refusal: ${plan.codex_instructions.reason}`);
+    }
   }
 
   if (plan.codex_trust_note) {
     lines.push('');
     lines.push(plan.codex_trust_note);
+  }
+
+  // CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: deletions are the one
+  // class a preview must never omit, so name each row apply will unlink.
+  // Rendered even when the retire set is empty (the section only exists for
+  // an adapter-covered surface at all), so "nothing will be removed" is an
+  // explicit statement rather than an absence the reader has to infer.
+  if (plan.telemetry_retirement) {
+    const retire = plan.telemetry_retirement;
+    lines.push('');
+    lines.push('Telemetry rows (adapter-covered surface owns this plane):');
+    if (retire.retire.length === 0) {
+      lines.push('  would retire: none');
+    } else {
+      lines.push(`  would retire (delete ${retire.retire.length}):`);
+      for (const relPath of retire.retire) lines.push(`    - ${relPath}`);
+    }
+    if (retire.retained.length > 0) {
+      lines.push(
+        `  kept, still installed by ${retire.retainedFor.join(', ')} (${retire.retained.length}):`
+      );
+      for (const relPath of retire.retained) lines.push(`    - ${relPath}`);
+    }
+    if (retire.unmanaged.length > 0) {
+      lines.push(`  left alone, not CAWS-managed: ${retire.unmanaged.join(', ')}`);
+    }
   }
 
   lines.push('');
@@ -757,6 +881,28 @@ function renderInitPlan(plan: InitPlanDocument): string {
   } else {
     lines.push('Plan refused; resolve the refusal above before applying init.');
   }
+  return lines.join('\n');
+}
+
+function renderCodexInstructionMerge(result: CodexInstructionMergeResult): string {
+  const lines = ['Codex project instructions:'];
+  if (result.kind === 'refused') {
+    lines.push(`  REFUSED — did not change ${result.target}.`);
+    if (result.reason === 'duplicate_managed_block') {
+      lines.push('  Duplicate CAWS instruction blocks need manual reconciliation.');
+    } else if (result.reason === 'malformed_managed_block') {
+      lines.push('  Found malformed CAWS instruction markers; no bytes were changed.');
+    } else {
+      lines.push(`  ${result.error ?? result.reason}`);
+    }
+    return lines.join('\n');
+  }
+
+  lines.push(`  ${result.kind}: ${result.target}`);
+  if (result.kind === 'merged' || result.kind === 'updated') {
+    lines.push('  Content outside the bounded CAWS block was preserved byte-for-byte.');
+  }
+  lines.push('  Restart Codex to rebuild the root instruction chain.');
   return lines.join('\n');
 }
 
@@ -769,9 +915,7 @@ function runInitPlan(
 ): number {
   const projectPlan = planInitProject(repoRoot);
   if (!projectPlan.ok) {
-    const isLegacy = projectPlan.errors.some(
-      (d) => d.rule === 'store.init.legacy_residue'
-    );
+    const isLegacy = projectPlan.errors.some((d) => d.rule === 'store.init.legacy_residue');
     if (opts.json === true) {
       jsonOut(out, {
         ok: false,
@@ -793,11 +937,10 @@ function runInitPlan(
 
   const detection = detectAgentHarness(repoRoot);
   const chosen = chooseSurface(opts.agentSurface, detection);
-  const hookPlan = planHookPackStep(repoRoot, chosen.surface, opts);
+  const system = systemSurfaceEnabled(chosen.surface, opts.home);
+  const hookPlan = planHookPackStep(repoRoot, system ? 'none' : chosen.surface, opts);
   const resolution =
-    chosen.surface && chosen.surface !== 'none'
-      ? resolveHookPack(chosen.surface)
-      : null;
+    chosen.surface && chosen.surface !== 'none' ? resolveHookPack(chosen.surface) : null;
   const unimplemented =
     resolution?.kind === 'declared_not_implemented'
       ? `--agent-surface "${chosen.surface}" is declared but not yet implemented in this CLI version.`
@@ -825,9 +968,7 @@ function runInitPlan(
   const kimiSettings =
     hookPlan.pack?.id === 'kimi-code'
       ? {
-          ...(opts.wireUserConfig === true
-            ? { user_config: planKimiConfigMerge() }
-            : {}),
+          ...(opts.wireUserConfig === true ? { user_config: planKimiConfigMerge() } : {}),
           config_example: planKimiConfigExample(repoRoot),
         }
       : undefined;
@@ -839,13 +980,23 @@ function runInitPlan(
           instruction_import: planQwenInstructionImport(repoRoot),
         }
       : undefined;
+  const codexInstructions =
+    hookPlan.pack?.id === 'codex' ? planCodexProjectInstructions(repoRoot) : undefined;
   const codexTrustNote =
     hookPlan.pack?.id === 'codex'
       ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
       : undefined;
+  // CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: mirror the apply-side
+  // condition exactly (isAdapterCoveredSurface + planTelemetryRetirement, the
+  // classifier retireStaleTelemetryRows is defined in terms of), so the
+  // preview cannot name a different set than apply unlinks.
+  const telemetryRetirement =
+    chosen.surface !== null && chosen.surface !== 'none' && isAdapterCoveredSurface(chosen.surface)
+      ? planTelemetryRetirement(repoRoot)
+      : undefined;
 
   const plan: InitPlanDocument = {
-    ok: !unimplemented && !anyRefused,
+    ok: !unimplemented && !anyRefused && codexInstructions?.kind !== 'refused',
     read_only: true,
     command: 'init',
     repo_root: repoRoot,
@@ -853,9 +1004,7 @@ function runInitPlan(
       surface: chosen.surface,
       reason: chosen.reason,
       implemented:
-        chosen.surface === null || chosen.surface === 'none'
-          ? null
-        : resolution?.kind === 'pack',
+        chosen.surface === null || chosen.surface === 'none' ? null : resolution?.kind === 'pack',
       ...(unimplemented ? { refusal: unimplemented } : {}),
     },
     canonical_state: projectPlan.value,
@@ -865,7 +1014,9 @@ function runInitPlan(
     ...(zcodeSettings ? { zcode_settings: zcodeSettings } : {}),
     ...(kimiSettings ? { kimi_settings: kimiSettings } : {}),
     ...(qwenSettings ? { qwen_settings: qwenSettings } : {}),
+    ...(codexInstructions ? { codex_instructions: codexInstructions } : {}),
     ...(codexTrustNote ? { codex_trust_note: codexTrustNote } : {}),
+    ...(telemetryRetirement ? { telemetry_retirement: telemetryRetirement } : {}),
     next_apply_command: applyCommand(opts),
   };
 
@@ -882,6 +1033,168 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
+
+  if (opts.action === 'migrate') {
+    if (
+      !opts.fromFile ||
+      (opts.actionArg !== undefined && opts.actionArg !== 'apply') ||
+      (opts.actionArg === 'apply' && opts.plan) ||
+      opts.overwrite ||
+      opts.force ||
+      opts.adopt ||
+      opts.agentSurface ||
+      opts.wireUserConfig ||
+      opts.threeWayPath ||
+      opts.projectsRoot ||
+      opts.nativeConfigTarget
+    ) {
+      err(
+        'caws init migrate: use --from reviewed-plan.json to preview; add positional apply to execute.'
+      );
+      return 2;
+    }
+    try {
+      const result = adoptLegacyProject(
+        cwd,
+        JSON.parse(fs.readFileSync(opts.fromFile, 'utf8')),
+        opts.actionArg === 'apply'
+      );
+      out(JSON.stringify(result, null, 2));
+      return 0;
+    } catch (error) {
+      err(`caws init migrate: ${(error as Error).message}`);
+      return 1;
+    }
+  }
+
+  if (opts.action === 'adapters') {
+    try {
+      const operation = opts.actionArg ?? 'install';
+      if (
+        opts.overwrite ||
+        opts.force ||
+        opts.adopt ||
+        opts.wireUserConfig ||
+        opts.threeWayPath ||
+        (!['adopt', 'configure', 'migrate'].includes(operation) &&
+          (opts.fromFile || opts.agentSurface)) ||
+        (opts.projectsRoot && operation !== 'migrate') ||
+        (opts.projectsRoot && opts.fromFile) ||
+        (opts.nativeConfigTarget && operation !== 'configure')
+      ) {
+        err(
+          'caws init adapters: incompatible options; use --plan/--json, or --agent-surface/--from with adopt'
+        );
+        return 2;
+      }
+      if (operation === 'configure' || operation === 'migrate') {
+        if (!opts.agentSurface) {
+          err('caws init adapters: --agent-surface is required');
+          return 2;
+        }
+        const options = { surface: opts.agentSurface, plan: opts.plan === true };
+        if (operation === 'configure') {
+          if (opts.fromFile) {
+            err('configure does not accept --from');
+            return 2;
+          }
+          const result = configureSystemRuntime({
+            ...options,
+            ...(opts.nativeConfigTarget ? { nativeConfigTarget: opts.nativeConfigTarget } : {}),
+          });
+          out(
+            opts.json
+              ? JSON.stringify(result, null, 2)
+              : `${opts.plan ? 'PLAN' : 'OK'} system registration: ${opts.agentSurface}\n${result.changes.map((c) => `  ${c.path}`).join('\n')}\nRestart and review native hook trust before activation.`
+          );
+          return 0;
+        }
+        const roots = opts.projectsRoot
+          ? fs
+              .readdirSync(opts.projectsRoot, { withFileTypes: true })
+              .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+              .map((e) => path.resolve(opts.projectsRoot!, e.name))
+              .filter(
+                (p) => fs.existsSync(path.join(p, '.git')) && fs.existsSync(path.join(p, '.caws'))
+              )
+          : [cwd];
+        const results = roots.map((repo) => {
+          try {
+            return {
+              ok: true,
+              ...migrateSystemProject({
+                ...options,
+                repo,
+                ...(opts.fromFile ? { fromFile: opts.fromFile } : {}),
+              }),
+            };
+          } catch (error) {
+            return { ok: false, root: repo, error: (error as Error).message };
+          }
+        });
+        out(
+          opts.json
+            ? JSON.stringify({ readOnly: opts.plan === true, results }, null, 2)
+            : results
+                .map(
+                  (r) =>
+                    `${r.ok ? 'OK' : 'REVIEW'} ${r.root}: ${'error' in r ? r.error : r.changed ? 'migration prepared/applied' : 'unchanged'}`
+                )
+                .join('\n')
+        );
+        return results.every((r) => r.ok) ? 0 : 1;
+      }
+      if (operation === 'adopt') {
+        if (!opts.agentSurface) {
+          err('caws init adapters adopt: --agent-surface is required');
+          return 2;
+        }
+        if (/(?:^|\/)\.caws\/worktrees\//.test(cwd)) {
+          err('caws init adapters adopt: run from the canonical project root');
+          return 1;
+        }
+        const result = adoptMachineAdapter({
+          repo: cwd,
+          surface: opts.agentSurface,
+          plan: opts.plan === true,
+          ...(opts.fromFile ? { fromFile: opts.fromFile } : {}),
+        });
+        out(
+          opts.json
+            ? JSON.stringify(result, null, 2)
+            : `${opts.plan ? 'PLAN' : 'OK'} machine adapter adoption (${opts.agentSurface})\n` +
+                result.changes.map((c) => `  ${c.path}\n${opts.plan ? c.after : ''}`).join('\n') +
+                '\n  Restart the harness and review changed hooks before claiming activation.'
+        );
+        return 0;
+      }
+      if (operation !== 'install' && operation !== 'rollback') {
+        err(
+          `caws init adapters: unknown operation ${operation}; expected install | rollback | configure | migrate | adopt`
+        );
+        return 2;
+      }
+      const options = { plan: opts.plan === true };
+      const result =
+        operation === 'rollback' ? rollbackMachineRuntime(options) : installMachineRuntime(options);
+      out(
+        opts.json
+          ? JSON.stringify(result, null, 2)
+          : `${opts.plan ? 'PLAN' : 'OK'} machine adapter ${operation}: ${result.digest}\n  home: ${result.home}\n  launcher: ${result.launcher}\n  changed: ${result.changed}\n  Project adoption and harness wiring are separate explicit steps.`
+      );
+      return 0;
+    } catch (error) {
+      err(`caws init adapters: ${(error as Error).message}`);
+      return 1;
+    }
+  }
+
+  if (opts.projectsRoot || opts.nativeConfigTarget) {
+    err(
+      'caws init: --projects-root requires adapters migrate; --native-config-target requires adapters configure.'
+    );
+    return 2;
+  }
 
   // A7 (CAWS-HOOKPACK-UPGRADE-RETROFIT-001): init mutates the CANONICAL
   // checkout's hooks and settings. Run from inside a linked worktree it
@@ -935,10 +1248,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // Validate --agent-surface early. An unknown value is a programmer
   // error from the caller (or a typo at the CLI); fail fast with a
   // clear diagnostic.
-  if (
-    opts.agentSurface !== undefined &&
-    !isKnownSurface(opts.agentSurface)
-  ) {
+  if (opts.agentSurface !== undefined && !isKnownSurface(opts.agentSurface)) {
     err(`caws init: unknown --agent-surface "${opts.agentSurface}".`);
     err(`  Known values: ${KNOWN_SURFACES.join(', ')}.`);
     return 2;
@@ -956,20 +1266,12 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // Validate --overwrite targets against the packs the chosen surface would
   // install, BEFORE any write (or plan) step — a typo'd target must never
   // produce a partial overwrite.
-  if (
-    opts.overwriteTargets !== undefined &&
-    opts.overwriteTargets.length > 0
-  ) {
+  if (opts.overwriteTargets !== undefined && opts.overwriteTargets.length > 0) {
     const detection = detectAgentHarness(repoRoot);
     const chosen = chooseSurface(opts.agentSurface, detection);
-    const { unknown, valid } = checkOverwriteTargets(
-      chosen.surface,
-      opts.overwriteTargets
-    );
+    const { unknown, valid } = checkOverwriteTargets(chosen.surface, opts.overwriteTargets);
     if (unknown.length > 0) {
-      err(
-        `caws init: unknown --overwrite target(s): ${unknown.join(', ')}`
-      );
+      err(`caws init: unknown --overwrite target(s): ${unknown.join(', ')}`);
       err('  Targets must be managed pack destination paths. Valid paths:');
       for (const p of valid) err(`    ${p}`);
       return 2;
@@ -977,7 +1279,9 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   }
 
   if (opts.plan === true && opts.action !== undefined) {
-    err(`caws init: --plan does not combine with the "${opts.action}" subcommand (diff is already read-only).`);
+    err(
+      `caws init: --plan does not combine with the "${opts.action}" subcommand (diff is already read-only).`
+    );
     return 2;
   }
 
@@ -988,15 +1292,28 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   }
 
   if (opts.plan === true) {
-    return runInitPlan(repoRoot, opts, out, err, showData);
+    try {
+      return runInitPlan(repoRoot, opts, out, err, showData);
+    } catch (error) {
+      err(`caws init: ${(error as Error).message}`);
+      return 1;
+    }
+  }
+
+  const detection = detectAgentHarness(repoRoot);
+  const chosen = chooseSurface(opts.agentSurface, detection);
+  let system: boolean;
+  try {
+    system = systemSurfaceEnabled(chosen.surface, opts.home);
+  } catch (error) {
+    err(`caws init: ${(error as Error).message}`);
+    return 1;
   }
 
   // Step 1: bootstrap canonical .caws/ state.
   const result = initProject(repoRoot);
   if (!result.ok) {
-    const isLegacy = result.errors.some(
-      (d) => d.rule === 'store.init.legacy_residue'
-    );
+    const isLegacy = result.errors.some((d) => d.rule === 'store.init.legacy_residue');
     err(
       isLegacy
         ? 'caws init: refusing to overwrite legacy state.'
@@ -1026,11 +1343,13 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   }
 
   // Step 2: choose the agent surface and install the hook pack.
-  const detection = detectAgentHarness(repoRoot);
-  const chosen = chooseSurface(opts.agentSurface, detection);
+  if (system)
+    out(
+      `System runtime configured for ${chosen.surface}; stock hooks and native registration are managed in the user home. No project hook pack is installed.`
+    );
   const hookPackResult = performHookPackStep(
     repoRoot,
-    chosen.surface,
+    system ? 'none' : chosen.surface,
     chosen.reason,
     opts
   );
@@ -1040,11 +1359,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // When the user requested an unimplemented surface (cursor, windsurf
   // today), the renderer surfaces it as a skipped-ambiguous with the
   // same instruction shape.
-  if (
-    opts.agentSurface !== undefined &&
-    opts.agentSurface !== 'none' &&
-    chosen.surface !== null
-  ) {
+  if (opts.agentSurface !== undefined && opts.agentSurface !== 'none' && chosen.surface !== null) {
     const resolution = resolveHookPack(opts.agentSurface);
     if (resolution.kind === 'declared_not_implemented') {
       err(
@@ -1078,7 +1393,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         : '';
     out(`  Apply with: caws init --agent-surface ${chosen.surface} --overwrite${targets} --force`);
   } else {
-    out(renderHookPackInstall(hookPackResult));
+    if (!system) out(renderHookPackInstall(hookPackResult));
   }
 
   // Step 3: wire .claude/settings.json. Only meaningful when the Claude Code
@@ -1091,6 +1406,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // leftover pre-rename .claude/hooks/dispatch/ directory.
   let wiringStatus: ReturnType<typeof inspectClaudeSettings> | undefined;
   let mergeResult: SettingsMergeResult | undefined;
+  let codexInstructionResult: CodexInstructionMergeResult | undefined;
   let orphanedDispatchDir: string | null = null;
   if (hookPackResult.pack?.id === 'claude-code') {
     mergeResult = mergeClaudeSettings(repoRoot);
@@ -1102,6 +1418,8 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     wiringStatus = inspectClaudeSettings(repoRoot);
     out(renderSettingsWiring(wiringStatus, mergeResult, orphanedDispatchDir));
   } else if (hookPackResult.pack?.id === 'codex') {
+    codexInstructionResult = mergeCodexProjectInstructions(repoRoot);
+    out(renderCodexInstructionMerge(codexInstructionResult));
     out(renderCodexHookTrust());
   } else if (hookPackResult.pack?.id === 'zcode') {
     mergeResult = mergeZcodeConfig(repoRoot);
@@ -1152,7 +1470,21 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // settings.json wiring is in place — without those signals the panel
   // becomes a constant STOP sign on re-runs, training agents to ignore
   // it.
-  out(renderActivationContract(hookPackResult, wiringStatus));
+  if (system) {
+    out(
+      `System activation for ${chosen.surface}: user registration is configured. Verify native hook trust and execution in a fresh harness session.`
+    );
+  } else {
+    // CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: tell the
+    // activation panel when --adopt was requested so a no-op adopt run
+    // renders what actually happened instead of implying governance was
+    // disabled.
+    out(
+      renderActivationContract(hookPackResult, wiringStatus, {
+        ...(opts.adopt === true ? { adoptRequested: true } : {}),
+      })
+    );
+  }
 
   // Step 5: first-contact commit hint. When .caws/ was newly created
   // (not 'already_initialized') AND the cwd is a real git working tree,
@@ -1160,21 +1492,15 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // to run to persist governance state. Without this hint, users miss
   // that .caws/ is untracked and lose state on branch switches.
   // Outside a git working tree, the hint would be misleading — skip it.
-  if (
-    result.value.outcome === 'created' &&
-    isInsideGitWorkingTree(repoRoot)
-  ) {
+  if (result.value.outcome === 'created' && isInsideGitWorkingTree(repoRoot)) {
     out('');
-    out(
-      'Next: stage and commit the .caws/ directory to persist governance state:'
-    );
+    out('Next: stage and commit the .caws/ directory to persist governance state:');
     out('  git add .caws/ && git commit -m "chore: add caws governance state"');
   }
 
   // Exit code: refusal in pack install → 1 so callers see something went
   // wrong; otherwise 0.
-  const anyRefused = hookPackResult.actions.some(
-    (a) => a.action === 'refused'
-  );
-  return anyRefused ? 1 : 0;
+  const anyRefused = hookPackResult.actions.some((a) => a.action === 'refused');
+  const codexInstructionsRefused = codexInstructionResult?.kind === 'refused';
+  return anyRefused || codexInstructionsRefused ? 1 : 0;
 }

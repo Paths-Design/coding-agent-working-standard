@@ -29,13 +29,9 @@ const {
   portHookFile,
   readPristineBaseline,
 } = require('../../dist/init/hook-install');
-const {
-  SHARED_PACK,
-} = require('../../dist/init/hook-packs/manifest-shared');
+const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
 const { resolveHookPack } = require('../../dist/init/hook-packs/register');
-const {
-  runInitCommand,
-} = require('../../dist/shell/commands/init');
+const { runInitCommand } = require('../../dist/shell/commands/init');
 
 const repos = [];
 afterEach(() => {
@@ -90,10 +86,17 @@ function installedRepo(prefix) {
   return repoRoot;
 }
 
+// CAWS-CLI-INIT-SYSTEM-SURFACE-HOME-OVERRIDE-001: runInitCommand consults
+// systemSurfaceEnabled against this home. Without an isolated one, a
+// developer/agent machine that has genuinely run `caws init adapters
+// install` makes systemSurfaceEnabled true here, so the CLI correctly skips
+// installing/re-stamping the project-local pack -- a false test failure, not
+// a product bug. Each call gets its own fresh, unadopted home.
 function runInit(opts) {
   const out = [];
   const err = [];
   const code = runInitCommand({
+    home: fs.mkdtempSync(path.join(os.tmpdir(), 'caws-retrofit-home-')),
     ...opts,
     out: (line) => out.push(line),
     err: (line) => err.push(line),
@@ -168,9 +171,7 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
       json: true,
     });
     expect(j.code).toBe(0);
-    const parsed = JSON.parse(
-      j.out.slice(j.out.indexOf('{'), j.out.lastIndexOf('}') + 1)
-    );
+    const parsed = JSON.parse(j.out.slice(j.out.indexOf('{'), j.out.lastIndexOf('}') + 1));
     const guard = parsed.files.find((f) => f.destPath === GUARD);
     expect(guard.kind).toBe('managed_old_version');
     expect(guard.installedVersion).toBe(1);
@@ -205,9 +206,7 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
       path.join(repoRoot, '.caws', 'hooks', '.pristine', 'shared', '.caws', 'hooks', 'audit.sh'),
       { force: true }
     );
-    const degraded = diffHookPack(SHARED_PACK, { repoRoot }).find(
-      (d) => d.destPath === AUDIT
-    );
+    const degraded = diffHookPack(SHARED_PACK, { repoRoot }).find((d) => d.destPath === AUDIT);
     expect(degraded.threeWay.available).toBe(false);
     expect(degraded.threeWay.reason).toContain('no pristine baseline');
     expect(degraded.twoWayDiff).not.toBe('');
@@ -237,12 +236,23 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
     const landed = fs.readFileSync(path.join(repoRoot, AUDIT), 'utf8');
     expect(landed).toContain('# ported growth');
     expect(landed).toMatch(new RegExp(`^# hook_pack_version: ${SHARED_PACK.packVersion}$`, 'm'));
-    expect(readPristineBaseline(repoRoot, 'shared', AUDIT)).toBe(landed);
-    const after = diffHookPack(SHARED_PACK, { repoRoot }).find(
-      (d) => d.destPath === AUDIT
-    );
+
+    // The baseline records the UPSTREAM body this path was last synced to, NOT
+    // what landed. A ported body is template + local growth, so baselining it
+    // would make `installed - baseline` empty for the one file shape guaranteed
+    // to hold local edits — and the three-way diff asserted above would then
+    // report no LOCAL GROWTH on a file that just had growth ported into it.
+    const baseline = readPristineBaseline(repoRoot, 'shared', AUDIT);
+    expect(baseline).not.toBe(landed);
+    expect(baseline).not.toContain('# ported growth');
+
+    const after = diffHookPack(SHARED_PACK, { repoRoot }).find((d) => d.destPath === AUDIT);
     expect(after.kind).toBe('managed_drift');
     expect(after.installedVersion).toBe(SHARED_PACK.packVersion);
+    // Drift tracking RESUMED means the baseline is usable again: the three-way
+    // decomposition is available and still attributes the growth locally.
+    expect(after.threeWay.available).toBe(true);
+    expect(after.threeWay.localGrowthDiff).toContain('# ported growth');
     fs.rmSync(staging, { force: true });
   });
 
@@ -251,9 +261,22 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
     const staging = path.join(os.tmpdir(), `ur-bad-${Date.now()}.sh`);
     const cases = [
       ['no managed header', '#!/bin/bash\n# just a script\n'],
-      ['wrong pack', fs.readFileSync(path.join(repoRoot, AUDIT), 'utf8').replace(/^# hook_pack: shared$/m, '# hook_pack: other')],
-      ['dropped edit_stance', fs.readFileSync(path.join(repoRoot, AUDIT), 'utf8').replace(/edit_stance/m, 'stance_removed')],
-      ['bash syntax error', fs.readFileSync(path.join(repoRoot, AUDIT), 'utf8') + '\nif [ broken; then\n'],
+      [
+        'wrong pack',
+        fs
+          .readFileSync(path.join(repoRoot, AUDIT), 'utf8')
+          .replace(/^# hook_pack: shared$/m, '# hook_pack: other'),
+      ],
+      [
+        'dropped edit_stance',
+        fs
+          .readFileSync(path.join(repoRoot, AUDIT), 'utf8')
+          .replace(/edit_stance/m, 'stance_removed'),
+      ],
+      [
+        'bash syntax error',
+        fs.readFileSync(path.join(repoRoot, AUDIT), 'utf8') + '\nif [ broken; then\n',
+      ],
     ];
     for (const [name, content] of cases) {
       fs.writeFileSync(staging, content);
@@ -308,9 +331,9 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
     });
     expect(clean.code).toBe(0);
     expect(clean.out).toContain(`Ported ${AUDIT}`);
-    const subject = execFileSync('git', [
-      '-C', repoRoot, 'log', '-1', '--format=%s',
-    ], { encoding: 'utf8' }).trim();
+    const subject = execFileSync('git', ['-C', repoRoot, 'log', '-1', '--format=%s'], {
+      encoding: 'utf8',
+    }).trim();
     expect(subject).toContain(`port hook ${AUDIT}`);
     fs.rmSync(staging, { force: true });
   });
@@ -324,22 +347,24 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
     fs.mkdirSync(path.dirname(vendorHook), { recursive: true });
     fs.writeFileSync(vendorHook, '#!/bin/bash\n');
     const template = path.resolve(
-      __dirname, '..', '..', 'templates', 'hook-packs', 'shared', 'protected-paths.sh'
+      __dirname,
+      '..',
+      '..',
+      'templates',
+      'hook-packs',
+      'shared',
+      'protected-paths.sh'
     );
     // Direct agent-side Edit of an installed hook: still blocked, guard
     // fully active — the sanctioned flow (diff/port) needs no exemption.
-    const blocked = spawnSync(
-      'bash',
-      [template],
-      {
-        input: JSON.stringify({
-          tool_name: 'Edit',
-          tool_input: { file_path: vendorHook },
-        }),
-        env: { ...process.env, CAWS_PROJECT_DIR: repoRoot },
-        encoding: 'utf8',
-      }
-    );
+    const blocked = spawnSync('bash', [template], {
+      input: JSON.stringify({
+        tool_name: 'Edit',
+        tool_input: { file_path: vendorHook },
+      }),
+      env: { ...process.env, CAWS_PROJECT_DIR: repoRoot },
+      encoding: 'utf8',
+    });
     // Exit 2, not 1: the Claude Code PreToolUse protocol treats ONLY exit 2
     // as a block (CAWS-HOOKPACK-PROTECTED-PATHS-CAWS-HOOKS-COVERAGE-01).
     expect(blocked.status).toBe(2);

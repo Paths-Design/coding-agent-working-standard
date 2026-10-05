@@ -2,10 +2,10 @@
 // acquire ownership of the current worktree, and (optionally) update the
 // current session's lease claimed_paths.
 //
-// Pipeline (--paths absent — existing legacy behavior, byte-equivalent):
+// Pipeline (--paths absent):
 //   1. resolveRepoRoot(cwd)
 //   2. composeStoreSnapshot (worktrees + agents + specs)
-//   3. resolveSession({ allowMint: true })        — write op, mints if needed
+//   3. resolveCallerSession                           — mint only for explicit takeover
 //   4. resolveBinding(cwd, registry, specs)        — identify the worktree
 //   5. kernel.assertOwnership(registry, name, session, { takeover }, now)
 //      → Ok(null)             — same-session, no patch
@@ -43,11 +43,8 @@
 //   - Stale heartbeat is NOT abandonment.
 //   - prior_owners is unbounded, append-only on takeover.
 //
-// Event emission is OUT OF SCOPE for 6a. The `claim_taken_over` event
-// type exists in the kernel schema, but emitting it requires deciding
-// the exact payload shape, and that decision belongs with the broader
-// claim/worktree event work in a later slice. Same-session refresh
-// emits nothing.
+// Takeover emits claim_taken_over in the same transaction as the ownership
+// update. Same-session refresh emits no takeover event.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -80,7 +77,14 @@ import { resolveBinding } from '../binding/resolve-binding';
 import { renderClaimPanel, classifyOwnership } from '../render/claim';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
-import { resolveSession, resolveSessionCandidates } from '../session/resolve-session';
+import { resolveCallerSession } from '../session/resolve-session';
+import type { ResolvedSession } from '../session/types';
+
+function surfaceMintedContinuation(session: ResolvedSession, out: (line: string) => void): void {
+  if (session.source !== 'minted') return;
+  const quoted = "'" + session.identity.session_id.replaceAll("'", "'\\''") + "'";
+  out(`Continue in this shell: export CAWS_SESSION_ID=${quoted}`);
+}
 
 export interface ClaimCommandOptions {
   readonly takeover?: boolean;
@@ -219,10 +223,10 @@ function detectPhantomSessionRoot(
   return null;
 }
 
-function identityPayload(session: {
+function identityPayload(session: { readonly session_id: string; readonly platform?: string }): {
   readonly session_id: string;
   readonly platform?: string;
-}): { readonly session_id: string; readonly platform?: string } {
+} {
   return {
     session_id: session.session_id,
     ...(session.platform !== undefined ? { platform: session.platform } : {}),
@@ -239,9 +243,7 @@ function renderClaimPlan(plan: ClaimPlanDocument): string {
   lines.push(`worktree: ${plan.worktree_name}`);
   lines.push(`mode: ${plan.mode}`);
   lines.push(`current session: ${plan.current_session.session_id}`);
-  lines.push(
-    `current owner: ${plan.current_owner ? plan.current_owner.session_id : 'unowned'}`
-  );
+  lines.push(`current owner: ${plan.current_owner ? plan.current_owner.session_id : 'unowned'}`);
   lines.push(`ownership: ${plan.ownership_relation}`);
   if (plan.refusal) lines.push(`refusal: ${plan.refusal}`);
 
@@ -253,9 +255,7 @@ function renderClaimPlan(plan: ClaimPlanDocument): string {
       `  prior owners: ${plan.takeover.prior_owner_count_before} -> ${plan.takeover.prior_owner_count_after}`
     );
     if (plan.takeover.prior_owner_to_append) {
-      lines.push(
-        `  prior owner to append: ${plan.takeover.prior_owner_to_append.session_id}`
-      );
+      lines.push(`  prior owner to append: ${plan.takeover.prior_owner_to_append.session_id}`);
     }
     lines.push(`  resulting owner: ${plan.takeover.resulting_owner.session_id}`);
   }
@@ -332,7 +332,13 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // a bridge claim is session↔spec authority with no worktree in play.
   if (opts.spec !== undefined || opts.release === true) {
     return runClaimBridgeDispatch(opts, {
-      cwd, nowFn, env, out, err, showData, json: opts.json === true,
+      cwd,
+      nowFn,
+      env,
+      out,
+      err,
+      showData,
+      json: opts.json === true,
     });
   }
 
@@ -354,13 +360,16 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     return 2;
   }
 
-  // 3. Session (write op → mint if missing).
-  const sessionResult = resolveSession({
+  // 3. A normal claim must identify the caller before comparing ownership.
+  // Minting here would create a second identity after a no-env create/enter.
+  // Only an explicit takeover may establish a new identity; ordinary entry
+  // carries the context printed by create or supplied by the native harness.
+  const sessionResult = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
     env,
     now: nowFn,
-    allowMint: !isReadOnly && !wantsReleasePaths,
+    allowMint: wantsTakeover && !isReadOnly && !wantsReleasePaths,
   });
   if (!sessionResult.ok) {
     err('caws claim: failed to resolve session identity.');
@@ -368,16 +377,6 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     return 2;
   }
   const session = sessionResult.value.identity;
-
-  // SESSION-CAPSULE-WORKTREE-CWD-001: build the cwd-independent candidate set,
-  // the same one merge/bind/destroy consult. The single `session` above may
-  // resolve to a fresh mint when this claim runs from a different cwd than the
-  // one that minted the worktree's owner (the create-then-enter flow), because
-  // resolveSession's capsule tier is cwd-keyed. Threading the candidate set
-  // into assertOwnership lets the kernel admit the recorded owner via the
-  // cwd-independent capsule read, so an agent claiming its OWN worktree is not
-  // forced to --takeover. Never mints; read-only resolution over env + capsules.
-  const sessionCandidates = resolveSessionCandidates({ cawsDir, env });
 
   // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
   // authority decision point — only on the MUTATING paths (claim/takeover/
@@ -414,50 +413,20 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     // This should not happen if resolveBinding said we are in a tracked
     // worktree — but be defensive: if the registry lost the entry
     // between the bound resolution and now, treat as a composition error.
-    err(
-      `caws claim: worktree '${worktreeName}' not in worktrees.json (registry race).`
-    );
+    err(`caws claim: worktree '${worktreeName}' not in worktrees.json (registry race).`);
     return 2;
   }
 
   // 5. Kernel ownership decision.
   const now = nowFn();
-  // CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001: under an EXPLICIT --takeover,
-  // narrow the candidate set to identities the caller can legitimately
-  // claim as "self" — those whose session_id equals the single resolved
-  // session (resolveSession, the same resolver `caws status` uses). The
-  // non-takeover claim passes the full candidate set unchanged so
-  // create-then-enter (SESSION-CAPSULE-WORKTREE-CWD-001) still admits the
-  // owner from a different cwd.
-  //
-  // Why this is needed: resolveSessionCandidates admits EVERY fresh
-  // (<=24h last_seen_at) durable hook envelope on disk, with no liveness
-  // check. A foreign session F that is DEAD but whose envelope is still
-  // fresh would otherwise be admitted as a candidate, match
-  // owner.session_id, and let the kernel's candidate-admission branch
-  // short-circuit the takeover to a no-op — leaving the worktree owned
-  // by F forever, with F rendered as "you". An explicit takeover must
-  // NOT be short-circuited by a foreign envelope: only the resolved self
-  // is admitted, so the kernel reaches its takeover_claim branch and the
-  // ownership rewrite fires. The kernel stays pure id-equality; the
-  // self-vs-foreign decision lives in the shell, where the resolved
-  // identity and the takeover intent are both in scope.
-  const candidatesForKernel = wantsTakeover
-    ? sessionCandidates.candidates
-        .map((c) => c.identity)
-        .filter((identity) => identity.session_id === session.session_id)
-    : sessionCandidates.candidates.map((c) => c.identity);
+  // Never let a neighboring capsule/envelope speak for a different resolved
+  // caller. Claim admission and its audit/rendering must use the same identity.
   const ownershipResult = assertOwnership(
     snapshot.worktrees,
     worktreeName,
     session,
     {
       takeover: wantsTakeover,
-      // SESSION-CAPSULE-WORKTREE-CWD-001: admit the recorded owner via the
-      // cwd-independent candidate set so a same-agent claim from a different
-      // cwd is recognized without --takeover. (N4: narrowed to resolved-self
-      // only under --takeover, see candidatesForKernel above.)
-      sessionCandidates: candidatesForKernel,
     },
     now
   );
@@ -475,8 +444,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
         repo_root: repoRoot,
         worktree_name: worktreeName,
         current_session: identityPayload(session),
-        current_owner:
-          record.owner !== undefined ? identityPayload(record.owner) : null,
+        current_owner: record.owner !== undefined ? identityPayload(record.owner) : null,
         ownership_relation: classifyOwnership(record, session),
         refusal: ownershipResult.errors.map((d) => d.message).join('; '),
       };
@@ -509,8 +477,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     if (patch !== null) {
       const phantomRoot = detectPhantomSessionRoot(env, record.path);
       if (phantomRoot !== null) {
-        refusal =
-          `phantom-root takeover: ${phantomRoot.varName}=${phantomRoot.root} is not worktree '${worktreeName}'`;
+        refusal = `phantom-root takeover: ${phantomRoot.varName}=${phantomRoot.root} is not worktree '${worktreeName}'`;
       }
     }
     const priorCount = record.prior_owners?.length ?? 0;
@@ -634,6 +601,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     return 0;
   }
 
+  let takeoverApplied = false;
   if (patch !== null) {
     // Patch must be a takeover_claim (the kernel only emits null or a
     // takeover_claim from assertOwnership). Before applying it, refuse a
@@ -661,8 +629,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
       const ownerLine = renderClaimPanel({
         worktreeName,
         worktreeRecord: record,
-        ...(record.owner !== undefined &&
-        snapshot.agents[record.owner.session_id] !== undefined
+        ...(record.owner !== undefined && snapshot.agents[record.owner.session_id] !== undefined
           ? { agentRecord: snapshot.agents[record.owner.session_id]! }
           : {}),
         currentSession: session,
@@ -686,8 +653,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     //
     // Placed AFTER the phantom-root refusal above so a refused takeover leaves
     // no audit implying it happened.
-    const priorOwnerRecord =
-      patch.kind === 'takeover_claim' ? patch.prior_owner : undefined;
+    const priorOwnerRecord = patch.kind === 'takeover_claim' ? patch.prior_owner : undefined;
     const applyResult = applyTakeoverWithAudit(cawsDir, {
       name: worktreeName,
       patch,
@@ -718,6 +684,13 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
       err(renderDiagnostics(applyResult.errors, { showData }));
       return 2;
     }
+    takeoverApplied = true;
+    // Ownership and its audit are committed now. Surface the actual caller
+    // before any operational-cache failure can bypass the continuation.
+    out(
+      `Ownership transferred for worktree '${worktreeName}' to ${session.session_id}; audit event recorded.`
+    );
+    surfaceMintedContinuation(sessionResult.value, out);
   }
 
   // 7. Refresh agents.json — ONLY on the legacy `--paths` absent branch.
@@ -733,7 +706,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // to lifecycle verbs refresh agents.json so freshness display stays
   // current independent of IDE hooks. refreshAgentClaim only fails on
   // a malformed session shape; we just validated this session via
-  // resolveSession, so Err here would be a real bug. Treat it as exit 2.
+  // resolveCallerSession, so Err here would be a real bug. Treat it as exit 2.
   if (opts.paths === undefined) {
     const refreshResult = refreshAgentClaim(snapshot.agents, session, now, {
       bound_worktree: worktreeName,
@@ -761,11 +734,15 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // does NOT regress ownership; it surfaces as a typed diagnostic and
   // returns exit 1 so the operator sees that the paths were not stored.
   if (opts.paths !== undefined) {
+    const pathMetadataFailed = (): number => {
+      if (takeoverApplied) err('caws claim: ownership transferred; path metadata failed.');
+      return 1;
+    };
     const leasesResult = loadLeases(cawsDir);
     if (!leasesResult.ok) {
       err('caws claim: --paths: failed to load leases.');
       err(renderDiagnostics(leasesResult.errors, { showData }));
-      return 1;
+      return pathMetadataFailed();
     }
     const patchResult = updateAgentLeasePaths(leasesResult.value.leases, session, {
       claimed_paths: opts.paths,
@@ -773,13 +750,13 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     if (!patchResult.ok) {
       err('caws claim: --paths: refused.');
       err(renderDiagnostics(patchResult.errors, { showData }));
-      return 1;
+      return pathMetadataFailed();
     }
     const applyPathsResult = applyLeasePatch(cawsDir, patchResult.value);
     if (!applyPathsResult.ok) {
       err('caws claim: --paths: lease apply failed.');
       err(renderDiagnostics(applyPathsResult.errors, { showData }));
-      return 1;
+      return pathMetadataFailed();
     }
     // Surface any warn-no-op diagnostics (missing lease file race
     // between load and apply). Treat as refusal so the operator sees
@@ -788,7 +765,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     if (applyPathsResult.value.diagnostics.length > 0) {
       err('caws claim: --paths: lease apply produced diagnostics.');
       err(renderDiagnostics(applyPathsResult.value.diagnostics, { showData }));
-      if (!applyPathsResult.value.wrote) return 1;
+      if (!applyPathsResult.value.wrote) return pathMetadataFailed();
     }
   }
 
@@ -809,67 +786,17 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
       : record;
 
   const newRel = classifyOwnership(renderedRecord, session);
-  // CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001 (defense in depth). Under an
-  // EXPLICIT --takeover, the candidate filter above already restricts
-  // admission to resolved-self identities, so the kernel's Ok(null) can
-  // only be the direct sameSession case (resolvedSelf === owner). Any
-  // other Ok(null) under --takeover would mean the filter regressed and re-
-  // admitted a foreign candidate — refuse to render that foreign owner as
-  // "you" or silently exit 0. This is CONDITIONAL on wantsTakeover: the
-  // non-takeover claim path legitimately admits a candidate whose id
-  // differs from the single resolved self (the create-then-enter case,
-  // SESSION-CAPSULE-WORKTREE-CWD-001), and that admission must keep
-  // surfacing "OWNED (you)" / exit 0.
-  const ownerIsResolvedSelf =
-    renderedRecord.owner !== undefined &&
-    renderedRecord.owner.session_id === session.session_id;
-  const takeoverAdmissionIsHonest =
-    !wantsTakeover || ownerIsResolvedSelf;
-  // SESSION-CAPSULE-WORKTREE-CWD-001: when the kernel admitted via the cwd-
-  // independent candidate set (assertOwnership => Ok(null)) but the single
-  // resolved `session` differs from the recorded owner, newRel is 'foreign'
-  // even though ownership IS established. For the panel render, present the
-  // admitted owner as the current session so classifyOwnership returns 'you'
-  // (the owner IS us, admitted via our candidate identity) — the panel then
-  // reads "OWNED (you)" matching the admission result. Localized to claim.ts
-  // so no render-side override is needed. N4: under --takeover additionally
-  // require the admitted owner to BE the resolved self, so a foreign owner
-  // is never mislabeled "you" even if the filter regressed.
-  const panelSession =
-    ownershipResult.ok &&
-    ownershipResult.value === null &&
-    newRel !== 'you' &&
-    renderedRecord.owner !== undefined &&
-    takeoverAdmissionIsHonest
-      ? renderedRecord.owner
-      : session;
   out(
     renderClaimPanel({
       worktreeName,
       worktreeRecord: renderedRecord,
-      currentSession: panelSession,
+      currentSession: session,
       now,
       ...(opts.staleTtlMs !== undefined ? { staleTtlMs: opts.staleTtlMs } : {}),
     })
   );
 
-  // Same-session OR successful takeover both count as "claim established".
-  // SESSION-CAPSULE-WORKTREE-CWD-001: the kernel may have admitted via the
-  // cwd-independent candidate set (assertOwnership => Ok(null)) even when the
-  // single resolved `session` differs from the recorded owner — the
-  // create-then-enter case where the owner was minted from a different cwd.
-  // classifyOwnership(renderedRecord, session) would label that 'foreign'
-  // because it compares only the single session id, so the exit decision must
-  // key on the kernel's admission result, not the naive relation. Ok(null) =>
-  // admitted (directly or via candidates) => claim established.
-  // N4: under --takeover additionally require the admitted owner to BE the
-  // resolved self, so an Ok(null) reached via a foreign candidate (a
-  // regression in the filter above) cannot silently exit 0 on a
-  // foreign-owned worktree. The non-takeover claim keeps the original
-  // Ok(null) => established behavior so create-then-enter is preserved.
-  if (ownershipResult.ok && ownershipResult.value === null && takeoverAdmissionIsHonest) {
-    return 0;
-  }
+  // A successful claim must describe the same caller we authorized above.
   return newRel === 'you' ? 0 : 1;
 }
 
@@ -893,10 +820,7 @@ interface BridgeDispatchCtx {
  * the worktree owner. Non-active specs refuse with their lifecycle
  * handoffs. Exit codes follow the uniform convention (0/1/2).
  */
-function runClaimBridgeDispatch(
-  opts: ClaimCommandOptions,
-  ctx: BridgeDispatchCtx
-): number {
+function runClaimBridgeDispatch(opts: ClaimCommandOptions, ctx: BridgeDispatchCtx): number {
   const { out, err, showData, json } = ctx;
 
   if (opts.release === true && opts.takeover === true) {
@@ -916,7 +840,7 @@ function runClaimBridgeDispatch(
   }
   const { cawsDir } = repoRootResult.value;
 
-  const sessionResult = resolveSession({
+  const sessionResult = resolveCallerSession({
     cawsDir,
     worktreeRoot: ctx.cwd,
     env: ctx.env,
@@ -965,13 +889,19 @@ function runClaimBridgeDispatch(
     return 1;
   }
   if (spec.lifecycle_state !== 'active') {
-    err(`caws claim --spec: spec "${specId}" is ${spec.lifecycle_state} — a bridge confers authority only for an ACTIVE spec.`);
+    err(
+      `caws claim --spec: spec "${specId}" is ${spec.lifecycle_state} — a bridge confers authority only for an ACTIVE spec.`
+    );
     if (spec.lifecycle_state === 'closed') {
       err(`  Resume the work: caws specs reopen ${specId}`);
     } else if (spec.lifecycle_state === 'archived') {
-      err(`  Archived body: caws specs show ${specId} --archived  |  recover: caws specs recover ${specId}`);
+      err(
+        `  Archived body: caws specs show ${specId} --archived  |  recover: caws specs recover ${specId}`
+      );
     } else {
-      err(`  Activate it first: caws specs activate ${specId}  (or bind a worktree: caws worktree ensure <name> --spec ${specId}).`);
+      err(
+        `  Activate it first: caws specs activate ${specId}  (or bind a worktree: caws worktree ensure <name> --spec ${specId}).`
+      );
     }
     return 1;
   }
@@ -986,11 +916,15 @@ function runClaimBridgeDispatch(
   }
   for (const [name, record] of Object.entries(registryResult.value)) {
     if (record?.specId === specId) {
-      err(`caws claim --spec: spec "${specId}" is held by worktree "${name}" — worktree bindings WIN over bridges (one authority holder per spec).`);
+      err(
+        `caws claim --spec: spec "${specId}" is held by worktree "${name}" — worktree bindings WIN over bridges (one authority holder per spec).`
+      );
       err(`  Enter the lane instead: cd .caws/worktrees/${name}`);
       const owner = record.owner?.session_id;
       if (owner !== undefined) {
-        err(`  Worktree owner: ${owner} (read their session log before any takeover consideration).`);
+        err(
+          `  Worktree owner: ${owner} (read their session log before any takeover consideration).`
+        );
       }
       return 1;
     }
@@ -1010,12 +944,19 @@ function runClaimBridgeDispatch(
       return 1;
     }
     if (json) {
-      out(JSON.stringify({
-        ok: true, spec_id: specId,
-        prior_owner: t.value.priorOwnerSessionId, session_id: session.session_id,
-      }));
+      out(
+        JSON.stringify({
+          ok: true,
+          spec_id: specId,
+          prior_owner: t.value.priorOwnerSessionId,
+          session_id: session.session_id,
+        })
+      );
     } else {
-      out(`bridge for ${specId} taken over from ${t.value.priorOwnerSessionId} (prior_owners audit appended; bridge_claim_taken_over event recorded).`);
+      out(
+        `bridge for ${specId} taken over from ${t.value.priorOwnerSessionId} (prior_owners audit appended; bridge_claim_taken_over event recorded).`
+      );
+      surfaceMintedContinuation(sessionResult.value, out);
     }
     return 0;
   }
@@ -1033,17 +974,28 @@ function runClaimBridgeDispatch(
     return 1;
   }
   if (json) {
-    out(JSON.stringify({
-      ok: true, spec_id: specId, session_id: session.session_id,
-      refreshed: a.value.refreshed,
-    }));
+    out(
+      JSON.stringify({
+        ok: true,
+        spec_id: specId,
+        session_id: session.session_id,
+        refreshed: a.value.refreshed,
+      })
+    );
   } else {
-    out(a.value.refreshed
-      ? `refreshed bridge for ${specId} (session ${session.session_id})`
-      : `bridged ${specId} to session ${session.session_id} (.caws/claims/bridge.json; claim_bridged event recorded).`);
-    out("  Scope admission now flows from this binding: the spec's scope.in is your write surface —");
-    out('  exactly as a worktree binding enforces it, nothing wider (bridge is authority, not scope expansion).');
+    out(
+      a.value.refreshed
+        ? `refreshed bridge for ${specId} (session ${session.session_id})`
+        : `bridged ${specId} to session ${session.session_id} (.caws/claims/bridge.json; claim_bridged event recorded).`
+    );
+    out(
+      "  Scope admission now flows from this binding: the spec's scope.in is your write surface —"
+    );
+    out(
+      '  exactly as a worktree binding enforces it, nothing wider (bridge is authority, not scope expansion).'
+    );
     out(`  Release with: caws claim --release --spec ${specId}`);
+    surfaceMintedContinuation(sessionResult.value, out);
   }
   return 0;
 }

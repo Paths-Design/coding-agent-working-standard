@@ -179,9 +179,7 @@ function detectCAWSSetup(cwd = process.cwd()) {
   if (!templateDir && !isQuietCommand) {
     console.warn(chalk.yellow('CAWS templates not found in standard locations'));
     console.warn(chalk.blue('This may limit available scaffolding features'));
-    console.warn(
-      chalk.blue('For full functionality, ensure caws-template package is available')
-    );
+    console.warn(chalk.blue('For full functionality, ensure caws-template package is available'));
   }
 
   const hasTemplateDir = templateDir !== null;

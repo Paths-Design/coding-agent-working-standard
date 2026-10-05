@@ -79,7 +79,7 @@ export function detectWedgedSessions(cawsDir: string): DoctorFinding[] {
             `Reset this session's shell cwd: \`cd ${lease.repo_root}\` ` +
             '(or restart the session rooted at the repo root). The session ' +
             'cannot run any further commands until its cwd points at an ' +
-            'existing directory. CAWS will not change a live session\'s ' +
+            "existing directory. CAWS will not change a live session's " +
             'shell cwd automatically.',
           data: {
             session_id: lease.session_id,

@@ -2,22 +2,30 @@
 doc_id: agents-tutorial
 authority: reference
 status: active
-title: CAWS Tutorial — Step-by-Step Guide (v11.9.0)
+title: CAWS Tutorial — Step-by-Step Guide
 owner: vNext rewrite team
 updated: 2026-08-19
 ---
 
 # CAWS Tutorial — Step-by-Step Guide
 
-**Hands-on tutorial for implementing CAWS v11.9.0 in your project**
+**Hands-on tutorial for implementing CAWS in your project (v11 surface; check
+`caws --version` for the installed package version)**
 
-> **v11.1 surface.** This tutorial uses the v11.9.0 commands: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `scaffold`, `verify-acs`, `burnup`, `sidecar`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11 surface.** This tutorial uses these v11 commands: `init`, `doctor`,
+> `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`,
+> `worktree`, `agents`. Removed v10 commands (`validate`, `iterate`, `evaluate`,
+> `diagnose`, `scaffold`, `verify-acs`, `burnup`, `sidecar`) are not used.
+> Doctrine source:
+> [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ---
 
 ## Tutorial Overview
 
-This tutorial walks you through implementing CAWS for a simple feature. We'll build a "user preferences" feature with proper planning, testing, and quality gates.
+This tutorial walks you through implementing CAWS for a simple feature. We'll
+build a "user preferences" feature with proper planning, testing, and quality
+gates.
 
 **Time**: ~45 minutes  
 **Level**: Beginner to Intermediate  
@@ -30,13 +38,12 @@ This tutorial walks you through implementing CAWS for a simple feature. We'll bu
 **Feature**: Add user preferences storage to a web application
 
 **Requirements**:
+
 - Store user preferences in localStorage
 - Support dark/light theme preference
 - Validate preference values
 - Handle storage errors gracefully
 - Include proper TypeScript types
-
-**Risk Level**: Tier 2 (standard feature with data persistence)
 
 ---
 
@@ -49,66 +56,68 @@ This tutorial walks you through implementing CAWS for a simple feature. We'll bu
 caws init
 ```
 
-This creates `.caws/` with `policy.yaml`, `specs/`, `waivers/`, `worktrees.json`, `agents.json`.
+This creates `.caws/` with `policy.yaml`, `specs/`, `waivers/`,
+`worktrees.json`, `agents.json`.
 
 ### Create the feature spec
 
 Use the CLI to create the spec — this is the canonical path:
 
 ```bash
-caws specs create PREF-001 --title "Add User Preferences Storage" --mode feature --risk-tier 2 \
+caws specs create PREF-001 --title "Add User Preferences Storage" --mode feature \
   --contract "preferences-api:behavior"
 ```
 
-`--contract` is not optional here: tier 1 and tier 2 specs require at least one,
-and the command refuses without it (`Tier 2 specs require at least one
-contract`). The shape is `"name:type[:path]"`, where type is one of
-`api | schema | contract-test | behavior`. A tier-3 or `--mode chore` spec needs
-no contract.
+The optional `--contract` declares the preferences boundary this feature must
+preserve. It uses `"name:type[:path]"`, with type one of
+`api | schema | contract-test | behavior`. No tier selection is required.
 
-This writes `.caws/specs/PREF-001.yaml` with `lifecycle_state: active`. Now edit it to add scope, invariants, acceptance, and non-functional requirements:
+This writes `.caws/specs/PREF-001.yaml` with `lifecycle_state: draft` (pass
+`--activate` to create it active directly, or bind a worktree later with
+`caws worktree create <name> --spec PREF-001`, which activates on bind). Now
+edit it to add scope, invariants, acceptance, and non-functional requirements:
 
 ```yaml
 id: PREF-001
-title: "Add User Preferences Storage"
-risk_tier: 2
+title: 'Add User Preferences Storage'
 mode: feature
-lifecycle_state: active
+lifecycle_state: draft
 blast_radius:
   modules: [ui, storage, types]
   data_migration: false
 scope:
-  in: ["src/preferences/", "src/types/", "tests/"]
-  out: ["src/unrelated/", "node_modules/"]
+  in: ['src/preferences/', 'src/types/', 'tests/']
+  out: ['src/unrelated/', 'node_modules/']
 invariants:
-  - "Preferences are validated before storage"
-  - "Invalid preferences fall back to defaults"
+  - 'Preferences are validated before storage'
+  - 'Invalid preferences fall back to defaults'
   - "Storage errors don't crash the application"
-  - "TypeScript types prevent runtime errors"
+  - 'TypeScript types prevent runtime errors'
 acceptance:
-  - id: "A1"
-    given: "User changes theme preference"
-    when: "Preference is saved"
-    then: "Theme persists across browser sessions"
-  - id: "A2"
-    given: "Invalid preference value is provided"
-    when: "Save is attempted"
-    then: "Value is rejected and default is used"
-  - id: "A3"
-    given: "localStorage is unavailable"
-    when: "Preference save is attempted"
-    then: "Operation fails gracefully without errors"
+  - id: 'A1'
+    given: 'User changes theme preference'
+    when: 'Preference is saved'
+    then: 'Theme persists across browser sessions'
+  - id: 'A2'
+    given: 'Invalid preference value is provided'
+    when: 'Save is attempted'
+    then: 'Value is rejected and default is used'
+  - id: 'A3'
+    given: 'localStorage is unavailable'
+    when: 'Preference save is attempted'
+    then: 'Operation fails gracefully without errors'
 non_functional:
-  accessibility: ["keyboard navigation", "screen reader support"]
-  performance: ["preference read/write < 50ms"]
-  security: ["input validation", "XSS prevention"]
+  accessibility: ['keyboard navigation', 'screen reader support']
+  performance: ['preference read/write < 50ms']
+  security: ['input validation', 'XSS prevention']
 contracts:
-  - name: "preferences-storage"
-    type: "behavior"
-    description: "localStorage contract for preference persistence"
+  - name: 'preferences-storage'
+    type: 'behavior'
+    description: 'localStorage contract for preference persistence'
 ```
 
-(See the kernel schema at `packages/caws-cli/src/kernel/schemas/spec.v1.json` for all valid fields.)
+(See the kernel schema at `packages/caws-cli/src/kernel/schemas/spec.v1.json`
+for all valid fields.)
 
 ### Verify spec / drift
 
@@ -122,10 +131,14 @@ caws doctor
 
 ## Step 2: Plan the Implementation
 
-### Copy Feature Template
+### Author a Feature Plan
+
+CAWS ships no plan-file generator or `.caws/templates/` directory — author the
+plan directly:
 
 ```bash
-cp .caws/templates/feature.plan.md docs/plans/PREF-001.md
+mkdir -p docs/plans
+$EDITOR docs/plans/PREF-001.md
 ```
 
 ### Fill in Feature Plan
@@ -136,18 +149,24 @@ Edit `docs/plans/PREF-001.md`:
 # PREF-001: Add User Preferences Storage
 
 ## Problem Statement
-Users need to persist their preferences (theme, language, etc.) across browser sessions.
+
+Users need to persist their preferences (theme, language, etc.) across browser
+sessions.
 
 ## Proposed Solution
-Implement a preferences system using localStorage with TypeScript types and validation.
+
+Implement a preferences system using localStorage with TypeScript types and
+validation.
 
 ## Technical Approach
+
 - Create TypeScript interfaces for preferences
 - Implement storage layer with error handling
 - Add validation and defaults
 - Integrate with existing UI components
 
 ## Files to Create/Modify
+
 1. `src/types/preferences.ts` - TypeScript interfaces
 2. `src/preferences/storage.ts` - Storage implementation
 3. `src/preferences/validation.ts` - Input validation
@@ -156,17 +175,21 @@ Implement a preferences system using localStorage with TypeScript types and vali
 6. `tests/preferences/validation.test.ts` - Validation tests
 
 ## Testing Strategy
+
 - Unit tests for storage operations
 - Validation tests for edge cases
 - Integration tests for error handling
 - Manual testing for UI integration
 
 ## Risk Assessment
+
 - **Data Loss**: localStorage can be cleared → Mitigation: Graceful degradation
-- **Type Safety**: Runtime validation needed → Mitigation: TypeScript + runtime checks
+- **Type Safety**: Runtime validation needed → Mitigation: TypeScript + runtime
+  checks
 - **Browser Support**: localStorage availability → Mitigation: Feature detection
 
 ## Rollback Plan
+
 1. Remove preference-related imports
 2. Delete preference files
 3. Revert any UI changes
@@ -180,6 +203,7 @@ Implement a preferences system using localStorage with TypeScript types and vali
 ### Create Test Files
 
 **`tests/preferences/storage.test.ts`**:
+
 ```typescript
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { PreferencesStorage } from '../../src/preferences/storage';
@@ -203,7 +227,9 @@ describe('PreferencesStorage', () => {
   it('should handle localStorage unavailable', () => {
     // Mock localStorage unavailable
     const originalGetItem = Storage.prototype.getItem;
-    Storage.prototype.getItem = () => { throw new Error('Storage unavailable'); };
+    Storage.prototype.getItem = () => {
+      throw new Error('Storage unavailable');
+    };
 
     expect(() => storage.load()).not.toThrow();
     expect(storage.load()).toEqual({});
@@ -219,9 +245,13 @@ describe('PreferencesStorage', () => {
 ```
 
 **`tests/preferences/validation.test.ts`**:
+
 ```typescript
 import { describe, it, expect } from '@jest/globals';
-import { validatePreferences, DEFAULT_PREFERENCES } from '../../src/preferences/validation';
+import {
+  validatePreferences,
+  DEFAULT_PREFERENCES,
+} from '../../src/preferences/validation';
 
 describe('validatePreferences', () => {
   it('should accept valid preferences', () => {
@@ -239,7 +269,7 @@ describe('validatePreferences', () => {
     const result = validatePreferences(partialPrefs);
     expect(result).toEqual({
       theme: 'light',
-      language: DEFAULT_PREFERENCES.language
+      language: DEFAULT_PREFERENCES.language,
     });
   });
 });
@@ -260,6 +290,7 @@ npm test
 ### Create TypeScript Interfaces
 
 **`src/types/preferences.ts`**:
+
 ```typescript
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'auto';
@@ -279,10 +310,13 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
 ### Implement Validation
 
 **`src/preferences/validation.ts`**:
+
 ```typescript
 import { UserPreferences, DEFAULT_PREFERENCES } from '../types/preferences';
 
-export function validatePreferences(prefs: Partial<UserPreferences>): UserPreferences {
+export function validatePreferences(
+  prefs: Partial<UserPreferences>
+): UserPreferences {
   const validated: UserPreferences = { ...DEFAULT_PREFERENCES };
 
   if (prefs.theme) {
@@ -314,6 +348,7 @@ export function validatePreferences(prefs: Partial<UserPreferences>): UserPrefer
 ### Implement Storage Layer
 
 **`src/preferences/storage.ts`**:
+
 ```typescript
 import { UserPreferences, DEFAULT_PREFERENCES } from '../types/preferences';
 import { validatePreferences } from './validation';
@@ -340,7 +375,10 @@ export class PreferencesStorage {
       return validatePreferences(parsed);
     } catch (error) {
       // Storage unavailable or corrupted data
-      console.warn('Failed to load preferences, using defaults:', error.message);
+      console.warn(
+        'Failed to load preferences, using defaults:',
+        error.message
+      );
       return DEFAULT_PREFERENCES;
     }
   }
@@ -382,7 +420,7 @@ find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml -exec wc -l {} +
 ### Run quality gates
 
 ```bash
-caws gates run --spec FEAT-PREFS
+caws gates run --spec PREF-001
 ```
 
 **Expected**: exit 0 (all blocking gates pass).
@@ -393,7 +431,7 @@ caws gates run --spec FEAT-PREFS
 npm run test:coverage
 ```
 
-**Expected**: ≥80% branch coverage for Tier 2
+**Expected**: The coverage threshold configured by this project
 
 ### Manual Verification
 
@@ -419,7 +457,7 @@ If scope changed during implementation, update `.caws/specs/<spec-id>.yaml`:
 ```yaml
 # Add any new files to scope.in
 scope:
-  in: ["src/preferences/", "src/types/", "tests/", "src/hooks/"]
+  in: ['src/preferences/', 'src/types/', 'tests/', 'src/hooks/']
 ```
 
 ### Record completion evidence
@@ -441,27 +479,30 @@ caws specs show PREF-001
 
 ## Step 7: Create PR
 
-### Use PR Template
+### Author a PR Description
 
-```bash
-cp .caws/templates/pr.md docs/prs/PREF-001.md
-```
+CAWS ships no PR template generator — author the description directly (e.g.
+`docs/prs/PREF-001.md`, or straight into the PR body):
 
-### Fill in PR Template
+### Fill in PR Description
 
 ```markdown
 ## Title: feat: Add user preferences storage
 
 ## Description
-Implements persistent user preferences with localStorage, including theme and language settings.
+
+Implements persistent user preferences with localStorage, including theme and
+language settings.
 
 ## Feature Spec
+
 - **ID**: PREF-001
 - **Risk Tier**: 2
 - **Change Budget**: 8 files, 200 lines
 - **Actual Changes**: 6 files, 145 lines
 
 ## Files Changed
+
 - `src/types/preferences.ts` (25 lines)
 - `src/preferences/storage.ts` (45 lines)
 - `src/preferences/validation.ts` (35 lines)
@@ -470,23 +511,27 @@ Implements persistent user preferences with localStorage, including theme and la
 - `.caws/specs/<spec-id>.yaml` (minor updates)
 
 ## Testing
+
 - Unit tests: full coverage
 - Validation tests: All edge cases covered
 - Manual testing: All acceptance criteria verified
 
 ## Quality Gates
+
 - Validation: feature spec valid
 - Coverage: 85% branch coverage
 - Tests: All passing
 - Manual Review: Ready for review
 
 ## Rollback Plan
+
 1. Remove preference imports from components
 2. Delete preference files
 3. Clear localStorage keys
 4. Revert UI integration changes
 
 ## Acceptance Criteria
+
 - [x] Theme preference persists across sessions
 - [x] Invalid preferences fall back to defaults
 - [x] Storage errors handled gracefully
@@ -525,7 +570,6 @@ You've successfully implemented a CAWS-managed feature with:
 - **Feature Spec**: `.caws/specs/<spec-id>.yaml`
 - **Tests**: `tests/preferences/`
 - **Documentation**: `docs/plans/PREF-001.md`
-- **Templates**: `.caws/templates/`
 
 ---
 
@@ -546,7 +590,7 @@ describe('PreferencesStorage - Property Tests', () => {
           notifications: fc.boolean(),
           autoSave: fc.boolean(),
         }),
-        (prefs) => {
+        prefs => {
           const storage = new PreferencesStorage();
           storage.save(prefs);
           const loaded = storage.load();
@@ -564,6 +608,5 @@ This ensures your storage works correctly with any valid input combination.
 
 **Happy coding with CAWS!**
 
-**Tutorial Version**: 2.0  
-**CAWS Version**: 11.1.6  
-**Last Updated**: 2026-05-28
+**Tutorial Version**: 2.0 **Last Updated**: 2026-05-28 (check the installed
+package version with `caws --version`)

@@ -60,8 +60,4 @@ export interface Waiver {
 }
 
 /** Derived classification used by renderers and doctor. */
-export type WaiverEffectiveness =
-  | 'active'
-  | 'revoked'
-  | 'expired'
-  | 'not_applicable';
+export type WaiverEffectiveness = 'active' | 'revoked' | 'expired' | 'not_applicable';

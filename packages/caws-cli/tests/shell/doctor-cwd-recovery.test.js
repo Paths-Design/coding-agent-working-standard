@@ -51,7 +51,10 @@ function writeLease(cawsDir, sessionId, overrides = {}) {
     git_dir: '/repo/.git',
     ...overrides,
   };
-  fs.writeFileSync(path.join(cawsDir, 'leases', `${sessionId}.json`), JSON.stringify(lease, null, 2));
+  fs.writeFileSync(
+    path.join(cawsDir, 'leases', `${sessionId}.json`),
+    JSON.stringify(lease, null, 2)
+  );
   return lease;
 }
 

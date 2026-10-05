@@ -36,11 +36,7 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
-import type {
-  AgentRegistry,
-  RegistryPatch,
-  WorktreeRecord,
-} from '../kernel';
+import type { AgentRegistry, RegistryPatch, WorktreeRecord } from '../kernel';
 import { err, ok, type Diagnostic, type Result } from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
@@ -52,7 +48,11 @@ const AGENTS_FILENAME = 'agents.json';
 
 // (CAWS-REFACTOR-SHARED-UTILS-001) storeErr delegates to storeDiagnostic.
 function storeErr(rule: string, message: string, data?: Record<string, unknown>): Diagnostic {
-  return storeDiagnostic(rule, message, data !== undefined ? { severity: 'error', data } : { severity: 'error' });
+  return storeDiagnostic(
+    rule,
+    message,
+    data !== undefined ? { severity: 'error', data } : { severity: 'error' }
+  );
 }
 
 function readRegistryJson<T>(filePath: string, defaultValue: T): Result<T> {
@@ -76,7 +76,10 @@ function readRegistryJson<T>(filePath: string, defaultValue: T): Result<T> {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return err(
-        storeErr(STORE_RULES.REGISTRY_NOT_OBJECT, `${path.basename(filePath)} is not a JSON object.`)
+        storeErr(
+          STORE_RULES.REGISTRY_NOT_OBJECT,
+          `${path.basename(filePath)} is not a JSON object.`
+        )
       );
     }
     return ok(parsed as T);
@@ -197,13 +200,13 @@ function applyRefreshAgent(
   patch: Extract<RegistryPatch, { kind: 'refresh_agent' }>
 ): Result<true> {
   const filePath = path.join(cawsDir, AGENTS_FILENAME);
-  const readResult = readRegistryJson<Record<string, AgentRegistry[string]>>(
-    filePath,
-    {}
-  );
+  const readResult = readRegistryJson<Record<string, AgentRegistry[string]>>(filePath, {});
   if (!readResult.ok) return readResult;
   const registry: Record<string, AgentRegistry[string]> = { ...readResult.value };
-  const prev = registry[patch.session.session_id] ?? { session_id: patch.session.session_id, last_active: patch.last_active };
+  const prev = registry[patch.session.session_id] ?? {
+    session_id: patch.session.session_id,
+    last_active: patch.last_active,
+  };
   registry[patch.session.session_id] = {
     ...prev,
     session_id: patch.session.session_id,

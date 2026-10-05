@@ -1,28 +1,8 @@
 'use strict';
 
-/**
- * SESSION-CANDIDATE-RESOLUTION-HARDENING-001 — the D3 over-match fixture
- * (failure-lineage Entry 35, split from WORKTREE-ISOLATION-HARDENING-001).
- *
- * The defect: readAllCapsules admitted EVERY well-formed capsule under
- * .caws/sessions/*.json identity-blind, so with two distinct sessions'
- * capsules in one repo, session B's candidate set included session A —
- * admitsOwner then let B destroy/merge/bind A's worktree. This suite
- * asserts the FIXED behavior (the original Entry-35 fixture asserted the
- * over-match; this is its flipped expectation):
- *
- * A1  Two capsules, no env identity, no caller pointer => NEITHER admits
- *     for a foreign process; admitsOwner(candidates, A-owned) === null.
- *     Fail closed: under-admit degrades to the refusal --takeover resolves.
- * A1b Fresh repo-matched caller pointer naming B => B admits, A does not.
- * A1c Env identity (CAWS_SESSION_ID=A) => A admits, B does not.
- * A2  Single capsule on disk => admits with NO corroboration (the
- *     machine-and-repo evidence CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001
- *     pinned — the takeover-from-canonical compat rule).
- * A3  The candidate trace renders every rejected capsule with a reason —
- *     no silent fallback.
- *
- * SUT: dist/shell/session/resolve-session (npm run build compiles first).
+/** Ownership cache records never establish the invoking caller. These cases
+ * preserve the D3 foreign-session controls and close the singleton and shared
+ * pointer exceptions. Explicit caller context remains sufficient across cwd.
  */
 
 const fs = require('fs');
@@ -91,7 +71,7 @@ describe('SESSION-CANDIDATE-RESOLUTION-HARDENING-001 (D3 over-match fix)', () =>
     expect(admitsOwner(result, 'session-b')).toBeNull();
   });
 
-  test('A1b: fresh repo-matched caller pointer naming B — B admits, A rejected', () => {
+  test('A1b: fresh repo-matched caller pointer naming B cannot identify an unknown caller', () => {
     const { root, cawsDir } = mkRepo();
     writeCapsule(cawsDir, 'session-a', root);
     writeCapsule(cawsDir, 'session-b', root);
@@ -102,8 +82,8 @@ describe('SESSION-CANDIDATE-RESOLUTION-HARDENING-001 (D3 over-match fix)', () =>
       .filter((c) => c.source === 'capsule')
       .map((c) => c.identity.session_id);
 
-    expect(capsuleIds).toEqual(['session-b']);
-    expect(admitsOwner(result, 'session-b')).not.toBeNull();
+    expect(capsuleIds).toEqual([]);
+    expect(admitsOwner(result, 'session-b')).toBeNull();
     expect(admitsOwner(result, 'session-a')).toBeNull(); // the D3 breach, closed
   });
 
@@ -126,7 +106,7 @@ describe('SESSION-CANDIDATE-RESOLUTION-HARDENING-001 (D3 over-match fix)', () =>
     expect(admitsOwner(result, 'session-b')).toBeNull();
   });
 
-  test('A2: single capsule admits with no corroboration (takeover-from-canonical compat)', () => {
+  test('A2: single capsule cannot identify an unknown caller', () => {
     const { root, cawsDir } = mkRepo();
     writeCapsule(cawsDir, 'session-owner', root);
 
@@ -135,8 +115,8 @@ describe('SESSION-CANDIDATE-RESOLUTION-HARDENING-001 (D3 over-match fix)', () =>
       .filter((c) => c.source === 'capsule')
       .map((c) => c.identity.session_id);
 
-    expect(capsuleIds).toEqual(['session-owner']);
-    expect(admitsOwner(result, 'session-owner')).not.toBeNull();
+    expect(capsuleIds).toEqual([]);
+    expect(admitsOwner(result, 'session-owner')).toBeNull();
   });
 
   test('A3: rejected capsules appear in the trace with reasons (no silent fallback)', () => {
@@ -148,11 +128,11 @@ describe('SESSION-CANDIDATE-RESOLUTION-HARDENING-001 (D3 over-match fix)', () =>
     const result = resolveSessionCandidates({ cawsDir, env: {}, now: () => NOW });
     const rendered = describeCandidateTrace(result);
 
-    expect(rendered).toContain('capsule: admitted');
+    expect(rendered).toContain('capsule: rejected');
     expect(rendered).toContain('session-b');
-    // The rejection rides along in the mixed-admission reason.
+    // A shared pointer cannot rescue either cached identity.
     expect(rendered).toContain('uncorroborated-capsule: session-a.json');
-    expect(rendered).toContain('D3 over-match guard');
+    expect(rendered).toContain('does not identify the invoking caller');
   });
 
   test('A3b: all-rejected multi-capsule case renders every capsule with a reason', () => {

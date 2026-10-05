@@ -1,0 +1,45 @@
+id: CAWS-DEFECT-SESSION-RESOLVER-CLI-GUARD-PARITY-01
+title: 'The CLI and the hook guards resolve different session identities when CAWS_SESSION_ID disagrees with the harness session, so the CLI stamps an owner the guards then treat as foreign'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T03:30:13.027Z'
+updated_at: '2026-10-05T03:30:13.027Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'caws-cli shell: resolve-session.ts caller resolution order; reprieve.ts session lookup order'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/session/resolve-session.ts'
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/tests/shell/session-resolver-parity.test.js'
+  out: []
+invariants:
+  - 'Within one harness session, every CAWS surface that stamps or checks ownership resolves the same session id'
+  - 'CAWS_SESSION_ID remains the identity when no harness session variable is present, so pinning outside a harness keeps working'
+  - 'Surfaces whose own harness identity is carried by CAWS_SESSION_ID or DSH_SESSION_ID resolve exactly as before'
+acceptance:
+  - id: A1
+    given: 'a Claude Code session with CLAUDE_CODE_SESSION_ID=Y and an unrelated CAWS_SESSION_ID=X exported (observed 2026-10-04: X=@darianrosebrook)'
+    when: 'caws worktree create or caws claim resolves the caller'
+    then: 'the stamped owner is Y, the id the hook guards resolve from the payload, and stderr carries one notice that CAWS_SESSION_ID=X was not used'
+  - id: A2
+    given: 'the same environment'
+    when: 'the CLI resolver and the guard resolver (lib/session-id.sh fed a payload carrying Y) are both asked for the caller'
+    then: 'they return the same id, asserted by one parity test'
+  - id: A3
+    given: 'CAWS_SESSION_ID=X and no harness session variable'
+    when: 'the CLI resolves the caller'
+    then: 'it resolves X, unchanged from today'
+  - id: A4
+    given: 'a Codex session (CODEX_THREAD_ID=Z) with CAWS_SESSION_ID=X'
+    when: 'the CLI resolves the caller'
+    then: 'it resolves Z by the same rule'
+  - id: A5
+    given: 'caws reprieve show/revoke resolving the current session'
+    when: 'harness and CAWS_SESSION_ID disagree'
+    then: 'it uses the same order as the CLI resolver, so a grant and its lookup cannot target different sessions'
+non_functional: {}
+contracts: []

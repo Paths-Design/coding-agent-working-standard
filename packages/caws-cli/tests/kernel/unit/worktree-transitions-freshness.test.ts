@@ -15,8 +15,11 @@
  * reliance on wall-clock) — the non_functional.reliability requirement.
  */
 
-import { canTransitionSpecWithWorktree } from '../../../src/kernel/worktree/transitions';
-import { heartbeatAge, isStaleByTTL, refreshAgentClaim } from '../../../src/kernel/worktree/freshness';
+import {
+  heartbeatAge,
+  isStaleByTTL,
+  refreshAgentClaim,
+} from '../../../src/kernel/worktree/freshness';
 import { WORKTREE_RULES } from '../../../src/kernel/worktree/rules';
 import { isOk, isErr } from '../../../src/kernel/result/construct';
 import type { Spec } from '../../../src/kernel/spec/types';
@@ -30,6 +33,17 @@ import type {
 
 const spec = { id: 'SPEC-1' } as unknown as Spec;
 
+function transitionDecision(registryValue: WorktreeRegistry, transition: SpecTransition) {
+  // The known-transition set is initialized when this module loads. Reload it
+  // inside the active test so mutations to that initializer are observable;
+  // a top-level import leaves those mutants outside Jest's test lifecycle.
+  jest.resetModules();
+  const transitions = jest.requireActual<typeof import('../../../src/kernel/worktree/transitions')>(
+    '../../../src/kernel/worktree/transitions'
+  );
+  return transitions.canTransitionSpecWithWorktree(spec, registryValue, transition);
+}
+
 /** A registry mapping name -> a record whose only meaningful field is specId. */
 function registry(entries: Record<string, string>): WorktreeRegistry {
   const out: Record<string, unknown> = {};
@@ -41,9 +55,16 @@ const EMPTY = registry({});
 
 describe('canTransitionSpecWithWorktree: invalid transition', () => {
   test('unknown transition -> Err transition.invalid_transition', () => {
-    const r = canTransitionSpecWithWorktree(spec, EMPTY, 'frobnicate' as SpecTransition);
+    const r = transitionDecision(EMPTY, 'frobnicate' as SpecTransition);
     expect(isErr(r)).toBe(true);
-    if (isErr(r)) expect(r.errors[0]!.rule).toBe(WORKTREE_RULES.TRANSITION_INVALID);
+    if (isErr(r)) {
+      expect(r.errors[0]).toMatchObject({
+        rule: WORKTREE_RULES.TRANSITION_INVALID,
+        authority: 'kernel/worktree',
+        message: 'Unknown spec transition "frobnicate".',
+        narrowRepair: 'Use one of: close, archive, delete, merge_finalize.',
+      });
+    }
   });
 });
 
@@ -51,30 +72,46 @@ describe('canTransitionSpecWithWorktree: close/archive/delete blocked by active 
   const blocked: SpecTransition[] = ['close', 'archive', 'delete'];
 
   test.each(blocked)('%s is BLOCKED when a worktree is bound to the spec', (t) => {
-    const r = canTransitionSpecWithWorktree(spec, registry({ 'wt-a': 'SPEC-1' }), t);
+    const r = transitionDecision(registry({ 'wt-a': 'SPEC-1' }), t);
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
-      expect(r.errors[0]!.rule).toBe(WORKTREE_RULES.TRANSITION_BLOCKED_BY_ACTIVE_BINDING);
-      // The diagnostic names the offending worktree so the shell can act.
-      expect(r.errors[0]!.data?.bound_worktrees).toEqual(['wt-a']);
+      expect(r.errors[0]).toMatchObject({
+        rule: WORKTREE_RULES.TRANSITION_BLOCKED_BY_ACTIVE_BINDING,
+        authority: 'kernel/worktree',
+        message: `Spec SPEC-1 cannot ${t} while worktree "wt-a" is bound.`,
+        subject: 'SPEC-1',
+        narrowRepair:
+          'Detach worktree "wt-a" from spec SPEC-1 first by running `caws worktree merge wt-a` (if the worktree branch is ready to merge) or `caws worktree destroy wt-a` (if the work is abandoned).',
+        data: {
+          transition: t,
+          spec_id: 'SPEC-1',
+          bound_worktrees: ['wt-a'],
+        },
+      });
     }
   });
 
   test.each(blocked)('%s is ALLOWED when no worktree is bound', (t) => {
-    const r = canTransitionSpecWithWorktree(spec, EMPTY, t);
+    const r = transitionDecision(EMPTY, t);
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.allowed).toBe(true);
   });
 
   test('a binding to a DIFFERENT spec does not block (matches by specId)', () => {
-    const r = canTransitionSpecWithWorktree(spec, registry({ 'wt-other': 'SPEC-2' }), 'close');
+    const r = transitionDecision(registry({ 'wt-other': 'SPEC-2' }), 'close');
     expect(isOk(r)).toBe(true);
+  });
+
+  test('a malformed null registry record is ignored instead of crashing', () => {
+    const malformed = { 'wt-null': null } as unknown as WorktreeRegistry;
+    const r = transitionDecision(malformed, 'close');
+    expect(r).toEqual({ ok: true, value: { transition: 'close', allowed: true } });
   });
 });
 
 describe('canTransitionSpecWithWorktree: merge_finalize is the legal close-while-bound vector', () => {
   test('merge_finalize is ALLOWED even with an active binding', () => {
-    const r = canTransitionSpecWithWorktree(spec, registry({ 'wt-a': 'SPEC-1' }), 'merge_finalize');
+    const r = transitionDecision(registry({ 'wt-a': 'SPEC-1' }), 'merge_finalize');
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       expect(r.value.allowed).toBe(true);
@@ -84,7 +121,7 @@ describe('canTransitionSpecWithWorktree: merge_finalize is the legal close-while
   });
 
   test('merge_finalize with NO binding is allowed and reports no binding', () => {
-    const r = canTransitionSpecWithWorktree(spec, EMPTY, 'merge_finalize');
+    const r = transitionDecision(EMPTY, 'merge_finalize');
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.binding).toBeUndefined();
   });
@@ -128,7 +165,11 @@ describe('freshness: isStaleByTTL (display/hygiene predicate, NEVER authority �
 
   test('staleness is purely temporal — it does not consider ownership (doctrine: stale != abandoned)', () => {
     // Two records with identical age are equally stale regardless of bound_worktree.
-    const a: AgentRecord = { session_id: 'a', last_active: '2026-06-13T11:50:00.000Z', bound_worktree: 'wt-a' };
+    const a: AgentRecord = {
+      session_id: 'a',
+      last_active: '2026-06-13T11:50:00.000Z',
+      bound_worktree: 'wt-a',
+    };
     const b: AgentRecord = { session_id: 'b', last_active: '2026-06-13T11:50:00.000Z' };
     expect(isStaleByTTL(a, ttl, now)).toBe(isStaleByTTL(b, ttl, now));
   });
@@ -152,9 +193,13 @@ describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
     if (isOk(r)) {
       // kills L40 ObjectLiteral ({}) — the patch object must carry these fields.
       expect(r.value.kind).toBe('refresh_agent');
-      expect(r.value.session).toEqual(session);
-      // kills L41 StringLiteral — last_active is now.toISOString(), not "".
-      expect(r.value.last_active).toBe('2026-06-13T12:00:00.000Z');
+      // Narrowing if for the union member; the kind expect above throws on a
+      // regressed kind, so the guarded asserts stay falsifiable.
+      if (r.value.kind === 'refresh_agent') {
+        expect(r.value.session).toEqual(session);
+        // kills L41 StringLiteral — last_active is now.toISOString(), not "".
+        expect(r.value.last_active).toBe('2026-06-13T12:00:00.000Z');
+      }
     }
   });
 
@@ -176,9 +221,12 @@ describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
     const r = refreshAgentClaim(NO_AGENTS, session, NOW, { bound_worktree: 'wt-x' });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
-      expect(r.value.bound_worktree).toBe('wt-x');
-      // the false arm: bound_spec_id NOT provided -> absent
-      expect(r.value).not.toHaveProperty('bound_spec_id');
+      expect(r.value.kind).toBe('refresh_agent');
+      if (r.value.kind === 'refresh_agent') {
+        expect(r.value.bound_worktree).toBe('wt-x');
+        // the false arm: bound_spec_id NOT provided -> absent
+        expect(r.value).not.toHaveProperty('bound_spec_id');
+      }
     }
   });
 
@@ -187,8 +235,11 @@ describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
     const r = refreshAgentClaim(NO_AGENTS, session, NOW, { bound_spec_id: 'SPEC-9' });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
-      expect(r.value.bound_spec_id).toBe('SPEC-9');
-      expect(r.value).not.toHaveProperty('bound_worktree');
+      expect(r.value.kind).toBe('refresh_agent');
+      if (r.value.kind === 'refresh_agent') {
+        expect(r.value.bound_spec_id).toBe('SPEC-9');
+        expect(r.value).not.toHaveProperty('bound_worktree');
+      }
     }
   });
 
@@ -200,8 +251,11 @@ describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
     });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
-      expect(r.value.bound_worktree).toBe('wt-x');
-      expect(r.value.bound_spec_id).toBe('SPEC-9');
+      expect(r.value.kind).toBe('refresh_agent');
+      if (r.value.kind === 'refresh_agent') {
+        expect(r.value.bound_worktree).toBe('wt-x');
+        expect(r.value.bound_spec_id).toBe('SPEC-9');
+      }
     }
   });
 

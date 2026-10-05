@@ -378,15 +378,31 @@ describe('CAWS-DEFECT-AC-EVIDENCE-WINDOW-01: the advisory is achievable and dura
     expect(runClose(root, 'ACWIN-010').code).toBe(0);
 
     const env = { ...process.env, CAWS_QUIET: '1', CLAUDE_CODE_SESSION_ID: 'acwin-restale' };
-    const run = (args) => spawnSync(process.execPath, [CLI, ...args], { cwd: root, encoding: 'utf8', env });
+    const run = (args) =>
+      spawnSync(process.execPath, [CLI, ...args], { cwd: root, encoding: 'utf8', env });
 
-    expect(run(['specs', 'reopen', 'ACWIN-010', '--reason', 'recording missed evidence']).status).toBe(0);
+    expect(
+      run(['specs', 'reopen', 'ACWIN-010', '--reason', 'recording missed evidence']).status
+    ).toBe(0);
     for (const ac of ['A1', 'A2']) {
       expect(
-        run(['specs', 'evidence', 'ACWIN-010', '--ac', ac, '--status', 'pass', '--evidence-ref', 'npx jest']).status
+        run([
+          'specs',
+          'evidence',
+          'ACWIN-010',
+          '--ac',
+          ac,
+          '--status',
+          'pass',
+          '--evidence-ref',
+          'npx jest',
+        ]).status
       ).toBe(0);
     }
-    expect(run(['specs', 'close', 'ACWIN-010', '--resolution', 'completed', '--reason', 'evidence in']).status).toBe(0);
+    expect(
+      run(['specs', 'close', 'ACWIN-010', '--resolution', 'completed', '--reason', 'evidence in'])
+        .status
+    ).toBe(0);
 
     // THIS is why the list is derived and not stored: a field written at the
     // FIRST close would still name A1 and A2 as gaps after they were filled.
@@ -415,9 +431,7 @@ describe('CAWS-DEFECT-AC-EVIDENCE-WINDOW-01: the advisory is achievable and dura
 
     // The close-time state remains recoverable from the chain itself: no
     // ac_recorded event for this spec precedes the spec_closed.
-    const acBefore = events.filter(
-      (e) => e.event === 'ac_recorded' && e.spec_id === 'ACWIN-006'
-    );
+    const acBefore = events.filter((e) => e.event === 'ac_recorded' && e.spec_id === 'ACWIN-006');
     expect(acBefore).toHaveLength(0);
   });
 
@@ -430,8 +444,16 @@ describe('CAWS-DEFECT-AC-EVIDENCE-WINDOW-01: the advisory is achievable and dura
     const attempt = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'evidence', 'ACWIN-007',
-        '--ac', 'A1', '--status', 'pass', '--evidence-ref', 'npx jest -t A1',
+        CLI,
+        'specs',
+        'evidence',
+        'ACWIN-007',
+        '--ac',
+        'A1',
+        '--status',
+        'pass',
+        '--evidence-ref',
+        'npx jest -t A1',
       ],
       {
         cwd: root,

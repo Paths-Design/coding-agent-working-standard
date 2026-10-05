@@ -69,6 +69,7 @@ function grant(repoRoot, env, extra = {}) {
   const err = [];
   const code = runReprieveGrantCommand({
     cwd: repoRoot,
+    homeDir: path.join(repoRoot, 'machine-home'),
     now: () => new Date('2026-07-26T02:00:00.000Z'),
     out: (l) => out.push(l),
     err: (l) => err.push(l),
@@ -83,7 +84,14 @@ function grant(repoRoot, env, extra = {}) {
 }
 
 function stateFile(repoRoot, session) {
-  return path.join(repoRoot, '.claude', 'hooks', 'state', `guard-reprieve-${session}.json`);
+  return path.join(
+    repoRoot,
+    'machine-home',
+    'state',
+    'sessions',
+    session,
+    `guard-reprieve-${session}.json`
+  );
 }
 
 describe('CAWS-REPRIEVE-NO-SELF-GRANT-001: refusal inside an agent session (A1)', () => {
@@ -96,12 +104,16 @@ describe('CAWS-REPRIEVE-NO-SELF-GRANT-001: refusal inside an agent session (A1)'
     'CAWS_SESSION_ID',
     'HOOK_SESSION_ID',
     'CURSOR_TRACE_ID',
+    'QWEN_CODE_SESSION_ID',
+    'DSH_SESSION_ID',
   ])('refuses when %s alone is set', (varName) => {
     const repoRoot = makeRepoRoot();
     const r = grant(repoRoot, { ...HUMAN_ENV, [varName]: SESSION });
 
     expect(r.code).toBe(1);
     expect(r.err).toContain('agents cannot grant their own reprieves');
+    expect(r.err).toContain('why ordinary alternatives cannot work');
+    expect(r.err).toContain('verification/recovery; revoke when done');
     // The refusal must name WHICH var betrayed the session, or the operator
     // cannot tell why a shell they think is human was treated as an agent.
     expect(r.err).toContain(varName);
@@ -115,14 +127,20 @@ describe('CAWS-REPRIEVE-NO-SELF-GRANT-001: refusal inside an agent session (A1)'
     expect(fs.existsSync(stateFile(repoRoot, SESSION))).toBe(false);
     // The guard runs before the state dir is even resolved, so the vendor logs
     // dir must not have been created as a side effect of a refused grant.
-    expect(fs.existsSync(path.join(repoRoot, '.claude', 'logs', 'guard-reprieves.log'))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, 'machine-home', 'state', 'guard-reprieves.log'))).toBe(
+      false
+    );
   });
 
   it('refuses even when --session is passed explicitly', () => {
     // --session sets the RECORD's id; it does not change who is running the
     // command. An agent naming a different session must not slip through.
     const repoRoot = makeRepoRoot();
-    const r = grant(repoRoot, { ...HUMAN_ENV, CODEX_THREAD_ID: SESSION }, { session: 'some-other-session' });
+    const r = grant(
+      repoRoot,
+      { ...HUMAN_ENV, CODEX_THREAD_ID: SESSION },
+      { session: 'some-other-session' }
+    );
 
     expect(r.code).toBe(1);
     expect(r.err).toContain('agents cannot grant their own reprieves');
@@ -146,9 +164,7 @@ describe('CAWS-REPRIEVE-NO-SELF-GRANT-001: the Codex-shaped session (A2)', () =>
     expect(r.code).toBe(1);
     expect(r.err).toContain('agents cannot grant their own reprieves');
     expect(r.err).toContain('CODEX_THREAD_ID');
-    expect(
-      fs.existsSync(stateFile(repoRoot, '019f9b5e-b0e4-7b90-88b4-1952fdc68495'))
-    ).toBe(false);
+    expect(fs.existsSync(stateFile(repoRoot, '019f9b5e-b0e4-7b90-88b4-1952fdc68495'))).toBe(false);
   });
 
   it('detectAgentSessionVars reports CODEX_THREAD_ID without CAWS_SESSION_ID', () => {

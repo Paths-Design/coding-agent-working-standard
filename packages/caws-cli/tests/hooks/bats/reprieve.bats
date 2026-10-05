@@ -266,3 +266,151 @@ run_pretooluse_with_session() {
   echo "result=$result" >&3
   grep -Fq "REPRIEVED" <<<"$result"
 }
+
+# ─── A10–A13: repo reach (CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01) ────────
+#
+# A grant used to be honored in EVERY repo on the machine for the granted
+# session. Session 1aa3f0bd held one for 3h across four repos on the strength
+# of the reason string "EXTENSION: fix the dsh work." The record now carries
+# the repo it was granted for, and the reader honors it only there.
+#
+# These write into the MACHINE store (not the legacy project state dir) on
+# purpose: the reach check is only meaningful when the record is FINDABLE from
+# the other repo. A legacy-dir record would be missed by path resolution and
+# the test would pass without exercising the reach check at all.
+
+# write_reprieve_machine <session> <expires> <handlers-csv> [<repo_root>]
+#   Omit <repo_root> to write a machine-wide record (what --all-repos produces,
+#   and what every record written before this field existed looks like).
+write_reprieve_machine() {
+  local sid="$1" expires="$2" handlers_csv="$3" repo_root="${4:-}"
+  local safe_sid
+  safe_sid="$(printf '%s' "$sid" | tr -c 'A-Za-z0-9._-' '_')"
+  local state_dir="$CAWS_TEST_HOME/.caws/state/sessions/$safe_sid"
+  mkdir -p "$state_dir"
+  python3 - "$state_dir/guard-reprieve-$safe_sid.json" "$sid" "$expires" \
+    "$handlers_csv" "$repo_root" <<'PY'
+import json, sys
+path, sid, expires, handlers_csv, repo_root = sys.argv[1:6]
+rec = {
+    "session_id": sid,
+    "created_at": "2026-09-19T00:00:00Z",
+    "expires_at": expires,
+    "approved_by": "bats-test",
+    "reason": "bats reprieve reach test",
+    "handlers": [h.strip() for h in handlers_csv.split(",") if h.strip()],
+}
+if repo_root:
+    rec["repo_root"] = repo_root
+with open(path, "w") as f:
+    json.dump(rec, f, indent=2)
+PY
+}
+
+# consult_reprieve <handler> <session> <project-dir>
+#   Run caws_is_handler_reprieved against the INSTALLED lib with the machine
+#   home the fixture isolated. Echoes REPRIEVED or NOT-REPRIEVED.
+consult_reprieve() {
+  local handler="$1" sid="$2" project_dir="$3"
+  HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws" \
+    CAWS_PROJECT_DIR="$project_dir" CAWS_VENDOR_DIR=.claude \
+    HOOKS_DIR="$CAWS_TEST_HOOKS_DIR" SID="$sid" HANDLER="$handler" bash -c '
+      source "$HOOKS_DIR/lib/caws-state.sh" 2>/dev/null || true
+      source "$HOOKS_DIR/lib/reprieve.sh"
+      if caws_is_handler_reprieved "$HANDLER" "$SID"; then
+        echo "REPRIEVED"
+      else
+        echo "NOT-REPRIEVED"
+      fi
+  ' 2>&1
+}
+
+# A sibling git repo that is NOT the fixture repo. Echoes its path; the caller
+# removes it.
+make_foreign_repo() {
+  local dir
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-foreign-XXXXXX")"
+  git -C "$dir" init -q -b main
+  git -C "$dir" config user.name 'CAWS Test'
+  git -C "$dir" config user.email 'test@caws.invalid'
+  git -C "$dir" config commit.gpgsign false
+  git -C "$dir" commit -q --allow-empty -m 'root commit'
+  printf '%s\n' "$dir"
+}
+
+@test "A10 — a repo-scoped grant is honored in the repo it was granted for" {
+  local canonical
+  canonical="$(cd "$CAWS_TEST_REPO" && pwd -P)"
+  write_reprieve_machine "sess-a10" "2099-01-01T00:00:00Z" "protected-paths.sh" "$canonical"
+  local result
+  result="$(consult_reprieve protected-paths.sh sess-a10 "$CAWS_TEST_REPO")"
+  echo "result=$result" >&3
+  grep -Fqx "REPRIEVED" <<<"$result"
+}
+
+@test "A11 — a repo-scoped grant does NOT reach a different repo" {
+  local canonical foreign
+  canonical="$(cd "$CAWS_TEST_REPO" && pwd -P)"
+  foreign="$(make_foreign_repo)"
+  write_reprieve_machine "sess-a11" "2099-01-01T00:00:00Z" "protected-paths.sh" "$canonical"
+  # Same session, same handler, same (findable) record — only the repo differs.
+  local here there
+  here="$(consult_reprieve protected-paths.sh sess-a11 "$CAWS_TEST_REPO")"
+  there="$(consult_reprieve protected-paths.sh sess-a11 "$foreign")"
+  rm -rf "$foreign"
+  echo "here=$here there=$there" >&3
+  # The paired assertion is the point: a bare NOT-REPRIEVED in the foreign repo
+  # would also hold if the record were simply unreadable.
+  grep -Fqx "REPRIEVED" <<<"$here"
+  grep -Fqx "NOT-REPRIEVED" <<<"$there"
+}
+
+@test "A12 — a grant stamped with the canonical root reaches that repo's worktrees" {
+  local canonical wt
+  canonical="$(cd "$CAWS_TEST_REPO" && pwd -P)"
+  write_reprieve_machine "sess-a12" "2099-01-01T00:00:00Z" "protected-paths.sh" "$canonical"
+  wt="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-reach-wt-XXXXXX")"
+  rmdir "$wt"
+  git -C "$CAWS_TEST_REPO" worktree add -q "$wt" -b bats-reprieve-reach-wt
+  local result
+  result="$(consult_reprieve protected-paths.sh sess-a12 "$wt")"
+  git -C "$CAWS_TEST_REPO" worktree remove --force "$wt" 2>/dev/null
+  git -C "$CAWS_TEST_REPO" branch -D bats-reprieve-reach-wt 2>/dev/null
+  echo "result=$result" >&3
+  # A linked worktree is the SAME repo. Scoping by `git rev-parse --show-toplevel`
+  # instead of --git-common-dir would strand every worktree of the granting repo.
+  grep -Fqx "REPRIEVED" <<<"$result"
+}
+
+@test "A13 — a record with no repo_root stays machine-wide (pre-upgrade + --all-repos)" {
+  local foreign
+  foreign="$(make_foreign_repo)"
+  write_reprieve_machine "sess-a13" "2099-01-01T00:00:00Z" "protected-paths.sh"
+  local result
+  result="$(consult_reprieve protected-paths.sh sess-a13 "$foreign")"
+  rm -rf "$foreign"
+  echo "result=$result" >&3
+  # An upgrade must not void a grant a human already approved, and --all-repos
+  # writes this same shape deliberately.
+  grep -Fqx "REPRIEVED" <<<"$result"
+}
+
+@test "A14 — a malformed repo_root is treated as no reprieve, not as machine-wide" {
+  local safe_sid state_dir
+  write_reprieve_machine "sess-a14" "2099-01-01T00:00:00Z" "protected-paths.sh" "$CAWS_TEST_REPO"
+  safe_sid="sess-a14"
+  state_dir="$CAWS_TEST_HOME/.caws/state/sessions/$safe_sid"
+  # A non-string repo_root: fail CLOSED (guard runs). Falling back to
+  # machine-wide here would let a corrupt field widen reach.
+  python3 - "$state_dir/guard-reprieve-$safe_sid.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+rec = json.load(open(p))
+rec["repo_root"] = 12345
+json.dump(rec, open(p, "w"), indent=2)
+PY
+  local result
+  result="$(consult_reprieve protected-paths.sh sess-a14 "$CAWS_TEST_REPO")"
+  echo "result=$result" >&3
+  grep -Fqx "NOT-REPRIEVED" <<<"$result"
+}

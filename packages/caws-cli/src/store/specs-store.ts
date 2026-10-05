@@ -17,12 +17,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  isOk,
-  parseAndValidateSpec,
-  type Diagnostic,
-  type Spec,
-} from '../kernel';
+import { isOk, parseAndValidateSpec, type Diagnostic, type Spec } from '../kernel';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 import { readYamlSource } from './yaml-store';

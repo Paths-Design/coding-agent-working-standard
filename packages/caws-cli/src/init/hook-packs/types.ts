@@ -25,8 +25,40 @@
 // a pack file requires naming the entry and identifying the replacement
 // mechanism.
 
-/** Supported agent harnesses. Implemented packs: claude-code, codex, opencode, zcode, kimi-code, qwen-code. */
-export type AgentSurface = 'claude-code' | 'codex' | 'opencode' | 'zcode' | 'kimi-code' | 'qwen-code' | 'dsh' | 'cursor' | 'windsurf' | 'none';
+/**
+ * Supported agent harnesses. The union AND the surface maps derive from
+ * packages/caws-cli/surfaces/registry.json via the generator — adding a
+ * surface is one registry edit, and the build fails when this file drifts
+ * (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A2).
+ */
+export type { AgentSurface } from './surfaces.generated';
+export {
+  AGENT_SURFACES,
+  SENTINEL_SURFACE,
+  SURFACE_ENV_VARS,
+  SURFACE_HOOK_MECHANISMS,
+  SURFACE_PIN_VARS,
+  TRUST_GATED_SURFACES,
+} from './surfaces.generated';
+import type { AgentSurface } from './surfaces.generated';
+
+/**
+ * Surfaces whose turn telemetry — the session-log fold under
+ * `.caws/sessions/` and the agent lease lifecycle under `.caws/leases/` — is
+ * owned by a per-harness telemetry ADAPTER writing through the governed CLI,
+ * not by the vendored shared-pack rows. For these surfaces the shared core
+ * omits its telemetry rows (`sharedPackForSurface`), and re-running
+ * `caws init` for the surface retires stale managed copies. Vendoring a
+ * second writer onto the same session/lease state is a dual-writer defect.
+ * (CAWS-HARNESS-TELEMETRY-ADAPTER-001.)
+ */
+export const ADAPTER_COVERED_SURFACES: readonly AgentSurface[] = ['dsh'];
+
+/** Whether a surface's turn telemetry belongs to a per-harness adapter
+ *  rather than the vendored shared-pack rows. */
+export function isAdapterCoveredSurface(surface: AgentSurface): boolean {
+  return (ADAPTER_COVERED_SURFACES as readonly string[]).includes(surface);
+}
 
 /** Lifecycle interception points a pack may register on a harness. */
 export type LifecycleEvent =
@@ -35,7 +67,9 @@ export type LifecycleEvent =
   | 'pre_edit'
   | 'session_start'
   | 'pre_compact'
-  | 'stop';
+  | 'stop'
+  /** Session teardown. Distinct from `stop`, which fires once per turn. */
+  | 'session_end';
 
 /** A single file the pack installs, relative to the repo root. */
 export interface HookPackFile {
@@ -87,6 +121,37 @@ export interface HookPackV1 {
   readonly activation: 'immediate' | 'restart_required' | 'unknown';
 }
 
+/** Why a managed file's body differs from the shipping template.
+ *
+ * A body difference alone cannot say WHO changed the file: the consumer may
+ * have grown it, or upstream may have grown the template while this copy sat
+ * still. Both produce the same two-way inequality. The installer records the
+ * as-installed body at `.caws/hooks/.pristine/<packId>/<destPath>`, and that
+ * third point is what separates them.
+ *
+ * `upstream_only` is a NARROWED INVESTIGATION, not a safety verdict. It says
+ * "no local edit is recorded over the baseline" — never "refreshing is safe".
+ *
+ * The residual doubt is now historical rather than structural. `caws init port`
+ * in 12.0.0 and 12.1.0 baselined the RECONCILED body it landed, absorbing the
+ * repo's growth into the very record meant to expose it, so a grown file that
+ * was ported by those versions still reads `upstream_only` today. Ports from
+ * this version baseline the upstream template instead, which is what keeps
+ * `installed - baseline = local growth` true. A baseline written by an older
+ * CLI is not healed retroactively — re-port the path to correct it.
+ *
+ * CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01,
+ * CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01.
+ */
+export type HookPackDriftClass =
+  /** Installed body differs from its recorded baseline: the repo edited it. */
+  | 'local_growth'
+  /** Installed body equals its baseline; only the template moved. */
+  | 'upstream_only'
+  /** No baseline recorded (or it is unreadable), so the two cannot be told
+   *  apart. Always refused — absence of evidence is not evidence of safety. */
+  | 'unobserved';
+
 /** Managed-file header fields. Used by install for parse/emit. */
 export interface ManagedHeader {
   readonly hookPack: string;
@@ -112,7 +177,14 @@ export type InstallFileState =
     }
   /** Managed file at destPath matching this pack/version but content
    *  differs from bundled. Refuses without --adopt or --overwrite. */
-  | { readonly kind: 'managed_drift'; readonly header: ManagedHeader }
+  | {
+      readonly kind: 'managed_drift';
+      readonly header: ManagedHeader;
+      /** Which side moved, decided against the recorded pristine baseline.
+       *  Diagnostic only: every class still refuses without --adopt or
+       *  --overwrite. */
+      readonly driftClass: HookPackDriftClass;
+    }
   /** File at destPath without a managed header. Refuses without
    *  --adopt or --overwrite. */
   | { readonly kind: 'unmanaged_collision' };
@@ -138,6 +210,12 @@ export interface HookPackFileAction {
   readonly action: 'created' | 'updated' | 'unchanged' | 'refused';
   /** When action === 'refused', the reason. */
   readonly refusalReason?: 'unmanaged_collision' | 'managed_drift';
+  /** When refusalReason === 'managed_drift', which side moved. Carried as its
+   *  own field rather than widening `refusalReason`, so consumers already
+   *  matching 'managed_drift' keep working. Absent for unmanaged collisions,
+   *  which have no baseline to compare against.
+   *  (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01 A4.) */
+  readonly driftClass?: HookPackDriftClass;
   /** True when --overwrite selected this file but --force was absent: the
    *  replacement was withheld pending explicit confirmation. The renderer
    *  surfaces `diff` and the --overwrite --force remediation. */

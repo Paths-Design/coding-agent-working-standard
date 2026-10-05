@@ -40,7 +40,12 @@ const { CLAUDE_CODE_PACK } = require('../../dist/init/hook-packs/manifest-claude
 const { OPENCODE_PACK } = require('../../dist/init/hook-packs/manifest-opencode');
 const { CODEX_PACK } = require('../../dist/init/hook-packs/manifest-codex');
 const { IMPLEMENTED_SURFACES } = require('../../dist/init/hook-packs/register');
-const { renderHookPackInstall } = require('../../dist/shell/render/init-hook-pack');
+const { DSH_PACK, DSH_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-dsh');
+const { SURFACE_HOOK_MECHANISMS } = require('../../dist/init/hook-packs/surfaces.generated');
+const {
+  renderHookPackInstall,
+  renderActivationContract,
+} = require('../../dist/shell/render/init-hook-pack');
 
 const EXCLUDED_DIRS = new Set(['tmp', '.caws', '__pycache__', 'node_modules']);
 const EXCLUDED_FILES = new Set(['.DS_Store']);
@@ -59,8 +64,8 @@ function listTemplateFiles(dir, baseDir = dir) {
   return out;
 }
 
-const ALL_TEMPLATE_FILES = ['shared', 'claude-code', 'codex', 'opencode', 'zcode'].flatMap(
-  (pack) => listTemplateFiles(path.join(PACKS_ROOT, pack))
+const ALL_TEMPLATE_FILES = ['shared', 'claude-code', 'codex', 'opencode', 'zcode'].flatMap((pack) =>
+  listTemplateFiles(path.join(PACKS_ROOT, pack))
 );
 
 /** The subset of template files that carry the managed marker (the ones whose
@@ -136,6 +141,21 @@ describe('A2: parseManagedHeader still recognizes a rewritten header as managed'
       (f) => parseManagedHeader(fs.readFileSync(f, 'utf8')) === null
     ).map((f) => path.relative(PACKS_ROOT, f));
     expect(unparsable).toEqual([]);
+  });
+
+  test('the generated surfaces registry carries a parseable generated-authority header', () => {
+    const content = fs.readFileSync(
+      path.join(PACKS_ROOT, 'shared', 'lib', 'surfaces-registry.sh'),
+      'utf8'
+    );
+    const header = parseManagedHeader(content);
+
+    expect(header).not.toBeNull();
+    expect(header.hookPack).toBe('shared');
+    expect(header.hookPackVersion).toBeGreaterThan(0);
+    expect(header.cawsMinMajor).toBe(11);
+    expect(content).toMatch(/edit_stance: GENERATED PROJECTION/);
+    expect(content).toContain('packages/caws-cli/surfaces/registry.json');
   });
 
   test('the multi-line edit_stance block does not swallow or corrupt a marker key', () => {
@@ -261,6 +281,8 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
   // A representative shared hook with a multi-line body, so a real edit is
   // unambiguous.
   const REL = '.caws/hooks/scope-guard.sh';
+  const GENERATED_REL = '.caws/hooks/lib/surfaces-registry.sh';
+  const GENERATED_SENTINEL = '# @generated — DO NOT EDIT.';
 
   beforeEach(() => {
     repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-growth-'));
@@ -293,6 +315,67 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
     const a = r.actions.find((x) => x.destPath === REL);
     expect(a.action).toBe('unchanged');
     expect(fs.readFileSync(abs(REL)).equals(before)).toBe(true);
+  });
+
+  test('a second shared install is byte-identical and unchanged for every manifest destination', () => {
+    const before = new Map(
+      SHARED_PACK.installedFiles.map(({ destPath }) => [destPath, fs.readFileSync(abs(destPath))])
+    );
+
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+
+    expect(r.actions).toEqual(
+      SHARED_PACK.installedFiles.map(({ destPath }) => ({
+        destPath,
+        action: 'unchanged',
+      }))
+    );
+    for (const { destPath } of SHARED_PACK.installedFiles) {
+      expect(fs.readFileSync(abs(destPath)).equals(before.get(destPath))).toBe(true);
+    }
+  });
+
+  test('an exact legacy headerless generated registry migrates to the managed projection', () => {
+    const installed = fs.readFileSync(abs(GENERATED_REL), 'utf8');
+    const sentinelIndex = installed.indexOf(GENERATED_SENTINEL);
+    expect(sentinelIndex).toBeGreaterThanOrEqual(0);
+    const legacy = installed.slice(sentinelIndex);
+    fs.writeFileSync(abs(GENERATED_REL), legacy);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === GENERATED_REL);
+    const migrated = fs.readFileSync(abs(GENERATED_REL), 'utf8');
+
+    expect(a).toEqual({
+      destPath: GENERATED_REL,
+      action: 'updated',
+      restampOnly: true,
+    });
+    expect(parseManagedHeader(migrated)).toMatchObject({
+      hookPack: 'shared',
+      hookPackVersion: SHARED_PACK.packVersion,
+      cawsMinMajor: 11,
+    });
+    expect(migrated.slice(migrated.indexOf(GENERATED_SENTINEL))).toBe(legacy);
+  });
+
+  test('a modified legacy headerless generated registry remains refused and byte-preserved', () => {
+    const installed = fs.readFileSync(abs(GENERATED_REL), 'utf8');
+    const sentinelIndex = installed.indexOf(GENERATED_SENTINEL);
+    expect(sentinelIndex).toBeGreaterThanOrEqual(0);
+    const modifiedLegacy =
+      installed.slice(sentinelIndex) + '\n# repo-specific generated projection edit\n';
+    fs.writeFileSync(abs(GENERATED_REL), modifiedLegacy);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === GENERATED_REL);
+
+    expect(a).toEqual({
+      destPath: GENERATED_REL,
+      action: 'refused',
+      refusalReason: 'unmanaged_collision',
+    });
+    expect(fs.readFileSync(abs(GENERATED_REL), 'utf8')).toBe(modifiedLegacy);
   });
 
   test('re-init of a GROWN (edited) hook is REFUSED as drift and the edit SURVIVES', () => {
@@ -603,5 +686,203 @@ describe('A7: skip panels derive their surface list from IMPLEMENTED_SURFACES', 
       expect(out).toContain(surface);
     }
     expect(out).toContain('dsh');
+  });
+});
+
+/**
+ * A8 — DSH runtime-description currency
+ * (CAWS-DSH-ADAPTER-RUNTIME-DESCRIPTION-01).
+ *
+ * The DSH doctrine, the dsh manifest, and the dsh install guidance pinned the
+ * interposition shim to `@deepseek-ai/dsh-hooks-caws`, a package in the DSH
+ * harness tree. The deployed integration is the profile-loaded
+ * `@caws/dsh-bundle`, so the shipped description named an adapter that is not
+ * the one running — the same "hardcoded per-surface fact goes stale" defect A7
+ * closes for the skip-panel surface list. These arms assert the description
+ * derives its mechanism from the surface registry and carries no retired pin.
+ *
+ * The registry (`packages/caws-cli/surfaces/registry.json`) is the single source
+ * of per-surface facts; `SURFACE_HOOK_MECHANISMS` is its generated projection.
+ * Asserting against the projection rather than a literal is what makes a future
+ * mechanism change fail here instead of rotting in prose.
+ */
+describe('A8: the DSH description derives its mechanism from the surface registry', () => {
+  const RETIRED_PIN = '@deepseek-ai/dsh-hooks-caws';
+  const REFERENCE_BUNDLE = '@caws/dsh-bundle';
+  const DSH_DOCTRINE = path.join(PACKS_ROOT, 'dsh', 'AGENTS.md');
+  const MANIFEST_SOURCE = path.join(CLI_PKG_ROOT, 'src', 'init', 'hook-packs', 'manifest-dsh.ts');
+  const REGISTRY = path.join(CLI_PKG_ROOT, 'surfaces', 'registry.json');
+
+  // Drive the SHIPPED manifest, not a hand-built stub: the summary is part of
+  // the description under test. The activation guidance is a separate renderer
+  // (renderActivationContract), so both panels are scanned.
+  const PACK_RESULT = {
+    pack: DSH_PACK,
+    outcome: 'installed',
+    activation: 'restart_required',
+    actions: [{ destPath: '.dsh/AGENTS.md', action: 'created' }],
+  };
+
+  function renderDshInstall() {
+    return renderHookPackInstall(PACK_RESULT);
+  }
+
+  function renderDshActivation() {
+    return renderActivationContract(PACK_RESULT);
+  }
+
+  test('non-vacuity anchor: the registry mechanism for dsh is harness-plugin', () => {
+    // If this ever changes, every assertion below is asserting the wrong fact —
+    // fail here first rather than passing against a stale expectation.
+    expect(SURFACE_HOOK_MECHANISMS.dsh).toBe('harness-plugin');
+  });
+
+  test('the generated projection still matches its registry source', () => {
+    const registry = JSON.parse(fs.readFileSync(REGISTRY, 'utf8'));
+    expect(SURFACE_HOOK_MECHANISMS.dsh).toBe(registry.surfaces.dsh.hookMechanism);
+  });
+
+  test('no shipped DSH artifact names the retired shim package', () => {
+    const artifacts = {
+      'templates/hook-packs/dsh/AGENTS.md': fs.readFileSync(DSH_DOCTRINE, 'utf8'),
+      'src/init/hook-packs/manifest-dsh.ts': fs.readFileSync(MANIFEST_SOURCE, 'utf8'),
+      'manifest summary': DSH_PACK.summary,
+      'rendered dsh install panel': renderDshInstall(),
+      'rendered dsh activation guidance': renderDshActivation(),
+    };
+    const offenders = Object.entries(artifacts)
+      .filter(([, body]) => body.includes(RETIRED_PIN))
+      .map(([name]) => name);
+    expect(offenders).toEqual([]);
+    // Positive control: the scan is looking at real content, so an empty
+    // offender list is a finding and not an artifact of an empty haystack.
+    expect(artifacts['templates/hook-packs/dsh/AGENTS.md']).toContain(REFERENCE_BUNDLE);
+  });
+
+  test('the doctrine states the registry mechanism and names the reference adapter, not as the wiring test', () => {
+    const doctrine = fs.readFileSync(DSH_DOCTRINE, 'utf8');
+    expect(doctrine).toContain(SURFACE_HOOK_MECHANISMS.dsh);
+    expect(doctrine).toContain(REFERENCE_BUNDLE);
+    // The doctrine must scope the bundle name to "reference", because naming a
+    // package is what went stale the first time.
+    expect(doctrine).toMatch(/reference adapter/i);
+  });
+
+  test('the doctrine sends the reader to the live profile for wiring, never to a settings key', () => {
+    const doctrine = fs.readFileSync(DSH_DOCTRINE, 'utf8');
+    // The fact that makes the check runnable on any machine.
+    expect(doctrine).toContain('dsh.profile.bundles');
+    // The retired claim shape: inferring "not wired" from the absence of a
+    // settings hooks key. That inference is unfalsifiable on this surface and
+    // must not return.
+    expect(doctrine).not.toMatch(/settings\.yaml[^.]*declares no hooks key/i);
+    expect(doctrine).not.toMatch(/no wiring invokes the dispatchers/i);
+  });
+
+  // The retracted derivation: naming the PROFILE's own patch as the layer that
+  // carries the CAWS plugin ids. A profile composes each bundle's patch first,
+  // so the profile patch is an additional layer and is empty on a stock profile.
+  const RETRACTED_WIRING_HOME = /\bprofile'?s (?:own )?`cordis\.patch\.yml`[^.\n]{0,60}\binsert/i;
+
+  test('the doctrine names the bundle patch layer, not the profile patch, as the plugin-id source', () => {
+    const doctrine = fs.readFileSync(DSH_DOCTRINE, 'utf8');
+    // The bundle's own patch is the layer that carries the CAWS inserts.
+    expect(doctrine).toContain('dsh.bundle.patch');
+    expect(doctrine).toMatch(/bundle's own patch|bundle's patch/i);
+    // The retracted rule must be absent...
+    expect(RETRACTED_WIRING_HOME.test(doctrine)).toBe(false);
+    // ...and the matcher must be able to see it, or the line above proves nothing.
+    expect(
+      RETRACTED_WIRING_HOME.test(
+        "plus that profile's `cordis.patch.yml`, which inserts the plugin ids"
+      )
+    ).toBe(true);
+  });
+
+  test('the manifest comment carries the same composition rule as the doctrine', () => {
+    const manifest = fs.readFileSync(MANIFEST_SOURCE, 'utf8');
+    expect(manifest).toContain('dsh.bundle.patch');
+    expect(RETRACTED_WIRING_HOME.test(manifest)).toBe(false);
+  });
+
+  test('the manifest summary derives its mechanism from the registry', () => {
+    // The summary is printed by the install panel, so a literal here would ship
+    // the same stale-fact risk the doctrine carried.
+    expect(DSH_PACK.summary).toContain(SURFACE_HOOK_MECHANISMS.dsh);
+  });
+
+  test('the rendered dsh activation guidance names the mechanism and points at the profile', () => {
+    const out = renderDshActivation();
+    expect(out).toContain(SURFACE_HOOK_MECHANISMS.dsh);
+    expect(out).toMatch(/profile/i);
+    expect(out).not.toContain(RETIRED_PIN);
+  });
+
+  test('a real install stamps the doctrine at the bumped pack version and still parses as managed', () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-dsh-doctrine-'));
+    try {
+      const r = installHookPack(DSH_PACK, { repoRoot });
+      const installed = path.join(repoRoot, '.dsh', 'AGENTS.md');
+      expect(r.actions.find((a) => a.destPath === '.dsh/AGENTS.md').action).toBe('created');
+      const content = fs.readFileSync(installed, 'utf8');
+      const header = parseManagedHeader(content);
+      expect(header).not.toBeNull();
+      expect(header.hookPack).toBe('dsh');
+      // The stamp lifts the frozen template literal to the manifest version, so
+      // a doctrine change without a version bump is visible as a stale stamp.
+      expect(header.hookPackVersion).toBe(DSH_PACK_VERSION);
+      expect(DSH_PACK.packVersion).toBe(DSH_PACK_VERSION);
+      expect(content).toContain(SURFACE_HOOK_MECHANISMS.dsh);
+      expect(content).not.toContain(RETIRED_PIN);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01 A6 — the activation
+ * contract no longer claims "Pre-tool-call governance is NOT in effect" on a
+ * run that merely installed nothing. A bare `caws init --adopt` (no surface
+ * detected) is a verified no-op: the panel must say what the run did, that
+ * pre-existing installs stand, and what --adopt actually scopes to.
+ */
+describe('A6: no-pack activation renders the run honestly (CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01)', () => {
+  const NO_PACK_RESULT = {
+    pack: null,
+    outcome: 'skipped_explicit_none',
+    activation: 'not_applicable',
+    actions: [],
+  };
+
+  test('a no-pack run states what it did without asserting governance is disabled', () => {
+    const out = renderActivationContract(NO_PACK_RESULT);
+    expect(out).toContain('This run installed no hook pack');
+    expect(out).toContain('Nothing was written or changed by this step');
+    expect(out).toContain('remains in effect unchanged');
+    expect(out).not.toContain('NOT in effect');
+  });
+
+  test('an adopt no-op names the scope of --adopt explicitly', () => {
+    const out = renderActivationContract(NO_PACK_RESULT, undefined, { adoptRequested: true });
+    expect(out).toContain('--adopt only decides collision handling DURING an install');
+    expect(out).toContain('writes nothing');
+    expect(out).not.toContain('NOT in effect');
+  });
+
+  test('a no-pack run without adopt does not mention adopt', () => {
+    const out = renderActivationContract(NO_PACK_RESULT);
+    expect(out).not.toContain('--adopt');
+  });
+
+  test('skipped_ambiguous renders the same honesty (shared no-pack panel)', () => {
+    const out = renderActivationContract(
+      { pack: null, outcome: 'skipped_ambiguous', activation: 'not_applicable', actions: [] },
+      undefined,
+      { adoptRequested: true }
+    );
+    expect(out).toContain('This run installed no hook pack');
+    expect(out).not.toContain('NOT in effect');
+    expect(out).toContain('--adopt only decides collision handling DURING an install');
   });
 });

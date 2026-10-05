@@ -2,15 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://caws.paths.design/schemas/messages.v1.json",
   "title": "CAWS Inter-Agent Message",
-  "description": "One line in .caws/messages.jsonl — a directed message between two CAWS sessions (or a session and a named human/automation client). This log is SEPARATE from events.jsonl by design: chat-rate traffic must never dilute the integrity-critical audit chain. Four record kinds share the file: a 'message' record (a directed send), a 'delivery' record (marks a message consumed), a 'refusal' record (a refused send/reply — best-effort telemetry, never read back for delivery state), and a 'prune' marker (archive-only, records which ids a prune archived). Like events, the actor is a structured, kernel-attributed envelope so a message's PROVENANCE (who sent it) is recorded rather than self-claimed — but the channel does NOT vouch for the message BODY, which a consumer must treat as an unverified claim.",
+  "description": "One line in .caws/messages.jsonl — a directed message, legacy immediate-delivery receipt, expiring automatic-delivery offer, exact offer settlement, refusal, or archive prune marker. This operational log is separate from events.jsonl and confers no authority.",
   "type": "object",
   "additionalProperties": false,
   "required": ["record", "ts"],
   "properties": {
     "record": {
       "type": "string",
-      "enum": ["message", "delivery", "refusal", "prune"],
-      "description": "Discriminator. 'message': a directed send (carries id/actor/to/text/channel). 'delivery': marks a prior message id consumed by its recipient. 'refusal': a refused send/reply (telemetry; not delivery state). 'prune': archive marker naming the ids a prune archived (archive-only)."
+      "enum": ["message", "delivery", "offer", "offer_settlement", "refusal", "prune"],
+      "description": "Discriminator. 'delivery' is the consume-on-manual-poll path. 'offer' reserves automatic candidates. 'offer_settlement' delivers or releases one exact live offer."
     },
     "ts": {
       "type": "string",
@@ -79,6 +79,37 @@
       "minLength": 1,
       "description": "On 'delivery' records: the id of the message that was consumed. Required on 'delivery' records."
     },
+    "offer_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique automatic-delivery occurrence id on offer and offer_settlement records."
+    },
+    "recipient": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Recipient identity bound into an offer and its settlement."
+    },
+    "deliver_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Message ids reserved atomically by an offer."
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Offer expiry. An expired offer cannot be settled and its messages may be offered again."
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["delivered", "released"],
+      "description": "Offer settlement outcome. Delivered means adapter handoff, not recipient visibility."
+    },
+    "boundary": {
+      "type": "string",
+      "const": "adapter_handoff",
+      "description": "Strongest observation claimed by a delivered automatic settlement."
+    },
     "mode": {
       "type": "string",
       "enum": ["auto", "poll"],
@@ -116,6 +147,24 @@
     {
       "if": { "properties": { "record": { "const": "delivery" } } },
       "then": { "required": ["deliver_id"] }
+    },
+    {
+      "if": { "properties": { "record": { "const": "offer" } } },
+      "then": { "required": ["offer_id", "recipient", "deliver_ids", "expires_at", "mode"] }
+    },
+    {
+      "if": { "properties": { "record": { "const": "offer_settlement" } } },
+      "then": { "required": ["offer_id", "recipient", "outcome"] }
+    },
+    {
+      "if": {
+        "properties": {
+          "record": { "const": "offer_settlement" },
+          "outcome": { "const": "delivered" }
+        },
+        "required": ["record", "outcome"]
+      },
+      "then": { "required": ["boundary"] }
     },
     {
       "if": { "properties": { "record": { "const": "refusal" } } },

@@ -1,0 +1,42 @@
+id: CAWS-DEFECT-ARCHIVE-BATCH-DROPS-NARROW-REPAIR-01
+title: 'specs archive batch mode prints each failure reason but drops its narrowRepair, so the --replace remedy for a stale archived body is never shown'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-04T23:45:37.201Z'
+updated_at: '2026-10-05T03:19:34.097Z'
+created_by_session: '@darianrosebrook'
+blast_radius:
+  modules:
+    - 'caws-cli shell: specs archive / prune-drafts batch failure rendering'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/tests/shell/specs-archive-batch.test.js'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/tests/shell/specs-prune-drafts.test.js
+  out: []
+invariants:
+  - 'Every refusal a batch command reports carries the same remedy the single-item command would print'
+acceptance:
+  - id: A1
+    given: 'a closed spec whose id already has an older archived body'
+    when: 'caws specs archive --status closed --apply runs'
+    then: 'the failed line for that spec is followed by the narrowRepair text naming caws specs archive <id> --replace'
+  - id: A2
+    given: 'the same batch run with --json'
+    when: 'it emits the failure'
+    then: 'the failed entry carries the narrowRepair remedy as a field'
+  - id: A3
+    given: 'archiveClosedSpecs (store) fails one selected spec whose diagnostic carries a narrowRepair'
+    when: 'the batch outcome is returned'
+    then: 'the failed entry for that spec carries the narrowRepair text, so no renderer can lose it'
+  - id: A4
+    given: >-
+      specs prune-drafts --apply where one candidate fails retirement with a
+      diagnostic carrying a narrowRepair
+    when: 'the batch output and --json are rendered'
+    then: 'the failed line and JSON entry carry that remedy, matching archive'
+non_functional: {}
+contracts: []

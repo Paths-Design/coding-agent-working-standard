@@ -15,6 +15,7 @@
 //   Current context
 //     cwd relation: tracked / untracked / outside repo
 //     worktree name (if resolved) / bound spec id / binding state
+//     lane divergence from base (only inside a tracked worktree)
 //     current session id (or "unresolved (read-only)")
 //
 //   Claim (only when inside a tracked worktree)
@@ -23,6 +24,7 @@
 //   Doctor
 //     error/warning/info counts; top findings, capped.
 
+import { projectDoctorFindings } from '../../kernel';
 import type {
   ActivitySummary,
   AgentLease,
@@ -35,13 +37,11 @@ import type {
   WorktreeRegistry,
 } from '../../kernel';
 
+import { formatLaneCounts, type LaneDivergence } from '../../store';
 import type { ResolvedBinding } from '../binding/types';
 import type { ResolvedSession } from '../session/types';
 import { renderClaimPanel } from './claim';
-import {
-  countFindingSeverities,
-  renderFindings,
-} from './finding';
+import { countFindingSeverities, renderFindings } from './finding';
 
 export interface StatusRenderInput {
   readonly repoRoot: string;
@@ -75,6 +75,15 @@ export interface StatusRenderInput {
   readonly selfSessionId?: string | null;
   /** Optional focused panel selection. Undefined means full dashboard. */
   readonly panels?: readonly StatusPanel[];
+
+  // ─── WORKTREE-LANE-DIVERGENCE-SURFACE-001 ─────────────────────────────
+  /**
+   * The current worktree's position relative to its base, pre-computed by the
+   * command (git plumbing is the command's job; this module stays pure).
+   * Absent when cwd is not inside a tracked worktree — in which case NOTHING
+   * lane-shaped renders, rather than a zero-filled placeholder.
+   */
+  readonly lane?: LaneDivergence;
 }
 
 const DEFAULT_FINDING_CAP = 5;
@@ -91,7 +100,7 @@ export function renderShortStatus(input: StatusRenderInput): string {
           .map(([state, count]) => `${count} ${state}`)
           .join(', ');
   const worktreeCount = Object.keys(input.worktrees).length;
-  const counts = countFindingSeverities(input.doctorFindings);
+  const counts = countFindingSeverities(projectDoctorFindings(input.doctorFindings).findings);
   const leaseSummary = input.leaseSummary;
   const agentSummary =
     leaseSummary === undefined || leaseSummary.total === 0
@@ -101,8 +110,8 @@ export function renderShortStatus(input: StatusRenderInput): string {
     input.eventChainOk === undefined
       ? `${input.eventCount} events`
       : input.eventChainOk
-      ? `${input.eventCount} events chain=ok`
-      : `${input.eventCount} events chain=broken`;
+        ? `${input.eventCount} events chain=ok`
+        : `${input.eventCount} events chain=broken`;
   const activeSpecCount = lifecycle['active'] ?? 0;
   return [
     'CAWS Status (short)',
@@ -113,6 +122,13 @@ export function renderShortStatus(input: StatusRenderInput): string {
     `  events:    ${eventSummary}`,
     `  cwd:       ${describeCwdRelation(input.binding)}`,
     `  binding:   ${describeBindingState(input.binding.binding, activeSpecCount)}`,
+    // Absent outside a tracked worktree: a lane line with nothing to describe
+    // would be noise, and a zero-filled one would be a lie.
+    ...(input.lane !== undefined
+      ? [
+          `  lane:      ${input.lane.branch} → ${input.lane.baseBranch}  ${formatLaneCounts(input.lane)}`,
+        ]
+      : []),
   ].join('\n');
 }
 
@@ -168,16 +184,10 @@ function renderLeaseRow(lease: AgentLease, selfSessionId: string | null, now: Da
   const age = formatAge(now.getTime() - Date.parse(lease.last_active));
   const branch = lease.branch ?? '-';
   const spec = lease.bound_spec_id ?? '-';
-  const wtTag =
-    lease.bound_worktree !== undefined
-      ? `wt=${lease.bound_worktree}`
-      : '';
+  const wtTag = lease.bound_worktree !== undefined ? `wt=${lease.bound_worktree}` : '';
   // LEASE-WORK-STATE-001: visibility-only annotation; absent field renders
   // nothing (no placeholder noise for leases that never declared state).
-  const stateTag =
-    lease.work_state !== undefined
-      ? `state=${lease.work_state}`
-      : '';
+  const stateTag = lease.work_state !== undefined ? `state=${lease.work_state}` : '';
   const parts = [
     lease.session_id,
     lease.platform,
@@ -198,6 +208,38 @@ function formatAge(ms: number): string {
   if (ms < 3600_000) return `${Math.round(ms / 60_000)}m`;
   if (ms < 86_400_000) return `${Math.round(ms / 3600_000)}h`;
   return `${Math.round(ms / 86_400_000)}d`;
+}
+
+/**
+ * Lane lines for the Current context block.
+ *
+ * Renders the same `ahead=N behind=M` token `caws worktree list` prints — one
+ * computation, one vocabulary, so a reader comparing the two surfaces is
+ * comparing identical strings rather than two dialects of the same fact.
+ *
+ * The parenthetical is load-bearing, not decoration. These counts come from
+ * LOCAL refs shared with the canonical checkout, read at this instant; a peer
+ * landing work moves them. Presenting a bare number would invite reading it as
+ * a merge-time guarantee, which it is not — `caws worktree merge`'s
+ * compare-and-swap is what actually reconciles.
+ */
+function renderLaneLines(lane: LaneDivergence, worktreeName: string, lines: string[]): void {
+  const counts = formatLaneCounts(lane);
+  if (lane.unknownReason !== null) {
+    lines.push(
+      `  lane:        ${lane.branch} → ${lane.baseBranch}  ${counts}  (unavailable: ${lane.unknownReason})`
+    );
+    return;
+  }
+  const currency =
+    lane.containsBase === true ? `contains ${lane.baseBranch}` : 'local refs, read just now';
+  lines.push(`  lane:        ${lane.branch} → ${lane.baseBranch}  ${counts}  (${currency})`);
+  if (lane.containsBase === true) return;
+  lines.push(
+    `  reconcile:   this lane is missing ${lane.behind} commit(s) from ${lane.baseBranch} — ` +
+      `\`git merge ${lane.baseBranch}\` from here, or let \`caws worktree merge ${worktreeName}\` ` +
+      `land against ${lane.baseBranch} as it stands then (compare-and-swap).`
+  );
 }
 
 function describeCwdRelation(binding: ResolvedBinding): string {
@@ -229,7 +271,7 @@ function describeBindingState(state: BindingState, _activeSpecCount: number): st
       // repair is to bind — not to go inspect N specs.
       // (Supersedes CAWS-STATUS-UNBOUND-ENFORCEMENT-CAVEAT-001's wording;
       // CAWS-SPEC-ACTIVATION-BINDS-001.)
-      return 'unbound (no write authority here — every governed path is refused for lack of a binding, not by any spec\'s scope.out; bind one to edit)';
+      return "unbound (no write authority here — every governed path is refused for lack of a binding, not by any spec's scope.out; bind one to edit)";
   }
 }
 
@@ -293,11 +335,10 @@ function renderAgentsPanel(input: StatusRenderInput, lines: string[]): void {
 
 function renderDoctorPanel(input: StatusRenderInput, lines: string[]): void {
   lines.push('Doctor');
-  const counts = countFindingSeverities(input.doctorFindings);
-  lines.push(
-    `  Summary:   ${counts.errors}E / ${counts.warnings}W / ${counts.infos}I`
-  );
-  if (input.doctorFindings.length === 0) {
+  const { findings } = projectDoctorFindings(input.doctorFindings);
+  const counts = countFindingSeverities(findings);
+  lines.push(`  Summary:   ${counts.errors}E / ${counts.warnings}W / ${counts.infos}I`);
+  if (findings.length === 0) {
     lines.push('  (no findings)');
     return;
   }
@@ -307,14 +348,29 @@ function renderDoctorPanel(input: StatusRenderInput, lines: string[]): void {
     warning: 1,
     info: 2,
   };
-  const top = [...input.doctorFindings]
-    .sort((a, b) => rank[a.severity] - rank[b.severity])
-    .slice(0, cap);
+  const hooks = findings.filter((f) => f.rule.startsWith('doctor.hooks.'));
+  const display: DoctorFinding[] =
+    hooks.length > 1
+      ? [
+          ...findings.filter((f) => !f.rule.startsWith('doctor.hooks.')),
+          {
+            rule: 'doctor.hooks.maintenance',
+            authority: 'kernel/diagnostics',
+            severity: hooks.some((f) => f.severity === 'error')
+              ? 'error'
+              : hooks.some((f) => f.severity === 'warning')
+                ? 'warning'
+                : 'info',
+            message: `Hook maintenance: ${hooks.length} diagnostics (${hooks.map((f) => f.rule).join(', ')}). Inspect selected handlers before deciding what to port, retain or retire.`,
+            narrowRepair: 'caws hooks list --json; caws doctor --data',
+            data: { findings: hooks },
+          },
+        ]
+      : [...findings];
+  const top = [...display].sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, cap);
   lines.push(renderFindings(top, { suppressTakeoverHints: true }));
-  if (input.doctorFindings.length > cap) {
-    lines.push(
-      `  … ${input.doctorFindings.length - cap} more — run \`caws doctor\` for full list`
-    );
+  if (display.length > cap) {
+    lines.push(`  … ${display.length - cap} more — run \`caws doctor\` for full list`);
   }
 }
 
@@ -324,9 +380,7 @@ export function renderStatus(input: StatusRenderInput): string {
   lines.push('');
 
   const focusedPanels =
-    input.panels !== undefined && input.panels.length > 0
-      ? new Set(input.panels)
-      : null;
+    input.panels !== undefined && input.panels.length > 0 ? new Set(input.panels) : null;
   if (focusedPanels !== null) {
     const renderFocused = (panel: StatusPanel, render: () => void) => {
       if (!focusedPanels.has(panel)) return;
@@ -371,7 +425,7 @@ export function renderStatus(input: StatusRenderInput): string {
       unboundActive === 0
         ? `  in flight:   ${bound} of ${activeTotal} active bound to a worktree`
         : `  in flight:   ${bound} of ${activeTotal} active bound to a worktree; ` +
-          `${unboundActive} active with no worktree (see doctor)`
+            `${unboundActive} active with no worktree (see doctor)`
     );
   }
 
@@ -382,8 +436,8 @@ export function renderStatus(input: StatusRenderInput): string {
     input.eventChainOk === undefined
       ? `${input.eventCount} events`
       : input.eventChainOk
-      ? `${input.eventCount} events (chain OK)`
-      : `${input.eventCount} events (CHAIN BROKEN — see doctor)`;
+        ? `${input.eventCount} events (chain OK)`
+        : `${input.eventCount} events (CHAIN BROKEN — see doctor)`;
   lines.push(`  events:      ${eventLine}`);
 
   // -------- Current context --------
@@ -394,9 +448,10 @@ export function renderStatus(input: StatusRenderInput): string {
     lines.push(`  worktree:    ${input.binding.worktreeName}`);
   }
   const activeSpecCount = lifecycle['active'] ?? 0;
-  lines.push(
-    `  binding:     ${describeBindingState(input.binding.binding, activeSpecCount)}`
-  );
+  lines.push(`  binding:     ${describeBindingState(input.binding.binding, activeSpecCount)}`);
+  if (input.binding.worktreeName !== undefined && input.lane !== undefined) {
+    renderLaneLines(input.lane, input.binding.worktreeName, lines);
+  }
 
   if (input.session !== null) {
     lines.push(

@@ -67,10 +67,12 @@ const RECORDED = JSON.parse(
 const { SHARED_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-shared');
 const { CLAUDE_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { CODEX_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-codex');
+const { DSH_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-dsh');
 const { KIMI_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-kimi-code');
 const { OPENCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-opencode');
 const { QWEN_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-qwen-code');
 const { ZCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-zcode');
+const { IMPLEMENTED_SURFACES } = require('../../dist/init/hook-packs/register');
 
 const PACKS = [
   { id: 'shared', dir: path.join(PACKS_ROOT, 'shared'), version: SHARED_PACK_VERSION },
@@ -80,11 +82,18 @@ const PACKS = [
     version: CLAUDE_CODE_PACK_VERSION,
   },
   { id: 'codex', dir: path.join(PACKS_ROOT, 'codex'), version: CODEX_PACK_VERSION },
+  { id: 'dsh', dir: path.join(PACKS_ROOT, 'dsh'), version: DSH_PACK_VERSION },
   { id: 'kimi-code', dir: path.join(PACKS_ROOT, 'kimi-code'), version: KIMI_CODE_PACK_VERSION },
   { id: 'opencode', dir: path.join(PACKS_ROOT, 'opencode'), version: OPENCODE_PACK_VERSION },
   { id: 'qwen-code', dir: path.join(PACKS_ROOT, 'qwen-code'), version: QWEN_CODE_PACK_VERSION },
   { id: 'zcode', dir: path.join(PACKS_ROOT, 'zcode'), version: ZCODE_PACK_VERSION },
 ];
+
+/** Implemented surfaces with no fingerprint-pack entry. */
+function surfacesWithoutFingerprint(coveredIds) {
+  const covered = new Set(coveredIds);
+  return [...IMPLEMENTED_SURFACES].filter((surface) => surface !== 'none' && !covered.has(surface));
+}
 
 describe('pack-fingerprint guard: live template fingerprint matches the recorded baseline', () => {
   test.each(PACKS)(
@@ -151,5 +160,32 @@ describe('fingerprintPack: deterministic + exclusions (A4)', () => {
     } finally {
       fs.rmSync(copy, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * Coverage lockstep (CAWS-DSH-WIRING-HOME-AND-GUARD-COVERAGE-01).
+ *
+ * The guard above only fingerprints the packs its own PACKS list names, so a
+ * surface whose pack was never listed is silently unprotected — exactly how the
+ * `dsh` pack's doctrine shipped a wrong wiring-home derivation through a
+ * versioned template change with nothing to notice it. These arms assert the
+ * covered set against the implemented-surface registry, and prove the check can
+ * fail by running it against a covered set with `dsh` removed.
+ */
+describe('pack-fingerprint coverage lockstep: every implemented surface is covered', () => {
+  test('the covered pack set covers every implemented agent surface', () => {
+    expect(surfacesWithoutFingerprint(PACKS.map((pack) => pack.id))).toEqual([]);
+  });
+
+  test('every covered pack has a recorded baseline entry', () => {
+    const missing = PACKS.filter((pack) => RECORDED[pack.id] === undefined).map((pack) => pack.id);
+    expect(missing).toEqual([]);
+  });
+
+  test('the lockstep check is falsifiable: a covered set without dsh is caught', () => {
+    // Control: the pre-lane covered set named five vendor packs and `shared`.
+    const withoutDsh = PACKS.map((pack) => pack.id).filter((id) => id !== 'dsh');
+    expect(surfacesWithoutFingerprint(withoutDsh)).toEqual(['dsh']);
   });
 });

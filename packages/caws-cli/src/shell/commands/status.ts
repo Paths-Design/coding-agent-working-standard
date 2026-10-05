@@ -30,7 +30,7 @@
 //   2. composeDoctorSnapshot(...)                → snapshot + doctorInput
 //   3. inspectProjectState(doctorInput)          → DoctorReport
 //   4. resolveBinding(cwd, registry, specs)
-//   5. resolveSession({ allowMint: false })      — read-only; never mints
+//   5. resolveCallerSession({ allowMint: false })      — read-only; never mints
 //   6. loadLeases(cawsDir)                       — read-only
 //   7. summarizeActiveAgents(leases, now, ttl)   — pure classification
 //   8. If --heartbeat: applyLeasePatch(write_lease for self)
@@ -51,6 +51,7 @@ import * as os from 'node:os';
 import {
   applyLeasePatch,
   composeDoctorSnapshot,
+  computeLaneDivergence,
   loadLeases,
   readGitDirInfo,
   resolveRepoRoot,
@@ -58,11 +59,14 @@ import {
   loadBridges,
   inboxAllMessages,
   formatAge,
+  type LaneDivergence,
 } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderShortStatus, renderStatus, type StatusPanel } from '../render/status';
-import { resolveSession } from '../session/resolve-session';
+import { emitStaleTelemetryAdvisory } from '../render/stale-telemetry-advisory';
+import { resolveCallerSession } from '../session/resolve-session';
+import { buildStatusPanelPayload } from '../panel-data';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
 
@@ -130,7 +134,7 @@ export interface StatusCommandOptions {
   /** Opt-in lease mutation. When true, status writes/refreshes the
    *  current session's lease as a heartbeat. Default false. */
   readonly heartbeat?: boolean;
-  /** Explicit session id (overrides resolveSession). Identity only by
+  /** Explicit session id (overrides resolveCallerSession). Identity only by
    *  default — does NOT trigger a lease write unless --heartbeat is
    *  also passed. */
   readonly sessionId?: string;
@@ -151,28 +155,6 @@ function selectedPanels(opts: StatusCommandOptions): readonly StatusPanel[] | un
   if (opts.agents === true) panels.push('agents');
   if (opts.doctor === true) panels.push('doctor');
   return panels.length > 0 ? panels : undefined;
-}
-
-function countByLifecycle(specs: readonly { readonly lifecycle_state: string }[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const spec of specs) counts[spec.lifecycle_state] = (counts[spec.lifecycle_state] ?? 0) + 1;
-  return counts;
-}
-
-function countDoctorFindings(findings: readonly { readonly severity: string }[]): {
-  readonly errors: number;
-  readonly warnings: number;
-  readonly infos: number;
-} {
-  let errors = 0;
-  let warnings = 0;
-  let infos = 0;
-  for (const finding of findings) {
-    if (finding.severity === 'error') errors++;
-    else if (finding.severity === 'warning') warnings++;
-    else infos++;
-  }
-  return { errors, warnings, infos };
 }
 
 // ─── git path normalization ──────────────────────────────────────────────
@@ -220,7 +202,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   //    (AUTH-BINDING-BRIDGE-001). Read-only composition: status never mints
   //    an identity, so a bridge surfaces only when one already resolves.
   const bridgesLoad = loadBridges(cawsDir);
-  const bridgeSession = resolveSession({
+  const bridgeSession = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
     env,
@@ -260,7 +242,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     };
   }
 
-  const sessionResult = resolveSession({
+  const sessionResult = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
     env,
@@ -303,7 +285,9 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   // --session-id alone never triggers this.
   if (wantsHeartbeat) {
     if (sessionIdentity === null) {
-      err('caws status: --heartbeat requires resolvable session identity (set CLAUDE_SESSION_ID, use a capsule, or pass --session-id).');
+      err(
+        'caws status: --heartbeat requires resolvable session identity (set CLAUDE_SESSION_ID, use a capsule, or pass --session-id).'
+      );
       // Continue rendering — heartbeat failure is non-fatal.
     } else {
       const gitInfo = readGitDirInfo(cwd);
@@ -352,6 +336,29 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   }
 
   const panels = selectedPanels(opts);
+
+  // ─── WORKTREE-LANE-DIVERGENCE-SURFACE-001 ─────────────────────────────
+  // "Is this lane current?" was the one question status could not answer, so
+  // agents dropped to raw `git rev-list --left-right --count`. Computed here
+  // (the command owns subprocesses; the renderer stays pure) and ONLY when cwd
+  // is inside a tracked worktree — outside one there is no lane, and a
+  // placeholder would be noise at best.
+  //
+  // Status's default-purity contract is intact: rev-parse and rev-list write
+  // nothing. A git failure degrades to an explicit unknown marker inside the
+  // returned struct and never changes the exit code.
+  //
+  // Read against the CANONICAL repo root even when cwd is the worktree —
+  // worktrees share one ref namespace, and using one root everywhere is why
+  // `worktree list` and `status` cannot report different numbers for one lane.
+  let lane: LaneDivergence | undefined;
+  if (binding.worktreeName !== undefined) {
+    const record = snapshot.worktrees[binding.worktreeName];
+    if (record !== undefined) {
+      lane = computeLaneDivergence(repoRoot, record.branch ?? '', record.baseBranch ?? '');
+    }
+  }
+
   const effectiveLeaseSummary = wantsHeartbeat
     ? (callSummarizeActiveAgentsSafe(leases, now, leaseTtl) ?? EMPTY_ACTIVITY_SUMMARY)
     : summary;
@@ -374,66 +381,38 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     ...(opts.staleTtlMs !== undefined ? { staleTtlMs: opts.staleTtlMs } : {}),
     ...(opts.findingCap !== undefined ? { findingCap: opts.findingCap } : {}),
     ...(panels !== undefined ? { panels } : {}),
+    ...(lane !== undefined ? { lane } : {}),
   };
 
   if (opts.json === true) {
-    const jsonPanels = panels ?? ['specs', 'worktrees', 'agents', 'doctor'] as const;
-    const payload: Record<string, unknown> = {
-      ok: true,
-      read_only: !wantsHeartbeat,
-      panels: jsonPanels,
-    };
-    if (jsonPanels.includes('specs')) {
-      payload.specs = {
-        count: snapshot.specs.length,
-        by_lifecycle: countByLifecycle(snapshot.specs),
-        items: snapshot.specs.map((spec) => ({
-          id: spec.id,
-          title: spec.title,
-          lifecycle_state: spec.lifecycle_state,
-          ...(spec.worktree !== undefined ? { worktree: spec.worktree } : {}),
-        })),
-      };
-    }
-    if (jsonPanels.includes('worktrees')) {
-      payload.worktrees = {
-        count: Object.keys(snapshot.worktrees).length,
-        items: Object.entries(snapshot.worktrees).map(([name, record]) => ({
-          name,
-          spec_id: record.specId,
-          path: record.path,
-          ...(record.owner !== undefined ? { owner: record.owner } : {}),
-        })),
-      };
-    }
-    if (jsonPanels.includes('agents')) {
-      payload.agents = {
-        leases: {
-          total: effectiveLeaseSummary.total,
-          active: effectiveLeaseSummary.active,
-          stale: effectiveLeaseSummary.stale,
-          stopped: effectiveLeaseSummary.stopped,
-        },
-        self_session_id: sessionIdentity?.session_id ?? null,
-      };
-    }
-    if (jsonPanels.includes('doctor')) {
-      payload.doctor = {
-        counts: countDoctorFindings(report.findings),
-        findings: report.findings,
-      };
-    }
-    if (mailSummary.count > 0) {
-      payload.messages = {
-        undelivered: mailSummary.count,
-        ...(mailSummary.oldestAgeMs !== null ? { oldest_age_ms: mailSummary.oldestAgeMs } : {}),
-      };
-    }
+    const jsonPanels = panels ?? (['specs', 'worktrees', 'agents', 'doctor'] as const);
+    // CAWS-TUI-DASHBOARD-001: payload assembly moved verbatim to
+    // shell/panel-data.ts (single source shared with the TUI dashboard).
+    // Shape invariant pinned by tests/shell/tui-dashboard.test.js.
+    const payload = buildStatusPanelPayload({
+      jsonPanels,
+      specs: snapshot.specs,
+      worktrees: snapshot.worktrees,
+      leaseSummary: effectiveLeaseSummary,
+      selfSessionId: sessionIdentity?.session_id ?? null,
+      wantsHeartbeat,
+      defaultMode: panels === undefined,
+      lane,
+      laneWorktree: binding.worktreeName ?? null,
+      doctorFindings: report.findings,
+      mailSummary,
+    });
     out(JSON.stringify(payload, null, 2));
     return 0;
   }
 
   out(opts.short === true ? renderShortStatus(renderInput) : renderStatus(renderInput));
+
+  // CAWS-HARNESS-TELEMETRY-ADAPTER-001: render-only advisory when doctor
+  // observed stale vendored telemetry rows on an adapter-covered surface.
+  // Empty finding list => no output => byte-identical baseline. Never an
+  // authority input; status stays read-only.
+  emitStaleTelemetryAdvisory(report.findings, out);
 
   if (mailSummary.count > 0) {
     out(

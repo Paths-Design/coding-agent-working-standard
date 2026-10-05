@@ -66,35 +66,65 @@ else
 fi
 unset _codex_pi_shared _codex_pi_fallback
 
-parse_hook_input() {
-  # Fast path: the dispatcher already parsed the input and exported
-  # HOOK_* env vars to the handler's environment. Re-extracting from
-  # HOOK_INPUT_JSON would be a wasted python subprocess. HOOK_TOOL_NAME
-  # is the canonical "parse completed" marker -- after a completed parse
-  # it's always defined (possibly empty for malformed input), so the
-  # `${HOOK_TOOL_NAME+set}` test distinguishes "parser ran" from
-  # "handler invoked standalone and parser hasn't run yet".
-  if [[ -n "${HOOK_TOOL_NAME+set}" ]]; then
-    return 0
+# CAWS-DEFECT-HOOK-PAYLOAD-ENV-E2BIG-01. Largest payload (bytes) that may be
+# exported into the environment. Everything about a payload is serialized at
+# least twice on the way to a handler (the sanitized JSON plus the per-field
+# TOOL_*_JSON strings), so the inline ceiling is set well below any platform
+# argument-list limit rather than near it. Override with
+# CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES; set it to 0 to force file transport.
+_hook_payload_transport() {
+  local max="${CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES:-131072}"
+  [[ "$max" =~ ^[0-9]+$ ]] || max=131072
+  local bytes
+  bytes=$(LC_ALL=C printf '%s' "${HOOK_INPUT_JSON:-}" | wc -c | tr -d ' ')
+  [[ "$bytes" =~ ^[0-9]+$ ]] || bytes=0
+  if (( bytes >= max )); then
+    HOOK_PAYLOAD_TRUNCATED=1
+  else
+    HOOK_PAYLOAD_TRUNCATED=0
   fi
+  if [[ -n "${HOOK_PAYLOAD_FILE:-}" && -f "${HOOK_PAYLOAD_FILE:-}" ]]; then
+    rm -f "$HOOK_PAYLOAD_FILE" 2>/dev/null || true
+  fi
+  HOOK_PAYLOAD_FILE=""
+  export HOOK_PAYLOAD_TRUNCATED HOOK_PAYLOAD_FILE
+}
 
-  # If HOOK_INPUT_JSON is set but HOOK_TOOL_NAME is not, a caller staged
-  # the sanitized payload but didn't run the extractor. Extract now.
-  # Otherwise (standalone handler), read stdin via the sanitizer.
-  if [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
-    HOOK_INPUT_JSON="$(read_hook_input_json)"
+# _write_payload_file <payload>
+# Writes the full payload to a dispatch-scoped file and exports its path.
+# Fails open: with no safe temp directory the payload stays inline for this
+# dispatch (a bounded overshoot) rather than dropping bytes or blocking the
+# tool call. Only whole payloads are ever written.
+_write_payload_file() {
+  local payload="${1:-}"
+  local dir="${TMPDIR:-/tmp}"
+  local file
+  file=$(mktemp "${dir%/}/caws-hook-payload-XXXXXX" 2>/dev/null) || {
     export HOOK_INPUT_JSON
+    HOOK_PAYLOAD_TRUNCATED=0
+    export HOOK_PAYLOAD_TRUNCATED
+    return 0
+  }
+  if printf '%s' "$payload" > "$file" 2>/dev/null; then
+    HOOK_PAYLOAD_FILE="$file"
+    if [[ -n "${CAWS_TEMP_FILES+x}" ]]; then
+      CAWS_TEMP_FILES+=("$file")
+    else
+      CAWS_TEMP_FILES=("$file")
+    fi
+    trap 'rm -f "$HOOK_PAYLOAD_FILE" 2>/dev/null || true' EXIT 2>/dev/null || true
+    export HOOK_PAYLOAD_FILE
+  else
+    rm -f "$file" 2>/dev/null || true
+    export HOOK_INPUT_JSON
+    HOOK_PAYLOAD_TRUNCATED=0
+    export HOOK_PAYLOAD_TRUNCATED
   fi
+  return 0
+}
 
-  # Extract all common scalar fields in ONE python call, emitting
-  # shlex-quoted bash assignments. Compared to 3-5 separate `jq` calls,
-  # this is one subprocess per handler instead of many. Values are sh-safe
-  # via shlex.quote, so `eval` is not a code-injection hazard.
-  #
-  # Codex-specific: applies apply_patch normalization and exports
-  # HOOK_FILE_PATHS and HOOK_ORIGINAL_TOOL_NAME.
-  local assignments
-  assignments=$(printf '%s' "$HOOK_INPUT_JSON" | python3 -c '
+_hook_extract_scalar_fields() {
+  python3 -c '
 import json
 import shlex
 import sys
@@ -170,10 +200,54 @@ fields = {
     "HOOK_TOOL_INPUT_JSON": json.dumps(tool_input),
     "HOOK_TOOL_RESPONSE_JSON": json.dumps(tool_response),
 }
-
 for k, v in fields.items():
     print(f"{k}={shlex.quote(str(v))}")
-' 2>/dev/null || true)
+' 2>/dev/null || true
+}
+
+parse_hook_input() {
+  # Fast path: the dispatcher already parsed the input and exported
+  # HOOK_* env vars to the handler's environment. Re-extracting from
+  # HOOK_INPUT_JSON would be a wasted python subprocess. HOOK_TOOL_NAME
+  # is the canonical "parse completed" marker -- after a completed parse
+  # it's always defined (possibly empty for malformed input), so the
+  # `${HOOK_TOOL_NAME+set}` test distinguishes "parser ran" from
+  # "handler invoked standalone and parser hasn't run yet".
+  if [[ -n "${HOOK_TOOL_NAME+set}" ]]; then
+    return 0
+  fi
+
+  # If HOOK_INPUT_JSON is set but HOOK_TOOL_NAME is not, a caller staged
+  # the sanitized payload but didn't run the extractor. Extract now.
+  # Otherwise (standalone handler), read stdin via the sanitizer.
+  if [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+    HOOK_INPUT_JSON="$(read_hook_input_json)"
+  fi
+
+  # CAWS-DEFECT-HOOK-PAYLOAD-ENV-E2BIG-01: bound the bytes that reach the
+  # process environment; see shared/lib/parse-input.sh for the full rationale.
+  _hook_payload_transport
+  if [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == "1" ]]; then
+    _write_payload_file "$HOOK_INPUT_JSON"
+  else
+    export -n HOOK_INPUT_JSON 2>/dev/null || true
+  fi
+
+  # Extract all common scalar fields in ONE python call, emitting
+  # shlex-quoted bash assignments. Compared to 3-5 separate `jq` calls,
+  # this is one subprocess per handler instead of many. Values are sh-safe
+  # via shlex.quote, so `eval` is not a code-injection hazard.
+  #
+  # Codex-specific: applies apply_patch normalization and exports
+  # HOOK_FILE_PATHS and HOOK_ORIGINAL_TOOL_NAME. A file-transported payload is
+  # read from HOOK_PAYLOAD_FILE inside a subshell so the bytes never enter this
+  # shell's exported environment.
+  local assignments
+  if [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == "1" && -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+    assignments=$(_hook_extract_scalar_fields < "$HOOK_PAYLOAD_FILE")
+  else
+    assignments=$(printf '%s' "$HOOK_INPUT_JSON" | _hook_extract_scalar_fields)
+  fi
 
   # Fail-open: if the python subprocess failed for any reason, leave
   # HOOK_* vars unset/empty. Handlers will see empty tool_name and
@@ -196,9 +270,23 @@ for k, v in fields.items():
          HOOK_SOURCE="${HOOK_SOURCE:-}" \
          HOOK_PERMISSION_MODE="${HOOK_PERMISSION_MODE:-default}" \
          HOOK_TOOL_USE_ID="${HOOK_TOOL_USE_ID:-}" \
-         HOOK_STOP_HOOK_ACTIVE="${HOOK_STOP_HOOK_ACTIVE:-0}" \
-         HOOK_TOOL_INPUT_JSON="${HOOK_TOOL_INPUT_JSON:-{\}}" \
-         HOOK_TOOL_RESPONSE_JSON="${HOOK_TOOL_RESPONSE_JSON:-{\}}"
+         HOOK_STOP_HOOK_ACTIVE="${HOOK_STOP_HOOK_ACTIVE:-0}"
+
+  # In file-transport mode the full tool input/response JSON is deliberately not
+  # exported: those are the unbounded-size variables, and a reader that needs
+  # them reads HOOK_PAYLOAD_FILE. Empty plus HOOK_PAYLOAD_TRUNCATED=1 makes the
+  # absence explicit rather than a partial value presented as complete. Scalars
+  # are extracted from the file and always exported so matcher predicates work.
+  local _inline_tool_json=1
+  [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == "1" ]] && _inline_tool_json=0
+  if (( _inline_tool_json )); then
+    export HOOK_TOOL_INPUT_JSON="${HOOK_TOOL_INPUT_JSON:-{\}}" \
+           HOOK_TOOL_RESPONSE_JSON="${HOOK_TOOL_RESPONSE_JSON:-{\}}"
+  else
+    HOOK_TOOL_INPUT_JSON=""
+    HOOK_TOOL_RESPONSE_JSON=""
+    export HOOK_TOOL_INPUT_JSON HOOK_TOOL_RESPONSE_JSON
+  fi
 
   # CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: write/refresh the
   # durable session envelope so agent-Bash CLI invocations (which
@@ -210,130 +298,13 @@ for k, v in fields.items():
 }
 
 # CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001
-# Write/refresh `<repo_root>/.caws/sessions/<session_id>/.session-envelope.json`.
-# Called from parse_hook_input after exports are set. Idempotent.
-# Preserves created_at across refreshes; updates last_seen_at to now.
-# All failures are silently swallowed; hooks MUST NOT block on cache.
+# Use the canonical shared envelope writer; do not fork cache safety per surface.
+_caws_cache_lib="${CAWS_SHARED_LIB_DIR:-${CAWS_PROJECT_DIR:-.}/.caws/hooks/lib}/session-cache.sh"
+source "$_caws_cache_lib" || return 2
+unset _caws_cache_lib
+
+# Preserve the vendor entry point's default even without bootstrap flags.
+# An explicitly resolved platform still takes precedence in the shared writer.
 _write_durable_session_envelope() {
-  # Refuse missing/unknown/empty session id. The resolver refuses the
-  # literal "unknown" so writing it would just produce a stale file
-  # that gets skipped on read.
-  local sid="${HOOK_SESSION_ID:-}"
-  if [[ -z "$sid" || "$sid" == "unknown" ]]; then
-    return 0
-  fi
-
-  # CANONICAL repo root via git. CAWS-SESSION-LOG-RELOCATE-001: per-session
-  # state lives under <canonical>/.caws/sessions/, not repo-root tmp/. We
-  # resolve git-common-dir's parent (the canonical checkout) so a linked
-  # worktree writes to the canonical .caws/sessions/, and so the envelope's
-  # repo_root FIELD matches the resolver's canonical repoRoot
-  # (path.dirname(cawsDir)). If HOOK_CWD is empty or git fails, skip.
-  local cwd="${HOOK_CWD:-$PWD}"
-  local repo_root common
-  common=$(cd "$cwd" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null) || return 0
-  [[ -z "$common" ]] && return 0
-  case "$common" in
-    /*) : ;;
-    *)  common="$cwd/$common" ;;
-  esac
-  repo_root=$(cd "$common/.." 2>/dev/null && pwd -P) || return 0
-  [[ -z "$repo_root" ]] && return 0
-  # Only write where a .caws/ exists (a real CAWS project).
-  [[ -d "$repo_root/.caws" ]] || return 0
-
-  local envelope_dir="$repo_root/.caws/sessions/$sid"
-  local envelope_path="$envelope_dir/.session-envelope.json"
-  mkdir -p "$envelope_dir" 2>/dev/null || return 0
-
-  # Preserve created_at from existing envelope (refresh semantics).
-  # Use python for JSON read; if parse fails, treat as new envelope.
-  local now created_at
-  now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  created_at="$now"
-  if [[ -f "$envelope_path" ]]; then
-    local existing_created
-    existing_created=$(python3 -c '
-import json, sys
-try:
-    with open(sys.argv[1]) as f:
-        d = json.load(f)
-    v = d.get("created_at")
-    if isinstance(v, str) and v:
-        print(v)
-except Exception:
-    pass
-' "$envelope_path" 2>/dev/null)
-    if [[ -n "$existing_created" ]]; then
-      created_at="$existing_created"
-    fi
-  fi
-
-  # Atomic write: temp file + rename. tmpfile is in the same dir to
-  # guarantee same-filesystem rename atomicity.
-  #
-  # CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A5): write the `platform` field,
-  # sourced from CAWS_PLATFORM_FLAG (exported by agent-surface.sh as "codex" for
-  # this surface). WITHOUT this field the resolver falls back to 'claude-code'
-  # (resolve-session.ts envelope.platform ?? 'claude-code'), so a codex-created
-  # worktree gets stamped owner.platform='claude-code' while the lease correctly
-  # says 'codex' — the exact misattribution behind the ownership-crossing
-  # incidents. Mirrors shared/lib/parse-input.sh's envelope writer shape.
-  local platform="${CAWS_PLATFORM_FLAG:-codex}"
-  local tmpfile="$envelope_dir/.session-envelope.tmp.$$"
-  python3 -c '
-import json, sys
-payload = {
-    "session_id": sys.argv[1],
-    "repo_root": sys.argv[2],
-    "created_at": sys.argv[3],
-    "last_seen_at": sys.argv[4],
-    "hook_event": sys.argv[5],
-    "platform": sys.argv[6],
-}
-with open(sys.argv[7], "w") as f:
-    json.dump(payload, f)
-    f.write("\n")
-' "$sid" "$repo_root" "$created_at" "$now" "${HOOK_EVENT_NAME:-unknown}" "$platform" "$tmpfile" 2>/dev/null || {
-    rm -f "$tmpfile" 2>/dev/null
-    return 0
-  }
-  mv -f "$tmpfile" "$envelope_path" 2>/dev/null || {
-    rm -f "$tmpfile" 2>/dev/null
-    return 0
-  }
-
-  # CAWS-WORKTREE-OWNERSHIP-HARNESS-ID-001: also write/refresh the per-repo
-  # caller-session pointer at `<repo_root>/.caws/sessions/.caller-session.json`
-  # (CAWS-SESSION-LOG-RELOCATE-001 moved it out of repo-root tmp/). In
-  # agent-Bash, HOOK_SESSION_ID is not in the env, so the resolver cannot
-  # tell which of several fresh sibling envelopes is the caller's. This
-  # pointer names the session that most recently fired a hook in this repo
-  # — the actively-working caller — so the resolver can disambiguate the
-  # >=2-fresh-envelope case to the caller's own envelope. Evidence only:
-  # the resolver treats absent/stale/non-matching pointers as "refuse",
-  # never as a guess. Reuses sid / repo_root / now from above.
-  local pointer_dir="$repo_root/.caws/sessions"
-  local pointer_path="$pointer_dir/.caller-session.json"
-  local pointer_tmp="$pointer_dir/.caller-session.tmp.$$"
-  mkdir -p "$pointer_dir" 2>/dev/null || return 0
-  python3 -c '
-import json, sys
-payload = {
-    "session_id": sys.argv[1],
-    "repo_root": sys.argv[2],
-    "last_seen_at": sys.argv[3],
-}
-with open(sys.argv[4], "w") as f:
-    json.dump(payload, f)
-    f.write("\n")
-' "$sid" "$repo_root" "$now" "$pointer_tmp" 2>/dev/null || {
-    rm -f "$pointer_tmp" 2>/dev/null
-    return 0
-  }
-  mv -f "$pointer_tmp" "$pointer_path" 2>/dev/null || {
-    rm -f "$pointer_tmp" 2>/dev/null
-    return 0
-  }
-  return 0
+  _caws_write_session_envelope codex
 }

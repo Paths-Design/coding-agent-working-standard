@@ -66,7 +66,13 @@ export function runHandoffExportCommand(opts: HandoffExportOptions): number {
   }
   const { repoRoot, cawsDir } = rootRes.value;
 
-  const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, now: nowFn, allowMint: true });
+  const sessionResult = resolveSession({
+    cawsDir,
+    worktreeRoot: cwd,
+    env,
+    now: nowFn,
+    allowMint: true,
+  });
   if (!sessionResult.ok) {
     err('caws handoff export: failed to resolve session identity.');
     err(renderDiagnostics(sessionResult.errors, { showData }));
@@ -148,7 +154,13 @@ export function runHandoffImportCommand(opts: HandoffImportOptions): number {
     return 1;
   }
 
-  const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, now: nowFn, allowMint: true });
+  const sessionResult = resolveSession({
+    cawsDir,
+    worktreeRoot: cwd,
+    env,
+    now: nowFn,
+    allowMint: true,
+  });
   if (!sessionResult.ok) {
     err('caws handoff import: failed to resolve session identity.');
     err(renderDiagnostics(sessionResult.errors, { showData }));

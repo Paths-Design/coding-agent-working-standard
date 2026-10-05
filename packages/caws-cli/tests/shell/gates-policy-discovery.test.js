@@ -5,10 +5,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const {
-  runGatesExplainCommand,
-  runGatesListCommand,
-} = require('../../dist/shell');
+const { runGatesExplainCommand, runGatesListCommand } = require('../../dist/shell');
 const { initProject } = require('../../dist/store/init-store');
 
 const repos = [];
@@ -82,11 +79,7 @@ function tunePolicy(cawsDir) {
       ``,
     ].join('\n')
   );
-  raw += [
-    `waivers:`,
-    `  min_approvers_for_budget_raise: 2`,
-    ``,
-  ].join('\n');
+  raw += [`waivers:`, `  max_active_waivers_per_gate: 2`, ``].join('\n');
   fs.writeFileSync(policyPath, raw);
 }
 
@@ -140,13 +133,17 @@ describe('caws gates list/explain discovery', () => {
     expect(payload.gate_count).toBe(5);
     const budget = payload.gates.find((gate) => gate.gate_id === 'budget_limit');
     const godObject = payload.gates.find((gate) => gate.gate_id === 'god_object');
-    expect(budget.mode).toBe('block');
+    // A fresh init declares the budget warn: honored as written, flagged advisory.
+    expect(budget.mode).toBe('warn');
+    expect(budget.advisory).toBe(true);
+    expect(budget).not.toHaveProperty('declared_mode');
     expect(budget.enabled).toBe(true);
     expect(budget.effective_waiver_ids).toEqual(['BUDGET-001']);
     expect(godObject.mode).toBe('warn');
+    expect(godObject.advisory).toBe(false);
     expect(godObject.thresholds).toEqual({ warning: 1750, critical: 2000 });
     expect(payload.risk_tiers['3'].max_files).toBe(30);
-    expect(payload.waiver_policy.min_approvers_for_budget_raise).toBe(2);
+    expect(payload.waiver_policy).toEqual({ max_active_waivers_per_gate: 2 });
     expect(readEvents(caws)).toBe(before);
   });
 
@@ -168,6 +165,44 @@ describe('caws gates list/explain discovery', () => {
     expect(JSON.parse(matching.out).gate.effective_waiver_ids).toEqual(['BUDGET-001']);
     expect(JSON.parse(nonMatching.out).gate.effective_waiver_ids).toEqual([]);
     expect(readEvents(caws)).toBe(before);
+  });
+
+  // A read surface must report the mode `gates run` applies. A policy that
+  // still declares the budget `block` would otherwise read as an enforced
+  // limit an agent has to trim work to meet.
+  test('a budget declared block reads back as warn, with the declaration marked not honored', () => {
+    const { repoRoot } = fixtureRepo();
+    const policyPath = path.join(repoRoot, '.caws', 'policy.yaml');
+    const raw = fs.readFileSync(policyPath, 'utf8');
+    const declaredBlock = raw.replace(
+      / {2}budget_limit:\n {4}enabled: true\n {4}mode: warn\n/,
+      '  budget_limit:\n    enabled: true\n    mode: block\n'
+    );
+    expect(declaredBlock).not.toBe(raw);
+    fs.writeFileSync(policyPath, declaredBlock);
+
+    const listed = JSON.parse(runList(repoRoot, { json: true }).out);
+    const budget = listed.gates.find((gate) => gate.gate_id === 'budget_limit');
+    const scope = listed.gates.find((gate) => gate.gate_id === 'scope_boundary');
+    expect([budget.mode, budget.declared_mode, budget.advisory]).toEqual(['warn', 'block', true]);
+    expect(scope.mode).toBe('block');
+    expect(scope).not.toHaveProperty('declared_mode');
+
+    const listText = runList(repoRoot).out;
+    expect(listText).toContain(
+      '  - budget_limit: enabled=true mode=warn (policy declares block; not honored) advisory effective_waivers=0'
+    );
+    expect(listText).toContain('  - scope_boundary: enabled=true mode=block effective_waivers=0');
+
+    const explained = runExplain(repoRoot, 'budget_limit');
+    expect(explained.code).toBe(0);
+    expect(explained.out.split('\n')).toEqual(
+      expect.arrayContaining([
+        '  mode=warn (policy declares block; not honored)',
+        '  advisory: a risk-tier sizing goal; an overage is reported and never blocks',
+      ])
+    );
+    expect(explained.out).not.toContain('mode=block');
   });
 
   test('unknown gate ids fail with the accepted gate set before mutation', () => {

@@ -20,7 +20,8 @@
 // for all shared hook logic. A change to a shared file requires exactly
 // one version bump here, not parallel bumps in two vendor trees.
 
-import type { HookPackV1 } from './types';
+import type { AgentSurface, HookPackFile, HookPackV1 } from './types';
+import { isAdapterCoveredSurface } from './types';
 
 // v2 (WORKTREE-REPAIR-INSTALLED-SMOKE-001): agent-stop.sh corrected from the
 // nonexistent `caws agents deregister` to `caws agents stop` (the Stop hook was
@@ -317,7 +318,276 @@ import type { HookPackV1 } from './types';
 // v46 (WORKTREE-ENSURE-AFFORDANCE-001): agent-register.sh's unbound advisory
 // names `caws worktree ensure <name> --spec <id>` (the idempotent
 // create-or-admit verb) instead of bare create. Advisory-only change.
-export const SHARED_PACK_VERSION = 51;
+// v52 (CAWS-DEFECT-SCOPE-GUARD-FOREIGN-WORKTREE-CONTAINMENT-BYPASS-01):
+// scope-guard.sh only adopts a `/.caws/worktrees/<name>` root as WORK_DIR when
+// it is a linked worktree of the repository this session governs. A write into
+// ANOTHER repository's worktree previously slipped past the foreign-repo
+// containment block onto the strike ramp (and wrote strike state into the
+// foreign gitdir); it now takes the containment block on the first attempt,
+// naming the foreign repository.
+// v53 (CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01): session-id.sh gained
+// surface-pinned precedence, the canonical CAWS_SESSION_ID normalization
+// (caws_normalize_session_env, wired into run-handlers.sh), and the PID-record
+// trust anchor; the capsule-glob fallback tier was REMOVED (unknown stays
+// unknown). Existing consumers' next `caws init` reports session-id.sh +
+// run-handlers.sh as managed_drift until they refresh.
+// v54 (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A3/A5/A6): session-id.sh pin map
+// derives from the generated surfaces-registry.sh snippet; agent-surface.sh
+// gains the ~/.caws/surfaces/<surface>/lib user tier and registry-derived
+// vendor dirs; guard strike/reprieve state moves to the SESSION-GLOBAL home
+// (~/.caws/state/sessions/<sid>/), legacy repo-local files read-only;
+// classify_command.py admits leading-pathspec commit forms. Existing
+// consumers' next `caws init` reports the changed rows as managed_drift
+// until they refresh.
+// v55 (CAWS-CODEX-HOOK-RUNTIME-CONTRACT-001): quiet-merge.sh retains only its
+// lifecycle-command CWD reroot and no longer pipelines, suppresses, or follows
+// a governed command with a successful command; scan-secrets.sh emits the
+// PreToolUse event it actually runs under.
+// v56 (CAWS-HOOK-GENERATED-FILE-IDEMPOTENCE-001): the generated surface
+// registry projection now carries a managed generated-authority header, and the
+// installer migrates only the byte-exact legacy headerless projection. Local or
+// unrelated headerless content remains preserved as an unmanaged collision.
+// v57 (CAWS-CODEX-INSTRUCTION-REACH-002): the codex instruction allowlist
+// includes AGENTS.override.md before AGENTS.md, mirroring the harness's root
+// discovery precedence and admitting the file init may select for its managed
+// working-contract block.
+// v60 (CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001): every dispatch
+// script (pre_tool_use, post_tool_use, stop, session_start, pre_compact) and
+// lib/run-handlers.sh guard the handler-array expansion so a fully-disabled
+// handler set (e.g. CAWS_DISABLED_HANDLERS covering every entry) returns exit
+// 0 instead of crashing with "unbound variable" on bash 3.2 (macOS default
+// /bin/bash). This bump also catches up the fingerprint for three prior
+// content changes that landed without a version bump: lib/agent-surface.sh
+// and reset-danger-latch.sh (session-global home distribution work) and
+// block-dangerous.sh.
+//
+// v61 (CAWS-WORKTREE-GUARD-BASE-PUSH-RETIRE-001): worktree-guard.sh no
+// longer refuses an ordinary `git push` from the base branch while
+// worktrees are active. That refusal was inherited unreviewed from a bulk
+// hook migration with no documented rationale; publishing already-merged
+// commits rewrites no history and races no sibling's index, unlike the
+// force-push case immediately above it in the file, which stays blocked.
+//
+// v62 (CAWS-HOOKPACK-UNGUARDED-HOME-UNBOUND-VARIABLE-001): guard every bare
+// $HOME dereference under set -u across protected-paths.sh, scope-guard.sh,
+// plan-transcript-finalize.sh, plan-transcript-snapshot.sh, session-log.sh,
+// runtime-paths.sh, block-dangerous.sh, audit.sh, and the agent-surface.sh /
+// reprieve.sh libs. A minimal environment with HOME unset (a container, a
+// stripped CI runner) previously crashed these with "HOME: unbound
+// variable" -- in block-dangerous.sh this surfaced as a fail-closed BLOCK
+// that also armed the danger latch for an ordinary command.
+//
+// v63 (CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001): the v62 ${HOME:-}
+// fallback fixed the crash but degraded several checks into aliasing an
+// absent home to a ROOT-BASED path ("/", "/.caws", "/.claude") instead of
+// "no home-tier authority exists". In scope-guard.sh this was a real
+// authority-widening bug: the home-vendor-dir ALLOW_PREFIXES entry became
+// the absolute prefix "/.claude/", which the foreign-repo containment check
+// consults BEFORE refusing -- so an absolute write outside the governed
+// repo (e.g. /.claude/pwned) was silently ADMITTED instead of BLOCKED.
+// Fixed scope-guard.sh, protected-paths.sh, agent-surface.sh, reprieve.sh,
+// block-dangerous.sh, and the best-effort session-log.sh/plan-transcript-*.sh/
+// runtime-paths.sh lookups to omit/skip the home-tier entirely when no real
+// home is known, rather than defaulting to a filesystem-root path.
+//
+// v64 (CAWS-MESSAGE-OFFER-SETTLEMENT-DELIVERY-01): automatic message delivery
+// now reserves an expiring offer and settles it only after bounded advisory
+// composition reaches the adapter-handoff boundary. Same-priority advisory
+// cards compose whole under budget while guard decisions retain precedence.
+//
+// v65 (CAWS-DEFECT-HOOK-PAYLOAD-ENV-E2BIG-01): parse-input.sh no longer exports
+// the whole sanitized payload into the process environment. Payloads at or above
+// CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES (default 131072) move to a dispatch-scoped
+// file referenced by HOOK_PAYLOAD_FILE, with HOOK_PAYLOAD_TRUNCATED=1 and empty
+// inline TOOL_*_JSON marking the inline representation absent by design. A
+// multi-megabyte tool response previously pushed the environment past ARG_MAX and
+// every dispatch fork died with `Argument list too long`.
+// v66 (CAWS-HOOK-ADVISORY-BUDGET-TIERS-01): run-handlers.sh admits advisory
+// cards one at a time against the bytes still available instead of measuring the
+// cumulative candidate. An oversized card is truncated to fit with an explicit
+// elided-byte marker rather than dropped whole, and a declined card's diagnostic
+// names its own size, so one large guard can no longer starve every later
+// handler's advisory for that invocation.
+// v67 (CAWS-HOOK-ADVISORY-SESSION-DEDUP-01): the dispatch loop suppresses an
+// advisory card whose text is byte-identical to one this handler already
+// surfaced in this session, keyed on a sha256 of the exact text so a changed
+// fact always re-surfaces. The ledger is per-session machine state, bounded by
+// CAWS_HOOK_ADVISORY_DEDUP_MAX, fail-open on any fault, and every suppression is
+// reported on stderr.
+// HOOKPACK-SHARED-VERSION-STAMP-INTEGRITY-001: every staleness signal in the
+// guard plane keys on this number, not on file content — the SessionStart
+// pack-drift advisory compares it to the pinned runtime, and
+// doctor.hooks.installed_pack_version_lag compares it to the installed header.
+// Shared template changes that land without a bump (as several did across this
+// line of work, including the trap, the classifier intersection, the JSONL
+// audit, and lib/heredoc.sh) move the enforcement plane while leaving every
+// consumer of the signal believing nothing changed. Bump it WITH the template
+// change; tests/init/pack-fingerprint.test.js fails closed otherwise.
+// Hook port qualification: shared execution records and session-cache custody.
+// Managed-header contract repair (CAWS-HOOK-PACK-MANAGED-HEADER-001): every
+// managed template now carries a parseable header, so a fresh install is
+// re-adoptable by a later install or a second-surface init.
+// v76: root-file parity and target-worktree scope delegation.
+// v77: credential-read selector precision — public-by-construction exclusion
+// (.env.example, *.pub) and unambiguous read-verb coverage. Both edits landed
+// in classified slices that did not carry this bump; the fingerprint control
+// caught the omission (HOOKPACK-SHARED-VERSION-BUMP-RECURRENCE-001).
+// v78: session-log steering/usage signals. session_log_renderer.py records
+// per-request usage (deduplicated on message id + request id), splits the two
+// interrupt kinds, and detects rewinds; harness_claude.py carries the usage
+// and row lineage that make those visible; a new dispatch/session_end.sh seals
+// .meta.json with the exit reason and session usage total.
+//
+// v79 (CAWS-RESET-STRIKES-SESSION-LOOKUP-001): reset-strikes.sh --session could
+// never reach the LIVE strike store. The session-global store encodes the sid in
+// the DIRECTORY ($HOME/.caws/state/sessions/<sid>/strikes.json); the legacy
+// repo-local files encode it in the FILENAME (guard-strikes-<sid>.json).
+// collect_strike_files returns both, but --session filtered with
+// grep 'guard-strikes-<sid>.json$' — a pattern the live path cannot match. So
+// the one mode the block message tells a human to run (it prints --session <id>
+// pre-filled) exited 1 with "No strike file found" against a live strike file
+// that existed. The listing had the same bug from the other end, labelling every
+// live file "session=strikes" (the basename, not the sid). Matching now derives
+// the sid from either shape, and an unknown-session refusal lists the sessions
+// that DO have strike state instead of leaving the operator guessing a uuid.
+// Bump re-propagates: 28 of 28 runtime snapshots under ~/.caws/lib/runtimes
+// carry the old filter, and installed copies are copied, not linked.
+// v80 (CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01): the danger-latch kill plane
+// could aim at the agent running the hook test suite. agent-surface.sh derives
+// CAWS_TRAP_KILL=1 + CAWS_AGENT_PROCESS_NAMES="claude" for the claude-code
+// surface on the premise — stated in its own comment — that the hook env is
+// harness-owned and the guard's ancestors are the session's processes. Under
+// bats both premises invert: the guard is exec'd as a child of the agent's own
+// Bash tool, so the ancestor walk resolves the LIVE agent, and a latch armed by
+// one test escalates in the next into a real SIGTERM against the developer's
+// session. Temp-dir isolation does not cover it — that scopes where the latch
+// sentinel lands, not whose PID the walk returns. agent-surface.sh now honors a
+// test-harness attestation (.caws/hooks/.test-harness) that defaults the kill
+// off AND filters every live agent-surface name out of the resolved target, so
+// a fixture can only ever aim the trap at a process it spawned itself. The
+// marker lives under .caws/hooks/ because protected-paths.sh refuses agent
+// writes there and `caws init` never emits it, so it cannot be minted inside a
+// governed repo to disarm a real session's escalation.
+// v81: session-log.sh sealed usage.models in whatever order find(1) handed back
+// the turn files. That order is a filesystem property, not a session property —
+// APFS returns hash order (turn-001, turn-007, turn-011, ...), ext4 returns its
+// own — so identical turn files sealed to different models lists on a developer
+// machine and in CI. The token sums are order-independent and were always
+// correct; only models carried the defect. The sealer now sorts the turn files
+// by name before concatenating them, matching the renderer's own
+// sorted(directory.glob("turn-*.json")).
+// v82: protected-paths.sh keyed on the TOOL (Write|Edit) rather than on the
+// write, so the entire Bash channel was unguarded — `echo x >
+// .caws/hooks/protected-paths.sh`, `sed -i` over a guard and `rm
+// .caws/hooks/lib/write-allowlist.sh` were all admitted, and no other
+// pre_tool_use handler covered the gap (bash-write-guard delegates to
+// caws_is_write_allowlisted, which returns allow for `.caws/*`; block-dangerous
+// protects one filename under the vendor dir, not the pack's install dir). A
+// guard could therefore be disarmed by choosing a different tool. Both channels
+// now run one adjudication over one matcher, so they cannot diverge.
+// v83: project-wired surfaces (qwen-code, kimi-code, opencode, zcode, dsh) exec
+// dispatch/<event>.sh directly with a literal HANDLERS array baked in at init,
+// so a repo's committed hook-policy.json governed only the two machine-routed
+// surfaces and silently not the other five. Every shared dispatcher now reads a
+// compiled dispatch/<event>.chain sidecar through the new lib/local-chain.sh.
+// The stock array is left intact rather than regenerated: rewriting it would
+// hold the dispatcher permanently in managed_drift and make caws init refuse
+// every future upstream fix to it.
+// v84 (CAWS-HOOKS-GUARD-CONFIG-TIER2-01): tier-2 guard configuration. A repo
+// may now declare DATA a shipped guard consults — additional allow prefixes,
+// clamped advisory thresholds — in the `guards` block of hook-policy.json,
+// without forking the guard. lib/guard-config.py parses it (and
+// policy.non_governed_zones, whose inline awk block moves here) exactly ONCE
+// per dispatch; lib/guard-config.sh exports the result so adopting guards read
+// plain variables and spawn nothing. Measured: a python3 start is ~31ms, so
+// four guards parsing independently would cost ~124ms on every tool call.
+//
+// v85 (CAWS-GOAL-AC-STOP-GATE-01): the acceptance stop gate. goal-ac-gate.sh
+// joins the Stop chain and is the first handler in this pack that may emit a
+// hard control decision from that event: given a `caws goal set <spec-id>`
+// binding it re-derives the spec's acceptance and refuses the stop while any
+// criterion is unproven. Inert without a binding.
+//
+// 85 rather than 84 because this and the tier-2 guard config were developed on
+// separate branches that BOTH bumped the shared pack to 84. Keeping either
+// side's 84 would publish two different pack contents under one version, and
+// every installed consumer decides whether to update by comparing that number
+// — so the collision would be invisible and permanent. The merged tree is new
+// content and takes a new number.
+// 86 closes CAWS-BASH-GUARD-INTERPRETER-WRITE-01: bash-write-guard now scans
+// python/node payloads for write targets that appear as path literals, and
+// scope-guard's cross-repo refusal states the residual instead of claiming the
+// Bash boundary was already complete. An installed consumer decides whether to
+// update by comparing this number, so a guard fix that does not bump it never
+// reaches a single installed hook.
+// 87 closes CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01 on the reader side:
+// lib/reprieve.sh now honors a record's `repo_root`, so a grant issued in one
+// repo no longer lifts a guard in every other repo on the machine. An absent
+// field stays machine-wide, which is what keeps a pre-upgrade grant alive.
+// 88 closes CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01. The cross-repo
+// predicate and the interpreter write-literal scan move from bash-write-guard
+// into lib/bash-mutation-targets.sh, and block-dangerous consults them before
+// choosing an opaque-exec remediation: it no longer offers "write the probe to
+// a script file and run it by path" when the payload's write target is in
+// another repository — the route its sibling guard refuses, and the sentence
+// session 1aa3f0bd followed out of the repo. bash-write-guard additionally
+// fails CLOSED on a lib that loads but predates those functions, because that
+// shape used to lose the cross-repo arm with nothing in the output to say so.
+// 89 closes CAWS-DEFECT-SHORTCUT-LANG-DOMAIN-VOCABULARY-FP-01. The
+// shortcut-language guard struck UI code that uses the placeholder word as
+// vocabulary (the input attribute and prop, a union member, the CSS
+// pseudo-element) and type names or input masks sharing a marker word, while
+// missing "this is just a ..." stub phrasing. Marker words are now scoped to
+// where they are unambiguous: the placeholder word counts only in comment text
+// beside a stub cue, and in code only the uppercase marker convention counts.
+// The advisory names the line it quotes, counted within the edit for an Edit.
+export const SHARED_PACK_VERSION = 89;
+
+/**
+ * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
+ * session_log_renderer.py writing .caws/sessions/) and the agent lease
+ * lifecycle hooks (agent-heartbeat.sh, agent-stop.sh writing .caws/leases/).
+ *
+ * CAWS-HARNESS-TELEMETRY-ADAPTER-001: for adapter-covered surfaces
+ * (ADAPTER_COVERED_SURFACES — see isAdapterCoveredSurface) a per-harness
+ * telemetry adapter owns this plane, so `sharedPackForSurface` omits these
+ * rows from the install set and re-running `caws init` retires stale managed
+ * copies (retireStaleTelemetryRows). The POLICY plane rows — guards, audit,
+ * registration, dispatch — are installed unchanged for every surface.
+ */
+export const TELEMETRY_ROW_DEST_PATHS: readonly string[] = [
+  '.caws/hooks/agent-heartbeat.sh',
+  '.caws/hooks/agent-stop.sh',
+  '.caws/hooks/session-log.sh',
+  '.caws/hooks/session_log_renderer.py',
+];
+
+const TELEMETRY_INSTALLED_FILES: readonly HookPackFile[] = [
+  {
+    destPath: '.caws/hooks/agent-heartbeat.sh',
+    sourcePath: 'agent-heartbeat.sh',
+    executable: true,
+    managed: true,
+  },
+  {
+    destPath: '.caws/hooks/agent-stop.sh',
+    sourcePath: 'agent-stop.sh',
+    executable: true,
+    managed: true,
+  },
+  {
+    destPath: '.caws/hooks/session-log.sh',
+    sourcePath: 'session-log.sh',
+    executable: true,
+    managed: true,
+  },
+  {
+    destPath: '.caws/hooks/session_log_renderer.py',
+    sourcePath: 'session_log_renderer.py',
+    executable: false,
+    managed: true,
+  },
+];
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
@@ -340,6 +610,7 @@ export const SHARED_PACK: HookPackV1 = {
     'session_start',
     'pre_compact',
     'stop',
+    'session_end',
   ],
   stateModel: {
     // The shared core reads canonical CAWS state.
@@ -405,11 +676,107 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    {
+      destPath: '.caws/hooks/dispatch/session_end.sh',
+      sourcePath: 'dispatch/session_end.sh',
+      executable: true,
+      managed: true,
+    },
 
     // -- Shared libraries --
     {
+      destPath: '.caws/hooks/hook-utilities.sh',
+      sourcePath: 'hook-utilities.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/hook-utilities.py',
+      sourcePath: 'lib/hook-utilities.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/transcript-store.py',
+      sourcePath: 'lib/transcript-store.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/harness_claude.py',
+      sourcePath: 'lib/harness_claude.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/harness_codex.py',
+      sourcePath: 'lib/harness_codex.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/harness_common.py',
+      sourcePath: 'lib/harness_common.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/harness_dsh.py',
+      sourcePath: 'lib/harness_dsh.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/harness_kimi.py',
+      sourcePath: 'lib/harness_kimi.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/harness_opencode.py',
+      sourcePath: 'lib/harness_opencode.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/harness_qwen.py',
+      sourcePath: 'lib/harness_qwen.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/harness_zcode.py',
+      sourcePath: 'lib/harness_zcode.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/session-log.schema.json',
+      sourcePath: 'lib/session-log.schema.json',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/bash-mutation-targets.sh',
+      sourcePath: 'lib/bash-mutation-targets.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/ask-capability.sh',
+      sourcePath: 'lib/ask-capability.sh',
+      executable: false,
+      managed: true,
+    },
+    {
       destPath: '.caws/hooks/lib/agent-surface.sh',
       sourcePath: 'lib/agent-surface.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/session-cache.sh',
+      sourcePath: 'lib/session-cache.sh',
       executable: false,
       managed: true,
     },
@@ -422,6 +789,39 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/run-handlers.sh',
       sourcePath: 'lib/run-handlers.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // Parses the compiled dispatch/<event>.chain sidecar for project-wired
+      // surfaces. Sourced best-effort by every shared dispatcher behind a
+      // `declare -F` guard, so a pack that predates it degrades to the stock
+      // handler array rather than failing.
+      destPath: '.caws/hooks/lib/local-chain.sh',
+      sourcePath: 'lib/local-chain.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-HOOKS-GUARD-CONFIG-TIER2-01: the tier-2 config parser. Run ONCE
+      // per dispatch by run-handlers.sh, never per guard. Reads both
+      // hook-policy.json `guards` and policy.non_governed_zones, so one parse
+      // serves every adopting guard and the two sources cannot disagree about
+      // what the allow table contains.
+      destPath: '.caws/hooks/lib/guard-config.py',
+      sourcePath: 'lib/guard-config.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-HOOKS-GUARD-CONFIG-TIER2-01: the accessor half. Pure bash 3.2
+      // (macOS ships 3.2, which has no associative arrays), so the table is
+      // read back through `${!name}` indirection and every accessor spawns
+      // nothing. Sourced best-effort behind a `declare -F` guard, so a pack
+      // predating it leaves each adopting guard on its shipped table —
+      // degraded, never disarmed.
+      destPath: '.caws/hooks/lib/guard-config.sh',
+      sourcePath: 'lib/guard-config.sh',
       executable: false,
       managed: true,
     },
@@ -444,12 +844,30 @@ export const SHARED_PACK: HookPackV1 = {
       managed: true,
     },
     {
+      // GUARD-HEREDOC-BODY-READ-AS-COMMAND-001: neutralize safelisted heredoc
+      // BODIES before a guard tokenizes command text. Ported from sterling's
+      // .caws/hooks/lib/heredoc.sh; consumed by bash-write-guard.sh.
+      destPath: '.caws/hooks/lib/heredoc.sh',
+      sourcePath: 'lib/heredoc.sh',
+      executable: false,
+      managed: true,
+    },
+    {
       // CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A6): shared session-id
       // precedence helper sourced by the write guards, block-dangerous.sh, and
       // reset-danger-latch.sh so every shell surface resolves "the current
       // session" through ONE env-var chain that mirrors the TS resolver.
       destPath: '.caws/hooks/lib/session-id.sh',
       sourcePath: 'lib/session-id.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A5: generated from the surface
+      // registry — the vendor-dir/pin/env maps the resolver and guard plane
+      // source through caws_source_lib.
+      destPath: '.caws/hooks/lib/surfaces-registry.sh',
+      sourcePath: 'lib/surfaces-registry.sh',
       executable: false,
       managed: true,
     },
@@ -535,6 +953,18 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    {
+      // CAWS-DEFECT-WORKTREE-ISOLATION-PIN-RELEASE-01 (Entry 41): opt-in
+      // worktree-pin guard. Installs with the pack; wiring is the commented
+      // HANDLERS entry in dispatch/pre_tool_use.sh. Deliberately no
+      // SHARED_PACK_VERSION bump in this slice: the in-flight v57 bump
+      // (CAWS-CODEX-INSTRUCTION-REACH-002) re-propagates the whole pack, and a
+      // second edit of the same constant would text-conflict across lanes.
+      destPath: '.caws/hooks/worktree-pin-guard.sh',
+      sourcePath: 'worktree-pin-guard.sh',
+      executable: true,
+      managed: true,
+    },
 
     // -- Dangerous command guards --
     {
@@ -546,6 +976,12 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/classify_command.py',
       sourcePath: 'classify_command.py',
+      executable: true,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/advisory_truncate.py',
+      sourcePath: 'advisory_truncate.py',
       executable: true,
       managed: true,
     },
@@ -585,30 +1021,18 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    // CAWS-GOAL-AC-STOP-GATE-01: policy plane, not telemetry. Opt-in via a
+    // per-session goal binding; inert with no binding, so every surface can
+    // carry it without changing stop behavior until a goal is set.
     {
-      destPath: '.caws/hooks/agent-heartbeat.sh',
-      sourcePath: 'agent-heartbeat.sh',
+      destPath: '.caws/hooks/goal-ac-gate.sh',
+      sourcePath: 'goal-ac-gate.sh',
       executable: true,
       managed: true,
     },
-    {
-      destPath: '.caws/hooks/agent-stop.sh',
-      sourcePath: 'agent-stop.sh',
-      executable: true,
-      managed: true,
-    },
-    {
-      destPath: '.caws/hooks/session-log.sh',
-      sourcePath: 'session-log.sh',
-      executable: true,
-      managed: true,
-    },
-    {
-      destPath: '.caws/hooks/session_log_renderer.py',
-      sourcePath: 'session_log_renderer.py',
-      executable: false,
-      managed: true,
-    },
+    // Telemetry plane (CAWS-HARNESS-TELEMETRY-ADAPTER-001): adapter-covered
+    // surfaces get this slice filtered out via sharedPackForSurface.
+    ...TELEMETRY_INSTALLED_FILES,
     {
       destPath: '.caws/hooks/audit.sh',
       sourcePath: 'audit.sh',
@@ -705,3 +1129,23 @@ export const SHARED_PACK: HookPackV1 = {
     },
   ],
 };
+
+/**
+ * The shared core as it installs for `surface`. Non-covered surfaces get
+ * SHARED_PACK itself — the identical rows in the identical order, byte for
+ * byte (NON-COVERED-SURFACES-UNCHANGED). Adapter-covered surfaces get the
+ * pack with the telemetry rows omitted: the turn-log fold and the lease
+ * lifecycle belong to the surface's telemetry adapter, and vendoring a
+ * second writer onto the same .caws/sessions/ + .caws/leases/ state is the
+ * dual-writer defect CAWS-HARNESS-TELEMETRY-ADAPTER-001 removes. Pack
+ * identity (`id: 'shared'`, version, headers) is unchanged — the cut is
+ * manifest shape, not a new pack.
+ */
+export function sharedPackForSurface(surface: AgentSurface): HookPackV1 {
+  if (!isAdapterCoveredSurface(surface)) return SHARED_PACK;
+  const covered = new Set<string>(TELEMETRY_ROW_DEST_PATHS);
+  return {
+    ...SHARED_PACK,
+    installedFiles: SHARED_PACK.installedFiles.filter((f) => !covered.has(f.destPath)),
+  };
+}

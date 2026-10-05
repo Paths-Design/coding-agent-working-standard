@@ -22,6 +22,7 @@ const path = require('path');
 const {
   sendMessage,
   pollMessage,
+  settleMessageOffer,
   inboxCount,
   inboxAllMessages,
   pruneMessages,
@@ -32,6 +33,7 @@ const {
 
 const NOT_LIVE = 'store.messages.recipient_not_live';
 const RECIPIENT_INVALID = 'store.messages.recipient_invalid';
+const OFFER_NOT_FOUND = 'store.messages.offer_not_found';
 
 const dirs = [];
 function cawsDir() {
@@ -62,6 +64,67 @@ function makeLive(caws, sessionId) {
 
 const sender = { kind: 'agent', id: 'sender-1', session_id: 'sender-1', platform: 'test' };
 
+test('poll and prune acquire the established message-ledger lock', () => {
+  const caws = cawsDir();
+  const openedLocks = [];
+  const realOpen = fs.openSync;
+  const openSpy = jest.spyOn(fs, 'openSync').mockImplementation((target, flags, ...rest) => {
+    if (flags === 'wx') openedLocks.push(String(target));
+    return realOpen.call(fs, target, flags, ...rest);
+  });
+  let polled;
+  let pruned;
+  try {
+    polled = pollMessage(caws, 'recip-1', { peek: true });
+    pruned = pruneMessages(caws, { status: 'delivered' });
+  } finally {
+    openSpy.mockRestore();
+  }
+
+  expect(polled.ok).toBe(true);
+  expect(pruned.ok).toBe(true);
+  expect(openedLocks).toEqual([
+    path.join(caws, 'messages.jsonl.lock'),
+    path.join(caws, 'messages.jsonl.lock'),
+  ]);
+});
+
+test('a lock held by an earlier CLI prevents poll and prune from mutating the ledger', () => {
+  const caws = cawsDir();
+  const sent = sendMessage(caws, {
+    actor: sender,
+    to: 'recip-1',
+    text: 'preserve during upgrade',
+    requireLive: false,
+  });
+  expect(sent.ok).toBe(true);
+  const ledger = path.join(caws, 'messages.jsonl');
+  const original = fs.readFileSync(ledger);
+  const lock = path.join(caws, 'messages.jsonl.lock');
+  const held = JSON.stringify({ pid: process.pid, at: new Date().toISOString() });
+  fs.writeFileSync(lock, held, { flag: 'wx' });
+  try {
+    const results = [
+      pollMessage(caws, 'recip-1'),
+      pruneMessages(caws, { status: 'delivered', apply: true }),
+    ];
+    for (const result of results) {
+      expect(result.ok).toBe(false);
+      expect(result.errors[0]).toMatchObject({
+        rule: 'store.lifecycle.lock_contention',
+        subject: lock,
+      });
+    }
+    expect(fs.readFileSync(ledger)).toEqual(original);
+    expect(fs.readFileSync(lock, 'utf8')).toBe(held);
+  } finally {
+    fs.unlinkSync(lock);
+  }
+  const delivered = pollMessage(caws, 'recip-1');
+  expect(delivered.ok).toBe(true);
+  expect(delivered.value.message.text).toBe('preserve during upgrade');
+});
+
 // ─── A1: round-trip + deliver-once ──────────────────────────────────────────
 
 test('A1: send then poll returns the exact text with sender attribution', () => {
@@ -87,6 +150,237 @@ test('A1: a delivered message is not re-delivered on a second poll', () => {
   const second = pollMessage(caws, 'recip-1');
   expect(second.ok).toBe(true);
   expect(second.value.message).toBeNull();
+});
+
+describe('message offer settlement', () => {
+  test('A1: an offered message is reserved without being marked delivered until settlement', () => {
+    const caws = cawsDir();
+    sendMessage(caws, { actor: sender, to: 'recip-1', text: 'select me', requireLive: false });
+
+    const offered = pollMessage(caws, 'recip-1', { offer: true, receipt: 'auto' });
+    expect(offered.ok).toBe(true);
+    expect(offered.value.message.text).toBe('select me');
+    expect(offered.value.offer).toMatchObject({ recipient: 'recip-1' });
+
+    const records = fs
+      .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(records.filter((record) => record.record === 'delivery')).toHaveLength(0);
+    expect(records.filter((record) => record.record === 'offer')).toHaveLength(1);
+
+    const competing = pollMessage(caws, 'recip-1', { offer: true, receipt: 'auto' });
+    expect(competing.ok).toBe(true);
+    expect(competing.value.message).toBeNull();
+    expect(inboxCount(caws, 'recip-1').value).toBe(1);
+    expect(channelHistory(caws, 'sender-1', 'recip-1').value[0].delivered).toBe(false);
+
+    const settled = settleMessageOffer(caws, offered.value.offer.id, 'recip-1', 'delivered');
+    expect(settled.ok).toBe(true);
+    expect(settled.value.boundary).toBe('adapter_handoff');
+    expect(pollMessage(caws, 'recip-1', { peek: true }).value.message).toBeNull();
+    expect(inboxCount(caws, 'recip-1').value).toBe(0);
+    expect(inboxAllMessages(caws).value.count).toBe(0);
+    expect(channelHistory(caws, 'sender-1', 'recip-1').value[0].delivered).toBe(true);
+  });
+
+  test('A2: release makes the reserved message immediately eligible for a new offer', () => {
+    const caws = cawsDir();
+    sendMessage(caws, { actor: sender, to: 'recip-1', text: 'retry me', requireLive: false });
+    const first = pollMessage(caws, 'recip-1', { offer: true, receipt: 'auto' });
+
+    const released = settleMessageOffer(caws, first.value.offer.id, 'recip-1', 'released');
+    expect(released.ok).toBe(true);
+    expect(Object.hasOwn(released.value, 'boundary')).toBe(false);
+    expect(settleMessageOffer(caws, first.value.offer.id, 'recip-1', 'released').ok).toBe(false);
+    const retry = pollMessage(caws, 'recip-1', { offer: true, receipt: 'auto' });
+    expect(retry.value.message.text).toBe('retry me');
+    expect(retry.value.offer.id).not.toBe(first.value.offer.id);
+  });
+
+  test('A2: expired offers retry and cannot be acknowledged late', () => {
+    const caws = cawsDir();
+    sendMessage(caws, { actor: sender, to: 'recip-1', text: 'expired retry', requireLive: false });
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+    try {
+      const first = pollMessage(caws, 'recip-1', {
+        offer: true,
+        receipt: 'auto',
+        offerTtlMs: 100,
+      });
+      now.mockReturnValue(1_100);
+      expect(settleMessageOffer(caws, first.value.offer.id, 'recip-1', 'delivered').ok).toBe(false);
+      now.mockReturnValue(1_101);
+
+      const retry = pollMessage(caws, 'recip-1', { offer: true, receipt: 'auto' });
+      expect(retry.value.message.text).toBe('expired retry');
+      expect(retry.value.offer.id).not.toBe(first.value.offer.id);
+      const late = settleMessageOffer(caws, first.value.offer.id, 'recip-1', 'delivered');
+      expect(late.ok).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  test('A2: wrong-recipient and replayed settlements are rejected without changing delivery', () => {
+    const caws = cawsDir();
+    sendMessage(caws, {
+      actor: sender,
+      to: 'recip-1',
+      text: 'bound occurrence',
+      requireLive: false,
+    });
+    const offered = pollMessage(caws, 'recip-1', { offer: true, receipt: 'auto' });
+    const offerId = offered.value.offer.id;
+
+    expect(settleMessageOffer(caws, offerId, 'recip-2', 'delivered').ok).toBe(false);
+    expect(pollMessage(caws, 'recip-1', { offer: true, receipt: 'auto' }).value.message).toBeNull();
+    expect(settleMessageOffer(caws, offerId, 'recip-1', 'delivered').ok).toBe(true);
+    expect(settleMessageOffer(caws, offerId, 'recip-1', 'delivered').ok).toBe(false);
+    expect(pollMessage(caws, 'recip-1', { peek: true }).value.message).toBeNull();
+  });
+
+  test('A2: an unknown offer is a typed refusal rather than an exception', () => {
+    const caws = cawsDir();
+    const missing = settleMessageOffer(caws, 'missing-offer', 'recip-1', 'delivered');
+    expect(missing.ok).toBe(false);
+    expect(missing.errors[0].rule).toBe(OFFER_NOT_FOUND);
+  });
+
+  test('A2: an offer cannot settle if any member was delivered by another consumer', () => {
+    const caws = cawsDir();
+    sendMessage(caws, { actor: sender, to: 'recip-1', text: 'first', requireLive: false });
+    sendMessage(caws, { actor: sender, to: 'recip-1', text: 'second', requireLive: false });
+    const offered = pollMessage(caws, 'recip-1', {
+      offer: true,
+      receipt: 'auto',
+      drain: 2,
+    });
+    fs.appendFileSync(
+      path.join(caws, 'messages.jsonl'),
+      JSON.stringify({
+        record: 'delivery',
+        deliver_id: offered.value.messages[0].message.id,
+        ts: new Date().toISOString(),
+        mode: 'poll',
+      }) + '\n'
+    );
+
+    expect(settleMessageOffer(caws, offered.value.offer.id, 'recip-1', 'delivered').ok).toBe(false);
+  });
+
+  test('A2: retention archives a delivered offer occurrence with its message', () => {
+    const caws = cawsDir();
+    sendMessage(caws, {
+      actor: sender,
+      to: 'recip-1',
+      text: 'retain occurrence',
+      requireLive: false,
+    });
+    const offered = pollMessage(caws, 'recip-1', { offer: true, receipt: 'auto' });
+    settleMessageOffer(caws, offered.value.offer.id, 'recip-1', 'delivered');
+
+    const pruned = pruneMessages(caws, {
+      status: 'delivered',
+      include: [offered.value.message.id],
+      apply: true,
+    });
+    expect(pruned.ok).toBe(true);
+    expect(pruned.value.pruned_messages).toBe(1);
+    expect(pruned.value.pruned_delivery_records).toBe(1);
+    const live = fs.readFileSync(path.join(caws, 'messages.jsonl'), 'utf8');
+    expect(live).not.toContain(offered.value.offer.id);
+    const archive = fs.readFileSync(path.join(caws, 'messages.jsonl.archive'), 'utf8');
+    expect(archive).toContain('"record":"offer"');
+    expect(archive).toContain('"record":"offer_settlement"');
+  });
+
+  test('A2: replay ignores stale, predated, boundaryless, and cross-recipient settlements', () => {
+    const caws = cawsDir();
+    const sent = ['cross recipient', 'stale', 'predated', 'boundaryless'].map(
+      (text) =>
+        sendMessage(caws, { actor: sender, to: 'recip-1', text, requireLive: false }).value.message
+    );
+    const ledger = path.join(caws, 'messages.jsonl');
+    fs.appendFileSync(
+      ledger,
+      [
+        JSON.stringify({
+          record: 'offer',
+          offer_id: 'forged-offer',
+          recipient: 'recip-2',
+          deliver_ids: [sent[0].id],
+          ts: '2026-01-01T00:00:00.000Z',
+          expires_at: '2026-01-01T00:00:01.000Z',
+          mode: 'auto',
+        }),
+        JSON.stringify({
+          record: 'offer_settlement',
+          offer_id: 'forged-offer',
+          recipient: 'recip-2',
+          outcome: 'delivered',
+          boundary: 'adapter_handoff',
+          ts: '2026-01-01T00:00:02.000Z',
+        }),
+        JSON.stringify({
+          record: 'offer',
+          offer_id: 'stale-offer',
+          recipient: 'recip-1',
+          deliver_ids: [sent[1].id],
+          ts: '2026-01-01T00:00:00.000Z',
+          expires_at: '2026-01-01T00:00:01.000Z',
+          mode: 'auto',
+        }),
+        JSON.stringify({
+          record: 'offer_settlement',
+          offer_id: 'stale-offer',
+          recipient: 'recip-1',
+          outcome: 'delivered',
+          boundary: 'adapter_handoff',
+          ts: '2026-01-01T00:00:02.000Z',
+        }),
+        JSON.stringify({
+          record: 'offer',
+          offer_id: 'predated-offer',
+          recipient: 'recip-1',
+          deliver_ids: [sent[2].id],
+          ts: '2026-01-01T00:00:01.000Z',
+          expires_at: '2026-01-01T00:00:03.000Z',
+          mode: 'auto',
+        }),
+        JSON.stringify({
+          record: 'offer_settlement',
+          offer_id: 'predated-offer',
+          recipient: 'recip-1',
+          outcome: 'delivered',
+          boundary: 'adapter_handoff',
+          ts: '2026-01-01T00:00:00.000Z',
+        }),
+        JSON.stringify({
+          record: 'offer',
+          offer_id: 'boundaryless-offer',
+          recipient: 'recip-1',
+          deliver_ids: [sent[3].id],
+          ts: '2026-01-01T00:00:00.000Z',
+          expires_at: '2030-01-01T00:00:00.000Z',
+          mode: 'auto',
+        }),
+        JSON.stringify({
+          record: 'offer_settlement',
+          offer_id: 'boundaryless-offer',
+          recipient: 'recip-1',
+          outcome: 'delivered',
+          ts: '2026-01-01T00:00:01.000Z',
+        }),
+      ].join('\n') + '\n'
+    );
+
+    expect(
+      channelHistory(caws, 'sender-1', 'recip-1').value.every((entry) => !entry.delivered)
+    ).toBe(true);
+    expect(inboxCount(caws, 'recip-1').value).toBe(4);
+  });
 });
 
 test('A1: the sender does not receive their own message', () => {
@@ -249,7 +543,12 @@ test('A2: a send to a STALE active lease (old heartbeat) is refused', () => {
 
 test('A2: --allow-dead (requireLive:false) bypasses the liveness check', () => {
   const caws = cawsDir();
-  const sent = sendMessage(caws, { actor: sender, to: 'ghost', text: 'forced', requireLive: false });
+  const sent = sendMessage(caws, {
+    actor: sender,
+    to: 'ghost',
+    text: 'forced',
+    requireLive: false,
+  });
   expect(sent.ok).toBe(true);
 });
 
@@ -430,10 +729,15 @@ test('concurrent polls from separate processes deliver a message at most once', 
   const distPath = path.join(__dirname, '..', '..', 'dist', 'store', 'messages-store.js');
   const caws = cawsDir();
   makeLive(caws, 'r');
-  sendMessage(caws, { actor: { kind: 'agent', id: 's', session_id: 's' }, to: 'r', text: 'ONLY-ONE' });
+  sendMessage(caws, {
+    actor: { kind: 'agent', id: 's', session_id: 's' },
+    to: 'r',
+    text: 'ONLY-ONE',
+  });
 
   const N = 6;
-  const poller = `const {pollMessage}=require(${JSON.stringify(distPath)});` +
+  const poller =
+    `const {pollMessage}=require(${JSON.stringify(distPath)});` +
     `const r=pollMessage(${JSON.stringify(caws)},'r');` +
     `if(r.ok&&r.value.message)process.stdout.write(r.value.message.id);`;
 
@@ -450,6 +754,32 @@ test('concurrent polls from separate processes deliver a message at most once', 
 
   // Exactly one process received the single message; no duplicate delivery.
   expect(gotIds.length).toBe(1);
+}, 30000);
+
+test('concurrent automatic offers reserve a message for exactly one occurrence', async () => {
+  const { spawn } = require('child_process');
+  const distPath = path.join(__dirname, '..', '..', 'dist', 'store', 'messages-store.js');
+  const caws = cawsDir();
+  sendMessage(caws, {
+    actor: { kind: 'agent', id: 's', session_id: 's' },
+    to: 'r',
+    text: 'ONE-OFFER',
+    requireLive: false,
+  });
+  const offerer =
+    `const {pollMessage}=require(${JSON.stringify(distPath)});` +
+    `const r=pollMessage(${JSON.stringify(caws)},'r',{offer:true,receipt:'auto'});` +
+    `if(r.ok&&r.value.offer)process.stdout.write(r.value.offer.id);`;
+  const runOne = () =>
+    new Promise((resolve) => {
+      const child = spawn(process.execPath, ['-e', offerer], { encoding: 'utf8' });
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      child.on('close', () => resolve(out.trim()));
+    });
+  const results = await Promise.all(Array.from({ length: 6 }, runOne));
+  expect(results.filter(Boolean)).toHaveLength(1);
+  expect(inboxCount(caws, 'r').value).toBe(1);
 }, 30000);
 
 // ─── peek: read without consuming (AGENT-MESSAGE-CHANNEL-002) ─────────────────
@@ -529,10 +859,7 @@ test('poll --wait returns immediately when a message is already present', () => 
 
 // ─── CAWS-MESSAGE-DELIVERY-UX-001: aliases, reply lookup, delivery state ─────
 
-const {
-  resolveRecipient,
-  getMessageDeliveryState,
-} = require('../../dist/store/messages-store');
+const { resolveRecipient, getMessageDeliveryState } = require('../../dist/store/messages-store');
 
 const ALIAS_UNRESOLVED = 'store.messages.alias_unresolved';
 
@@ -774,9 +1101,19 @@ test('LEDGER A8: legacy records without reply_to/mode parse with zero diagnostic
       ts: new Date().toISOString(),
     },
     { record: 'delivery', deliver_id: 'legacy-1', ts: new Date().toISOString() },
-    { record: 'refusal', id: 'r-1', class: 'recipient_not_live', to: 'x', reason: 'test', ts: new Date().toISOString() },
+    {
+      record: 'refusal',
+      id: 'r-1',
+      class: 'recipient_not_live',
+      to: 'x',
+      reason: 'test',
+      ts: new Date().toISOString(),
+    },
   ];
-  fs.writeFileSync(path.join(caws, 'messages.jsonl'), legacy.map((l) => JSON.stringify(l)).join('\n') + '\n');
+  fs.writeFileSync(
+    path.join(caws, 'messages.jsonl'),
+    legacy.map((l) => JSON.stringify(l)).join('\n') + '\n'
+  );
   const hist = channelHistory(caws, 'a', 'b');
   expect(hist.ok).toBe(true);
   expect(hist.value).toHaveLength(1);
@@ -866,7 +1203,10 @@ test('ECON A6: legacy records without urgency parse with zero diagnostics', () =
     },
     { record: 'delivery', deliver_id: 'legacy-econ', ts: new Date().toISOString() },
   ];
-  fs.writeFileSync(path.join(caws, 'messages.jsonl'), legacy.map((l) => JSON.stringify(l)).join('\n') + '\n');
+  fs.writeFileSync(
+    path.join(caws, 'messages.jsonl'),
+    legacy.map((l) => JSON.stringify(l)).join('\n') + '\n'
+  );
   const hist = channelHistory(caws, 'a', 'b');
   expect(hist.ok).toBe(true);
   expect(hist.value).toHaveLength(1);

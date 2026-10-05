@@ -75,7 +75,8 @@ function snapshot(caws) {
   const specsDir = path.join(caws, 'specs');
   return {
     specs: Object.fromEntries(
-      fs.readdirSync(specsDir)
+      fs
+        .readdirSync(specsDir)
         .filter((entry) => entry.endsWith('.yaml'))
         .sort()
         .map((entry) => [entry, readBytes(path.join(specsDir, entry))])

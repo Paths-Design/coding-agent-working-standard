@@ -79,7 +79,8 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       path,
       normalizedPath: normPath,
       message: 'No spec is bound to this worktree; the kernel cannot decide scope authority.',
-      narrowRepair: 'Bind a spec to this worktree by running `caws worktree bind <worktree-name> --spec <spec-id>` (writes the bidirectional binding atomically). If no worktree exists yet, create one with `caws worktree create <name> --spec <spec-id>` instead.',
+      narrowRepair:
+        'Bind a spec to this worktree by running `caws worktree bind <worktree-name> --spec <spec-id>` (writes the bidirectional binding atomically). If no worktree exists yet, create one with `caws worktree create <name> --spec <spec-id>` instead.',
       bindingState: 'unbound',
     };
   }
@@ -98,9 +99,15 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       data: {
         specHasWorktree: binding.detail.specHasWorktree,
         registryHasSpecId: binding.detail.registryHasSpecId,
-        ...(binding.detail.specWorktree !== undefined && { specWorktree: binding.detail.specWorktree }),
-        ...(binding.detail.registrySpecId !== undefined && { registrySpecId: binding.detail.registrySpecId }),
-        ...(binding.detail.worktreeName !== undefined && { worktreeName: binding.detail.worktreeName }),
+        ...(binding.detail.specWorktree !== undefined && {
+          specWorktree: binding.detail.specWorktree,
+        }),
+        ...(binding.detail.registrySpecId !== undefined && {
+          registrySpecId: binding.detail.registrySpecId,
+        }),
+        ...(binding.detail.worktreeName !== undefined && {
+          worktreeName: binding.detail.worktreeName,
+        }),
       },
     };
   }
@@ -265,7 +272,8 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
     path,
     normalizedPath: normPath,
     message: `Path "${normPath}" does not match any entry in spec ${spec.id} scope.in or scope.support.`,
-    narrowRepair: 'Add a covering entry to scope.in (worktree-claimed) or scope.support (editable, not claimed), or move the change to a covered path.',
+    narrowRepair:
+      'Add a covering entry to scope.in (worktree-claimed) or scope.support (editable, not claimed), or move the change to a covered path.',
     bindingState: binding.kind,
     data: { specId: spec.id },
   };
@@ -282,7 +290,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
 export function evaluatePathResult(
   path: string,
   binding: BindingState,
-  policy: Policy,
+  policy: Policy
 ): Result<AdmitDecision> {
   const decision = evaluatePath(path, binding, policy);
   if (decision.kind === 'admit') {

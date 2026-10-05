@@ -330,7 +330,7 @@ components:
               - security
               - performance
           description: Quality checks to run
-          default: ["tests", "coverage", "lint"]
+          default: ['tests', 'coverage', 'lint']
         config:
           type: object
           description: Assessment-specific configuration
@@ -352,7 +352,7 @@ components:
         path:
           type: string
           description: File system path to assess
-          example: "/path/to/project"
+          example: '/path/to/project'
         files:
           type: array
           items:
@@ -368,7 +368,7 @@ components:
               description: Repository URL
             branch:
               type: string
-              default: "main"
+              default: 'main'
               description: Branch to assess
             commit:
               type: string
@@ -476,7 +476,7 @@ components:
               - contract
               - performance
           description: Test types to run
-          default: ["unit", "integration"]
+          default: ['unit', 'integration']
         config:
           type: object
           description: Test runner configuration
@@ -559,7 +559,7 @@ components:
             - html
             - lcov
             - clover
-          default: "json"
+          default: 'json'
           description: Coverage report format
         thresholds:
           type: object
@@ -673,7 +673,7 @@ components:
           items:
             type: string
           description: Specific mutation operators to use
-          example: ["ArithmeticOperator", "ConditionalBoundary"]
+          example: ['ArithmeticOperator', 'ConditionalBoundary']
         timeout:
           type: integer
           minimum: 1
@@ -803,7 +803,7 @@ components:
                 description: Contract file path
               status:
                 type: string
-                enum: ["pass", "fail", "error"]
+                enum: ['pass', 'fail', 'error']
               errors:
                 type: array
                 items:
@@ -887,7 +887,7 @@ components:
           description: Issue description
         severity:
           type: string
-          enum: ["error", "warning", "info"]
+          enum: ['error', 'warning', 'info']
           description: Issue severity level
         fixable:
           type: boolean
@@ -910,7 +910,7 @@ components:
               - code
               - containers
           description: Security scanners to run
-          default: ["secrets", "dependencies", "code"]
+          default: ['secrets', 'dependencies', 'code']
         severity:
           type: string
           enum:
@@ -918,7 +918,7 @@ components:
             - medium
             - high
             - critical
-          default: "medium"
+          default: 'medium'
           description: Minimum severity to report
 
     SecurityResult:
@@ -1043,8 +1043,8 @@ components:
           description: API endpoint to test
         method:
           type: string
-          enum: ["GET", "POST", "PUT", "DELETE", "PATCH"]
-          default: "GET"
+          enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+          default: 'GET'
         payload:
           type: object
           description: Request payload for POST/PUT
@@ -1175,7 +1175,7 @@ components:
               description: Whether contracts are required
             review:
               type: string
-              enum: ["required", "optional", "none"]
+              enum: ['required', 'optional', 'none']
               description: Code review requirements
 
     GateValidationRequest:
@@ -1288,7 +1288,7 @@ components:
         code:
           type: string
           description: Error code identifier
-          example: "ASSESSMENT_FAILED"
+          example: 'ASSESSMENT_FAILED'
         message:
           type: string
           description: Human-readable error message

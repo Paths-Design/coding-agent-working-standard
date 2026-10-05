@@ -44,8 +44,7 @@ export const DOCTOR_RULES = {
    * picking a winner requires authority policy from
    * WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.
    */
-  WORKTREE_BINDING_CONTRADICTION_3WAY:
-    'doctor.worktree.binding_contradiction_3way',
+  WORKTREE_BINDING_CONTRADICTION_3WAY: 'doctor.worktree.binding_contradiction_3way',
   /**
    * `git worktree list --porcelain` reports a linked worktree at some
    * path; no `.caws/worktrees.json` entry references that path. H6 in
@@ -68,11 +67,20 @@ export const DOCTOR_RULES = {
    * worktree_created event was appended to the immutable hash chain, then the
    * worktree_bound event failed and the transaction rolled back the registry +
    * filesystem writes — leaving an event recording a worktree the control plane
-   * does not reflect. WORKTREE-DOCTOR-HALF-STATE-001. Severity WARN — it is
-   * reconcilable governance residue (the audit record is honest), not active
-   * corruption; the repair is a later gated slice, so the diagnostic is a
-   * pointer, not a command. Suppressed when a later `worktree_destroyed` event
-   * for the same name closes the lifecycle, or when the worktree is live.
+   * does not reflect. WORKTREE-DOCTOR-HALF-STATE-001. Suppressed when a later
+   * `worktree_destroyed` event for the same name closes the lifecycle, or when
+   * the worktree is live.
+   *
+   * CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: severity is now conditional.
+   * WARN (the reconcilable-residue case) when any physical remainder exists or
+   * any tombstone observation is missing — no governed command can close this
+   * class, so an unverifiable orphan stays visible as actionable-looking
+   * residue. INFO (verifiable tombstone) when the name is observably dead
+   * everywhere: registry absent, spec binding absent, destroy event absent,
+   * recorded branch absent from the observed local refs, recorded path
+   * observed absent, and no linked worktree listed at the recorded path. A
+   * warning nobody can discharge trains operators to ignore doctor; the
+   * tombstone records the verification without demanding a remedy.
    */
   WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING:
     'doctor.worktree.event_without_control_plane_binding',
@@ -84,8 +92,7 @@ export const DOCTOR_RULES = {
    * evaluated. Severity INFO — incomplete observability is preferable
    * to fail-closed.
    */
-  WORKTREE_GIT_OBSERVATION_UNAVAILABLE:
-    'doctor.worktree.git_observation_unavailable',
+  WORKTREE_GIT_OBSERVATION_UNAVAILABLE: 'doctor.worktree.git_observation_unavailable',
   /**
    * Bidirectional binding exists, but the spec's lifecycle_state is not
    * 'active' (it is draft, closed, or archived). Closed/archived specs
@@ -184,8 +191,7 @@ export const DOCTOR_RULES = {
    */
   INIT_LEGACY_WORKING_SPEC_PRESENT: 'doctor.init.legacy_working_spec_present',
   /** `.caws/working-spec.schema.json` legacy artifact present. Error. */
-  INIT_LEGACY_WORKING_SPEC_SCHEMA_PRESENT:
-    'doctor.init.legacy_working_spec_schema_present',
+  INIT_LEGACY_WORKING_SPEC_SCHEMA_PRESENT: 'doctor.init.legacy_working_spec_schema_present',
   /**
    * `.caws/specs/` directory absent on a project that otherwise looks
    * initialized. Stores default to "no specs" so this is operational
@@ -217,6 +223,222 @@ export const DOCTOR_RULES = {
    */
   INIT_HOOKS_PRESENT_CAWS_ABSENT: 'doctor.init.hooks_present_caws_absent',
 
+  /**
+   * CAWS-HARNESS-TELEMETRY-ADAPTER-001: the vendored telemetry rows
+   * (agent-heartbeat.sh, agent-stop.sh, session-log.sh,
+   * session_log_renderer.py under .caws/hooks/) are still installed as
+   * shared-pack managed files while an adapter-covered surface pack (dsh)
+   * is ALSO installed. The telemetry plane for an adapter-covered surface
+   * is owned by that surface's harness adapter, so the vendored rows are
+   * stale dual-writers over the same .caws/sessions/ and .caws/leases/
+   * state. Absence is never staleness: no rows present, or rows without an
+   * installed adapter pack, stays silent. Severity: warning (render-only;
+   * the vendored rows still work). Repair: re-run `caws init` — for an
+   * adapter-covered surface init omits the rows from the install set and
+   * retires managed stale copies (retireStaleTelemetryRows); unmanaged
+   * local growth is never touched.
+   */
+  HOOKS_STALE_TELEMETRY_PACK: 'doctor.hooks.stale_telemetry_pack',
+
+  /**
+   * CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: the repo's INSTALLED shared
+   * hook pack (.caws/hooks rows, stamped hook_pack_version header) lags the
+   * SHIPPING SHARED_PACK_VERSION. The hooks that enforce governance are the
+   * CLI's runtime; running a pack the shipping code no longer contains is
+   * the guard-plane equivalent of shipping stale runtime (observed live:
+   * v43 installed vs v53 shipped — including a pre-PID-anchor session-id.sh
+   * whose removed capsule tier was still enforcing). Severity: warning.
+   * Repair: `caws init diff` to inspect per-file drift, then
+   * `caws init --overwrite --force` to refresh, or `--adopt` to keep local
+   * growth. Absent/unreadable headers are unobserved (silent).
+   *
+   * HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001: this rule is NOT suppressed by the
+   * presence of a machine runtime. The runtime makes a repo's copied pack inert
+   * ONLY for a surface CAWS has REGISTERED in that harness's native config, and
+   * registration is deliberately narrow: system-runtime.ts vendorFor admits just
+   * codex, claude-code and qwen-code (an unregistered harness is refused, because
+   * registering one with no verified adapter would let systemSurfaceEnabled()
+   * report true while `caws init` stops maintaining the pack that harness
+   * actually executes). Every other harness keeps running the repo's own copy —
+   * the adapter-wired DSH bridge invokes
+   * <repoRoot>/.caws/hooks/dispatch/<event>.sh directly and has no runtime path
+   * at all. So `systemRuntime !== undefined` reports which surfaces are
+   * configured; it does NOT prove the harness executing against this repo is
+   * among them. Suppressing on it asserted a wiring fact doctor cannot observe,
+   * and the failure mode was silence about a live, old guard plane — reproduced
+   * live: runtime installed, copied pack at v56 while the CLI shipped v68, DSH
+   * executing the v56 copy, doctor silent. Reporting is the fail-safe direction:
+   * a false-positive advisory at worst, never silence about a live old plane.
+   */
+  HOOKS_INSTALLED_PACK_VERSION_LAG: 'doctor.hooks.installed_pack_version_lag',
+
+  /**
+   * HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001: an installed copied shared hook
+   * file differs in BODY from the shipping template once the install-time
+   * `hook_pack_version` stamp is normalized on both sides. The version stamp is
+   * NOT a freshness proxy — manifest-shared.ts records content changes that
+   * landed without a version bump — so version equality cannot prove the copied
+   * pack matches what the CLI ships. This is the gap the version-lag rule above
+   * structurally cannot see.
+   *
+   * CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: this rule now fires
+   * ONLY over rows WITHOUT verified new growth — no baseline, or the installed
+   * body matches its baseline. That shape is AMBIGUOUS rather than refreshable:
+   * a port run under CLI 12.0.0 or 12.1.0 baselined the reconciled body it
+   * landed, so a growth file that went through one of those ports shows "no
+   * edit over baseline" too. CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01
+   * changed port to baseline the upstream template, which removes the ambiguity
+   * for new ports but does not heal baselines already written. Severity:
+   * warning, with a repair that demands reading the diff before any refresh
+   * and names `caws init port` for deltas worth keeping. Rows whose
+   * baseline PROVES new growth (installed differs from baseline) render as
+   * HOOKS_PACK_LOCAL_GROWTH (info) instead.
+   */
+  HOOKS_PACK_BODY_DRIFT: 'doctor.hooks.pack_body_drift',
+
+  /**
+   * CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: installed copied
+   * shared hook files whose pristine baseline (written by the installer at
+   * .caws/hooks/.pristine/<packId>/<destPath>) PROVES deliberate local growth —
+   * the installed body differs from the as-installed baseline. Refreshing
+   * would destroy that growth, so a warning demanding refresh is a demand
+   * nobody can safely perform (the destructive no-discharge class). Severity:
+   * INFO — the divergence is verified repo-owned surface awaiting the retrofit
+   * (absorb the growth upstream, then re-init), and rows that also carry
+   * upstream template changes name them so the retrofit ports everything.
+   */
+  HOOKS_PACK_LOCAL_GROWTH: 'doctor.hooks.pack_local_growth',
+
+  /**
+   * CAWS-DOCTOR-FORK-LAG-UPSTREAM-MOVED-01: a locally grown hook file whose
+   * UPSTREAM template has also moved since its baseline was recorded. Growth
+   * alone is a standing, discharged state (HOOKS_PACK_LOCAL_GROWTH, info);
+   * growth whose upstream moved is an outstanding obligation — the fork is
+   * running without upstream fixes it never received.
+   *
+   * This is deliberately NOT folded into HOOKS_INSTALLED_PACK_VERSION_LAG.
+   * That rule's warning branch prescribes `caws init --overwrite --force`,
+   * which DESTROYS a fork; escalating a fork into it would aim the operator
+   * at the one command that loses the work. Severity: WARNING with a PORT
+   * remediation — the obligation is real, and the safe discharge is
+   * `caws init port`, never a wholesale refresh.
+   */
+  HOOKS_PACK_FORK_UPSTREAM_MOVED: 'doctor.hooks.pack_fork_upstream_moved',
+
+  /**
+   * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: a handler the repo-local hook policy
+   * records as a FORK (`surfaces.<s>.forks`) whose shipped counterpart has
+   * moved since the fork was taken — the recorded sha256 no longer matches
+   * the template the running CLI ships.
+   *
+   * Distinct from HOOKS_PACK_FORK_UPSTREAM_MOVED even though the obligation
+   * rhymes. That rule reads `.pristine` baselines, so it can only see a fork
+   * that stayed at its installed path. The whole point of `hooks replace` is
+   * that a fork moves to `.caws/hooks/ext/`, where no baseline exists and the
+   * baseline observer is structurally blind — the `forks` record IS the
+   * provenance, and this rule is the only thing that reads it.
+   *
+   * Severity is evidence-led, not fork-led: a fork whose upstream has NOT
+   * moved is a standing, discharged decision and stays SILENT, because
+   * warning on every recorded fork is how the original inversion survived —
+   * an unreadable signal gets ignored. Only a moved upstream is an
+   * outstanding retrofit. A fork whose shipped counterpart cannot be measured
+   * at all is unobserved, and unobserved never fires.
+   */
+  HOOKS_REPO_POLICY_FORK_LAG: 'doctor.hooks.repo_policy_fork_lag',
+
+  /**
+   * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: a compiled chain sidecar
+   * (.caws/hooks/dispatch/<event>.chain) disagrees with what the current
+   * policy and installed dispatcher would compile.
+   *
+   * This is the project-wired plane's entire honoring mechanism: the five
+   * project-wired surfaces exec the dispatcher directly and read the sidecar,
+   * so a stale sidecar means those harnesses are running a chain the
+   * committed policy no longer describes — silently, because nothing else
+   * reports it. Machine-routed surfaces resolve the policy live and are
+   * unaffected, which is exactly why this cannot be noticed from a Claude
+   * Code session. Severity: warning. Repair: `caws hooks compile`.
+   */
+  HOOKS_REPO_POLICY_CHAIN_STALE: 'doctor.hooks.repo_policy_chain_stale',
+
+  /**
+   * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: `.caws/hooks/hook-policy.json` exists
+   * but does not parse, or the validator rejects it (an over-authority floor
+   * entry, an unknown key, a malformed extension anchor).
+   *
+   * ERROR, not warning, and never silence. The launcher is fail-CLOSED on a
+   * bad policy: it raises and the handler emits a block with exit 2 — so an
+   * invalid document is not a config nit, it is an outage on every tool call
+   * for every routed surface. Reporting it as "no policy" would show a repo
+   * as healthy at the precise moment its guard plane is refusing everything.
+   * Repair: `caws hooks validate` names the offending key.
+   */
+  HOOKS_REPO_POLICY_INVALID: 'doctor.hooks.repo_policy_invalid',
+
+  /**
+   * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the superseded
+   * `.caws/hooks/adapter-policy.json` is still present.
+   *
+   * Its shape is a FROZEN FULL COPY of the stock chain
+   * (`{events: {<event>: {hooks_dir, handlers[]}}}`), so it does not age
+   * gracefully: a copy taken before an event or a handler existed silently
+   * pins the old set. Severity INFO — it is still read, so this is a
+   * migration prompt, not a break. Repair: `caws hooks import --from-machine`
+   * and the additive `hook-policy.json` keys.
+   */
+  HOOKS_LEGACY_ADAPTER_POLICY: 'doctor.hooks.legacy_adapter_policy',
+
+  /**
+   * CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmp files in
+   * .caws/leases/ — a lease write crashed between tmp creation and rename,
+   * littering the directory invisibly (the loader already ignores non-.json
+   * names). Severity: warning. Repair: automatic (the next lease write
+   * sweeps dead-owner/hard-aged tmps) or manual removal. Foreign files are
+   * never named.
+   */
+  LEASES_STRANDED_TMP: 'doctor.leases.stranded_tmp',
+
+  /**
+   * CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: the machine's ~/.caws global
+   * home exists but carries entries outside the known structure (state/,
+   * surfaces/, lib/) — unmanaged global state is the pre-v11 residue class
+   * (observed live: working-spec.yaml + orphan events.jsonl). Severity:
+   * warning. Repair: archive the foreign entries with a manifest (the A1
+   * migration pattern), never blind-delete.
+   */
+  HOOKS_SYSTEM_RUNTIME: 'doctor.hooks.system_runtime',
+  HOOKS_SYSTEM_RUNTIME_INVALID: 'doctor.hooks.system_runtime_invalid',
+  HOOKS_SYSTEM_LEGACY_WIRING: 'doctor.hooks.system_legacy_wiring',
+  GLOBAL_HOME_UNMANAGED_STATE: 'doctor.global_home.unmanaged_state',
+  /**
+   * CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: entries in the machine's
+   * ~/.caws global home that are RECOGNIZED legacy output of a prior CLI
+   * generation (`sessions` — pre-v11 machine-home session logs; current
+   * session logs are repo-local). Distinct from unmanaged state: the
+   * provenance is known, the current CLI neither reads nor writes these, and
+   * no review is demanded. Severity INFO — names the legacy provenance so a
+   * future reader knows what the bytes are; keeping them is safe.
+   */
+  GLOBAL_HOME_RECOGNIZED_LEGACY_STATE: 'doctor.global_home.recognized_legacy_state',
+  /** Existing home with neither a legacy migration stamp nor a verified runtime. */
+  GLOBAL_HOME_STAMP_MISSING: 'doctor.global_home.stamp_missing',
+  GLOBAL_HOME_UNREADABLE: 'doctor.global_home.unreadable',
+  GLOBAL_HOME_RUNTIME_INVALID: 'doctor.global_home.runtime_invalid',
+
+  /**
+   * CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface (qwen-code,
+   * zcode) carries CAWS hook wiring at BOTH user scope and project scope on
+   * this machine. The harness merges the two additively, so every CAWS
+   * dispatcher double-fires (doubled audit events, SessionStart hangs —
+   * proven live 2026-08-13). Severity: warning (render-only; wiring still
+   * works, twice). Repair: keep ONE scope — the user-scope wiring (immune
+   * to the qwen trust gate and the zcode project-hook strip); remove the
+   * project-scope hook entries. `caws init` for a gated surface now refuses
+   * to add them, but entries from a pre-guard init must be removed by hand.
+   */
+  HOOKS_USER_SCOPE_DUAL_WIRING: 'doctor.hooks.user_scope_dual_wiring',
+
   // ---- registry hygiene (slice 7c.2) -------------------------------------
   /**
    * worktrees.json or agents.json parsed as something other than a plain
@@ -227,7 +449,7 @@ export const DOCTOR_RULES = {
 
   // ---- policy posture (slice 7c.2) ---------------------------------------
   /**
-   * A critical gate (budget_limit, spec_completeness, scope_boundary) is
+   * A critical gate (spec_completeness, scope_boundary) is
    * disabled OR not in block mode. Doctor reports this as posture risk;
    * policy validation already emits its own semantic warning. The two
    * audiences are different (operator vs. config validator) and the

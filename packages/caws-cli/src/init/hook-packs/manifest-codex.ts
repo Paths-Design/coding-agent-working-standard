@@ -11,7 +11,7 @@
 // (manifest-shared.ts) which installs under .caws/hooks/. This vendor
 // adapter now installs only the codex-specific surface files:
 //   - hooks.json (the codex wiring; command paths updated to .caws/hooks/dispatch/)
-//   - AGENTS.md (agent doctrine)
+//   - CAWS.md (detailed adapter reference; not an instruction-discovery file)
 //   - hooks/lib/emit.sh, parse-input.sh, run-handlers.sh (genuine codex overrides)
 //
 // The codex override libs install to .codex/hooks/lib/ which is exactly
@@ -31,10 +31,9 @@
 // is surface-neutral and handles codex PreCompact events directly; no
 // per-vendor caws_dispatch/pre_compact.sh is needed.
 //
-// Decision on codex README: the codex adapter does NOT install a README.md.
-// A README under .codex/hooks/ would need to be maintained separately from
-// the claude-code README and would describe the same shared hook logic. The
-// AGENTS.md is the authoritative surface doc for codex; that is sufficient.
+// Repository-wide CAWS instructions are merged separately into the active root
+// AGENTS.override.md / AGENTS.md by init. A vendor-local .codex/AGENTS.md is not
+// on Codex's instruction-discovery path for ordinary repository work.
 
 import type { HookPackV1 } from './types';
 
@@ -49,7 +48,33 @@ import type { HookPackV1 } from './types';
 // CAWS metadata field from hooks.json because Codex only accepts `hooks` at the
 // top level. Installer recognition now uses the runtime-root dispatcher shape
 // for this one JSON file instead of unsupported embedded metadata.
-export const CODEX_PACK_VERSION = 13;
+//
+// Version 14: CAWS-CODEX-INSTRUCTION-REACH-002. The detailed adapter reference
+// moves from the misleading .codex/AGENTS.md path to .codex/CAWS.md. The
+// concise, repository-wide working contract is merged into the root
+// instruction file by the init command, following Codex discovery precedence.
+//
+// Version 18: CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001. hooks/lib/
+// run-handlers.sh (the codex override of the shared dispatch loop) guards the
+// same empty-handler-array expansion fixed in the shared pack, so a fully
+// disabled handler set for an event returns exit 0 instead of crashing with
+// "unbound variable" on bash 3.2 (macOS default /bin/bash).
+// Version 19: CAWS-MESSAGE-OFFER-SETTLEMENT-DELIVERY-01. The Codex runner
+// preserves bounded advisory membership while retaining deny/rewrite control.
+// Version 20: CAWS-DEFECT-HOOK-PAYLOAD-ENV-E2BIG-01. The Codex parser override
+// (hooks/lib/parse-input.sh) adopts the bounded payload transport: a payload at
+// or above CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES is written to a dispatch-scoped
+// file instead of the process environment, and apply_patch normalization still
+// runs against the full payload read from that file.
+// Version 21: CAWS-HOOK-ADVISORY-BUDGET-TIERS-01. The Codex dispatch override
+// adopts per-card advisory admission: truncate-to-fit with an explicit elided
+// marker instead of dropping the whole card and starving later handlers. Deny
+// control decisions still short-circuit untruncated.
+// Version 22: CAWS-HOOK-ADVISORY-SESSION-DEDUP-01. The Codex dispatch override
+// adopts per-session advisory suppression keyed on exact text, retaining deny
+// precedence and its exit-1 promotion.
+// Hook port qualification: shared execution records and session-cache custody.
+export const CODEX_PACK_VERSION = 26;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',
@@ -57,17 +82,10 @@ export const CODEX_PACK: HookPackV1 = {
   packVersion: CODEX_PACK_VERSION,
   cawsMinMajor: 11,
   summary:
-    'Codex vendor adapter: hooks.json wiring, AGENTS.md, and codex-specific ' +
+    'Codex vendor adapter: hooks.json wiring, CAWS.md reference, and codex-specific ' +
     'lib overrides. Shared hook logic is in the `shared` pack under .caws/hooks/.',
   activation: 'restart_required',
-  lifecycleEvents: [
-    'pre_bash',
-    'pre_write',
-    'pre_edit',
-    'session_start',
-    'pre_compact',
-    'stop',
-  ],
+  lifecycleEvents: ['pre_bash', 'pre_write', 'pre_edit', 'session_start', 'pre_compact', 'stop'],
   stateModel: {
     reads: [
       '.caws/specs/*.yaml',
@@ -104,15 +122,21 @@ export const CODEX_PACK: HookPackV1 = {
       managed: true,
     },
 
-    // -- Agent doctrine for codex --
+    // -- Detailed Codex adapter reference (root instructions are merged by init) --
     {
-      destPath: '.codex/AGENTS.md',
-      sourcePath: 'AGENTS.md',
+      destPath: '.codex/CAWS.md',
+      sourcePath: 'CAWS.md',
       executable: false,
       managed: true,
     },
 
     // -- Codex-specific lib overrides --
+    {
+      destPath: '.codex/hooks/lib/session-transcript.py',
+      sourcePath: 'hooks/lib/session-transcript.py',
+      executable: false,
+      managed: true,
+    },
     // These install to .codex/hooks/lib/ which is where caws_source_lib
     // looks for vendor overrides at runtime. Each file is sourced in
     // preference to the shared default when CAWS_VENDOR_DIR=.codex.

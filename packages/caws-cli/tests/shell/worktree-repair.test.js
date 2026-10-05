@@ -30,10 +30,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const {
-  runWorktreeRepairCommand,
-  decideRepair,
-} = require('../../dist/shell/commands/worktree');
+const { runWorktreeRepairCommand, decideRepair } = require('../../dist/shell/commands/worktree');
 const { initProject } = require('../../dist/store/init-store');
 const { loadEvents } = require('../../dist/store/events-store');
 const { verifyChain, DOCTOR_RULES } = require('../../dist/kernel');
@@ -349,7 +346,9 @@ describe('A6: ambiguous/forbidden classes refuse with zero mutation', () => {
     const caws = setupCaws(repoRoot);
     // Registry binds wt-x to a spec id with no spec file + a backing dir so it
     // is not also an H1 ghost. The missing spec is the H2 signal.
-    writeRegistry(caws, { 'wt-x': { specId: 'MISSING-SPEC-999', branch: 'wt-x', baseBranch: 'main' } });
+    writeRegistry(caws, {
+      'wt-x': { specId: 'MISSING-SPEC-999', branch: 'wt-x', baseBranch: 'main' },
+    });
     makeWorktreeDir(caws, 'wt-x');
     const before = snapshotState(caws, []);
 

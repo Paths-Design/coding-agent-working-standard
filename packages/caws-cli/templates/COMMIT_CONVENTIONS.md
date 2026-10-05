@@ -28,26 +28,31 @@ This repository uses [Conventional Commits](https://conventionalcommits.org/) fo
 ## Examples
 
 ### Feature
+
 ```
 feat: add user authentication system
 ```
 
 ### Bug Fix
+
 ```
 fix: resolve memory leak in data processing
 ```
 
 ### Documentation
+
 ```
 docs: update API documentation for new endpoints
 ```
 
 ### Refactoring
+
 ```
 refactor: extract user validation logic into separate module
 ```
 
 ### Breaking Change
+
 ```
 feat!: change API response format for user data
 
@@ -78,6 +83,7 @@ Commits following these conventions will automatically:
 ## CI/CD Integration
 
 The automated release process includes:
+
 - ✅ Linting and testing
 - ✅ Package building
 - ✅ NPM publishing with OIDC authentication

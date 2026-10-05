@@ -15,25 +15,34 @@ updated: 2026-05-28
 
 ## Overview
 
-This document provides procedures for rolling back bad releases and responding to production incidents for CAWS packages. For the canonical release procedure (how to publish a new version), see `docs/release-procedure.md`.
+This document provides procedures for rolling back bad releases and responding
+to production incidents for CAWS packages. For the canonical release procedure
+(how to publish a new version), see `docs/release-procedure.md`.
 
 **Key release facts:**
-- Releases are **tag-driven**. The Release workflow triggers ONLY on `push: tags: [caws-cli-v*, caws-kernel-v*, v*]`. Pushing to `main` NEVER triggers a publish.
-- Only `caws-cli-v*` tags are **accepted**. Bare `v*` and `caws-kernel-v*` tags are observed, refused, and deleted from origin.
-- The publish script is `scripts/release-tag-publish.mjs`. CI does NOT invoke `semantic-release`, does NOT bump versions, and does NOT generate changelogs.
-- Canonical tag format: `caws-cli-vX.Y.Z` (e.g. `caws-cli-v11.1.6`). GitHub Releases use this full tag name.
-- Asymmetric failure invariant: pre-publish failures DELETE the tag; post-publish ancillary failures PRESERVE it.
+
+- Releases are **tag-driven**. The Release workflow triggers ONLY on
+  `push: tags: [caws-cli-v*, caws-kernel-v*, v*]`. Pushing to `main` NEVER
+  triggers a publish.
+- Only `caws-cli-v*` tags are **accepted**. Bare `v*` and `caws-kernel-v*` tags
+  are observed, refused, and deleted from origin.
+- The publish script is `scripts/release-tag-publish.mjs`. CI does NOT invoke
+  `semantic-release`, does NOT bump versions, and does NOT generate changelogs.
+- Canonical tag format: `caws-cli-vX.Y.Z` (e.g. `caws-cli-v11.1.6`). GitHub
+  Releases use this full tag name.
+- Asymmetric failure invariant: pre-publish failures DELETE the tag;
+  post-publish ancillary failures PRESERVE it.
 
 ---
 
 ## Quick Reference
 
-| Scenario                   | Action             | Time to Resolution |
-| -------------------------- | ------------------ | ------------------ |
-| **Broken npm package**     | Deprecate + hotfix | 15-30 minutes      |
-| **Security vulnerability** | Emergency patch    | 1-4 hours          |
-| **Failed CI/CD**           | Revert commit + re-tag | 5-10 minutes   |
-| **Breaking API change**    | Major version bump | N/A - by design    |
+| Scenario                   | Action                 | Time to Resolution |
+| -------------------------- | ---------------------- | ------------------ |
+| **Broken npm package**     | Deprecate + hotfix     | 15-30 minutes      |
+| **Security vulnerability** | Emergency patch        | 1-4 hours          |
+| **Failed CI/CD**           | Revert commit + re-tag | 5-10 minutes       |
+| **Breaking API change**    | Major version bump     | N/A - by design    |
 
 ---
 
@@ -186,7 +195,8 @@ gh issue create --title "SECURITY: Upgrade from 11.1.5 immediately" \
 
 ### Strategy 4: Major Version Rollback
 
-**When to use**: Breaking changes need to be reverted across a major version line
+**When to use**: Breaking changes need to be reverted across a major version
+line
 
 **Procedure**:
 
@@ -462,9 +472,7 @@ Version 11.1.5 contains a vulnerability that could allow [description].
 
 ### Action Required
 
-Upgrade immediately:
-\`\`\`bash
-npm install -g @paths.design/caws-cli@latest
+Upgrade immediately: \`\`\`bash npm install -g @paths.design/caws-cli@latest
 \`\`\`
 
 ### Timeline
@@ -499,9 +507,7 @@ CLI validation failed on Windows with path separators.
 
 ### Upgrade
 
-\`\`\`bash
-npm install -g @paths.design/caws-cli@latest
-\`\`\`
+\`\`\`bash npm install -g @paths.design/caws-cli@latest \`\`\`
 
 Closes #123
 ```
@@ -644,7 +650,8 @@ npm dist-tag add @paths.design/caws-cli@11.1.6 latest
 
 ## Resources
 
-- **Release Procedure**: `docs/release-procedure.md` (canonical — read this first)
+- **Release Procedure**: `docs/release-procedure.md` (canonical — read this
+  first)
 - **Security Policy**: `SECURITY.md`
 - **Contributing**: `CONTRIBUTING.md`
 - **Support**: hello@paths.design

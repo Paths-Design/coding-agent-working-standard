@@ -32,7 +32,7 @@ const cliProjects = require('./packages/caws-cli/jest.config.js').projects;
 
 /** @type {import('jest').Config} */
 module.exports = {
-  projects: cliProjects.map((project) => ({
+  projects: cliProjects.map(project => ({
     ...project,
     rootDir: '<rootDir>/packages/caws-cli',
   })),

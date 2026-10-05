@@ -10,17 +10,25 @@ updated: 2026-05-15
 
 # CAWS Migration Guide: v3.4 → v3.5
 
-> **HISTORICAL — superseded by v11.0.0.** This document describes the v3.4→v3.5 migration path that was current circa October 2025. Both v3.4 and v3.5 are pre-vNext. The v11.0.0 cutover (current) is a ground-up rewrite around a pure kernel/store/shell architecture and is not described here.
+> **HISTORICAL — superseded by v11.0.0.** This document describes the v3.4→v3.5
+> migration path that was current circa October 2025. Both v3.4 and v3.5 are
+> pre-vNext. The v11.0.0 cutover (current) is a ground-up rewrite around a pure
+> kernel/store/shell architecture and is not described here.
 >
-> If you are migrating *to v11*, see the [`README.md`](../README.md) and [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md) instead.
+> If you are migrating _to v11_, see the [`README.md`](../README.md) and
+> [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md)
+> instead.
 >
-> Commands described below (`caws validate`, `caws waivers create`, etc.) are v3-era surfaces and are removed in v11. The body is preserved for users still on v3.x.
+> Commands described below (`caws validate`, `caws waivers create`, etc.) are
+> v3-era surfaces and are removed in v11. The body is preserved for users still
+> on v3.x.
 
 ---
 
 **Agent-Agency Enhancements Edition (v3 era)**
 
-This guide helps you migrate existing CAWS projects to take advantage of new features from agent-agency integration.
+This guide helps you migrate existing CAWS projects to take advantage of new
+features from agent-agency integration.
 
 ---
 
@@ -364,7 +372,8 @@ caws waiver create \
 
 #### Issue: "Policy file missing quality thresholds"
 
-**Solution:** It's optional! Old format still works. But if you want the new features, add them:
+**Solution:** It's optional! Old format still works. But if you want the new
+features, add them:
 
 ```yaml
 risk_tiers:

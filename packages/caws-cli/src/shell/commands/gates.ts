@@ -36,6 +36,10 @@
 // zero-disposition guard was absent entirely — a run with no policy-declared
 // known-gate intersections silently exited 0 with no audit trail.
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { runGit } from '../../store/repo-root';
+import { readGateChanges, type GateChangeBasis } from '../gates/local-evaluators/diff-helpers';
 import {
   type Actor,
   type Diagnostic,
@@ -46,12 +50,7 @@ import {
   type Waiver,
 } from '../../kernel';
 
-import {
-  appendEvent,
-  composeStoreSnapshot,
-  loadWaivers,
-  resolveRepoRoot,
-} from '../../store';
+import { appendEvent, composeStoreSnapshot, loadWaivers, resolveRepoRoot } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderGatesRun } from '../render/gates';
 import { resolveSession } from '../session/resolve-session';
@@ -59,17 +58,13 @@ import { buildActor } from '../session/actor';
 import { SHELL_RULES } from '../rules';
 import {
   deriveDispositions,
+  effectiveGateMode,
+  isAdvisoryGate,
   type GateDisposition,
 } from '../gates/disposition';
 import { runLocalEvaluators } from '../gates/local-evaluators';
-import {
-  validateGatesReport,
-  type GatesReport,
-} from '../gates/gate-result-contract';
-import {
-  filterWaivedViolations,
-  type WaiverEvidence,
-} from '../gates/waiver-filter';
+import { validateGatesReport, type GatesReport } from '../gates/gate-result-contract';
+import { filterWaivedViolations, type WaiverEvidence } from '../gates/waiver-filter';
 
 export interface GatesRunCommandOptions {
   readonly cwd?: string;
@@ -130,7 +125,13 @@ interface GateDiscoverySnapshot {
 interface GateSummary {
   readonly gate_id: string;
   readonly enabled: boolean;
+  /** The mode `gates run` will apply — for an advisory gate declared
+   *  `block`, `warn`. */
   readonly mode: string;
+  /** Present only when policy declares a mode that is not honored. */
+  readonly declared_mode?: string;
+  /** True for a gate that never blocks whatever policy declares. */
+  readonly advisory: boolean;
   readonly description: string | null;
   readonly thresholds: Record<string, unknown>;
   readonly effective_waiver_ids: readonly string[];
@@ -192,15 +193,24 @@ function gateSummary(args: {
     ...(args.specId !== undefined ? { specId: args.specId } : {}),
     now: args.now,
   });
+  const mode = effectiveGateMode(args.gateId, args.config.mode);
   return {
     gate_id: args.gateId,
     enabled: args.config.enabled,
-    mode: args.config.mode,
+    mode,
+    ...(mode !== args.config.mode ? { declared_mode: args.config.mode } : {}),
+    advisory: isAdvisoryGate(args.gateId),
     description: args.config.description ?? null,
     thresholds: args.config.thresholds ?? {},
     effective_waiver_ids: effective.map((waiver) => waiver.id).sort(),
     effective_waiver_count: effective.length,
   };
+}
+
+function modeText(gate: GateSummary): string {
+  return gate.declared_mode === undefined
+    ? `mode=${gate.mode}`
+    : `mode=${gate.mode} (policy declares ${gate.declared_mode}; not honored)`;
 }
 
 function gateSummaries(args: {
@@ -237,15 +247,21 @@ export function runGatesListCommand(opts: GatesListCommandOptions = {}): number 
   });
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      spec_id: opts.specId ?? null,
-      gate_count: gates.length,
-      gates,
-      risk_tiers: loaded.policy.risk_tiers,
-      waiver_policy: loaded.policy.waivers ?? {},
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          spec_id: opts.specId ?? null,
+          gate_count: gates.length,
+          gates,
+          risk_tiers: loaded.policy.risk_tiers,
+          waiver_policy: loaded.policy.waivers ?? {},
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 
@@ -254,11 +270,11 @@ export function runGatesListCommand(opts: GatesListCommandOptions = {}): number 
   out('  gates:');
   for (const gate of gates) {
     out(
-      `  - ${gate.gate_id}: enabled=${gate.enabled} mode=${gate.mode} ` +
-        `effective_waivers=${gate.effective_waiver_count}`
+      `  - ${gate.gate_id}: enabled=${gate.enabled} ${modeText(gate)}` +
+        `${gate.advisory ? ' advisory' : ''} effective_waivers=${gate.effective_waiver_count}`
     );
   }
-  out('  risk_tiers:');
+  out('  risk_tiers (sizing goals; budget_limit is advisory and never blocks):');
   for (const [tier, budget] of Object.entries(loaded.policy.risk_tiers)) {
     out(`  - ${tier}: max_files=${budget.max_files} max_loc=${budget.max_loc}`);
   }
@@ -291,20 +307,29 @@ export function runGatesExplainCommand(opts: GatesExplainCommandOptions): number
   });
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      spec_id: opts.specId ?? null,
-      gate: summary,
-      waiver_policy: loaded.policy.waivers ?? {},
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          spec_id: opts.specId ?? null,
+          gate: summary,
+          waiver_policy: loaded.policy.waivers ?? {},
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 
   out(`caws gates explain: ${summary.gate_id}`);
   if (opts.specId !== undefined) out(`  spec: ${opts.specId}`);
   out(`  enabled=${summary.enabled}`);
-  out(`  mode=${summary.mode}`);
+  out(`  ${modeText(summary)}`);
+  if (summary.advisory) {
+    out('  advisory: a risk-tier sizing goal; an overage is reported and never blocks');
+  }
   if (summary.description !== null) out(`  description=${summary.description}`);
   out(`  thresholds=${JSON.stringify(summary.thresholds)}`);
   out(
@@ -321,20 +346,19 @@ function dispositionToEventBody(args: {
   ts: string;
   actor: Actor;
   specId: string;
+  changeBasis?: GateChangeBasis;
   waiverEvidence?: WaiverEvidence;
 }): EventBody {
-  const violations = args.disposition.violations
-    .slice(0, MAX_EVENT_VIOLATIONS)
-    .map((v) => ({
-      rule: typeof v.type === 'string' ? v.type : 'unknown',
-      subject:
-        typeof v.file === 'string'
-          ? typeof v.line === 'number'
-            ? `${v.file}:${v.line}`
-            : v.file
-          : (v.gate ?? 'unknown'),
-      ...(v.message !== undefined ? { details: v.message } : {}),
-    }));
+  const violations = args.disposition.violations.slice(0, MAX_EVENT_VIOLATIONS).map((v) => ({
+    rule: typeof v.type === 'string' ? v.type : 'unknown',
+    subject:
+      typeof v.file === 'string'
+        ? typeof v.line === 'number'
+          ? `${v.file}:${v.line}`
+          : v.file
+        : (v.gate ?? 'unknown'),
+    ...(v.message !== undefined ? { details: v.message } : {}),
+  }));
 
   const ev = args.waiverEvidence;
   const waivedCount = ev?.waived_count ?? 0;
@@ -350,6 +374,7 @@ function dispositionToEventBody(args: {
       result: args.disposition.outcome === 'skipped' ? 'skipped' : args.disposition.outcome,
       violations,
       waived_count: waivedCount,
+      ...(args.changeBasis !== undefined ? { metrics: { change_basis: args.changeBasis } } : {}),
       ...(ev !== undefined && ev.waiver_ids.length > 0
         ? { waiver_ids: ev.waiver_ids.slice() }
         : {}),
@@ -359,6 +384,7 @@ function dispositionToEventBody(args: {
 
 export interface GatesRunCommandRequest {
   readonly specId: string;
+  readonly baseRef?: string;
 }
 
 export function runGatesRunCommand(
@@ -472,11 +498,40 @@ export function runGatesRunCommand(
     err(`(rule: ${SHELL_RULES.GATES_POLICY_REQUIRED})`);
     return 2;
   }
+  let changeSet: ReturnType<typeof readGateChanges>;
+  try {
+    const top = runGit(['rev-parse', '--show-toplevel'], cwd);
+    if (!top.ok) throw new Error(top.reason);
+    const checkout = fs.realpathSync(top.stdout.trim());
+    const lane = Object.entries(snapshot.worktrees).find(([name, entry]) => {
+      const lanePath = entry.path ?? path.join(cawsDir, 'worktrees', name);
+      return fs.existsSync(lanePath) && fs.realpathSync(lanePath) === checkout;
+    });
+    if (lane !== undefined && lane[1].specId !== request.specId) {
+      throw new Error('The invoking lane is not bound to the requested spec.');
+    }
+    if (
+      lane !== undefined &&
+      request.baseRef !== undefined &&
+      request.baseRef !== lane[1].baseBranch
+    ) {
+      throw new Error(
+        'A registered lane uses its recorded base branch; --base cannot narrow that basis.'
+      );
+    }
+    if (lane !== undefined && lane[1].baseBranch === undefined)
+      throw new Error('Registered lane has no base branch.');
+    changeSet = readGateChanges(checkout, lane?.[1].baseBranch ?? request.baseRef);
+  } catch (error) {
+    err(`caws gates run: change basis unavailable: ${(error as Error).message}`);
+    return 2;
+  }
   const localResult = runLocalEvaluators({
     spec: activeSpec,
     policy,
     repoRoot,
     nowIso: now.toISOString(),
+    stagedChanges: changeSet.changes,
   });
   const mergedReport: GatesReport = {
     ...report,
@@ -501,10 +556,7 @@ export function runGatesRunCommand(
   });
 
   // 6b. Policy-driven disposition on UNWAIVED violations only.
-  const dispositionResult = deriveDispositions(
-    waiverFilter.reportForDisposition,
-    policy
-  );
+  const dispositionResult = deriveDispositions(waiverFilter.reportForDisposition, policy);
 
   // 6c. Zero-disposition guard. A "run" that emits zero gate_evaluated
   //     events is a silent CI false-green: the dashboard goes green with
@@ -545,6 +597,7 @@ export function runGatesRunCommand(
       ts,
       actor,
       specId: request.specId,
+      changeBasis: changeSet.basis,
       ...(waiverFilter.waivedByGate[d.gate_id] !== undefined
         ? { waiverEvidence: waiverFilter.waivedByGate[d.gate_id] }
         : {}),
@@ -559,6 +612,10 @@ export function runGatesRunCommand(
   }
 
   // 8. Render summary (always — partial evidence is still operator-useful).
+  out(`Change basis: ${JSON.stringify(changeSet.basis)}`);
+  out(
+    'Scope covers the named committed/staged paths only; unstaged and untracked work is not evaluated.'
+  );
   out(renderGatesRun(dispositionResult));
 
   // 9. Exit code, in priority order:

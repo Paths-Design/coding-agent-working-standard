@@ -25,6 +25,7 @@ function runCreate(root, opts) {
   const out = [];
   const err = [];
   const code = runSpecsCreateCommand({
+    env: {},
     cwd: root,
     out: (line) => out.push(line),
     err: (line) => err.push(line),
@@ -58,56 +59,22 @@ describe('caws specs create --plan', () => {
     );
   });
 
-  test('tier 1 plan reports missing semantic fields without writing files or events', () => {
+  test('tierless plan requires no optional operational fields and writes nothing', () => {
     const root = mkRepo();
     const result = runCreate(root, {
-      id: 'PLAN-TIER-001',
-      title: 'Tier one plan',
+      id: 'PLAN-NEW-001',
+      title: 'Tierless plan',
       mode: 'feature',
-      riskTier: 1,
-      plan: true,
-    });
-
-    expect(result.code).toBe(0);
-    expect(result.out).toContain('caws specs create --plan: needs changes candidate');
-    expect(result.out).toContain('/contracts');
-    expect(result.out).toContain('/observability');
-    expect(result.out).toContain('/rollback');
-    expect(result.out).toContain('/non_functional/security');
-    expect(result.out).toContain('example YAML additions:');
-    expect(result.out).toContain('observability:');
-    expect(result.out).toContain('rollback:');
-    expect(result.out).toContain('non_functional:');
-    expect(result.out).toContain('security:');
-    expect(result.out).toContain('No files, events, or worktree registry entries were written.');
-    expect(fs.existsSync(specPath(root, 'PLAN-TIER-001'))).toBe(false);
-    expect(fs.existsSync(eventsPath(root))).toBe(false);
-  });
-
-  test('tier 1 JSON plan includes field examples for missing semantic fields', () => {
-    const root = mkRepo();
-    const result = runCreate(root, {
-      id: 'PLAN-TIER-JSON-001',
-      title: 'Tier one json plan',
-      mode: 'feature',
-      riskTier: 1,
-      contract: ['core-api:behavior'],
       plan: true,
       json: true,
     });
-
     expect(result.code).toBe(0);
-    const json = JSON.parse(result.out);
-    expect(json.valid).toBe(false);
-    expect(json.missing_fields).toEqual([
-      '/observability',
-      '/rollback',
-      '/non_functional/security',
-    ]);
-    expect(json.field_examples['/observability']).toContain('observability:');
-    expect(json.field_examples['/rollback']).toContain('rollback:');
-    expect(json.field_examples['/non_functional/security']).toContain('non_functional:');
-    expect(fs.existsSync(specPath(root, 'PLAN-TIER-JSON-001'))).toBe(false);
+    const plan = JSON.parse(result.out);
+    expect(plan.valid).toBe(true);
+    expect(plan.missing_fields).toEqual([]);
+    expect(plan.candidate).not.toHaveProperty('risk_tier');
+    expect(plan.command).not.toMatch(/--(?:risk-tier|tier)/);
+    expect(fs.existsSync(specPath(root, 'PLAN-NEW-001'))).toBe(false);
     expect(fs.existsSync(eventsPath(root))).toBe(false);
   });
 
@@ -117,26 +84,22 @@ describe('caws specs create --plan', () => {
       id: 'PLAN-CONTRACT-001',
       title: 'Bad contract plan',
       mode: 'feature',
-      riskTier: 2,
       contract: ['behavior:verifychain-detects-tamper'],
       plan: true,
     });
 
     expect(result.code).toBe(1);
-    expect(result.err).toContain(
-      'Did you mean --contract "verifychain-detects-tamper:behavior"?'
-    );
+    expect(result.err).toContain('Did you mean --contract "verifychain-detects-tamper:behavior"?');
     expect(fs.existsSync(specPath(root, 'PLAN-CONTRACT-001'))).toBe(false);
     expect(fs.existsSync(eventsPath(root))).toBe(false);
   });
 
-  test('valid tier 3 JSON plan reports candidate and still writes nothing', () => {
+  test('valid JSON plan reports candidate and still writes nothing', () => {
     const root = mkRepo();
     const result = runCreate(root, {
       id: 'PLAN-VALID-001',
       title: 'Valid plan',
       mode: 'feature',
-      riskTier: 3,
       scopeIn: ['src/foo.ts', 'tests/foo.test.ts'],
       plan: true,
       json: true,

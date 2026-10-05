@@ -34,7 +34,17 @@ import {
   type WorktreeRecord,
 } from '../../kernel';
 
-import { loadLeases, loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, runGit, writeFileAtomic } from '../../store';
+import {
+  computeLaneDivergence,
+  formatLaneCounts,
+  loadLeases,
+  loadSpecs,
+  loadWorktrees,
+  realpathSafe,
+  resolveRepoRoot,
+  runGit,
+  writeFileAtomic,
+} from '../../store';
 import { isGovernedStatePath } from '../../store/git-autocommit';
 import { composeDoctorSnapshot } from '../../store/doctor-snapshot';
 import { configureWorktreeSparseCheckout } from '../../store/git-sparse-checkout';
@@ -58,10 +68,17 @@ import {
   untrackWorktree,
   type WorktreeListEntry,
 } from '../../store/worktrees-writer';
+import { reconcileWorktreeCreation } from '../../store/worktree-reconciliation';
 import { clearSpecBinding } from '../../store/specs-writer';
 import { pruneBridgeGhosts } from '../../store/bridge-store';
 import { buildActor } from '../session/actor';
-import { admitsOwner, resolveSession, resolveSessionCandidates } from '../session/resolve-session';
+import type { SessionSource } from '../session/types';
+import {
+  admitsOwner,
+  resolveCallerSession,
+  resolveSessionCandidates,
+} from '../session/resolve-session';
+import { lifecycleContainmentAdmits } from '../session/session-origin';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
 
@@ -97,10 +114,7 @@ function setupIO(opts: BaseCommandOptions) {
  * failure. (CAWS-AUTOCOMMIT-INTEGRITY-001 surfaced it;
  * CAWS-AUTOCOMMIT-INTEGRITY-002 corrected the exit-code policy.)
  */
-function surfaceAuditCommit(
-  auditCommit: unknown,
-  err: (s: string) => void
-): void {
+function surfaceAuditCommit(auditCommit: unknown, err: (s: string) => void): void {
   const ac =
     auditCommit !== null && typeof auditCommit === 'object'
       ? (auditCommit as { kind?: unknown; reason?: unknown })
@@ -138,15 +152,14 @@ function surfaceBindActivation(
   }
 }
 
-function surfaceArtifactLinks(
-  summary: unknown,
-  out: (s: string) => void
-): void {
+function surfaceArtifactLinks(summary: unknown, out: (s: string) => void): void {
   const artifactSummary = coerceArtifactSummary(summary);
   out('Artifacts:');
   if (artifactSummary === undefined || artifactSummary.statuses.length === 0) {
     out('  no recognized dependency/cache artifacts were linked.');
-    out('  If tests report missing dependencies, install them inside the worktree before retrying.');
+    out(
+      '  If tests report missing dependencies, install them inside the worktree before retrying.'
+    );
     return;
   }
 
@@ -212,6 +225,22 @@ function resolveCawsCtx(
   return { repoRoot: r.value.repoRoot, cawsDir: r.value.cawsDir };
 }
 
+function surfaceContinuation(
+  id: { session: { session_id: string }; source: SessionSource },
+  worktreePath: string,
+  out: (line: string) => void
+): void {
+  const quote = (value: string): string => "'" + value.replaceAll("'", "'\\''") + "'";
+  // Emit the identity used by this invocation, never copy one out of registry.
+  if (id.source === 'minted' || id.source === 'caws_env') {
+    out(
+      `Continue in this shell: export CAWS_SESSION_ID=${quote(id.session.session_id)}; cd ${quote(worktreePath)} && caws claim`
+    );
+  } else {
+    out(`Next: cd ${quote(worktreePath)} && caws claim`);
+  }
+}
+
 function buildActorPair(
   cawsDir: string,
   cwd: string,
@@ -221,13 +250,17 @@ function buildActorPair(
   errFn: (line: string) => void,
   showData: boolean,
   cmd: string
-): { session: { session_id: string; platform?: string }; actor: ReturnType<typeof buildActor> } | null {
-  const sessionResult = resolveSession({
+): {
+  session: { session_id: string; platform?: string };
+  source: SessionSource;
+  actor: ReturnType<typeof buildActor>;
+} | null {
+  const sessionResult = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
     env,
     now: nowFn,
-    allowMint: true,
+    allowMint: cmd === 'create',
   });
   if (!sessionResult.ok) {
     errFn(`caws worktree ${cmd}: failed to resolve session identity.`);
@@ -239,6 +272,7 @@ function buildActorPair(
     kind: actorKind ?? 'agent',
   });
   return {
+    source: sessionResult.value.source,
     session: {
       session_id: sessionResult.value.identity.session_id,
       ...(sessionResult.value.identity.platform !== undefined
@@ -262,6 +296,24 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
   const ctx = resolveCawsCtx(cwd, err, showData, 'create');
   if (ctx === null) return 2;
+
+  // CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01: before buildActorPair, which
+  // mints an identity on this path and is therefore itself a write.
+  if (
+    !lifecycleContainmentAdmits({
+      command: 'worktree create',
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      cwd,
+      env,
+      now: nowFn,
+      out,
+      err,
+    })
+  ) {
+    return 1;
+  }
+
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'create');
   if (id === null) return 2;
 
@@ -306,10 +358,7 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   const relWtPath = path.relative(ctx.repoRoot, String(wtPath));
   out(`created ${outcome.name} at ${relWtPath} (spec: ${opts.specId})`);
   surfaceBindActivation(outcome.data, opts.specId, out);
-  // CAWS-FIRST-CONTACT-UX-001 A3: tell the user where to work next.
-  // Without this hint, users continue editing in the canonical checkout
-  // and trigger union-mode scope behavior they can't explain.
-  out(`Next: cd ${relWtPath} to start working in the bound worktree.`);
+  surfaceContinuation(id, path.resolve(ctx.repoRoot, String(wtPath)), out);
   surfaceArtifactLinks(outcome.data?.artifact_links, out);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
@@ -317,10 +366,42 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
 
 // ─── caws worktree list ───────────────────────────────────────────────────
 
-export type WorktreeListOptions = BaseCommandOptions;
+export interface WorktreeListOptions extends BaseCommandOptions {
+  readonly json?: boolean;
+}
+
+/**
+ * One registry row joined with its lane divergence, computed ONCE and
+ * rendered twice.
+ *
+ * Both renderings read this same array rather than each deriving the facts
+ * themselves. That makes the parity obligation structural: a fact cannot
+ * appear in one form and be missing from the other, because there is only one
+ * place a fact comes from.
+ */
+interface WorktreeListRow {
+  readonly name: string;
+  readonly branch: string;
+  readonly base_branch: string;
+  readonly spec_id: string | null;
+  readonly owner: { readonly session_id: string; readonly platform?: string } | null;
+  /** Relative to the repo root — the form the human row prints. */
+  readonly path: string;
+  readonly absolute_path: string;
+  readonly divergence: {
+    readonly ahead: number | null;
+    readonly behind: number | null;
+    readonly contains_base: boolean | null;
+    /** Non-null means the counts could not be computed. Never flattened to
+     *  zero: `ahead=0 behind=0` reads as "this lane is current", which is the
+     *  one answer that is actively wrong for an unresolvable ref. */
+    readonly unknown_reason: string | null;
+  };
+}
 
 export function runWorktreeListCommand(opts: WorktreeListOptions = {}): number {
-  const { cwd, out, err, showData } = setupIO(opts);
+  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const json = opts.json === true;
   const ctx = resolveCawsCtx(cwd, err, showData, 'list');
   if (ctx === null) return 2;
 
@@ -330,17 +411,121 @@ export function runWorktreeListCommand(opts: WorktreeListOptions = {}): number {
     err(renderDiagnostics(result.errors, { showData }));
     return 1;
   }
-  if (result.value.entries.length === 0) {
+
+  // WORKTREE-LANE-DIVERGENCE-SURFACE-001: "what is this lane?" was already
+  // answered here; "is it current?" was not, and agents dropped to raw
+  // `git rev-list --left-right --count` to find out. Divergence is read-only
+  // git plumbing over refs this process already shares, so it joins the row
+  // rather than living in a second command.
+  const rows: WorktreeListRow[] = result.value.entries.map((entry) => {
+    const divergence = computeLaneDivergence(ctx.repoRoot, entry.branch, entry.baseBranch);
+    return {
+      name: entry.name,
+      branch: entry.branch,
+      base_branch: entry.baseBranch,
+      spec_id: entry.specId ?? null,
+      owner:
+        entry.owner === undefined || entry.owner === null
+          ? null
+          : {
+              session_id: entry.owner.session_id,
+              ...(entry.owner.platform !== undefined ? { platform: entry.owner.platform } : {}),
+            },
+      path: path.relative(ctx.repoRoot, entry.path),
+      absolute_path: entry.path,
+      divergence: {
+        ahead: divergence.ahead,
+        behind: divergence.behind,
+        contains_base: divergence.containsBase,
+        unknown_reason: divergence.unknownReason,
+      },
+    };
+  });
+
+  const staleLanes = rows.filter(
+    (r) =>
+      r.divergence.unknown_reason === null &&
+      r.divergence.behind !== null &&
+      r.divergence.behind > 0
+  ).length;
+  const unavailable = rows
+    .filter((r) => r.divergence.unknown_reason !== null)
+    .map((r) => `${r.name}: ${String(r.divergence.unknown_reason)}`);
+
+  if (json) {
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          // worktrees.json is the AUTHORITY for ownership and spec binding.
+          // Named here so a consumer does not have to infer it, and so this
+          // payload is never confused with a lease-derived one.
+          source: '.caws/worktrees.json',
+          // The divergence counts are a point-in-time read of LOCAL refs that
+          // a peer's next merge invalidates. Timestamped so a cached response
+          // cannot be mistaken for a current one.
+          computed_at: nowFn().toISOString(),
+          worktrees: rows,
+          counts: {
+            total: rows.length,
+            behind_base: staleLanes,
+            divergence_unavailable: unavailable.length,
+          },
+        },
+        null,
+        2
+      )
+    );
+    return 0;
+  }
+
+  if (rows.length === 0) {
     out('(no worktrees registered)');
     return 0;
   }
-  for (const entry of result.value.entries) {
-    const rel = path.relative(ctx.repoRoot, entry.path);
-    const ownerStr = entry.owner ? entry.owner.session_id.slice(0, 8) : 'unowned';
-    const specStr = entry.specId ?? '(unbound)';
+
+  for (const row of rows) {
+    const ownerStr = row.owner ? row.owner.session_id.slice(0, 8) : 'unowned';
+    const specStr = row.spec_id ?? '(unbound)';
+    const counts = formatLaneCounts({
+      branch: row.branch,
+      baseBranch: row.base_branch,
+      ahead: row.divergence.ahead,
+      behind: row.divergence.behind,
+      containsBase: row.divergence.contains_base,
+      unknownReason: row.divergence.unknown_reason,
+    });
     out(
-      `${entry.name.padEnd(28)} ${entry.branch.padEnd(20)} → ${entry.baseBranch.padEnd(12)} spec=${specStr.padEnd(20)} owner=${ownerStr.padEnd(10)} ${rel}`
+      `${row.name.padEnd(28)} ${row.branch.padEnd(20)} → ${row.base_branch.padEnd(12)} ${counts.padEnd(22)} spec=${specStr.padEnd(20)} owner=${ownerStr.padEnd(10)} ${row.path}`
     );
+  }
+
+  // An unresolvable ref is reported by name and reason rather than rendered as
+  // `ahead=0 behind=0`, which would read as "this lane is current" — the one
+  // answer that is actively wrong.
+  if (unavailable.length > 0) {
+    out('');
+    out('Divergence unavailable:');
+    for (const line of unavailable) out(`  ${line}`);
+  }
+
+  // Being behind base is not an error and does not block `caws worktree
+  // merge` — it is the normal condition of a lane while peers land work. It
+  // is surfaced because it changes what a reader does next, and because the
+  // counts are a point-in-time read of LOCAL refs that a peer's next merge
+  // invalidates.
+  // The footer carries the GUIDANCE, not a second copy of the per-row counts —
+  // every `behind=` value is already on its own row above.
+  if (staleLanes > 0) {
+    out('');
+    out(
+      `${staleLanes} of ${rows.length} lane(s) are missing commits from their base (behind > 0 above).`
+    );
+    out('  Reconcile now: from inside the worktree, git merge <base>.');
+    out(
+      '  Or not at all: caws worktree merge <name> lands against the base as it stands then, via compare-and-swap.'
+    );
+    out('  Counts read local refs at this instant; a peer landing work moves them.');
   }
   return 0;
 }
@@ -362,10 +547,13 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'bind');
   if (id === null) return 2;
 
-  // Ownership-comparison surface for the foreign-owner guard (Fix 4) — the same
-  // exhaustive candidate set destroy/merge build. Distinct from id.session
-  // (single-identity event actor).
-  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+  // Ownership comparison reuses the caller already resolved for the audit actor.
+  // Corroborated cache records cannot add another session to this identity.
+  const sessionCandidates = resolveSessionCandidates({
+    cawsDir: ctx.cawsDir,
+    env,
+    caller: { identity: id.session, source: id.source },
+  });
 
   // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
   // authority decision point (bind mutates the worktree↔spec binding).
@@ -402,7 +590,9 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
     return 2;
   }
   if (opts.steal === true) {
-    out(`bound ${outcome.name} → ${opts.specId} (ownership SEIZED — worktree_ownership_seized event appended)`);
+    out(
+      `bound ${outcome.name} → ${opts.specId} (ownership SEIZED — worktree_ownership_seized event appended)`
+    );
   } else {
     out(`bound ${outcome.name} → ${opts.specId}`);
   }
@@ -426,11 +616,10 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'destroy');
   if (id === null) return 2;
 
-  // Ownership-comparison surface: build the exhaustive candidate set
-  // (across all capsules + env sources) for the writer's admission test.
-  // Distinct from `id.session` (single-identity actor for the event).
-  // See CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001.
+  // Admission and audit attribution use the same resolved caller. Cached
+  // records may corroborate that identity, never introduce another session.
   const sessionCandidates = resolveSessionCandidates({
+    caller: { identity: id.session, source: id.source },
     cawsDir: ctx.cawsDir,
     env,
   });
@@ -502,7 +691,11 @@ export function runWorktreeUntrackCommand(opts: WorktreeUntrackOptions): number 
 
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'untrack');
   if (id === null) return 2;
-  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+  const sessionCandidates = resolveSessionCandidates({
+    cawsDir: ctx.cawsDir,
+    env,
+    caller: { identity: id.session, source: id.source },
+  });
 
   const result = untrackWorktree(ctx.cawsDir, {
     name: opts.name,
@@ -529,14 +722,20 @@ export function runWorktreeUntrackCommand(opts: WorktreeUntrackOptions): number 
 
   if (outcome.kind === 'dry_run') {
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: true,
-        dry_run: true,
-        read_only: true,
-        name: outcome.name,
-        reason,
-        findings: outcome.findings,
-      }, null, 2));
+      out(
+        JSON.stringify(
+          {
+            ok: true,
+            dry_run: true,
+            read_only: true,
+            name: outcome.name,
+            reason,
+            findings: outcome.findings,
+          },
+          null,
+          2
+        )
+      );
     } else {
       out(`caws worktree untrack ${outcome.name}: dry-run plan`);
       for (const finding of outcome.findings) out(`- ${finding}`);
@@ -546,14 +745,20 @@ export function runWorktreeUntrackCommand(opts: WorktreeUntrackOptions): number 
   }
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      dry_run: false,
-      read_only: false,
-      name: outcome.name,
-      action: outcome.action,
-      data: outcome.data ?? {},
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          dry_run: false,
+          read_only: false,
+          name: outcome.name,
+          action: outcome.action,
+          data: outcome.data ?? {},
+        },
+        null,
+        2
+      )
+    );
   } else {
     out(`untracked ${outcome.name} (physical directory preserved)`);
   }
@@ -585,6 +790,26 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
   const ctx = resolveCawsCtx(cwd, err, showData, 'merge');
   if (ctx === null) return 2;
+
+  // CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01. Applied to --dry-run too: the
+  // dry run reads the target repo's registry and spec state and reports them,
+  // so exempting it would leave a contained session able to enumerate a
+  // foreign repo's governance state through the command it is refused.
+  if (
+    !lifecycleContainmentAdmits({
+      command: 'worktree merge',
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      cwd,
+      env,
+      now: nowFn,
+      out,
+      err,
+    })
+  ) {
+    return 1;
+  }
+
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'merge');
   if (id === null) return 2;
 
@@ -598,9 +823,9 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
     return 2;
   }
 
-  // See destroy: ownership-comparison surface needs the exhaustive
-  // candidate set, distinct from the single-identity actor.
+  // As in destroy, compare ownership using the already resolved audit actor.
   const sessionCandidates = resolveSessionCandidates({
+    caller: { identity: id.session, source: id.source },
     cawsDir: ctx.cawsDir,
     env,
   });
@@ -755,6 +980,19 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
         `  If that range is empty the branch is safe to delete: git branch -d ${branchName}`
     );
   }
+  // CAWS-DEFECT-MERGE-STALE-CANONICAL-INDEX-001: advancing the base ref is
+  // durable even when Git refuses to refresh a dirty canonical checkout. The
+  // merge still exits 0, but the split state must be loud and actionable so a
+  // later commit cannot unknowingly record the old index as a rollback.
+  if (outcome.data?.canonical_checkout_state === 'stale') {
+    err(
+      `warning: merge completed but the canonical checkout is STALE.\n` +
+        `  Git refused the safe refresh: ${String(outcome.data?.canonical_checkout_sync_error)}\n` +
+        `  Preserve or commit the local changes first, then refresh the exact merged transition:\n` +
+        `    ${String(outcome.data?.canonical_checkout_repair_command)}\n` +
+        `  Do not commit from the canonical checkout until git status no longer shows merged paths as staged reversions.`
+    );
+  }
   // CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01: when --closure-notes was
   // supplied but the bound spec was ALREADY closed (pre-closed via
   // `caws specs close`), the merge's already-closed fast path skipped closeSpec
@@ -881,7 +1119,11 @@ function renderPlanData(plan: MigrationPlan, out: (line: string) => void): void 
   // but machine-parseable.
   const payload =
     plan.kind === 'no_op'
-      ? { kind: plan.kind, reason: plan.reason, ...('recordCount' in plan ? { recordCount: plan.recordCount } : {}) }
+      ? {
+          kind: plan.kind,
+          reason: plan.reason,
+          ...('recordCount' in plan ? { recordCount: plan.recordCount } : {}),
+        }
       : plan.kind === 'apply'
         ? {
             kind: plan.kind,
@@ -899,9 +1141,7 @@ function renderPlanData(plan: MigrationPlan, out: (line: string) => void): void 
   out(JSON.stringify(payload, null, 2));
 }
 
-export function runWorktreeMigrateRegistryCommand(
-  opts: WorktreeMigrateRegistryOptions
-): number {
+export function runWorktreeMigrateRegistryCommand(opts: WorktreeMigrateRegistryOptions): number {
   const { cwd, out, err, showData } = setupIO(opts);
   const ctx = resolveCawsCtx(cwd, err, showData, 'migrate-registry');
   if (ctx === null) return 2;
@@ -918,7 +1158,9 @@ export function runWorktreeMigrateRegistryCommand(
       out(`${worktreesJsonPath} does not exist. Nothing to migrate.`);
       return 0;
     }
-    err(`caws worktree migrate-registry: failed to read ${worktreesJsonPath}: ${cause.message ?? 'unknown error'}`);
+    err(
+      `caws worktree migrate-registry: failed to read ${worktreesJsonPath}: ${cause.message ?? 'unknown error'}`
+    );
     return 2;
   }
 
@@ -931,11 +1173,8 @@ export function runWorktreeMigrateRegistryCommand(
     ...(s.worktree !== undefined ? { worktree: s.worktree } : {}),
   }));
 
-  const plan = planMigration(
-    fileContents,
-    specs,
-    specsResult.diagnostics,
-    (p: string) => fs.existsSync(p)
+  const plan = planMigration(fileContents, specs, specsResult.diagnostics, (p: string) =>
+    fs.existsSync(p)
   );
 
   const dryRun = opts.dryRun === true;
@@ -1049,7 +1288,13 @@ interface PhysicalGitWorktree {
   readonly branch?: string;
 }
 
-const WORKTREE_PHYSICAL_CLEANUP_STATES: readonly WorktreePhysicalCleanupStateClass[] = [
+/**
+ * The closed set `cleanup-plan --state` filters on, and the set it REFUSES
+ * against below. Exported so the option's help lists all of them: it used to
+ * name four as a "for example" while the guard rejected the other seven by
+ * name, which reads to a caller as an open set that mysteriously refuses.
+ */
+export const WORKTREE_PHYSICAL_CLEANUP_STATES: readonly WorktreePhysicalCleanupStateClass[] = [
   'destroy-ready',
   'unbound-clean-candidate',
   'dirty-refused',
@@ -1070,7 +1315,9 @@ function defaultWorktreePath(cawsDir: string, name: string): string {
 // (CAWS-REFACTOR-SHARED-UTILS-001) gitOutput consolidated into store/repo-root.ts
 // as runGit; callers flipped to the shared (args, cwd) arg order.
 
-function listPhysicalGitWorktrees(repoRoot: string): { ok: true; worktrees: readonly PhysicalGitWorktree[] } | { ok: false; reason: string } {
+function listPhysicalGitWorktrees(
+  repoRoot: string
+): { ok: true; worktrees: readonly PhysicalGitWorktree[] } | { ok: false; reason: string } {
   const out = runGit(['worktree', 'list', '--porcelain'], repoRoot);
   if (!out.ok) return { ok: false, reason: out.reason };
 
@@ -1093,20 +1340,29 @@ function listPhysicalGitWorktrees(repoRoot: string): { ok: true; worktrees: read
       flush();
       currentPath = line.slice('worktree '.length).trim();
     } else if (line.startsWith('branch ')) {
-      currentBranch = line.slice('branch '.length).trim().replace(/^refs\/heads\//, '');
+      currentBranch = line
+        .slice('branch '.length)
+        .trim()
+        .replace(/^refs\/heads\//, '');
     }
   }
   flush();
   return { ok: true, worktrees };
 }
 
-function isCleanWorktree(worktreePath: string): { ok: true; clean: boolean; output: string } | { ok: false; reason: string } {
+function isCleanWorktree(
+  worktreePath: string
+): { ok: true; clean: boolean; output: string } | { ok: false; reason: string } {
   const status = runGit(['status', '--porcelain'], worktreePath);
   if (!status.ok) return { ok: false, reason: status.reason };
   return { ok: true, clean: status.stdout.trim().length === 0, output: status.stdout };
 }
 
-function isMerged(repoRoot: string, branch: string, baseBranch: string): { ok: true; merged: boolean } | { ok: false; reason: string } {
+function isMerged(
+  repoRoot: string,
+  branch: string,
+  baseBranch: string
+): { ok: true; merged: boolean } | { ok: false; reason: string } {
   const branchCheck = runGit(['rev-parse', '--verify', branch], repoRoot);
   if (!branchCheck.ok) return { ok: false, reason: branchCheck.reason };
   const baseCheck = runGit(['rev-parse', '--verify', baseBranch], repoRoot);
@@ -1120,16 +1376,14 @@ function specLifecycle(specs: readonly Spec[], specId: string | undefined): stri
   return specs.find((spec) => spec.id === specId)?.lifecycle_state;
 }
 
-function physicalItem(
-  input: {
-    readonly name: string;
-    readonly entry: WorktreeRecord;
-    readonly cawsDir: string;
-    readonly repoRoot: string;
-    readonly specs: readonly Spec[];
-    readonly sessionCandidates: ReturnType<typeof resolveSessionCandidates>;
-  }
-): WorktreePhysicalCleanupPlanItem {
+function physicalItem(input: {
+  readonly name: string;
+  readonly entry: WorktreeRecord;
+  readonly cawsDir: string;
+  readonly repoRoot: string;
+  readonly specs: readonly Spec[];
+  readonly sessionCandidates: ReturnType<typeof resolveSessionCandidates>;
+}): WorktreePhysicalCleanupPlanItem {
   const wtPath = input.entry.path ?? defaultWorktreePath(input.cawsDir, input.name);
   const baseDetails: Record<string, unknown> = {
     registry_path: input.entry.path,
@@ -1153,7 +1407,8 @@ function physicalItem(
       ...common,
       state_class: 'missing-directory-refused',
       allowed_mutation: null,
-      refusal_reason: 'The registry entry has no physical directory; this is control-plane residue, not a physical cleanup candidate.',
+      refusal_reason:
+        'The registry entry has no physical directory; this is control-plane residue, not a physical cleanup candidate.',
       next_command: `caws worktree prune --include ${input.name}`,
       details: baseDetails,
     };
@@ -1164,13 +1419,17 @@ function physicalItem(
       ...common,
       state_class: 'not-git-worktree-refused',
       allowed_mutation: null,
-      refusal_reason: 'The path exists but is not a git worktree, so CAWS will not classify it for physical cleanup.',
+      refusal_reason:
+        'The path exists but is not a git worktree, so CAWS will not classify it for physical cleanup.',
       next_command: 'Inspect the directory manually; do not delete it through CAWS.',
       details: baseDetails,
     };
   }
 
-  if (input.entry.owner !== undefined && admitsOwner(input.sessionCandidates, input.entry.owner.session_id) === null) {
+  if (
+    input.entry.owner !== undefined &&
+    admitsOwner(input.sessionCandidates, input.entry.owner.session_id) === null
+  ) {
     return {
       ...common,
       state_class: 'foreign-owned-refused',
@@ -1246,7 +1505,12 @@ function physicalItem(
     };
   }
 
-  if (lifecycle !== undefined && lifecycle !== 'closed' && lifecycle !== 'archived' && lifecycle !== 'retired') {
+  if (
+    lifecycle !== undefined &&
+    lifecycle !== 'closed' &&
+    lifecycle !== 'archived' &&
+    lifecycle !== 'retired'
+  ) {
     return {
       ...common,
       clean: true,
@@ -1305,7 +1569,9 @@ function unregisteredPhysicalItems(
 
   const physicalRoot = realpathSafe(path.join(cawsDir, 'worktrees'));
   const registeredPaths = new Set(
-    Object.entries(registry).map(([name, entry]) => realpathSafe(entry.path ?? defaultWorktreePath(cawsDir, name)))
+    Object.entries(registry).map(([name, entry]) =>
+      realpathSafe(entry.path ?? defaultWorktreePath(cawsDir, name))
+    )
   );
   const items: WorktreePhysicalCleanupPlanItem[] = [];
   for (const wt of physical.worktrees) {
@@ -1321,8 +1587,10 @@ function unregisteredPhysicalItems(
       path: wt.path,
       ...(wt.branch !== undefined ? { branch: wt.branch } : {}),
       allowed_mutation: null,
-      refusal_reason: 'A physical git worktree exists under .caws/worktrees but has no CAWS registry entry.',
-      next_command: 'Inspect with git worktree list and caws doctor before deciding whether to register, preserve, or remove it manually.',
+      refusal_reason:
+        'A physical git worktree exists under .caws/worktrees but has no CAWS registry entry.',
+      next_command:
+        'Inspect with git worktree list and caws doctor before deciding whether to register, preserve, or remove it manually.',
       details: {},
     });
   }
@@ -1343,13 +1611,15 @@ function selectedByPhysicalFilters(
     !filters.include.has(item.subject) &&
     !filters.include.has(item.path) &&
     (item.spec_id === undefined || !filters.include.has(item.spec_id))
-  ) return false;
+  )
+    return false;
   if (
     filters.exclude !== undefined &&
     (filters.exclude.has(item.subject) ||
       filters.exclude.has(item.path) ||
       (item.spec_id !== undefined && filters.exclude.has(item.spec_id)))
-  ) return false;
+  )
+    return false;
   return true;
 }
 
@@ -1362,10 +1632,16 @@ export function buildWorktreePhysicalCleanupPlan(input: {
   readonly state?: readonly string[];
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
-}): { readonly ok: true; readonly items: readonly WorktreePhysicalCleanupPlanItem[] } | { readonly ok: false; readonly message: string } {
-  const stateSet = input.state !== undefined && input.state.length > 0 ? new Set(input.state) : undefined;
+}):
+  | { readonly ok: true; readonly items: readonly WorktreePhysicalCleanupPlanItem[] }
+  | { readonly ok: false; readonly message: string } {
+  const stateSet =
+    input.state !== undefined && input.state.length > 0 ? new Set(input.state) : undefined;
   if (stateSet !== undefined) {
-    const unknown = [...stateSet].filter((state) => !WORKTREE_PHYSICAL_CLEANUP_STATES.includes(state as WorktreePhysicalCleanupStateClass));
+    const unknown = [...stateSet].filter(
+      (state) =>
+        !WORKTREE_PHYSICAL_CLEANUP_STATES.includes(state as WorktreePhysicalCleanupStateClass)
+    );
     if (unknown.length > 0) {
       return {
         ok: false,
@@ -1374,8 +1650,10 @@ export function buildWorktreePhysicalCleanupPlan(input: {
     }
   }
 
-  const includeSet = input.include !== undefined && input.include.length > 0 ? new Set(input.include) : undefined;
-  const excludeSet = input.exclude !== undefined && input.exclude.length > 0 ? new Set(input.exclude) : undefined;
+  const includeSet =
+    input.include !== undefined && input.include.length > 0 ? new Set(input.include) : undefined;
+  const excludeSet =
+    input.exclude !== undefined && input.exclude.length > 0 ? new Set(input.exclude) : undefined;
   const filters = {
     ...(stateSet !== undefined ? { states: stateSet } : {}),
     ...(includeSet !== undefined ? { include: includeSet } : {}),
@@ -1395,17 +1673,23 @@ export function buildWorktreePhysicalCleanupPlan(input: {
   const unregistered = unregisteredPhysicalItems(input.repoRoot, input.cawsDir, input.registry);
   return {
     ok: true,
-    items: [...registered, ...unregistered].filter((item) => selectedByPhysicalFilters(item, filters)),
+    items: [...registered, ...unregistered].filter((item) =>
+      selectedByPhysicalFilters(item, filters)
+    ),
   };
 }
 
-function physicalCountsByState(items: readonly WorktreePhysicalCleanupPlanItem[]): Record<string, number> {
+function physicalCountsByState(
+  items: readonly WorktreePhysicalCleanupPlanItem[]
+): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const item of items) counts[item.state_class] = (counts[item.state_class] ?? 0) + 1;
   return counts;
 }
 
-function physicalApplyCounts(outcomes: readonly WorktreePhysicalCleanupApplyOutcome[]): Record<string, number> {
+function physicalApplyCounts(
+  outcomes: readonly WorktreePhysicalCleanupApplyOutcome[]
+): Record<string, number> {
   return {
     applied: outcomes.filter((item) => item.action === 'applied').length,
     refused: outcomes.filter((item) => item.action === 'refused').length,
@@ -1425,8 +1709,14 @@ function renderWorktreePhysicalCleanupPlan(
   for (const item of items) {
     out(`- ${item.state_class} ${item.subject}`);
     out(`  path: ${item.path}`);
-    if (item.spec_id !== undefined) out(`  spec: ${item.spec_id}${item.lifecycle_state !== undefined ? ` (${item.lifecycle_state})` : ''}`);
-    if (item.branch !== undefined) out(`  branch: ${item.branch}${item.base_branch !== undefined ? ` -> ${item.base_branch}` : ''}`);
+    if (item.spec_id !== undefined)
+      out(
+        `  spec: ${item.spec_id}${item.lifecycle_state !== undefined ? ` (${item.lifecycle_state})` : ''}`
+      );
+    if (item.branch !== undefined)
+      out(
+        `  branch: ${item.branch}${item.base_branch !== undefined ? ` -> ${item.base_branch}` : ''}`
+      );
     if (item.owner_session_id !== undefined) out(`  owner: ${item.owner_session_id}`);
     out(`  registered: ${item.registered ? 'yes' : 'no'}`);
     if (item.clean !== undefined) out(`  clean: ${item.clean ? 'yes' : 'no'}`);
@@ -1463,7 +1753,9 @@ function hasExplicitPhysicalCleanupSelector(opts: WorktreePhysicalCleanupOptions
   );
 }
 
-export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalCleanupOptions): number {
+export function runWorktreePhysicalCleanupPlanCommand(
+  opts: WorktreePhysicalCleanupOptions
+): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
   const ctx = resolveCawsCtx(cwd, err, showData, 'cleanup-plan');
   if (ctx === null) return 2;
@@ -1500,13 +1792,28 @@ export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalClea
     if (!hasExplicitPhysicalCleanupSelector(opts)) {
       err('caws worktree cleanup-plan --apply: refused.');
       err('  Add at least one explicit selector: --state, --include, or --exclude.');
-      err('  First apply class is intentionally narrow; use --state destroy-ready to apply all currently ready candidates.');
+      err(
+        '  First apply class is intentionally narrow; use --state destroy-ready to apply all currently ready candidates.'
+      );
       return 1;
     }
 
-    const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'cleanup-plan');
+    const id = buildActorPair(
+      ctx.cawsDir,
+      cwd,
+      env,
+      nowFn,
+      opts.actorKind,
+      err,
+      showData,
+      'cleanup-plan'
+    );
     if (id === null) return 2;
-    const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+    const sessionCandidates = resolveSessionCandidates({
+      cawsDir: ctx.cawsDir,
+      env,
+      caller: { identity: id.session, source: id.source },
+    });
     const outcomes: WorktreePhysicalCleanupApplyOutcome[] = [];
 
     for (const item of plan.items) {
@@ -1560,18 +1867,24 @@ export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalClea
     }
 
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: !outcomes.some((item) => item.action !== 'applied'),
-        dry_run: false,
-        read_only: false,
-        outcomes,
-        counts: physicalApplyCounts(outcomes),
-        filters: {
-          state: opts.state ?? [],
-          include: opts.include ?? [],
-          exclude: opts.exclude ?? [],
-        },
-      }, null, 2));
+      out(
+        JSON.stringify(
+          {
+            ok: !outcomes.some((item) => item.action !== 'applied'),
+            dry_run: false,
+            read_only: false,
+            outcomes,
+            counts: physicalApplyCounts(outcomes),
+            filters: {
+              state: opts.state ?? [],
+              include: opts.include ?? [],
+              exclude: opts.exclude ?? [],
+            },
+          },
+          null,
+          2
+        )
+      );
     } else {
       renderWorktreePhysicalCleanupApply(outcomes, out);
     }
@@ -1579,18 +1892,24 @@ export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalClea
   }
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      dry_run: true,
-      read_only: true,
-      candidates: plan.items,
-      counts_by_state: physicalCountsByState(plan.items),
-      filters: {
-        state: opts.state ?? [],
-        include: opts.include ?? [],
-        exclude: opts.exclude ?? [],
-      },
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          dry_run: true,
+          read_only: true,
+          candidates: plan.items,
+          counts_by_state: physicalCountsByState(plan.items),
+          filters: {
+            state: opts.state ?? [],
+            include: opts.include ?? [],
+            exclude: opts.exclude ?? [],
+          },
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 
@@ -1644,7 +1963,10 @@ function isGitWorktree(p: string): boolean {
   }
 }
 
-function gitStatusPorcelain(cwd: string, pathspec: string): { ok: true; output: string } | { ok: false; reason: string } {
+function gitStatusPorcelain(
+  cwd: string,
+  pathspec: string
+): { ok: true; output: string } | { ok: false; reason: string } {
   try {
     const output = execFileSync(resolveGitBinary(), ['status', '--porcelain', '--', pathspec], {
       cwd,
@@ -1692,19 +2014,27 @@ export function runWorktreeRepairSparseCommand(opts: WorktreeRepairSparseOptions
   }
   const entry = registryResult.value[opts.name];
   if (entry === undefined) {
-    err(`caws worktree repair-sparse: missing-registry: '${opts.name}' is not in .caws/worktrees.json.`);
-    err(`  Recovery: run 'caws worktree list' to see registered worktrees, or 'caws worktree create ${opts.name} --spec <id>' if this is a new worktree.`);
+    err(
+      `caws worktree repair-sparse: missing-registry: '${opts.name}' is not in .caws/worktrees.json.`
+    );
+    err(
+      `  Recovery: run 'caws worktree list' to see registered worktrees, or 'caws worktree create ${opts.name} --spec <id>' if this is a new worktree.`
+    );
     return 1;
   }
 
   // A5b: on-disk path presence.
   const recordedPath = entry.path;
   if (typeof recordedPath !== 'string' || recordedPath.length === 0) {
-    err(`caws worktree repair-sparse: missing-path: registry entry for '${opts.name}' has no recorded path.`);
+    err(
+      `caws worktree repair-sparse: missing-path: registry entry for '${opts.name}' has no recorded path.`
+    );
     return 1;
   }
   if (!fs.existsSync(recordedPath)) {
-    err(`caws worktree repair-sparse: missing-path: recorded path for '${opts.name}' does not exist on disk.`);
+    err(
+      `caws worktree repair-sparse: missing-path: recorded path for '${opts.name}' does not exist on disk.`
+    );
     err(`  Recorded path: ${recordedPath}`);
     err(`  Recovery: re-create the worktree with 'caws worktree create ${opts.name} --spec <id>'.`);
     return 1;
@@ -1715,8 +2045,12 @@ export function runWorktreeRepairSparseCommand(opts: WorktreeRepairSparseOptions
   const targetReal = realpathSafe(recordedPath);
   const canonicalReal = realpathSafe(ctx.repoRoot);
   if (targetReal === canonicalReal) {
-    err(`caws worktree repair-sparse: canonical-target-refused: '${opts.name}' resolves to the canonical checkout itself.`);
-    err(`  The canonical checkout IS spec authority — sparse-checkout is not applied there by design.`);
+    err(
+      `caws worktree repair-sparse: canonical-target-refused: '${opts.name}' resolves to the canonical checkout itself.`
+    );
+    err(
+      `  The canonical checkout IS spec authority — sparse-checkout is not applied there by design.`
+    );
     err(`  This command is only for linked worktrees created via 'caws worktree create'.`);
     return 1;
   }
@@ -1724,10 +2058,16 @@ export function runWorktreeRepairSparseCommand(opts: WorktreeRepairSparseOptions
   // A5d: must be a git worktree (sanity — a stale directory after manual
   // `git worktree remove` would pass A5b but fail this).
   if (!isGitWorktree(targetReal)) {
-    err(`caws worktree repair-sparse: not-a-worktree: '${opts.name}' exists on disk but is not a git worktree.`);
+    err(
+      `caws worktree repair-sparse: not-a-worktree: '${opts.name}' exists on disk but is not a git worktree.`
+    );
     err(`  Resolved path: ${targetReal}`);
-    err(`  No .git file or directory found at the target. The CAWS registry and git's worktree registry may have diverged.`);
-    err(`  Recovery: investigate manually. Do NOT delete or recreate without understanding why the divergence occurred.`);
+    err(
+      `  No .git file or directory found at the target. The CAWS registry and git's worktree registry may have diverged.`
+    );
+    err(
+      `  Recovery: investigate manually. Do NOT delete or recreate without understanding why the divergence occurred.`
+    );
     return 1;
   }
 
@@ -1737,20 +2077,30 @@ export function runWorktreeRepairSparseCommand(opts: WorktreeRepairSparseOptions
   // refuse and direct them to a manual recovery path.
   const dirtyCheck = gitStatusPorcelain(targetReal, '.caws/specs');
   if (!dirtyCheck.ok) {
-    err(`caws worktree repair-sparse: git-status-failed: unable to check .caws/specs cleanliness in '${opts.name}'.`);
+    err(
+      `caws worktree repair-sparse: git-status-failed: unable to check .caws/specs cleanliness in '${opts.name}'.`
+    );
     err(`  git stderr: ${dirtyCheck.reason}`);
     return 2;
   }
   if (dirtyCheck.output.trim().length > 0) {
-    err(`caws worktree repair-sparse: dirty-specs-refused: '${opts.name}'/.caws/specs/ contains uncommitted changes.`);
+    err(
+      `caws worktree repair-sparse: dirty-specs-refused: '${opts.name}'/.caws/specs/ contains uncommitted changes.`
+    );
     err(`  git status --porcelain .caws/specs/ output:`);
     for (const line of dirtyCheck.output.trim().split('\n')) {
       err(`    ${line}`);
     }
-    err(`  This command will NOT stash, clean, reset, or delete those files. Doing so risks losing work that was`);
-    err(`  authored under .caws/specs/ inside this worktree (which would be non-authoritative spec copies — but`);
+    err(
+      `  This command will NOT stash, clean, reset, or delete those files. Doing so risks losing work that was`
+    );
+    err(
+      `  authored under .caws/specs/ inside this worktree (which would be non-authoritative spec copies — but`
+    );
     err(`  may still represent intent worth preserving).`);
-    err(`  Recovery (manual): from inside the worktree, commit or remove the dirty files first, then re-run`);
+    err(
+      `  Recovery (manual): from inside the worktree, commit or remove the dirty files first, then re-run`
+    );
     err(`  'caws worktree repair-sparse ${opts.name}' from the canonical checkout.`);
     return 1;
   }
@@ -1761,14 +2111,18 @@ export function runWorktreeRepairSparseCommand(opts: WorktreeRepairSparseOptions
   const specsDir = path.join(targetReal, '.caws', 'specs');
   const specsAbsent = !fs.existsSync(specsDir);
   if (sparseFlag === 'true' && specsAbsent) {
-    out(`caws worktree repair-sparse: ${opts.name} already has the sparse invariant (core.sparseCheckout=true, .caws/specs absent). No action taken.`);
+    out(
+      `caws worktree repair-sparse: ${opts.name} already has the sparse invariant (core.sparseCheckout=true, .caws/specs absent). No action taken.`
+    );
     return 0;
   }
 
   // A4: apply the kernel helper.
   const repairResult = configureWorktreeSparseCheckout(targetReal);
   if (!repairResult.ok) {
-    err(`caws worktree repair-sparse: failed at step '${repairResult.step}': ${repairResult.reason}`);
+    err(
+      `caws worktree repair-sparse: failed at step '${repairResult.step}': ${repairResult.reason}`
+    );
     return 2;
   }
 
@@ -1781,11 +2135,15 @@ export function runWorktreeRepairSparseCommand(opts: WorktreeRepairSparseOptions
     err(`caws worktree repair-sparse: post-condition violation for '${opts.name}'.`);
     err(`  core.sparseCheckout=${postSparseFlag ?? '(absent)'} (expected: true)`);
     err(`  .caws/specs/ absent=${postSpecsAbsent} (expected: true)`);
-    err(`  The kernel helper reported success but the invariant is not satisfied. This is likely a defect.`);
+    err(
+      `  The kernel helper reported success but the invariant is not satisfied. This is likely a defect.`
+    );
     return 2;
   }
 
-  out(`caws worktree repair-sparse: ${opts.name} sparse invariant restored (core.sparseCheckout=true, .caws/specs absent).`);
+  out(
+    `caws worktree repair-sparse: ${opts.name} sparse invariant restored (core.sparseCheckout=true, .caws/specs absent).`
+  );
   return 0;
 }
 
@@ -1822,6 +2180,7 @@ export interface WorktreeRepairOptions extends BaseCommandOptions {
 
 export type WorktreePruneStateClass =
   | 'ghost-registry'
+  | 'verified-dead-creation'
   | 'dead-binding'
   | 'closed-spec-residue'
   | 'missing-spec-refused'
@@ -1903,11 +2262,12 @@ export function decideRepair(finding: DoctorFinding): RepairDecision {
   switch (finding.rule) {
     case DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY: {
       const worktreeName =
-        typeof data.worktree_name === 'string'
-          ? data.worktree_name
-          : finding.subject;
+        typeof data.worktree_name === 'string' ? data.worktree_name : finding.subject;
       if (typeof worktreeName !== 'string' || worktreeName.length === 0) {
-        return { kind: 'refuse', reason: 'H1 ghost finding has no worktree name; cannot prune safely.' };
+        return {
+          kind: 'refuse',
+          reason: 'H1 ghost finding has no worktree name; cannot prune safely.',
+        };
       }
       return { kind: 'prune_ghost_registry', worktreeName };
     }
@@ -1917,8 +2277,7 @@ export function decideRepair(finding: DoctorFinding): RepairDecision {
       //   closed/archived          -> H3-dormant: clear (dormant_spec_binding)
       //   active + dir absent       -> H4 ghost:   clear (ghost_spec_binding)
       //   active + dir present/unk  -> H3-active ambiguity: REFUSE
-      const specId =
-        typeof data.spec_id === 'string' ? data.spec_id : finding.subject;
+      const specId = typeof data.spec_id === 'string' ? data.spec_id : finding.subject;
       const worktreeName =
         typeof data.worktree_name === 'string' ? data.worktree_name : '(unknown)';
       if (typeof specId !== 'string' || specId.length === 0) {
@@ -1982,8 +2341,15 @@ export function decideRepair(finding: DoctorFinding): RepairDecision {
   }
 }
 
-const WORKTREE_PRUNE_STATES: readonly WorktreePruneStateClass[] = [
+/**
+ * The closed set `--state` / `--status` filter on. Exported so the option's
+ * help reads the same list this module dispatches on: the description used to
+ * carry three values as a hand-written "for example", which told a reader
+ * neither what else was accepted nor that the set was closed at all.
+ */
+export const WORKTREE_PRUNE_STATES: readonly WorktreePruneStateClass[] = [
   'ghost-registry',
+  'verified-dead-creation',
   'dead-binding',
   'closed-spec-residue',
   'missing-spec-refused',
@@ -2038,7 +2404,8 @@ function repairItemFromDecision(
       state_class: stateClass,
       source_rule: finding.rule,
       severity: finding.severity,
-      allowed_mutation: 'clear stale spec worktree binding and append spec_binding_cleared via caws worktree repair',
+      allowed_mutation:
+        'clear stale spec worktree binding and append spec_binding_cleared via caws worktree repair',
       next_command: `caws worktree repair --dry-run && caws worktree repair`,
       details: {
         ...data,
@@ -2085,10 +2452,24 @@ function repairItemFromDecision(
   };
 }
 
-export function worktreePruneItemFromFinding(
-  finding: DoctorFinding
-): WorktreePrunePlanItem | null {
+export function worktreePruneItemFromFinding(finding: DoctorFinding): WorktreePrunePlanItem | null {
   const data = (finding.data ?? {}) as Record<string, unknown>;
+  if (
+    finding.rule === DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING &&
+    data.verified_dead === true &&
+    typeof data.created_event_seq === 'number' &&
+    typeof data.created_event_hash === 'string'
+  ) {
+    return {
+      subject: findingSubject(finding, data),
+      state_class: 'verified-dead-creation',
+      source_rule: finding.rule,
+      severity: finding.severity,
+      allowed_mutation: 'revalidate absence and append an identity-bound worktree_pruned receipt',
+      next_command: `caws worktree prune --state verified-dead-creation --include ${findingSubject(finding, data)} --apply`,
+      details: data,
+    };
+  }
   const repairDecision = decideRepair(finding);
   const repairItem = repairItemFromDecision(finding, repairDecision);
   if (repairItem !== null) return repairItem;
@@ -2115,7 +2496,8 @@ export function worktreePruneItemFromFinding(
       allowed_mutation: null,
       refusal_reason:
         'The owner lease is stale or absent, but leases are not authority; cleanup requires explicit handoff/takeover intent.',
-      next_command: finding.narrowRepair ?? 'Inspect owner state with caws worktree list and caws agents list.',
+      next_command:
+        finding.narrowRepair ?? 'Inspect owner state with caws worktree list and caws agents list.',
       details: data,
     };
   }
@@ -2156,13 +2538,15 @@ export function buildWorktreePrunePlan(
     readonly include?: readonly string[];
     readonly exclude?: readonly string[];
   } = {}
-): { readonly ok: true; readonly items: readonly WorktreePrunePlanItem[] } | { readonly ok: false; readonly message: string } {
+):
+  | { readonly ok: true; readonly items: readonly WorktreePrunePlanItem[] }
+  | { readonly ok: false; readonly message: string } {
   const stateSet =
-    filters.states !== undefined && filters.states.length > 0
-      ? new Set(filters.states)
-      : undefined;
+    filters.states !== undefined && filters.states.length > 0 ? new Set(filters.states) : undefined;
   if (stateSet !== undefined) {
-    const unknown = [...stateSet].filter((state) => !WORKTREE_PRUNE_STATES.includes(state as WorktreePruneStateClass));
+    const unknown = [...stateSet].filter(
+      (state) => !WORKTREE_PRUNE_STATES.includes(state as WorktreePruneStateClass)
+    );
     if (unknown.length > 0) {
       return {
         ok: false,
@@ -2227,7 +2611,11 @@ function renderWorktreePrunePlan(
  * that already confer nothing read-side; disk hygiene only, NO events).
  */
 function renderBridgeGhostSection(
-  plan: { candidates: ReadonlyArray<{ specId: string; holderSessionId: string; reason: string }>; removed: ReadonlyArray<string>; apply: boolean },
+  plan: {
+    candidates: ReadonlyArray<{ specId: string; holderSessionId: string; reason: string }>;
+    removed: ReadonlyArray<string>;
+    apply: boolean;
+  },
   out: (line: string) => void
 ): void {
   if (plan.candidates.length === 0) return;
@@ -2238,7 +2626,9 @@ function renderBridgeGhostSection(
     out(`- ${tag} ${c.specId} (holder ${c.holderSessionId}; reason: ${c.reason})`);
   }
   if (!plan.apply) {
-    out('  (no events appended — retired-binding hygiene; the audit trail is spec_closed/spec_archived)');
+    out(
+      '  (no events appended — retired-binding hygiene; the audit trail is spec_closed/spec_archived)'
+    );
   }
 }
 
@@ -2302,10 +2692,39 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
   if (opts.apply === true) {
     const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'prune');
     if (id === null) return 2;
-    const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+    const sessionCandidates = resolveSessionCandidates({
+      cawsDir: ctx.cawsDir,
+      env,
+      caller: { identity: id.session, source: id.source },
+    });
     const outcomes: WorktreePruneApplyOutcome[] = [];
 
     for (const item of plan.items) {
+      if (item.state_class === 'verified-dead-creation') {
+        const result = reconcileWorktreeCreation(ctx.cawsDir, {
+          name: item.subject,
+          createdEventSeq: item.details.created_event_seq as number,
+          createdEventHash: item.details.created_event_hash as string,
+          actor: id.actor,
+          now: nowFn,
+        });
+        outcomes.push(
+          isOk(result)
+            ? {
+                subject: item.subject,
+                state_class: item.state_class,
+                action: 'applied',
+                mutation: 'appended worktree_pruned absence receipt for the exact creation',
+              }
+            : {
+                subject: item.subject,
+                state_class: item.state_class,
+                action: 'failed',
+                reason: firstErrorMessage(result.errors),
+              }
+        );
+        continue;
+      }
       if (item.state_class === 'ghost-registry') {
         const result = pruneWorktree(ctx.cawsDir, {
           name: item.subject,
@@ -2386,24 +2805,35 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
     // AUTH-BINDING-BRIDGE-001: --apply also removes retired bridge bindings
     // (eventless hygiene — the retirement audit lives in spec_closed/
     // spec_archived, not here). Single merged JSON emit.
-    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, true);
+    // Exact creation receipts never carry unrelated bridge cleanup along.
+    const receiptOnly = opts.state?.length === 1 && opts.state[0] === 'verified-dead-creation';
+    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, !receiptOnly);
 
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: !outcomes.some((item) => item.action !== 'applied'),
-        dry_run: false,
-        read_only: false,
-        outcomes,
-        counts: pruneApplyCounts(outcomes),
-        ...(bridgePlan.ok
-          ? { bridge_ghosts: bridgePlan.value.candidates, bridge_removed: bridgePlan.value.removed }
-          : {}),
-        filters: {
-          state: opts.state ?? [],
-          include: opts.include ?? [],
-          exclude: opts.exclude ?? [],
-        },
-      }, null, 2));
+      out(
+        JSON.stringify(
+          {
+            ok: !outcomes.some((item) => item.action !== 'applied'),
+            dry_run: false,
+            read_only: false,
+            outcomes,
+            counts: pruneApplyCounts(outcomes),
+            ...(bridgePlan.ok
+              ? {
+                  bridge_ghosts: bridgePlan.value.candidates,
+                  bridge_removed: bridgePlan.value.removed,
+                }
+              : {}),
+            filters: {
+              state: opts.state ?? [],
+              include: opts.include ?? [],
+              exclude: opts.exclude ?? [],
+            },
+          },
+          null,
+          2
+        )
+      );
     } else {
       renderWorktreePruneApply(outcomes, out);
       if (bridgePlan.ok) renderBridgeGhostSection(bridgePlan.value, out);
@@ -2414,19 +2844,25 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
   if (opts.json === true) {
     // AUTH-BINDING-BRIDGE-001: bridge-ghost candidates ride along in JSON.
     const bridgePlan = bridgeGhostPlan(ctx.cawsDir, false);
-    out(JSON.stringify({
-      ok: true,
-      dry_run: true,
-      read_only: true,
-      candidates: plan.items,
-      counts_by_state: countsByState(plan.items),
-      bridge_ghosts: bridgePlan.ok ? bridgePlan.value.candidates : [],
-      filters: {
-        state: opts.state ?? [],
-        include: opts.include ?? [],
-        exclude: opts.exclude ?? [],
-      },
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          dry_run: true,
+          read_only: true,
+          candidates: plan.items,
+          counts_by_state: countsByState(plan.items),
+          bridge_ghosts: bridgePlan.ok ? bridgePlan.value.candidates : [],
+          filters: {
+            state: opts.state ?? [],
+            include: opts.include ?? [],
+            exclude: opts.exclude ?? [],
+          },
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 
@@ -2447,7 +2883,16 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
 function bridgeGhostPlan(
   cawsDir: string,
   apply: boolean
-): { ok: true; value: { candidates: ReadonlyArray<{ specId: string; holderSessionId: string; reason: string }>; removed: ReadonlyArray<string>; apply: boolean } } | { ok: false } {
+):
+  | {
+      ok: true;
+      value: {
+        candidates: ReadonlyArray<{ specId: string; holderSessionId: string; reason: string }>;
+        removed: ReadonlyArray<string>;
+        apply: boolean;
+      };
+    }
+  | { ok: false } {
   const specs = loadSpecs(cawsDir);
   const specStates: Record<string, string | undefined> = {};
   for (const s of specs.specs) specStates[s.id] = s.lifecycle_state;
@@ -2483,7 +2928,11 @@ export function runWorktreeRepairCommand(opts: WorktreeRepairOptions): number {
   // accurately even when no mutation will occur).
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'repair');
   if (id === null) return 2;
-  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+  const sessionCandidates = resolveSessionCandidates({
+    cawsDir: ctx.cawsDir,
+    env,
+    caller: { identity: id.session, source: id.source },
+  });
 
   let repaired = 0;
   let refused = 0;
@@ -2617,7 +3066,9 @@ export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
   const specsRes = loadSpecs(ctx.cawsDir);
   const spec = specsRes.specs.find((s) => s.id === opts.specId);
   if (spec === undefined) {
-    err(`caws worktree ensure: no spec "${opts.specId}" — run \`caws specs list\` for the canonical ids.`);
+    err(
+      `caws worktree ensure: no spec "${opts.specId}" — run \`caws specs list\` for the canonical ids.`
+    );
     return 1;
   }
   const state = specLifecycle(specsRes.specs, opts.specId);
@@ -2627,7 +3078,9 @@ export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
       err(`  To resume the work: caws specs reopen ${opts.specId}`);
       err(`  To read the body:    caws specs show ${opts.specId}`);
     } else {
-      err(`  Archived body: caws specs show ${opts.specId} --archived  |  recover: caws specs recover ${opts.specId}`);
+      err(
+        `  Archived body: caws specs show ${opts.specId} --archived  |  recover: caws specs recover ${opts.specId}`
+      );
     }
     return 1;
   }
@@ -2659,7 +3112,9 @@ export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
 
   // Exists => the admit path. Binding conflict first (cheap, unambiguous).
   if (existing.specId !== opts.specId) {
-    err(`caws worktree ensure: worktree "${opts.name}" is already bound to spec "${existing.specId ?? '(unbound)'}", not "${opts.specId}".`);
+    err(
+      `caws worktree ensure: worktree "${opts.name}" is already bound to spec "${existing.specId ?? '(unbound)'}", not "${opts.specId}".`
+    );
     err('  Inspect: caws worktree list');
     if (existing.specId !== null) {
       err(`  Rebind deliberately: caws worktree bind ${opts.name} --spec ${opts.specId}`);
@@ -2670,17 +3125,16 @@ export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
   // Foreign-owner soft-block (same discipline as bind/merge/claim). A stale
   // heartbeat is NOT authorization — surface the owner, let the human or the
   // claim surface decide. ensure takes no takeover flag by design.
+  const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'ensure');
+  if (id === null) return 2;
   const ownerId = existing.owner?.session_id;
-  if (ownerId !== undefined) {
-    const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'ensure');
-    if (id === null) return 2;
-    const candidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
-    if (admitsOwner(candidates, ownerId) === null) {
-      err(`caws worktree ensure: worktree "${opts.name}" is owned by another session (${ownerId}).`);
-      err('  Read their context before deciding: .caws/sessions/ session logs, caws agents list');
-      err('  Authority transfer stays on the single surface: caws claim --takeover (requires user authorization).');
-      return 1;
-    }
+  if (ownerId !== undefined && id.session.session_id !== ownerId) {
+    err(`caws worktree ensure: worktree "${opts.name}" is owned by another session (${ownerId}).`);
+    err('  Read their context before deciding: .caws/sessions/ session logs, caws agents list');
+    err(
+      '  Authority transfer stays on the single surface: caws claim --takeover (requires user authorization).'
+    );
+    return 1;
   }
 
   // Branch unmoved off base => safe admit. A moved branch means in-flight
@@ -2691,16 +3145,19 @@ export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
     return 2;
   }
   if (!mergedRes.merged) {
-    err(`caws worktree ensure: branch "${existing.branch}" has moved off base "${existing.baseBranch}" — the lane is in flight.`);
+    err(
+      `caws worktree ensure: branch "${existing.branch}" has moved off base "${existing.baseBranch}" — the lane is in flight.`
+    );
     err(`  Enter it directly: cd ${path.relative(ctx.repoRoot, existing.path)}`);
     err('  ensure admits only untouched fork-point states; it never adopts in-flight work.');
     return 1;
   }
 
   // ADMIT: idempotent no-op. No events, no registry/spec/file mutation.
-  const rel = path.relative(ctx.repoRoot, existing.path);
-  out(`ensured ${opts.name} (already bound to spec ${opts.specId}; branch untouched at fork point)`);
-  out(`Next: cd ${rel} to start working in the bound worktree.`);
+  out(
+    `ensured ${opts.name} (already bound to spec ${opts.specId}; branch untouched at fork point)`
+  );
+  surfaceContinuation(id, path.resolve(ctx.repoRoot, existing.path), out);
   return 0;
 }
 
@@ -2858,7 +3315,10 @@ function buildReviewReport(
     );
     const paths: ReviewPathVerdict[] = [];
     if (filesRes.ok) {
-      for (const p of filesRes.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) {
+      for (const p of filesRes.stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)) {
         const inScope = reviewPathInScope(p, spec);
         paths.push({
           path: p,
@@ -3041,7 +3501,9 @@ function renderReviewReport(report: ReviewReport, out: (s: string) => void): voi
     const oc = report.ownerContext;
     out(`Owner context (${oc.sessionId}):`);
     if (oc.workState !== undefined) {
-      out(`  work_state: ${oc.workState}${oc.workStateNote !== undefined ? ` — ${oc.workStateNote}` : ''}`);
+      out(
+        `  work_state: ${oc.workState}${oc.workStateNote !== undefined ? ` — ${oc.workStateNote}` : ''}`
+      );
     }
     if (oc.lastActiveAgeMs !== null) {
       out(`  last active: ${formatAge(oc.lastActiveAgeMs)} ago`);

@@ -93,7 +93,11 @@ describe('caws events rotate --dry-run', () => {
     expect(payload.prior_file_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(payload.prior_line_count).toBe(1);
     expect(payload.prior_chain_status).toBe('parseable_unverified');
-    expect(payload.actor_shape_stats).toEqual({ v10_string_actor: 0, v11_object_actor: 1, unparseable: 0 });
+    expect(payload.actor_shape_stats).toEqual({
+      v10_string_actor: 0,
+      v11_object_actor: 1,
+      unparseable: 0,
+    });
     expect(payload.genesis_event.event).toBe('chain_rotated');
     expect(payload.genesis_event.data.prior_file_path).toBe(payload.archive);
     expect(payload.genesis_event.data.prior_file_digest).toBe(payload.prior_file_digest);

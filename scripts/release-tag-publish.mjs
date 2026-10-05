@@ -50,12 +50,13 @@
  *   20  pre-publish validation failed (version mismatch, CHANGELOG missing,
  *       build failed, smoke failed); tag was deleted.
  *   21  pre-publish failure but tag deletion ALSO failed (manual repair).
- *   30  post-publish failure (registry verify failed, release create failed);
+ *   30  uncertain npm publish outcome or post-publish ancillary failure;
  *       tag preserved, repair command emitted.
  */
 
 import { execSync, spawnSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'node:os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -79,14 +80,91 @@ const PACKAGES = [
 const REFUSED_TAG_PREFIXES = [
   {
     prefix: 'caws-kernel-v',
-    reason: 'kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/release-procedure.md',
+    reason:
+      'kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/release-procedure.md',
   },
 ];
 
 // Bare v* (no package prefix). Refused with a clear pointer to the new convention.
 const LEGACY_BARE_V_REGEX = /^v\d+\.\d+\.\d+([-+].*)?$/;
 
-const SEMVER_REGEX = /^\d+\.\d+\.\d+([-+].*)?$/;
+const NUMERIC = '(?:0|[1-9][0-9]*)';
+const PRERELEASE_ID = `(?:${NUMERIC}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)`;
+const SEMVER_REGEX = new RegExp(
+  `^${NUMERIC}\\.${NUMERIC}\\.${NUMERIC}(?:-${PRERELEASE_ID}(?:\\.${PRERELEASE_ID})*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`
+);
+
+function releaseChannel(version) {
+  if (!SEMVER_REGEX.test(version)) throw new Error(`Invalid release version: ${version}`);
+  return version.split('+')[0].includes('-') ? 'next' : 'latest';
+}
+
+export function publicationArgs(version) {
+  return ['publish', '--access', 'public', '--provenance', '--tag', releaseChannel(version)];
+}
+
+export function releaseArgs(tag, version, notesFile) {
+  return [
+    'release',
+    'create',
+    tag,
+    '--title',
+    tag,
+    '--notes-file',
+    notesFile,
+    '--verify-tag',
+    ...(releaseChannel(version) === 'next' ? ['--prerelease'] : []),
+  ];
+}
+
+// =============================================================================
+// Publish credential isolation.
+//
+// npm performs the OIDC trusted-publisher exchange ONLY when it finds no
+// configured registry credential. Any inherited token — valid or not — preempts
+// the exchange and downgrades the sanctioned path to token auth, which is
+// exactly how the 12.0.0 publish failed (E404 on PUT).
+//
+// Declining to ADD a token is not the same as ensuring none is PRESENT: a
+// merge over process.env can only add keys. This builds the publish
+// environment by removal, so the guarantee is enforced by code rather than by
+// the workflow's discipline of never setting these variables.
+// =============================================================================
+
+const REGISTRY_CREDENTIAL_VARS = new Set(['NPM_TOKEN', 'NODE_AUTH_TOKEN']);
+
+export function isRegistryCredential(key) {
+  if (REGISTRY_CREDENTIAL_VARS.has(key.toUpperCase())) return true;
+  // npm maps every config key to an npm_config_<key> env var, including
+  // registry-scoped forms such as
+  // npm_config_//registry.npmjs.org/:_authToken and the legacy npm_config__auth.
+  return /^npm_config_/i.test(key) && /_auth/i.test(key);
+}
+
+/**
+ * Build the environment for the `npm publish` child.
+ *
+ * OIDC mode: every registry credential is removed, leaving the id-token
+ * exchange as the only possible auth path.
+ * Token mode: credentials are removed and then exactly one source is
+ * reinstated, so a stale ambient npm_config auth var cannot win over NPM_TOKEN.
+ *
+ * @returns {{ env: Record<string,string>, removed: string[] }}
+ */
+export function publishEnvironment({ hasNpmToken, inherited = process.env }) {
+  const env = {};
+  for (const [key, value] of Object.entries(inherited)) {
+    if (!isRegistryCredential(key)) env[key] = value;
+  }
+  if (hasNpmToken) {
+    env.NODE_AUTH_TOKEN = inherited.NPM_TOKEN;
+    env.NPM_TOKEN = inherited.NPM_TOKEN;
+  }
+  const removed = Object.keys(inherited)
+    .filter(key => isRegistryCredential(key) && !(key in env))
+    .sort();
+  return { env, removed };
+}
 
 // =============================================================================
 // Logging helpers — structured, single-line for CI log scraping.
@@ -116,10 +194,10 @@ function logError(msg, extra = {}) {
 const RELEASE_TRIGGER_PREFIXES = ['caws-cli-v', 'caws-kernel-v', 'v'];
 
 function tagMatchesAnyReleaseTrigger(tag) {
-  return RELEASE_TRIGGER_PREFIXES.some((prefix) => tag.startsWith(prefix));
+  return RELEASE_TRIGGER_PREFIXES.some(prefix => tag.startsWith(prefix));
 }
 
-function parseTag(tag) {
+export function parseTag(tag) {
   // Refused: bare v*
   if (LEGACY_BARE_V_REGEX.test(tag)) {
     return {
@@ -157,8 +235,10 @@ function parseTag(tag) {
   return {
     ok: false,
     refusalType: 'unknown_prefix',
-    reason: `tag "${tag}" does not match any enabled package prefix. Expected: ${PACKAGES.filter((p) => p.enabled)
-      .map((p) => p.tagPrefix + 'X.Y.Z')
+    reason: `tag "${tag}" does not match any enabled package prefix. Expected: ${PACKAGES.filter(
+      p => p.enabled
+    )
+      .map(p => p.tagPrefix + 'X.Y.Z')
       .join(', ')}`,
     shouldDelete: matchedTrigger,
   };
@@ -242,7 +322,10 @@ function runStep(name, cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, {
     cwd: opts.cwd || rootDir,
     stdio: 'inherit',
-    env: { ...process.env, ...(opts.env || {}) },
+    // `envExact` REPLACES the inherited environment; `env` merges into it.
+    // Credential isolation needs replacement — merging can only add keys, so
+    // it can never remove an inherited token (see publishEnvironment).
+    env: opts.envExact || { ...process.env, ...(opts.env || {}) },
   });
   const ok = result.status === 0;
   logInfo(`step.end`, { step: name, exit_code: result.status, ok });
@@ -316,13 +399,17 @@ function createGitHubRelease(tag, version, changelogSection, isDryRun) {
     return { ok: false, reason: 'GITHUB_REPOSITORY env var not set; cannot create GitHub Release' };
   }
   const body = changelogSection || `Release ${version}`;
-  // Use gh release create. --notes uses the body verbatim. --verify-tag
+  // Use gh release create with exact notes bytes in a file. --verify-tag
   // ensures the tag exists (it should, but defense in depth).
-  const result = spawnSync(
-    'gh',
-    ['release', 'create', tag, '--title', tag, '--notes', body, '--verify-tag'],
-    { stdio: 'inherit' }
-  );
+  const notesDir = mkdtempSync(path.join(tmpdir(), 'caws-release-notes-'));
+  let result;
+  try {
+    const notesFile = path.join(notesDir, 'notes.md');
+    writeFileSync(notesFile, body);
+    result = spawnSync('gh', releaseArgs(tag, version, notesFile), { stdio: 'inherit' });
+  } finally {
+    rmSync(notesDir, { recursive: true, force: true });
+  }
   return {
     ok: result.status === 0,
     reason: result.status !== 0 ? `gh release create exited ${result.status}` : undefined,
@@ -344,6 +431,27 @@ function main() {
   }
 
   logInfo('release.start', { tag, dry_run: isDryRun, repo: process.env.GITHUB_REPOSITORY });
+
+  // Claim tag-disposition authority for the rest of this run.
+  //
+  // Every exit path below applies the correct tag policy for its own failure
+  // stage. Steps BEFORE this script (checkout, npm ci, gh auth) have no such
+  // policy — if one of them fails, the pushed tag survives with nothing
+  // published, which is the "tag exists, package does not" ambiguity this
+  // whole design exists to remove. The workflow's failure handler deletes the
+  // tag only when this marker is ABSENT, so the script's own decisions
+  // (including exit 12's deliberate leave-the-tag-alone) are never overridden.
+  const claimPath = process.env.CAWS_RELEASE_SCRIPT_MARKER;
+  if (claimPath) {
+    try {
+      writeFileSync(claimPath, `${tag}\n`);
+    } catch (error) {
+      // A marker we cannot write would make the workflow handler delete a tag
+      // this script is about to take responsibility for. Refuse instead.
+      logError('release.marker_unwritable', { path: claimPath, reason: error.message });
+      process.exit(20);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Phase 1: Parse + refuse.
@@ -396,7 +504,10 @@ function main() {
       logError('validation.failed', { check: name, reason: r.reason });
       const del = deleteTagFromOrigin(tag, isDryRun);
       if (!del.ok) {
-        logError('tag.delete.failed', { reason: del.reason, repair: `gh api -X DELETE repos/${process.env.GITHUB_REPOSITORY}/git/refs/tags/${tag}` });
+        logError('tag.delete.failed', {
+          reason: del.reason,
+          repair: `gh api -X DELETE repos/${process.env.GITHUB_REPOSITORY}/git/refs/tags/${tag}`,
+        });
         process.exit(21);
       }
       logInfo('tag.deleted', { tag, dry_run: !!del.dryRun });
@@ -419,7 +530,12 @@ function main() {
     process.exit(20);
   }
 
-  const smokeStep = runStep('prepublish_smoke', 'npm', ['run', 'smoke:fresh-install', '-w', pkg.name]);
+  const smokeStep = runStep('prepublish_smoke', 'npm', [
+    'run',
+    'smoke:fresh-install',
+    '-w',
+    pkg.name,
+  ]);
   if (!smokeStep.ok) {
     logError('smoke.failed', { exit_code: smokeStep.exitCode });
     const del = deleteTagFromOrigin(tag, isDryRun);
@@ -455,36 +571,32 @@ function main() {
   if (isDryRun) {
     logInfo('publish.dry_run', { pkg: pkg.name, version });
   } else {
+    const { env: publishEnv, removed } = publishEnvironment({ hasNpmToken });
     logInfo('publish.auth_mode', {
       mode: hasNpmToken ? 'token' : 'oidc-trusted-publisher',
+      // Named explicitly so a misconfigured runner is visible in the CI log
+      // rather than silently changing which auth path npm takes.
+      credentials_removed: removed,
     });
-    const publishStep = runStep(
-      'npm_publish',
-      'npm',
-      ['publish', '--access', 'public', '--provenance'],
-      {
-        cwd: path.join(rootDir, pkg.pkgPath),
-        // In OIDC mode inject NO token env: npm must see no configured
-        // authToken for the registry, or it skips the OIDC exchange.
-        env: hasNpmToken
-          ? {
-              NODE_AUTH_TOKEN: process.env.NPM_TOKEN,
-              NPM_TOKEN: process.env.NPM_TOKEN,
-            }
-          : {},
-      }
-    );
+    const publishStep = runStep('npm_publish', 'npm', publicationArgs(version), {
+      cwd: path.join(rootDir, pkg.pkgPath),
+      // envExact, not env: the guarantee is that no inherited credential
+      // reaches npm, which requires replacing the environment rather than
+      // merging into it.
+      envExact: publishEnv,
+    });
     if (!publishStep.ok) {
-      logError('publish.failed', { exit_code: publishStep.exitCode });
-      // Publish failure: tag rollback IS appropriate here because the registry
-      // mutation did not succeed. (npm publish is the boundary; if it
-      // exited non-zero, no version was published.)
-      const del = deleteTagFromOrigin(tag, isDryRun);
-      if (!del.ok) {
-        logError('tag.delete.failed', { reason: del.reason });
-        process.exit(21);
-      }
-      process.exit(20);
+      // The server can accept the upload before a connection drops or a
+      // later npm lifecycle step fails. A nonzero client exit cannot prove
+      // absence, and deleting the tag can destroy published provenance.
+      logError('publish.outcome_uncertain', {
+        exit_code: publishStep.exitCode,
+        tag_preserved: true,
+        repair: `npm view ${pkg.name}@${version} version dist.integrity dist-tags --json`,
+        message:
+          'Inspect registry state and artifact identity before retrying. The tag is preserved; no GitHub Release was created.',
+      });
+      process.exit(30);
     }
   }
 
@@ -516,7 +628,8 @@ function main() {
     logError('post_publish.partial_failure', {
       tag_preserved: true,
       failures: postPublishFailures,
-      message: 'npm publish succeeded; tag is preserved as the provenance anchor. Run the repair commands above to complete ancillary steps.',
+      message:
+        'npm publish succeeded; tag is preserved as the provenance anchor. Run the repair commands above to complete ancillary steps.',
     });
     process.exit(30);
   }
@@ -533,4 +646,4 @@ function main() {
   process.exit(0);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) main();

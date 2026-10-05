@@ -17,10 +17,7 @@
 // handle — but the human prose tells the user which repair to perform.
 
 import type { Decision } from '../../kernel';
-import type {
-  AuthorityContextCandidate,
-  ResolvedBinding,
-} from '../binding/types';
+import type { AuthorityContextCandidate, ResolvedBinding } from '../binding/types';
 
 export interface RenderDecisionOptions {
   /**
@@ -121,9 +118,9 @@ export function buildScopeDecisionJson(
       ? 'spec_context'
       : boundContext?.source === 'target_scope_in_claim'
         ? 'union'
-      : decision.bindingState === 'bound' || decision.bindingState === 'bridged'
-        ? 'authoritative'
-        : 'union';
+        : decision.bindingState === 'bound' || decision.bindingState === 'bridged'
+          ? 'authoritative'
+          : 'union';
 
   const boundSpecId = extractBoundSpecId(decision, boundContext);
   const matchedPattern = extractMatchedPattern(decision.data);
@@ -168,10 +165,7 @@ export function buildScopeDecisionJson(
 }
 
 /** Render the stable JSON contract as a single line for hook consumption. */
-export function renderDecisionJson(
-  decision: Decision,
-  boundContext?: ResolvedBinding
-): string {
+export function renderDecisionJson(decision: Decision, boundContext?: ResolvedBinding): string {
   return JSON.stringify(buildScopeDecisionJson(decision, boundContext));
 }
 
@@ -204,8 +198,7 @@ function extractMatchedPattern(
   data: Readonly<Record<string, unknown>> | undefined
 ): string | undefined {
   if (data === undefined) return undefined;
-  const candidate =
-    data['matchedPattern'] ?? data['matchedPrefix'] ?? data['matchedName'];
+  const candidate = data['matchedPattern'] ?? data['matchedPrefix'] ?? data['matchedName'];
   return typeof candidate === 'string' ? candidate : undefined;
 }
 
@@ -240,6 +233,49 @@ function specListCommand(
       };
 }
 
+/**
+ * A claimant the remediation may recommend as a verified authority: its
+ * scope.in claims the path, the kernel admits the path under its own binding,
+ * and its lane has not already landed (CAWS-SCOPE-REMEDIATION-STATES-VERIFIED-SAFETY-01).
+ */
+function isVerifiedClaimant(candidate: AuthorityContextCandidate): boolean {
+  return (
+    candidate.matchedScopeInEntry !== undefined &&
+    candidate.bindingAdmits === true &&
+    candidate.landedOpen === undefined
+  );
+}
+
+/**
+ * A claimant nobody has evaluated (no policy loaded, or evaluation threw).
+ * Only these still need the caller's read-only --spec check; for the rest the
+ * CLI already has the answer and says it.
+ */
+function isUnevaluatedClaimant(candidate: AuthorityContextCandidate): boolean {
+  return (
+    candidate.matchedScopeInEntry !== undefined &&
+    candidate.bindingAdmits === undefined &&
+    candidate.landedOpen === undefined
+  );
+}
+
+/**
+ * Every candidate claims the path, yet none may take new work on it: each one
+ * either already landed or is refused by the kernel under its own binding. The
+ * handoff is then a new spec, not any of the listed ones.
+ */
+function noClaimantTakesNewWork(candidates: readonly AuthorityContextCandidate[]): boolean {
+  const claiming = candidates.filter((c) => c.matchedScopeInEntry !== undefined);
+  return (
+    claiming.length > 0 &&
+    claiming.every((c) => c.landedOpen !== undefined || c.bindingAdmits === false)
+  );
+}
+
+function shortSha(sha: string): string {
+  return sha.slice(0, 10);
+}
+
 function authorityCandidateCommands(
   normPath: string,
   candidates: readonly AuthorityContextCandidate[],
@@ -247,41 +283,74 @@ function authorityCandidateCommands(
 ): ScopeRemediationCommand[] {
   const commands: ScopeRemediationCommand[] = [];
   for (const candidate of candidates.slice(0, 5)) {
-    commands.push({
-      command: `caws scope show ${shellQuote(normPath)} --spec ${shellQuote(candidate.specId)}`,
-      description: `Read-only check whether ${candidate.specId} is the right spec context for this path.`,
-      mutates: false,
-    });
+    const id = candidate.specId;
+    const entry = candidate.matchedScopeInEntry;
+    // A landed spec is offered for inspection only. `ensure` on it would
+    // succeed — it is active with no worktree — and quietly fold new work into
+    // a slice whose work is already on the base branch.
+    if (candidate.landedOpen !== undefined) {
+      commands.push({
+        command: `caws specs show ${shellQuote(id)}`,
+        description: `Read-only: ${id} landed in merge ${shortSha(candidate.landedOpen.mergeCommit)} and was left open with --no-close for its evidence and close. Inspect it; do not bind new work to it.`,
+        mutates: false,
+      });
+      continue;
+    }
+    const verified = isVerifiedClaimant(candidate);
+    if (!verified) {
+      commands.push({
+        command: `caws scope show ${shellQuote(normPath)} --spec ${shellQuote(id)}`,
+        description:
+          candidate.bindingAdmits === false
+            ? `Read-only: shows why the kernel refuses this path under ${id} (${candidate.bindingRefusalRule ?? 'refused'}) although its scope.in "${entry}" matches.`
+            : `Read-only check whether ${id} is the right spec context for this path.`,
+        mutates: false,
+      });
+      // Binding a spec the kernel refuses this path under yields a worktree
+      // that refuses the same edit; offering it would be a dead end.
+      if (candidate.bindingAdmits === false) continue;
+    }
+    const verifiedBecause = `the kernel admits this path under its binding (scope.in "${entry}")`;
     if (typeof opts.trackedWorktreeName === 'string') {
       if (candidate.worktreeName === undefined) {
         commands.push({
-          command: `caws worktree bind ${shellQuote(opts.trackedWorktreeName)} --spec ${shellQuote(candidate.specId)}`,
-          description:
-            candidate.lifecycleState === 'draft'
-              ? `Bind this tracked worktree to draft spec ${candidate.specId} — the bind activates it.`
-              : `Bind this tracked worktree to active spec ${candidate.specId}.`,
+          command: `caws worktree bind ${shellQuote(opts.trackedWorktreeName)} --spec ${shellQuote(id)}`,
+          description: verified
+            ? candidate.lifecycleState === 'draft'
+              ? `Safe: binds this unbound worktree to draft ${id} and activates it, and ${verifiedBecause}. No other spec or worktree changes.`
+              : `Safe: binds this unbound worktree to active ${id}, and ${verifiedBecause}. No other spec or worktree changes.`
+            : candidate.lifecycleState === 'draft'
+              ? `Bind this tracked worktree to draft spec ${id} — the bind activates it.`
+              : `Bind this tracked worktree to active spec ${id}.`,
           mutates: true,
         });
       } else {
         commands.push({
           command: `cd .caws/worktrees/${shellQuote(candidate.worktreeName)}`,
-          description: `Enter the existing worktree already bound to ${candidate.specId}.`,
+          description: verified
+            ? `Enter ${candidate.worktreeName}, the worktree bound to ${id}; ${verifiedBecause}.`
+            : `Enter the existing worktree already bound to ${id}.`,
           mutates: false,
         });
       }
     } else if (candidate.worktreeName === undefined) {
       commands.push({
-        command: `caws worktree ensure <name> --spec ${shellQuote(candidate.specId)}`,
-        description:
-          candidate.lifecycleState === 'draft'
-            ? `Create-or-admit a governed worktree for draft spec ${candidate.specId} — creating it activates the draft; an existing untouched lane admits idempotently.`
-            : `Create-or-admit a governed worktree for active spec ${candidate.specId}; an existing untouched lane admits idempotently.`,
+        command: `caws worktree ensure <name> --spec ${shellQuote(id)}`,
+        description: verified
+          ? candidate.lifecycleState === 'draft'
+            ? `Safe: ${id} is a draft with no worktree, and ${verifiedBecause}. ensure creates a worktree bound to ${id} and activates the draft in the same transaction; no other spec or worktree changes.`
+            : `Safe: ${id} is active with no worktree, and ${verifiedBecause}. ensure creates a worktree bound to ${id}, or re-enters an untouched lane of that name already bound to it; no other spec or worktree changes.`
+          : candidate.lifecycleState === 'draft'
+            ? `Create-or-admit a governed worktree for draft spec ${id} — creating it activates the draft; an existing untouched lane admits idempotently.`
+            : `Create-or-admit a governed worktree for active spec ${id}; an existing untouched lane admits idempotently.`,
         mutates: true,
       });
     } else {
       commands.push({
         command: `cd .caws/worktrees/${shellQuote(candidate.worktreeName)}`,
-        description: `Enter the existing worktree already bound to ${candidate.specId}.`,
+        description: verified
+          ? `Enter ${candidate.worktreeName}, the worktree bound to ${id}; ${verifiedBecause}.`
+          : `Enter the existing worktree already bound to ${id}.`,
         mutates: false,
       });
     }
@@ -289,33 +358,105 @@ function authorityCandidateCommands(
   return commands;
 }
 
+/** The handoff when no listed claimant may take new work on the path. */
+function newSpecCommands(
+  normPath: string,
+  opts: { readonly trackedWorktreeName?: string } = {}
+): ScopeRemediationCommand[] {
+  return [
+    {
+      command: `caws specs create <id> --title "<title>" --mode <mode> --scope-in ${shellQuote(normPath)}`,
+      description:
+        'Author a new spec that claims this path. Every spec listed above has already landed or is refused this path by the kernel, so none is a lane for this edit.',
+      mutates: true,
+    },
+    typeof opts.trackedWorktreeName === 'string'
+      ? {
+          command: `caws worktree bind ${shellQuote(opts.trackedWorktreeName)} --spec <id>`,
+          description: 'Bind this unbound worktree to the new spec; the bind activates it.',
+          mutates: true,
+        }
+      : {
+          command: 'caws worktree ensure <name> --spec <id>',
+          description: 'Create the new spec’s worktree; creating it activates the draft.',
+          mutates: true,
+        },
+  ];
+}
+
+/** One sentence per claimant, stating what the CLI established about it. */
+function claimantNote(candidate: AuthorityContextCandidate): string {
+  const id = candidate.specId;
+  const entry = candidate.matchedScopeInEntry;
+  const landed = candidate.landedOpen;
+  if (landed !== undefined) {
+    const by =
+      landed.mergedBySession !== undefined ? ` from session ${landed.mergedBySession}` : '';
+    return (
+      `${id} already landed: merge ${shortSha(landed.mergeCommit)} at ${landed.mergedAt}${by}, via worktree ${landed.worktreeName}. ` +
+      'It was left open with --no-close so its evidence can be recorded before it closes; it is finished work, not a lane for this edit. ' +
+      'Closing it belongs to the session that merged it.'
+    );
+  }
+  if (candidate.bindingAdmits === true) {
+    const where =
+      candidate.worktreeName !== undefined ? `worktree ${candidate.worktreeName}` : 'no worktree';
+    return (
+      `Verified: ${id} (${candidate.lifecycleState}, ${where}) claims this path via scope.in "${entry}", and the kernel admits the path under its binding.` +
+      (candidate.lifecycleState === 'draft' ? ' Binding it activates the draft.' : '')
+    );
+  }
+  if (candidate.bindingAdmits === false) {
+    return `${id} claims this path via scope.in "${entry}", but the kernel refuses the path under its binding (${candidate.bindingRefusalRule ?? 'refused'}), so binding it would not make this path editable.`;
+  }
+  return (
+    `${id} claims this path via scope.in "${entry}"` +
+    (candidate.lifecycleState === 'draft'
+      ? ' and is a draft — creating or binding its worktree activates it.'
+      : '.')
+  );
+}
+
+const READ_ONLY_CHECK_NOTE =
+  'Use the read-only scope --spec check first; it compares path fit but does not grant current-checkout write authority.';
+
 function authorityCandidateNotes(
   candidates: readonly AuthorityContextCandidate[]
 ): readonly string[] {
   const claiming = candidates.filter((c) => c.matchedScopeInEntry !== undefined);
-  const notes = [
-    'Use the read-only scope --spec check first; it compares path fit but does not grant current-checkout write authority.',
-  ];
+  const notes: string[] = [];
   // CAWS-SPEC-ACTIVATION-BINDS-001: a list of specs that CLAIM the path and a
   // list of specs that merely happen to be active are very different handoffs.
   // Saying which one this is stops the fallback list from reading as a claim.
-  if (claiming.length > 0) {
-    const one = claiming[0];
-    notes.unshift(
-      claiming.length === 1
-        ? `${one?.specId} claims this path via scope.in "${one?.matchedScopeInEntry}"` +
-          (one?.lifecycleState === 'draft'
-            ? ' and is a draft — creating or binding its worktree activates it.'
-            : '.')
-        : `${claiming.length} specs claim this path via scope.in; listed in id order` +
+  if (claiming.length === 0) {
+    notes.push(
+      'No active spec claims this path via scope.in, so every active spec is listed as a fallback. Widen the owning spec with caws specs amend-scope <id> --add <path> instead of picking an unrelated one.',
+      READ_ONLY_CHECK_NOTE
+    );
+  } else {
+    if (claiming.length > 1) {
+      notes.push(
+        `${claiming.length} specs claim this path via scope.in; listed in id order` +
           (claiming.some((c) => c.lifecycleState === 'draft')
             ? ' (drafts among them activate on bind).'
             : '.')
-    );
-  } else {
-    notes.unshift(
-      'No active spec claims this path via scope.in, so every active spec is listed as a fallback. Widen the owning spec with caws specs amend-scope <id> --add <path> instead of picking an unrelated one.'
-    );
+      );
+    }
+    // CAWS-SCOPE-REMEDIATION-STATES-VERIFIED-SAFETY-01: state what was
+    // established about each claimant. A hedge ("check first", "does not
+    // grant") in place of a fact the CLI already holds reads as a warning and
+    // stalls the caller; a stated fact with its reason does not.
+    for (const candidate of claiming.slice(0, 5)) notes.push(claimantNote(candidate));
+    const verified = claiming.filter(isVerifiedClaimant);
+    if (verified.length > 0) {
+      notes.push(
+        'This checkout is refused only because it has no binding. ' +
+          (verified.length === 1
+            ? 'The --spec fit check is already done for the verified claimant, and binding it is what grants write authority here.'
+            : 'The --spec fit check is already done for each verified claimant; any of them is a valid authority, so bind the one whose acceptance criteria this edit serves.')
+      );
+    }
+    if (claiming.some(isUnevaluatedClaimant)) notes.push(READ_ONLY_CHECK_NOTE);
   }
   if (candidates.length > 5) {
     notes.push(
@@ -339,28 +480,33 @@ export function buildScopeRemediation(
     typeof boundContext.worktreeName === 'string'
   ) {
     const wt = boundContext.worktreeName;
+    // CAWS-SCOPE-REMEDIATION-STATES-VERIFIED-SAFETY-01: every fact here is
+    // already resolved — the owning worktree, its spec, the admitting entry —
+    // so state them instead of sending the caller to re-derive them. The guard
+    // note is a statement of worktree-write-guard's `block_claimed` branch,
+    // which fires for writers on the claiming worktree's base branch.
+    const specId = extractBoundSpecId(decision, boundContext);
+    const entry = extractMatchedPattern(decision.data);
+    const owner =
+      specId !== undefined && entry !== undefined
+        ? `Verified: worktree ${wt} is bound to ${specId}, whose scope.in entry "${entry}" admits this path.`
+        : `Verified: worktree ${wt}'s bound spec admits this path through its scope.in.`;
     return {
-      summary:
-        `Path is admitted by worktree ${wt}'s scope.in claim; enter that worktree before editing.`,
+      summary: `${owner} Edit it from inside ${wt}.`,
       commands: [
         {
-          command: 'caws worktree list --data',
-          description: 'Inspect registered worktrees and their bound specs.',
-          mutates: false,
-        },
-        {
           command: `cd .caws/worktrees/${shellQuote(wt)}`,
-          description: 'Move into the worktree that owns this path claim.',
+          description: `Safe: a read-only move into ${wt}, the worktree that holds this path's claim.`,
           mutates: false,
         },
         {
           command: 'caws claim',
-          description: 'Inspect current worktree ownership before editing.',
+          description: `Shows whether this session owns ${wt}; the worktree guards admit edits there only for its owner.`,
           mutates: false,
         },
       ],
       notes: [
-        'A base-checkout write to this path can still be blocked by worktree-write-guard.',
+        `A write to this path from the checkout of ${wt}'s base branch is blocked by worktree-write-guard, because ${wt} claims it.`,
       ],
     };
   }
@@ -403,7 +549,8 @@ export function buildScopeRemediation(
         },
         {
           command: `caws specs amend-scope ${shellQuote(specId)} --add-support ${shellQuote(normPath)}`,
-          description: 'Add the path to scope.support, making it editable but not worktree-claimed.',
+          description:
+            'Add the path to scope.support, making it editable but not worktree-claimed.',
           mutates: true,
         },
       ],
@@ -426,7 +573,8 @@ export function buildScopeRemediation(
         },
         {
           command: `caws specs amend-scope ${shellQuote(specId)} --remove-out ${shellQuote(matched)}`,
-          description: 'Remove the matching scope.out exclusion if this path is intentionally in scope.',
+          description:
+            'Remove the matching scope.out exclusion if this path is intentionally in scope.',
           mutates: true,
         },
       ],
@@ -451,7 +599,8 @@ export function buildScopeRemediation(
       });
     }
     return {
-      summary: 'The worktree/spec binding is one-sided; repair the binding before evaluating scope.',
+      summary:
+        'The worktree/spec binding is one-sided; repair the binding before evaluating scope.',
       commands,
     };
   }
@@ -459,24 +608,33 @@ export function buildScopeRemediation(
   if (decision.kind === 'no_authority' && decision.bindingState === 'unbound') {
     const candidates = authorityCandidates(boundContext);
     const normPath = decision.normalizedPath ?? decision.path;
+    const verified = candidates.filter(isVerifiedClaimant);
+    const soleVerified = verified.length === 1 ? verified[0] : undefined;
+    const needsNewSpec = noClaimantTakesNewWork(candidates);
     if (typeof boundContext?.worktreeName === 'string') {
       const commands: ScopeRemediationCommand[] = [
         specListCommand(candidates),
         ...authorityCandidateCommands(normPath, candidates, {
           trackedWorktreeName: boundContext.worktreeName,
         }),
+        ...(needsNewSpec
+          ? newSpecCommands(normPath, { trackedWorktreeName: boundContext.worktreeName })
+          : []),
       ];
       if (candidates.length === 0) {
-        commands.push(
-          {
-            command: `caws worktree bind ${shellQuote(boundContext.worktreeName)} --spec <spec-id>`,
-            description: 'Bind this existing worktree to the active spec that should own the edit.',
-            mutates: true,
-          }
-        );
+        commands.push({
+          command: `caws worktree bind ${shellQuote(boundContext.worktreeName)} --spec <spec-id>`,
+          description: 'Bind this existing worktree to the active spec that should own the edit.',
+          mutates: true,
+        });
       }
       return {
-        summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; choose a spec authority before editing.`,
+        summary:
+          soleVerified !== undefined
+            ? `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; ${soleVerified.specId} is the verified authority for this path — bind it before editing.`
+            : needsNewSpec
+              ? `Tracked worktree ${boundContext.worktreeName} is not bound to a spec, and no spec listed here can take new work on this path; bind it to a new spec before editing.`
+              : `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; choose a spec authority before editing.`,
         commands,
         notes:
           candidates.length > 0
@@ -488,16 +646,23 @@ export function buildScopeRemediation(
     const commands: ScopeRemediationCommand[] = [
       specListCommand(candidates),
       ...authorityCandidateCommands(normPath, candidates),
+      ...(needsNewSpec ? newSpecCommands(normPath) : []),
     ];
     if (candidates.length === 0) {
       commands.push({
         command: 'caws worktree ensure <name> --spec <spec-id>',
-        description: 'Create-or-admit a governed worktree for the active spec that should own the edit.',
+        description:
+          'Create-or-admit a governed worktree for the active spec that should own the edit.',
         mutates: true,
       });
     }
     return {
-      summary: 'No worktree is bound for this context; choose a spec authority and create or enter its worktree before editing.',
+      summary:
+        soleVerified !== undefined
+          ? `No worktree is bound for this context; ${soleVerified.specId} is the verified authority for this path — create or enter its worktree before editing.`
+          : needsNewSpec
+            ? 'No worktree is bound for this context, and no spec listed here can take new work on this path; author a new spec that claims it before editing.'
+            : 'No worktree is bound for this context; choose a spec authority and create or enter its worktree before editing.',
       commands,
       notes:
         candidates.length > 0
@@ -530,10 +695,7 @@ const KIND_LABEL: Record<Decision['kind'], string> = {
   invalid_path: 'INVALID     ',
 };
 
-export function renderDecision(
-  decision: Decision,
-  opts: RenderDecisionOptions = {}
-): string {
+export function renderDecision(decision: Decision, opts: RenderDecisionOptions = {}): string {
   const lines: string[] = [];
   const remediation = buildScopeRemediation(decision, opts.boundContext);
   const label = KIND_LABEL[decision.kind];
@@ -541,10 +703,7 @@ export function renderDecision(
   const ruleLabel = nuance !== '' ? `${decision.rule} ${nuance}` : decision.rule;
   lines.push(`${label} ${ruleLabel}`);
   lines.push(`             path:    ${decision.path}`);
-  if (
-    typeof decision.normalizedPath === 'string' &&
-    decision.normalizedPath !== decision.path
-  ) {
+  if (typeof decision.normalizedPath === 'string' && decision.normalizedPath !== decision.path) {
     lines.push(`             normalized: ${decision.normalizedPath}`);
   }
   lines.push(`             message: ${decision.message}`);
@@ -573,8 +732,16 @@ export function renderDecision(
           candidate.worktreeName !== undefined
             ? `, worktree ${candidate.worktreeName}`
             : ', no worktree';
+        const fact =
+          candidate.landedOpen !== undefined
+            ? `, landed in ${shortSha(candidate.landedOpen.mergeCommit)} and left open`
+            : candidate.bindingAdmits === true
+              ? ', verified: admits this path'
+              : candidate.bindingAdmits === false
+                ? `, refuses this path: ${candidate.bindingRefusalRule ?? 'refused'}`
+                : '';
         lines.push(
-          `               - ${candidate.specId} (${candidate.lifecycleState}${wt})`
+          `               - ${candidate.specId} (${candidate.lifecycleState}${wt}${fact})`
         );
       }
     }
@@ -595,10 +762,7 @@ export function renderDecision(
  * shell-side state produced the unbound decision. For every other kind,
  * return ''.
  */
-function unboundNuance(
-  decision: Decision,
-  boundContext: ResolvedBinding | undefined
-): string {
+function unboundNuance(decision: Decision, boundContext: ResolvedBinding | undefined): string {
   if (decision.kind !== 'no_authority') return '';
   if (decision.bindingState !== 'unbound') return '';
   if (boundContext === undefined) return '';

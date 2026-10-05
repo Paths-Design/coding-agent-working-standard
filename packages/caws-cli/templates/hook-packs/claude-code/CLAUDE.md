@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 19
+# hook_pack_version: 25
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -21,6 +21,30 @@ This directory is the **claude-code vendor adapter** for the CAWS hook pack. It
 contains only the wiring and surface documentation for Claude Code. All shared
 hook logic lives in the CAWS shared core, installed at `.caws/hooks/` in the
 consumer repo.
+
+## Coding rigor: acceptance, review and evidence
+
+Apply this standard to hook reviews and implementation; scale checks to risk.
+The full guide is `docs/guides/coding-rigor.md` in the installed CLI package.
+
+- Define acceptance as observable behavior with a specific check and a
+  counterexample that must fail. Rank failures by trigger, cost and resolve-now
+  or defer decision, including irreversible choices and growing dependencies.
+- Trace the real entry point to consumer-visible behavior, including rejection,
+  partial failure and cleanup. Assert semantic values and state; use negative
+  controls or mutation checks for consequential logic. Never lower declared floors.
+- Cite commands, cwd/revision, exit status, selected tests, output and runtime
+  artifacts. Preserve failed/skipped/interrupted attempts and artifact identity.
+  Inspect before/after state for side effects; keep generated evidence out of
+  source commits.
+- Distinguish source review, tests, installed packages, native execution,
+  acceptance records, CI, merge and deployment. Passing gates alone do not
+  establish completion. State what could still be wrong, what was not verified
+  and the exact additional observation needed to close each material gap.
+- Review authorizes inspection and findings; fixes, evidence recording and
+  publication need corresponding authorization. Lead with the highest-impact
+  finding; give investigate / implement / change actions with where and why.
+  Name the strongest objection when changing course; say when the plan is sound.
 
 ## Layout (CAWS-HOOK-PACK-SHARED-CORE-001)
 
@@ -139,19 +163,17 @@ hit blind. Each has a concrete fix below. **Validate every authored spec with
 `caws specs show <id>` (or `caws doctor`) before you commit it** — those surface
 a schema rejection immediately, so you never commit a spec that will not load.
 
-- **Tier 1 / tier 2 specs require at least one contract.** A bare
-  `caws specs create <id> --mode feature --risk-tier 2` is rejected
-  (`Tier 2 specs require at least one contract`). Author the contract in the same
-  command — do not hand-edit the YAML afterward:
+- **Create specs without selecting a risk tier.** Declare scope and acceptance
+  for the work. Add a contract when it helps state an interface or guarantee:
 
   ```bash
-  caws specs create FEAT-001 --title "..." --mode feature --risk-tier 2 \
+  caws specs create FEAT-001 --title "..." --mode feature \
     --contract "core-api:behavior"
   ```
 
-  `--contract` is repeatable and takes `"name:type[:path]"`, where `type` is one
-  of `api | schema | contract-test | behavior`. If the slice is a low-blast-radius
-  chore, use `--risk-tier 3` (or `--mode chore`) instead — those need no contract.
+  `--contract` is optional and repeatable, using `"name:type[:path]"` with
+  `api | schema | contract-test | behavior`. Operational requirements can be
+  supplied through `--observability`, `--rollback` and `--security` independently.
 
 - **`non_functional.*` values are arrays of strings, not scalars.** The four
   admitted subkeys (`accessibility`, `performance`, `reliability`, `security`)

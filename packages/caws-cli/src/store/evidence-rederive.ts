@@ -1,0 +1,1123 @@
+/**
+ * Acceptance-evidence re-derivation — the IMPURE half.
+ * CAWS-SPECS-VERIFY-ACS-REDERIVE-001.
+ *
+ * The kernel (`kernel/evidence/rederive.ts`) decides what to check and how to
+ * read the outcomes. This module executes the plan: it asks git whether a
+ * cited commit exists and is reachable, whether a cited artifact is in the
+ * tree, and — only when asked — runs a cited test through the repository's
+ * own runner. It then hands a plain-data report back to the kernel.
+ *
+ * SUBPROCESS DISCIPLINE. Every spawn here is `execFileSync` with a
+ * compile-time program name and an argv array. Agent-authored strings appear
+ * only as operands, after `--`, and a nodeid is refused before any spawn if it
+ * begins with `-`. Every spawn sets an explicit timeout, `killSignal` and
+ * `maxBuffer` — no other subprocess in this package does, and a governance
+ * command that can hang on a test runner is a worse defect than the one this
+ * slice fixes. A timeout is reported as `timeout`, never as passed or failed.
+ *
+ * NO `npx`. v10.2's verify-acs ran `npx jest`; in a repo without the runner
+ * installed, npx may fetch and execute a package from the network. Runners are
+ * resolved from the repository's own `node_modules/.bin`, and `unavailable` is
+ * reported when absent. pytest is invoked as `python3 -m pytest`, which never
+ * installs anything.
+ *
+ * COLLECT FIRST, ALWAYS. Existence is checked before any run, so a cited test
+ * that does not exist is `missing` rather than `failed`, and existence-only
+ * mode yields `not_run` — never `passed`.
+ *
+ * `command` CHECKS ARE NEVER EXECUTED. The plan marks them non-executable and
+ * this module skips them; the kernel reports `command_not_executed`.
+ *
+ * WHAT IS PROVEN HERE. Execution is implemented for pytest, jest, node --test
+ * and bats, the runners this repository can exercise in its own test suite.
+ * vitest, cargo and go are DETECTED (so the runner name is right in output) but
+ * report `unavailable` with a detail naming the gap, rather than shipping an
+ * untested execution path.
+ */
+
+import { execFileSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { resolveGitBinary } from './git-binary';
+import {
+  classifyRederivation,
+  planRederivation,
+  summarizeRederivation,
+  type CheckClass,
+  type CheckOutcome,
+  type CriterionVerdict,
+  type DeclaredCheck,
+  type RederivationPlan,
+  type RederivationReport,
+  type RederivationSummary,
+  type Spec,
+} from '../kernel';
+
+export const TEST_RUNNERS = [
+  'pytest',
+  'jest',
+  'node',
+  'bats',
+  'vitest',
+  'cargo',
+  'go',
+  'unknown',
+] as const;
+export type TestRunner = (typeof TEST_RUNNERS)[number];
+/** Runners a caller may name as an override; `unknown` is a detection result, not a choice. */
+export const SELECTABLE_TEST_RUNNERS: readonly TestRunner[] = TEST_RUNNERS.filter(
+  (r) => r !== 'unknown'
+);
+/**
+ * Runners this module can actually run. Selectable is a larger set than
+ * executable: naming `--runner cargo` is accepted and reports `unavailable`,
+ * because detection is implemented for every runner but execution is not.
+ *
+ * Exported so the dispatch below and the `--runner` help text derive the split
+ * from ONE place. The help previously listed the selectable set with no hint
+ * that three of its members verify nothing, and a reader wiring `--runner go`
+ * into CI got a gate that reports success while checking nothing — the failure
+ * class this repository's release stance names as the most dangerous.
+ */
+export const EXECUTABLE_TEST_RUNNERS: readonly TestRunner[] = ['pytest', 'jest', 'node', 'bats'];
+
+function isExecutableRunner(runner: TestRunner): boolean {
+  return EXECUTABLE_TEST_RUNNERS.includes(runner);
+}
+
+export interface SpawnOptions {
+  readonly cwd: string;
+  readonly timeout: number;
+  readonly killSignal: 'SIGKILL';
+  readonly maxBuffer: number;
+  readonly encoding: 'utf8';
+  readonly stdio: ['ignore', 'pipe', 'pipe'];
+  readonly env: NodeJS.ProcessEnv;
+}
+
+/** Injectable for tests: the exact shape this module calls `execFileSync` with. */
+export type ExecFileSyncLike = (
+  file: string,
+  args: readonly string[],
+  options: SpawnOptions
+) => string;
+
+export interface RederiveTimeouts {
+  readonly git?: number;
+  readonly collect?: number;
+  readonly run?: number;
+}
+
+export interface RederiveOptions {
+  /** Which executable classes to run at this call site. Unselected checks report `not_run`. */
+  readonly classes: readonly CheckClass[];
+  /** Execute cited tests (true) or only confirm they exist (false → `not_run`). */
+  readonly runTests: boolean;
+  /** Override runner detection. */
+  readonly runner?: TestRunner;
+  readonly timeouts?: RederiveTimeouts;
+  readonly execFile?: ExecFileSyncLike;
+}
+
+export const DEFAULT_TIMEOUTS: Required<RederiveTimeouts> = {
+  git: 10_000,
+  collect: 30_000,
+  run: 120_000,
+};
+
+const MAX_BUFFER = 8 * 1024 * 1024;
+const DETAIL_MAX = 240;
+
+// ─── bounded spawn ───────────────────────────────────────────────────────────
+
+type SpawnResult =
+  | { readonly kind: 'ok'; readonly stdout: string }
+  | {
+      readonly kind: 'exit';
+      readonly status: number;
+      readonly stdout: string;
+      readonly stderr: string;
+    }
+  | { readonly kind: 'timeout' }
+  | { readonly kind: 'enoent' }
+  | { readonly kind: 'error'; readonly message: string };
+
+function childEnv(): NodeJS.ProcessEnv {
+  // JEST_WORKER_ID is jest's marker for its own workers. A runner spawned from
+  // inside a jest process (this package's own tests) must not inherit it.
+  const env = { ...process.env };
+  delete env.JEST_WORKER_ID;
+  return env;
+}
+
+function toText(value: unknown): string {
+  if (value instanceof Buffer) return value.toString('utf8');
+  return typeof value === 'string' ? value : '';
+}
+
+function spawnBounded(
+  exec: ExecFileSyncLike,
+  file: string,
+  args: readonly string[],
+  cwd: string,
+  timeout: number
+): SpawnResult {
+  try {
+    const stdout = exec(file, [...args], {
+      cwd,
+      timeout,
+      killSignal: 'SIGKILL',
+      maxBuffer: MAX_BUFFER,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: childEnv(),
+    });
+    return { kind: 'ok', stdout: toText(stdout) };
+  } catch (e) {
+    const c = e as {
+      code?: string;
+      status?: number | null;
+      signal?: string | null;
+      killed?: boolean;
+      stdout?: unknown;
+      stderr?: unknown;
+      message?: string;
+    };
+    if (c.code === 'ENOENT') return { kind: 'enoent' };
+    if (c.code === 'ETIMEDOUT' || c.killed === true || c.signal === 'SIGKILL') {
+      return { kind: 'timeout' };
+    }
+    if (typeof c.status === 'number') {
+      return { kind: 'exit', status: c.status, stdout: toText(c.stdout), stderr: toText(c.stderr) };
+    }
+    return { kind: 'error', message: c.message ?? 'unknown spawn error' };
+  }
+}
+
+function tail(text: string, max = DETAIL_MAX): string {
+  const lines = text
+    .split('\n')
+    .map((l) => l.trimEnd())
+    .filter((l) => l.length > 0);
+  const joined = lines.slice(-3).join(' | ');
+  return joined.length > max ? `…${joined.slice(-max)}` : joined;
+}
+
+// ─── target validation ───────────────────────────────────────────────────────
+
+const SHA_RE = /^[0-9a-f]{4,40}$/i;
+
+function refuseSha(sha: string): string | null {
+  return SHA_RE.test(sha) ? null : `commit_sha ${JSON.stringify(sha)} is not a hex object id`;
+}
+
+function refuseRepoPath(p: string): string | null {
+  if (p.length === 0) return 'artifact_path is empty';
+  if (/[\0\n\r]/.test(p)) return 'artifact_path contains a control character';
+  if (path.isAbsolute(p))
+    return `artifact_path ${JSON.stringify(p)} is absolute; must be repo-relative`;
+  if (p.split(/[\\/]/).includes('..'))
+    return `artifact_path ${JSON.stringify(p)} escapes the repository`;
+  return null;
+}
+
+function refuseNodeid(nodeid: string): string | null {
+  if (nodeid.length === 0) return 'test_nodeid is empty';
+  if (/[\0\n\r]/.test(nodeid)) return 'test_nodeid contains a control character';
+  if (nodeid.startsWith('-')) {
+    return `test_nodeid ${JSON.stringify(nodeid)} begins with "-"; a nodeid is an operand, not a runner flag`;
+  }
+  const file = nodeid.split('::')[0] ?? '';
+  return refuseRepoPath(file)?.replace('artifact_path', 'test_nodeid file') ?? null;
+}
+
+// ─── git checks ──────────────────────────────────────────────────────────────
+
+function citationOutcome(
+  exec: ExecFileSyncLike,
+  repoRoot: string,
+  sha: string,
+  timeout: number
+): CheckOutcome {
+  const base = { class: 'citation' as const, target: sha };
+  const refused = refuseSha(sha);
+  if (refused !== null) return { ...base, outcome: 'refused', detail: refused };
+
+  const exists = spawnBounded(
+    exec,
+    resolveGitBinary(),
+    ['cat-file', '-e', `${sha}^{commit}`],
+    repoRoot,
+    timeout
+  );
+  if (exists.kind === 'enoent')
+    return { ...base, outcome: 'unavailable', detail: 'git binary not found' };
+  if (exists.kind === 'timeout')
+    return { ...base, outcome: 'timeout', detail: 'git cat-file timed out' };
+  if (exists.kind === 'error') return { ...base, outcome: 'unavailable', detail: exists.message };
+  if (exists.kind === 'exit') {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `commit ${sha} is not an object in this repository`,
+    };
+  }
+
+  const reach = spawnBounded(
+    exec,
+    resolveGitBinary(),
+    ['for-each-ref', '--contains', sha, '--count=1', '--format=%(refname)'],
+    repoRoot,
+    timeout
+  );
+  if (reach.kind === 'timeout')
+    return { ...base, outcome: 'timeout', detail: 'git for-each-ref timed out' };
+  if (reach.kind !== 'ok') {
+    return { ...base, outcome: 'unavailable', detail: 'git for-each-ref failed' };
+  }
+  const ref = reach.stdout.trim();
+  if (ref.length === 0) {
+    return {
+      ...base,
+      outcome: 'unreachable',
+      detail: `commit ${sha} exists but no ref reaches it`,
+    };
+  }
+  return {
+    ...base,
+    outcome: 'passed',
+    detail: `commit ${sha} exists and is reachable from ${ref}`,
+  };
+}
+
+function artifactOutcome(
+  exec: ExecFileSyncLike,
+  repoRoot: string,
+  artifactPath: string,
+  revision: string,
+  timeout: number
+): CheckOutcome {
+  const base = { class: 'artifact' as const, target: artifactPath };
+  const refused = refuseRepoPath(artifactPath);
+  if (refused !== null) return { ...base, outcome: 'refused', detail: refused };
+
+  const inTree = spawnBounded(
+    exec,
+    resolveGitBinary(),
+    ['cat-file', '-e', `${revision}:${artifactPath}`],
+    repoRoot,
+    timeout
+  );
+  if (inTree.kind === 'enoent')
+    return { ...base, outcome: 'unavailable', detail: 'git binary not found' };
+  if (inTree.kind === 'timeout')
+    return { ...base, outcome: 'timeout', detail: 'git cat-file timed out' };
+  if (inTree.kind === 'error') return { ...base, outcome: 'unavailable', detail: inTree.message };
+  if (inTree.kind === 'ok')
+    return { ...base, outcome: 'passed', detail: `${artifactPath} present at ${revision}` };
+
+  // Three distinct ways to be absent at the cited revision, each with its own
+  // remediation: not anywhere; on disk but never committed; committed later
+  // than the citation (the citation is the stale field, not the artifact).
+  const onDisk = fs.existsSync(path.join(repoRoot, artifactPath));
+  if (!onDisk)
+    return { ...base, outcome: 'missing', detail: `${artifactPath} not found at ${revision}` };
+  const atHead =
+    revision !== 'HEAD' &&
+    spawnBounded(
+      exec,
+      resolveGitBinary(),
+      ['cat-file', '-e', `HEAD:${artifactPath}`],
+      repoRoot,
+      timeout
+    ).kind === 'ok';
+  return {
+    ...base,
+    outcome: 'missing',
+    detail: atHead
+      ? `${artifactPath} is tracked at HEAD but absent at cited ${revision}; cite the commit that added it`
+      : `${artifactPath} is on disk but not tracked at ${revision}; commit it before citing it`,
+  };
+}
+
+// ─── test runner detection ───────────────────────────────────────────────────
+
+function fileContains(filePath: string, needle: string): boolean {
+  try {
+    return fs.readFileSync(filePath, 'utf8').includes(needle);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `node --test` has no config file, so the only honest signal is an npm script
+ * that actually invokes it. Matched structurally rather than by substring:
+ * `node` followed by its own flags and then a bare `--test`.
+ *
+ * `node scripts/build.js --test` must NOT match — the flag belongs to the
+ * script, not to node's test runner — and `--test-name-pattern` alone must not
+ * either, which is why `--test` has to end at a word boundary that is not `-`.
+ */
+function hasNodeTestScript(dir: string): boolean {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(dir, 'package.json'), 'utf8');
+  } catch {
+    return false;
+  }
+  let scripts: unknown;
+  try {
+    scripts = (JSON.parse(raw) as { scripts?: unknown }).scripts;
+  } catch {
+    return false;
+  }
+  if (typeof scripts !== 'object' || scripts === null) return false;
+  const invokesNodeTest = /(^|[\s&|;(])node\s+(?:--[\w-]+(?:=\S+)?\s+)*--test(\s|$)/;
+  return Object.values(scripts as Record<string, unknown>).some(
+    (s) => typeof s === 'string' && invokesNodeTest.test(s)
+  );
+}
+
+/** Detect the runner configured in one directory (lifted from v10.2 verify-acs). */
+export function detectTestRunner(dir: string): TestRunner {
+  const has = (name: string): boolean => fs.existsSync(path.join(dir, name));
+  if (has('pytest.ini') || has('conftest.py') || has('setup.cfg')) return 'pytest';
+  if (fileContains(path.join(dir, 'pyproject.toml'), '[tool.pytest')) return 'pytest';
+  if (['vitest.config.ts', 'vitest.config.js', 'vitest.config.mts'].some(has)) return 'vitest';
+  if (['jest.config.js', 'jest.config.ts', 'jest.config.mjs', 'jest.config.cjs'].some(has))
+    return 'jest';
+  if (fileContains(path.join(dir, 'package.json'), '"jest"')) return 'jest';
+  // After every framework probe: a project carrying a jest or vitest config may
+  // also run something through `node --test`, and re-routing it here would
+  // change which runner an existing project is verified with.
+  if (hasNodeTestScript(dir)) return 'node';
+  if (has('Cargo.toml')) return 'cargo';
+  if (has('go.mod')) return 'go';
+  return 'unknown';
+}
+
+interface RunnerContext {
+  readonly runner: TestRunner;
+  /** Directory the runner is invoked from — where its config was found. */
+  readonly cwd: string;
+}
+
+/**
+ * Resolve the runner for one nodeid: an explicit override wins; a `.py` file
+ * is pytest; otherwise walk from the nodeid's directory up to the repo root
+ * and take the first directory carrying a runner config, so a monorepo
+ * package's config beats the root's absence.
+ */
+function resolveRunner(
+  repoRoot: string,
+  nodeidFile: string,
+  override: TestRunner | undefined
+): RunnerContext {
+  let dir = path.resolve(repoRoot, path.dirname(nodeidFile));
+  const root = path.resolve(repoRoot);
+  const walk: string[] = [];
+  while (dir.startsWith(root)) {
+    walk.push(dir);
+    if (dir === root) break;
+    dir = path.dirname(dir);
+  }
+  if (override !== undefined) {
+    const cfgDir = walk.find((d) => detectTestRunner(d) === override) ?? root;
+    return { runner: override, cwd: cfgDir };
+  }
+  if (nodeidFile.endsWith('.py')) {
+    const cfgDir = walk.find((d) => detectTestRunner(d) === 'pytest') ?? root;
+    return { runner: 'pytest', cwd: cfgDir };
+  }
+  // bats has no config file to detect; the extension is the whole signal.
+  if (nodeidFile.endsWith('.bats')) return { runner: 'bats', cwd: root };
+  for (const d of walk) {
+    const r = detectTestRunner(d);
+    if (r !== 'unknown') return { runner: r, cwd: d };
+  }
+  return { runner: 'unknown', cwd: root };
+}
+
+function findBin(fromDir: string, stopDir: string, name: string): string | null {
+  let dir = path.resolve(fromDir);
+  const stop = path.resolve(stopDir);
+  for (;;) {
+    const candidate = path.join(dir, 'node_modules', '.bin', name);
+    if (fs.existsSync(candidate)) return candidate;
+    if (dir === stop || dir === path.dirname(dir)) return null;
+    dir = path.dirname(dir);
+  }
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ─── test checks ─────────────────────────────────────────────────────────────
+
+interface TestTimeouts {
+  readonly collect: number;
+  readonly run: number;
+}
+
+function spawnToOutcome(
+  base: { class: 'test'; target: string },
+  r: SpawnResult,
+  onExit: (status: number, out: string) => CheckOutcome,
+  what: string
+): CheckOutcome {
+  switch (r.kind) {
+    case 'ok':
+      return { ...base, outcome: 'passed', detail: `${what} passed` };
+    case 'exit':
+      return onExit(r.status, `${r.stdout}\n${r.stderr}`);
+    case 'timeout':
+      return {
+        ...base,
+        outcome: 'timeout',
+        detail: `${what} exceeded its time bound and was killed`,
+      };
+    case 'enoent':
+      return { ...base, outcome: 'unavailable', detail: `${what}: runner binary not found` };
+    case 'error':
+      return { ...base, outcome: 'unavailable', detail: r.message };
+  }
+}
+
+function pytestOutcome(
+  exec: ExecFileSyncLike,
+  ctx: RunnerContext,
+  repoRoot: string,
+  nodeid: string,
+  runTests: boolean,
+  t: TestTimeouts
+): CheckOutcome {
+  const base = { class: 'test' as const, target: nodeid };
+  const [file, ...rest] = nodeid.split('::');
+  const relFile = path.relative(ctx.cwd, path.resolve(repoRoot, file ?? ''));
+  const relNodeid = [relFile, ...rest].join('::');
+
+  const collect = spawnBounded(
+    exec,
+    'python3',
+    ['-m', 'pytest', '--collect-only', '-q', '--', relNodeid],
+    ctx.cwd,
+    t.collect
+  );
+  if (collect.kind === 'timeout')
+    return { ...base, outcome: 'timeout', detail: 'pytest collection timed out' };
+  if (collect.kind === 'enoent')
+    return { ...base, outcome: 'unavailable', detail: 'python3 not found' };
+  if (collect.kind === 'error') return { ...base, outcome: 'unavailable', detail: collect.message };
+  if (collect.kind === 'exit') {
+    // python3 present, pytest not installed: the runner is unavailable, which
+    // must never read as "the citation names nothing" (an infrastructure gap
+    // would otherwise refute an honest citation).
+    if (/No module named pytest/.test(collect.stderr)) {
+      return {
+        ...base,
+        outcome: 'unavailable',
+        detail: 'pytest is not installed for python3 (No module named pytest)',
+      };
+    }
+    // 5 = no tests collected; anything else is a collection error (import
+    // failure, syntax error). Both mean the citation cannot be collected.
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `pytest could not collect ${nodeid}: ${tail(collect.stderr || collect.stdout)}`,
+    };
+  }
+  const items = collect.stdout
+    .split('\n')
+    .filter(
+      (l) =>
+        l.trim().length > 0 &&
+        !l.startsWith('=') &&
+        !/^\d+ tests? collected/.test(l) &&
+        !/no tests ran/.test(l)
+    );
+  if (items.length === 0)
+    return { ...base, outcome: 'missing', detail: `pytest collected nothing for ${nodeid}` };
+  if (!runTests)
+    return {
+      ...base,
+      outcome: 'not_run',
+      detail: `${items.length} item(s) collected; not executed`,
+    };
+
+  const run = spawnBounded(
+    exec,
+    'python3',
+    ['-m', 'pytest', '-q', '-x', '--', relNodeid],
+    ctx.cwd,
+    t.run
+  );
+  return spawnToOutcome(
+    base,
+    run,
+    (status, out) =>
+      status === 5
+        ? { ...base, outcome: 'missing', detail: `pytest ran nothing for ${nodeid}` }
+        : { ...base, outcome: 'failed', detail: `pytest exit ${status}: ${tail(out)}` },
+    `pytest ${nodeid}`
+  );
+}
+
+function jestOutcome(
+  exec: ExecFileSyncLike,
+  ctx: RunnerContext,
+  repoRoot: string,
+  nodeid: string,
+  runTests: boolean,
+  t: TestTimeouts
+): CheckOutcome {
+  const base = { class: 'test' as const, target: nodeid };
+  const [file, ...rest] = nodeid.split('::');
+  const absFile = path.resolve(repoRoot, file ?? '');
+  const testName = rest.length > 0 ? rest[rest.length - 1] : undefined;
+
+  if (!fs.existsSync(absFile))
+    return { ...base, outcome: 'missing', detail: `test file not found: ${file}` };
+  if (testName !== undefined && !fileContains(absFile, testName)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `test name ${JSON.stringify(testName)} not found in ${file}`,
+    };
+  }
+  if (!runTests)
+    return { ...base, outcome: 'not_run', detail: 'test file and name present; not executed' };
+
+  const bin = findBin(ctx.cwd, repoRoot, 'jest');
+  if (bin === null) {
+    return {
+      ...base,
+      outcome: 'unavailable',
+      detail: `jest is not installed under ${path.relative(repoRoot, ctx.cwd) || '.'}/node_modules; npx is deliberately not used`,
+    };
+  }
+  const relFile = path.relative(ctx.cwd, absFile);
+  // --json: the exit status cannot distinguish a pass from a run that executed
+  // nothing. A --testNamePattern matching no test exits 0 with every test in
+  // the file skipped, so the counts are what decide. Test console output goes
+  // to stderr under --json, leaving stdout as the result document.
+  const args = ['--runInBand', '--runTestsByPath', '--json'];
+  if (testName !== undefined) args.push(`--testNamePattern=${escapeRegex(testName)}`);
+  args.push('--', relFile);
+  const run = spawnBounded(exec, bin, args, ctx.cwd, t.run);
+  if (run.kind !== 'ok' && run.kind !== 'exit') {
+    return spawnToOutcome(base, run, () => ({ ...base, outcome: 'failed' }), `jest ${nodeid}`);
+  }
+
+  const counts = jestCounts(run.stdout);
+  const executed = counts === null ? 0 : counts.passed + counts.failed;
+  // A suite that fails to load also executes zero tests; that is a failure of
+  // the cited file, not a citation that names nothing.
+  if (counts !== null && executed === 0 && counts.failedSuites === 0) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail:
+        testName !== undefined
+          ? `jest selected zero tests for ${JSON.stringify(testName)} in ${file} (jest exits 0 when a name pattern matches nothing)` +
+            (/%[sdifjop#%]/.test(testName)
+              ? '; a test.each title is a template — cite the file alone, or a name without format specifiers'
+              : '')
+          : `jest ran no test in ${file}; every test in it was skipped or none exists`,
+    };
+  }
+  if (run.kind === 'exit') {
+    return {
+      ...base,
+      outcome: 'failed',
+      detail: `jest exit ${run.status}: ${tail(`${run.stdout}\n${run.stderr}`)}`,
+    };
+  }
+  if (counts === null) {
+    return {
+      ...base,
+      outcome: 'unavailable',
+      detail:
+        'jest exited 0 but its --json result could not be read, so which tests ran is unknown',
+    };
+  }
+  return {
+    ...base,
+    outcome: 'passed',
+    detail: `jest ${nodeid} passed (${executed} test${executed === 1 ? '' : 's'} executed)`,
+  };
+}
+
+/**
+ * Executed-test counts from jest's --json result, or null when stdout is not
+ * that document. Null never reads as a pass: the caller treats an unreadable
+ * result on exit 0 as unavailable.
+ */
+function jestCounts(
+  stdout: string
+): { passed: number; failed: number; failedSuites: number } | null {
+  const start = stdout.indexOf('{');
+  if (start < 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout.slice(start));
+  } catch {
+    return null;
+  }
+  const r = parsed as {
+    numPassedTests?: unknown;
+    numFailedTests?: unknown;
+    numFailedTestSuites?: unknown;
+  };
+  if (
+    typeof r.numPassedTests !== 'number' ||
+    typeof r.numFailedTests !== 'number' ||
+    typeof r.numFailedTestSuites !== 'number'
+  ) {
+    return null;
+  }
+  return {
+    passed: r.numPassedTests,
+    failed: r.numFailedTests,
+    failedSuites: r.numFailedTestSuites,
+  };
+}
+
+/**
+ * Does the TAP stream carry a result line for exactly `description`?
+ *
+ * This is the whole reason the node runner cannot read its exit code alone.
+ * `node --test --test-name-pattern=<x>` where nothing matches exits 0 and
+ * prints `# pass 1` — the PASS is the file, reported as its own subtest
+ * (`ok 1 - tests/sample.test.js`) around an empty inner plan (`1..0`). The same
+ * shape appears for a file containing no tests. Both would read as a verified
+ * criterion, which is the "reports success while checking nothing" class this
+ * module exists to prevent.
+ *
+ * TAP escapes `#` and `\` in descriptions, so a name containing either can fail
+ * to match here and report `missing`. That direction is deliberate: an
+ * unmatched name under-claims, and this function must never be the reason a
+ * citation reads as verified.
+ */
+function tapHasResultFor(output: string, description: string): boolean {
+  return new RegExp(`^\\s*(?:not )?ok \\d+ - ${escapeRegex(description)}\\s*(?:#.*)?$`, 'm').test(
+    output
+  );
+}
+
+/** Any TAP result line whose description is not the file itself. */
+function tapRanSomethingBesides(output: string, relFile: string): boolean {
+  const lines = output.split('\n');
+  const result = /^\s*(?:not )?ok \d+ - (.*?)\s*(?:#.*)?$/;
+  return lines.some((line) => {
+    const m = result.exec(line);
+    return m !== null && m[1] !== undefined && m[1].trim() !== relFile;
+  });
+}
+
+function nodeOutcome(
+  exec: ExecFileSyncLike,
+  ctx: RunnerContext,
+  repoRoot: string,
+  nodeid: string,
+  runTests: boolean,
+  t: TestTimeouts
+): CheckOutcome {
+  const base = { class: 'test' as const, target: nodeid };
+  const [file, ...rest] = nodeid.split('::');
+  const absFile = path.resolve(repoRoot, file ?? '');
+  const testName = rest.length > 0 ? rest[rest.length - 1] : undefined;
+
+  if (!fs.existsSync(absFile))
+    return { ...base, outcome: 'missing', detail: `test file not found: ${file}` };
+  if (testName !== undefined && !fileContains(absFile, testName)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `test name ${JSON.stringify(testName)} not found in ${file}`,
+    };
+  }
+  if (!runTests)
+    return { ...base, outcome: 'not_run', detail: 'test file and name present; not executed' };
+
+  const relFile = path.relative(ctx.cwd, absFile);
+  const args = ['--test'];
+  if (testName !== undefined) args.push(`--test-name-pattern=${escapeRegex(testName)}`);
+  args.push(relFile);
+  // process.execPath, not 'node': re-derivation must run under the same runtime
+  // the CLI itself was launched with, and it must never reach a shell.
+  const run = spawnBounded(exec, process.execPath, args, ctx.cwd, t.run);
+
+  if (run.kind === 'timeout')
+    return { ...base, outcome: 'timeout', detail: `node --test ${nodeid} exceeded its time bound` };
+  if (run.kind === 'enoent')
+    return { ...base, outcome: 'unavailable', detail: 'node binary not found' };
+  if (run.kind === 'error') return { ...base, outcome: 'unavailable', detail: run.message };
+
+  const out = run.kind === 'ok' ? run.stdout : `${run.stdout}\n${run.stderr}`;
+  if (testName !== undefined && !tapHasResultFor(out, testName)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `node --test reported no result for ${JSON.stringify(testName)} in ${file}; a --test-name-pattern matching nothing still exits 0 with the file counted as the pass`,
+    };
+  }
+  if (testName === undefined && !tapRanSomethingBesides(out, relFile)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `node --test ran no test in ${file}; the only TAP result was the file itself`,
+    };
+  }
+  return run.kind === 'ok'
+    ? { ...base, outcome: 'passed', detail: `node --test ${nodeid} passed` }
+    : { ...base, outcome: 'failed', detail: `node --test exit ${run.status}: ${tail(out)}` };
+}
+
+/** One bats TAP result: `ok N name`, `not ok N name`, or `ok N name # skip (reason)`. */
+function batsResults(tap: string): { name: string; skipped: boolean }[] {
+  const results: { name: string; skipped: boolean }[] = [];
+  for (const line of tap.split('\n')) {
+    const m = /^(?:not )?ok \d+ (.*)$/.exec(line.trimEnd());
+    if (m === null || m[1] === undefined) continue;
+    const skip = / # skip\b/.exec(m[1]);
+    results.push(
+      skip === null
+        ? { name: m[1], skipped: false }
+        : { name: m[1].slice(0, skip.index), skipped: true }
+    );
+  }
+  return results;
+}
+
+function batsOutcome(
+  exec: ExecFileSyncLike,
+  ctx: RunnerContext,
+  repoRoot: string,
+  nodeid: string,
+  runTests: boolean,
+  t: TestTimeouts
+): CheckOutcome {
+  const base = { class: 'test' as const, target: nodeid };
+  const [file, ...rest] = nodeid.split('::');
+  const absFile = path.resolve(repoRoot, file ?? '');
+  const testName = rest.length > 0 ? rest[rest.length - 1] : undefined;
+
+  if (!fs.existsSync(absFile))
+    return { ...base, outcome: 'missing', detail: `test file not found: ${file}` };
+  if (testName !== undefined && !fileContains(absFile, testName)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `test name ${JSON.stringify(testName)} not found in ${file}`,
+    };
+  }
+  if (!runTests)
+    return { ...base, outcome: 'not_run', detail: 'test file and name present; not executed' };
+
+  // The repo's own bats first; bats is as often a system install as an npm
+  // one, so PATH is the fallback (argv only — never a shell).
+  const bin = findBin(path.dirname(absFile), repoRoot, 'bats') ?? 'bats';
+  const relFile = path.relative(ctx.cwd, absFile);
+  // --filter is an unanchored regex, so a cited name would also select every
+  // test it is a substring of. Anchor it to select exactly the cited test.
+  const args = ['--tap'];
+  if (testName !== undefined) args.push('--filter', `^${escapeRegex(testName)}$`);
+  args.push(relFile);
+  const run = spawnBounded(exec, bin, args, ctx.cwd, t.run);
+  if (run.kind === 'enoent') {
+    return {
+      ...base,
+      outcome: 'unavailable',
+      detail: 'bats is not installed in node_modules/.bin or on PATH',
+    };
+  }
+  if (run.kind !== 'ok' && run.kind !== 'exit') {
+    return spawnToOutcome(base, run, () => ({ ...base, outcome: 'failed' }), `bats ${nodeid}`);
+  }
+  if (run.kind === 'exit') {
+    return {
+      ...base,
+      outcome: 'failed',
+      detail: `bats exit ${run.status}: ${tail(`${run.stdout}\n${run.stderr}`)}`,
+    };
+  }
+
+  // Exit 0 is not a pass: a --filter matching nothing prints an empty plan
+  // (`1..0`) and exits 0, and a skipped test is `ok` in TAP. Only the result
+  // lines that ran decide.
+  const results = batsResults(run.stdout);
+  const executed = results.filter((r) => !r.skipped);
+  if (testName !== undefined) {
+    const own = results.filter((r) => r.name === testName);
+    if (own.length > 0 && own.every((r) => r.skipped)) {
+      return {
+        ...base,
+        outcome: 'missing',
+        detail: `bats skipped ${JSON.stringify(testName)} in ${file}; a skipped test did not execute`,
+      };
+    }
+    if (!executed.some((r) => r.name === testName)) {
+      return {
+        ...base,
+        outcome: 'missing',
+        detail: `bats selected zero tests for ${JSON.stringify(testName)} in ${file} (bats exits 0 when --filter matches nothing)`,
+      };
+    }
+  } else if (executed.length === 0) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `bats ran no test in ${file}; every test in it was skipped or none exists`,
+    };
+  }
+  const n = executed.length;
+  return {
+    ...base,
+    outcome: 'passed',
+    detail: `bats ${nodeid} passed (${n} test${n === 1 ? '' : 's'} executed)`,
+  };
+}
+
+function testOutcome(
+  exec: ExecFileSyncLike,
+  repoRoot: string,
+  nodeid: string,
+  opts: RederiveOptions,
+  t: TestTimeouts
+): CheckOutcome {
+  const base = { class: 'test' as const, target: nodeid };
+  const refused = refuseNodeid(nodeid);
+  if (refused !== null) return { ...base, outcome: 'refused', detail: refused };
+
+  const file = nodeid.split('::')[0] ?? '';
+  const ctx = resolveRunner(repoRoot, file, opts.runner);
+  // Derived from EXECUTABLE_TEST_RUNNERS rather than a hand-listed set of
+  // fall-through cases, so adding an execution path cannot leave this branch —
+  // or the `--runner` help that reads the same constant — behind.
+  if (!isExecutableRunner(ctx.runner)) {
+    return {
+      ...base,
+      outcome: 'unavailable',
+      detail:
+        ctx.runner === 'unknown'
+          ? 'no test runner detected (pytest.ini/conftest.py, jest.config.*, vitest.config.*, a package.json script invoking node --test, a .bats test file, Cargo.toml, go.mod)'
+          : `runner ${ctx.runner} detected; re-derivation does not execute this runner — run the test yourself and cite the resulting commit or artifact`,
+    };
+  }
+  if (ctx.runner === 'pytest') return pytestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
+  if (ctx.runner === 'jest') return jestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
+  if (ctx.runner === 'node') return nodeOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
+  if (ctx.runner === 'bats') return batsOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
+  // Declared executable with no dispatch arm. That is a programming error, and
+  // it must not read as a verdict about the citation.
+  return {
+    ...base,
+    outcome: 'unavailable',
+    detail: `runner ${ctx.runner} is declared executable but has no dispatch arm`,
+  };
+}
+
+// ─── report ──────────────────────────────────────────────────────────────────
+
+/**
+ * Execute the plan's selected, executable checks and return the outcomes.
+ * Non-executable checks (`command`) get no outcome; unselected classes get
+ * `not_run`. Everything else is observed.
+ */
+export function buildRederivationReport(
+  repoRoot: string,
+  plan: RederivationPlan,
+  opts: RederiveOptions
+): RederivationReport {
+  const exec: ExecFileSyncLike = opts.execFile ?? (execFileSync as unknown as ExecFileSyncLike);
+  const timeouts = { ...DEFAULT_TIMEOUTS, ...(opts.timeouts ?? {}) };
+  const selected = new Set<CheckClass>(opts.classes);
+  const outcomes: Record<string, CheckOutcome[]> = {};
+
+  for (const criterion of plan.criteria) {
+    const list: CheckOutcome[] = [];
+    // The artifact check is anchored at the criterion's own citation when that
+    // citation exists; otherwise at HEAD.
+    let anchor = 'HEAD';
+
+    for (const check of criterion.checks) {
+      if (!check.executable) continue;
+      if (!selected.has(check.class)) {
+        list.push({
+          class: check.class,
+          target: check.target,
+          outcome: 'not_run',
+          detail: 'not selected at this stage',
+        });
+        continue;
+      }
+      const outcome = runCheck(exec, repoRoot, check, anchor, opts, timeouts);
+      if (check.class === 'citation' && outcome.outcome === 'passed') anchor = check.target;
+      list.push(outcome);
+    }
+    outcomes[criterion.id] = list;
+  }
+  return { outcomes };
+}
+
+function runCheck(
+  exec: ExecFileSyncLike,
+  repoRoot: string,
+  check: DeclaredCheck,
+  anchor: string,
+  opts: RederiveOptions,
+  t: Required<RederiveTimeouts>
+): CheckOutcome {
+  switch (check.class) {
+    case 'citation':
+      return citationOutcome(exec, repoRoot, check.target, t.git);
+    case 'artifact':
+      return artifactOutcome(exec, repoRoot, check.target, anchor, t.git);
+    case 'test':
+      return testOutcome(exec, repoRoot, check.target, opts, { collect: t.collect, run: t.run });
+    case 'command':
+      // Unreachable: the plan marks command checks non-executable and the
+      // caller skips them. Kept explicit so a future class addition cannot
+      // fall through into execution.
+      return {
+        class: 'command',
+        target: check.target,
+        outcome: 'not_run',
+        detail: 'command is never executed',
+      };
+  }
+}
+
+// ─── which tree to re-derive against ─────────────────────────────────────────
+
+export interface VerificationTree {
+  /** Absolute root of the tree cited tests and artifacts resolve against. */
+  readonly root: string;
+  /** True when `root` is a linked worktree rather than the canonical checkout. */
+  readonly linked: boolean;
+  /** HEAD of `root`, or null when git could not report it. */
+  readonly head: string | null;
+  /** `git status --porcelain` lines of a linked tree; always empty for canonical. */
+  readonly dirty: readonly string[];
+}
+
+function realpathOr(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+/**
+ * The tree a re-derivation invoked from `cwd` runs against.
+ *
+ * Specs are canonical-only, so the repo root the CLI resolves is always the
+ * canonical checkout. Re-deriving there made a test that exists only on a
+ * slice branch `test_not_found`, and agents routed the proof through
+ * `worktree merge --no-close` to get it onto the canonical tree. From inside a
+ * linked worktree the cited code is the worktree's, so that is the tree to run.
+ *
+ * Only a linked tree reports `dirty`: canonical behaviour is unchanged.
+ */
+export function resolveVerificationTree(
+  repoRoot: string,
+  cwd: string,
+  opts: { readonly execFile?: ExecFileSyncLike; readonly timeout?: number } = {}
+): VerificationTree {
+  const exec: ExecFileSyncLike = opts.execFile ?? (execFileSync as unknown as ExecFileSyncLike);
+  const timeout = opts.timeout ?? DEFAULT_TIMEOUTS.git;
+  const canonical = realpathOr(repoRoot);
+  const top = spawnBounded(
+    exec,
+    resolveGitBinary(),
+    ['rev-parse', '--show-toplevel'],
+    cwd,
+    timeout
+  );
+  const root = top.kind === 'ok' ? realpathOr(top.stdout.trim()) : canonical;
+  const linked = root !== canonical;
+  const headRun = spawnBounded(exec, resolveGitBinary(), ['rev-parse', 'HEAD'], root, timeout);
+  const head = headRun.kind === 'ok' ? headRun.stdout.trim() : null;
+  if (!linked) return { root: canonical, linked, head, dirty: [] };
+  const status = spawnBounded(
+    exec,
+    resolveGitBinary(),
+    ['status', '--porcelain', '--untracked-files=all'],
+    root,
+    timeout
+  );
+  // An unreadable status is not a clean one: report it as a dirty line so the
+  // record-time gate refuses rather than trusting an unknown tree.
+  const dirty =
+    status.kind === 'ok'
+      ? status.stdout.split('\n').filter((l) => l.trim().length > 0)
+      : ['(git status could not be read for this worktree)'];
+  return { root, linked, head, dirty };
+}
+
+// ─── convenience ─────────────────────────────────────────────────────────────
+
+export interface RederivationResult {
+  readonly plan: RederivationPlan;
+  readonly report: RederivationReport;
+  readonly verdicts: readonly CriterionVerdict[];
+  readonly summary: RederivationSummary;
+}
+
+/** Plan, execute, classify, summarize — one call for the shell and the close gate. */
+export function rederiveSpecEvidence(
+  repoRoot: string,
+  spec: Spec,
+  opts: RederiveOptions
+): RederivationResult {
+  const plan = planRederivation(spec);
+  const report = buildRederivationReport(repoRoot, plan, opts);
+  const verdicts = classifyRederivation(spec, plan, report);
+  return { plan, report, verdicts, summary: summarizeRederivation(verdicts) };
+}
+
+/**
+ * What the `[agent-cited]` tag means, printed once beside any table that
+ * carries it. Every check today derives from an agent-supplied field, so the
+ * tag marks almost every row — including rows whose test just executed. It was
+ * once labelled `[self-reported]`, which agents read as "not executed".
+ */
+export const AGENT_CITED_LEGEND =
+  'agent-cited means the agent chose which commit, artifact or test to cite; ' +
+  'it marks the citation’s relevance as unchecked, not the check as unrun.';
+
+function checkDetail(c: CriterionVerdict['checks'][number]): string {
+  if (c.detail !== undefined) return c.detail;
+  return c.class === 'command'
+    ? `recorded, never executed: ${c.target}`
+    : `${c.reason}: ${c.target}`;
+}
+
+/**
+ * One line per criterion, shared by the close-gate advisory and the CLI table.
+ *
+ * Every check is named when there is more than one. Printing only the deciding
+ * check hid the rest: on a tie between a verified commit and a verified test
+ * the commit decided, so a test that executed and passed read as a commit-only
+ * check.
+ */
+export function describeVerdict(v: CriterionVerdict): string {
+  const marker = v.self_reported ? ' [agent-cited]' : '';
+  const only = v.checks.length === 1 ? v.checks[0] : undefined;
+  const detail =
+    v.checks.length === 0
+      ? ''
+      : only !== undefined
+        ? ` — ${only.class === 'command' ? `command ${checkDetail(only)}` : checkDetail(only)}`
+        : ` — ${v.checks.map((c) => `${c.class} ${c.verdict}: ${checkDetail(c)}`).join('; ')}`;
+  const divergence =
+    v.divergence !== undefined
+      ? ` (acceptance declares ${v.divergence.declared.join(', ')}; evidence names ${v.divergence.reported})`
+      : '';
+  return `${v.id}: ${v.verdict} (${v.reason})${detail}${marker}${divergence}`;
+}

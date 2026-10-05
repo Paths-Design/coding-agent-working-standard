@@ -4,10 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { initProject } = require('../../dist/store/init-store');
-const {
-  runScopeCommand,
-  runScopePlanCommand,
-} = require('../../dist/shell/index');
+const { runScopeCommand, runScopePlanCommand } = require('../../dist/shell/index');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
 
 afterAll(() => {
@@ -120,23 +117,26 @@ describe('scope target-scope-claim authority handoff', () => {
         boundSpecId: 'OWNER-001',
         worktreeName: 'owned-wt',
         remediation: {
-          summary: "Path is admitted by worktree owned-wt's scope.in claim; enter that worktree before editing.",
+          summary:
+            'Verified: worktree owned-wt is bound to OWNER-001, whose scope.in entry "packages/owned" admits this path. Edit it from inside owned-wt.',
           commands: [
             {
-              command: 'caws worktree list --data',
-              description: 'Inspect registered worktrees and their bound specs.',
-              mutates: false,
-            },
-            {
               command: 'cd .caws/worktrees/owned-wt',
-              description: 'Move into the worktree that owns this path claim.',
+              description:
+                "Safe: a read-only move into owned-wt, the worktree that holds this path's claim.",
               mutates: false,
             },
             {
               command: 'caws claim',
-              description: 'Inspect current worktree ownership before editing.',
+              description:
+                'Shows whether this session owns owned-wt; the worktree guards admit edits there only for its owner.',
               mutates: false,
             },
+          ],
+          // States worktree-write-guard's block_claimed branch as a fact, not a
+          // possibility: a hedge here is what made agents stall on the handoff.
+          notes: [
+            "A write to this path from the checkout of owned-wt's base branch is blocked by worktree-write-guard, because owned-wt claims it.",
           ],
         },
       });
@@ -162,20 +162,16 @@ describe('scope target-scope-claim authority handoff', () => {
     });
     expect(payload.remediation_groups).toEqual([
       {
-        command: 'caws worktree list --data',
-        description: 'Inspect registered worktrees and their bound specs.',
-        mutates: false,
-        paths: ['packages/owned/file.ts'],
-      },
-      {
         command: 'cd .caws/worktrees/owned-wt',
-        description: 'Move into the worktree that owns this path claim.',
+        description:
+          "Safe: a read-only move into owned-wt, the worktree that holds this path's claim.",
         mutates: false,
         paths: ['packages/owned/file.ts'],
       },
       {
         command: 'caws claim',
-        description: 'Inspect current worktree ownership before editing.',
+        description:
+          'Shows whether this session owns owned-wt; the worktree guards admit edits there only for its owner.',
         mutates: false,
         paths: ['packages/owned/file.ts'],
       },
@@ -184,7 +180,6 @@ describe('scope target-scope-claim authority handoff', () => {
     const humanResult = runPlan(root);
     expect(humanResult.code).toBe(0);
     expect(humanResult.out).toContain('admit=1 reject=0 no_authority=0 invalid_path=0');
-    expect(humanResult.out).toContain('caws worktree list --data');
     expect(humanResult.out).toContain('cd .caws/worktrees/owned-wt');
     expect(humanResult.out).toContain('caws claim');
     expect(fs.existsSync(eventsPath(cawsDir))).toBe(false);

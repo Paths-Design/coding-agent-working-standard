@@ -1,0 +1,131 @@
+id: CAWS-CLI-HUMAN-DURATION-FLAGS-01
+title: 'Age and TTL flags accept human durations (--older-than 10m, --stale-ttl 30m) via the reprieve --for parser'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge human-duration-flags at 4ebc0181ab2779c0c17c6f67dae3f91b4a9eed83'
+created_at: '2026-10-04T23:05:44.393Z'
+updated_at: '2026-10-05T00:34:37.485Z'
+created_by_session: '@darianrosebrook'
+blast_radius:
+  modules:
+    - 'caws-cli shell: register.ts option parsing for specs prune-drafts/archive, agents list/show/prune, session prune, message status/prune'
+    - 'caws-cli shell: shared duration parser (extracted from reprieve --for)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/duration.ts'
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/src/shell/commands/message.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/store/messages-store.ts'
+    - 'packages/caws-cli/tests/shell/duration-flags.test.js'
+    - 'packages/caws-cli/tests/docs/cli-help-context.test.js'
+    - 'docs/agents/full-guide.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+    - packages/caws-cli/tests/shell/message-retention-prune.test.js
+    - packages/caws-cli/tests/shell/specs-prune-drafts.test.js
+    - packages/caws-cli/mutation-policy.json
+  out: []
+invariants:
+  - 'Every existing --older-than-ms / --stale-ttl-ms invocation with a valid non-negative integer keeps its exact current meaning (hooks and docs call these flags)'
+  - 'A duration flag never guesses a unit: a bare number is refused, as reprieve --for refuses it'
+  - 'An unparseable age or TTL value is refused loudly with exit 1; it never silently falls back to the default'
+  - 'reprieve --for and the age/TTL flags share one parser, so their accepted grammar cannot drift'
+acceptance:
+  - id: A1
+    given: 'a repo with closed specs, draft specs, leases, session logs and messages'
+    when: 'specs prune-drafts, specs archive, agents prune, session prune, message status and message prune run through the real CLI with --older-than 10m'
+    then: 'each selects exactly what the same command selects with --older-than-ms 600000'
+  - id: A2
+    given: 'agents list and agents show'
+    when: 'run through the real CLI with --stale-ttl 30m'
+    then: 'the stale classification uses 1800000 ms, identical to --stale-ttl-ms 1800000'
+  - id: A3
+    given: '--older-than or --stale-ttl with a bare number (30), an unknown unit (10x), a negative (-5m) or an empty value'
+    when: 'any covered command runs'
+    then: 'it exits 1, stderr names the flag, echoes the value, lists the accepted units with an example, and no file, event or lease is changed'
+  - id: A4
+    given: 'both --older-than and --older-than-ms (or --stale-ttl and --stale-ttl-ms) on one invocation'
+    when: 'the command runs'
+    then: 'it exits 1 naming both flags rather than picking one'
+  - id: A5
+    given: 'an invalid --stale-ttl-ms or message status --older-than-ms value (abc, -1, 1.5)'
+    when: 'the command runs'
+    then: 'it exits 1 naming the flag instead of silently using the default TTL or window'
+  - id: A6
+    given: '--help for each covered leaf'
+    when: 'rendered'
+    then: 'it lists --older-than <duration> (or --stale-ttl <duration>) with the accepted units, alongside the retained -ms flag'
+  - id: A7
+    given: 'specs archive --status closed --older-than 10m in dry-run'
+    when: 'it prints the apply command'
+    then: 'the echoed command uses --older-than 10m, not --older-than-ms 600000'
+  - id: A8
+    given: 'reprieve grant --for'
+    when: 'the duration parser moves to the shared module'
+    then: 'the existing reprieve relative-expiry tests pass unchanged'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Built binary (dist/index.js, spawned per case) at 6090be30. specs prune-drafts, specs archive, session prune, message status --mine --queued and message prune each echo the applied threshold in --json; --older-than 10m and --older-than-ms 600000 both yield 600000, and --older-than 1h30m yields 5400000, so the value is forwarded, not defaulted. agents prune echoes nothing, so a fixture with stopped leases aged 2h and 1m discriminates: --older-than 10m and --older-than-ms 600000 both select only stopped-2h; 3h selects none; 0s selects both. Mutation probe: a register.ts mutant that drops the duration value failed all 8 cases in this describe (18 suite-wide)."
+    recorded_at: "2026-10-05T00:11:17.961Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: the duration flag reaches each handler as milliseconds"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Built binary at 6090be30. agents list --stale-ttl 10m echoes stale_ttl_ms 600000, identical to --stale-ttl-ms 600000; --stale-ttl 1h30m gives 5400000. agents show on a lease idle 20m: --stale-ttl 10m gives liveness.ttl_ms 600000 and classification stale; --stale-ttl 1h gives 3600000 and active, so the TTL changes the classification. The AC names 30m; it is checked with 10m, 1h30m and 1h through the same linear parser (30m resolves to 1800000 in the resolver)."
+    recorded_at: "2026-10-05T00:14:56.470Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: the duration flag reaches each handler as milliseconds"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Built binary at 6090be30. Seven invocations across specs archive, specs prune-drafts, agents prune, session prune, message prune (all with --apply) plus message status and agents list, with values 30, 10x, -5m, empty string, '2 days', soon: each exits 1, stderr starts 'caws <group> <leaf>: <flag> \"<value>\"' and lists the units; a byte snapshot of every file under .caws (including an old stopped lease that --apply would delete) is identical before and after. Bare 30 additionally names 30m/30h and --older-than-ms 30 (unit test in the same file)."
+    recorded_at: "2026-10-05T00:17:58.607Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Built binary at 6090be30. specs archive --older-than 10m --older-than-ms 600000 and agents show --stale-ttl 10m --stale-ttl-ms 600000 both exit 1 with 'pass --<flag> <duration> or --<flag>-ms <ms>, not both'; the resolver unit test pins the exact message naming both values."
+    recorded_at: "2026-10-05T00:20:34.916Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Built binary at 6090be30. agents list --stale-ttl-ms abc, agents show --stale-ttl-ms -1, message status --older-than-ms 1.5 and agents prune --older-than-ms abc each exit 1 with '<flag>-ms must be a non-negative integer' (before: agents list/show and message status dropped a non-finite value and used the default; agents prune accepted negatives and fractions). Valid --older-than-ms 86400000 still selects the 48h-old stopped lease, so the -ms form keeps its meaning."
+    recorded_at: "2026-10-05T00:22:55.868Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Built dist metadata at 6090be30: all nine leaf/flag pairs (specs prune-drafts, specs archive, agents list, agents show, agents prune x2, session prune, message status, message prune) declare '<flag> <duration>' and keep '<flag>-ms <ms>'; rendered 'caws specs archive --help' shows --older-than <duration>, --older-than-ms <ms> and the unit list. tests/docs/cli-help-context.test.js also passes with --older-than added to its cleanup-leaf expectations."
+    recorded_at: "2026-10-05T00:25:52.025Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::help lists each duration flag beside its -ms flag"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Built binary at 6090be30: specs archive --status closed --older-than 10m prints 'apply: caws specs archive --status closed --older-than 10m --apply' and no --older-than-ms; a threshold that is not whole seconds (--older-than-ms 1500) is echoed exactly as --older-than-ms 1500 rather than rounded."
+    recorded_at: "2026-10-05T00:29:00.624Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: archive dry-run echoes the duration form"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "The parser moved verbatim to src/shell/duration.ts; reprieve.ts imports and re-exports it. reprieve-relative-expiry.test.js has no diff against main and passes at 6090be30 (full file 9.4s run earlier this session, plus this re-derivation). duration-flags.test.js asserts reprieve.parseDurationToSeconds and DURATION_UNITS_HELP are the same objects as the shared module's, so the grammar has one source."
+    recorded_at: "2026-10-05T00:31:31.025Z"
+    test_nodeid: "packages/caws-cli/tests/shell/reprieve-relative-expiry.test.js::CAWS-REPRIEVE-RELATIVE-EXPIRY-001: parseDurationToSeconds"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"

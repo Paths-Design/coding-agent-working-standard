@@ -132,11 +132,17 @@ describe('detectBuildStaleness (CAWS-GUARD-BUILD-FRESHNESS-001)', () => {
     // must still detect staleness correctly.
     const root = mkPkgRoot();
     fs.mkdirSync(path.join(root, 'src', 'shell', 'commands'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'src', 'shell', 'commands', 'doctor.ts'), 'export const x = 1;');
+    fs.writeFileSync(
+      path.join(root, 'src', 'shell', 'commands', 'doctor.ts'),
+      'export const x = 1;'
+    );
     setMtime(path.join(root, 'src', 'shell', 'commands', 'doctor.ts'), T0 + 500);
     fs.mkdirSync(path.join(root, 'dist', 'shell', 'commands'), { recursive: true });
     fs.writeFileSync(path.join(root, 'dist', 'shell', 'commands', 'doctor.js'), 'exports.x = 1;');
-    fs.writeFileSync(path.join(root, 'dist', 'shell', 'commands', 'doctor.d.ts'), 'export declare const x = 1;');
+    fs.writeFileSync(
+      path.join(root, 'dist', 'shell', 'commands', 'doctor.d.ts'),
+      'export declare const x = 1;'
+    );
     setMtime(path.join(root, 'dist', 'shell', 'commands', 'doctor.js'), T0 + 100);
     setMtime(path.join(root, 'dist', 'shell', 'commands', 'doctor.d.ts'), T0 + 100);
 

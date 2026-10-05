@@ -3,7 +3,7 @@
 //
 // The closed enums are exported as `const` value arrays (the single runtime
 // source), and the corresponding TYPES are derived from them. This lets
-// consumers (e.g. the CLI's --mode/--resolution/--risk-tier option help and
+// consumers (e.g. the CLI's --mode/--resolution option help and
 // validation) import the values rather than re-declaring them — eliminating
 // the enum-duplication drift class (CAWS-CLI-HELP-METADATA-AUTHORITY-001).
 // The arrays MUST mirror the corresponding enums in src/schemas/spec.v1.json,
@@ -131,12 +131,15 @@ export interface EvidenceRecord {
   exit_code?: number;
   artifact_path?: string;
   commit_sha?: string;
+  /** HEAD at which `caws specs evidence --verify` executed the cited test and saw it pass. */
+  test_verified_at?: string;
 }
 
 export interface Spec {
   id: string;
   title: string;
-  risk_tier: RiskTier;
+  /** Legacy field retained for existing specs; new authoring does not assign a tier. */
+  risk_tier?: RiskTier;
   mode: Mode;
   lifecycle_state: LifecycleState;
   resolution?: Resolution;
@@ -157,6 +160,8 @@ export interface Spec {
   experimental_mode?: ExperimentalMode;
   created_at?: string;
   updated_at?: string;
+  /** Provenance only, never authority: session id whose `caws specs create` run wrote the spec. Optional — pre-existing and hand-authored specs omit it. */
+  created_by_session?: string;
   owner?: string;
   closure_notes?: string;
   evidence?: EvidenceRecord[];

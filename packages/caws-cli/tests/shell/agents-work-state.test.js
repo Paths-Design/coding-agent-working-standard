@@ -33,7 +33,11 @@ const { initProject } = require('../../dist/store/init-store');
 const repos = [];
 afterAll(() => {
   for (const r of repos) {
-    try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      fs.rmSync(r, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
 });
 
@@ -96,8 +100,12 @@ describe('LEASE-WORK-STATE-001', () => {
     register(root, 'sess-a1');
     const before = readLease(root, 'sess-a1');
 
-    const r = setWorkState(root, 'sess-a1', 'blocked_awaiting_human',
-      'waiting on human review of AUTH-BINDING-BRIDGE-001');
+    const r = setWorkState(
+      root,
+      'sess-a1',
+      'blocked_awaiting_human',
+      'waiting on human review of AUTH-BINDING-BRIDGE-001'
+    );
     expect(r.code).toBe(0);
 
     const after = readLease(root, 'sess-a1');
@@ -149,16 +157,25 @@ describe('LEASE-WORK-STATE-001', () => {
 
     const both = sinks();
     const c1 = runAgentsWorkStateCommand({
-      sessionId: 'sess-a3b', set: 'working', clear: true,
-      cwd: root, env: { ...process.env }, out: both.outFn, err: both.errFn,
+      sessionId: 'sess-a3b',
+      set: 'working',
+      clear: true,
+      cwd: root,
+      env: { ...process.env },
+      out: both.outFn,
+      err: both.errFn,
     });
     expect(c1).toBe(1);
     expect(both.err.join('\n')).toContain('mutually exclusive');
 
     const noteOnly = sinks();
     const c2 = runAgentsWorkStateCommand({
-      sessionId: 'sess-a3b', note: 'orphan note',
-      cwd: root, env: { ...process.env }, out: noteOnly.outFn, err: noteOnly.errFn,
+      sessionId: 'sess-a3b',
+      note: 'orphan note',
+      cwd: root,
+      env: { ...process.env },
+      out: noteOnly.outFn,
+      err: noteOnly.errFn,
     });
     expect(c2).toBe(1);
     expect(noteOnly.err.join('\n')).toContain('--note requires --set');
@@ -188,18 +205,28 @@ describe('LEASE-WORK-STATE-001', () => {
     const now = new Date();
     const s1 = summarizeActiveAgents(withState, now, 30 * 60 * 1000);
     const s2 = summarizeActiveAgents(stripped, now, 30 * 60 * 1000);
-    const key = (summary) => summary.active.map((l) => `${l.session_id}:${l.status}`).sort().join(',');
+    const key = (summary) =>
+      summary.active
+        .map((l) => `${l.session_id}:${l.status}`)
+        .sort()
+        .join(',');
     expect(key(s1)).toBe(key(s2));
 
     // Liveness (message send gate) is likewise blind to work_state.
     const live1 = require('../../dist/store/messages-store').describeRecipientLiveness(
-      path.join(root, '.caws'), 'sess-blind');
+      path.join(root, '.caws'),
+      'sess-blind'
+    );
     expect(live1.ok && live1.value.live).toBe(true);
     stripped['sess-blind'].work_state = 'done'; // any value
-    fs.writeFileSync(leasePath(root, 'sess-blind'),
-      JSON.stringify(stripped['sess-blind'], null, 2) + '\n');
+    fs.writeFileSync(
+      leasePath(root, 'sess-blind'),
+      JSON.stringify(stripped['sess-blind'], null, 2) + '\n'
+    );
     const live2 = require('../../dist/store/messages-store').describeRecipientLiveness(
-      path.join(root, '.caws'), 'sess-blind');
+      path.join(root, '.caws'),
+      'sess-blind'
+    );
     expect(live2.ok && live2.value.live).toBe(true);
     expect(live1.value.reason).toBe(live2.value.reason);
   });
@@ -243,7 +270,10 @@ describe('LEASE-WORK-STATE-001', () => {
     // Stale classification ignores the annotation: same lease with an old
     // heartbeat buckets stale regardless of state value.
     const { summarizeActiveAgents } = require('../../dist/kernel');
-    const staleLease = { ...lease, last_active: new Date(Date.now() - 60 * 60 * 1000).toISOString() };
+    const staleLease = {
+      ...lease,
+      last_active: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    };
     const registry = { 'sess-a6': staleLease };
     const summary = summarizeActiveAgents(registry, new Date(), 30 * 60 * 1000);
     expect(summary.active).toHaveLength(0);
@@ -252,8 +282,12 @@ describe('LEASE-WORK-STATE-001', () => {
     // --clear removes all three keys.
     const c = sinks();
     const cc = runAgentsWorkStateCommand({
-      sessionId: 'sess-a6', clear: true,
-      cwd: root, env: { ...process.env }, out: c.outFn, err: c.errFn,
+      sessionId: 'sess-a6',
+      clear: true,
+      cwd: root,
+      env: { ...process.env },
+      out: c.outFn,
+      err: c.errFn,
     });
     expect(cc).toBe(0);
     const cleared = readLease(root, 'sess-a6');

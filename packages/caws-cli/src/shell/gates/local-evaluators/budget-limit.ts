@@ -1,22 +1,26 @@
 // budget_limit evaluator.
 //
-// Compares staged diff size to the policy's per-risk-tier budget.
+// Compares staged diff size to the policy's per-risk-tier sizing goal.
 //
 // Rules:
 //   - Risk tier comes from the active spec (1, 2, or 3).
-//   - Budget comes from policy.risk_tiers[tier] (max_files, max_loc).
-//   - A violation fires when files_changed > max_files or
-//     loc_changed > max_loc. Each threshold breach is one violation.
+//   - The goal comes from policy.risk_tiers[tier] (max_files, max_loc).
+//   - An observation fires when files_changed > max_files or
+//     loc_changed > max_loc. Each threshold crossed is one observation.
 //
-// This evaluator is local (caws-cli concern). v11 deliberately keeps
-// risk-tier budget enforcement in the CLI where the active spec and
-// staged diff are authoritative.
+// budget_limit is advisory (kernel ADVISORY_GATES): disposition never lets
+// it block. The message is what an agent reads, so it says outright not to
+// cut work to fit — a line count is a planning signal, scope is the boundary.
 
 import type { Spec } from '../../../kernel';
 import type { Policy } from '../../../kernel';
 
 import type { GatesViolation } from '../gate-result-contract';
 import { listStagedChanges, totalInsertions, type StagedFileChange } from './diff-helpers';
+
+const SIZING_GOAL_ADVICE =
+  'A sizing goal, not a limit: do not trim, defer or stub work to fit it. ' +
+  'If the change is larger than planned, say so in the spec.';
 
 export interface BudgetLimitInput {
   readonly spec: Spec;
@@ -33,12 +37,12 @@ export interface BudgetLimitResult {
   readonly observed: {
     readonly files_changed: number;
     readonly loc_changed: number;
-    readonly max_files: number;
-    readonly max_loc: number;
+    readonly max_files: number | null;
+    readonly max_loc: number | null;
   };
 }
 
-function tierKey(tier: number): '1' | '2' | '3' | undefined {
+function tierKey(tier: number | undefined): '1' | '2' | '3' | undefined {
   if (tier === 1) return '1';
   if (tier === 2) return '2';
   if (tier === 3) return '3';
@@ -52,11 +56,11 @@ export function evaluateBudgetLimit(input: BudgetLimitInput): BudgetLimitResult 
 
   const tk = tierKey(input.spec.risk_tier);
   if (tk === undefined) {
-    // Spec carries a risk_tier the schema accepts (1, 2, 3); anything
-    // else is a spec-completeness problem, not a budget violation.
+    // Tierless specs have no legacy sizing goal. Never invent a tier or
+    // report a zero-sized budget for them.
     return {
       violations: [],
-      observed: { files_changed, loc_changed, max_files: 0, max_loc: 0 },
+      observed: { files_changed, loc_changed, max_files: null, max_loc: null },
     };
   }
   const budget = input.policy.risk_tiers[tk];
@@ -68,9 +72,9 @@ export function evaluateBudgetLimit(input: BudgetLimitInput): BudgetLimitResult 
       gate: 'budget_limit',
       type: 'max_files_exceeded',
       message:
-        `Staged change touches ${files_changed} file(s); risk-tier ${input.spec.risk_tier} ` +
-        `budget allows up to ${max_files}.`,
-      severity: 'fail',
+        `Staged change touches ${files_changed} file(s); the risk-tier ${input.spec.risk_tier} ` +
+        `sizing goal is ${max_files}. ${SIZING_GOAL_ADVICE}`,
+      severity: 'warn',
     });
   }
   if (loc_changed > max_loc) {
@@ -78,9 +82,9 @@ export function evaluateBudgetLimit(input: BudgetLimitInput): BudgetLimitResult 
       gate: 'budget_limit',
       type: 'max_loc_exceeded',
       message:
-        `Staged change adds ${loc_changed} line(s); risk-tier ${input.spec.risk_tier} ` +
-        `budget allows up to ${max_loc}.`,
-      severity: 'fail',
+        `Staged change adds ${loc_changed} line(s); the risk-tier ${input.spec.risk_tier} ` +
+        `sizing goal is ${max_loc}. ${SIZING_GOAL_ADVICE}`,
+      severity: 'warn',
     });
   }
 

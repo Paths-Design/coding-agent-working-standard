@@ -1,0 +1,1077 @@
+'use strict';
+
+/**
+ * Store-side evidence re-derivation (CAWS-SPECS-VERIFY-ACS-REDERIVE-001):
+ * A1 (existence ≠ pass), A3 (fabrication classes), A5 (no agent string
+ * executes), A6 (bounded subprocess), A7 (argv injection), A9 (merge-stage
+ * classes spawn only git), A13 (no false green on infra failure).
+ *
+ * Drives the REAL compiled executor against a REAL temp git repository that
+ * carries a jest package (js/), a pytest package (py/), a tracked artifact,
+ * and an orphan commit no ref reaches. Runner spawns are real where the
+ * assertion is about runner behavior, and a recording spy where the
+ * assertion is about WHAT is spawned.
+ */
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync, execSync } = require('child_process');
+
+const {
+  buildRederivationReport,
+  rederiveSpecEvidence,
+  detectTestRunner,
+  describeVerdict,
+  AGENT_CITED_LEGEND,
+} = require('../../dist/store/evidence-rederive');
+const { resolveGitBinary, resetGitBinaryCache } = require('../../dist/store/git-binary');
+const { planRederivation } = require('../../dist/kernel');
+
+// jest's package exports hide bin/jest.js from require.resolve; the hoisted
+// .bin symlink at the repo root is the same file the CLI would find.
+const JEST_BIN = fs.realpathSync(path.resolve(__dirname, '../../../../node_modules/.bin/jest'));
+const BATS_BIN = fs.realpathSync(path.resolve(__dirname, '../../../../node_modules/.bin/bats'));
+
+// pytest is not part of this package's toolchain (CI's main test job has no
+// python setup). Real-pytest cases run only where it exists; the
+// pytest-missing path is pinned unconditionally below with a spy.
+const HAS_PYTEST =
+  require('child_process').spawnSync('python3', ['-m', 'pytest', '--version'], { encoding: 'utf8' })
+    .status === 0;
+const describeWithPytest = HAS_PYTEST ? describe : describe.skip;
+
+const repos = [];
+afterEach(() => {
+  for (const repo of repos.splice(0)) fs.rmSync(repo, { recursive: true, force: true });
+});
+
+function git(root, args) {
+  return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
+}
+
+function write(root, rel, content) {
+  const p = path.join(root, rel);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, content);
+}
+
+/**
+ * Two commits: c1 has the runner fixtures, c2 adds docs/report.md. An orphan
+ * commit (no ref) proves the unreachable class.
+ */
+function mkFixtureRepo() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rederive-'));
+  repos.push(root);
+  git(root, ['init', '--quiet', '-b', 'main']);
+  git(root, ['config', 'user.email', 't@example.com']);
+  git(root, ['config', 'user.name', 'T']);
+
+  write(root, 'js/jest.config.js', "module.exports = { testEnvironment: 'node' };\n");
+  write(
+    root,
+    'js/tests/sample.test.js',
+    [
+      "test('adds', () => { expect(1 + 1).toBe(2); });",
+      "test('fails on purpose', () => { expect(1).toBe(2); });",
+      '',
+    ].join('\n')
+  );
+  write(root, 'js/tests/hang.test.js', "test('hangs', () => { for (;;) {} });\n");
+  // Zero-selection fixtures: jest exits 0 with every test skipped when a
+  // name pattern selects nothing, so exit status alone cannot tell a pass
+  // from a run that executed no test.
+  write(
+    root,
+    'js/tests/each.test.js',
+    [
+      '// ghost title appears only in this comment',
+      "test.each(['a', 'b'])('%s: x', (v) => { expect(v).toBeTruthy(); });",
+      '',
+    ].join('\n')
+  );
+  write(root, 'js/tests/skipped.test.js', "test.skip('later', () => { expect(1).toBe(2); });\n");
+  write(root, 'js/tests/broken.test.js', "test('loads', () => { expect(1).toBe(1);\n");
+  write(root, 'py/conftest.py', '');
+  write(
+    root,
+    'py/tests/test_sample.py',
+    [
+      'def test_passes():',
+      '    assert True',
+      '',
+      'def test_fails():',
+      '    assert 1 == 2',
+      '',
+    ].join('\n')
+  );
+  // node --test package: detected from the script, not a config file. `empty`
+  // and the absent-name case are the vacuity fixtures — node reports both as
+  // `ok 1 - <file>` with exit 0.
+  write(root, 'node/package.json', JSON.stringify({ scripts: { test: 'node --test tests/' } }));
+  write(
+    root,
+    'node/tests/sample.test.js',
+    [
+      "const test = require('node:test');",
+      "const assert = require('node:assert');",
+      "test('adds', () => { assert.equal(1 + 1, 2); });",
+      "test('fails on purpose', () => { assert.equal(1, 2); });",
+      '',
+    ].join('\n')
+  );
+  write(root, 'node/tests/empty.test.js', '// no tests in this file\n');
+
+  write(root, 'plain/tests/orphan.test.js', "test('x', () => {});\n");
+  git(root, ['add', '-A']);
+  git(root, ['commit', '--quiet', '--no-verify', '-m', 'c1']);
+  const c1 = git(root, ['rev-parse', 'HEAD']);
+
+  write(root, 'docs/report.md', '# report\n');
+  git(root, ['add', '-A']);
+  git(root, ['commit', '--quiet', '--no-verify', '-m', 'c2']);
+  const c2 = git(root, ['rev-parse', 'HEAD']);
+
+  const orphan = git(root, ['commit-tree', `${c2}^{tree}`, '-m', 'orphan']);
+
+  // The runner is resolved from the repo's own node_modules, never npx.
+  fs.mkdirSync(path.join(root, 'node_modules', '.bin'), { recursive: true });
+  fs.symlinkSync(JEST_BIN, path.join(root, 'node_modules', '.bin', 'jest'));
+
+  return { root, c1, c2, orphan };
+}
+
+function spec(entries) {
+  // entries: { A1: {commit_sha, artifact_path, test_nodeid, command} , ... }
+  const ids = Object.keys(entries);
+  return {
+    acceptance: ids.map((id) => ({ id, given: 'g', when: 'w', then: 't' })),
+    evidence: ids
+      .filter((id) => entries[id] !== null)
+      .map((id) => ({
+        criterion_id: id,
+        status: 'pass',
+        recorded_at: '2026-09-16T12:00:00.000Z',
+        ...entries[id],
+      })),
+  };
+}
+
+const ALL = ['citation', 'artifact', 'test'];
+
+function outcomesFor(root, s, opts) {
+  const plan = planRederivation(s);
+  const report = buildRederivationReport(root, plan, { classes: ALL, runTests: false, ...opts });
+  return report.outcomes;
+}
+
+/** A spy execFile that records every spawn and returns ok. */
+function spyExec() {
+  const calls = [];
+  const fn = (file, args, options) => {
+    calls.push({ file, args: [...args], options });
+    return '';
+  };
+  return { fn, calls };
+}
+
+// ─── citation class (A3) ─────────────────────────────────────────────────────
+
+describe('citation checks', () => {
+  test('full and abbreviated shas of a reachable commit pass, with the reaching ref named', () => {
+    const { root, c2 } = mkFixtureRepo();
+    const o = outcomesFor(
+      root,
+      spec({ A1: { commit_sha: c2 }, A2: { commit_sha: c2.slice(0, 8) } })
+    );
+    expect(o.A1[0].outcome).toBe('passed');
+    expect(o.A1[0].detail).toContain('reachable from refs/heads/main');
+    expect(o.A2[0].outcome).toBe('passed');
+  });
+
+  test('a sha that is no object -> missing; an orphan commit -> unreachable; garbage -> refused', () => {
+    const { root, orphan } = mkFixtureRepo();
+    const o = outcomesFor(
+      root,
+      spec({
+        A1: { commit_sha: 'deadbeefcafe' },
+        A2: { commit_sha: orphan },
+        A3: { commit_sha: 'not-a-sha!' },
+      })
+    );
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toContain('is not an object');
+    expect(o.A2[0].outcome).toBe('unreachable');
+    expect(o.A2[0].detail).toContain('no ref reaches it');
+    expect(o.A3[0].outcome).toBe('refused');
+    expect(o.A3[0].detail).toContain('not a hex object id');
+  });
+});
+
+// ─── artifact class (A3) ─────────────────────────────────────────────────────
+
+describe('artifact checks', () => {
+  test('tracked at HEAD -> passed; absent -> missing; on disk but untracked -> missing with remediation', () => {
+    const { root } = mkFixtureRepo();
+    write(root, 'scratch/untracked.md', 'x');
+    const o = outcomesFor(
+      root,
+      spec({
+        A1: { artifact_path: 'docs/report.md' },
+        A2: { artifact_path: 'docs/nope.md' },
+        A3: { artifact_path: 'scratch/untracked.md' },
+      })
+    );
+    expect(o.A1[0].outcome).toBe('passed');
+    expect(o.A1[0].detail).toBe('docs/report.md present at HEAD');
+    expect(o.A2[0].outcome).toBe('missing');
+    expect(o.A2[0].detail).toBe('docs/nope.md not found at HEAD');
+    expect(o.A3[0].outcome).toBe('missing');
+    expect(o.A3[0].detail).toContain('on disk but not tracked at HEAD; commit it');
+  });
+
+  test('anchored at the criterion citation: report.md is absent at c1 and present at c2', () => {
+    const { root, c1, c2 } = mkFixtureRepo();
+    const o = outcomesFor(
+      root,
+      spec({
+        A1: { commit_sha: c1, artifact_path: 'docs/report.md' },
+        A2: { commit_sha: c2, artifact_path: 'docs/report.md' },
+      })
+    );
+    expect(o.A1.map((x) => x.outcome)).toEqual(['passed', 'missing']);
+    expect(o.A1[1].detail).toBe(
+      `docs/report.md is tracked at HEAD but absent at cited ${c1}; cite the commit that added it`
+    );
+    expect(o.A2.map((x) => x.outcome)).toEqual(['passed', 'passed']);
+    expect(o.A2[1].detail).toBe(`docs/report.md present at ${c2}`);
+  });
+
+  test('absolute and escaping paths are refused before any spawn', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(
+      root,
+      spec({ A1: { artifact_path: '/etc/passwd' }, A2: { artifact_path: '../outside.md' } }),
+      { execFile: fn }
+    );
+    expect(o.A1[0].outcome).toBe('refused');
+    expect(o.A2[0].outcome).toBe('refused');
+    expect(calls).toHaveLength(0);
+  });
+});
+
+// ─── test class: jest (A1) ───────────────────────────────────────────────────
+
+describe('jest re-derivation', () => {
+  test('existence-only on a PASSING test is not_run, never passed (A1)', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/sample.test.js::adds' } }), {
+      runTests: false,
+    });
+    expect(o.A1[0].outcome).toBe('not_run');
+    expect(o.A1[0].detail).toContain('not executed');
+  });
+
+  test('existence-only on a FAILING test is also not_run — collected is neither pass nor fail (A1)', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(
+      root,
+      spec({ A1: { test_nodeid: 'js/tests/sample.test.js::fails on purpose' } }),
+      { runTests: false }
+    );
+    expect(o.A1[0].outcome).toBe('not_run');
+  });
+
+  test('--run: passing -> passed; failing -> failed with the runner exit named', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(
+      root,
+      spec({
+        A1: { test_nodeid: 'js/tests/sample.test.js::adds' },
+        A2: { test_nodeid: 'js/tests/sample.test.js::fails on purpose' },
+      }),
+      { runTests: true }
+    );
+    expect(o.A1[0].outcome).toBe('passed');
+    expect(o.A1[0].detail).toBe('jest js/tests/sample.test.js::adds passed (1 test executed)');
+    expect(o.A2[0].outcome).toBe('failed');
+    expect(o.A2[0].detail).toMatch(/^jest exit 1:/);
+  });
+
+  test('--run: a test.each template name selects zero tests -> missing, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/each.test.js::%s: x' } }), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toBe(
+      'jest selected zero tests for "%s: x" in js/tests/each.test.js (jest exits 0 when a name pattern matches nothing); ' +
+        'a test.each title is a template — cite the file alone, or a name without format specifiers'
+    );
+  });
+
+  test('--run: a name found in the file but belonging to no test -> missing, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(
+      root,
+      spec({ A1: { test_nodeid: 'js/tests/each.test.js::ghost title' } }),
+      {
+        runTests: true,
+      }
+    );
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toMatch(
+      /^jest selected zero tests for "ghost title" in js\/tests\/each\.test\.js/
+    );
+  });
+
+  test('--run: a file-level citation whose only test is skipped -> missing, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/skipped.test.js' } }), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toMatch(/^jest ran no test in js\/tests\/skipped\.test\.js/);
+  });
+
+  test('--run: a cited file that fails to load executes zero tests and is failed, not missing', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/broken.test.js::loads' } }), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('failed');
+    expect(o.A1[0].detail).toMatch(/^jest exit 1:/);
+  });
+
+  test('--run: a jest exit 0 whose result cannot be read is unavailable, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/sample.test.js::adds' } }), {
+      runTests: true,
+      execFile: () => 'not json',
+    });
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toBe(
+      'jest exited 0 but its --json result could not be read, so which tests ran is unknown'
+    );
+  });
+
+  test('unknown test name or missing file -> missing, without spawning', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(
+      root,
+      spec({
+        A1: { test_nodeid: 'js/tests/sample.test.js::no such test' },
+        A2: { test_nodeid: 'js/tests/missing.test.js::x' },
+      }),
+      { runTests: true, execFile: fn }
+    );
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toContain('"no such test" not found');
+    expect(o.A2[0].outcome).toBe('missing');
+    expect(o.A2[0].detail).toContain('test file not found');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('jest not installed in the repo -> unavailable, and npx is not reached for', () => {
+    const { root } = mkFixtureRepo();
+    fs.rmSync(path.join(root, 'node_modules'), { recursive: true, force: true });
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/sample.test.js::adds' } }), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toContain('npx is deliberately not used');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a hanging test hits the bound -> timeout, and leaves no child behind (A6)', () => {
+    const { root } = mkFixtureRepo();
+    const started = Date.now();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/hang.test.js::hangs' } }), {
+      runTests: true,
+      timeouts: { run: 3000 },
+    });
+    const elapsed = Date.now() - started;
+    expect(o.A1[0].outcome).toBe('timeout');
+    expect(o.A1[0].detail).toContain('was killed');
+    expect(elapsed).toBeLessThan(20000);
+    // No orphan: nothing under this process still references the hanging file.
+    const ps = execSync('ps -axo ppid=,command=', { encoding: 'utf8' });
+    const orphans = ps
+      .split('\n')
+      .filter((l) => l.includes('hang.test.js') && l.trim().startsWith(String(process.pid)));
+    expect(orphans).toEqual([]);
+  });
+});
+
+// ─── test class: pytest (A1) ─────────────────────────────────────────────────
+
+describe('pytest not installed (A13)', () => {
+  test('python3 present but no pytest module -> unavailable, never missing', () => {
+    const { root } = mkFixtureRepo();
+    const calls = [];
+    const fn = (file, args) => {
+      calls.push({ file, args });
+      throw Object.assign(new Error('Command failed'), {
+        status: 1,
+        stdout: '',
+        stderr: '/usr/bin/python3: No module named pytest\n',
+      });
+    };
+    const o = outcomesFor(
+      root,
+      spec({ A1: { test_nodeid: 'py/tests/test_sample.py::test_passes' } }),
+      {
+        runTests: true,
+        execFile: fn,
+      }
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].file).toBe('python3');
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toBe('pytest is not installed for python3 (No module named pytest)');
+  });
+});
+
+describeWithPytest('pytest re-derivation', () => {
+  test('existence-only -> not_run with the collected count; --run passing -> passed; failing -> failed', () => {
+    const { root } = mkFixtureRepo();
+    const collect = outcomesFor(
+      root,
+      spec({ A1: { test_nodeid: 'py/tests/test_sample.py::test_passes' } }),
+      { runTests: false }
+    );
+    expect(collect.A1[0].outcome).toBe('not_run');
+    expect(collect.A1[0].detail).toMatch(/^1 item\(s\) collected; not executed$/);
+
+    const run = outcomesFor(
+      root,
+      spec({
+        A1: { test_nodeid: 'py/tests/test_sample.py::test_passes' },
+        A2: { test_nodeid: 'py/tests/test_sample.py::test_fails' },
+      }),
+      { runTests: true }
+    );
+    expect(run.A1[0].outcome).toBe('passed');
+    expect(run.A2[0].outcome).toBe('failed');
+    expect(run.A2[0].detail).toMatch(/^pytest exit 1:/);
+  });
+
+  test('a nodeid pytest cannot collect -> missing', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(
+      root,
+      spec({ A1: { test_nodeid: 'py/tests/test_sample.py::test_nope' } }),
+      { runTests: true }
+    );
+    expect(o.A1[0].outcome).toBe('missing');
+  });
+});
+
+// ─── argv injection (A7) ─────────────────────────────────────────────────────
+
+describe('argv injection is refused before any spawn (A7)', () => {
+  test.each(['--collect-only', '-p no:cacheprovider', '-x'])(
+    '%s is refused with zero spawns',
+    (nodeid) => {
+      const { root } = mkFixtureRepo();
+      const { fn, calls } = spyExec();
+      const o = outcomesFor(root, spec({ A1: { test_nodeid: nodeid } }), {
+        runTests: true,
+        execFile: fn,
+      });
+      expect(o.A1[0].outcome).toBe('refused');
+      expect(o.A1[0].detail).toContain('begins with "-"');
+      expect(calls).toHaveLength(0);
+    }
+  );
+
+  test('a shell metacharacter string reaches pytest as one operand after --, never a shell', () => {
+    const { root } = mkFixtureRepo();
+    const sentinel = path.join(root, 'injection-sentinel');
+    const original = 'sentinel must survive unchanged\n';
+    fs.writeFileSync(sentinel, original);
+    // If interpreted by a shell, this harmless fixture-owned overwrite is
+    // observable. A deletion payload paired with an absence assertion would
+    // incorrectly pass when the injection actually ran.
+    const hostile = `py/tests/test_sample.py::; printf compromised > '${sentinel}'`;
+    const { fn, calls } = spyExec();
+    outcomesFor(root, spec({ A1: { test_nodeid: hostile } }), { runTests: false, execFile: fn });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].file).toBe('python3');
+    const args = calls[0].args;
+    const dd = args.indexOf('--');
+    expect(dd).toBeGreaterThan(-1);
+    expect(args.slice(dd + 1)).toEqual([hostile.replace(/^py\//, '')]);
+    expect(calls[0].options.timeout).toBeGreaterThan(0);
+    expect(calls[0].options.killSignal).toBe('SIGKILL');
+    expect(calls[0].options.maxBuffer).toBeGreaterThan(0);
+
+    // And for real. Which outcome that is depends on the machine: the executor
+    // invokes `python3 -m pytest`, so a host whose ambient python3 cannot
+    // import pytest must report the runner unavailable rather than infer
+    // anything about the nodeid. Asserting `missing` unconditionally made this
+    // pass only where some python3 on PATH happened to carry pytest, and fail
+    // under the pre-push hook's leaner PATH. Both branches prove the same
+    // thing, and neither may report the hostile string as collected.
+    const real = outcomesFor(root, spec({ A1: { test_nodeid: hostile } }), { runTests: true });
+    if (HAS_PYTEST) {
+      expect(real.A1[0].outcome).toBe('missing');
+      expect(real.A1[0].detail).toMatch(/pytest (could not collect|collected nothing)/);
+    } else {
+      expect(real.A1[0].outcome).toBe('unavailable');
+      expect(real.A1[0].detail).toMatch(/No module named pytest|python3 not found/);
+    }
+    expect(fs.readFileSync(sentinel, 'utf8')).toBe(original);
+    // Sensitivity control: the same payload executed by a shell must change
+    // the sentinel. It touches only this test's temporary repository.
+    execFileSync('/bin/sh', ['-c', hostile], { cwd: root, stdio: 'pipe' });
+    expect(fs.readFileSync(sentinel, 'utf8')).toBe('compromised');
+    if (process.env.CAWS_RELEASE_ARTIFACT_DIR) {
+      fs.mkdirSync(process.env.CAWS_RELEASE_ARTIFACT_DIR, { recursive: true });
+      fs.writeFileSync(
+        path.join(process.env.CAWS_RELEASE_ARTIFACT_DIR, 'injection-control.json'),
+        JSON.stringify(
+          {
+            nodeid: hostile,
+            safe_outcome: real.A1[0],
+            pytest_available: HAS_PYTEST,
+            sentinel_before: original,
+            sentinel_after_safe_runner: original,
+            unsafe_control: {
+              command: ['/bin/sh', '-c', hostile],
+              exit_status: 0,
+              sentinel_after: fs.readFileSync(sentinel, 'utf8'),
+            },
+          },
+          null,
+          2
+        ) + '\n'
+      );
+    }
+  });
+});
+
+// ─── merge-stage class selection (A9, store half) ────────────────────────────
+
+describe('class selection', () => {
+  test("classes ['citation','artifact'] spawns only git; the test check is not_run", () => {
+    const { root, c2 } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    const plan = planRederivation(
+      spec({
+        A1: {
+          commit_sha: c2,
+          artifact_path: 'docs/report.md',
+          test_nodeid: 'js/tests/sample.test.js::adds',
+          command: 'touch /tmp/caws-exec-probe',
+        },
+      })
+    );
+    const report = buildRederivationReport(root, plan, {
+      classes: ['citation', 'artifact'],
+      runTests: true,
+      execFile: fn,
+    });
+    const gitBin = resolveGitBinary();
+    expect(calls.length).toBeGreaterThan(0);
+    for (const c of calls) expect(c.file).toBe(gitBin);
+    const test = report.outcomes.A1.find((o) => o.class === 'test');
+    expect(test.outcome).toBe('not_run');
+    expect(test.detail).toBe('not selected at this stage');
+    // command never produces an outcome — the executor skips it entirely.
+    expect(report.outcomes.A1.some((o) => o.class === 'command')).toBe(false);
+  });
+});
+
+// ─── command never executes (A5, store half) ─────────────────────────────────
+
+describe('command is never executed (A5)', () => {
+  test('a command citing touch leaves no file and produces no spawn of anything but the selected classes', () => {
+    const { root } = mkFixtureRepo();
+    const probe = path.join(os.tmpdir(), `caws-exec-probe-${process.pid}`);
+    fs.rmSync(probe, { force: true });
+    const { fn, calls } = spyExec();
+    const s = spec({ A1: { command: `touch ${probe}`, exit_code: 0 } });
+    const r = rederiveSpecEvidence(root, s, { classes: ALL, runTests: true, execFile: fn });
+    expect(calls).toHaveLength(0);
+    expect(r.verdicts[0].verdict).toBe('not_rederived');
+    expect(r.verdicts[0].reason).toBe('command_not_executed');
+    // Real executor, same spec: still no file.
+    rederiveSpecEvidence(root, s, { classes: ALL, runTests: true });
+    expect(fs.existsSync(probe)).toBe(false);
+  });
+});
+
+// ─── runner detection and unavailability ─────────────────────────────────────
+
+describe('runner detection and unavailable outcomes', () => {
+  test('detectTestRunner reads the fixture dirs', () => {
+    const { root } = mkFixtureRepo();
+    expect(detectTestRunner(path.join(root, 'js'))).toBe('jest');
+    expect(detectTestRunner(path.join(root, 'py'))).toBe('pytest');
+    expect(detectTestRunner(path.join(root, 'node'))).toBe('node');
+    expect(detectTestRunner(path.join(root, 'plain'))).toBe('unknown');
+    expect(detectTestRunner(root)).toBe('unknown');
+  });
+
+  test('no runner config above the nodeid -> unavailable, naming what was looked for', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'plain/tests/orphan.test.js::x' } }), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toContain('no test runner detected');
+  });
+
+  test('a detected-but-unimplemented runner (vitest override) -> unavailable, not a silent pass', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/sample.test.js::adds' } }), {
+      runTests: true,
+      runner: 'vitest',
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toContain(
+      'runner vitest detected; re-derivation does not execute this runner'
+    );
+    expect(calls).toHaveLength(0);
+  });
+});
+
+// ─── node --test (CAWS-REDERIVE-EXECUTES-NODE-TEST-01) ───────────────────────
+
+/**
+ * The cases that decide correctness here spawn the REAL node runner against the
+ * REAL fixture, because the defect being guarded against is a property of
+ * node's own exit code and cannot be observed through a spy.
+ */
+describe('the node --test runner executes, and never verifies what it did not run', () => {
+  const nodeSpec = (nodeid) => spec({ A1: { test_nodeid: nodeid } });
+
+  test('a script invoking node --test is detected; a script merely passing --test to a program is not', () => {
+    const { root } = mkFixtureRepo();
+    const dir = path.join(root, 'probe');
+
+    write(root, 'probe/package.json', JSON.stringify({ scripts: { test: 'node --test tests/' } }));
+    expect(detectTestRunner(dir)).toBe('node');
+
+    // The flag belongs to the script here, not to node's test runner.
+    write(
+      root,
+      'probe/package.json',
+      JSON.stringify({ scripts: { check: 'node scripts/build.js --test' } })
+    );
+    expect(detectTestRunner(dir)).toBe('unknown');
+
+    // --test-name-pattern alone does not run tests.
+    write(
+      root,
+      'probe/package.json',
+      JSON.stringify({ scripts: { t: 'node --test-name-pattern=x foo.js' } })
+    );
+    expect(detectTestRunner(dir)).toBe('unknown');
+
+    // Reached through a chain, which is how a real `test` script is written.
+    write(
+      root,
+      'probe/package.json',
+      JSON.stringify({ scripts: { test: 'npm run build && node --test tests/*.test.js' } })
+    );
+    expect(detectTestRunner(dir)).toBe('node');
+  });
+
+  /**
+   * Both jest detection routes, because they are separated in the chain: a
+   * `jest.config.*` file, and `"jest"` inside package.json for a project with no
+   * config file. Only the second is adjacent to the node probe, so a test that
+   * covered the config route alone would not notice the node probe being
+   * hoisted above it.
+   */
+  test('jest still wins over a node --test script, by config file AND by package.json', () => {
+    const { root } = mkFixtureRepo();
+
+    // Route 1: jest.config.js present, plus a node --test script.
+    write(
+      root,
+      'js/package.json',
+      JSON.stringify({ scripts: { 'test:unit': 'node --test tests/' } })
+    );
+    expect(detectTestRunner(path.join(root, 'js'))).toBe('jest');
+
+    // Route 2: no jest config file at all — jest is known only from
+    // package.json, in the same file that carries the node --test script.
+    write(
+      root,
+      'jestdep/package.json',
+      JSON.stringify({
+        scripts: { test: 'node --test tests/' },
+        devDependencies: { jest: '^29.0.0' },
+      })
+    );
+    expect(detectTestRunner(path.join(root, 'jestdep'))).toBe('jest');
+  });
+
+  test('a cited name that exists and passes -> passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('passed');
+  });
+
+  test('a cited name that exists and fails -> failed, so the criterion is refuted', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::fails on purpose'), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('failed');
+    expect(o.A1[0].detail).toContain('node --test exit');
+  });
+
+  /**
+   * The defect this runner is shaped around. `node --test
+   * --test-name-pattern=<nothing>` exits 0 and prints `# pass 1`, because the
+   * FILE is counted as the passing subtest around an empty inner plan. Reading
+   * the exit code would verify a criterion whose cited test does not exist.
+   *
+   * The name is written into the file as a comment so the cheap `fileContains`
+   * pre-check passes and execution is actually reached — without that, this
+   * would pass for the wrong reason and prove nothing about the runner.
+   */
+  test('a name absent from the run exits 0 with "# pass 1" and is still missing, never passed', () => {
+    const { root } = mkFixtureRepo();
+    write(
+      root,
+      'node/tests/sample.test.js',
+      [
+        "const test = require('node:test');",
+        "const assert = require('node:assert');",
+        '// ghost only ever appears here, never as a real test',
+        "test('adds', () => { assert.equal(1 + 1, 2); });",
+        '',
+      ].join('\n')
+    );
+
+    // What node itself reports for that pattern: exit 0, one pass, and the only
+    // TAP result is the file.
+    const raw = execFileSync(
+      process.execPath,
+      ['--test', '--test-name-pattern=ghost', 'tests/sample.test.js'],
+      { cwd: path.join(root, 'node'), encoding: 'utf8' }
+    );
+    expect(raw).toMatch(/^# pass 1$/m);
+    expect(raw).toMatch(/^ok 1 - tests\/sample\.test\.js$/m);
+
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::ghost'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].outcome).not.toBe('passed');
+    expect(o.A1[0].detail).toContain('no result for');
+  });
+
+  test('a file whose only TAP result is itself is missing, not passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/empty.test.js'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toContain('ran no test');
+  });
+
+  test('a cited file that does not exist is missing, and nothing is spawned', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, nodeSpec('node/tests/absent.test.js::x'), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('without --run a located node citation is not_run, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), {
+      runTests: false,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('not_run');
+    expect(o.A1[0].outcome).not.toBe('passed');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('the cited name reaches node as an escaped pattern in argv, never through a shell', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    outcomesFor(root, nodeSpec('node/tests/sample.test.js::fails on purpose'), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].file).toBe(process.execPath);
+    expect(calls[0].args).toContain('--test');
+    expect(calls[0].args).toContain('--test-name-pattern=fails on purpose');
+    expect(calls[0].options.shell).toBeFalsy();
+  });
+});
+
+// ─── bats (CAWS-EVIDENCE-REDERIVE-VITEST-BATS-RUNNERS-01) ───────────────────
+
+/**
+ * Like node --test, the decisive cases run the REAL bats (the repo's own,
+ * hoisted to the monorepo root) against a REAL fixture: `bats --filter` that
+ * selects nothing exits 0, and only the TAP it prints can tell that apart from
+ * a pass.
+ */
+describe('the bats runner executes the cited test, and never verifies what it did not run', () => {
+  const batsSpec = (nodeid) => spec({ A1: { test_nodeid: nodeid } });
+
+  function mkBatsRepo() {
+    const fx = mkFixtureRepo();
+    write(
+      fx.root,
+      'sh/tests/sample.bats',
+      [
+        '#!/usr/bin/env bats',
+        '# ghost only ever appears here, never as a real test',
+        '',
+        '@test "adds" {',
+        '  [ "$((1 + 1))" -eq 2 ]',
+        '}',
+        '',
+        '@test "fails on purpose" {',
+        '  [ 1 -eq 2 ]',
+        '}',
+        '',
+        '@test "later" {',
+        '  skip "not yet"',
+        '}',
+        '',
+      ].join('\n')
+    );
+    write(fx.root, 'sh/tests/skipped.bats', '@test "later" {\n  skip "not yet"\n}\n');
+    fs.symlinkSync(BATS_BIN, path.join(fx.root, 'node_modules', '.bin', 'bats'));
+    return fx;
+  }
+
+  test('a cited .bats test that passes is executed and passed, naming one test', () => {
+    const { root } = mkBatsRepo();
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::adds'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('passed');
+    expect(o.A1[0].detail).toBe('bats sh/tests/sample.bats::adds passed (1 test executed)');
+  });
+
+  test('a cited .bats test that fails -> failed, so the criterion is refuted', () => {
+    const { root } = mkBatsRepo();
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::fails on purpose'), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('failed');
+    expect(o.A1[0].detail).toContain('bats exit 1');
+    expect(o.A1[0].detail).toContain('not ok 1 fails on purpose');
+  });
+
+  test('a filter selecting nothing exits 0 in bats itself and is still missing, never passed', () => {
+    const { root } = mkBatsRepo();
+    // What bats itself reports for a name that selects nothing: exit 0, an
+    // empty plan. Reading the exit code would verify a test that never ran.
+    const raw = execFileSync(BATS_BIN, ['--tap', '--filter', '^ghost$', 'sh/tests/sample.bats'], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    expect(raw).toMatch(/^1\.\.0$/m);
+
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::ghost'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toBe(
+      'bats selected zero tests for "ghost" in sh/tests/sample.bats (bats exits 0 when --filter matches nothing)'
+    );
+  });
+
+  test('a skipped test is reported as not executed, never passed', () => {
+    const { root } = mkBatsRepo();
+    const named = outcomesFor(root, batsSpec('sh/tests/sample.bats::later'), { runTests: true });
+    expect(named.A1[0].outcome).toBe('missing');
+    expect(named.A1[0].detail).toBe(
+      'bats skipped "later" in sh/tests/sample.bats; a skipped test did not execute'
+    );
+    const file = outcomesFor(root, batsSpec('sh/tests/skipped.bats'), { runTests: true });
+    expect(file.A1[0].outcome).toBe('missing');
+    expect(file.A1[0].detail).toBe(
+      'bats ran no test in sh/tests/skipped.bats; every test in it was skipped or none exists'
+    );
+  });
+
+  test('a filter that is a prefix of a real name does not select it: the match is anchored', () => {
+    const { root } = mkBatsRepo();
+    write(root, 'sh/tests/sample.bats', '# add\n@test "adds" {\n  true\n}\n');
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::add'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('missing');
+  });
+
+  test('the cited name reaches bats as an anchored, escaped --filter in argv, never through a shell', () => {
+    const { root } = mkBatsRepo();
+    const { fn, calls } = spyExec();
+    outcomesFor(root, batsSpec('sh/tests/sample.bats::fails on purpose'), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].file).toBe(path.join(root, 'node_modules', '.bin', 'bats'));
+    expect(calls[0].args).toEqual([
+      '--tap',
+      '--filter',
+      '^fails on purpose$',
+      'sh/tests/sample.bats',
+    ]);
+    expect(calls[0].options.shell).toBeFalsy();
+  });
+
+  test('without --run a located bats citation is not_run and nothing is spawned', () => {
+    const { root } = mkBatsRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::adds'), {
+      runTests: false,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('not_run');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a cited name absent from the file is missing before any spawn', () => {
+    const { root } = mkBatsRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::nowhere'), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toBe('test name "nowhere" not found in sh/tests/sample.bats');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('no bats in node_modules or on PATH -> unavailable, never passed', () => {
+    const { root } = mkFixtureRepo();
+    write(root, 'sh/tests/sample.bats', '@test "adds" {\n  true\n}\n');
+    const enoent = () => {
+      const e = new Error('spawn bats ENOENT');
+      e.code = 'ENOENT';
+      throw e;
+    };
+    const o = outcomesFor(root, batsSpec('sh/tests/sample.bats::adds'), {
+      runTests: true,
+      execFile: enoent,
+    });
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toContain('bats');
+  });
+});
+
+// ─── no false green on infrastructure failure (A13, store half) ──────────────
+
+describe('infrastructure failure never reads as clean (A13)', () => {
+  test('CAWS_GIT_BINARY=/nonexistent -> every git-backed check is unavailable; summary has zero verified', () => {
+    const { root, c2 } = mkFixtureRepo();
+    const prev = process.env.CAWS_GIT_BINARY;
+    process.env.CAWS_GIT_BINARY = '/nonexistent/git';
+    resetGitBinaryCache();
+    try {
+      const r = rederiveSpecEvidence(
+        root,
+        spec({ A1: { commit_sha: c2 }, A2: { artifact_path: 'docs/report.md' } }),
+        {
+          classes: ALL,
+          runTests: false,
+        }
+      );
+      expect(r.report.outcomes.A1[0].outcome).toBe('unavailable');
+      expect(r.report.outcomes.A2[0].outcome).toBe('unavailable');
+      expect(r.summary.verified).toBe(0);
+      expect(r.summary.not_rederived).toBe(2);
+      for (const v of r.verdicts) expect(v.reason).toBe('runner_unavailable');
+    } finally {
+      if (prev === undefined) delete process.env.CAWS_GIT_BINARY;
+      else process.env.CAWS_GIT_BINARY = prev;
+      resetGitBinaryCache();
+    }
+  });
+});
+
+// ─── end to end (A2, store half) + describeVerdict (A12) ─────────────────────
+
+describe('rederiveSpecEvidence', () => {
+  test('one verified, one refuted, one narrative -> 1/1/1, and the lines carry the agent-cited tag', () => {
+    const { root, c2 } = mkFixtureRepo();
+    const r = rederiveSpecEvidence(
+      root,
+      spec({
+        A1: { commit_sha: c2 },
+        A2: { artifact_path: 'docs/nope.md' },
+        A3: { evidence_ref: 'trust me' },
+      }),
+      { classes: ALL, runTests: false }
+    );
+    expect(r.summary).toEqual({
+      total: 3,
+      verified: 1,
+      refuted: 1,
+      not_rederived: 1,
+      narrative_only: 1,
+      self_reported: 2,
+      command_declared: 0,
+    });
+    const lines = r.verdicts.map(describeVerdict);
+    expect(lines[0]).toMatch(
+      /^A1: verified \(passed\) — commit .* reachable from refs\/heads\/main \[agent-cited\]$/
+    );
+    expect(lines[1]).toBe(
+      'A2: refuted (artifact_missing) — docs/nope.md not found at HEAD [agent-cited]'
+    );
+    expect(lines[2]).toBe('A3: not_rederived (no_mechanical_field)');
+  });
+
+  test('a criterion with a commit and an executed test names both checks, not the commit alone', () => {
+    const { root, c2 } = mkFixtureRepo();
+    const r = rederiveSpecEvidence(
+      root,
+      spec({ A1: { commit_sha: c2, test_nodeid: 'js/tests/sample.test.js::adds' } }),
+      { classes: ALL, runTests: true }
+    );
+    expect(describeVerdict(r.verdicts[0])).toBe(
+      `A1: verified (passed) — citation verified: commit ${c2} exists and is reachable from refs/heads/main; ` +
+        'test verified: jest js/tests/sample.test.js::adds passed (1 test executed) [agent-cited]'
+    );
+  });
+
+  test('a refuted check beside a verified one is named with its own verdict', () => {
+    const { root, c2 } = mkFixtureRepo();
+    const r = rederiveSpecEvidence(
+      root,
+      spec({ A1: { commit_sha: c2, artifact_path: 'docs/nope.md' } }),
+      { classes: ALL, runTests: false }
+    );
+    expect(describeVerdict(r.verdicts[0])).toBe(
+      `A1: refuted (artifact_missing) — citation verified: commit ${c2} exists and is reachable from refs/heads/main; ` +
+        `artifact refuted: docs/nope.md not found at ${c2} [agent-cited]`
+    );
+  });
+
+  test('a command check, which carries no outcome detail, is named as recorded and never executed', () => {
+    const { root } = mkFixtureRepo();
+    const r = rederiveSpecEvidence(root, spec({ A1: { command: 'make check' } }), {
+      classes: ALL,
+      runTests: false,
+    });
+    expect(describeVerdict(r.verdicts[0])).toBe(
+      'A1: not_rederived (command_not_executed) — command recorded, never executed: make check [agent-cited]'
+    );
+  });
+
+  test('the agent-cited legend says relevance is unchecked, never that the check did not run', () => {
+    expect(AGENT_CITED_LEGEND).toBe(
+      'agent-cited means the agent chose which commit, artifact or test to cite; ' +
+        'it marks the citation’s relevance as unchecked, not the check as unrun.'
+    );
+  });
+});

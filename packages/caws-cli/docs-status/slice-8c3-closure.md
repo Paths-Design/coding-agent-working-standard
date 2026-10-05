@@ -24,11 +24,11 @@ Slice 8c.2 closed with three MUST-FIX-BEFORE-8D specs (CLI-GATES-002, QG-001, HO
 
 After `27ff6d5` (HEAD as of 8c.3 closure), rebuilt all three tarballs from a clean `npm pack`:
 
-| Tarball | Version | Size |
-|---|---|---|
-| `paths.design-caws-kernel-1.0.0.tgz` | 1.0.0 | 118065 B |
-| `paths.design-quality-gates-2.0.0.tgz` | 2.0.0 | 112062 B |
-| `paths.design-caws-cli-11.0.0.tgz` | 11.0.0 | 120311 B |
+| Tarball                                | Version | Size     |
+| -------------------------------------- | ------- | -------- |
+| `paths.design-caws-kernel-1.0.0.tgz`   | 1.0.0   | 118065 B |
+| `paths.design-quality-gates-2.0.0.tgz` | 2.0.0   | 112062 B |
+| `paths.design-caws-cli-11.0.0.tgz`     | 11.0.0  | 120311 B |
 
 Evidence: `tmp/<session>/8c3-final-rc.log` gate-1 section.
 
@@ -85,13 +85,13 @@ All gate-3 acceptance criteria satisfied: init, doctor, status, evidence record,
 
 Against `/Users/darianrosebrook/Desktop/Projects/caws` using the sandbox binary:
 
-| Command | Standalone exit | Gate criterion | Outcome |
-|---|---|---|---|
-| `caws status` | 0 | shows `policy: loaded`, not MISSING | ✅ |
-| `caws doctor` | 1 | findings section 0E for governance-shape | ✅ findings `0E / 7W / 0I` — zero governance-shape ERRORs. Exit 1 is from 54 load errors that are explicitly out of HOST-GOV-001 scope (see Known non-blockers below). |
-| `caws scope show <path>` | 0 | no longer exits 2 from policy load | ✅ (was exit 2 pre-HOST-GOV-001) |
-| `caws waiver list --include-revoked` | 0 | clean output, no malformed diagnostics | ✅ — 2 revoked waivers (WV-0001, WV-0002), zero `waiver.schema.*` errors |
-| `.caws/events.jsonl` line count | 51 → 51 | unchanged before/after | ✅ (gate 5 invariant: no host event appends during read-only dogfood) |
+| Command                              | Standalone exit | Gate criterion                           | Outcome                                                                                                                                                                |
+| ------------------------------------ | --------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `caws status`                        | 0               | shows `policy: loaded`, not MISSING      | ✅                                                                                                                                                                     |
+| `caws doctor`                        | 1               | findings section 0E for governance-shape | ✅ findings `0E / 7W / 0I` — zero governance-shape ERRORs. Exit 1 is from 54 load errors that are explicitly out of HOST-GOV-001 scope (see Known non-blockers below). |
+| `caws scope show <path>`             | 0               | no longer exits 2 from policy load       | ✅ (was exit 2 pre-HOST-GOV-001)                                                                                                                                       |
+| `caws waiver list --include-revoked` | 0               | clean output, no malformed diagnostics   | ✅ — 2 revoked waivers (WV-0001, WV-0002), zero `waiver.schema.*` errors                                                                                               |
+| `.caws/events.jsonl` line count      | 51 → 51         | unchanged before/after                   | ✅ (gate 5 invariant: no host event appends during read-only dogfood)                                                                                                  |
 
 The seven WARN findings are: 5 unbound-active specs (CLI-GATES-002, CLI-GATES-003, HOOK-SAFETY-001, HOST-GOV-001, QG-001) — every spec authored or migrated in 8c.2/8c.3 trips this WARN because v11.0 does not ship `caws worktree bind`. This is the intentional v11.0 lifecycle gap deferred to v11.1. The other 2 WARNs are `doctor.agent.stale_display_only` (display-only, non-blocking by design).
 

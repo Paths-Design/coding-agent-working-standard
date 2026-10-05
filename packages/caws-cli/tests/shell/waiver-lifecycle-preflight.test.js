@@ -5,10 +5,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const {
-  runWaiverCreateCommand,
-  runWaiverPruneCommand,
-} = require('../../dist/shell');
+const { runWaiverCreateCommand, runWaiverPruneCommand } = require('../../dist/shell');
 const { initProject } = require('../../dist/store/init-store');
 const { loadWaivers } = require('../../dist/store/waivers-store');
 

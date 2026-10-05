@@ -54,7 +54,13 @@ describe('worktree cleanup --status aliases', () => {
   test('worktree cleanup-plan --status is accepted as a state-class filter', () => {
     const { root } = mkRepo();
 
-    const result = runCli(root, ['worktree', 'cleanup-plan', '--status', 'destroy-ready', '--json']);
+    const result = runCli(root, [
+      'worktree',
+      'cleanup-plan',
+      '--status',
+      'destroy-ready',
+      '--json',
+    ]);
 
     expect(result.status).toBe(0);
     const payload = JSON.parse(result.stdout);

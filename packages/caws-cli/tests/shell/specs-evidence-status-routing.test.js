@@ -90,8 +90,15 @@ describe('caws specs evidence --status routing (full CLI parse path)', () => {
     commitAll(root, 'add active fixture');
 
     const result = spawnCli(root, [
-      'specs', 'evidence', 'EV-ROUTE-A-001',
-      '--ac', 'A1', '--status', 'pass', '--evidence-ref', 'npm test',
+      'specs',
+      'evidence',
+      'EV-ROUTE-A-001',
+      '--ac',
+      'A1',
+      '--status',
+      'pass',
+      '--evidence-ref',
+      'npm test',
     ]);
     const output = `${result.stdout}${result.stderr}`;
 
@@ -122,8 +129,15 @@ describe('caws specs evidence --status routing (full CLI parse path)', () => {
     commitAll(root, 'add active fixture');
 
     const result = spawnCli(root, [
-      'specs', 'evidence', 'EV-ROUTE-C-001',
-      '--ac', 'A1', '--status', 'bogus', '--evidence-ref', 'npm test',
+      'specs',
+      'evidence',
+      'EV-ROUTE-C-001',
+      '--ac',
+      'A1',
+      '--status',
+      'bogus',
+      '--evidence-ref',
+      'npm test',
     ]);
     const output = `${result.stdout}${result.stderr}`;
 

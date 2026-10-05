@@ -116,13 +116,16 @@ describe('manifest-vs-disk drift (A2): no drift in either direction', () => {
     }
   });
 
-  test.each(PACKS)('$id: every on-disk template file is declared (or a known non-manifest file)', ({ id, manifest, dir }) => {
-    const declared = new Set(manifest.installedFiles.map((f) => f.sourcePath));
-    const allowed = KNOWN_NON_MANIFEST_FILES[id] ?? new Set();
-    const onDisk = listTemplateFiles(dir);
-    const undeclared = onDisk.filter((f) => !declared.has(f) && !allowed.has(f));
-    expect(undeclared).toEqual([]);
-  });
+  test.each(PACKS)(
+    '$id: every on-disk template file is declared (or a known non-manifest file)',
+    ({ id, manifest, dir }) => {
+      const declared = new Set(manifest.installedFiles.map((f) => f.sourcePath));
+      const allowed = KNOWN_NON_MANIFEST_FILES[id] ?? new Set();
+      const onDisk = listTemplateFiles(dir);
+      const undeclared = onDisk.filter((f) => !declared.has(f) && !allowed.has(f));
+      expect(undeclared).toEqual([]);
+    }
+  );
 
   test('settings.json.example is the documented non-manifest exception and IS present on disk', () => {
     // Pin the exception: it must exist (written-program path depends on it) and

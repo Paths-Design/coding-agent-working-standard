@@ -149,7 +149,10 @@ export interface AcquireBridgeInput {
  * path, the owner re-acquiring refreshes last_seen only). The acquire pairs
  * bridge.json with one claim_bridged event in a lifecycle transaction.
  */
-export function acquireBridge(cawsDir: string, input: AcquireBridgeInput): Result<{ readonly specId: string; readonly refreshed: boolean }> {
+export function acquireBridge(
+  cawsDir: string,
+  input: AcquireBridgeInput
+): Result<{ readonly specId: string; readonly refreshed: boolean }> {
   const loaded = loadBridges(cawsDir);
   const dirOk = ensureClaimsDir(cawsDir);
   if (!dirOk.ok) return err(dirOk.errors);
@@ -183,17 +186,19 @@ export function acquireBridge(cawsDir: string, input: AcquireBridgeInput): Resul
   const txn = runLifecycleTransaction({
     cawsDir,
     plannedWrites: [bridgeWrite(cawsDir, registry)],
-    events: [{
-      event: 'claim_bridged',
-      ts: nowIso,
-      actor: input.actor,
-      spec_id: input.specId,
-      data: {
-        session_id: input.session.session_id,
-        ...(input.session.platform !== undefined ? { platform: input.session.platform } : {}),
-        ...(input.contextCwd !== undefined ? { context_cwd: input.contextCwd } : {}),
+    events: [
+      {
+        event: 'claim_bridged',
+        ts: nowIso,
+        actor: input.actor,
+        spec_id: input.specId,
+        data: {
+          session_id: input.session.session_id,
+          ...(input.session.platform !== undefined ? { platform: input.session.platform } : {}),
+          ...(input.contextCwd !== undefined ? { context_cwd: input.contextCwd } : {}),
+        },
       },
-    }],
+    ],
   });
   if (!txn.ok) return err(txn.errors);
   // Inspect the OUTCOME, not just the Result: partial_failure_recovered is
@@ -221,7 +226,10 @@ export interface TakeoverBridgeInput {
  * owns it (use the acquire path; a no-op takeover would fabricate an audit
  * entry for a transition that did not happen).
  */
-export function takeoverBridge(cawsDir: string, input: TakeoverBridgeInput): Result<{ readonly priorOwnerSessionId: string }> {
+export function takeoverBridge(
+  cawsDir: string,
+  input: TakeoverBridgeInput
+): Result<{ readonly priorOwnerSessionId: string }> {
   const loaded = loadBridges(cawsDir);
   const dirOk = ensureClaimsDir(cawsDir);
   if (!dirOk.ok) return err(dirOk.errors);
@@ -270,24 +278,26 @@ export function takeoverBridge(cawsDir: string, input: TakeoverBridgeInput): Res
   const txn = runLifecycleTransaction({
     cawsDir,
     plannedWrites: [bridgeWrite(cawsDir, registry)],
-    events: [{
-      event: 'bridge_claim_taken_over',
-      ts: nowIso,
-      actor: input.actor,
-      spec_id: input.specId,
-      data: {
-        prior_owner: {
-          session_id: existing.session_id,
-          ...(existing.platform !== undefined ? { platform: existing.platform } : {}),
-          ...(existing.last_seen !== undefined ? { last_seen: existing.last_seen } : {}),
+    events: [
+      {
+        event: 'bridge_claim_taken_over',
+        ts: nowIso,
+        actor: input.actor,
+        spec_id: input.specId,
+        data: {
+          prior_owner: {
+            session_id: existing.session_id,
+            ...(existing.platform !== undefined ? { platform: existing.platform } : {}),
+            ...(existing.last_seen !== undefined ? { last_seen: existing.last_seen } : {}),
+          },
+          new_owner: {
+            session_id: input.session.session_id,
+            ...(input.session.platform !== undefined ? { platform: input.session.platform } : {}),
+          },
+          reason: input.reason,
         },
-        new_owner: {
-          session_id: input.session.session_id,
-          ...(input.session.platform !== undefined ? { platform: input.session.platform } : {}),
-        },
-        reason: input.reason,
       },
-    }],
+    ],
   });
   if (!txn.ok) return err(txn.errors);
   if (txn.value.kind !== 'success') {
@@ -314,7 +324,10 @@ export interface ReleaseBridgeOutcome {
  * domain error — no --takeover semantics on release). One claim_released
  * event per removed binding, all in one lifecycle transaction.
  */
-export function releaseBridge(cawsDir: string, input: ReleaseBridgeInput): Result<ReleaseBridgeOutcome> {
+export function releaseBridge(
+  cawsDir: string,
+  input: ReleaseBridgeInput
+): Result<ReleaseBridgeOutcome> {
   const loaded = loadBridges(cawsDir);
   const dirOk = ensureClaimsDir(cawsDir);
   if (!dirOk.ok) return err(dirOk.errors);
@@ -346,17 +359,19 @@ export function releaseBridge(cawsDir: string, input: ReleaseBridgeInput): Resul
     const txn = runLifecycleTransaction({
       cawsDir,
       plannedWrites: [bridgeWrite(cawsDir, registry)],
-      events: [{
-        event: 'claim_released',
-        ts: nowIso,
-        actor: input.actor,
-        spec_id: input.specId,
-        data: {
-          session_id: input.session.session_id,
-          ...(input.session.platform !== undefined ? { platform: input.session.platform } : {}),
-          scope: 'named',
+      events: [
+        {
+          event: 'claim_released',
+          ts: nowIso,
+          actor: input.actor,
+          spec_id: input.specId,
+          data: {
+            session_id: input.session.session_id,
+            ...(input.session.platform !== undefined ? { platform: input.session.platform } : {}),
+            scope: 'named',
+          },
         },
-      }],
+      ],
     });
     if (!txn.ok) return err(txn.errors);
     if (txn.value.kind !== 'success') {

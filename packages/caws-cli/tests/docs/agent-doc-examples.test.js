@@ -105,9 +105,9 @@ describe('caws evidence record examples in agent-facing docs are runnable', () =
   });
 
   test('every example names a real evidence type', () => {
-    const bad = ALL_EXAMPLES.filter(
-      (e) => !e.type || !EVIDENCE_SCHEMA_BY_TYPE[e.type]
-    ).map((e) => `${e.rel}: --type ${e.type}`);
+    const bad = ALL_EXAMPLES.filter((e) => !e.type || !EVIDENCE_SCHEMA_BY_TYPE[e.type]).map(
+      (e) => `${e.rel}: --type ${e.type}`
+    );
     expect(bad).toEqual([]);
   });
 
@@ -149,31 +149,27 @@ describe('caws evidence record examples in agent-facing docs are runnable', () =
   });
 });
 
-describe('caws specs create examples satisfy the tier/contract rule', () => {
-  // Tier 1 and 2 specs require at least one contract; the CLI refuses without
-  // one. TUTORIAL.md's first hands-on command violated this, so a reader
-  // following the tutorial literally was blocked on step one.
-  const CREATE_RE = /caws specs create\s+([^\n`]*)/g;
-
-  test('no documented tier-1/2 create omits --contract', () => {
+describe('spec creation examples do not require tier selection', () => {
+  test('current authoring surfaces use tierless creation commands', () => {
+    const surfaces = [
+      ...DOC_SURFACES,
+      'README.md',
+      'packages/caws-cli/README.md',
+      'docs/guides/caws-contracts.md',
+      'docs/guides/caws-developer-guide.md',
+      'packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md',
+      'packages/caws-cli/templates/hook-packs/codex/CAWS.md',
+    ];
     const failures = [];
-    for (const rel of DOC_SURFACES) {
-      const body = fs
-        .readFileSync(path.join(ROOT, rel), 'utf8')
-        .replace(/\\\n\s*/g, ' ');
-      let m;
-      CREATE_RE.lastIndex = 0;
-      while ((m = CREATE_RE.exec(body)) !== null) {
-        const inv = m[1];
-        const tier = /--risk-tier\s+(\d)/.exec(inv);
-        if (!tier) continue;
-        const isChore = /--mode\s+chore/.test(inv);
-        if (isChore) continue;
-        if ((tier[1] === '1' || tier[1] === '2') && !/--contract/.test(inv)) {
-          failures.push(`${rel}: tier ${tier[1]} create without --contract: ${inv.trim()}`);
-        }
+    let commands = 0;
+    for (const rel of surfaces) {
+      const body = fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\\\n\s*/g, ' ');
+      for (const match of body.matchAll(/caws specs create\s+([^\n`]*)/g)) {
+        commands += 1;
+        if (/--(?:risk-tier|tier)\b/.test(match[1])) failures.push(rel + ': ' + match[1]);
       }
     }
+    expect(commands).toBeGreaterThan(10);
     expect(failures).toEqual([]);
   });
 });
@@ -231,11 +227,11 @@ describe('remediation text names real, runnable escape-hatch commands', () => {
     const blocked = {
       dispositions: [
         {
-          gate_id: 'budget_limit',
+          gate_id: 'scope_boundary',
           mode: 'block',
           outcome: 'fail',
           blocks: true,
-          violations: [{ gate: 'budget_limit', message: 'max_files exceeded' }],
+          violations: [{ gate: 'scope_boundary', message: 'src/x.ts is outside scope.in' }],
         },
       ],
       unmatchedViolations: [],
@@ -251,7 +247,13 @@ describe('remediation text names real, runnable escape-hatch commands', () => {
     // A clean run must NOT advertise the exception path.
     const clean = renderGatesRun({
       dispositions: [
-        { gate_id: 'budget_limit', mode: 'block', outcome: 'pass', blocks: false, violations: [] },
+        {
+          gate_id: 'scope_boundary',
+          mode: 'block',
+          outcome: 'pass',
+          blocks: false,
+          violations: [],
+        },
       ],
       unmatchedViolations: [],
       anyBlocks: false,

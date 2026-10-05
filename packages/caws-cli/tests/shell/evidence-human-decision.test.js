@@ -82,7 +82,8 @@ function runSchema(root, opts) {
 
 function lastEvent(cawsDir) {
   const loaded = loadEvents(cawsDir);
-  if (!loaded.ok) throw new Error('loadEvents failed: ' + loaded.errors.map((e) => e.message).join('; '));
+  if (!loaded.ok)
+    throw new Error('loadEvents failed: ' + loaded.errors.map((e) => e.message).join('; '));
   const verified = verifyChain(loaded.value.events);
   if (!verified.ok) throw new Error('verifyChain failed after append');
   return loaded.value.events[loaded.value.events.length - 1];
@@ -120,10 +121,18 @@ describe('HUMAN-DECISION-EVIDENCE-001', () => {
   test('A3: list filters to human_decision only; invalid type names the full set', () => {
     const { root, cawsDir } = mkRepo();
     expect(
-      runRecord(root, { kind: 'human_decision', specId: 'FEAT-44', data: { decision: 'd', decision_class: 'direction' } }).code
+      runRecord(root, {
+        kind: 'human_decision',
+        specId: 'FEAT-44',
+        data: { decision: 'd', decision_class: 'direction' },
+      }).code
     ).toBe(0);
     expect(
-      runRecord(root, { kind: 'test', specId: 'FEAT-44', data: { command: 'npm test', exit_code: 0 } }).code
+      runRecord(root, {
+        kind: 'test',
+        specId: 'FEAT-44',
+        data: { command: 'npm test', exit_code: 0 },
+      }).code
     ).toBe(0);
 
     const listed = runList(root, { specId: 'FEAT-44', kind: 'human_decision' });
@@ -141,21 +150,37 @@ describe('HUMAN-DECISION-EVIDENCE-001', () => {
     const { root } = mkRepo();
     // Missing required `decision`.
     expect(
-      runRecord(root, { kind: 'human_decision', specId: 'FEAT-45', data: { decision_class: 'approval' } }).code
+      runRecord(root, {
+        kind: 'human_decision',
+        specId: 'FEAT-45',
+        data: { decision_class: 'approval' },
+      }).code
     ).toBe(1);
     // decision_class outside the closed enum.
     expect(
-      runRecord(root, { kind: 'human_decision', specId: 'FEAT-45', data: { decision: 'x', decision_class: 'maybe' } }).code
+      runRecord(root, {
+        kind: 'human_decision',
+        specId: 'FEAT-45',
+        data: { decision: 'x', decision_class: 'maybe' },
+      }).code
     ).toBe(1);
     // Unknown top-level field (additionalProperties: false).
     expect(
-      runRecord(root, { kind: 'human_decision', specId: 'FEAT-45', data: { decision: 'x', decision_class: 'approval', extra: 1 } }).code
+      runRecord(root, {
+        kind: 'human_decision',
+        specId: 'FEAT-45',
+        data: { decision: 'x', decision_class: 'approval', extra: 1 },
+      }).code
     ).toBe(1);
   });
 
   test('A5: existing evidence kinds still validate (test_recorded appends)', () => {
     const { root } = mkRepo();
-    const r = runRecord(root, { kind: 'test', specId: 'FEAT-46', data: { command: 'npm test', exit_code: 0 } });
+    const r = runRecord(root, {
+      kind: 'test',
+      specId: 'FEAT-46',
+      data: { command: 'npm test', exit_code: 0 },
+    });
     expect(r.code).toBe(0);
     expect(r.out).toContain('recorded test_recorded');
   });

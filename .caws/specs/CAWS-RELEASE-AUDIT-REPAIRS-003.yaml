@@ -1,0 +1,140 @@
+id: CAWS-RELEASE-AUDIT-REPAIRS-003
+title: 'Repair release qualification and truthful runtime contracts'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge release-audit-repairs at 8343a1f0f579ec54676195f7e8c1bb4ff95868f7'
+created_at: '2026-10-03T21:37:19.652Z'
+updated_at: '2026-10-05T03:26:55.325Z'
+created_by_session: '01a1039e-0b4e-7fd3-84b3-0684232a7628'
+blast_radius:
+  modules:
+    - 'release qualification, scope evaluation, merge preflight, hook adapter, telemetry and packaging'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.github/workflows'
+    - 'package.json'
+    - 'package-lock.json'
+    - 'packages/caws-cli'
+    - 'scripts'
+    - 'docs'
+    - 'AGENTS.md'
+    - 'CLAUDE.md'
+    - CONTRIBUTING.md
+  out: []
+invariants:
+  - 'No lowered gate floors, fabricated evidence, publication, foreign ownership takeover, or weakened guarded-write enforcement'
+  - 'Generated logs remain ignored and evidence is tied to observed commands and candidate bytes'
+acceptance:
+  - id: A1
+    given: 'a fresh checkout'
+    when: 'release qualification setup and checks run'
+    then: 'root dependency audit resolves correctly, documentation prerequisites exist before tests, and all mutation sources have an explicit proof strategy'
+  - id: A2
+    given: 'committed branch work, staged changes and Git read failures'
+    when: 'scope gates run'
+    then: 'the caller change basis is recorded and out-of-scope work or unavailable evaluation cannot report pass'
+  - id: A3
+    given: 'a conflicting lane and a clean lane'
+    when: 'merge dry-run executes'
+    then: 'conflicts are reported, clean readiness is accurate, and refs and worktree bytes remain unchanged'
+  - id: A4
+    given: 'an unknown hook event and valid lifecycle failures'
+    when: 'the installed adapter runs'
+    then: 'invalid invocation fails and legitimate lifecycle degradation preserves its intended nonblocking behavior'
+  - id: A5
+    given: 'a fixture-owned sentinel and hostile nodeid'
+    when: 'evidence runners execute or a deliberate shell execution control runs'
+    then: 'safe execution preserves the sentinel and the unsafe control is detected'
+  - id: A6
+    given: 'Python caches and real renderer output'
+    when: 'a candidate is packed and rendered turns validated'
+    then: 'no bytecode enters the package and null summaries and lineage validate while invalid shapes remain rejected'
+  - id: A7
+    given: 'the candidate dependency graph'
+    when: 'workspace and detached production audits run'
+    then: 'findings are remediated without unsupported downgrades and any unresolved vulnerability blocks release readiness'
+  - id: A8
+    given: 'current implementation and registry observations'
+    when: 'release guidance and notes are inspected'
+    then: 'docs describe shipped commands and bounded goals, registry discrepancy is accounted for, and missing remote or native evidence is explicit'
+  - id: A9
+    given: 'repository agent instructions, contributor guidance and shipped agent templates'
+    when: 'the coding-rigor standard is read and consumer docs are staged'
+    then: >-
+      each entry point carries acceptance, falsification, evidence and authorization
+      requirements; the detailed guide is reachable through repo links and shipped
+      consumer docs; documentation checks pass without claiming native adoption or
+      release qualification
+observability:
+  - 'Retain commands, exit statuses, logs, fixture state and checksums under ignored canonical evidence storage'
+rollback:
+  - 'Revert each logical source commit before publication; do not alter registry versions or installed shared runtime'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:24:43.757Z"
+    test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::committed forbidden lane work is evaluated despite an empty canonical index; event carries its basis"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:24:25.159Z"
+    test_nodeid: "packages/caws-cli/tests/ci/release-hardening.test.js::release qualification requires the same dependency audit as PR CI"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:25:36.848Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a bootstrap-scope fault refuses the tool call but never the session exit"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:26:03.951Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a shell metacharacter string reaches pytest as one operand after --, never a shell"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:26:24.376Z"
+    test_nodeid: "packages/caws-cli/tests/ci/artifact-contracts.test.js::real renderer bytes validate with nullable summary and lineage; malformed shapes are rejected"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:25:12.578Z"
+    test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::merge preview distinguishes clean and conflicting branches without changing refs, indexes, files or events"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Manually inspected actual command receipts: reports/release-audit-003/audit-command-comparison.json (both workspace routes exit 0, 817 dependencies, zero findings); qualification-pinned.json (all 10 cases pass, detached production audit total 0, exact candidate ea563eec9a74b103f45501e1b297ab692c628d8816b7381b84c9c9cd3641cb7f). Not a --verify re-execution. Generated receipts intentionally untracked."
+    recorded_at: "2026-10-04T02:20:57.598Z"
+    command: "npm run audit:dependencies --workspaces=false -- --json; node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-pinned.json"
+    exit_code: 0
+    commit_sha: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Manually inspected docs-final.log, merge-help-final.log, registry-final.json, goal-bats-final.log, and docs/release-readiness.md. Current npm latest 12.1.0 and next 12.2.0-rc.2 accounted; earlier RC lookup failure is not publication failure. Local package ten-case qualification passes; remote CI, supported platform matrix, actual native trust/delivery, and fresh publication version remain separate release requirements. No native/global adoption or publication performed. Not a --verify semantic re-execution."
+    recorded_at: "2026-10-04T02:22:15.221Z"
+    command: "npm run docs:check --workspace @paths.design/caws-cli; npm view @paths.design/caws-cli dist-tags --json --prefer-online; node packages/caws-cli/dist/index.js worktree merge --help"
+    exit_code: 0
+    commit_sha: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+  - criterion_id: A9
+    status: pass
+    evidence_ref: "Manual content/link review across root CLAUDE.md, AGENTS.md, CONTRIBUTING.md, legacy templates, shipped Claude hook guide and Codex managed block. docs:check stages 10 consumer documents; guide strict metadata valid, staged bytes SHA256 ba87c6744feffe9877311c13db68552f0da85d5967ab5f8f78c303f7d96581af match author; actual npm preview contains guide, Claude hook guide and compiled instruction carrier. Five suites/70 tests pass (reports/coding-rigor-docs/tests.log). instructions-runtime.json shows v1-to-v2 updated, second merge unchanged and outside bytes preserved. --verify checks tracked guide custody; semantic conclusions were inspected manually. Initial wrong-cwd test invocation, restricted default npm cache and excluded legacy template assumptions were corrected; stale-version fixture was repaired. No native/global adoption or current release qualification claim."
+    recorded_at: "2026-10-04T04:33:17.396Z"
+    command: "npm run docs:check --workspace @paths.design/caws-cli; npm run typecheck --workspace @paths.design/caws-cli; jest selected instruction/doc suites; npm pack --dry-run --json --ignore-scripts with owned cache; managed-block runtime fixture"
+    exit_code: 0
+    artifact_path: docs/guides/coding-rigor.md

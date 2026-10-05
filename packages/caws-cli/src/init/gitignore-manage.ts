@@ -22,7 +22,8 @@ import * as path from 'path';
  * v2: added `tmp/guard-strikes-*.json` (defense-in-depth for any legacy
  * guard-strike file that lands in a tracked `tmp/`;
  * CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001). */
-export const GITIGNORE_BLOCK_VERSION = 2;
+// v3: session bridge claims are operational state, not source artifacts.
+export const GITIGNORE_BLOCK_VERSION = 3;
 
 export const GITIGNORE_BEGIN_MARKER = `# >>> caws gitignore (managed, v${GITIGNORE_BLOCK_VERSION}) >>>`;
 export const GITIGNORE_END_MARKER = '# <<< caws gitignore <<<';
@@ -55,6 +56,7 @@ export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
   '.caws/worktrees.json',
   '.caws/agents.json',
   '.caws/leases/',
+  '.caws/claims/',
   '.caws/cache/',
   '.caws/sessions/',
   '.caws/state/',
@@ -103,14 +105,10 @@ export interface GitignorePlanResult {
 /** Find the [start,end] line indices (inclusive) of an existing managed block,
  * or null if absent. Detection keys on the marker lines, not entry contents,
  * so a stale (different-version) block is still found and replaced. */
-function findManagedBlock(
-  lines: readonly string[]
-): { start: number; end: number } | null {
+function findManagedBlock(lines: readonly string[]): { start: number; end: number } | null {
   const start = lines.findIndex((l) => l.startsWith(BEGIN_MARKER_PREFIX));
   if (start === -1) return null;
-  const end = lines.findIndex(
-    (l, i) => i >= start && l.trim() === GITIGNORE_END_MARKER
-  );
+  const end = lines.findIndex((l, i) => i >= start && l.trim() === GITIGNORE_END_MARKER);
   if (end === -1) return null;
   return { start, end };
 }

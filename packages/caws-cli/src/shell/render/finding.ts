@@ -62,10 +62,7 @@ function sanitizeRepairForStatus(repair: string): string {
   return `${base} Run \`caws doctor\` for full hygiene context.`.replace(/\s+/g, ' ').trim();
 }
 
-export function renderFinding(
-  f: DoctorFinding,
-  opts: RenderFindingsOptions = {}
-): string {
+export function renderFinding(f: DoctorFinding, opts: RenderFindingsOptions = {}): string {
   const lines: string[] = [`${SEVERITY_LABEL[f.severity]} ${f.rule}: ${f.message}`];
   if (typeof f.subject === 'string' && f.subject.length > 0) {
     lines.push(`            subject: ${f.subject}`);
@@ -94,9 +91,7 @@ export function renderFindings(
   return kept.map((f) => renderFinding(f, opts)).join('\n');
 }
 
-export function countFindingSeverities(
-  findings: readonly DoctorFinding[]
-): {
+export function countFindingSeverities(findings: readonly DoctorFinding[]): {
   readonly errors: number;
   readonly warnings: number;
   readonly infos: number;

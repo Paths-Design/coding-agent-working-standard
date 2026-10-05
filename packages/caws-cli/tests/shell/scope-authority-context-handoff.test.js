@@ -109,6 +109,7 @@ describe('scope authority-context handoff', () => {
         specId: 'ZZZ-OWNER-003',
         lifecycleState: 'active',
         matchedScopeInEntry: 'packages/owned',
+        bindingAdmits: true,
       },
     ]);
     // The alphabetically-first specs are gone, not merely demoted.
@@ -116,7 +117,7 @@ describe('scope authority-context handoff', () => {
     expect(commands).not.toContain('AAA-UNRELATED-001');
     expect(commands).toContain('ZZZ-OWNER-003');
     expect(result.json.remediation.notes[0]).toBe(
-      'ZZZ-OWNER-003 claims this path via scope.in "packages/owned".'
+      'Verified: ZZZ-OWNER-003 (active, no worktree) claims this path via scope.in "packages/owned", and the kernel admits the path under its binding.'
     );
   });
 
@@ -128,9 +129,10 @@ describe('scope authority-context handoff', () => {
 
     const result = runScopeJson(root, 'packages/shared/sub/file.ts');
 
-    expect(
-      result.json.remediation.authorityCandidates.map((c) => c.specId)
-    ).toEqual(['CLAIM-A-001', 'CLAIM-B-002']);
+    expect(result.json.remediation.authorityCandidates.map((c) => c.specId)).toEqual([
+      'CLAIM-A-001',
+      'CLAIM-B-002',
+    ]);
     expect(result.json.remediation.notes[0]).toBe(
       '2 specs claim this path via scope.in; listed in id order.'
     );
@@ -143,14 +145,13 @@ describe('scope authority-context handoff', () => {
 
     const result = runScopeJson(root, 'packages/no-owner/file.ts');
 
-    expect(
-      result.json.remediation.authorityCandidates.map((c) => c.specId)
-    ).toEqual(['AAA-UNRELATED-001', 'ZZZ-UNRELATED-002']);
+    expect(result.json.remediation.authorityCandidates.map((c) => c.specId)).toEqual([
+      'AAA-UNRELATED-001',
+      'ZZZ-UNRELATED-002',
+    ]);
     // None carry a match, so none of them is presented as a claim.
     expect(
-      result.json.remediation.authorityCandidates.every(
-        (c) => c.matchedScopeInEntry === undefined
-      )
+      result.json.remediation.authorityCandidates.every((c) => c.matchedScopeInEntry === undefined)
     ).toBe(true);
     expect(result.json.remediation.notes[0]).toContain('No active spec claims this path');
     expect(result.json.remediation.notes[0]).toContain('caws specs amend-scope');
@@ -179,6 +180,7 @@ describe('scope authority-context handoff', () => {
         specId: 'ZZZ-DRAFT-OWNER-002',
         lifecycleState: 'draft',
         matchedScopeInEntry: 'packages/owned',
+        bindingAdmits: true,
       },
     ]);
     // The command that resolves it must be the one that ALSO activates.
@@ -213,9 +215,9 @@ describe('scope authority-context handoff', () => {
 
     const result = runScopeJson(root, 'packages/no-owner/file.ts');
 
-    expect(
-      result.json.remediation.authorityCandidates.map((c) => c.specId)
-    ).toEqual(['ACTIVE-A-001']);
+    expect(result.json.remediation.authorityCandidates.map((c) => c.specId)).toEqual([
+      'ACTIVE-A-001',
+    ]);
   });
 
   test('a glob scope.in entry is matched, not treated as a literal', () => {
@@ -230,6 +232,7 @@ describe('scope authority-context handoff', () => {
         specId: 'GLOB-OWNER-001',
         lifecycleState: 'active',
         matchedScopeInEntry: 'packages/*/src/index.ts',
+        bindingAdmits: true,
       },
     ]);
   });
@@ -257,6 +260,7 @@ describe('scope authority-context handoff', () => {
         specId: 'GLOBSTAR-OWNER-001',
         lifecycleState: 'active',
         matchedScopeInEntry: 'packages/caws-cli/tests/hooks/**',
+        bindingAdmits: true,
       },
     ]);
   });
@@ -282,22 +286,20 @@ describe('scope authority-context handoff', () => {
     writeSpec(caws, 'BRACE-OWNER-001', ['docs/{api,agents}/cli.md']);
     writeSpec(caws, 'BRACKET-OWNER-002', ['src/[abc]/x.ts']);
 
-    expect(
-      runScopeJson(root, 'docs/api/cli.md').json.remediation.authorityCandidates
-    ).toEqual([
+    expect(runScopeJson(root, 'docs/api/cli.md').json.remediation.authorityCandidates).toEqual([
       {
         specId: 'BRACE-OWNER-001',
         lifecycleState: 'active',
         matchedScopeInEntry: 'docs/{api,agents}/cli.md',
+        bindingAdmits: true,
       },
     ]);
-    expect(
-      runScopeJson(root, 'src/a/x.ts').json.remediation.authorityCandidates
-    ).toEqual([
+    expect(runScopeJson(root, 'src/a/x.ts').json.remediation.authorityCandidates).toEqual([
       {
         specId: 'BRACKET-OWNER-002',
         lifecycleState: 'active',
         matchedScopeInEntry: 'src/[abc]/x.ts',
+        bindingAdmits: true,
       },
     ]);
   });
@@ -331,7 +333,8 @@ describe('scope authority-context handoff', () => {
       },
       {
         command: 'caws scope show packages/no-owner/file.ts --spec ACTIVE-BOUND-001',
-        description: 'Read-only check whether ACTIVE-BOUND-001 is the right spec context for this path.',
+        description:
+          'Read-only check whether ACTIVE-BOUND-001 is the right spec context for this path.',
         mutates: false,
       },
       {
@@ -341,12 +344,14 @@ describe('scope authority-context handoff', () => {
       },
       {
         command: 'caws scope show packages/no-owner/file.ts --spec ACTIVE-UNBOUND-001',
-        description: 'Read-only check whether ACTIVE-UNBOUND-001 is the right spec context for this path.',
+        description:
+          'Read-only check whether ACTIVE-UNBOUND-001 is the right spec context for this path.',
         mutates: false,
       },
       {
         command: 'caws worktree ensure <name> --spec ACTIVE-UNBOUND-001',
-        description: 'Create-or-admit a governed worktree for active spec ACTIVE-UNBOUND-001; an existing untouched lane admits idempotently.',
+        description:
+          'Create-or-admit a governed worktree for active spec ACTIVE-UNBOUND-001; an existing untouched lane admits idempotently.',
         mutates: true,
       },
     ]);

@@ -126,6 +126,7 @@ function runCleanupPlan(cwd, opts = {}) {
   const out = [];
   const err = [];
   const code = runWorktreePhysicalCleanupPlanCommand({
+    env: { CAWS_SESSION_ID: 'fixture-session' },
     cwd,
     out: (l) => out.push(l),
     err: (l) => err.push(l),

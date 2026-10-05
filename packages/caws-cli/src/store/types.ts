@@ -1,3 +1,4 @@
+import type { GlobalHomeObservation, SystemRuntimeObservation } from '../kernel/doctor/types';
 // Node-only store types.
 //
 // The store layer is the bridge between the filesystem and the pure
@@ -17,6 +18,8 @@ import type {
   GitWorktreeEntry,
   LeaseRegistry,
   Policy,
+  RepoHookPolicyObservation,
+  SharedPackDriftRow,
   Spec,
   Waiver,
   WorktreeRegistry,
@@ -119,6 +122,18 @@ export interface StoreSnapshot {
   readonly initResidue: {
     readonly workingSpecYaml: boolean;
     readonly workingSpecSchemaJson: boolean;
+    /**
+     * CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: every path at which a legacy
+     * project-local spec schema was found (repo-relative, posix separators)
+     * — today `.caws/working-spec.schema.json` and
+     * `.caws/schemas/working-spec.schema.json`. The kernel is the validator,
+     * so a file at any of these paths is dead authority a reader can still
+     * mistake for the governing schema. Supersedes `workingSpecSchemaJson`,
+     * which sees only the root path; that field is retained so an older
+     * snapshot writer stays valid, and the rule falls back to it when this
+     * list is undefined (unobserved, not "none found").
+     */
+    readonly legacySpecSchemaPaths?: readonly string[];
   };
 
   /**
@@ -156,8 +171,84 @@ export interface StoreSnapshot {
      * INIT_HOOKS_PRESENT_CAWS_ABSENT.
      */
     readonly hookPackInstalled: boolean;
+    /**
+     * CAWS-HARNESS-TELEMETRY-ADAPTER-001: vendored telemetry rows present
+     * under .caws/hooks/ with a `hook_pack: shared` CAWS-MANAGED-HOOK
+     * header (observed via parseManagedHeader — the same parser init uses).
+     * Unmanaged files at those paths are never reported. Combined with a
+     * non-empty `adapterPackSurfaceMarkers`, doctor fires
+     * doctor.hooks.stale_telemetry_pack. Optional so older snapshot
+     * consumers stay valid.
+     */
+    readonly managedTelemetryRowPaths?: readonly string[];
+    /**
+     * CAWS-HARNESS-TELEMETRY-ADAPTER-001: adapter-covered surfaces whose
+     * harness-pack marker is installed (e.g. `['dsh']` for a `.dsh/AGENTS.md`
+     * with a `hook_pack: dsh` managed header). No persisted surface receipt
+     * exists, so doctor infers adapter coverage from this marker. Optional.
+     */
+    readonly adapterPackSurfaceMarkers?: readonly string[];
+    /**
+     * CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: the installed surfaces
+     * whose install set STILL CONTAINS the vendored telemetry rows. Non-empty
+     * means those rows are load-bearing for a co-installed surface (its
+     * dispatchers invoke them, its own init reinstalls them), so they are not
+     * stale dual-writers and `HOOKS_STALE_TELEMETRY_PACK` stays silent.
+     * Mirrors the kernel-side field in kernel/doctor/types.ts. Optional; when
+     * undefined the observation is unavailable (unobserved, not "unclaimed").
+     */
+    readonly telemetryRowClaimantSurfaces?: readonly string[];
+    /**
+     * CAWS-GATED-SURFACE-SCOPE-GUARD-001: gated surfaces with user-scope
+     * CAWS wiring / project-scope CAWS hook entries (observed via the
+     * user-scope-wiring leaf). Optional; combined they feed
+     * doctor.hooks.user_scope_dual_wiring.
+     */
+    readonly userScopeCawsWiringBySurface?: readonly string[];
+    readonly gatedProjectHookEntriesBySurface?: readonly string[];
+    /**
+     * CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: installed vs shipping
+     * shared pack versions (observed from an installed row's managed
+     * header vs the store's own SHARED_PACK_VERSION).
+     */
+    readonly systemRuntime?: SystemRuntimeObservation;
+    readonly installedSharedPackVersion?: number;
+    readonly shippingSharedPackVersion?: number;
+    /**
+     * HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001 /
+     * CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: drifted copied
+     * shared hook files classified against their pristine baselines (growth /
+     * upstream / unobserved). Absent/empty is silent.
+     */
+    readonly installedSharedPackBodyDrift?: readonly SharedPackDriftRow[];
+    /**
+     * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy, with
+     * fork provenance and compiled-chain freshness measured by the observer
+     * (hook-install.ts). Mirrors the kernel-side field. Undefined = the repo
+     * has no `.caws/hooks/hook-policy.json` — silent, never a finding.
+     */
+    readonly repoHookPolicy?: RepoHookPolicyObservation;
+    /** The superseded `.caws/hooks/adapter-policy.json` is still on disk. */
+    readonly legacyAdapterPolicyPresent?: boolean;
+    /** CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded lease tmp files. */
+    /** CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: global home observation. */
+    readonly globalHomeObservation?: GlobalHomeObservation;
+    readonly strandedLeaseTmpFiles?: readonly {
+      readonly name: string;
+      readonly ageMs: number;
+    }[];
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
+    /**
+     * CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: for each name carried by a
+     * `worktree_created` event (latest event per name wins), whether the path
+     * the event recorded exists on disk (any entry type). Used by kernel §2e
+     * to distinguish a verifiably-dead orphan (recorded path observed absent)
+     * from one whose recorded path still hosts something. Keyed by event data,
+     * NOT by registry or spec claims — the §2e subject is by construction
+     * absent from both. A name missing from this map is UNOBSERVED, not absent.
+     */
+    readonly createdWorktreePathExistsByName?: Readonly<Record<string, boolean>>;
     /**
      * Count of yaml files at the top of .caws/specs/.archive/.
      * Excludes .unrecoverable/ subdir. Retained for compatibility;
@@ -175,6 +266,14 @@ export interface StoreSnapshot {
    */
   readonly gitWorktrees?: readonly GitWorktreeEntry[];
   readonly gitObservationFailure?: string;
+  /**
+   * CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: local branch refs observed
+   * via `git for-each-ref --format=%(refname) refs/heads` (full ref names,
+   * e.g. `refs/heads/main`). Consumed by kernel §2e to prove a worktree
+   * event-orphan's recorded branch no longer exists. Undefined when the git
+   * call failed (unobserved — the tombstone check degrades to a warning).
+   */
+  readonly localBranchRefs?: readonly string[];
 
   /**
    * Diagnostics from worktrees.json / agents.json load failures that

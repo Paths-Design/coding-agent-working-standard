@@ -178,3 +178,42 @@ def test_no_active_worktrees_passes(repo):
     # No registry / no active worktrees -> pass, never reaches the claim check.
     verdict = _run_oracle(repo, str(repo / "any" / "file.js"))
     assert verdict.startswith("pass"), verdict
+
+
+# --- CLAIM-ORACLE-DIRECTORY-CONTAINMENT-001 ---------------------------------
+# A scope.in entry denotes a path AND everything beneath it. The pre-fix
+# matcher anchored '^...$' with no containment suffix, so a directory-shaped
+# entry ('pkg/dir/' or 'pkg/dir') matched only that literal string and every
+# file beneath an actively-claimed directory read as unclaimed — foreign
+# writes into a claimed subtree were admitted.
+
+def _claimable_repo(repo, scope_entry, worktree="wt-dir", spec="DIR-001"):
+    _make_worktree_dir(repo, worktree)
+    _write_registry(repo, {
+        worktree: {"name": worktree, "spec_id": spec,
+                   "path": str(repo / ".caws" / "worktrees" / worktree),
+                   "owner": {"session_id": "other-sess"}, "baseBranch": "main"}
+    })
+    _write_spec(repo, spec, [scope_entry], worktree)
+
+
+@pytest.mark.parametrize("entry", ["packages/dir/", "packages/dir"])
+def test_directory_entry_claims_files_beneath_it(repo, entry):
+    """Trailing slash and bare directory forms both claim the subtree."""
+    _claimable_repo(repo, entry)
+    verdict = _run_oracle(repo, "packages/dir/file.py", session_id="sess-self")
+    assert verdict.startswith("block_claimed"), verdict
+
+
+def test_directory_entry_respects_the_path_boundary(repo):
+    """'packages/dir' must not claim 'packages/directory/file.py'."""
+    _claimable_repo(repo, "packages/dir")
+    verdict = _run_oracle(repo, "packages/directory/file.py", session_id="sess-self")
+    assert verdict.startswith("pass"), verdict
+
+
+def test_slash_only_entry_claims_nothing(repo):
+    """An entry that is only slashes compiles to a never-matching pattern."""
+    _claimable_repo(repo, "/")
+    verdict = _run_oracle(repo, "packages/dir/file.py", session_id="sess-self")
+    assert verdict.startswith("pass"), verdict

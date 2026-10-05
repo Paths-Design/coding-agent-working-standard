@@ -103,9 +103,7 @@ describe('archiveSpec move semantics', () => {
     expect(result.value.path).toBe(path.join(root, toRel));
     expect(fs.existsSync(path.join(root, fromRel))).toBe(false);
     expect(fs.existsSync(path.join(root, toRel))).toBe(true);
-    expect(fs.readFileSync(path.join(root, toRel), 'utf8')).toContain(
-      'lifecycle_state: archived'
-    );
+    expect(fs.readFileSync(path.join(root, toRel), 'utf8')).toContain('lifecycle_state: archived');
     expect(git(root, ['ls-files', '--', toRel]).trim()).toBe(toRel);
     expect(git(root, ['ls-tree', '--name-only', 'HEAD', '--', fromRel]).trim()).toBe('');
 
@@ -138,9 +136,7 @@ describe('archiveSpec move semantics', () => {
     expect(fs.existsSync(path.join(root, toRel))).toBe(true);
     expect(git(root, ['ls-files', '--', toRel]).trim()).toBe('');
     expect(git(root, ['ls-tree', '--name-only', 'HEAD', '--', fromRel]).trim()).toBe('');
-    expect(result.value.warnings).toEqual([
-      expect.stringContaining(`${toRel} is ignored by git`),
-    ]);
+    expect(result.value.warnings).toEqual([expect.stringContaining(`${toRel} is ignored by git`)]);
 
     const event = latestSpecArchived(caws, id);
     expect(event.data).toEqual({ from_path: fromRel, to_path: toRel });

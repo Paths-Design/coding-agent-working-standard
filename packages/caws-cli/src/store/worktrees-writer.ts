@@ -44,30 +44,28 @@ import {
 } from '../kernel';
 
 import { applyRegistryPatch } from './apply-patch';
-import { autoCommit, isPathDirty, isGovernedStatePath, type AutoCommitOutcome } from './git-autocommit';
+import {
+  autoCommit,
+  isPathDirty,
+  isGovernedStatePath,
+  type AutoCommitOutcome,
+} from './git-autocommit';
 import { configureWorktreeSparseCheckout } from './git-sparse-checkout';
 import {
   linkWorktreeArtifacts,
   listVerifiedArtifactLinks,
   removeWorktreeArtifactLinks,
 } from './worktree-artifacts';
-import { closeSpec, type SpecWriterOutcome } from './specs-writer';
+import { closeSpec, SCOPE_IN_PLACEHOLDER, type SpecWriterOutcome } from './specs-writer';
 import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
 import { runLifecycleTransaction } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
-import {
-  admitsOwner,
-  describeCandidateTrace,
-} from '../shell/session/resolve-session';
+import { admitsOwner, describeCandidateTrace } from '../shell/session/resolve-session';
 import type { SessionCandidates } from '../shell/session/types';
 import { repoRootFromCawsDir, runGit, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
-import {
-  insertTopLevelScalarAfter,
-  removeTopLevelScalar,
-  setTopLevelScalar,
-} from './yaml-patch';
+import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
 import { readYamlSource } from './yaml-store';
 
 // ─── Common types ────────────────────────────────────────────────────────
@@ -317,11 +315,7 @@ function cwdSelfDestructRefusal(name: string, wtPath: string): Diagnostic {
 function registryRelPath(cawsDir: string, repoRoot: string): string {
   return path.relative(repoRoot, path.join(cawsDir, 'worktrees.json'));
 }
-function specRelPath(
-  cawsDir: string,
-  specId: string,
-  repoRoot: string
-): string {
+function specRelPath(cawsDir: string, specId: string, repoRoot: string): string {
   return path.relative(repoRoot, specPath(cawsDir, specId));
 }
 
@@ -342,18 +336,13 @@ interface PreWriteState {
   readonly specWasDirty: boolean;
 }
 
-function capturePreWriteState(
-  cawsDir: string,
-  specId: string | null
-): PreWriteState {
+function capturePreWriteState(cawsDir: string, specId: string | null): PreWriteState {
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const registryPath = registryRelPath(cawsDir, repoRoot);
   return {
     registryWasDirty: isPathDirty(repoRoot, registryPath),
     specWasDirty:
-      specId === null
-        ? false
-        : isPathDirty(repoRoot, specRelPath(cawsDir, specId, repoRoot)),
+      specId === null ? false : isPathDirty(repoRoot, specRelPath(cawsDir, specId, repoRoot)),
   };
 }
 
@@ -379,9 +368,7 @@ function autoCommitTransition(
   };
   const verb = verbForAction[action];
   const specSuffix =
-    specId !== null && (action === 'created' || action === 'bound')
-      ? ` to ${specId}`
-      : '';
+    specId !== null && (action === 'created' || action === 'bound') ? ` to ${specId}` : '';
   const message =
     action === 'merged' && specId !== null
       ? `chore(caws): close ${specId} post-merge of ${name}`
@@ -513,19 +500,14 @@ function mergeRepairHint(
 // Porcelain quotes paths with special characters; a quoted path never
 // matches a candidate relPath and therefore stays treated as dirt —
 // fail closed.
-function isWorkingTreeCleanExceptArtifactLinks(
-  repoRoot: string,
-  worktreePath: string
-): boolean {
+function isWorkingTreeCleanExceptArtifactLinks(repoRoot: string, worktreePath: string): boolean {
   const r = runGit(['status', '--porcelain'], worktreePath);
   if (!r.ok) return false;
   const lines = r.stdout.split('\n').filter((l) => l.trim().length > 0);
   if (lines.length === 0) return true;
   if (!lines.every((l) => l.startsWith('?? '))) return false;
   const links = new Set(
-    listVerifiedArtifactLinks(repoRoot, worktreePath).map((p) =>
-      p.split(path.sep).join('/')
-    )
+    listVerifiedArtifactLinks(repoRoot, worktreePath).map((p) => p.split(path.sep).join('/'))
   );
   return lines.every((l) => links.has(l.slice(3)));
 }
@@ -555,21 +537,23 @@ function validateWorktreeName(name: string): Result<true> {
 
 // ─── Spec lookup with strict active-only enforcement ─────────────────────
 
-function loadSpecOrError(cawsDir: string, specId: string): Result<{
+function loadSpecOrError(
+  cawsDir: string,
+  specId: string
+): Result<{
   readonly source: string;
   readonly path: string;
   readonly spec: ReturnType<typeof parseAndValidateSpec> extends Result<infer S> ? S : never;
   readonly lifecycleState: string;
   readonly currentWorktree: string | undefined;
+  readonly scopeIn: readonly string[];
 }> {
   const p = specPath(cawsDir, specId);
   if (!fs.existsSync(p)) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${specId}" not found at ${p}.`,
-        { subject: specId }
-      )
+      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, `Spec "${specId}" not found at ${p}.`, {
+        subject: specId,
+      })
     );
   }
   const srcResult = readYamlSource(p);
@@ -588,6 +572,7 @@ function loadSpecOrError(cawsDir: string, specId: string): Result<{
   const spec = parsed.value as {
     lifecycle_state: string;
     worktree?: string;
+    scope?: { in?: string[] };
   };
   return ok({
     source: srcResult.value,
@@ -595,6 +580,7 @@ function loadSpecOrError(cawsDir: string, specId: string): Result<{
     spec: parsed.value as never,
     lifecycleState: spec.lifecycle_state,
     currentWorktree: spec.worktree,
+    scopeIn: Array.isArray(spec.scope?.in) ? spec.scope.in : [],
   });
 }
 
@@ -602,20 +588,12 @@ function loadSpecOrError(cawsDir: string, specId: string): Result<{
 
 /** Set `worktree: <name>` on a spec via raw-byte patching. Inserts the
  *  field after `lifecycle_state` if absent. Returns patched bytes. */
-function patchSpecSetWorktree(
-  source: string,
-  worktreeName: string
-): Result<string> {
+function patchSpecSetWorktree(source: string, worktreeName: string): Result<string> {
   const hasField = /^worktree:/m.test(source);
   if (hasField) {
     return setTopLevelScalar(source, 'worktree', worktreeName);
   }
-  return insertTopLevelScalarAfter(
-    source,
-    'lifecycle_state',
-    'worktree',
-    worktreeName
-  );
+  return insertTopLevelScalarAfter(source, 'lifecycle_state', 'worktree', worktreeName);
 }
 
 /** Remove `worktree:` from a spec by deleting the entire top-level
@@ -633,10 +611,35 @@ function patchSpecClearWorktree(source: string): Result<string> {
   return removeTopLevelScalar(source, 'worktree');
 }
 
-function nonGovernableSpecBindingError(
-  specId: string,
-  lifecycleState: string
-): Result<never> {
+/**
+ * Refuse to bind a spec whose scope.in is still the unfilled create scaffold.
+ *
+ * Binding is the moment a spec becomes write authority, and it is the last
+ * moment declaring the surface is cheap. The scaffold admits nothing (it is a
+ * plain prefix entry and no real path begins with it), so accepting the bind
+ * does not leak authority — it hands the agent a lane that refuses every write
+ * and makes them discover that one scope.reject.scope_in_miss and one strike
+ * at a time. Ten specs in this repo reached a terminal state still carrying it.
+ *
+ * Draft specs are deliberately NOT checked elsewhere: a freshly created draft
+ * carrying the scaffold is the normal resting state, so `specs create` and
+ * `specs validate` only advise. The refusal lives here, where the scaffold
+ * stops being a placeholder and starts being a claim.
+ */
+function unscopedSpecBindingError(specId: string): Result<never> {
+  return err(
+    storeDiagnostic(
+      STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+      `Spec "${specId}" still carries the create scaffold in scope.in, so it declares no files and would refuse every write in the worktree. Declare the surface first: caws specs amend-scope ${specId} --add <path> (repeatable; adding a real path discharges the scaffold).`,
+      {
+        subject: specId,
+        data: { scope_in_placeholder: SCOPE_IN_PLACEHOLDER },
+      }
+    )
+  );
+}
+
+function nonGovernableSpecBindingError(specId: string, lifecycleState: string): Result<never> {
   const alternative =
     lifecycleState === 'closed'
       ? `Reopen it first: caws specs reopen ${specId}.`
@@ -865,11 +868,11 @@ export function createWorktree(
   // CAWS-SPEC-ACTIVATION-BINDS-001: draft is a GOVERNABLE bind state, not a
   // refusal. A draft bound here is promoted to active inside the transaction
   // below; only terminal states (closed/archived) are refused.
-  if (
-    specInfo.value.lifecycleState !== 'active' &&
-    specInfo.value.lifecycleState !== 'draft'
-  ) {
+  if (specInfo.value.lifecycleState !== 'active' && specInfo.value.lifecycleState !== 'draft') {
     return nonGovernableSpecBindingError(input.specId, specInfo.value.lifecycleState);
+  }
+  if (specInfo.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER)) {
+    return unscopedSpecBindingError(input.specId);
   }
   if (
     specInfo.value.currentWorktree !== undefined &&
@@ -1265,9 +1268,7 @@ export function applyTakeoverWithAudit(
       worktree_name: input.name,
       prior_owner: {
         session_id: input.priorOwner.session_id,
-        ...(input.priorOwner.platform !== undefined
-          ? { platform: input.priorOwner.platform }
-          : {}),
+        ...(input.priorOwner.platform !== undefined ? { platform: input.priorOwner.platform } : {}),
         last_seen: input.priorOwner.last_seen,
       },
       new_owner: {
@@ -1392,11 +1393,11 @@ export function bindWorktreeRepair(
   // CAWS-SPEC-ACTIVATION-BINDS-001: draft is a GOVERNABLE bind state, not a
   // refusal. A draft bound here is promoted to active inside the transaction
   // below; only terminal states (closed/archived) are refused.
-  if (
-    specInfo.value.lifecycleState !== 'active' &&
-    specInfo.value.lifecycleState !== 'draft'
-  ) {
+  if (specInfo.value.lifecycleState !== 'active' && specInfo.value.lifecycleState !== 'draft') {
     return nonGovernableSpecBindingError(input.specId, specInfo.value.lifecycleState);
+  }
+  if (specInfo.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER)) {
+    return unscopedSpecBindingError(input.specId);
   }
 
   const registry = loadWorktrees(cawsDir);
@@ -1478,10 +1479,7 @@ export function bindWorktreeRepair(
     if (!isOk(applyResult)) return err(applyResult.errors);
 
     const eventData: Record<string, unknown> = { worktree_name: input.name };
-    if (
-      existingEntry.specId !== undefined &&
-      existingEntry.specId !== input.specId
-    ) {
+    if (existingEntry.specId !== undefined && existingEntry.specId !== input.specId) {
       eventData.previously_bound_to = existingEntry.specId;
     }
     const event: EventBody = {
@@ -1972,7 +1970,10 @@ export function untrackWorktree(
         storeDiagnostic(
           STORE_RULES.LIFECYCLE_PLAN_REJECTED,
           `Spec "${specId}" is bound to worktree "${currentWorktree}", not "${input.name}"; refusing to clear unrelated spec state.`,
-          { subject: specId, data: { worktree_name: input.name, current_worktree: currentWorktree } }
+          {
+            subject: specId,
+            data: { worktree_name: input.name, current_worktree: currentWorktree },
+          }
         )
       );
     }
@@ -2169,10 +2170,7 @@ function verifyLaneProvenance(
 
   const foreignCommits: LaneForeignCommit[] = [];
   for (const sha of shas) {
-    const files = runGit(
-      ['diff-tree', '--no-commit-id', '--name-only', '-r', sha],
-      repoRoot
-    );
+    const files = runGit(['diff-tree', '--no-commit-id', '--name-only', '-r', sha], repoRoot);
     if (!files.ok) {
       return {
         foreignCommits: [],
@@ -2184,16 +2182,12 @@ function verifyLaneProvenance(
       .map((s) => s.trim())
       .filter(Boolean);
     const outOfScopePaths = touched.filter(
-      (f) =>
-        !isGovernedStatePath(f) &&
-        !laneScope.some((entry) => scopeEntryMatches(entry, f))
+      (f) => !isGovernedStatePath(f) && !laneScope.some((entry) => scopeEntryMatches(entry, f))
     );
     if (outOfScopePaths.length === 0) continue;
     const candidateSpecIds = candidateScopes
       .filter((c) =>
-        outOfScopePaths.some((f) =>
-          c.scopeIn.some((entry) => scopeEntryMatches(entry, f))
-        )
+        outOfScopePaths.some((f) => c.scopeIn.some((entry) => scopeEntryMatches(entry, f)))
       )
       .map((c) => c.id)
       .sort();
@@ -2208,7 +2202,15 @@ function verifyLaneProvenance(
 const MERGE_CAS_MAX_ATTEMPTS = 5;
 
 type MergeCasOutcome =
-  | { ok: true; mergeCommit: string; baseBefore: string; attempts: number }
+  | {
+      ok: true;
+      mergeCommit: string;
+      baseBefore: string;
+      attempts: number;
+      canonicalCheckoutState: 'in_sync' | 'stale';
+      canonicalCheckoutSyncError?: string;
+      canonicalCheckoutRepairCommand?: string;
+    }
   | {
       ok: false;
       message: string;
@@ -2257,10 +2259,7 @@ function mergeViaCompareAndSwap(
     // Compute the merged tree in the object database. No working tree, no
     // index, no HEAD — so a dirty canonical checkout cannot corrupt the
     // result and a conflict cannot strand a half-merged tree on disk.
-    const treeResult = runGit(
-      ['merge-tree', '--write-tree', baseBefore, branch],
-      repoRoot
-    );
+    const treeResult = runGit(['merge-tree', '--write-tree', baseBefore, branch], repoRoot);
     if (!treeResult.ok) {
       // merge-tree exits non-zero on conflict and prints the conflicted
       // paths. This is a genuine conflict, not contention: retrying cannot
@@ -2303,10 +2302,7 @@ function mergeViaCompareAndSwap(
     // The atomic instant. Passing baseBefore as the expected-old value makes
     // this a compare-and-swap: if another agent advanced the base since we
     // read it, git refuses and writes nothing.
-    const casResult = runGit(
-      ['update-ref', ref, mergeCommit, baseBefore],
-      repoRoot
-    );
+    const casResult = runGit(['update-ref', ref, mergeCommit, baseBefore], repoRoot);
     if (casResult.ok) {
       // The ref moved. If the CANONICAL checkout happens to have the base
       // branch checked out, its working tree and index are now stale relative
@@ -2322,17 +2318,37 @@ function mergeViaCompareAndSwap(
       // Worktrees with a different branch checked out are unaffected, which
       // is the entire point of computing the merge in the object database.
       const headRef = runGit(['symbolic-ref', '--quiet', 'HEAD'], repoRoot);
+      let canonicalCheckoutState: 'in_sync' | 'stale' = 'in_sync';
+      let canonicalCheckoutSyncError: string | undefined;
+      let canonicalCheckoutRepairCommand: string | undefined;
       if (headRef.ok && headRef.stdout.trim() === ref) {
-        runGit(['read-tree', '-u', '-m', 'HEAD'], repoRoot);
+        // Name both trees explicitly. HEAD already resolves to mergeCommit
+        // after update-ref; the two-tree form tells Git which transition to
+        // materialize and preserves unrelated local changes. When an edit
+        // overlaps the merged paths, Git refuses instead of overwriting it.
+        const syncArgs = ['read-tree', '-u', '-m', baseBefore, mergeCommit];
+        const syncResult = runGit(syncArgs, repoRoot);
+        if (!syncResult.ok) {
+          canonicalCheckoutState = 'stale';
+          canonicalCheckoutSyncError = syncResult.reason;
+          canonicalCheckoutRepairCommand = `git ${syncArgs.join(' ')}`;
+        }
       }
-      return { ok: true, mergeCommit, baseBefore, attempts: attempt };
+      return {
+        ok: true,
+        mergeCommit,
+        baseBefore,
+        attempts: attempt,
+        canonicalCheckoutState,
+        ...(canonicalCheckoutSyncError !== undefined ? { canonicalCheckoutSyncError } : {}),
+        ...(canonicalCheckoutRepairCommand !== undefined ? { canonicalCheckoutRepairCommand } : {}),
+      };
     }
 
     // Lost the race. The objects we just wrote are unreferenced and will be
     // collected; nothing was mutated. Recompute against the new base.
     const isCas =
-      casResult.reason.includes('but expected') ||
-      casResult.reason.includes('cannot lock ref');
+      casResult.reason.includes('but expected') || casResult.reason.includes('cannot lock ref');
     if (!isCas) {
       return {
         ok: false,
@@ -2425,9 +2441,7 @@ export function mergeWorktree(
   if (entry.owner !== undefined) {
     const matched = admitsOwner(input.sessionCandidates, entry.owner.session_id);
     if (matched === null) {
-      findings.push(
-        `worktree is owned by a different session (${entry.owner.session_id})`
-      );
+      findings.push(`worktree is owned by a different session (${entry.owner.session_id})`);
     }
   }
   const wtPath = entry.path ?? worktreePathFor(cawsDir, input.name);
@@ -2454,11 +2468,7 @@ export function mergeWorktree(
   // nothing. Runs only when the binding facts exist (their absence is
   // already a finding above).
   let foreignCommits: readonly LaneForeignCommit[] = [];
-  if (
-    entry.specId !== undefined &&
-    entry.branch !== undefined &&
-    entry.baseBranch !== undefined
-  ) {
+  if (entry.specId !== undefined && entry.branch !== undefined && entry.baseBranch !== undefined) {
     const provenance = verifyLaneProvenance(
       cawsDir,
       repoRootFromCawsDir(cawsDir),
@@ -2481,6 +2491,32 @@ export function mergeWorktree(
 
   // Dry-run: report and return without mutation.
   if (input.dryRun === true) {
+    // Compute in Git's object database, just like the real CAS merge. This
+    // may create unreachable objects, but never updates refs, index or files.
+    // Pin both tips so the observation names exactly what was checked; a later
+    // real merge still recomputes and uses compare-and-swap.
+    let mergeCheck: Record<string, unknown> = { status: 'not_checked' };
+    if (findings.length === 0 && entry.baseBranch !== undefined && entry.branch !== undefined) {
+      const repo = repoRootFromCawsDir(cawsDir);
+      const base = runGit(['rev-parse', '--verify', `${entry.baseBranch}^{commit}`], repo);
+      const branch = runGit(['rev-parse', '--verify', `${entry.branch}^{commit}`], repo);
+      if (!base.ok || !branch.ok) {
+        findings.push('merge preflight could not resolve both branch tips');
+        mergeCheck = { status: 'unavailable' };
+      } else {
+        const baseSha = base.stdout.trim();
+        const branchSha = branch.stdout.trim();
+        const tree = runGit(['merge-tree', '--write-tree', baseSha, branchSha], repo);
+        mergeCheck = {
+          status: tree.ok ? 'clean' : 'conflict_or_error',
+          base_sha: baseSha,
+          branch_sha: branchSha,
+          ...(tree.ok ? { tree_sha: tree.stdout.trim().split('\n')[0] } : { detail: tree.reason }),
+        };
+        if (!tree.ok)
+          findings.push(`merge preflight failed (conflict or Git error): ${tree.reason}`);
+      }
+    }
     return ok({
       kind: 'dry_run',
       name: input.name,
@@ -2489,6 +2525,7 @@ export function mergeWorktree(
       data: {
         read_only: true,
         dry_run: true,
+        merge_check: mergeCheck,
         can_proceed: findings.length === 0,
         findings,
         next_commands: mergeRecoveryNextCommands(input.name, entry),
@@ -2568,31 +2605,20 @@ export function mergeWorktree(
   const laneTipResult = runGit(['rev-parse', branch], repoRoot);
   const laneTip = laneTipResult.ok ? laneTipResult.stdout.trim() : undefined;
 
-  const casOutcome = mergeViaCompareAndSwap(
-    repoRoot,
-    baseBranch,
-    branch,
-    message
-  );
+  const casOutcome = mergeViaCompareAndSwap(repoRoot, baseBranch, branch, message);
   if (!casOutcome.ok) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_WRITE_FAILED,
-        casOutcome.message,
-        {
-          subject: input.name,
-          narrowRepair: casOutcome.contention
-            ? `Another agent is merging into ${baseBranch}. Re-run: caws worktree merge ${input.name}`
-            : `${mergeRepairHint(input.name, entry)} ${casOutcome.repairSuffix ?? ''}`.trim(),
-          data: {
-            base_branch: baseBranch,
-            ...(casOutcome.contention ? { contention: true } : {}),
-            ...(casOutcome.attempts !== undefined
-              ? { attempts: casOutcome.attempts }
-              : {}),
-          },
-        }
-      )
+      storeDiagnostic(STORE_RULES.LIFECYCLE_WRITE_FAILED, casOutcome.message, {
+        subject: input.name,
+        narrowRepair: casOutcome.contention
+          ? `Another agent is merging into ${baseBranch}. Re-run: caws worktree merge ${input.name}`
+          : `${mergeRepairHint(input.name, entry)} ${casOutcome.repairSuffix ?? ''}`.trim(),
+        data: {
+          base_branch: baseBranch,
+          ...(casOutcome.contention ? { contention: true } : {}),
+          ...(casOutcome.attempts !== undefined ? { attempts: casOutcome.attempts } : {}),
+        },
+      })
     );
   }
   const mergeCommit = casOutcome.mergeCommit;
@@ -2732,7 +2758,10 @@ export function mergeWorktree(
             merge_commit: mergeCommit,
             spec_id: specId,
             close_outcome_kind: closeResult.value.kind,
-            close_cause: closeResult.value.kind === 'partial_failure_recovered' ? closeResult.value.cause : undefined,
+            close_cause:
+              closeResult.value.kind === 'partial_failure_recovered'
+                ? closeResult.value.cause
+                : undefined,
           },
         }
       )
@@ -2769,6 +2798,17 @@ export function mergeWorktree(
       // itself already succeeded; the range remains parent-derivable).
       ...(laneTip !== undefined ? { lane_tip: laneTip } : {}),
       base_before: casOutcome.baseBefore,
+      // CAWS-DEFECT-MERGE-STALE-CANONICAL-INDEX-001: the ref advance and
+      // checkout refresh are separate operations. Record whether the latter
+      // landed so a successful merge cannot silently leave a rollback staged
+      // in the canonical index.
+      canonical_checkout_state: casOutcome.canonicalCheckoutState,
+      ...(casOutcome.canonicalCheckoutSyncError !== undefined
+        ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }
+        : {}),
+      ...(casOutcome.canonicalCheckoutRepairCommand !== undefined
+        ? { canonical_checkout_repair_command: casOutcome.canonicalCheckoutRepairCommand }
+        : {}),
       // False only under --no-close (A3): the spec is deliberately left active
       // so AC evidence can be recorded before an explicit close.
       auto_closed_spec: !specLeftOpen,
@@ -2842,7 +2882,9 @@ export function mergeWorktree(
             merge_commit: mergeCommit,
             merged_outcome_kind: mergedTxn.value.kind,
             merged_cause:
-              mergedTxn.value.kind === 'partial_failure_recovered' ? mergedTxn.value.cause : undefined,
+              mergedTxn.value.kind === 'partial_failure_recovered'
+                ? mergedTxn.value.cause
+                : undefined,
           },
         }
       )
@@ -2929,6 +2971,13 @@ export function mergeWorktree(
     data: {
       merge_commit: mergeCommit,
       spec_id: specId,
+      canonical_checkout_state: casOutcome.canonicalCheckoutState,
+      ...(casOutcome.canonicalCheckoutSyncError !== undefined
+        ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }
+        : {}),
+      ...(casOutcome.canonicalCheckoutRepairCommand !== undefined
+        ? { canonical_checkout_repair_command: casOutcome.canonicalCheckoutRepairCommand }
+        : {}),
       auto_closed_spec: !specLeftOpen,
       spec_already_closed: specWasAlreadyClosed,
       // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): present only under --no-close,
@@ -2940,9 +2989,7 @@ export function mergeWorktree(
       branch_deleted: branchDeleted,
       // Present only on refusal, and carries git's own words so the
       // operator does not need a second investigation to act.
-      ...(branchDeleted
-        ? {}
-        : { branch_delete_error: branchDeleteResult.reason }),
+      ...(branchDeleted ? {} : { branch_delete_error: branchDeleteResult.reason }),
       // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: the auto-close's non-blocking
       // advisories, for runWorktreeMergeCommand to print. Omitted entirely
       // when the close had nothing to say, so a clean merge stays quiet.

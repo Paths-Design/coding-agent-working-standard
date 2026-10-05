@@ -15,6 +15,7 @@ import {
   type SettingsWiringStatus,
 } from '../../init/hook-install';
 import { IMPLEMENTED_SURFACES } from '../../init/hook-packs/register';
+import { SURFACE_HOOK_MECHANISMS } from '../../init/hook-packs/surfaces.generated';
 import type { HookPackInstallResult } from '../../init/hook-packs/types';
 
 function repeatChar(ch: string, n: number): string {
@@ -71,6 +72,14 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
   // actually wants attention. Framing them identically as a problem to
   // "resolve" is what trains agents to treat their own growth as an error.
   const drifted: string[] = [];
+  // Drift where the installed body still matches the baseline this installer
+  // wrote: the template moved, not the repo. Framing these as "your edits"
+  // told the operator something untrue and pointed them at --force.
+  // (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.)
+  const staleCopies: string[] = [];
+  // Drift with no recorded baseline: genuinely undecidable, so it is reported
+  // as undecided rather than folded into either confident bucket.
+  const unclassifiedDrift: string[] = [];
   const collided: string[] = [];
   // Overwrite selected these files but --force was absent: the replacement
   // was withheld and each refusal carries the diff of what --force would do.
@@ -90,7 +99,13 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
         if (a.forceRequired === true) {
           withheld.push({ destPath: a.destPath, diff: a.diff ?? '' });
         } else if (a.refusalReason === 'managed_drift') {
-          drifted.push(a.destPath);
+          if (a.driftClass === 'upstream_only') {
+            staleCopies.push(a.destPath);
+          } else if (a.driftClass === 'unobserved') {
+            unclassifiedDrift.push(a.destPath);
+          } else {
+            drifted.push(a.destPath);
+          }
         } else {
           collided.push(a.destPath);
         }
@@ -120,12 +135,57 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('  init did NOT overwrite them, so no growth was lost. Your options:');
     lines.push('    (default)     Do nothing — keep your edits. This is the right choice');
     lines.push('                  when you intended to grow these hooks.');
-    lines.push('    --adopt       Same outcome made explicit: keep your version and stop');
-    lines.push('                  reporting it as drift on future runs.');
+    lines.push('    caws init port <path> --from <staging-file>');
+    lines.push('                  Take upstream AND keep your edits. Reconcile the two by');
+    lines.push('                  hand into a staging file outside the hooks tree, then');
+    lines.push('                  port it: init validates, version-stamps, records a new');
+    lines.push('                  baseline and audit-commits, so drift tracking RESUMES.');
+    lines.push('                  See what upstream changed first with `caws init diff`.');
+    lines.push('    --adopt       Keep your version and STOP tracking drift on these paths.');
+    lines.push('                  This silences the report; it does not reconcile, so later');
+    lines.push('                  upstream fixes will not be offered for them again.');
     lines.push('    --overwrite   Preview replacing your version with the upstream template');
     lines.push('                  (shows a diff per file; nothing is written). Add --force');
     lines.push('                  to apply — only that path discards local edits. Target');
     lines.push('                  specific files with --overwrite <path...>.');
+  }
+
+  if (staleCopies.length > 0) {
+    lines.push(`  Template moved — no local edit recorded (${staleCopies.length}):`);
+    for (const p of staleCopies) lines.push(`    ↥ ${p}`);
+    lines.push('');
+    lines.push('  These match the body this installer last wrote, byte for byte. The');
+    lines.push('  template grew and this copy did not, so the difference is upstream');
+    lines.push('  work you have not received — not growth of your own. init still did');
+    lines.push('  NOT overwrite them, because a matching baseline narrows the question');
+    lines.push('  rather than settling it: `caws init port` in 12.0.0 and 12.1.0 wrote');
+    lines.push('  the reconciled body it landed into the baseline, so a file ported by');
+    lines.push('  those versions looks identical to a never-edited one. Ports from this');
+    lines.push('  version do not. Read the delta, then decide:');
+    lines.push('    caws init diff                 Show what upstream added.');
+    lines.push('    --overwrite <path...> --force  Refresh the paths you confirmed are');
+    lines.push('                                   stale copies. Discards anything local.');
+    lines.push('    caws init port <path> --from <staging-file>');
+    lines.push('                                   Use this instead when the delta turns');
+    lines.push('                                   out to hold work worth keeping: land a');
+    lines.push('                                   reconciled body, re-baseline, and keep');
+    lines.push('                                   drift tracking on.');
+    lines.push('    --adopt                        Keep this version and STOP tracking');
+    lines.push('                                   drift — silences it without reconciling.');
+  }
+
+  if (unclassifiedDrift.length > 0) {
+    lines.push(`  Drift unclassified — no recorded baseline (${unclassifiedDrift.length}):`);
+    for (const p of unclassifiedDrift) lines.push(`    ? ${p}`);
+    lines.push('');
+    lines.push('  These differ from the template, but no pristine baseline was recorded');
+    lines.push('  for them, so init cannot tell your growth from an un-received upstream');
+    lines.push('  change. It refuses rather than guess — guessing "stale" is the error');
+    lines.push('  that destroys work. Inspect with `caws init diff` and treat the result');
+    lines.push('  as growth unless you can show otherwise. The discharge that assumes the');
+    lines.push('  least is `caws init port <path> --from <staging-file>`: reconcile the two');
+    lines.push('  bodies yourself, land the result, and a fresh baseline is recorded so the');
+    lines.push('  next upgrade can classify this path instead of guessing again.');
   }
 
   if (collided.length > 0) {
@@ -152,10 +212,7 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('  diff below shows what --force would change (-: your line, +: incoming):');
     for (const w of withheld) {
       lines.push('');
-      const diffBody =
-        w.diff.length > 0
-          ? w.diff
-          : `(no diff available for ${w.destPath})`;
+      const diffBody = w.diff.length > 0 ? w.diff : `(no diff available for ${w.destPath})`;
       for (const dl of diffBody.split('\n')) lines.push(`    ${dl}`);
     }
     lines.push('');
@@ -191,9 +248,7 @@ export function renderCodexHookTrust(): string {
  *  There is no orphaned-dispatch-dir concept for zcode (it has no pre-rename
  *  legacy layout). A .zcode/config.json.example is always written as a
  *  reference artifact alongside the merge. */
-export function renderZcodeSettingsWiring(
-  mergeResult: SettingsMergeResult
-): string {
+export function renderZcodeSettingsWiring(mergeResult: SettingsMergeResult): string {
   const lines: string[] = [];
   lines.push(section('Step: .zcode/config.json wiring'));
 
@@ -212,6 +267,14 @@ export function renderZcodeSettingsWiring(
     case 'unchanged':
       lines.push('  OK — .zcode/config.json already wires all four CAWS bridge');
       lines.push('  entrypoints. No change.');
+      break;
+    case 'skipped_dual_scope':
+      lines.push('  SKIPPED — user-scope CAWS wiring for zcode detected at');
+      lines.push(`  ${mergeResult.userScopePath}. Project-scope hook entries were NOT`);
+      lines.push('  installed: zcode >=3.3.6 strips project-scope hooks anyway, and');
+      lines.push('  wiring both scopes fires every dispatcher twice. Keep the');
+      lines.push('  user-scope wiring as the single source; remove any project-scope');
+      lines.push('  hook entries if a previous init added them.');
       break;
     case 'invalid':
       lines.push(`  ERROR — .zcode/config.json could not be parsed: ${mergeResult.error}`);
@@ -332,6 +395,14 @@ export function renderQwenSettingsWiring(
     case 'unchanged':
       lines.push('  OK — .qwen/settings.json already wires all five CAWS shim');
       lines.push('  entrypoints. No change.');
+      break;
+    case 'skipped_dual_scope':
+      lines.push('  SKIPPED — user-scope CAWS wiring for qwen-code detected at');
+      lines.push(`  ${mergeResult.userScopePath}. Project-scope hook entries were NOT`);
+      lines.push('  installed: wiring both scopes fires every dispatcher twice');
+      lines.push('  (doubled audit events, SessionStart hangs). Keep the user-scope');
+      lines.push('  wiring as the single source; remove any project-scope hook');
+      lines.push('  entries if a previous init added them.');
       break;
     case 'invalid':
       lines.push(`  ERROR — .qwen/settings.json could not be parsed: ${mergeResult.error}`);
@@ -476,20 +547,46 @@ export function renderSettingsWiring(
  *  - what is the harness's activation model? (from pack)
  *
  *  Without these signals the panel becomes a constant STOP sign on every
- *  re-run, which trains agents to ignore it. */
+ *  re-run, which trains agents to ignore it.
+ *
+ *  CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: the no-pack branch
+ *  no longer asserts "governance is NOT in effect" — a run that merely
+ *  installed nothing says nothing about packs installed by earlier runs, and
+ *  a bare `caws init --adopt` (no surface detected) is exactly that shape: a
+ *  verified no-op that used to print a governance-disabled claim. The panel
+ *  now states what THIS run did, that pre-existing installs stand, and — when
+ *  adopt was requested — that adopt only resolves collisions during an
+ *  install and writes nothing on its own. */
+export interface ActivationRenderContext {
+  /** True when the caller invoked init with --adopt. */
+  readonly adoptRequested?: boolean;
+}
+
 export function renderActivationContract(
   result: HookPackInstallResult,
-  wiringStatus?: SettingsWiringStatus
+  wiringStatus?: SettingsWiringStatus,
+  context?: ActivationRenderContext
 ): string {
   const lines: string[] = [];
   lines.push(section('Step: activation'));
 
-  if (!result.pack || result.outcome === 'skipped_explicit_none') {
-    lines.push('  No hook pack was installed. Pre-tool-call governance is NOT in effect.');
-    return lines.join('\n');
-  }
-  if (result.outcome === 'skipped_ambiguous') {
-    lines.push('  No hook pack was selected. Pre-tool-call governance is NOT in effect.');
+  if (
+    !result.pack ||
+    result.outcome === 'skipped_explicit_none' ||
+    result.outcome === 'skipped_ambiguous'
+  ) {
+    // Both no-pack outcomes share this panel: with pack null the run wrote
+    // nothing, and the honest statement is about THIS run — a pre-existing
+    // install under .caws/hooks (if any) stands unchanged.
+    lines.push('  This run installed no hook pack (none was selected for this surface).');
+    lines.push('  Nothing was written or changed by this step.');
+    lines.push(
+      '  A hook pack already installed under .caws/hooks (if any) remains in effect unchanged.'
+    );
+    if (context?.adoptRequested === true) {
+      lines.push('  --adopt only decides collision handling DURING an install; with no install');
+      lines.push('  occurring it writes nothing and changes no governance state.');
+    }
     return lines.join('\n');
   }
 
@@ -553,14 +650,17 @@ export function renderActivationContract(
         break;
       }
       if (isDsh) {
+        const dshMechanism = SURFACE_HOOK_MECHANISMS.dsh;
         if (changed) {
-          lines.push('  Hook files were installed or updated. The DSH shim ships in the');
-          lines.push('  harness package tree — add @deepseek-ai/dsh-hooks-caws to the');
-          lines.push('  profile bundles, then restart the profile so the shim loads.');
+          lines.push('  Hook files were installed or updated. DSH interposes with a');
+          lines.push(`  harness-loaded plugin (${dshMechanism}), not a repo-local file or a`);
+          lines.push('  settings key. Put the CAWS bundle in the profile bundle list —');
+          lines.push('  the bundle carries its own patch layer — then restart the');
+          lines.push('  profile so it loads.');
         } else {
-          lines.push('  The DSH surface doctrine is installed. The shim is active once');
-          lines.push('  @deepseek-ai/dsh-hooks-caws is in the profile bundles and the');
-          lines.push('  profile is restarted.');
+          lines.push('  The DSH surface doctrine is installed. The plugin is active once');
+          lines.push('  the profile bundle list loads it and the profile is reloaded —');
+          lines.push('  read the composed profile rather than assuming either way.');
         }
         break;
       }

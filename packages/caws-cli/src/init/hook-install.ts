@@ -30,6 +30,7 @@
 // CAWS-owned entries are identified by the "/.claude/hooks/caws_dispatch/"
 // path segment in the hook command.
 
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -37,6 +38,7 @@ import { spawnSync } from 'child_process';
 
 import { unifiedDiff } from './unified-diff';
 import type {
+  HookPackDriftClass,
   HookPackFile,
   HookPackFileAction,
   HookPackInstallResult,
@@ -44,11 +46,36 @@ import type {
   InstallFileState,
   ManagedHeader,
 } from './hook-packs/types';
+import type {
+  RepoHookPolicyObservation,
+  RepoPolicyChainRow,
+  RepoPolicyForkRow,
+  SharedPackDriftRow,
+} from '../kernel/doctor/types';
+import { checkCompiledChains, policyDigest } from './hook-chain';
+import {
+  REPO_HOOK_POLICY_PATH,
+  effectiveRepoSurfacePolicy,
+  parseRepoHookPolicy,
+} from './repo-hook-policy';
+import type { AgentSurface } from './hook-packs/types';
+import {
+  SHARED_PACK,
+  TELEMETRY_ROW_DEST_PATHS,
+  sharedPackForSurface,
+} from './hook-packs/manifest-shared';
+import { KNOWN_SURFACES, resolveHookPack } from './hook-packs/register';
 
 /** Location of the pack templates relative to the caws-cli package root.
  *  Resolved at runtime from __dirname so it works both in dev (running
- *  ts-node against src/) and from the dist build. */
-function packTemplateRoot(packId: string): string {
+ *  ts-node against src/) and from the dist build.
+ *
+ *  Exported because more than one surface needs the shipped template bytes —
+ *  the installer, `caws hooks replace` (recording fork provenance) and doctor
+ *  (measuring fork lag). Each __dirname walk is a copy of a rule about package
+ *  layout, and a copy that is one `..` off resolves to nothing while every
+ *  caller degrades quietly. One resolver, several callers. */
+export function packTemplateRoot(packId: string): string {
   // The templates live alongside the built dist/ at the package root.
   // From dist/, walk up to the package root and down into templates.
   // From src/init/hook-install.ts ts-node mode, the same walk works.
@@ -69,123 +96,13 @@ function packTemplateRoot(packId: string): string {
 }
 
 // ─── Managed header parsing ──────────────────────────────────────────────
-
-/** Match a managed-header block at the top of a file. The block consists
- *  of consecutive `# CAWS-...` lines after an optional shebang or
- *  HTML/JSDoc comment opener. */
-const HEADER_MARKER = 'CAWS-MANAGED-HOOK';
-
-function parseJsonManagedHeader(content: string): ManagedHeader | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const description = (parsed as { description?: unknown }).description;
-  if (typeof description !== 'string' || !description.includes(HEADER_MARKER)) {
-    return null;
-  }
-
-  const readString = (key: string): string => {
-    const match = description.match(new RegExp(`${key}=([^\\s.]+)`));
-    return match ? match[1] ?? '' : '';
-  };
-
-  const hookPack = readString('hook_pack');
-  const hookPackVersion = Number.parseInt(readString('hook_pack_version'), 10);
-  const cawsMinMajor = Number.parseInt(readString('caws_min_major'), 10);
-  const lineageRefs = readString('lineage_refs')
-    .split(',')
-    .map((s) => Number.parseInt(s.trim(), 10))
-    .filter((n) => !Number.isNaN(n));
-
-  if (!hookPack || Number.isNaN(hookPackVersion) || hookPackVersion <= 0) {
-    return null;
-  }
-  return {
-    hookPack,
-    hookPackVersion,
-    cawsMinMajor: Number.isNaN(cawsMinMajor) ? 0 : cawsMinMajor,
-    lineageRefs,
-  };
-}
-
-/** Parse a managed header from file content. Returns null when not
- *  present. Tolerant of leading shebang and of `<!--`/`-->`-style
- *  comment wrappers (for Markdown). */
-export function parseManagedHeader(content: string): ManagedHeader | null {
-  const jsonHeader = parseJsonManagedHeader(content);
-  if (jsonHeader) return jsonHeader;
-
-  // Search the first ~30 lines for the marker. This is large enough to
-  // tolerate shebang + HTML comment wrapper but small enough to stay
-  // fast on big files.
-  const lines = content.split('\n').slice(0, 30);
-  let inBlock = false;
-  let hookPack = '';
-  let hookPackVersion = 0;
-  let cawsMinMajor = 0;
-  let lineageRefs: number[] = [];
-  let sawMarker = false;
-
-  for (const raw of lines) {
-    const line = raw.trim().replace(/^<!--\s*/, '').replace(/\s*-->\s*$/, '');
-    if (!line) continue;
-
-    if (line.includes(HEADER_MARKER)) {
-      sawMarker = true;
-      inBlock = true;
-      continue;
-    }
-    if (!inBlock) continue;
-
-    // The block consists of `# key: value` lines. First non-comment
-    // line ends the block.
-    if (!line.startsWith('#')) break;
-
-    const stripped = line.replace(/^#\s*/, '');
-    const colon = stripped.indexOf(':');
-    if (colon < 0) continue;
-    const key = stripped.slice(0, colon).trim();
-    const value = stripped.slice(colon + 1).trim();
-
-    switch (key) {
-      case 'hook_pack':
-        hookPack = value;
-        break;
-      case 'hook_pack_version': {
-        const n = Number.parseInt(value, 10);
-        if (!Number.isNaN(n)) hookPackVersion = n;
-        break;
-      }
-      case 'caws_min_major': {
-        const n = Number.parseInt(value, 10);
-        if (!Number.isNaN(n)) cawsMinMajor = n;
-        break;
-      }
-      case 'lineage_refs': {
-        lineageRefs = value
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0)
-          .map((s) => Number.parseInt(s, 10))
-          .filter((n) => !Number.isNaN(n));
-        break;
-      }
-      // 'do_not_edit_directly' is informational; ignored here.
-    }
-  }
-
-  if (!sawMarker || !hookPack || hookPackVersion <= 0) return null;
-  return {
-    hookPack,
-    hookPackVersion,
-    cawsMinMajor,
-    lineageRefs,
-  };
-}
+// CAWS-TELEMETRY-REPAIR-RESILIENCE-001: the parser lives in the leaf module
+// ./hook-packs/managed-header.ts (imports only the ManagedHeader type) so
+// the store's doctor snapshot and other identify-only consumers do not
+// depend on the install machinery. Re-exported here so existing importers
+// (tests, doctor-snapshot, the retire path below) are unchanged.
+export { parseManagedHeader } from './hook-packs/managed-header';
+import { HEADER_MARKER, parseManagedHeader } from './hook-packs/managed-header';
 
 // ─── Per-file state evaluation ───────────────────────────────────────────
 
@@ -226,6 +143,35 @@ function stripPackVersion(content: string): string {
     .replace(/(hook_pack_version=)\d+/, '$1#');
 }
 
+const GENERATED_SURFACES_REGISTRY_DEST = '.caws/hooks/lib/surfaces-registry.sh';
+const GENERATED_PROJECTION_SENTINEL = '# @generated — DO NOT EDIT.';
+
+/**
+ * Recognize the one legacy generated projection that shipped as `managed: true`
+ * without a CAWS managed header. The legacy file must start at the generated
+ * sentinel and match the current generated body byte-for-byte; arbitrary
+ * prefixes, stale projections, and locally edited projections remain unmanaged
+ * collisions. This is deliberately path-specific rather than a general
+ * headerless-file adoption rule.
+ */
+function isExactLegacyGeneratedProjection(
+  packId: string,
+  file: HookPackFile,
+  localContent: string,
+  incomingContent: string
+): boolean {
+  if (
+    packId !== 'shared' ||
+    file.destPath !== GENERATED_SURFACES_REGISTRY_DEST ||
+    !localContent.startsWith(GENERATED_PROJECTION_SENTINEL)
+  ) {
+    return false;
+  }
+
+  const incomingBodyOffset = incomingContent.indexOf(GENERATED_PROJECTION_SENTINEL);
+  return incomingBodyOffset >= 0 && localContent === incomingContent.slice(incomingBodyOffset);
+}
+
 const CODEX_EVENT_DISPATCHERS: Record<string, string> = {
   SessionStart: 'session_start.sh',
   PreToolUse: 'pre_tool_use.sh',
@@ -257,17 +203,10 @@ function normalizeCodexHooksJson(content: string): string | null {
   return JSON.stringify(parsed);
 }
 
-function codexHooksJsonEquivalentIgnoringManagedDescription(
-  left: string,
-  right: string
-): boolean {
+function codexHooksJsonEquivalentIgnoringManagedDescription(left: string, right: string): boolean {
   const normalizedLeft = normalizeCodexHooksJson(left);
   const normalizedRight = normalizeCodexHooksJson(right);
-  return (
-    normalizedLeft !== null &&
-    normalizedRight !== null &&
-    normalizedLeft === normalizedRight
-  );
+  return normalizedLeft !== null && normalizedRight !== null && normalizedLeft === normalizedRight;
 }
 
 function parseCodexHooksJsonManagedHeader(content: string): ManagedHeader | null {
@@ -358,9 +297,7 @@ function renderPackFileBytes(
       __CAWS_CODEX_STOP_COMMAND__: codexCommand(repoRoot, 'stop.sh'),
     };
     for (const [token, value] of Object.entries(replacements)) {
-      rendered = rendered
-        .split(token)
-        .join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
+      rendered = rendered.split(token).join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
     }
   }
 
@@ -370,6 +307,42 @@ function renderPackFileBytes(
 function bytesEqual(a: Buffer, b: Buffer): boolean {
   if (a.length !== b.length) return false;
   return a.compare(b) === 0;
+}
+
+/**
+ * Decide WHICH SIDE moved for a body that differs from the shipping template.
+ *
+ * A two-way comparison (installed vs template) proves only that they differ.
+ * It cannot attribute the difference, because consumer growth and upstream
+ * growth are the same inequality viewed from opposite ends. The installer
+ * records the as-installed body under `.caws/hooks/.pristine/`, and comparing
+ * against that third point separates them:
+ *
+ *   installed !== baseline  → the repo edited it            → local_growth
+ *   installed === baseline  → only the template moved       → upstream_only
+ *   no readable baseline    → cannot be told apart          → unobserved
+ *
+ * Fails closed in every direction it cannot see: an unreadable or missing
+ * baseline yields `unobserved`, never `upstream_only`. Mislabelling growth as
+ * a stale copy is the one error here that ends in destroyed work, so the
+ * uncertain case must never land on the permissive label.
+ *
+ * Uses the same `stripPackVersion` normalization as `evaluateFileState`, so a
+ * version-stamp-only difference never reads as either kind of growth.
+ *
+ * CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01 A1/A2/A3.
+ */
+function classifyDrift(
+  repoRoot: string,
+  packId: string,
+  file: HookPackFile,
+  localBytes: Buffer
+): HookPackDriftClass {
+  const pristine = readPristineBaseline(repoRoot, packId, file.destPath);
+  if (pristine === null) return 'unobserved';
+  const localBody = stripPackVersion(localBytes.toString('utf8'));
+  const pristineBody = stripPackVersion(pristine);
+  return localBody === pristineBody ? 'upstream_only' : 'local_growth';
 }
 
 function evaluateFileState(
@@ -394,7 +367,34 @@ function evaluateFileState(
   if (!header && packId === 'codex' && file.destPath === '.codex/hooks.json') {
     header = parseCodexHooksJsonManagedHeader(localContent);
   }
-  if (!header) return { kind: 'unmanaged_collision' };
+
+  const sourceAbs = path.join(packRoot, file.sourcePath);
+  const rawSourceBytes = readBytes(sourceAbs);
+
+  if (!header) {
+    if (rawSourceBytes !== null) {
+      const sourceBytes = renderPackFileBytes(rawSourceBytes, repoRoot, file, packVersion);
+      if (
+        isExactLegacyGeneratedProjection(packId, file, localContent, sourceBytes.toString('utf8'))
+      ) {
+        // Version zero is an internal migration sentinel: the legacy generated
+        // projection predates managed headers, while exact body equality proves
+        // that replacing it only adds current ownership metadata.
+        const legacyHeader: ManagedHeader = {
+          hookPack: packId,
+          hookPackVersion: 0,
+          cawsMinMajor: 11,
+          lineageRefs: [],
+        };
+        return {
+          kind: 'managed_old_version',
+          header: legacyHeader,
+          currentVersion: 0,
+        };
+      }
+    }
+    return { kind: 'unmanaged_collision' };
+  }
 
   if (header.hookPack !== packId) {
     // A managed file from a different pack at our destPath. Treat as
@@ -402,12 +402,12 @@ function evaluateFileState(
     return { kind: 'unmanaged_collision' };
   }
 
-  const sourceAbs = path.join(packRoot, file.sourcePath);
-  const rawSourceBytes = readBytes(sourceAbs);
   if (rawSourceBytes === null) {
     // Source template missing — this is a bug in the install, not a
-    // collision. Surface as drift so we don't silently no-op.
-    return { kind: 'managed_drift', header };
+    // collision. Surface as drift so we don't silently no-op. With no
+    // template there is nothing to attribute the difference to, so the
+    // class is unobserved rather than a guess in either direction.
+    return { kind: 'managed_drift', header, driftClass: 'unobserved' };
   }
 
   // Content is the authority for "did the consumer edit this"; the header
@@ -419,12 +419,7 @@ function evaluateFileState(
   // branch overwrite edited content on essentially every re-init).
   //
   // CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001.
-  const sourceBytes = renderPackFileBytes(
-    rawSourceBytes,
-    repoRoot,
-    file,
-    packVersion
-  );
+  const sourceBytes = renderPackFileBytes(rawSourceBytes, repoRoot, file, packVersion);
   if (bytesEqual(localBytes, sourceBytes)) {
     // Byte-identical to the (version-stamped) current template. Whether or not
     // the recorded header version was behind, there is no edit to preserve, so
@@ -469,11 +464,214 @@ function evaluateFileState(
     return { kind: 'managed_clean', header };
   }
 
-  // The body genuinely differs — the consumer grew this hook. Preserve it: the
-  // applyOne handler refuses (drift) unless --overwrite/--adopt. A version bump
-  // alone never silently clobbers an edited hook.
+  // The body genuinely differs. Preserve it: the applyOne handler refuses
+  // (drift) unless --overwrite/--adopt. A version bump alone never silently
+  // clobbers an edited hook.
   // CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001.
-  return { kind: 'managed_drift', header };
+  //
+  // WHICH side moved is a separate question from WHETHER to refuse. This used
+  // to assume the consumer grew the hook, but upstream growth the consumer has
+  // not received produces the identical inequality — so the assumption made a
+  // purely stale copy unreportable as stale, and pushed the operator toward
+  // --force, the same flag that discards real growth.
+  // CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.
+  return {
+    kind: 'managed_drift',
+    header,
+    driftClass: classifyDrift(repoRoot, packId, file, localBytes),
+  };
+}
+
+/**
+ * HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001: destPaths of installed SHARED_PACK
+ * files whose BODY differs from the shipping template with the version stamp
+ * normalized on both sides — i.e. genuine local growth OR an un-ported upstream
+ * body change, as opposed to merely an older version header.
+ *
+ * This reuses the SAME `evaluateFileState` classifier the install/diff path
+ * uses, so "drift" means one thing across the CLI. It exists because the
+ * version stamp is not a freshness proxy: `manifest-shared.ts` records content
+ * changes that landed without a version bump, so a version-equality check alone
+ * cannot prove the copied pack matches what this CLI ships.
+ *
+ * READ-ONLY: unlike the install path, nothing is written — not even pristine
+ * baselines. A file that cannot be read/classified is skipped, never fatal, so
+ * one unreadable path cannot wedge a doctor run.
+ *
+ * CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: each drifted row is
+ * classified against the pristine baseline the installer records
+ * (.caws/hooks/.pristine/<packId>/<destPath>): LOCAL GROWTH = installed body
+ * differs from its baseline (deliberate repo-owned edits — refreshing would
+ * destroy them); UPSTREAM change = baseline differs from the current rendered
+ * template (the retrofit must port those too). A drifted file with no baseline
+ * is UNOBSERVED (baselinePresent=false) — doctor keeps warning on it. All
+ * comparisons use the same stripPackVersion normalization evaluateFileState
+ * uses, so stamp-only differences never count as growth or upstream change.
+ */
+/** Identity of a shipped shared-pack handler, as a fork records it. */
+export interface ShippedHandlerProvenance {
+  readonly pack: string;
+  readonly pack_version: number;
+  readonly sha256: string;
+}
+
+/**
+ * Provenance of the shared-pack file shipping under `handler`, or null when
+ * the pack ships nothing by that name.
+ *
+ * Two surfaces need this and MUST agree: `caws hooks replace` writes the
+ * digest into a fork record, and doctor later compares that digest against the
+ * shipping file to measure lag. If the two computed it differently — a
+ * different path resolution, a different hash input — every fork would read as
+ * drifted the moment it was recorded, and the lag signal would be noise.
+ */
+export function shippedHandlerProvenance(handler: string): ShippedHandlerProvenance | null {
+  const row = SHARED_PACK.installedFiles.find((file) => path.basename(file.destPath) === handler);
+  if (row === undefined) return null;
+  const bytes = readBytes(path.join(packTemplateRoot(SHARED_PACK.id), row.sourcePath));
+  if (bytes === null) return null;
+  return {
+    pack: SHARED_PACK.id,
+    pack_version: SHARED_PACK.packVersion,
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+  };
+}
+
+/**
+ * Observe the repo-local hook policy for doctor.
+ *
+ * Returns undefined when the repo has NO `.caws/hooks/hook-policy.json` — a
+ * repo that has not opted in is not in a degraded state, and a doctor that
+ * complains about it trains its readers to ignore it. An unreadable or
+ * validator-rejected document is reported as `invalid`, never as absent:
+ * treating it as empty would report the repo healthy at the exact moment its
+ * guard plane is failing closed on every tool call.
+ *
+ * Every filesystem and template comparison happens here, so the kernel keeps
+ * no I/O — it receives plain rows and decides only severity and prose.
+ */
+export function observeRepoHookPolicy(repoRoot: string): RepoHookPolicyObservation | undefined {
+  const policyPath = path.join(repoRoot, REPO_HOOK_POLICY_PATH);
+  let text: string;
+  try {
+    text = fs.readFileSync(policyPath, 'utf8');
+  } catch (e) {
+    // ENOENT is "not opted in" (silent). Anything else — a permission error, a
+    // directory where the file should be — is a policy doctor cannot read, and
+    // the launcher cannot either, so it is reported rather than swallowed.
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    return {
+      kind: 'invalid',
+      error: `cannot read ${REPO_HOOK_POLICY_PATH}: ${(e as Error).message}`,
+    };
+  }
+
+  const parsed = parseRepoHookPolicy(text);
+  if (!parsed.ok) return { kind: 'invalid', error: parsed.error };
+
+  const forks: RepoPolicyForkRow[] = [];
+  for (const [surface, surfacePolicy] of Object.entries(parsed.policy.surfaces)) {
+    for (const [handler, fork] of Object.entries(surfacePolicy.forks)) {
+      const shipped = shippedHandlerProvenance(handler);
+      forks.push({
+        surface,
+        handler,
+        recordedPack: fork.forked_from.pack,
+        recordedPackVersion: fork.forked_from.pack_version,
+        shippingPackVersion: SHARED_PACK.packVersion,
+        reason: fork.reason,
+        // A handler the shared pack does not ship (or whose template cannot be
+        // read) has no measurable upstream. The key is OMITTED rather than set
+        // to false — unobserved, never "unchanged". Synthesizing false would
+        // report a fork as current on the strength of a comparison that never
+        // happened.
+        ...(shipped === null ? {} : { upstreamChange: shipped.sha256 !== fork.forked_from.sha256 }),
+      });
+    }
+  }
+
+  // Chain staleness is measured through the SAME resolver `caws hooks compile`
+  // writes with, so doctor can never report a chain current that compile would
+  // rewrite, nor stale one it would leave alone.
+  const dispatchDir = path.join(repoRoot, '.caws/hooks/dispatch');
+  let staleChains: RepoPolicyChainRow[] = [];
+  try {
+    staleChains = checkCompiledChains({
+      dispatchDir,
+      repo: effectiveRepoSurfacePolicy(parsed.policy, 'default'),
+      digest: policyDigest(text),
+      policyPresent: true,
+    })
+      .filter((check) => check.stale)
+      .map((check) => ({ event: check.event, reason: check.reason ?? 'stale' }));
+  } catch {
+    // Fail-open on the chain half only: an unreadable dispatch tree must not
+    // cost the fork rows we already computed.
+    staleChains = [];
+  }
+
+  return { kind: 'valid', forks, staleChains };
+}
+
+/**
+ * Whether the superseded `.caws/hooks/adapter-policy.json` is still present.
+ *
+ * Independent of hook-policy.json: the whole point is that a repo can carry
+ * the legacy frozen-chain file while having no modern policy at all, and that
+ * is the state most in need of naming.
+ */
+export function observeLegacyAdapterPolicy(repoRoot: string): boolean {
+  return fs.existsSync(path.join(repoRoot, '.caws/hooks/adapter-policy.json'));
+}
+
+export function observeSharedPackBodyDrift(repoRoot: string): readonly SharedPackDriftRow[] {
+  const packRoot = packTemplateRoot(SHARED_PACK.id);
+  const drifted: SharedPackDriftRow[] = [];
+  for (const file of SHARED_PACK.installedFiles) {
+    let state: InstallFileState;
+    try {
+      state = evaluateFileState(repoRoot, packRoot, SHARED_PACK.id, SHARED_PACK.packVersion, file);
+    } catch {
+      continue;
+    }
+    if (state.kind !== 'managed_drift') continue;
+
+    // Built mutable, classified below, then pushed as the frozen row shape.
+    const row: {
+      destPath: string;
+      baselinePresent: boolean;
+      localGrowth: boolean;
+      upstreamChange: boolean;
+    } = {
+      destPath: file.destPath,
+      baselinePresent: false,
+      localGrowth: false,
+      upstreamChange: false,
+    };
+    // localGrowth is READ from the classification evaluateFileState already
+    // made rather than recomputed here. Two surfaces deciding the same
+    // question from the same inputs must not hold two copies of the rule —
+    // that is how the install path came to attribute upstream growth to the
+    // consumer while this audit path classified it correctly.
+    // (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.)
+    const pristine = readPristineBaseline(repoRoot, SHARED_PACK.id, file.destPath);
+    if (pristine !== null) {
+      row.baselinePresent = true;
+      row.localGrowth = state.driftClass === 'local_growth';
+      const pristineBody = stripPackVersion(pristine);
+      const sourceBytes = readBytes(path.join(packRoot, file.sourcePath));
+      if (sourceBytes !== null) {
+        const templateBody = stripPackVersion(
+          renderPackFileBytes(sourceBytes, repoRoot, file, SHARED_PACK.packVersion).toString('utf8')
+        );
+        row.upstreamChange = pristineBody !== templateBody;
+      }
+      // Template unreadable: leave both flags false but baselinePresent true —
+      // the row stays unclassified (not growth), never a false downgrade.
+    }
+    drifted.push(row);
+  }
+  return drifted.sort((a, b) => a.destPath.localeCompare(b.destPath));
 }
 
 // ─── Install ─────────────────────────────────────────────────────────────
@@ -511,19 +709,14 @@ interface InstallContext {
   readonly adopt: boolean;
 }
 
-function contextFromOptions(
-  pack: HookPackV1,
-  options: HookPackInstallOptions
-): InstallContext {
+function contextFromOptions(pack: HookPackV1, options: HookPackInstallOptions): InstallContext {
   return {
     repoRoot: options.repoRoot,
     packRoot: options.packRootOverride ?? packTemplateRoot(pack.id),
     pack,
     overwrite: options.overwrite === true,
     overwriteTargets:
-      options.overwriteTargets !== undefined
-        ? new Set(options.overwriteTargets)
-        : null,
+      options.overwriteTargets !== undefined ? new Set(options.overwriteTargets) : null,
     force: options.force === true,
     adopt: options.adopt === true,
   };
@@ -552,19 +745,8 @@ function ensureDir(target: string): void {
 // via EPHEMERAL_CAWS_ENTRIES), current install only — writing a new
 // baseline retires the old one (same path, atomic write).
 
-export function pristinePathFor(
-  repoRoot: string,
-  packId: string,
-  destPath: string
-): string {
-  return path.join(
-    repoRoot,
-    '.caws',
-    'hooks',
-    '.pristine',
-    packId,
-    ...destPath.split('/')
-  );
+export function pristinePathFor(repoRoot: string, packId: string, destPath: string): string {
+  return path.join(repoRoot, '.caws', 'hooks', '.pristine', packId, ...destPath.split('/'));
 }
 
 function writePristineBaseline(
@@ -577,6 +759,16 @@ function writePristineBaseline(
   const p = pristinePathFor(repoRoot, packId, file.destPath);
   ensureDir(path.dirname(p));
   fs.writeFileSync(p, rendered);
+  fs.writeFileSync(
+    p + '.origin.json',
+    JSON.stringify({
+      version: 1,
+      writer: 'upstream-template-only',
+      pack: packId,
+      template_sha256: crypto.createHash('sha256').update(rendered).digest('hex'),
+      pack_version: parseManagedHeader(rendered.toString('utf8'))?.hookPackVersion ?? null,
+    }) + '\n'
+  );
 }
 
 /** The pristine as-installed content for a managed pack path, or null when
@@ -598,12 +790,7 @@ function writeFile(ctx: InstallContext, file: HookPackFile): void {
   if (sourceBytes === null) {
     throw new Error(`template file missing: ${sourceAbs}`);
   }
-  const rendered = renderPackFileBytes(
-    sourceBytes,
-    ctx.repoRoot,
-    file,
-    ctx.pack.packVersion
-  );
+  const rendered = renderPackFileBytes(sourceBytes, ctx.repoRoot, file, ctx.pack.packVersion);
   fs.writeFileSync(destAbs, rendered);
   writePristineBaseline(ctx.repoRoot, ctx.pack.id, file, rendered);
   if (file.executable) {
@@ -615,10 +802,7 @@ function writeFile(ctx: InstallContext, file: HookPackFile): void {
   }
 }
 
-function applyOne(
-  ctx: InstallContext,
-  file: HookPackFile
-): HookPackFileAction {
+function applyOne(ctx: InstallContext, file: HookPackFile): HookPackFileAction {
   const state = evaluateFileState(
     ctx.repoRoot,
     ctx.packRoot,
@@ -645,7 +829,7 @@ function applyOne(
       return { destPath: file.destPath, action: 'updated', restampOnly: true };
 
     case 'managed_drift':
-      return resolveCollision(ctx, file, 'managed_drift', true);
+      return resolveCollision(ctx, file, 'managed_drift', true, state.driftClass);
 
     case 'unmanaged_collision':
       return resolveCollision(ctx, file, 'unmanaged_collision', true);
@@ -663,12 +847,7 @@ function incomingDiff(ctx: InstallContext, file: HookPackFile): string {
   if (rawSourceBytes === null) {
     return `(pack template missing at ${file.sourcePath}; no diff available)`;
   }
-  const incoming = renderPackFileBytes(
-    rawSourceBytes,
-    ctx.repoRoot,
-    file,
-    ctx.pack.packVersion
-  );
+  const incoming = renderPackFileBytes(rawSourceBytes, ctx.repoRoot, file, ctx.pack.packVersion);
   return unifiedDiff(
     `local: ${file.destPath}`,
     `incoming: ${ctx.pack.id} v${ctx.pack.packVersion} template`,
@@ -684,7 +863,8 @@ function resolveCollision(
   ctx: InstallContext,
   file: HookPackFile,
   reason: 'managed_drift' | 'unmanaged_collision',
-  apply: boolean
+  apply: boolean,
+  driftClass?: HookPackDriftClass
 ): HookPackFileAction {
   if (overwriteSelects(ctx, file)) {
     if (ctx.force) {
@@ -699,6 +879,7 @@ function resolveCollision(
       destPath: file.destPath,
       action: 'refused',
       refusalReason: reason,
+      ...(driftClass === undefined ? {} : { driftClass }),
       forceRequired: true,
       diff: incomingDiff(ctx, file),
     };
@@ -710,13 +891,11 @@ function resolveCollision(
     destPath: file.destPath,
     action: 'refused',
     refusalReason: reason,
+    ...(driftClass === undefined ? {} : { driftClass }),
   };
 }
 
-function planOne(
-  ctx: InstallContext,
-  file: HookPackFile
-): HookPackFileAction {
+function planOne(ctx: InstallContext, file: HookPackFile): HookPackFileAction {
   const state = evaluateFileState(
     ctx.repoRoot,
     ctx.packRoot,
@@ -732,7 +911,7 @@ function planOne(
     case 'managed_old_version':
       return { destPath: file.destPath, action: 'updated', restampOnly: true };
     case 'managed_drift':
-      return resolveCollision(ctx, file, 'managed_drift', false);
+      return resolveCollision(ctx, file, 'managed_drift', false, state.driftClass);
     case 'unmanaged_collision':
       return resolveCollision(ctx, file, 'unmanaged_collision', false);
   }
@@ -750,10 +929,7 @@ function outcomeForActions(
   if (allUnchanged) {
     return 'already_installed';
   }
-  if (
-    actions.some((a) => a.action === 'updated') &&
-    !actions.some((a) => a.action === 'created')
-  ) {
+  if (actions.some((a) => a.action === 'updated') && !actions.some((a) => a.action === 'created')) {
     return 'updated';
   }
   return 'installed';
@@ -778,6 +954,232 @@ export function installHookPack(
     pack,
     actions,
     activation: pack.activation,
+  };
+}
+
+// ─── Telemetry row retirement (CAWS-HARNESS-TELEMETRY-ADAPTER-001) ────────
+
+/**
+ * CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: the surfaces whose vendor
+ * pack is installed in THIS project.
+ *
+ * There is no persisted receipt of which surfaces `caws init` has run for,
+ * so installation is inferred the way doctor already infers adapter
+ * coverage: a pack counts as installed when at least one of its managed
+ * files is on disk carrying that pack's own `hook_pack:` header. Reading
+ * the header (not merely statting the vendor directory) is what keeps an
+ * unrelated `.claude/` or `.zcode/` directory from being mistaken for a
+ * CAWS install.
+ *
+ * Derived from the pack manifests rather than a hand-maintained list, so a
+ * newly registered surface cannot leave this detector silently stale.
+ * Pure observation: never writes, never throws.
+ */
+export function observeInstalledPackSurfaces(repoRoot: string): readonly AgentSurface[] {
+  const installed: AgentSurface[] = [];
+  for (const surface of KNOWN_SURFACES) {
+    const resolution = resolveHookPack(surface);
+    // 'none' and declared-but-unimplemented surfaces install nothing.
+    if (resolution.kind !== 'pack') continue;
+    const pack = resolution.pack;
+    const present = pack.installedFiles.some((file) => {
+      if (!file.managed) return false;
+      let content: string;
+      try {
+        content = fs.readFileSync(path.join(repoRoot, file.destPath), 'utf8');
+      } catch {
+        return false;
+      }
+      const header = parseManagedHeader(content);
+      return header !== null && header.hookPack === pack.id;
+    });
+    if (present) installed.push(surface);
+  }
+  return installed;
+}
+
+/**
+ * Which telemetry rows are still claimed by an installed surface, and by
+ * whom.
+ *
+ * A row is claimed when `sharedPackForSurface` for any installed surface
+ * still lists it. That single question subsumes the surface taxonomy: for a
+ * non-covered surface the shared pack keeps the telemetry rows (so its
+ * dispatchers invoke them and its own init would reinstall them), and for an
+ * adapter-covered surface the pack omits them. Asking the manifest rather
+ * than testing surface identity means the rule needs no update when
+ * ADAPTER_COVERED_SURFACES changes.
+ *
+ * This is the invariant in general form: init must never remove a file that
+ * another installed surface's install set still contains.
+ */
+/**
+ * The installed surfaces that still claim the vendored telemetry rows.
+ *
+ * Doctor's single observation for CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001:
+ * a non-empty list means the rows on disk are LOAD-BEARING for a co-installed
+ * surface, not stale dual-writers, and `HOOKS_STALE_TELEMETRY_PACK` must stay
+ * silent. Exported from the install module on purpose — the same reason
+ * doctor-snapshot imports observeSharedPackBodyDrift from here: re-deriving
+ * "who needs these rows" in the store would create a second source of truth
+ * and let the advisory prescribe a repair the installer would not perform.
+ */
+export function observeTelemetryRowClaimants(repoRoot: string): readonly string[] {
+  return telemetryRowsClaimedBy(observeInstalledPackSurfaces(repoRoot)).claimants;
+}
+
+function telemetryRowsClaimedBy(surfaces: readonly AgentSurface[]): {
+  readonly rows: ReadonlySet<string>;
+  readonly claimants: readonly string[];
+} {
+  const telemetry = new Set<string>(TELEMETRY_ROW_DEST_PATHS);
+  const rows = new Set<string>();
+  const claimants: string[] = [];
+  for (const surface of surfaces) {
+    const claimed = sharedPackForSurface(surface).installedFiles.filter((file) =>
+      telemetry.has(file.destPath)
+    );
+    if (claimed.length === 0) continue;
+    claimants.push(surface);
+    for (const file of claimed) rows.add(file.destPath);
+  }
+  return { rows, claimants };
+}
+
+/** Outcome of retiring the vendored telemetry rows for an adapter-covered
+ *  surface. Absence is reported, never treated as staleness; local growth is
+ *  never touched; a failed deletion is reported and never thrown. The four
+ *  lists are disjoint per-path outcomes covering every TELEMETRY_ROW_DEST_PATHS
+ *  entry exactly once. */
+export interface TelemetryRetireResult {
+  /** Managed `hook_pack: shared` rows removed from disk. */
+  readonly retired: readonly string[];
+  /** Managed rows deliberately KEPT because another installed surface's
+   *  install set still contains them
+   *  (CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001). */
+  readonly retained: readonly string[];
+  /** The installed surfaces that claimed the retained rows. */
+  readonly retainedFor: readonly string[];
+  /** Dest paths that did not exist. */
+  readonly absent: readonly string[];
+  /** Files present at a telemetry dest path WITHOUT a shared-pack managed
+   *  header — local growth or foreign files; retirement refuses these. */
+  readonly unmanaged: readonly string[];
+  /** Managed rows whose deletion failed (readable but not removable —
+   * EPERM, a locked file, exotic perms). The row stays on disk; retirement
+   * reports it loudly instead of aborting init. */
+  readonly failed: readonly string[];
+}
+
+/**
+ * Remove the vendored telemetry rows (TELEMETRY_ROW_DEST_PATHS) when they are
+ * CAWS-managed installs of the shared pack. `caws init` calls this AFTER the
+ * shared install for an adapter-covered surface: those rows are no longer in
+ * the surface's install set (sharedPackForSurface), so managed copies left on
+ * disk by an earlier init are stale dual-writers over state the surface's
+ * telemetry adapter now owns.
+ *
+ * Non-destructive by construction and NEVER THROWS: absent files are
+ * reported, not errors; files without a `hook_pack: shared` managed header
+ * are never touched; a failed unlink (permissions, lock) is reported per
+ * path in `failed` so the caller can surface it without aborting the
+ * install that just completed. The deletion is reversible — re-running init
+ * for a non-covered surface reinstalls the rows, because for that surface
+ * they are still in the pack.
+ */
+/** What retirement WOULD do, computed without touching the filesystem.
+ *  `retire` is the set apply will unlink; `absent` and `unmanaged` are the
+ *  per-path reasons a row is left alone. Disjoint, and together they cover
+ *  every TELEMETRY_ROW_DEST_PATHS entry exactly once — same as
+ *  TelemetryRetireResult minus `failed`, which only an actual unlink can
+ *  discover. */
+export interface TelemetryRetirePlan {
+  readonly retire: readonly string[];
+  readonly absent: readonly string[];
+  readonly unmanaged: readonly string[];
+  /** Managed rows NOT retired because another installed surface's install
+   *  set still contains them — that surface's dispatchers invoke these rows
+   *  and its init would reinstall them
+   *  (CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001). */
+  readonly retained: readonly string[];
+  /** The installed surfaces that claimed the retained rows. Empty when
+   *  nothing was retained, so the reason is never asserted without effect. */
+  readonly retainedFor: readonly string[];
+}
+
+/**
+ * CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: the read-only half of
+ * retirement, so `caws init --plan` can enumerate the deletions apply will
+ * perform. `retireStaleTelemetryRows` is defined in terms of this function —
+ * one classifier, so a preview cannot promise a different set than apply
+ * removes (the same "one place so apply and plan cannot drift" rule the
+ * hook-pack policy options already follow).
+ *
+ * Pure observation: opens each row to read its managed header and never
+ * writes, so it is safe to call from any read-only path.
+ */
+export function planTelemetryRetirement(repoRoot: string): TelemetryRetirePlan {
+  const { rows: claimedRows, claimants } = telemetryRowsClaimedBy(
+    observeInstalledPackSurfaces(repoRoot)
+  );
+  const retire: string[] = [];
+  const absent: string[] = [];
+  const unmanaged: string[] = [];
+  const retained: string[] = [];
+  for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
+    } catch {
+      // Missing ≠ stale (MISSING-NOT-STALE invariant): nothing to retire.
+      absent.push(relPath);
+      continue;
+    }
+    const header = parseManagedHeader(content);
+    if (!header || header.hookPack !== 'shared') {
+      unmanaged.push(relPath);
+      continue;
+    }
+    // Ours, but still claimed by a co-installed surface: keep it. Checked
+    // AFTER the unmanaged test so local growth stays untouchable regardless
+    // of which surfaces are installed, and the four lists stay disjoint.
+    if (claimedRows.has(relPath)) {
+      retained.push(relPath);
+      continue;
+    }
+    retire.push(relPath);
+  }
+  return {
+    retire,
+    absent,
+    unmanaged,
+    retained,
+    // Only claim a reason when it had an effect.
+    retainedFor: retained.length > 0 ? claimants : [],
+  };
+}
+
+export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResult {
+  const plan = planTelemetryRetirement(repoRoot);
+  const retired: string[] = [];
+  const failed: string[] = [];
+  for (const relPath of plan.retire) {
+    try {
+      fs.unlinkSync(path.join(repoRoot, relPath));
+      retired.push(relPath);
+    } catch {
+      // The row is provably ours but the platform refuses the delete.
+      // Degrade loudly per-path: report, keep going, never abort init.
+      failed.push(relPath);
+    }
+  }
+  return {
+    retired,
+    retained: plan.retained,
+    retainedFor: plan.retainedFor,
+    absent: plan.absent,
+    unmanaged: plan.unmanaged,
+    failed,
   };
 }
 
@@ -837,22 +1239,14 @@ export function diffHookPack(
   const out: HookPackFileDiff[] = [];
 
   for (const file of pack.installedFiles) {
-    const state = evaluateFileState(
-      ctx.repoRoot,
-      ctx.packRoot,
-      pack.id,
-      pack.packVersion,
-      file
-    );
+    const state = evaluateFileState(ctx.repoRoot, ctx.packRoot, pack.id, pack.packVersion, file);
     const destAbs = path.join(ctx.repoRoot, file.destPath);
     const local = readBytes(destAbs)?.toString('utf8') ?? '';
     const raw = readBytes(path.join(ctx.packRoot, file.sourcePath));
     const incoming =
       raw === null
         ? null
-        : renderPackFileBytes(raw, ctx.repoRoot, file, pack.packVersion).toString(
-            'utf8'
-          );
+        : renderPackFileBytes(raw, ctx.repoRoot, file, pack.packVersion).toString('utf8');
 
     const twoWayDiff =
       incoming === null
@@ -871,11 +1265,7 @@ export function diffHookPack(
         reason: 'unmanaged pack file — no baseline is kept',
       };
     } else {
-      const baseline = readPristineBaseline(
-        ctx.repoRoot,
-        pack.id,
-        file.destPath
-      );
+      const baseline = readPristineBaseline(ctx.repoRoot, pack.id, file.destPath);
       if (baseline === null) {
         threeWay = {
           available: false,
@@ -946,10 +1336,7 @@ export type HookPackPortResult =
  *  atomically, records the pristine baseline, and thereby RESUMES drift
  *  tracking (unlike --adopt, which ends it): the landed file is the new
  *  managed baseline. The caller owns the audit commit. */
-export function portHookFile(
-  pack: HookPackV1,
-  options: HookPackPortOptions
-): HookPackPortResult {
+export function portHookFile(pack: HookPackV1, options: HookPackPortOptions): HookPackPortResult {
   const file = pack.installedFiles.find((f) => f.destPath === options.destPath);
   if (file === undefined) {
     return {
@@ -1026,10 +1413,7 @@ export function portHookFile(
   // Re-stamp at the current pack version: the agent ports CONTENT; the
   // version stamp is pack state, owned here. This is what resumes drift
   // tracking against the current version.
-  const rendered = Buffer.from(
-    stampPackVersion(candidate, pack.packVersion),
-    'utf8'
-  );
+  const rendered = Buffer.from(stampPackVersion(candidate, pack.packVersion), 'utf8');
   const destAbs = path.join(ctx.repoRoot, file.destPath);
   ensureDir(path.dirname(destAbs));
   fs.writeFileSync(destAbs, rendered);
@@ -1040,7 +1424,33 @@ export function portHookFile(
       // chmod can fail on some filesystems (Windows). Non-fatal.
     }
   }
-  writePristineBaseline(options.repoRoot, pack.id, file, rendered);
+  // The baseline records the UPSTREAM body this path was last synced to, not
+  // whatever landed on top of it. A port lands a RECONCILED body — template
+  // plus the repo's own growth — so baselining the candidate made
+  // `installed === baseline` true for a file that is mostly local work, and the
+  // drift classifier then read it as `upstream_only`: "no local edit recorded"
+  // about the one shape guaranteed to hold local edits. That is the label that
+  // makes `--overwrite --force` look safe on reconciled work.
+  //
+  // Baselining the TEMPLATE instead keeps `installed - baseline = local growth`
+  // true by construction on both write paths, which is what the baseline was
+  // introduced to mean. It also dissolves the ambiguity doctor's
+  // pack_body_drift row documents ("the port path re-baselines the ported
+  // body") at its source, rather than describing it forever.
+  //
+  // If the template cannot be read we write NO baseline: an absent baseline
+  // classifies `unobserved` and refuses, whereas a wrong one classifies
+  // confidently. Fail closed.
+  // CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01.
+  const templateBytes = readBytes(path.join(ctx.packRoot, file.sourcePath));
+  if (templateBytes !== null) {
+    writePristineBaseline(
+      options.repoRoot,
+      pack.id,
+      file,
+      renderPackFileBytes(templateBytes, ctx.repoRoot, file, pack.packVersion)
+    );
+  }
 
   return {
     ok: true,
@@ -1071,9 +1481,7 @@ export type SettingsWiringStatus =
  * settings.json — this function just surfaces the state so the CLI can
  * tell the user exactly what to add.
  */
-export function inspectClaudeSettings(
-  repoRoot: string
-): SettingsWiringStatus {
+export function inspectClaudeSettings(repoRoot: string): SettingsWiringStatus {
   const settingsPath = path.join(repoRoot, '.claude', 'settings.json');
   if (!fs.existsSync(settingsPath)) {
     return { kind: 'absent' };
@@ -1104,9 +1512,7 @@ export function inspectClaudeSettings(
     }
     // A canonical entry has a hook whose command path references any of
     // the known CAWS dispatch tails (shared-core or legacy).
-    const snake = key
-      .replace(/([a-z])([A-Z])/g, '$1_$2')
-      .toLowerCase();
+    const snake = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
     const sharedCoreTail = `.caws/hooks/dispatch/${snake}.sh`;
     const legacyCawsDispatchTail = `.claude/hooks/caws_dispatch/${snake}.sh`;
     const legacyDispatchTail = `.claude/hooks/dispatch/${snake}.sh`;
@@ -1145,9 +1551,7 @@ export function inspectClaudeSettings(
  *  .claude/hooks/caws_dispatch/<event>.sh and .claude/hooks/dispatch/<event>.sh
  *  are recognized by arrayHasCawsEntry as already-wired CAWS entries so
  *  re-running init does not duplicate entries for consumers on the old wiring. */
-export const CANONICAL_HOOK_ENTRIES: Readonly<
-  Record<string, Record<string, unknown>>
-> = {
+export const CANONICAL_HOOK_ENTRIES: Readonly<Record<string, Record<string, unknown>>> = {
   PreToolUse: {
     matcher: 'Bash|Read|Write|Edit|Glob|Grep|NotebookEdit',
     hooks: [
@@ -1190,6 +1594,19 @@ export const CANONICAL_HOOK_ENTRIES: Readonly<
       },
     ],
   },
+  // Session teardown, once per session — Stop fires once per TURN. The
+  // handler only seals artifacts earlier events wrote, so the timeout is
+  // short: nothing here may keep the harness from exiting.
+  SessionEnd: {
+    hooks: [
+      {
+        type: 'command',
+        command:
+          'CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR="$CLAUDE_PROJECT_DIR" "$CLAUDE_PROJECT_DIR"/.caws/hooks/dispatch/session_end.sh',
+        timeout: 10,
+      },
+    ],
+  },
 };
 
 /** A fresh settings.json containing ONLY the canonical CAWS wiring. */
@@ -1203,11 +1620,7 @@ function canonicalSettingsObject(): { hooks: Record<string, unknown[]> } {
 
 /** Canonical settings.json wiring snippet, returned as a JSON string
  *  ready to print or copy. Mirrors the snippet in CLAUDE.md. */
-export const CANONICAL_SETTINGS_SNIPPET = JSON.stringify(
-  canonicalSettingsObject(),
-  null,
-  2
-);
+export const CANONICAL_SETTINGS_SNIPPET = JSON.stringify(canonicalSettingsObject(), null, 2);
 
 // ─── settings.json merge (write / append / idempotent / never-clobber) ───
 
@@ -1229,7 +1642,13 @@ export type SettingsMergeResult =
   /** settings.json already wired all four entries; nothing written. */
   | { readonly kind: 'unchanged'; readonly path: string }
   /** settings.json existed but could not be parsed; left untouched. */
-  | { readonly kind: 'invalid'; readonly path: string; readonly error: string };
+  | { readonly kind: 'invalid'; readonly path: string; readonly error: string }
+  /** CAWS-GATED-SURFACE-SCOPE-GUARD-001: user-scope CAWS wiring for this
+   *  trust-gated surface exists on this machine, so the project-scope hook
+   *  entries were NOT installed (dual-scope wiring double-fires every
+   *  dispatcher — proven live 2026-08-13). Nothing was written; the
+   *  warning names the kept single source of wiring. */
+  | { readonly kind: 'skipped_dual_scope'; readonly path: string; readonly userScopePath: string };
 
 export type SettingsMergePlanResult = SettingsMergeResult & {
   readonly readOnly: true;
@@ -1340,19 +1759,13 @@ export function mergeClaudeSettings(repoRoot: string): SettingsMergeResult {
   }
 
   root.hooks = hooks;
-  fs.writeFileSync(
-    settingsPath,
-    `${JSON.stringify(root, null, 2)}\n`,
-    'utf8'
-  );
+  fs.writeFileSync(settingsPath, `${JSON.stringify(root, null, 2)}\n`, 'utf8');
   return { kind: 'merged', path: settingsPath, added };
 }
 
 /** Read-only counterpart to mergeClaudeSettings. Computes the same created /
  * merged / unchanged / invalid outcome without writing settings.json. */
-export function planClaudeSettingsMerge(
-  repoRoot: string
-): SettingsMergePlanResult {
+export function planClaudeSettingsMerge(repoRoot: string): SettingsMergePlanResult {
   const settingsPath = path.join(repoRoot, '.claude', 'settings.json');
 
   if (!fs.existsSync(settingsPath)) {
@@ -1402,22 +1815,14 @@ export function planClaudeSettingsMerge(
  *  Idempotent (always writes the same bytes). This is the reference
  *  artifact for users who decline the in-place merge. */
 export function writeSettingsExample(repoRoot: string): string {
-  const examplePath = path.join(
-    repoRoot,
-    '.claude',
-    'settings.json.example'
-  );
+  const examplePath = path.join(repoRoot, '.claude', 'settings.json.example');
   ensureDir(path.dirname(examplePath));
   fs.writeFileSync(examplePath, `${CANONICAL_SETTINGS_SNIPPET}\n`, 'utf8');
   return examplePath;
 }
 
 export function planSettingsExample(repoRoot: string): SettingsExamplePlanResult {
-  const examplePath = path.join(
-    repoRoot,
-    '.claude',
-    'settings.json.example'
-  );
+  const examplePath = path.join(repoRoot, '.claude', 'settings.json.example');
   const desired = `${CANONICAL_SETTINGS_SNIPPET}\n`;
   let existing: string | null = null;
   try {
@@ -1428,13 +1833,36 @@ export function planSettingsExample(repoRoot: string): SettingsExamplePlanResult
   return {
     path: examplePath,
     action:
-      existing === null
-        ? 'would_create'
-        : existing === desired
-          ? 'unchanged'
-          : 'would_update',
+      existing === null ? 'would_create' : existing === desired ? 'unchanged' : 'would_update',
     readOnly: true,
   };
+}
+
+// ─── Trust-gated surface scope guard (CAWS-GATED-SURFACE-SCOPE-GUARD-001) ────────────────────────────────────────
+
+// Detection lives in the leaf ./hook-packs/user-scope-wiring.ts (imports only
+// node builtins) so the store's doctor snapshot can observe user-scope wiring
+// without depending on the install machinery. Re-exported for existing callers.
+export { detectUserScopeCawsWiring } from './hook-packs/user-scope-wiring';
+import { detectUserScopeCawsWiring } from './hook-packs/user-scope-wiring';
+
+/** The guard shared by the gated surfaces' merge/plan entry points: if
+ *  user-scope CAWS wiring is present, project-scope hook entries are
+ *  suppressed with ONE loud warning (never a silent skip) and the caller
+ *  returns a skipped_dual_scope result. */
+function guardGatedSurfaceScope(
+  surface: 'qwen-code' | 'zcode',
+  homeDir?: string
+): { readonly skipped: boolean; readonly userScopePath: string } {
+  const detection = detectUserScopeCawsWiring(surface, homeDir);
+  if (!detection.present) return { skipped: false, userScopePath: detection.sourcePath };
+  process.stderr.write(
+    `Warning: user-scope CAWS wiring for ${surface} detected at ${detection.sourcePath}. ` +
+      'Project-scope hook entries were NOT installed: wiring both scopes fires every dispatcher twice ' +
+      '(doubled audit events, SessionStart hangs). Keep the user-scope wiring as the single source; ' +
+      'remove any project-scope hook entries if a previous init added them.\n'
+  );
+  return { skipped: true, userScopePath: detection.sourcePath };
 }
 
 // ─── .zcode/config.json wiring (ZCode vendor surface) ────────────────────
@@ -1478,9 +1906,7 @@ function ZCODE_BRIDGE_REF_DEFAULT_DISPATCHER(dispatcher: string): string {
 /** The canonical CAWS hook wiring for ZCode, as the structured entries that
  *  go under `hooks.events.<Event>`. Single source of truth for both the
  *  in-place merge and the printed/emitted example. */
-export const CANONICAL_ZCODE_HOOK_ENTRIES: Readonly<
-  Record<string, Record<string, unknown>>
-> = {
+export const CANONICAL_ZCODE_HOOK_ENTRIES: Readonly<Record<string, Record<string, unknown>>> = {
   PreToolUse: {
     matcher: ZCODE_PRETOOLUSE_MATCHER,
     hooks: [
@@ -1534,11 +1960,7 @@ function canonicalZcodeConfigObject(): {
 
 /** Canonical .zcode/config.json wiring snippet, as a JSON string ready to
  *  print or copy. */
-export const CANONICAL_ZCODE_CONFIG_SNIPPET = JSON.stringify(
-  canonicalZcodeConfigObject(),
-  null,
-  2
-);
+export const CANONICAL_ZCODE_CONFIG_SNIPPET = JSON.stringify(canonicalZcodeConfigObject(), null, 2);
 
 /** Does this event's entry array already contain a CAWS-owned entry? Matches a
  *  hook whose command references the `/.zcode/hooks/caws-bridge.sh` path, so
@@ -1574,8 +1996,19 @@ function arrayHasCawsZcodeEntry(entryArray: unknown): boolean {
  * Never overwrites an unparseable file. Idempotent: a second run on a
  * fully-wired config.json is a no-op and leaves the file byte-identical.
  */
-export function mergeZcodeConfig(repoRoot: string): SettingsMergeResult {
+export function mergeZcodeConfig(repoRoot: string, homeDir?: string): SettingsMergeResult {
   const configPath = path.join(repoRoot, '.zcode', 'config.json');
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: suppress hook entries when the
+  // machine carries user-scope CAWS wiring for this surface.
+  const gate = guardGatedSurfaceScope('zcode', homeDir);
+  if (gate.skipped) {
+    return {
+      kind: 'skipped_dual_scope',
+      path: configPath,
+      userScopePath: gate.userScopePath,
+    };
+  }
 
   if (!fs.existsSync(configPath)) {
     ensureDir(path.dirname(configPath));
@@ -1604,11 +2037,7 @@ export function mergeZcodeConfig(repoRoot: string): SettingsMergeResult {
   const root = parsed as Record<string, unknown>;
   // Ensure root.hooks is an object; force hooks.enabled = true.
   let hooks: Record<string, unknown>;
-  if (
-    root.hooks &&
-    typeof root.hooks === 'object' &&
-    !Array.isArray(root.hooks)
-  ) {
+  if (root.hooks && typeof root.hooks === 'object' && !Array.isArray(root.hooks)) {
     hooks = root.hooks as Record<string, unknown>;
   } else {
     hooks = {};
@@ -1618,11 +2047,7 @@ export function mergeZcodeConfig(repoRoot: string): SettingsMergeResult {
   hooks.enabled = true;
   // Ensure hooks.events is an object.
   let events: Record<string, unknown>;
-  if (
-    hooks.events &&
-    typeof hooks.events === 'object' &&
-    !Array.isArray(hooks.events)
-  ) {
+  if (hooks.events && typeof hooks.events === 'object' && !Array.isArray(hooks.events)) {
     events = hooks.events as Record<string, unknown>;
   } else {
     events = {};
@@ -1653,10 +2078,20 @@ export function mergeZcodeConfig(repoRoot: string): SettingsMergeResult {
 
 /** Read-only counterpart to mergeZcodeConfig. Computes the same created /
  *  merged / unchanged / invalid outcome without writing config.json. */
-export function planZcodeConfigMerge(
-  repoRoot: string
-): SettingsMergePlanResult {
+export function planZcodeConfigMerge(repoRoot: string, homeDir?: string): SettingsMergePlanResult {
   const configPath = path.join(repoRoot, '.zcode', 'config.json');
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: plan reports the skip the perform
+  // path would take — never a plan that promises entries the guard holds back.
+  const gate = guardGatedSurfaceScope('zcode', homeDir);
+  if (gate.skipped) {
+    return {
+      kind: 'skipped_dual_scope',
+      path: configPath,
+      userScopePath: gate.userScopePath,
+      readOnly: true,
+    };
+  }
 
   if (!fs.existsSync(configPath)) {
     return { kind: 'created', path: configPath, readOnly: true };
@@ -1688,9 +2123,7 @@ export function planZcodeConfigMerge(
       ? (root.hooks as Record<string, unknown>)
       : {};
   const events =
-    hooks.events &&
-    typeof hooks.events === 'object' &&
-    !Array.isArray(hooks.events)
+    hooks.events && typeof hooks.events === 'object' && !Array.isArray(hooks.events)
       ? (hooks.events as Record<string, unknown>)
       : {};
 
@@ -1760,9 +2193,7 @@ export function writeZcodeConfigExample(repoRoot: string): string {
   return examplePath;
 }
 
-export function planZcodeConfigExample(
-  repoRoot: string
-): SettingsExamplePlanResult {
+export function planZcodeConfigExample(repoRoot: string): SettingsExamplePlanResult {
   const examplePath = path.join(repoRoot, '.zcode', 'config.json.example');
   const desired = `${CANONICAL_ZCODE_CONFIG_SNIPPET}\n`;
   let existing: string | null = null;
@@ -1774,11 +2205,7 @@ export function planZcodeConfigExample(
   return {
     path: examplePath,
     action:
-      existing === null
-        ? 'would_create'
-        : existing === desired
-          ? 'unchanged'
-          : 'would_update',
+      existing === null ? 'would_create' : existing === desired ? 'unchanged' : 'would_update',
     readOnly: true,
   };
 }
@@ -1888,15 +2315,15 @@ function kimiBlockEndMarker(event: string): string {
  *  TOML literal string (single quotes): it contains double quotes for the
  *  shell but never a single quote, so no escaping is needed. */
 function renderKimiHookBlock(entry: KimiHookEntry): string {
-  const lines = [
-    kimiBlockBeginMarker(entry.event),
-    '[[hooks]]',
-    `event = "${entry.event}"`,
-  ];
+  const lines = [kimiBlockBeginMarker(entry.event), '[[hooks]]', `event = "${entry.event}"`];
   if (entry.matcher !== undefined) {
     lines.push(`matcher = "${entry.matcher}"`);
   }
-  lines.push(`command = '${entry.command}'`, `timeout = ${entry.timeout}`, kimiBlockEndMarker(entry.event));
+  lines.push(
+    `command = '${entry.command}'`,
+    `timeout = ${entry.timeout}`,
+    kimiBlockEndMarker(entry.event)
+  );
   return lines.join('\n');
 }
 
@@ -1907,9 +2334,7 @@ export const CANONICAL_KIMI_CONFIG_SNIPPET =
 
 /** Resolve the user-level kimi config path: $KIMI_CODE_HOME/config.toml when
  *  the env var is set and non-blank, else ~/.kimi-code/config.toml. */
-export function kimiUserConfigPath(
-  env: NodeJS.ProcessEnv = process.env
-): string {
+export function kimiUserConfigPath(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.KIMI_CODE_HOME;
   const home =
     typeof override === 'string' && override.trim().length > 0
@@ -1955,9 +2380,9 @@ function kimiConfigHasEvent(content: string, event: string): boolean {
 /** Compute which canonical events are not yet wired in `content` (empty
  *  string = absent file). Exported for the plan-mode preview. */
 export function missingKimiHookEvents(content: string): readonly string[] {
-  return CANONICAL_KIMI_HOOK_ENTRIES.filter(
-    (e) => !kimiConfigHasEvent(content, e.event)
-  ).map((e) => e.event);
+  return CANONICAL_KIMI_HOOK_ENTRIES.filter((e) => !kimiConfigHasEvent(content, e.event)).map(
+    (e) => e.event
+  );
 }
 
 /**
@@ -1970,9 +2395,7 @@ export function missingKimiHookEvents(content: string): readonly string[] {
  * Caller gates this on the explicit --wire-user-config flag; it writes
  * OUTSIDE the consumer repo into user-level state.
  */
-export function mergeKimiUserConfig(
-  opts: { env?: NodeJS.ProcessEnv } = {}
-): SettingsMergeResult {
+export function mergeKimiUserConfig(opts: { env?: NodeJS.ProcessEnv } = {}): SettingsMergeResult {
   const configPath = kimiUserConfigPath(opts.env);
 
   let existing: string | null = null;
@@ -1987,9 +2410,9 @@ export function mergeKimiUserConfig(
     return { kind: 'unchanged', path: configPath };
   }
 
-  const blocks = CANONICAL_KIMI_HOOK_ENTRIES.filter((e) =>
-    missing.includes(e.event)
-  ).map(renderKimiHookBlock);
+  const blocks = CANONICAL_KIMI_HOOK_ENTRIES.filter((e) => missing.includes(e.event)).map(
+    renderKimiHookBlock
+  );
 
   if (existing === null) {
     ensureDir(path.dirname(configPath));
@@ -2004,11 +2427,7 @@ export function mergeKimiUserConfig(
   // Append after existing content with exactly one blank-line separator.
   const trimmedEnd = existing.replace(/\n*$/, '');
   const separator = trimmedEnd.length > 0 ? '\n\n' : '';
-  fs.writeFileSync(
-    configPath,
-    `${trimmedEnd}${separator}${blocks.join('\n\n')}\n`,
-    'utf8'
-  );
+  fs.writeFileSync(configPath, `${trimmedEnd}${separator}${blocks.join('\n\n')}\n`, 'utf8');
   return { kind: 'merged', path: configPath, added: missing };
 }
 
@@ -2056,24 +2475,14 @@ export function inspectKimiUserConfig(
  *  who decline the user-level merge (or whose init ran without
  *  --wire-user-config). */
 export function writeKimiConfigExample(repoRoot: string): string {
-  const examplePath = path.join(
-    repoRoot,
-    '.kimi-code',
-    'caws-hooks.toml.example'
-  );
+  const examplePath = path.join(repoRoot, '.kimi-code', 'caws-hooks.toml.example');
   ensureDir(path.dirname(examplePath));
   fs.writeFileSync(examplePath, CANONICAL_KIMI_CONFIG_SNIPPET, 'utf8');
   return examplePath;
 }
 
-export function planKimiConfigExample(
-  repoRoot: string
-): SettingsExamplePlanResult {
-  const examplePath = path.join(
-    repoRoot,
-    '.kimi-code',
-    'caws-hooks.toml.example'
-  );
+export function planKimiConfigExample(repoRoot: string): SettingsExamplePlanResult {
+  const examplePath = path.join(repoRoot, '.kimi-code', 'caws-hooks.toml.example');
   const desired = CANONICAL_KIMI_CONFIG_SNIPPET;
   let existing: string | null = null;
   try {
@@ -2084,11 +2493,7 @@ export function planKimiConfigExample(
   return {
     path: examplePath,
     action:
-      existing === null
-        ? 'would_create'
-        : existing === desired
-          ? 'unchanged'
-          : 'would_update',
+      existing === null ? 'would_create' : existing === desired ? 'unchanged' : 'would_update',
     readOnly: true,
   };
 }
@@ -2130,12 +2535,9 @@ function qwenShimCommand(event: string): string {
  *  the same field is seconds. Seconds-era values (45/60/30) made every
  *  hook SIGTERM before the ~3s shim completed, silently disabling every
  *  guard (CAWS-QWEN-HOOK-TIMEOUT-001). */
-export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
-  Record<string, Record<string, unknown>>
-> = {
+export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<Record<string, Record<string, unknown>>> = {
   PreToolUse: {
-    matcher:
-      'run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit',
+    matcher: 'run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit',
     hooks: [
       {
         type: 'command',
@@ -2242,8 +2644,19 @@ function isCawsQwenBlock(block: unknown): boolean {
  * Never overwrites an unparseable file. Idempotent: a second run on a
  * fully-wired settings.json is a no-op and leaves the file byte-identical.
  */
-export function mergeQwenSettings(repoRoot: string): SettingsMergeResult {
+export function mergeQwenSettings(repoRoot: string, homeDir?: string): SettingsMergeResult {
   const settingsPath = path.join(repoRoot, '.qwen', 'settings.json');
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: suppress hook entries when the
+  // machine carries user-scope CAWS wiring for this surface.
+  const gate = guardGatedSurfaceScope('qwen-code', homeDir);
+  if (gate.skipped) {
+    return {
+      kind: 'skipped_dual_scope',
+      path: settingsPath,
+      userScopePath: gate.userScopePath,
+    };
+  }
 
   if (!fs.existsSync(settingsPath)) {
     ensureDir(path.dirname(settingsPath));
@@ -2305,11 +2718,7 @@ export function mergeQwenSettings(repoRoot: string): SettingsMergeResult {
   }
 
   root.hooks = hooks;
-  fs.writeFileSync(
-    settingsPath,
-    `${JSON.stringify(root, null, 2)}\n`,
-    'utf8'
-  );
+  fs.writeFileSync(settingsPath, `${JSON.stringify(root, null, 2)}\n`, 'utf8');
   return {
     kind: 'merged',
     path: settingsPath,
@@ -2320,10 +2729,20 @@ export function mergeQwenSettings(repoRoot: string): SettingsMergeResult {
 
 /** Read-only counterpart to mergeQwenSettings. Computes the same created /
  * merged / unchanged / invalid outcome without writing settings.json. */
-export function planQwenSettingsMerge(
-  repoRoot: string
-): SettingsMergePlanResult {
+export function planQwenSettingsMerge(repoRoot: string, homeDir?: string): SettingsMergePlanResult {
   const settingsPath = path.join(repoRoot, '.qwen', 'settings.json');
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: plan reports the skip the perform
+  // path would take — never a plan that promises entries the guard holds back.
+  const gate = guardGatedSurfaceScope('qwen-code', homeDir);
+  if (gate.skipped) {
+    return {
+      kind: 'skipped_dual_scope',
+      path: settingsPath,
+      userScopePath: gate.userScopePath,
+      readOnly: true,
+    };
+  }
 
   if (!fs.existsSync(settingsPath)) {
     return { kind: 'created', path: settingsPath, readOnly: true };
@@ -2364,10 +2783,7 @@ export function planQwenSettingsMerge(
       for (const block of existing as unknown[]) {
         if (!isCawsQwenBlock(block)) continue;
         sawCawsEntry = true;
-        if (
-          JSON.stringify(block) !== JSON.stringify(entry) &&
-          !repaired.includes(key)
-        ) {
+        if (JSON.stringify(block) !== JSON.stringify(entry) && !repaired.includes(key)) {
           repaired.push(key);
         }
       }
@@ -2444,18 +2860,12 @@ export function inspectQwenSettings(repoRoot: string): SettingsWiringStatus {
 export function writeQwenSettingsExample(repoRoot: string): string {
   const examplePath = path.join(repoRoot, '.qwen', 'settings.json.example');
   ensureDir(path.dirname(examplePath));
-  fs.writeFileSync(
-    examplePath,
-    `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`,
-    'utf8'
-  );
+  fs.writeFileSync(examplePath, `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`, 'utf8');
   return examplePath;
 }
 
 /** Read-only counterpart to writeQwenSettingsExample. */
-export function planQwenSettingsExample(
-  repoRoot: string
-): SettingsExamplePlanResult {
+export function planQwenSettingsExample(repoRoot: string): SettingsExamplePlanResult {
   const examplePath = path.join(repoRoot, '.qwen', 'settings.json.example');
   const desired = `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`;
   let existing: string | null = null;
@@ -2467,13 +2877,277 @@ export function planQwenSettingsExample(
   return {
     path: examplePath,
     action:
-      existing === null
-        ? 'would_create'
-        : existing === desired
-          ? 'unchanged'
-          : 'would_update',
+      existing === null ? 'would_create' : existing === desired ? 'unchanged' : 'would_update',
     readOnly: true,
   };
+}
+
+// ─── codex: root project-instruction merge ───
+//
+// Codex discovers one instruction file per directory, preferring a non-empty
+// AGENTS.override.md over AGENTS.md. A vendor-local .codex/AGENTS.md is not in
+// the instruction chain for ordinary repository work. Keep the always-on CAWS
+// contract concise, merge it only inside bounded markers, and leave the full
+// adapter reference at .codex/CAWS.md.
+
+export const CODEX_INSTRUCTION_BLOCK_VERSION = 2;
+export const CODEX_INSTRUCTION_BEGIN_MARKER = `<!-- >>> caws codex instructions (managed, v${CODEX_INSTRUCTION_BLOCK_VERSION}) >>> -->`;
+export const CODEX_INSTRUCTION_END_MARKER = '<!-- <<< caws codex instructions <<< -->';
+const CODEX_INSTRUCTION_BEGIN_PREFIX = '<!-- >>> caws codex instructions';
+
+export const CODEX_INSTRUCTION_BLOCK = [
+  CODEX_INSTRUCTION_BEGIN_MARKER,
+  '## CAWS working contract',
+  '',
+  'This repository uses the Coding Agent Working Standard (CAWS). Treat the',
+  '`caws` CLI and `.caws/specs/<id>.yaml` as workflow authority.',
+  '',
+  '- Before changing tracked files, run `caws status` and `caws claim`.',
+  '- Every work unit needs one spec and one bound CAWS worktree. Create or admit',
+  '  the lane with `caws worktree ensure <name> --spec <id>`.',
+  '- Never take over a foreign claim without explicit user authorization.',
+  '- Check each target with `caws scope check <path>`; do not hand-edit governed',
+  '  `.caws/` state when a CLI mutation exists.',
+  '- Implement and verify inside the bound lane. Commit each logical source',
+  '  change; do not commit generated artifacts.',
+  '- Before completion, run `caws doctor` and `caws gates run --spec <id>`,',
+  '  record acceptance evidence, then use `caws worktree review` and the',
+  '  governed merge surface.',
+  '- Preserve unrelated dirty state. A foreign or inherited doctor finding is',
+  "  evidence to report, not authority to rewrite another owner's work.",
+  '- If a dangerous-command guard blocks or asks, stop at the human boundary;',
+  '  do not rephrase the command to bypass it.',
+  '',
+  '### Coding rigor',
+  '',
+  '- Define acceptance as observable behavior with a specific check and a',
+  '  counterexample that must fail. Rank failures by trigger, cost and',
+  '  resolve-now/defer decision, including irreversible choices.',
+  '- Trace the real entry point to consumer-visible behavior. Assert semantic',
+  '  values and state; use negative controls or mutation checks for consequential',
+  '  logic. Scale checks to risk and never lower declared floors to pass.',
+  '- Cite commands, cwd/revision, exit status, selected tests, output and runtime',
+  '  artifacts. Preserve failed/skipped/interrupted attempts and artifact identity.',
+  '- Distinguish source review, tests, installed packages, native execution,',
+  '  acceptance records, CI, merge and deployment. Passing gates alone do not',
+  '  establish completion. State what could still be wrong, what was not verified',
+  '  and the exact additional observation needed to close each material gap.',
+  '- Review authorizes inspection and findings; fixes, evidence recording and',
+  '  publication need corresponding authorization. Lead with the highest-impact',
+  '  finding; give investigate / implement / change actions with where and why.',
+  '  Name the strongest objection when changing course; say when the plan is sound.',
+  '',
+  'Full method: `docs/guides/coding-rigor.md` in the installed CLI package.',
+  'Detailed Codex hook and recovery reference: `.codex/CAWS.md`.',
+  'Codex builds its instruction chain at session start; restart after init.',
+  CODEX_INSTRUCTION_END_MARKER,
+].join('\n');
+
+export type CodexInstructionTarget = 'AGENTS.md' | 'AGENTS.override.md';
+export type CodexInstructionRefusalReason =
+  | 'malformed_managed_block'
+  | 'duplicate_managed_block'
+  | 'instruction_file_unreadable'
+  | 'instruction_file_write_failed';
+
+export type CodexInstructionMergeResult =
+  | {
+      readonly kind: 'created' | 'merged' | 'updated' | 'unchanged';
+      readonly path: string;
+      readonly target: CodexInstructionTarget;
+    }
+  | {
+      readonly kind: 'refused';
+      readonly path: string;
+      readonly target: CodexInstructionTarget;
+      readonly reason: CodexInstructionRefusalReason;
+      readonly error?: string;
+    };
+
+export type CodexInstructionPlanResult = CodexInstructionMergeResult & {
+  readonly readOnly: true;
+};
+
+type InstructionRead =
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'readable'; readonly content: string }
+  | { readonly kind: 'unreadable'; readonly error: string };
+
+function readInstructionFile(filePath: string): InstructionRead {
+  if (!fs.existsSync(filePath)) return { kind: 'missing' };
+  try {
+    if (fs.lstatSync(filePath).isSymbolicLink()) {
+      return { kind: 'unreadable', error: 'refusing to write through a symbolic link' };
+    }
+    return { kind: 'readable', content: fs.readFileSync(filePath, 'utf8') };
+  } catch (e) {
+    return { kind: 'unreadable', error: (e as Error).message };
+  }
+}
+
+function countOccurrences(content: string, token: string): number {
+  return content.split(token).length - 1;
+}
+
+function selectCodexInstructionFile(repoRoot: string):
+  | {
+      readonly kind: 'selected';
+      readonly path: string;
+      readonly target: CodexInstructionTarget;
+      readonly existing: string | null;
+    }
+  | Extract<CodexInstructionMergeResult, { kind: 'refused' }> {
+  const overridePath = path.join(repoRoot, 'AGENTS.override.md');
+  const override = readInstructionFile(overridePath);
+  if (override.kind === 'unreadable') {
+    return {
+      kind: 'refused',
+      path: overridePath,
+      target: 'AGENTS.override.md',
+      reason: 'instruction_file_unreadable',
+      error: override.error,
+    };
+  }
+  if (override.kind === 'readable' && override.content.trim().length > 0) {
+    return {
+      kind: 'selected',
+      path: overridePath,
+      target: 'AGENTS.override.md',
+      existing: override.content,
+    };
+  }
+
+  const agentsPath = path.join(repoRoot, 'AGENTS.md');
+  const agents = readInstructionFile(agentsPath);
+  if (agents.kind === 'unreadable') {
+    return {
+      kind: 'refused',
+      path: agentsPath,
+      target: 'AGENTS.md',
+      reason: 'instruction_file_unreadable',
+      error: agents.error,
+    };
+  }
+  return {
+    kind: 'selected',
+    path: agentsPath,
+    target: 'AGENTS.md',
+    existing: agents.kind === 'readable' ? agents.content : null,
+  };
+}
+
+function computeCodexInstructionMerge(existing: string | null):
+  | {
+      readonly kind: 'created' | 'merged' | 'updated' | 'unchanged';
+      readonly content: string;
+    }
+  | {
+      readonly kind: 'refused';
+      readonly reason: 'malformed_managed_block' | 'duplicate_managed_block';
+    } {
+  if (existing === null) {
+    return { kind: 'created', content: `${CODEX_INSTRUCTION_BLOCK}\n` };
+  }
+
+  const beginCount = countOccurrences(existing, CODEX_INSTRUCTION_BEGIN_PREFIX);
+  const endCount = countOccurrences(existing, CODEX_INSTRUCTION_END_MARKER);
+  if (beginCount > 1 || endCount > 1) {
+    return { kind: 'refused', reason: 'duplicate_managed_block' };
+  }
+  if (beginCount !== endCount) {
+    return { kind: 'refused', reason: 'malformed_managed_block' };
+  }
+
+  const newline = existing.includes('\r\n') ? '\r\n' : '\n';
+  const block = CODEX_INSTRUCTION_BLOCK.replace(/\n/g, newline);
+  if (beginCount === 0) {
+    const separator = existing.length > 0 ? `${newline}${newline}` : newline;
+    return { kind: 'merged', content: `${block}${separator}${existing}` };
+  }
+
+  const begin = existing.indexOf(CODEX_INSTRUCTION_BEGIN_PREFIX);
+  const beginLineEnd = existing.indexOf(newline, begin);
+  const beginLine = existing.slice(begin, beginLineEnd === -1 ? existing.length : beginLineEnd);
+  if (
+    (begin > 0 && existing[begin - 1] !== '\n') ||
+    !/^<!-- >>> caws codex instructions \(managed, v\d+\) >>> -->$/.test(beginLine)
+  ) {
+    return { kind: 'refused', reason: 'malformed_managed_block' };
+  }
+
+  const end = existing.indexOf(CODEX_INSTRUCTION_END_MARKER, begin);
+  const endExclusive = end + CODEX_INSTRUCTION_END_MARKER.length;
+  const afterEnd = existing[endExclusive];
+  if (
+    end < begin ||
+    (end > 0 && existing[end - 1] !== '\n') ||
+    (afterEnd !== undefined && afterEnd !== '\n' && afterEnd !== '\r')
+  ) {
+    return { kind: 'refused', reason: 'malformed_managed_block' };
+  }
+  if (existing.slice(begin, endExclusive) === block) {
+    return { kind: 'unchanged', content: existing };
+  }
+  return {
+    kind: 'updated',
+    content: `${existing.slice(0, begin)}${block}${existing.slice(endExclusive)}`,
+  };
+}
+
+function inspectCodexProjectInstructions(repoRoot: string): {
+  result: CodexInstructionMergeResult;
+  content: string | null;
+} {
+  const selected = selectCodexInstructionFile(repoRoot);
+  if (selected.kind === 'refused') {
+    return { result: selected, content: null };
+  }
+  const computed = computeCodexInstructionMerge(selected.existing);
+  if (computed.kind === 'refused') {
+    return {
+      result: {
+        kind: 'refused',
+        path: selected.path,
+        target: selected.target,
+        reason: computed.reason,
+      },
+      content: null,
+    };
+  }
+  return {
+    result: {
+      kind: computed.kind,
+      path: selected.path,
+      target: selected.target,
+    },
+    content: computed.content,
+  };
+}
+
+/** Preview the active root instruction merge without writing any file. */
+export function planCodexProjectInstructions(repoRoot: string): CodexInstructionPlanResult {
+  const { result } = inspectCodexProjectInstructions(repoRoot);
+  return { ...result, readOnly: true };
+}
+
+/** Merge the bounded CAWS block into the root instruction file Codex selects. */
+export function mergeCodexProjectInstructions(repoRoot: string): CodexInstructionMergeResult {
+  const inspected = inspectCodexProjectInstructions(repoRoot);
+  if (inspected.result.kind === 'refused' || inspected.result.kind === 'unchanged') {
+    return inspected.result;
+  }
+  try {
+    fs.writeFileSync(inspected.result.path, inspected.content!, 'utf8');
+    return inspected.result;
+  } catch (e) {
+    return {
+      kind: 'refused',
+      path: inspected.result.path,
+      target: inspected.result.target,
+      reason: 'instruction_file_write_failed',
+      error: (e as Error).message,
+    };
+  }
 }
 
 // ─── qwen-code: root QWEN.md doctrine import ───
@@ -2485,10 +3159,8 @@ export function planQwenSettingsExample(
 // it every session. The block is fenced with markers; the merge appends it
 // when missing and is a byte-identical no-op when present.
 
-const QWEN_IMPORT_MARKER_BEGIN =
-  '<!-- >>> caws qwen-code doctrine import (managed, v1) >>> -->';
-const QWEN_IMPORT_MARKER_END =
-  '<!-- <<< caws qwen-code doctrine import (managed, v1) <<< -->';
+const QWEN_IMPORT_MARKER_BEGIN = '<!-- >>> caws qwen-code doctrine import (managed, v1) >>> -->';
+const QWEN_IMPORT_MARKER_END = '<!-- <<< caws qwen-code doctrine import (managed, v1) <<< -->';
 const QWEN_IMPORT_BLOCK = `${QWEN_IMPORT_MARKER_BEGIN}\n@.qwen/CAWS-HOOKS.md\n${QWEN_IMPORT_MARKER_END}`;
 
 /** Outcome of the root QWEN.md doctrine-import merge. */
@@ -2511,9 +3183,7 @@ function qwenInstructionImportPath(repoRoot: string): string {
 /** Merge the CAWS-managed doctrine import into the root QWEN.md. Creates the
  *  file when absent; appends the fenced block when missing; idempotent. The
  *  user's own QWEN.md content is never rewritten. */
-export function mergeQwenInstructionImport(
-  repoRoot: string
-): InstructionImportResult {
+export function mergeQwenInstructionImport(repoRoot: string): InstructionImportResult {
   const qwenMdPath = qwenInstructionImportPath(repoRoot);
 
   if (!fs.existsSync(qwenMdPath)) {
@@ -2538,9 +3208,7 @@ export function mergeQwenInstructionImport(
 }
 
 /** Read-only counterpart to mergeQwenInstructionImport. */
-export function planQwenInstructionImport(
-  repoRoot: string
-): InstructionImportPlanResult {
+export function planQwenInstructionImport(repoRoot: string): InstructionImportPlanResult {
   const qwenMdPath = qwenInstructionImportPath(repoRoot);
 
   if (!fs.existsSync(qwenMdPath)) {

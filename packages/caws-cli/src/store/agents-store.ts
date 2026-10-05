@@ -15,13 +15,7 @@
 // corrupting agents.json MUST NOT break any lease operation.
 
 import * as path from 'path';
-import {
-  err,
-  isOk,
-  ok,
-  type AgentRegistry,
-  type Result,
-} from '../kernel';
+import { err, isOk, ok, type AgentRegistry, type Result } from '../kernel';
 import { readJsonFile } from './json-store';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
@@ -38,11 +32,9 @@ export function loadAgents(cawsDir: string): Result<AgentRegistry> {
   const value = r.value;
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.REGISTRY_NOT_OBJECT,
-        `agents.json is not a JSON object.`,
-        { subject: filePath }
-      )
+      storeDiagnostic(STORE_RULES.REGISTRY_NOT_OBJECT, `agents.json is not a JSON object.`, {
+        subject: filePath,
+      })
     );
   }
   return ok(value as AgentRegistry);

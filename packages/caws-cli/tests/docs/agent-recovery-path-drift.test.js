@@ -69,10 +69,7 @@ describe('guard remediation text resolves to a real script', () => {
   // hooks dir at render time; that variable must resolve to the CAWS hooks
   // tree, not the harness vendor dir (which differs per surface: .claude,
   // .codex, .cursor, .windsurf, .opencode, .zcode).
-  const SHARED = path.join(
-    ROOT,
-    'packages/caws-cli/templates/hook-packs/shared'
-  );
+  const SHARED = path.join(ROOT, 'packages/caws-cli/templates/hook-packs/shared');
 
   const GUARDS_WITH_RESET_REMEDIATION = [
     'scope-guard.sh',
@@ -88,21 +85,14 @@ describe('guard remediation text resolves to a real script', () => {
       const offenders = body
         .split('\n')
         .map((line, i) => [i + 1, line])
-        .filter(([, line]) =>
-          /\$\{?CAWS_VENDOR_DIR\}?\/hooks\/reset-/.test(line)
-        );
+        .filter(([, line]) => /\$\{?CAWS_VENDOR_DIR\}?\/hooks\/reset-/.test(line));
 
-      expect(offenders.map(([n, l]) => `${script}:${n}: ${l.trim()}`)).toEqual(
-        []
-      );
+      expect(offenders.map(([n, l]) => `${script}:${n}: ${l.trim()}`)).toEqual([]);
     }
   );
 
   test('agent-surface.sh exports a CAWS_HOOKS_DIR for remediation text', () => {
-    const body = fs.readFileSync(
-      path.join(SHARED, 'lib', 'agent-surface.sh'),
-      'utf8'
-    );
+    const body = fs.readFileSync(path.join(SHARED, 'lib', 'agent-surface.sh'), 'utf8');
     expect(body).toMatch(/export .*\bCAWS_HOOKS_DIR\b/);
   });
 });
@@ -189,11 +179,11 @@ describe('reset-danger-latch resolves its state dir independently of cwd', () =>
 
   function runReset(script, session, cwd) {
     // cwd is deliberately NOT the fixture root — that is the whole point.
-    return execFileSync(
-      'bash',
-      [script, '--session', session, '--reason', 'regression test'],
-      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
-    );
+    return execFileSync('bash', [script, '--session', session, '--reason', 'regression test'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
   }
 
   test('clears a genuinely armed latch when run from a foreign cwd', () => {

@@ -124,7 +124,10 @@ function computeStaleness(srcDir: string, distDir: string): StalenessResult | nu
   // TypeScript sources: src/<rel>.ts -> dist/<rel>.{js,d.ts}
   for (const tsRel of listTsSources(srcDir)) {
     const base = tsRel.slice(0, -'.ts'.length); // strip .ts
-    consider(tsRel, TS_ARTIFACT_SUFFIXES.map((s) => base + s));
+    consider(
+      tsRel,
+      TS_ARTIFACT_SUFFIXES.map((s) => base + s)
+    );
   }
   // Allowlisted JS sources: src/<rel>.js -> dist/<rel>.js (1:1 copy)
   for (const jsRel of ALLOWLISTED_JS_SOURCES) {

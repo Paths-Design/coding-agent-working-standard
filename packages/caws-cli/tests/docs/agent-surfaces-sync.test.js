@@ -29,10 +29,7 @@ const CLI_PKG_ROOT = path.resolve(__dirname, '..', '..');
 const REPO_ROOT = path.resolve(CLI_PKG_ROOT, '..', '..');
 const POPULATOR = path.join(CLI_PKG_ROOT, 'scripts', 'populate-doc-markers.mjs');
 
-const {
-  KNOWN_SURFACES,
-  IMPLEMENTED_SURFACES,
-} = require('../../dist/init/hook-packs/register');
+const { KNOWN_SURFACES, IMPLEMENTED_SURFACES } = require('../../dist/init/hook-packs/register');
 
 // Pure renderers + marker replacement live in the CommonJS helper so the jest
 // sandbox (CommonJS, no --experimental-vm-modules) can load them directly. The
@@ -68,12 +65,16 @@ describe('populator renderers: derived shape from the live constants', () => {
     }
   });
 
-  test('renderReadmeInstallBlock emits one install line per implemented surface', () => {
+  test('renderReadmeInstallBlock distinguishes machine setup from project initialization', () => {
     const block = populator.renderReadmeInstallBlock(IMPLEMENTED_SURFACES);
     expect(block.startsWith('```bash\n')).toBe(true);
-    expect(block.trim().endsWith('```')).toBe(true);
+    expect(block).toContain('caws init adapters install --plan');
+    expect(block).toContain('caws init adapters configure --agent-surface codex');
+    expect(block).toContain('caws init adapters migrate --agent-surface codex');
+    expect(block).toContain('caws init --agent-surface codex');
+    expect(block).toContain('does not establish native activation');
     for (const s of IMPLEMENTED_SURFACES) {
-      expect(block).toContain(`caws init --agent-surface ${s}`);
+      expect(block).toContain('`' + s + '`');
     }
   });
 
@@ -102,13 +103,7 @@ describe('populator renderers: derived shape from the live constants', () => {
 
 describe('fillMarkers: marker-region replacement semantics', () => {
   test('block fill wraps content with newlines; idempotent on re-run', () => {
-    const text = [
-      'intro',
-      '<!-- m:start -->',
-      'old',
-      '<!-- m:end -->',
-      'outro',
-    ].join('\n');
+    const text = ['intro', '<!-- m:start -->', 'old', '<!-- m:end -->', 'outro'].join('\n');
     const fill = [{ name: 'm', content: 'NEW' }];
     const once = populator.fillMarkers(text, fill);
     const twice = populator.fillMarkers(once, fill);
@@ -125,9 +120,7 @@ describe('fillMarkers: marker-region replacement semantics', () => {
 
   test('a missing marker pair throws (drift detection)', () => {
     const text = 'no markers here';
-    expect(() => populator.fillMarkers(text, [{ name: 'm', content: 'X' }])).toThrow(
-      /not found/
-    );
+    expect(() => populator.fillMarkers(text, [{ name: 'm', content: 'X' }])).toThrow(/not found/);
   });
 });
 

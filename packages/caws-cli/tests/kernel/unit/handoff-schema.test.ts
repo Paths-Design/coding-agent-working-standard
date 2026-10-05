@@ -19,10 +19,32 @@ function makeBody(event: string, data: Record<string, unknown>, specId?: string)
 describe('handoff event schema validation (MULTI-AGENT-HANDOFF-EVENT-001)', () => {
   test('each handoff variant validates with a well-formed payload', () => {
     const cases: [string, Record<string, unknown>][] = [
-      ['stash_restore', { source_session: 'sess-a', receiving_session: 'sess-b', paths: ['src/a.ts'] }],
-      ['claim_transfer', { source_session: 'sess-a', receiving_session: 'sess-b', paths: ['src/**'] }],
-      ['overlap_ack_proceed', { source_session: 'sess-a', receiving_session: 'sess-b', paths: ['src/a.ts'], target_command: 'git stash' }],
-      ['manual_pickup', { source_session: 'sess-a', receiving_session: 'sess-b', paths: ['src/a.ts'], reason: 'user-authorized' }],
+      [
+        'stash_restore',
+        { source_session: 'sess-a', receiving_session: 'sess-b', paths: ['src/a.ts'] },
+      ],
+      [
+        'claim_transfer',
+        { source_session: 'sess-a', receiving_session: 'sess-b', paths: ['src/**'] },
+      ],
+      [
+        'overlap_ack_proceed',
+        {
+          source_session: 'sess-a',
+          receiving_session: 'sess-b',
+          paths: ['src/a.ts'],
+          target_command: 'git stash',
+        },
+      ],
+      [
+        'manual_pickup',
+        {
+          source_session: 'sess-a',
+          receiving_session: 'sess-b',
+          paths: ['src/a.ts'],
+          reason: 'user-authorized',
+        },
+      ],
     ];
     for (const [event, data] of cases) {
       const result = validateEventBody(makeBody(event, data));
@@ -32,16 +54,31 @@ describe('handoff event schema validation (MULTI-AGENT-HANDOFF-EVENT-001)', () =
 
   test('malformed variants are rejected (missing required field / extra field)', () => {
     // missing receiving_session
-    expect(isOk(validateEventBody(makeBody('stash_restore', { source_session: 'a', paths: ['x'] })))).toBe(false);
+    expect(
+      isOk(validateEventBody(makeBody('stash_restore', { source_session: 'a', paths: ['x'] })))
+    ).toBe(false);
     // overlap_ack_proceed requires target_command
     expect(
-      isOk(validateEventBody(makeBody('overlap_ack_proceed', { source_session: 'a', receiving_session: 'b', paths: ['x'] })))
+      isOk(
+        validateEventBody(
+          makeBody('overlap_ack_proceed', {
+            source_session: 'a',
+            receiving_session: 'b',
+            paths: ['x'],
+          })
+        )
+      )
     ).toBe(false);
     // additionalProperties: false
     expect(
       isOk(
         validateEventBody(
-          makeBody('manual_pickup', { source_session: 'a', receiving_session: 'b', paths: ['x'], extra: 1 })
+          makeBody('manual_pickup', {
+            source_session: 'a',
+            receiving_session: 'b',
+            paths: ['x'],
+            extra: 1,
+          })
         )
       )
     ).toBe(false);
@@ -52,7 +89,11 @@ describe('handoff event schema validation (MULTI-AGENT-HANDOFF-EVENT-001)', () =
     expect(
       isOk(
         validateEventBody(
-          makeBody('gate_evaluated', { gate_id: 'budget_limit', mode: 'block', result: 'pass' }, 'FEAT-1')
+          makeBody(
+            'gate_evaluated',
+            { gate_id: 'budget_limit', mode: 'block', result: 'pass' },
+            'FEAT-1'
+          )
         )
       )
     ).toBe(true);

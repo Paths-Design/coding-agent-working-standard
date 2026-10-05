@@ -4,7 +4,8 @@
 
 version: 1
 
-# Risk tier definitions with default budgets
+# Risk tier sizing goals. budget_limit reports a staged change larger than its
+# tier's goal; it is advisory and never blocks.
 risk_tiers:
   "1":
     max_files: 10
@@ -24,18 +25,13 @@ edit_rules:
   policy_and_code_same_pr: false
   require_signed_commits: true
 
-# Waiver-related policy rules. Individual waivers live in .caws/waivers/.
-# `min_approvers_for_budget_raise` migrated here from `edit_rules` under
-# HOST-GOV-001 — v11 schema places waiver controls on the waivers surface.
-waivers:
-  min_approvers_for_budget_raise: 2
-
 # Quality gates — only gates with implementations
 # mode: block (fails commit), warn (advisory), skip (disabled)
+# budget_limit is advisory by construction: a declared block runs as warn.
 gates:
   budget_limit:
     enabled: true
-    mode: block
+    mode: warn
   spec_completeness:
     enabled: true
     mode: block

@@ -14,9 +14,7 @@ function runTestCodemod(dryRun = true) {
   const project = new Project();
 
   // Load source files from packages
-  const sourceFiles = project.addSourceFilesAtPaths([
-    'packages/caws-cli/src/**/*.ts',
-  ]);
+  const sourceFiles = project.addSourceFilesAtPaths(['packages/caws-cli/src/**/*.ts']);
 
   console.log(`📁 Found ${sourceFiles.length} source files to process`);
 
@@ -29,7 +27,7 @@ function runTestCodemod(dryRun = true) {
     // Example transformation: Add TODO comments to console.log statements
     const consoleLogCalls = sourceFile
       .getDescendantsOfKind(23) // CallExpression
-      .filter((call) => {
+      .filter(call => {
         const expression = call.getExpression();
         return expression.getText() === 'console.log';
       });
@@ -37,7 +35,6 @@ function runTestCodemod(dryRun = true) {
     for (const call of consoleLogCalls) {
       // Add a comment above console.log statements
       const comment = `// TODO: Remove debug logging before production`;
-      const callText = call.getText();
 
       // Insert comment before the call
       const fullText = sourceFile.getFullText();

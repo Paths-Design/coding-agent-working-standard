@@ -179,8 +179,8 @@ export function runSpecsMigrateScan(opts: ScanOptions): Result<ScanReport> {
           data: { code: cause.code },
           narrowRepair:
             'Verify the .caws/specs/ directory exists and is readable. The scan refuses to proceed on a directory it cannot list (so apply-default bypass cannot masquerade as "no v10 specs found").',
-        },
-      ),
+        }
+      )
     );
   }
 
@@ -229,7 +229,7 @@ export function runSpecsMigrateScan(opts: ScanOptions): Result<ScanReport> {
           storeDiagnostic(
             STORE_RULES.SPECS_MIGRATE_PARSE_FAILED,
             `Failed to read ${relPath}: ${cause.message ?? 'unknown error'}.`,
-            { subject: relPath, data: { code: cause.code } },
+            { subject: relPath, data: { code: cause.code } }
           ),
         ],
       });
@@ -261,9 +261,7 @@ export function runSpecsMigrateScan(opts: ScanOptions): Result<ScanReport> {
     const migrateResult = migrateSpecV10(
       parseResult.value,
       { path: relPath, contentDigest: oldDigest },
-      opts.lifecycleMapping !== undefined
-        ? { lifecycleMapping: opts.lifecycleMapping }
-        : {},
+      opts.lifecycleMapping !== undefined ? { lifecycleMapping: opts.lifecycleMapping } : {}
     );
     if (!isOk(migrateResult)) {
       // Transformer returned err (non-object input, etc.) — record as
@@ -350,8 +348,8 @@ export function runSpecsMigrateApply(opts: ApplyOptions): Result<ApplyResult> {
           },
           narrowRepair:
             'Either fix the refused specs by hand (read the refusal reasons in the dry-run report), or re-run with --partial to apply the migratable subset, or supply --lifecycle-mapping to resolve the unmapped-lifecycle cluster.',
-        },
-      ),
+        }
+      )
     );
   }
 
@@ -372,9 +370,7 @@ export function runSpecsMigrateApply(opts: ApplyOptions): Result<ApplyResult> {
     // apply=true && (migrated || migrated_with_warnings):
     // Serialize, post-write-validate, atomic write.
     const serializedSpec =
-      entry.outcome.kind === 'migrated'
-        ? entry.outcome.value
-        : entry.outcome.value;
+      entry.outcome.kind === 'migrated' ? entry.outcome.value : entry.outcome.value;
     let serialized: string;
     try {
       serialized = yaml.dump(serializedSpec, {
@@ -391,7 +387,7 @@ export function runSpecsMigrateApply(opts: ApplyOptions): Result<ApplyResult> {
           storeDiagnostic(
             STORE_RULES.SPECS_MIGRATE_POST_WRITE_VALIDATION_FAILED,
             `Failed to serialize migrated spec to YAML: ${cause.message ?? 'unknown error'}.`,
-            { subject: entry.file },
+            { subject: entry.file }
           ),
         ],
       });
@@ -468,13 +464,13 @@ export function runSpecsMigrateApply(opts: ApplyOptions): Result<ApplyResult> {
             data: {
               partial: opts.partial,
               spec_write_count: reportEntries.filter(
-                (e) => e.verdict === 'migrated' || e.verdict === 'migrated_with_warnings',
+                (e) => e.verdict === 'migrated' || e.verdict === 'migrated_with_warnings'
               ).length,
             },
             narrowRepair:
               'Investigate the .caws/migrations/v10-specs/ directory permissions. The spec writes themselves cannot be rolled back; treat this as an audit-trail gap and document the migration manually.',
-          },
-        ),
+          }
+        )
       );
     }
     reportPath = writeRes.value;
@@ -514,8 +510,8 @@ function assertCawsDirShape(cawsDir: string): Result<true> {
           subject: String(cawsDir),
           narrowRepair:
             'Pass cawsDir as an absolute path whose basename is exactly ".caws" (e.g. "/path/to/repo/.caws").',
-        },
-      ),
+        }
+      )
     );
   }
   const base = path.basename(cawsDir);
@@ -529,8 +525,8 @@ function assertCawsDirShape(cawsDir: string): Result<true> {
           data: { basename: base, expected: '.caws' },
           narrowRepair:
             'Pass cawsDir as the path to the .caws directory itself, not the repo root or a subdirectory. The shell layer (caws specs migrate) should compute this from resolveRepoRoot + path.join(repoRoot, ".caws").',
-        },
-      ),
+        }
+      )
     );
   }
   return ok(true);
@@ -595,10 +591,7 @@ function buildBaseReportEntry(entry: ScanEntry): ReportEntry {
   };
 }
 
-function writeMigrationReport(
-  cawsDir: string,
-  report: MigrationReport,
-): Result<string> {
+function writeMigrationReport(cawsDir: string, report: MigrationReport): Result<string> {
   // Windows-safe ISO timestamp (colons → hyphens), matching the events
   // archive naming convention.
   const safeStamp = report.generated_at.replace(/:/g, '-');
@@ -614,8 +607,8 @@ function writeMigrationReport(
       storeDiagnostic(
         STORE_RULES.SPECS_MIGRATE_REPORT_WRITE_FAILED,
         `Failed to create migration report directory ${dir}: ${cause.message ?? 'unknown error'}.`,
-        { subject: dir, data: { code: cause.code } },
-      ),
+        { subject: dir, data: { code: cause.code } }
+      )
     );
   }
 

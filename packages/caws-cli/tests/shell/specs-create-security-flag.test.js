@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * A tier-1 spec is creatable through the CLI
+ * A spec is creatable through the CLI
  * (CAWS-DEFECT-SPECS-CREATE-AUTHORING-01, Sterling ledger N15).
  *
  * The defect this suite pins: `specs create --risk-tier 1` refused with
@@ -9,7 +9,7 @@
  * non_functional.security; the validator actually demands THREE fields —
  * observability, rollback, and non_functional.security (verified by running
  * the pre-fix binary: all three errors emit together). None had a flag, so the
- * only route to a tier-1 spec was hand-writing the YAML, bypassing the template
+ * only route to a spec was hand-writing the YAML, bypassing the template
  * discipline `create` exists to enforce.
  *
  * The fix adds --observability, --rollback, and --security (each repeatable).
@@ -45,7 +45,6 @@ function runCreate(root, id, opts = {}) {
     id,
     title: 'tier one fixture',
     mode: 'feature',
-    riskTier: '1',
     contract: ['core-api:api'],
     out: (line) => out.push(line),
     err: (line) => err.push(line),
@@ -66,8 +65,8 @@ const TIER1_FLAGS = {
   security: ['No new secret material is logged or persisted.'],
 };
 
-describe('caws specs create --risk-tier 1 is satisfiable from the CLI', () => {
-  test('supplying all three tier-1 fields creates a valid spec', () => {
+describe('caws specs create preserves operational fields', () => {
+  test('supplying all three operational fields creates a valid spec', () => {
     const { root, cawsDir } = mkRepo();
 
     const result = runCreate(root, 'TIER1-001', TIER1_FLAGS);
@@ -76,7 +75,7 @@ describe('caws specs create --risk-tier 1 is satisfiable from the CLI', () => {
     // three fields the command surface could not supply.
     expect(result.code).toBe(0);
     const spec = readSpec(cawsDir, 'TIER1-001');
-    expect(spec).toContain('risk_tier: 1');
+    expect(spec).not.toContain('risk_tier:');
     expect(spec).toContain('observability:');
     expect(spec).toContain('Log the refusal reason for each governed operation.');
     expect(spec).toContain('rollback:');
@@ -99,14 +98,20 @@ describe('caws specs create --risk-tier 1 is satisfiable from the CLI', () => {
 
     expect(result.code).toBe(0);
     const spec = readSpec(cawsDir, 'TIER1-002');
-    for (const v of ['first observability', 'second observability', 'first rollback',
-      'second rollback', 'first security', 'second security']) {
+    for (const v of [
+      'first observability',
+      'second observability',
+      'first rollback',
+      'second rollback',
+      'first security',
+      'second security',
+    ]) {
       expect(spec).toContain(v);
     }
     expect(spec.indexOf('first security')).toBeLessThan(spec.indexOf('second security'));
   });
 
-  test('the created tier-1 spec passes caws specs validate, not just create', () => {
+  test('the created spec passes caws specs validate, not just create', () => {
     const { root } = mkRepo();
     runCreate(root, 'TIER1-003', TIER1_FLAGS);
 
@@ -115,7 +120,16 @@ describe('caws specs create --risk-tier 1 is satisfiable from the CLI', () => {
     const validated = spawnSync(
       process.execPath,
       [CLI, 'specs', 'validate', '.caws/specs/TIER1-003.yaml'],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_QUIET: '1' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          CAWS_QUIET: '1',
+          CAWS_HOME: path.join(root, 'machine'),
+          CLAUDE_CODE_SESSION_ID: 'optional-plan-fixture',
+        },
+      }
     );
 
     expect(validated.status).toBe(0);
@@ -132,14 +146,22 @@ describe('caws specs create --risk-tier 1 is satisfiable from the CLI', () => {
     const created = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'TIER1-004',
-        '--title', 'full parse path',
-        '--mode', 'feature',
-        '--risk-tier', '1',
-        '--contract', 'core-api:api',
-        '--observability', 'obs via CLI',
-        '--rollback', 'rb via CLI',
-        '--security', 'sec via CLI',
+        CLI,
+        'specs',
+        'create',
+        'TIER1-004',
+        '--title',
+        'full parse path',
+        '--mode',
+        'feature',
+        '--contract',
+        'core-api:api',
+        '--observability',
+        'obs via CLI',
+        '--rollback',
+        'rb via CLI',
+        '--security',
+        'sec via CLI',
       ],
       {
         cwd: root,
@@ -156,59 +178,64 @@ describe('caws specs create --risk-tier 1 is satisfiable from the CLI', () => {
   });
 });
 
-describe('the refusal names the flags that satisfy it', () => {
-  test('a tier-1 create with no tier-1 flags is refused and names all three', () => {
+describe('operational fields are independently optional', () => {
+  test('omitting operational fields creates a valid spec without inferred requirements', () => {
     const { root, cawsDir } = mkRepo();
-
-    const result = runCreate(root, 'TIER1-101', {});
-
-    expect(result.code).not.toBe(0);
-    expect(readSpec(cawsDir, 'TIER1-101')).toBeNull();
-    // An operator must not have to discover that the surface can meet its own
-    // demand — the refusal names the flags.
-    expect(result.err).toContain('--observability');
-    expect(result.err).toContain('--rollback');
-    expect(result.err).toContain('--security');
+    const result = runCreate(root, 'OPTIONAL-101', {});
+    expect(result.code).toBe(0);
+    expect(readSpec(cawsDir, 'OPTIONAL-101')).not.toContain('risk_tier:');
+    expect(result.err).not.toMatch(/--observability|--rollback|--security/);
   });
-
-  test('a partial tier-1 create names only the flags still missing', () => {
-    const { root } = mkRepo();
-
-    const result = runCreate(root, 'TIER1-102', { security: ['only security supplied'] });
-
-    expect(result.code).not.toBe(0);
-    expect(result.err).toContain('--observability');
-    expect(result.err).toContain('--rollback');
-    // security was supplied; re-prescribing it would send the operator to
-    // re-pass a flag they already passed.
-    expect(result.err).not.toContain('--security');
+  test('security alone is retained without requiring the other fields', () => {
+    const { root, cawsDir } = mkRepo();
+    const result = runCreate(root, 'OPTIONAL-102', { security: ['only security supplied'] });
+    expect(result.code).toBe(0);
+    expect(readSpec(cawsDir, 'OPTIONAL-102')).toContain('only security supplied');
+    expect(result.err).not.toMatch(/--observability|--rollback/);
   });
 });
 
 describe('--plan prints a create command that actually works', () => {
   // Found post-merge by running the shipped binary: --plan's "create command:"
   // preview is built by createCommandPreview, which enumerates the flags it
-  // knows about. It did not know about the tier-1 trio, so --plan on a valid
-  // tier-1 candidate printed a command that OMITS them — and copying that
+  // knows about. It did not know about the operational fields, so --plan on a valid
+  // candidate printed a command that OMITS them — and copying that
   // command produces a refusal. A preview whose whole purpose is to be copied
   // must reproduce the candidate it previewed.
-  test('the tier-1 flags appear in the --plan create-command preview', () => {
+  test('the operational flags appear in the --plan create-command preview', () => {
     const { root } = mkRepo();
 
     const planned = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'TIER1-201',
-        '--title', 'plan preview',
-        '--mode', 'feature',
-        '--risk-tier', '1',
-        '--contract', 'core-api:api',
-        '--observability', 'obs item',
-        '--rollback', 'rb item',
-        '--security', 'sec item',
+        CLI,
+        'specs',
+        'create',
+        'TIER1-201',
+        '--title',
+        'plan preview',
+        '--mode',
+        'feature',
+        '--contract',
+        'core-api:api',
+        '--observability',
+        'obs item',
+        '--rollback',
+        'rb item',
+        '--security',
+        'sec item',
         '--plan',
       ],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_QUIET: '1' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          CAWS_QUIET: '1',
+          CAWS_HOME: path.join(root, 'machine'),
+          CLAUDE_CODE_SESSION_ID: 'optional-plan-fixture',
+        },
+      }
     );
 
     expect(planned.status).toBe(0);
@@ -224,18 +251,36 @@ describe('--plan prints a create command that actually works', () => {
     const planned = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'TIER1-202',
-        '--title', 'roundtrip',
-        '--mode', 'feature',
-        '--risk-tier', '1',
-        '--contract', 'core-api:api',
-        '--observability', 'obs roundtrip',
-        '--rollback', 'rb roundtrip',
-        '--security', 'sec roundtrip',
+        CLI,
+        'specs',
+        'create',
+        'TIER1-202',
+        '--title',
+        'roundtrip',
+        '--mode',
+        'feature',
+        '--contract',
+        'core-api:api',
+        '--observability',
+        'obs roundtrip',
+        '--rollback',
+        'rb roundtrip',
+        '--security',
+        'sec roundtrip',
         '--plan',
       ],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_QUIET: '1' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          CAWS_QUIET: '1',
+          CAWS_HOME: path.join(root, 'machine'),
+          CLAUDE_CODE_SESSION_ID: 'optional-plan-fixture',
+        },
+      }
     );
+    expect(planned.status).toBe(0);
     // The header line ("caws specs create --plan: valid candidate for X") also
     // starts with the command name; the preview is the one carrying flags.
     const previewLine = planned.stdout
@@ -248,7 +293,13 @@ describe('--plan prints a create command that actually works', () => {
     // quoting the preview gets wrong is the same defect as a flag it omits.
     const replay = spawnSync(
       'bash',
-      ['-c', previewLine.replace(/^caws /, `${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} `)],
+      [
+        '-c',
+        previewLine.replace(
+          /^caws /,
+          `${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} `
+        ),
+      ],
       {
         cwd: root,
         encoding: 'utf8',
@@ -265,13 +316,12 @@ describe('--plan prints a create command that actually works', () => {
   });
 });
 
-describe('lower tiers are unaffected', () => {
-  test('a tier-3 chore spec still creates with no tier-1 flags and renders non_functional: {}', () => {
+describe('optional fields in chore mode', () => {
+  test('a chore spec still creates with no operational flags and renders non_functional: {}', () => {
     const { root, cawsDir } = mkRepo();
 
     const result = runCreate(root, 'TIER3-001', {
       mode: 'chore',
-      riskTier: '3',
       contract: undefined,
     });
 
@@ -281,17 +331,16 @@ describe('lower tiers are unaffected', () => {
     expect(spec).not.toContain('observability:');
   });
 
-  test('a tier-3 spec may still supply the fields voluntarily', () => {
+  test('a chore spec may still supply the fields voluntarily', () => {
     const { root, cawsDir } = mkRepo();
 
     const result = runCreate(root, 'TIER3-002', {
       mode: 'chore',
-      riskTier: '3',
       contract: undefined,
-      security: ['voluntary on tier 3'],
+      security: ['voluntary requirement'],
     });
 
     expect(result.code).toBe(0);
-    expect(readSpec(cawsDir, 'TIER3-002')).toContain('voluntary on tier 3');
+    expect(readSpec(cawsDir, 'TIER3-002')).toContain('voluntary requirement');
   });
 });

@@ -35,6 +35,27 @@ def _git(repo, *args):
     )
 
 
+# CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A6 — named pathspecs are explicit
+# commit authority; an unverifiable truly-bare commit remains governed.
+def test_leading_pathspec_commit_is_not_bare(classify):
+    decision, *_ = classify('git commit .caws/specs/SPEC.yaml -m "spec(caws): test"')
+    assert decision not in ("ask", "block"), (
+        f"leading-pathspec commit misclassified: {decision}"
+    )
+
+
+def test_trailing_dashdash_pathspec_still_admitted(classify):
+    decision, *_ = classify('git commit -m "spec(caws): test" -- .caws/specs/SPEC.yaml')
+    assert decision not in ("ask", "block"), (
+        f"trailing -- pathspec regressed: {decision}"
+    )
+
+
+def test_truly_bare_commit_still_governed(classify):
+    decision, *_ = classify('git commit -m "bare"')
+    assert decision == "ask", f"bare commit must stay governed (ask), got {decision}"
+
+
 @pytest.fixture
 def commit_repo(tmp_path):
     """A real git repo with one committed file (tracked.txt) and a clean index.
@@ -507,3 +528,243 @@ class TestDecisionMatrixArtifact:
 
         # The matrix exercises all three decision classes (not all-allow / all-deny).
         assert seen["allow"] >= 1 and seen["ask"] >= 1 and seen["deny"] >= 1, seen
+
+
+# --- Entry-40: owner-identity impersonation in an authorization field --------
+# An approver/revoker field on a bounded exception exists so a HUMAN owns the
+# bypass. An agent that writes the machine owner's identity into it manufactures
+# a durable false human decision: it lands in git and every later reader takes
+# it for a real grant. Nothing else catches this — the path guards fire on rm/mv
+# of the waiver file, and no guard reads the SEMANTICS of an identity value.
+
+import tempfile
+from pathlib import Path
+
+import classify_command as cc
+
+
+def _classify_with_home(raw_command, home_name):
+    """Classify with a home directory whose basename is a known owner token."""
+    tmp = Path(tempfile.mkdtemp(prefix="caws-e40-"))
+    repo = tmp / "repo"
+    home = tmp / home_name
+    repo.mkdir(parents=True)
+    home.mkdir(parents=True)
+    return cc.classify_command(
+        raw_command, repo_root=repo, home=home, cwd=repo
+    )
+
+
+def test_authorization_flag_with_machine_owner_identity_is_denied():
+    result = _classify_with_home(
+        "caws waiver create WV-1 --approved-by ownerperson --reason x",
+        "ownerperson",
+    )
+    assert decision_of(result) == "deny", result
+    assert result[2] == "regex", result
+    assert "owner" in result[1].lower(), result
+
+
+def test_authorization_yaml_key_with_machine_owner_identity_is_denied():
+    result = _classify_with_home(
+        "printf 'approved_by: ownerperson' > .caws/waivers/WV-1.yaml",
+        "ownerperson",
+    )
+    assert decision_of(result) == "deny", result
+
+
+def test_authorization_flag_with_agent_identity_is_allowed(classify):
+    result = classify("caws waiver create WV-1 --approved-by claude-agent:sess-1")
+    assert decision_of(result) == "allow", result
+
+
+def test_authorization_flag_with_unrelated_identity_is_allowed(classify):
+    result = classify("caws waiver create WV-1 --approved-by someoneelse")
+    assert decision_of(result) == "allow", result
+
+
+def test_reading_the_authorization_key_is_allowed(classify):
+    result = classify('grep -rn "approved_by" .caws/waivers/')
+    assert decision_of(result) == "allow", result
+
+
+def test_configured_owner_identities_are_additive(monkeypatch, classify):
+    monkeypatch.setenv("CAWS_OWNER_IDENTITIES", "darian,rosebrook")
+    result = classify(
+        'caws reprieve grant --handlers x --approved-by "darian" '
+        "--reason y --expires-at 2030-01-01T00:00:00Z"
+    )
+    assert decision_of(result) == "deny", result
+
+
+# ── CLASSIFY-CREDENTIAL-PUBLIC-FILE-EXCLUSION-001 ───────────────────────────
+# A credential READ is catastrophic and stays in the latch-arming class: the
+# content enters the model context and is transmitted to the provider, so the
+# disclosure is irreversible in the same way mkfs is. Because the class is
+# justified, PATTERN PRECISION is the whole corrective surface — and the
+# selector was matching files that are public BY CONSTRUCTION, where no
+# disclosure is possible.
+#
+# Observed live: `echo "=== .env.example ===" && cat .env.example && ... git
+# ls-files | grep -E "\.env"` hard-denied during a SECURITY-HARDENING task,
+# armed the latch, and the retry killed the session (exit 143, 931s lost). The
+# file it blocked was git-tracked with four keys and four EMPTY values.
+
+REAL_CREDENTIAL_READS = [
+    "cat .env",
+    "cat .env.local",
+    "cat .env.production",
+    "cat .env.development.local",
+    "cat config/.env",
+    "cat ~/.ssh/id_rsa",
+    "cat ~/.ssh/id_ed25519",
+    "cat ~/.aws/credentials",
+]
+
+# Conventionally PUBLIC files: committed templates with placeholder values, and
+# public keys whose entire purpose is distribution.
+PUBLIC_BY_CONSTRUCTION = [
+    "cat .env.example",
+    "cat .env.sample",
+    "cat .env.template",
+    "cat .env.dist",
+    "cat .env.defaults",
+    "cat paths.design-site/.env.example",
+    "cat ~/.ssh/id_rsa.pub",
+    "cat ~/.ssh/id_ed25519.pub",
+]
+
+
+@pytest.mark.parametrize("command", REAL_CREDENTIAL_READS)
+def test_real_credential_reads_still_deny(classify, command):
+    """A1: the fix must not trade away recall on real secrets."""
+    result = classify(command)
+    assert decision_of(result) == "deny", result
+    assert "credential" in result[1], result
+
+
+@pytest.mark.parametrize("command", PUBLIC_BY_CONSTRUCTION)
+def test_public_by_construction_files_do_not_deny(classify, command):
+    """A2: a committed template or a public key cannot be exfiltrated."""
+    result = classify(command)
+    assert decision_of(result) != "deny", (
+        f"{command!r} denied as a credential read, but it is public by "
+        f"construction: {result}"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat .env.example .env.local",
+        "cat .env.example .env",
+        "cat ~/.ssh/id_rsa.pub ~/.ssh/id_rsa",
+    ],
+)
+def test_mixed_command_still_denies(classify, command):
+    """A3: the exclusion is a lookahead on the file selector, NOT a short
+    circuit — naming a template alongside a real credential must still deny.
+    This is the test that fails if someone replaces the lookahead with a
+    pre-filter that returns allow on any template match."""
+    result = classify(command)
+    assert decision_of(result) == "deny", result
+
+
+def test_system_credential_rule_is_untouched(classify):
+    """A5: the exclusion is scoped to the .env/.ssh/.aws selector; the separate
+    /etc/passwd|shadow rule and the id_rsa|credentials rule must not change."""
+    for command in ("cat /etc/passwd", "cat /etc/shadow"):
+        result = classify(command)
+        assert decision_of(result) == "deny", result
+
+
+# ── CLASSIFY-CREDENTIAL-READ-VERB-COVERAGE-001 ──────────────────────────────
+# A credential read is catastrophic wherever it happens, not only through `cat`.
+# `head .env` and `cp .env /tmp/x` disclose exactly as `cat .env` does — the
+# second while also depositing the secret where a later command can read it.
+#
+# Only verbs whose operand is UNAMBIGUOUSLY a file are added. Pattern-taking
+# tools (grep, rg, sed, awk) stay out deliberately: there the credential name is
+# a PATTERN, not a path, and admitting them would turn the security check that
+# started this whole line of work back into a session-killing hard-deny.
+
+NEW_VERB_READS = [
+    "head .env",
+    "tail -n 5 .env",
+    "less .env",
+    "more .env",
+    "base64 .env",
+    "xxd .env",
+    "od -c .env",
+    "strings .env",
+    "cp .env /tmp/x",
+    "cat .env | head -3",
+]
+
+
+@pytest.mark.parametrize("command", NEW_VERB_READS)
+def test_credential_reads_through_new_verbs_deny(classify, command):
+    """A1: every newly covered read channel denies on a real credential."""
+    result = classify(command)
+    assert decision_of(result) == "deny", result
+    assert "credential" in result[1], result
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "head .env.example",
+        "cp .env.example /tmp/x",
+        "base64 .env.sample",
+        "tail -3 .env.template",
+        "head ~/.ssh/id_rsa.pub",
+    ],
+)
+def test_public_by_construction_stays_readable_through_new_verbs(classify, command):
+    """A2: the public-by-construction exclusion is verb-independent."""
+    result = classify(command)
+    assert decision_of(result) != "deny", (
+        f"{command!r} denied as a credential read, but it is public by "
+        f"construction: {result}"
+    )
+
+
+def test_template_alongside_real_credential_still_denies_through_new_verb(classify):
+    """A6: the lookahead is on the file selector, so a mixed command denies."""
+    result = classify("head .env.example .env.local")
+    assert decision_of(result) == "deny", result
+
+
+def test_read_verbs_are_anchored_to_command_position(classify):
+    """A4: head/tail/less/more/od/strings are ordinary English words. Anchoring
+    to command position keeps UNQUOTED prose from matching; quoted content is
+    already stripped before these patterns run (`echo "cat .env"` allows)."""
+    result = classify("git commit -m add more .env handling")
+    assert "credential" not in result[1], (
+        f"unquoted prose matched the credential selector: {result}"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git ls-files | grep -E "\\.env"',
+        'grep -rn "\\.env" .gitignore',
+        'rg --files-with-matches "\\.env"',
+        'sed -n 1p .env',
+        'awk -F= "{print \\$1}" .env',
+    ],
+)
+def test_pattern_taking_tools_are_not_credential_reads(classify, command):
+    """A3: the hazard guard. `git ls-files | grep -E "\\.env"` is the security
+    check whose false-positive hard-deny armed the latch and killed a session.
+    grep/rg/sed/awk take PATTERNS, so the credential token need not be a file at
+    all; admitting them here would reintroduce that incident. This test fails if
+    someone widens the verb alternation to include them."""
+    result = classify(command)
+    assert result[1] != "credential file read", (
+        f"{command!r} was classified as a credential read; pattern-taking tools "
+        f"must stay out of the selector: {result}"
+    )
+
+

@@ -38,6 +38,7 @@ function runCreate(root, opts) {
   const out = [];
   const err = [];
   const code = runSpecsCreateCommand({
+    env: {},
     cwd: root,
     out: (line) => out.push(line),
     err: (line) => err.push(line),
@@ -73,8 +74,6 @@ describe('caws specs create --acceptance', () => {
       'Acceptance flag',
       '--mode',
       'chore',
-      '--tier',
-      '3',
       '--scope-in',
       'README.md',
       '--acceptance',
@@ -103,7 +102,6 @@ describe('caws specs create --acceptance', () => {
       id: 'ACCEPTANCE-002',
       title: 'Structured acceptance',
       mode: 'chore',
-      tier: 3,
       scopeIn: ['README.md'],
       acceptance: ['given: a repo; when: create runs; then: YAML is valid'],
     });
@@ -122,7 +120,6 @@ describe('caws specs create --acceptance', () => {
       id: 'ACCEPTANCE-003',
       title: 'Acceptance plan',
       mode: 'chore',
-      tier: 3,
       scopeIn: ['README.md'],
       acceptance: ['Runs cleanly'],
       plan: true,

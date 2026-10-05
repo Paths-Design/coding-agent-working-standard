@@ -20,6 +20,7 @@
 
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { resolveGitBinary } from './git-binary';
 
@@ -28,6 +29,8 @@ import {
   type Diagnostic,
   type DoctorInput,
   type GitWorktreeEntry,
+  type RepoHookPolicyObservation,
+  type SharedPackDriftRow,
   type TemplateCheck,
 } from '../kernel';
 import { loadAgents } from './agents-store';
@@ -37,6 +40,30 @@ import { loadPolicy } from './policy-store';
 import { loadSpecs } from './specs-store';
 import type { StoreSnapshot } from './types';
 import { loadWaivers } from './waivers-store';
+// CAWS-TELEMETRY-REPAIR-RESILIENCE-001: import the parser from the leaf
+// module — snapshot composition must not depend on the install machinery.
+// HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001 narrows that to PARSING: the pack
+// body-drift observer is imported from the install module on purpose, because
+// it is the only caller of the shared evaluateFileState classifier and
+// re-deriving the comparison here would create a second source of truth for
+// what "drift" means (the exact defect class of
+// HOOKPACK-STALENESS-VISIBILITY-001, which reported 51/51 files as drift).
+// hook-install.ts imports nothing from store/ (no cycle), and this module
+// already spawns processes, so no new failure mode is introduced. The call
+// site below is additionally guarded so a throw can never wedge doctor.
+import { parseManagedHeader } from '../init/hook-packs/managed-header';
+import { SHARED_PACK_VERSION, TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
+import {
+  observeLegacyAdapterPolicy,
+  observeRepoHookPolicy,
+  observeSharedPackBodyDrift,
+  observeTelemetryRowClaimants,
+} from '../init/hook-install';
+import { listStrandedTmpSiblings } from './atomic-write';
+import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
+import { observeSystemRuntime } from './system-runtime-observation';
+import { observeGlobalHome } from './global-home-observation';
+import { observeGatedSurfaceWiring } from '../init/hook-packs/user-scope-wiring';
 import { loadWorktrees } from './worktrees-store';
 
 // ----------------------------------------------------------------------------
@@ -74,10 +101,20 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
   // so it can distinguish "we observed the canonical path is absent"
   // from "we never observed the canonical path."
   const filesystem = observeFilesystem(repoRoot, cawsDir, worktrees, specsResult.specs);
-  const registryDiagnostics = collectRegistryDiagnostics(
-    worktreesResult,
-    agentsResult
+  // CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: created-event path presence
+  // is keyed by worktree_created event data (latest event per name wins) —
+  // the store reports the filesystem fact; the kernel alone decides that a
+  // name is an orphan or a tombstone.
+  const createdWorktreePathExistsByName = observeCreatedWorktreePaths(
+    isOk(eventsResult) ? eventsResult.value.events : []
   );
+  const filesystemWithCreatedPaths = {
+    ...filesystem,
+    ...(Object.keys(createdWorktreePathExistsByName).length > 0
+      ? { createdWorktreePathExistsByName }
+      : {}),
+  };
+  const registryDiagnostics = collectRegistryDiagnostics(worktreesResult, agentsResult);
 
   // WORKTREE-DOCTOR-HALF-STATE-001 — observe git worktree state.
   // Non-fatal: on failure, gitWorktrees is undefined and
@@ -85,6 +122,11 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
   // doctor.worktree.git_observation_unavailable and silently skips
   // H1/H6 rules. The rest of the report still runs.
   const gitObservation = observeGitWorktrees(repoRoot);
+
+  // CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01 — local branch refs, for the
+  // same slice's tombstone proof. Non-fatal and independent of the worktree
+  // listing: undefined on failure (unobserved, never absent).
+  const localBranchRefs = observeLocalBranchRefs(repoRoot);
 
   return {
     repoRoot,
@@ -102,11 +144,12 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
     waivers: waiversResult.waivers,
     waiverDiagnostics: waiversResult.diagnostics,
     initResidue,
-    filesystem,
+    filesystem: filesystemWithCreatedPaths,
     registryDiagnostics,
     ...(gitObservation.kind === 'ok'
       ? { gitWorktrees: gitObservation.entries }
       : { gitObservationFailure: gitObservation.reason }),
+    ...(localBranchRefs !== undefined ? { localBranchRefs } : {}),
   };
 }
 
@@ -138,9 +181,17 @@ function isDir(p: string): boolean {
 function observeInitResidue(cawsDir: string): StoreSnapshot['initResidue'] {
   return {
     workingSpecYaml: isFile(path.join(cawsDir, 'working-spec.yaml')),
-    workingSpecSchemaJson: isFile(
-      path.join(cawsDir, 'working-spec.schema.json')
-    ),
+    workingSpecSchemaJson: isFile(path.join(cawsDir, 'working-spec.schema.json')),
+    // CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: the legacy project-local spec
+    // schema is dead wherever it sits, so observe every location it is
+    // plausibly placed, not just the canonical one. Tidying the root copy
+    // into a schemas/ subdirectory is the most likely way an operator
+    // produces the variant, and detecting only the root path silently
+    // blesses it. Reported as repo-relative posix paths so the finding can
+    // name the file that actually exists.
+    legacySpecSchemaPaths: LEGACY_SPEC_SCHEMA_RELPATHS.filter((rel) =>
+      isFile(path.join(cawsDir, ...rel))
+    ).map((rel) => ['.caws', ...rel].join('/')),
   };
 }
 
@@ -153,10 +204,7 @@ function observeInitResidue(cawsDir: string): StoreSnapshot['initResidue'] {
  * installed. Kept narrow on purpose — a bare `.claude/hooks/` directory
  * is NOT evidence of CAWS.
  */
-const CAWS_HOOK_PACK_MARKERS = [
-  'scope-guard.sh',
-  'worktree-write-guard.sh',
-] as const;
+const CAWS_HOOK_PACK_MARKERS = ['scope-guard.sh', 'worktree-write-guard.sh'] as const;
 
 function observeHookPackInstalled(repoRoot: string): boolean {
   const hooksDir = path.join(repoRoot, '.claude', 'hooks');
@@ -164,6 +212,98 @@ function observeHookPackInstalled(repoRoot: string): boolean {
     if (isFile(path.join(hooksDir, marker))) return true;
   }
   return false;
+}
+
+/**
+ * CAWS-HARNESS-TELEMETRY-ADAPTER-001: the vendored telemetry rows this CLI
+ * installs for NON-covered surfaces. Imported from the manifest so the
+ * doctor observation and the init install set can never drift apart.
+ */
+const OBSERVED_TELEMETRY_ROWS = TELEMETRY_ROW_DEST_PATHS;
+
+/** Marker file name per adapter-covered surface that identifies that
+ *  surface's harness pack as installed (`.dsh/AGENTS.md` for dsh — the
+ *  marker contract the bundle-side adapter spec pins). */
+/**
+ * CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: every location a legacy
+ * project-local spec schema is found, relative to `.caws/`. vNext validates
+ * specs through the kernel, so a file at ANY of these paths is dead
+ * authority that can still mislead a reader into reconciling spec shapes
+ * against it. Path segments, joined per-platform for the stat and with `/`
+ * for reporting.
+ */
+const LEGACY_SPEC_SCHEMA_RELPATHS: readonly (readonly string[])[] = [
+  ['working-spec.schema.json'],
+  ['schemas', 'working-spec.schema.json'],
+];
+
+const ADAPTER_SURFACE_MARKER_FILE: Record<string, string> = {
+  dsh: 'AGENTS.md',
+};
+
+/**
+ * CAWS-HARNESS-TELEMETRY-ADAPTER-001: which of the vendored telemetry rows
+ * are present on disk as SHARED-PACK-MANAGED files (parsed with the same
+ * parseManagedHeader the installer writes). Absent files and unmanaged
+ * files are both omitted — doctor treats "no rows reported" as either
+ * absent or not-ours, and neither is staleness.
+ */
+/** CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: the INSTALLED shared pack
+ *  version, read from a load-bearing installed row's managed header.
+ *  Absent/unparseable = unobserved (undefined), never an error. */
+function observeInstalledSharedPackVersion(repoRoot: string): number | undefined {
+  for (const marker of ['scope-guard.sh', 'worktree-write-guard.sh', 'audit.sh']) {
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(repoRoot, '.caws', 'hooks', marker), 'utf8');
+    } catch {
+      continue;
+    }
+    const header = parseManagedHeader(content);
+    if (header && header.hookPack === 'shared' && header.hookPackVersion > 0) {
+      return header.hookPackVersion;
+    }
+  }
+  return undefined;
+}
+
+function observeManagedTelemetryRows(repoRoot: string): string[] {
+  const observed: string[] = [];
+  for (const relPath of OBSERVED_TELEMETRY_ROWS) {
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
+    } catch {
+      continue; // absent — never staleness
+    }
+    const header = parseManagedHeader(content);
+    if (header && header.hookPack === 'shared') observed.push(relPath);
+  }
+  return observed;
+}
+
+/**
+ * CAWS-HARNESS-TELEMETRY-ADAPTER-001: which adapter-covered surfaces have
+ * their harness pack installed in this project. There is no persisted
+ * surface receipt, so doctor infers adapter coverage from the surface's
+ * marker file carrying that surface's managed header (e.g. `.dsh/AGENTS.md`
+ * with `hook_pack: dsh`).
+ */
+function observeAdapterPackSurfaceMarkers(repoRoot: string): string[] {
+  const observed: string[] = [];
+  for (const surface of ADAPTER_COVERED_SURFACES) {
+    const markerFile = ADAPTER_SURFACE_MARKER_FILE[surface];
+    if (markerFile === undefined) continue;
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(repoRoot, `.${surface}`, markerFile), 'utf8');
+    } catch {
+      continue; // marker absent — surface pack not installed here
+    }
+    const header = parseManagedHeader(content);
+    if (header && header.hookPack === surface) observed.push(surface);
+  }
+  return observed;
 }
 
 function observeFilesystem(
@@ -195,9 +335,7 @@ function observeFilesystem(
     if (Object.prototype.hasOwnProperty.call(specClaimedWorktreeDirByName, name)) {
       continue;
     }
-    specClaimedWorktreeDirByName[name] = isDir(
-      path.join(cawsDir, 'worktrees', name)
-    );
+    specClaimedWorktreeDirByName[name] = isDir(path.join(cawsDir, 'worktrees', name));
   }
   return {
     cawsDirExists: isDir(cawsDir),
@@ -210,6 +348,102 @@ function observeFilesystem(
     // CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: observe the hook pack so doctor
     // can flag the hooks-present/substrate-absent split-brain.
     hookPackInstalled: observeHookPackInstalled(repoRoot),
+    ...(() => {
+      const systemRuntime = observeSystemRuntime(repoRoot);
+      return systemRuntime ? { systemRuntime } : {};
+    })(),
+    // CAWS-HARNESS-TELEMETRY-ADAPTER-001: observe managed telemetry rows and
+    // installed adapter-pack surfaces so doctor can flag stale dual-writers.
+    managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
+    globalHomeObservation: observeGlobalHome(
+      process.env.CAWS_HOME || path.join(os.homedir(), '.caws')
+    ),
+    adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
+    // CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: which installed surfaces
+    // still CLAIM those rows. Delegated to the install module for the same
+    // reason as observeSharedPackBodyDrift above: the installer's own notion
+    // of "whose install set contains this row" is the only correct answer,
+    // and re-deriving it here would let doctor prescribe a repair init
+    // would not perform.
+    telemetryRowClaimantSurfaces: observeTelemetryRowClaimants(repoRoot),
+    // CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmps in the
+    // leases dir, observed through the atomic-write lister itself (the same
+    // pattern the sweep uses — one source of truth for what counts as ours).
+    ...((): { strandedLeaseTmpFiles?: readonly { name: string; ageMs: number }[] } => {
+      const stranded = listStrandedTmpSiblings(path.join(cawsDir, 'leases', 'lease.json'));
+      if (stranded.length === 0) return {};
+      return {
+        strandedLeaseTmpFiles: stranded.map((f) => ({
+          name: path.basename(f.path),
+          ageMs: Math.round(f.ageMs),
+        })),
+      };
+    })(),
+    // CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: installed vs shipping pack
+    // versions, observed from the installed rows' managed headers.
+    // HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001: also observe per-file BODY
+    // drift, because the version stamp does not track content.
+    // CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: drift rows are
+    // baseline-classified (growth / upstream / unobserved) by the observer.
+    ...((): {
+      installedSharedPackVersion?: number;
+      shippingSharedPackVersion: number;
+      installedSharedPackBodyDrift?: readonly SharedPackDriftRow[];
+    } => {
+      const installed = observeInstalledSharedPackVersion(repoRoot);
+      let bodyDrift: readonly SharedPackDriftRow[] = [];
+      try {
+        bodyDrift = observeSharedPackBodyDrift(repoRoot);
+      } catch {
+        // Fail-open: an unreadable copied pack is never a doctor failure.
+        bodyDrift = [];
+      }
+      return {
+        ...(installed !== undefined ? { installedSharedPackVersion: installed } : {}),
+        shippingSharedPackVersion: SHARED_PACK_VERSION,
+        ...(bodyDrift.length > 0 ? { installedSharedPackBodyDrift: bodyDrift } : {}),
+      };
+    })(),
+    // CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy. Every
+    // comparison that needs the filesystem or a shipped template — the fork's
+    // upstream sha256, the compiled chain bytes — is resolved HERE, and the
+    // kernel receives plain rows. Absent policy yields undefined, which is
+    // silent; only an unreadable or invalid one becomes an observation.
+    ...((): {
+      repoHookPolicy?: RepoHookPolicyObservation;
+      legacyAdapterPolicyPresent?: boolean;
+    } => {
+      let observed: RepoHookPolicyObservation | undefined;
+      try {
+        observed = observeRepoHookPolicy(repoRoot);
+      } catch {
+        // Fail-open: a collection failure degrades THIS observation only and
+        // must never take the rest of doctor down with it.
+        observed = undefined;
+      }
+      let legacy = false;
+      try {
+        legacy = observeLegacyAdapterPolicy(repoRoot);
+      } catch {
+        legacy = false;
+      }
+      return {
+        ...(observed !== undefined ? { repoHookPolicy: observed } : {}),
+        ...(legacy ? { legacyAdapterPolicyPresent: true } : {}),
+      };
+    })(),
+    // CAWS-GATED-SURFACE-SCOPE-GUARD-001: both sides of the dual-wiring
+    // hazard, observed read-only (user home + project configs).
+    ...((): {
+      userScopeCawsWiringBySurface: readonly string[];
+      gatedProjectHookEntriesBySurface: readonly string[];
+    } => {
+      const observed = observeGatedSurfaceWiring(repoRoot);
+      return {
+        userScopeCawsWiringBySurface: observed.userScope,
+        gatedProjectHookEntriesBySurface: observed.projectScope,
+      };
+    })(),
     worktreeDirByName,
     specClaimedWorktreeDirByName,
     legacyArchiveBodyCount: countArchiveBodies(cawsDir),
@@ -268,11 +502,9 @@ type GitObservationResult =
 function observeGitWorktrees(repoRoot: string): GitObservationResult {
   let result;
   try {
-    result = spawnSync(
-      resolveGitBinary(),
-      ['-C', repoRoot, 'worktree', 'list', '--porcelain'],
-      { encoding: 'utf8' }
-    );
+    result = spawnSync(resolveGitBinary(), ['-C', repoRoot, 'worktree', 'list', '--porcelain'], {
+      encoding: 'utf8',
+    });
   } catch (e) {
     // spawnSync throws for some platform errors (e.g. ENOENT on git)
     // depending on Node version / option flags. Treat all throws as
@@ -356,6 +588,75 @@ function parseWorktreePorcelainLocal(text: string): GitWorktreeEntry[] {
   return entries;
 }
 
+// ----------------------------------------------------------------------------
+// CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01 — tombstone observations.
+//
+// Two read-only facts the kernel needs to prove a worktree event-orphan is
+// verifiably dead: which local branch refs exist, and whether the path each
+// worktree_created event recorded still exists. Both follow the established
+// keying discipline (registry-keyed / spec-claim-keyed / event-data-keyed
+// maps over pure data): the store reports facts, the kernel decides policy.
+// Both are non-fatal — undefined/absent observations never crash doctor and
+// never authorize a downgrade.
+// ----------------------------------------------------------------------------
+
+/**
+ * Local branch refs as full ref names (`refs/heads/<branch>`), observed via
+ * one `git for-each-ref` call. Undefined on any failure (unobserved).
+ */
+function observeLocalBranchRefs(repoRoot: string): readonly string[] | undefined {
+  let result;
+  try {
+    result = spawnSync(
+      resolveGitBinary(),
+      ['-C', repoRoot, 'for-each-ref', '--format=%(refname)', 'refs/heads'],
+      { encoding: 'utf8' }
+    );
+  } catch {
+    return undefined;
+  }
+  if (result.error || typeof result.status !== 'number' || result.status !== 0) {
+    return undefined;
+  }
+  const stdout = (result.stdout ?? '').toString();
+  const refs = stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('refs/heads/'));
+  return refs;
+}
+
+/**
+ * For each name carried by a `worktree_created` event (latest event per name
+ * wins — the most recent lifecycle is what "remains now" means), whether the
+ * path the event recorded exists on disk (any entry type). Events without a
+ * usable name+path are skipped; a skipped name is simply absent from the map
+ * (unobserved). Empty when the log carries no usable created events.
+ */
+function observeCreatedWorktreePaths(
+  events: readonly {
+    readonly event: string;
+    readonly data?: unknown;
+  }[]
+): Record<string, boolean> {
+  const pathsByName: Record<string, string> = {};
+  for (const ev of events) {
+    if (ev.event !== 'worktree_created') continue;
+    const d = ev.data as Record<string, unknown> | undefined;
+    const name = typeof d?.name === 'string' ? d.name : undefined;
+    const p = typeof d?.path === 'string' ? d.path : undefined;
+    if (name === undefined || name.length === 0 || p === undefined || p.length === 0) {
+      continue;
+    }
+    pathsByName[name] = p;
+  }
+  const existsByName: Record<string, boolean> = {};
+  for (const [name, p] of Object.entries(pathsByName)) {
+    existsByName[name] = fs.existsSync(p);
+  }
+  return existsByName;
+}
+
 function collectRegistryDiagnostics(
   worktreesResult: ReturnType<typeof loadWorktrees>,
   agentsResult: ReturnType<typeof loadAgents>
@@ -393,9 +694,7 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
   // branch comes from the registry (a unique baseBranch). Absent on git
   // failure or base ambiguity — the kernel finding silently skips
   // (missing != malformed).
-  let canonicalBranchObservation:
-    | { currentBranch: string; baseBranch: string }
-    | undefined;
+  let canonicalBranchObservation: { currentBranch: string; baseBranch: string } | undefined;
   {
     const baseBranches = new Set<string>();
     for (const record of Object.values(snapshot.worktrees ?? {})) {
@@ -439,19 +738,18 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
     initResidue: snapshot.initResidue,
     filesystem: snapshot.filesystem,
     registryDiagnostics: snapshot.registryDiagnostics,
-    ...(snapshot.gitWorktrees !== undefined
-      ? { gitWorktrees: snapshot.gitWorktrees }
-      : {}),
-    ...(canonicalBranchObservation !== undefined
-      ? { canonicalBranchObservation }
+    ...(snapshot.gitWorktrees !== undefined ? { gitWorktrees: snapshot.gitWorktrees } : {}),
+    ...(canonicalBranchObservation !== undefined ? { canonicalBranchObservation } : {}),
+    // CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: tombstone observation for
+    // §2e — undefined stays undefined (unobserved, no downgrade).
+    ...(snapshot.localBranchRefs !== undefined
+      ? { localBranchRefs: snapshot.localBranchRefs }
       : {}),
     ...(snapshot.gitObservationFailure !== undefined
       ? { gitObservationFailure: snapshot.gitObservationFailure }
       : {}),
     now: options.now,
-    ...(options.staleAgentTtlMs !== undefined
-      ? { staleAgentTtlMs: options.staleAgentTtlMs }
-      : {}),
+    ...(options.staleAgentTtlMs !== undefined ? { staleAgentTtlMs: options.staleAgentTtlMs } : {}),
     ...(options.unboundActiveThresholdMs !== undefined
       ? { unboundActiveThresholdMs: options.unboundActiveThresholdMs }
       : {}),

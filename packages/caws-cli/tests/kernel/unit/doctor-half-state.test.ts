@@ -134,10 +134,7 @@ describe('H3 — one-sided spec -> registry (spec has worktree:, registry has no
       specs: [spec('S-H3C', { worktree: 'wt-h3c', lifecycle_state: 'closed' } as Partial<Spec>)],
       worktrees: {},
     };
-    const f = findingFor(
-      inspectProjectState(input),
-      DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
-    );
+    const f = findingFor(inspectProjectState(input), DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY);
     expect(f?.severity).toBe('info');
   });
 });
@@ -173,10 +170,7 @@ describe('H5 — 3-way registry/spec contradiction (non-actionable repair)', () 
     // registry[name].specId === idB; spec idA claims name; spec idB lacks worktree.
     const input: DoctorInput = {
       now: NOW,
-      specs: [
-        spec('S-A', { worktree: 'wt-x' } as Partial<Spec>),
-        spec('S-B', {} as Partial<Spec>),
-      ],
+      specs: [spec('S-A', { worktree: 'wt-x' } as Partial<Spec>), spec('S-B', {} as Partial<Spec>)],
       worktrees: { 'wt-x': { specId: 'S-B' } },
     };
     const report = inspectProjectState(input);
@@ -223,9 +217,7 @@ describe('event-backed governance-half-state (A2/A6 — worktree_created orphan)
       events,
     };
     const report = inspectProjectState(input);
-    expect(rules(report)).toContain(
-      DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING
-    );
+    expect(rules(report)).toContain(DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
     const f = findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
     expect(f?.subject).toBe('wt-orphan');
     expect(f?.severity).toBe('warning');
@@ -233,7 +225,7 @@ describe('event-backed governance-half-state (A2/A6 — worktree_created orphan)
     expect(f?.data?.created_event_seq).toBe(2);
     expect(typeof f?.data?.created_event_hash).toBe('string');
     expect(f?.data?.spec_id).toBe('WT-SPEC');
-    // DIAGNOSE ONLY: no mutating command in the repair.
+    // Incomplete observations cannot authorize a reconciliation receipt.
     expect(f?.narrowRepair ?? '').not.toMatch(/\bcaws\s+\w|\bgit\s+\w/);
   });
 
@@ -294,6 +286,152 @@ describe('event-backed governance-half-state (A2/A6 — worktree_created orphan)
 });
 
 // =========================================================================
+// CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01 — verifiable-tombstone
+// downgrade. A warning that no governed command can discharge (destroy /
+// prune / repair refuse the event-orphan class by design) trains operators
+// to ignore doctor. When every physical observation is present-and-absent,
+// the orphan renders as INFO. The predicate is conjunctive; unobserved is
+// not absent.
+// =========================================================================
+
+describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01)', () => {
+  /** An orphan created-event with the full schema shape (name/branch/path). */
+  function orphanEvents(name = 'wt-tomb'): ChainedEvent[] {
+    return chain([
+      {
+        event: 'worktree_created',
+        data: {
+          name,
+          branch: name,
+          base_branch: 'main',
+          path: `/fixture/absent/${name}`,
+        },
+      },
+    ]);
+  }
+
+  /** Full tombstone observation set: branch absent, path absent, listing up. */
+  function tombstoneObservations(name = 'wt-tomb') {
+    return {
+      localBranchRefs: ['refs/heads/main'],
+      gitWorktrees: [],
+      filesystem: fsObs({ createdWorktreePathExistsByName: { [name]: false } }),
+    } as const;
+  }
+
+  function orphanInput(events: ChainedEvent[], extra: Partial<DoctorInput>): DoctorInput {
+    return { now: NOW, specs: [], worktrees: {}, events, ...extra };
+  }
+
+  test('A1: verifiably-dead orphan downgrades to info with verified_dead evidence', () => {
+    const report = inspectProjectState(orphanInput(orphanEvents(), tombstoneObservations()));
+    expect(rules(report)).toContain(DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
+    const f = findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
+    expect(f?.severity).toBe('info');
+    expect(f?.subject).toBe('wt-tomb');
+    expect(f?.data?.verified_dead).toBe(true);
+    expect(f?.data?.branch_observed_absent).toBe('wt-tomb');
+    expect(f?.data?.path_observed_absent).toBe('/fixture/absent/wt-tomb');
+    // The tombstone names no command either — diagnose-only posture holds.
+    expect(f?.narrowRepair).toContain('caws worktree prune --state verified-dead-creation');
+    // The tombstone contributes to infos, not warnings.
+    expect(report.summary.warnings).toBe(0);
+    expect(report.summary.infos).toBe(1);
+  });
+
+  test('A2: recorded branch still present keeps the warning (recoverable history remains)', () => {
+    const report = inspectProjectState(
+      orphanInput(orphanEvents(), {
+        ...tombstoneObservations(),
+        localBranchRefs: ['refs/heads/main', 'refs/heads/wt-tomb'],
+      })
+    );
+    const f = findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
+    expect(f?.severity).toBe('warning');
+    expect(f?.data?.verified_dead).toBeUndefined();
+  });
+
+  test('A3a: recorded path still exists on disk keeps the warning', () => {
+    const report = inspectProjectState(
+      orphanInput(orphanEvents(), {
+        ...tombstoneObservations(),
+        filesystem: fsObs({ createdWorktreePathExistsByName: { 'wt-tomb': true } }),
+      })
+    );
+    expect(
+      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)?.severity
+    ).toBe('warning');
+  });
+
+  test('A3b: a linked worktree still listed at the recorded path keeps the warning (un-pruned git metadata is residue)', () => {
+    const report = inspectProjectState(
+      orphanInput(orphanEvents(), {
+        ...tombstoneObservations(),
+        gitWorktrees: [{ path: '/fixture/absent/wt-tomb', branch: 'refs/heads/wt-tomb' }],
+      })
+    );
+    expect(
+      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)?.severity
+    ).toBe('warning');
+  });
+
+  test.each([
+    // "No observation" means the key is ABSENT, not present-as-undefined —
+    // exactOptionalPropertyTypes enforces that distinction, and the kernel's
+    // missing-vs-malformed doctrine wants absence anyway.
+    [
+      'no localBranchRefs observation',
+      (o: ReturnType<typeof tombstoneObservations>) => {
+        const { localBranchRefs: _lbr, ...rest } = o;
+        return rest;
+      },
+    ],
+    [
+      'name missing from the created-path map',
+      (o: ReturnType<typeof tombstoneObservations>) => ({
+        ...o,
+        filesystem: fsObs({ createdWorktreePathExistsByName: {} }),
+      }),
+    ],
+    [
+      'no gitWorktrees observation',
+      (o: ReturnType<typeof tombstoneObservations>) => {
+        const { gitWorktrees: _gw, ...rest } = o;
+        return rest;
+      },
+    ],
+  ])('A4: %s keeps the warning — unobserved never downgrades', (_label, mutate) => {
+    const report = inspectProjectState(
+      orphanInput(orphanEvents(), mutate(tombstoneObservations()))
+    );
+    expect(
+      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)?.severity
+    ).toBe('warning');
+  });
+
+  test('A4b: a created-event without a recorded path never downgrades (nothing to stat)', () => {
+    const events = chain([{ event: 'worktree_created', data: { name: 'wt-nopath' } }]);
+    const report = inspectProjectState(
+      orphanInput(events, {
+        localBranchRefs: ['refs/heads/main'],
+        gitWorktrees: [],
+        filesystem: fsObs({ createdWorktreePathExistsByName: { 'wt-nopath': false } }),
+      })
+    );
+    expect(
+      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)?.severity
+    ).toBe('warning');
+  });
+
+  test('A7: the downgrade path mutates nothing on a deeply-frozen input', () => {
+    const input = Object.freeze(
+      orphanInput(orphanEvents(), tombstoneObservations())
+    ) as DoctorInput;
+    expect(() => inspectProjectState(input)).not.toThrow();
+  });
+});
+
+// =========================================================================
 // A5 — doctor is read-only / mutation-free
 // =========================================================================
 
@@ -310,4 +448,37 @@ describe('doctor is read-only (A5)', () => {
     // throw in strict mode (ts-jest runs ESM-strict). It must complete cleanly.
     expect(() => inspectProjectState(input)).not.toThrow();
   });
+});
+
+describe('ordered lifecycle accounting', () => {
+  test.each(['worktree_untracked', 'worktree_destroyed'])(
+    '%s accounts only for the preceding creation',
+    (terminal) => {
+      const events = chain([
+        { event: 'worktree_created', data: { name: 'salvage', path: '/old', branch: 'salvage' } },
+        { event: terminal, data: { worktree_name: 'salvage' } },
+      ]);
+      expect(
+        rules(
+          inspectProjectState({
+            now: NOW,
+            specs: [],
+            worktrees: {},
+            events,
+            localBranchRefs: ['refs/heads/salvage'],
+          })
+        )
+      ).not.toContain(DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
+      const reused = chain([
+        ...events.map((e) => ({ event: e.event, data: e.data })),
+        { event: 'worktree_created', data: { name: 'salvage', path: '/new', branch: 'salvage' } },
+      ]);
+      const f = findingFor(
+        inspectProjectState({ now: NOW, specs: [], worktrees: {}, events: reused }),
+        DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING
+      );
+      expect(f?.data?.created_event_seq).toBe(3);
+      expect(f?.severity).toBe('warning');
+    }
+  );
 });

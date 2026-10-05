@@ -9,18 +9,25 @@ updated: 2026-05-15
 
 # CAWS Reflexivity: Self-Auditing Architecture
 
-**Author**: @darianrosebrook
-**Date**: October 12, 2025
-**Status**: Proposed Philosophy (pre-v11)
-**Inspiration**: Agent-Agency V2 Constitutional Design
+**Author**: @darianrosebrook **Date**: October 12, 2025 **Status**: Proposed
+Philosophy (pre-v11) **Inspiration**: Agent-Agency V2 Constitutional Design
 
-> **v11 doctrine note.** This document is *speculative philosophy* authored before the v11.0.0 cutover. The CLI snippets below reference `caws self-audit`, `caws waivers` (plural), `caws provenance analyze-waivers`, and `caws provenance analyze-ai` — none of which exist in v11.0.0. The *idea* (CAWS subjects itself to its own standards via the v11 surface — `caws doctor`, `caws gates run`, `caws evidence record`, `caws waiver`) is the v11-honest realization of this principle. Treat the snippets as design illustrations, not invocable commands.
+> **v11 doctrine note.** This document is _speculative philosophy_ authored
+> before the v11.0.0 cutover. The CLI snippets below reference
+> `caws self-audit`, `caws waivers` (plural), `caws provenance analyze-waivers`,
+> and `caws provenance analyze-ai` — none of which exist in v11.0.0. The _idea_
+> (CAWS subjects itself to its own standards via the v11 surface —
+> `caws doctor`, `caws gates run`, `caws evidence record`, `caws waiver`) is the
+> v11-honest realization of this principle. Treat the snippets as design
+> illustrations, not invocable commands.
 
 ---
 
 ## The Core Principle
 
-**CAWS Reflexivity** is the principle that any system enforcing CAWS standards must itself be subject to those same standards. This creates a self-consistent, philosophically complete architecture where no component is above the law.
+**CAWS Reflexivity** is the principle that any system enforcing CAWS standards
+must itself be subject to those same standards. This creates a self-consistent,
+philosophically complete architecture where no component is above the law.
 
 > "Practice what you preach"
 
@@ -37,7 +44,8 @@ Most quality enforcement tools have a fundamental inconsistency:
 
 This creates a philosophical gap: **rules for thee, but not for me**.
 
-Result: Governance tools can become technical debt, quality can degrade, and trust erodes.
+Result: Governance tools can become technical debt, quality can degrade, and
+trust erodes.
 
 ---
 
@@ -149,7 +157,8 @@ jobs:
 
 ### 2. Self-Waivers
 
-**Requirement**: Design exceptions in CAWS must be documented through the waiver system.
+**Requirement**: Design exceptions in CAWS must be documented through the waiver
+system.
 
 **Example**: Bootstrap Waiver
 
@@ -204,7 +213,8 @@ caws provenance analyze-waivers --component caws-cli
 
 ### 3. Reflexive Training (Future)
 
-**Requirement**: For AI-assisted development of CAWS, use CAWS compliance metrics as training signals.
+**Requirement**: For AI-assisted development of CAWS, use CAWS compliance
+metrics as training signals.
 
 **Concept**:
 
@@ -215,13 +225,13 @@ caws provenance analyze-waivers --component caws-cli
 class ReflexiveTrainer {
   async optimizeCAWSCompliance(developmentHistory) {
     // Analyze CAWS's own commits
-    const commits = developmentHistory.filter((c) => c.component === 'caws-cli');
+    const commits = developmentHistory.filter(c => c.component === 'caws-cli');
 
     // Track CAWS compliance metrics
-    const metrics = commits.map((c) => ({
+    const metrics = commits.map(c => ({
       waiverUsed: c.waiver_ids.length > 0,
       budgetExceeded: c.budget_compliance.violations.length > 0,
-      qualityGates: c.quality_gates.filter((g) => g.passed).length,
+      qualityGates: c.quality_gates.filter(g => g.passed).length,
       timestamp: c.timestamp,
     }));
 
@@ -283,7 +293,10 @@ interface BootstrapProgress {
 class ImmutableProvenanceRecorder {
   async record(verdict) {
     // Compute cryptographic hash
-    const hash = crypto.createHash('sha256').update(JSON.stringify(verdict)).digest('hex');
+    const hash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(verdict))
+      .digest('hex');
 
     // Sign with CAWS's private key (if available)
     const signature = await this.signVerdict(hash);
@@ -420,7 +433,8 @@ caws provenance analyze-ai --component caws-cli --metric waiver-rate
 - Architecture applies to architects
 - Governance evolves through same quality loop
 
-**Result**: A self-consistent system where constitutional principles are universal, not privileged.
+**Result**: A self-consistent system where constitutional principles are
+universal, not privileged.
 
 ---
 
@@ -428,7 +442,9 @@ caws provenance analyze-ai --component caws-cli --metric waiver-rate
 
 ### Q: Doesn't self-audit create circular dependency?
 
-**A**: No, because CAWS validation logic doesn't depend on CAWS passing validation. Self-audit is a quality check, not a build requirement. However, we do block releases if self-audit fails (just like user code).
+**A**: No, because CAWS validation logic doesn't depend on CAWS passing
+validation. Self-audit is a quality check, not a build requirement. However, we
+do block releases if self-audit fails (just like user code).
 
 ### Q: What if CAWS can't pass its own standards?
 
@@ -442,7 +458,9 @@ This forcing function ensures CAWS remains practical.
 
 ### Q: How do we bootstrap self-audit?
 
-**A**: Start with manual review (Phase 1), migrate to external tools (Phase 2), eventually enable self-audit (Phase 3). Document bootstrap waivers along the way.
+**A**: Start with manual review (Phase 1), migrate to external tools (Phase 2),
+eventually enable self-audit (Phase 3). Document bootstrap waivers along the
+way.
 
 ### Q: Does this slow down development?
 
@@ -482,7 +500,9 @@ This forcing function ensures CAWS remains practical.
 
 ## Conclusion
 
-CAWS Reflexivity ensures the arbiter isn't just a policeman—it's a citizen subject to the same constitutional framework it enforces, creating a truly self-consistent governance system.
+CAWS Reflexivity ensures the arbiter isn't just a policeman—it's a citizen
+subject to the same constitutional framework it enforces, creating a truly
+self-consistent governance system.
 
 By validating itself against its own standards, CAWS:
 
@@ -491,7 +511,8 @@ By validating itself against its own standards, CAWS:
 - **Demonstrates commitment** to its principles
 - **Creates accountability** through public audit
 
-**Reflexivity is not just a feature—it's a philosophy of engineering integrity.**
+**Reflexivity is not just a feature—it's a philosophy of engineering
+integrity.**
 
 ---
 

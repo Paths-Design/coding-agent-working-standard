@@ -1,0 +1,41 @@
+id: CAWS-ADAPTER-STOP-BLOCK-UNBOUNDED-02
+title: 'A repeatedly-blocking Stop handler has no budget, so a broken handler result still traps the session'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T03:03:41.343Z'
+updated_at: '2026-09-19T03:03:41.343Z'
+created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
+blast_radius:
+  modules:
+    - 'caws-cli/hook-runtime'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/tests/adapter/machine-runtime.test.js'
+  out: []
+invariants:
+  - 'Bounding a Stop refusal must not convert it to silent success: the release states plainly that it is releasing an unmet condition, so the drop is auditable in the transcript.'
+  - 'A Stop refusal that no actor can discharge - a malformed, unparseable or crashed handler result - is bounded: the adapter refuses it a finite number of consecutive times, then releases.'
+  - 'A well-formed block from a guard whose condition the agent can satisfy (for example the goal-ac-gate Stop hook) is not consumed by this budget; bounding it would disarm a designed gate.'
+acceptance:
+  - id: A1
+    given: 'a handler whose result is malformed on every stop'
+    when: 'the session stops repeatedly'
+    then: 'the adapter refuses at most N consecutive times and then releases with an explicit statement that it is releasing over an unmet condition'
+  - id: A2
+    given: 'the same handler after any successful stop'
+    when: 'it next emits a malformed result'
+    then: 'the consecutive counter has reset, so the budget is per-run of failures and not a lifetime cap'
+  - id: A3
+    given: >-
+      a handler that returns a well-formed, legitimate Stop block (a guard whose
+      condition is unmet but dischargeable)
+    when: 'the session stops more than N consecutive times'
+    then: 'every stop is still refused and the malformed-result counter is unchanged'
+non_functional: {}
+contracts:
+  - name: 'stop-block-budget'
+    type: behavior

@@ -32,7 +32,7 @@ export function parsePolicyYaml(source: string, options: ParseOptions = {}): Res
         }),
         narrowRepair: 'Fix the YAML syntax error indicated by location.',
         data: { rawMessage: msg },
-      }),
+      })
     );
   }
 
@@ -44,7 +44,7 @@ export function parsePolicyYaml(source: string, options: ParseOptions = {}): Res
         message: 'Policy document is empty.',
         ...(options.sourcePath !== undefined && { subject: options.sourcePath }),
         narrowRepair: 'Provide a non-empty YAML document.',
-      }),
+      })
     );
   }
 
@@ -56,7 +56,7 @@ export function parsePolicyYaml(source: string, options: ParseOptions = {}): Res
         message: `Policy document must be a YAML object, got ${Array.isArray(parsed) ? 'array' : typeof parsed}.`,
         ...(options.sourcePath !== undefined && { subject: options.sourcePath }),
         narrowRepair: 'Wrap the document as a top-level YAML mapping.',
-      }),
+      })
     );
   }
 

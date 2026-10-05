@@ -37,7 +37,11 @@ const { loadSpecs } = require('../../dist/store/specs-store');
 const repos = [];
 afterAll(() => {
   for (const r of repos) {
-    try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      fs.rmSync(r, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
 });
 

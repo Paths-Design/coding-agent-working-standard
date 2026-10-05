@@ -7,11 +7,11 @@ created_at: '2026-05-18T00:00:00.000Z'
 updated_at: '2026-05-29T00:30:00.000Z'
 blast_radius:
   modules:
-    - packages/quality-gates
-    - package-lock.json
-    - package.json
-    - .github/workflows
-    - docs
+    - 'packages/quality-gates'
+    - 'package-lock.json'
+    - 'package.json'
+    - '.github/workflows'
+    - 'docs'
   data_migration: false
 operational_rollback_slo: 60m
 scope:
@@ -67,6 +67,13 @@ acceptance:
     given: 'Any past consumer that pinned @paths.design/caws-quality-gates@2.x.'
     when: 'They install that version from npm.'
     then: 'The installation still works as it did before this slice; this slice does not touch the registry.'
+  - id: A7
+    given: >-
+      the five quality-gates config files still in .caws/ (code-freeze.yaml,
+      quality-exceptions.json, duplication-exceptions.yaml, refactor-baselines.yaml,
+      refactor-targets.yaml)
+    when: 'every source, hook, workflow and script on main is searched for a reader of each file'
+    then: 'no reader exists and the five files are removed from the tree'
 non_functional:
   reliability:
     - 'A clean checkout + npm install + npm test passes after the slice.'

@@ -242,9 +242,7 @@ function loadSchemaForKind(kind: EvidenceKind): EvidenceSchemaRecord {
   const candidates = schemaPathCandidates(eventType);
   const schemaPath = candidates.find((candidate) => fs.existsSync(candidate));
   if (schemaPath === undefined) {
-    throw new Error(
-      `missing schema file for ${eventType}; searched ${candidates.join(', ')}`
-    );
+    throw new Error(`missing schema file for ${eventType}; searched ${candidates.join(', ')}`);
   }
   const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8')) as Record<string, unknown>;
   const rawRequired = Array.isArray(schema.required) ? schema.required : [];
@@ -310,7 +308,10 @@ function eventMatchesRef(event: ChainedEvent, ref: string): boolean {
   return event.event_hash === ref || event.event_hash.startsWith(ref);
 }
 
-function resolveEventRef(events: readonly ChainedEvent[], ref: string):
+function resolveEventRef(
+  events: readonly ChainedEvent[],
+  ref: string
+):
   | { kind: 'found'; event: ChainedEvent }
   | { kind: 'not_found' }
   | { kind: 'ambiguous'; matches: readonly ChainedEvent[] } {
@@ -335,9 +336,7 @@ export function runEvidenceRecordCommand(opts: EvidenceRecordOptions): number {
     err(
       `caws evidence record: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac|human_decision.`
     );
-    err(
-      `(rule: ${SHELL_RULES.COMMAND_INVALID_EVIDENCE_TYPE})`
-    );
+    err(`(rule: ${SHELL_RULES.COMMAND_INVALID_EVIDENCE_TYPE})`);
     return 1;
   }
 
@@ -365,16 +364,22 @@ export function runEvidenceRecordCommand(opts: EvidenceRecordOptions): number {
       typeof opts.specId === 'string' && opts.specId.length > 0 ? opts.specId : '<spec-id>';
     err(
       'caws evidence record: --type ac is not the acceptance-criterion surface. This command appends an ' +
-        'ac_recorded AUDIT event only; it does NOT write the spec\'s evidence: block, which is the CLOSURE ' +
+        "ac_recorded AUDIT event only; it does NOT write the spec's evidence: block, which is the CLOSURE " +
         'AUTHORITY the close gate reads. Evidence recorded here satisfies nothing at close time.'
     );
-    err('  Use the governed command instead — it dual-writes the block AND the event in one transaction:');
+    err(
+      '  Use the governed command instead — it dual-writes the block AND the event in one transaction:'
+    );
     err(
       `    caws specs evidence ${specId} --ac ${criterion} --status ${status} --evidence-ref ${shellQuote(evidenceRef)}`
     );
     err('  (For a criterion you are deliberately not verifying separately, use');
-    err(`    caws specs evidence ${specId} --ac ${criterion} --status waived --waiver-reason "<why>")`);
-    err('  Read-only inspection of already-recorded AC evidence is unaffected: caws evidence list --type ac');
+    err(
+      `    caws specs evidence ${specId} --ac ${criterion} --status waived --waiver-reason "<why>")`
+    );
+    err(
+      '  Read-only inspection of already-recorded AC evidence is unaffected: caws evidence list --type ac'
+    );
     err(`(rule: ${SHELL_RULES.COMMAND_EVIDENCE_AC_WRONG_SURFACE})`);
     return 1;
   }
@@ -453,9 +458,7 @@ export function runEvidenceRecordCommand(opts: EvidenceRecordOptions): number {
   // 6. Print outcome AFTER success. Includes seq + event_hash so the
   // caller (agent or human) gets a stable handle for the new event.
   const ev = appendResult.value;
-  out(
-    `recorded ${ev.event} seq=${ev.seq} hash=${ev.event_hash} spec=${ev.spec_id ?? '(none)'}`
-  );
+  out(`recorded ${ev.event} seq=${ev.seq} hash=${ev.event_hash} spec=${ev.spec_id ?? '(none)'}`);
   // Print the relative events file path for ergonomics.
   out(`  written to ${path.relative(repoRoot, path.join(cawsDir, 'events.jsonl'))}`);
   return 0;
@@ -494,23 +497,27 @@ export function runEvidenceListCommand(opts: EvidenceListOptions): number {
   const summaries = candidates.map(evidenceSummary);
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      spec_id: opts.specId,
-      type: opts.kind ?? null,
-      count: summaries.length,
-      events: summaries,
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          spec_id: opts.specId,
+          type: opts.kind ?? null,
+          count: summaries.length,
+          events: summaries,
+        },
+        null,
+        2
+      )
+    );
   } else {
     out(
       `caws evidence list: ${summaries.length} event(s) for spec ${opts.specId}` +
         (opts.kind !== undefined ? ` type=${opts.kind}` : '')
     );
     for (const item of summaries) {
-      out(
-        `- seq=${item.seq} type=${item.type} hash=${item.hash} ts=${item.ts}`
-      );
+      out(`- seq=${item.seq} type=${item.type} hash=${item.hash} ts=${item.ts}`);
     }
     if (summaries.length === 0) out('  (none)');
   }
@@ -548,11 +555,17 @@ export function runEvidenceShowCommand(opts: EvidenceShowOptions): number {
 
   const summary = evidenceSummary(resolved.event);
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      event: summary,
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          event: summary,
+        },
+        null,
+        2
+      )
+    );
   } else {
     out(
       `seq=${summary.seq} event=${summary.event} type=${summary.type ?? '(non-evidence)'} ` +
@@ -584,16 +597,22 @@ export function runEvidenceSchemaCommand(opts: EvidenceSchemaOptions): number {
   }
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      type: record.kind,
-      event: record.event,
-      required: record.required,
-      properties: record.properties,
-      schema: record.schema,
-      example: record.example,
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          type: record.kind,
+          event: record.event,
+          required: record.required,
+          properties: record.properties,
+          schema: record.schema,
+          example: record.example,
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 

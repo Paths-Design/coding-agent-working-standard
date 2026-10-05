@@ -62,12 +62,16 @@ function seedLease(repoRoot, sessionId, platform = 'claude-code') {
 function makeRepoRoot() {
   const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-reprieve-cli-'));
   // resolveRepoRoot requires a git repo (the command refuses non-repo cwds).
-  execSync(`git init -q -b main && git config user.email t@t && git config user.name t && git commit -q --allow-empty -m root`, {
-    cwd: repoRoot,
-  });
+  execSync(
+    `git init -q -b main && git config user.email t@t && git config user.name t && git commit -q --allow-empty -m root`,
+    {
+      cwd: repoRoot,
+      homeDir: path.join(repoRoot, 'machine-home'),
+    }
+  );
   // The command creates the state/logs dirs via mkdir -p, but pre-create so
   // detectVendorDir finds .claude on the grant path.
-  fs.mkdirSync(path.join(repoRoot, '.claude', 'hooks', 'state'), {
+  fs.mkdirSync(path.join(repoRoot, 'machine-home', 'state', 'sessions'), {
     recursive: true,
   });
   // Every session this suite grants for needs a lease: the grant path resolves
@@ -80,8 +84,8 @@ function makeRepoRoot() {
   seedLease(repoRoot, 'sess-revoke');
   seedLease(repoRoot, 'sess-show');
   seedLease(repoRoot, 'sess-x');
-  const stateDir = path.join(repoRoot, '.claude', 'hooks', 'state');
-  const logsDir = path.join(repoRoot, '.claude', 'logs');
+  const stateDir = path.join(repoRoot, 'machine-home', 'state', 'sessions');
+  const logsDir = path.join(repoRoot, 'machine-home', 'state');
   return { repoRoot, stateDir, logsDir };
 }
 
@@ -97,13 +101,35 @@ function captureOut() {
 
 describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
   describe('grant', () => {
+    test('rejects a whitespace-only reason and explains the required justification without writing', () => {
+      const { repoRoot, stateDir, logsDir } = makeRepoRoot();
+      const errors = [];
+      const code = runReprieveGrantCommand({
+        cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {},
+        out: () => {},
+        err: (message) => errors.push(message),
+        handlers: 'protected-paths.sh',
+        reason: ' \n\t ',
+        approvedBy: 'human',
+        expiresAt: FUTURE_ISO,
+        session: 'sess-x',
+        surface: 'claude-code',
+      });
+      expect(code).toBe(1);
+      expect(errors.join('\n')).toContain('why ordinary alternatives cannot work');
+      expect(fs.readdirSync(stateDir)).toEqual([]);
+      expect(fs.existsSync(path.join(logsDir, 'guard-reprieves.log'))).toBe(false);
+    });
     test('writes the state file with all fields + the resolved session id', () => {
       const { repoRoot, stateDir } = makeRepoRoot();
       const { lines, out } = captureOut();
       const err = () => {};
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
-        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {}, // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out,
         err,
         handlers: 'protected-paths.sh,scan-secrets.sh',
@@ -116,6 +142,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       expect(code).toBe(0);
       const file = path.join(
         stateDir,
+        '019f6289-d6d6-76b3-a6d1-04123944b2e6',
         'guard-reprieve-019f6289-d6d6-76b3-a6d1-04123944b2e6.json'
       );
       expect(fs.existsSync(file)).toBe(true);
@@ -127,6 +154,10 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
         approved_by: 'darian',
         reason: 'editing hooks under CASR-001',
         handlers: ['protected-paths.sh', 'scan-secrets.sh'],
+        // CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01: a grant with no explicit
+        // reach flag is stamped with the repo it was made in, and the hook
+        // reader honors it only there.
+        repo_root: fs.realpathSync(repoRoot),
       });
       expect(lines.join('\n')).toContain('granted reprieve');
     });
@@ -136,6 +167,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const errs = [];
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out: () => {},
         err: (s) => errs.push(s),
         handlers: 'protected-paths.sh',
@@ -154,7 +186,8 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const errs = [];
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
-        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {}, // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: (s) => errs.push(s),
         handlers: 'protected-paths.sh',
@@ -177,7 +210,8 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const errs = [];
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
-        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {}, // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: (s) => errs.push(s),
         handlers: 'protected-paths.sh',
@@ -199,7 +233,8 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const errs = [];
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
-        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {}, // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: (s) => errs.push(s),
         handlers: ' , ',
@@ -219,7 +254,8 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { repoRoot } = makeRepoRoot();
       runReprieveGrantCommand({
         cwd: repoRoot,
-        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {}, // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: () => {},
         handlers: 'protected-paths.sh',
@@ -232,6 +268,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { lines, out } = captureOut();
       const code = runReprieveShowCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out,
         err: () => {},
         session: 'sess-show',
@@ -247,6 +284,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { lines, out } = captureOut();
       const code = runReprieveShowCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out,
         err: () => {},
         session: 'sess-none',
@@ -258,11 +296,12 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
   });
 
   describe('revoke', () => {
-    test('deletes the state file + appends an audit line', () => {
+    test('records a revocation tombstone and appends an audit line', () => {
       const { repoRoot, stateDir, logsDir } = makeRepoRoot();
       runReprieveGrantCommand({
         cwd: repoRoot,
-        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {}, // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: () => {},
         handlers: 'protected-paths.sh',
@@ -272,11 +311,12 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
         session: 'sess-revoke',
         surface: 'claude-code',
       });
-      const file = path.join(stateDir, 'guard-reprieve-sess-revoke.json');
+      const file = path.join(stateDir, 'sess-revoke', 'guard-reprieve-sess-revoke.json');
       expect(fs.existsSync(file)).toBe(true);
       const { out } = captureOut();
       const code = runReprieveRevokeCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out,
         err: () => {},
         reason: 'task complete',
@@ -284,7 +324,10 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
         surface: 'claude-code',
       });
       expect(code).toBe(0);
-      expect(fs.existsSync(file)).toBe(false);
+      expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toMatchObject({
+        handlers: [],
+        revoked_at: expect.any(String),
+      });
       // The audit log carries the revoke entry.
       const logPath = path.join(logsDir, 'guard-reprieves.log');
       expect(fs.existsSync(logPath)).toBe(true);
@@ -293,11 +336,12 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       expect(log).toMatch(/sess-revoke/);
     });
 
-    test('revoking a nonexistent reprieve is a clean no-op (exit 0)', () => {
+    test('revoking an absent record prevents legacy resurrection (exit 0)', () => {
       const { repoRoot } = makeRepoRoot();
       const { lines, out } = captureOut();
       const code = runReprieveRevokeCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out,
         err: () => {},
         reason: 'nothing to clear',
@@ -305,7 +349,17 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
         surface: 'claude-code',
       });
       expect(code).toBe(0);
-      expect(lines.join('\n')).toMatch(/nothing to revoke/i);
+      expect(lines.join('\n')).toMatch(/revoked reprieve for session sess-nope/i);
+      const tombstone = path.join(
+        repoRoot,
+        'machine-home/state/sessions/sess-nope/guard-reprieve-sess-nope.json'
+      );
+      expect(JSON.parse(fs.readFileSync(tombstone, 'utf8'))).toMatchObject({
+        session_id: 'sess-nope',
+        handlers: [],
+        reason: 'nothing to clear',
+        revoked_at: expect.any(String),
+      });
     });
 
     test('refuses revoke without --reason', () => {
@@ -313,6 +367,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const errs = [];
       const code = runReprieveRevokeCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out: () => {},
         err: (s) => errs.push(s),
         reason: '',
@@ -329,7 +384,8 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { repoRoot } = makeRepoRoot();
       runReprieveGrantCommand({
         cwd: repoRoot,
-        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
+        homeDir: path.join(repoRoot, 'machine-home'),
+        env: {}, // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: () => {},
         handlers: 'protected-paths.sh',
@@ -342,6 +398,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { lines, out } = captureOut();
       const code = runReprieveListCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out,
         err: () => {},
         surface: 'claude-code',
@@ -356,6 +413,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { lines, out } = captureOut();
       const code = runReprieveListCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out,
         err: () => {},
         surface: 'claude-code',
@@ -371,7 +429,8 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       for (const sid of ['sess-alpha', 'sess-beta']) {
         runReprieveGrantCommand({
           cwd: repoRoot,
-          env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
+          homeDir: path.join(repoRoot, 'machine-home'),
+          env: {}, // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
           out: () => {},
           err: () => {},
           handlers: 'protected-paths.sh',
@@ -383,15 +442,16 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
         });
       }
       expect(
-        fs.existsSync(path.join(stateDir, 'guard-reprieve-sess-alpha.json'))
+        fs.existsSync(path.join(stateDir, 'sess-alpha', 'guard-reprieve-sess-alpha.json'))
       ).toBe(true);
-      expect(
-        fs.existsSync(path.join(stateDir, 'guard-reprieve-sess-beta.json'))
-      ).toBe(true);
+      expect(fs.existsSync(path.join(stateDir, 'sess-beta', 'guard-reprieve-sess-beta.json'))).toBe(
+        true
+      );
       // show for alpha does NOT surface beta's record.
       const { lines, out } = captureOut();
       runReprieveShowCommand({
         cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
         out,
         err: () => {},
         session: 'sess-alpha',

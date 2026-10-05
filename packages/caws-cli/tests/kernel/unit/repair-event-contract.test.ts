@@ -57,7 +57,11 @@ describe('A2: worktree_pruned payload validation', () => {
     event: 'worktree_pruned',
     ts: TS,
     actor: ACTOR,
-    data: { worktree_name: 'wt-ghost', h_class: 'ghost_registry', reason: 'no backing git worktree (H1)' },
+    data: {
+      worktree_name: 'wt-ghost',
+      h_class: 'ghost_registry',
+      reason: 'no backing git worktree (H1)',
+    },
   };
 
   test('a well-formed worktree_pruned (no spec_id) validates', () => {
@@ -195,7 +199,10 @@ describe('A5: the new event types do not break canonical hashing or chain integr
   test('a chain containing worktree_pruned, worktree_untracked, and spec_binding_cleared verifies', () => {
     const bodies = [
       { event: 'spec_created', spec_id: 'FEAT-001', data: { title: 'x' } },
-      { event: 'worktree_pruned', data: { worktree_name: 'wt-ghost', h_class: 'ghost_registry', reason: 'H1' } },
+      {
+        event: 'worktree_pruned',
+        data: { worktree_name: 'wt-ghost', h_class: 'ghost_registry', reason: 'H1' },
+      },
       {
         event: 'worktree_untracked',
         spec_id: 'FEAT-001',
@@ -220,7 +227,13 @@ describe('A5: the new event types do not break canonical hashing or chain integr
     const chain: ChainedEvent[] = [];
     let prev: Hash | null = null;
     bodies.forEach((b, i) => {
-      const body = { seq: i + 1, ts: `2026-06-15T00:00:0${i}.000Z`, actor: ACTOR, prev_hash: prev, ...b };
+      const body = {
+        seq: i + 1,
+        ts: `2026-06-15T00:00:0${i}.000Z`,
+        actor: ACTOR,
+        prev_hash: prev,
+        ...b,
+      };
       const event_hash = computeEventHash(body as unknown as ChainedEvent);
       chain.push({ ...body, event_hash } as unknown as ChainedEvent);
       prev = event_hash;

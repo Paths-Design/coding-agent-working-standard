@@ -213,7 +213,12 @@ describe('CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001 — takeover of a foreign-own
     fs.writeFileSync(
       path.join(sessionsDir, `${self}.json`),
       JSON.stringify(
-        { session_id: self, platform: 'zcode', minted_at: '2026-07-30T10:00:00.000Z', worktree_root: root },
+        {
+          session_id: self,
+          platform: 'zcode',
+          minted_at: '2026-07-30T10:00:00.000Z',
+          worktree_root: root,
+        },
         null,
         2
       ) + '\n'

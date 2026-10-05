@@ -18,6 +18,7 @@
 
 import {
   pollMessage,
+  settleMessageOffer,
   resolveRepoRoot,
   resolveRecipient,
   sendMessage,
@@ -176,11 +177,7 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
 
   // --urgency validation (CAWS-MESSAGE-DELIVERY-ECONOMICS-001): 'critical' is
   // the only non-default value; anything else is refused and ledgered.
-  if (
-    opts.urgency !== undefined &&
-    opts.urgency !== 'critical' &&
-    opts.urgency !== 'normal'
-  ) {
+  if (opts.urgency !== undefined && opts.urgency !== 'critical' && opts.urgency !== 'normal') {
     const invalidReason = `--urgency accepts exactly "critical" or "normal"; got "${String(opts.urgency)}".`;
     recordRefusal(cawsDir, {
       class: 'urgency_invalid',
@@ -207,7 +204,9 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
     err(renderDiagnostics(sent.errors, { showData }));
     return 1;
   }
-  out(`sent to ${sent.value.message.to} (id ${sent.value.message.id}, channel ${sent.value.message.channel})`);
+  out(
+    `sent to ${sent.value.message.to} (id ${sent.value.message.id}, channel ${sent.value.message.channel})`
+  );
   if (sent.value.recipientIdle) {
     out(
       `(note: recipient lease is stopped but its heartbeat is fresh — idle between turns; ` +
@@ -394,23 +393,27 @@ export function runMessageStatusCommand(opts: MessageStatusCommandOptions): numb
       return 2;
     }
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: true,
-        read_only: true,
-        me,
-        older_than_ms: olderThanMs,
-        count: queued.value.count,
-        oldest_age_ms: queued.value.oldestAgeMs,
-        messages: queued.value.messages.map((entry) => ({
-          message: entry.message,
-          age_ms: entry.ageMs,
-        })),
-      }));
+      out(
+        JSON.stringify({
+          ok: true,
+          read_only: true,
+          me,
+          older_than_ms: olderThanMs,
+          count: queued.value.count,
+          oldest_age_ms: queued.value.oldestAgeMs,
+          messages: queued.value.messages.map((entry) => ({
+            message: entry.message,
+            age_ms: entry.ageMs,
+          })),
+        })
+      );
       return 0;
     }
     const oldest =
       queued.value.oldestAgeMs !== null ? ` (oldest ${formatAge(queued.value.oldestAgeMs)})` : '';
-    out(`Your undelivered sent messages (older than ${formatAge(olderThanMs)}): ${queued.value.count}${oldest}`);
+    out(
+      `Your undelivered sent messages (older than ${formatAge(olderThanMs)}): ${queued.value.count}${oldest}`
+    );
     if (queued.value.count === 0) {
       out('(none)');
       return 0;
@@ -485,7 +488,7 @@ export function runMessageStatusCommand(opts: MessageStatusCommandOptions): numb
   out(
     delivered
       ? `delivered: yes (at ${deliveredAt})`
-      : 'delivered: no (still queued — surfaces at the recipient\'s next poll/tool call)'
+      : "delivered: no (still queued — surfaces at the recipient's next poll/tool call)"
   );
   out(message.text);
   return 0;
@@ -507,6 +510,9 @@ export interface MessagePollCommandOptions extends BaseCommandOptions {
   /** Consume up to this many messages in one poll (1..10, default 1),
    *  critical-first then oldest-first (CAWS-MESSAGE-DELIVERY-ECONOMICS-001). */
   readonly drain?: number;
+  /** Reserve for later adapter settlement rather than consume on poll. */
+  readonly offer?: boolean;
+  readonly offerTtlMs?: number;
 }
 
 /**
@@ -542,12 +548,23 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     }
   }
 
-  const pollOpts: { waitMs?: number; peek?: boolean; receipt?: 'auto' | 'poll'; drain?: number } = {};
+  const pollOpts: {
+    waitMs?: number;
+    peek?: boolean;
+    receipt?: 'auto' | 'poll';
+    drain?: number;
+    offer?: boolean;
+    offerTtlMs?: number;
+  } = {};
   if (typeof opts.waitMs === 'number' && opts.waitMs > 0) pollOpts.waitMs = opts.waitMs;
   if (opts.peek === true) pollOpts.peek = true;
   if (opts.receipt === 'auto') pollOpts.receipt = 'auto';
   if (typeof opts.drain === 'number' && Number.isFinite(opts.drain) && opts.drain > 0) {
     pollOpts.drain = Math.floor(opts.drain);
+  }
+  if (opts.offer === true) pollOpts.offer = true;
+  if (typeof opts.offerTtlMs === 'number' && Number.isFinite(opts.offerTtlMs)) {
+    pollOpts.offerTtlMs = opts.offerTtlMs;
   }
 
   const pollStartMs = Date.now();
@@ -558,7 +575,7 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     err(renderDiagnostics(polled.errors, { showData }));
     return 2;
   }
-  const { message, sender, messages } = polled.value;
+  const { message, sender, messages, offer } = polled.value;
 
   // Mailbox depth for triage. On a peek/empty result this tells the agent how
   // many more are waiting; best-effort (a count failure does not fail the poll).
@@ -582,6 +599,7 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
           message: entry.message,
           ...(entry.sender !== undefined ? { sender: entry.sender } : {}),
         })),
+        ...(offer !== undefined ? { offer } : {}),
         waiting,
         poll_ms: pollMs,
         mine_queued_1h: mineQueued1h,
@@ -593,7 +611,12 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     out('(no messages)');
     return 0;
   }
-  const peekTag = opts.peek === true ? ' (peek — not consumed)' : '';
+  const peekTag =
+    opts.peek === true
+      ? ' (peek — not consumed)'
+      : opts.offer === true
+        ? ' (offered — awaiting adapter settlement)'
+        : '';
   for (const entry of messages) {
     const senderBits: string[] = [];
     if (entry.sender?.worktree !== undefined) senderBits.push(`worktree ${entry.sender.worktree}`);
@@ -611,9 +634,42 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
   // many others remain, so the threshold differs by the shown count between
   // the two modes.
   if (typeof waiting === 'number') {
-    const others = opts.peek === true ? waiting - messages.length : waiting;
+    const others = opts.peek === true || opts.offer === true ? waiting - messages.length : waiting;
     if (others > 0) out(`(${others} more message(s) waiting)`);
   }
+  return 0;
+}
+
+export interface MessageSettleCommandOptions extends BaseCommandOptions {
+  readonly offerId: string;
+  readonly me?: string;
+  readonly outcome: 'delivered' | 'released';
+  readonly json?: boolean;
+}
+
+/** `caws message settle` — settle one exact automatic-delivery offer. */
+export function runMessageSettleCommand(opts: MessageSettleCommandOptions): number {
+  const { cwd, env, out, err, showData } = defaults(opts);
+  const rootResult = resolveRepoRoot(cwd);
+  if (!rootResult.ok) {
+    err('caws message settle: failed to resolve repo root.');
+    err(renderDiagnostics(rootResult.errors, { showData }));
+    return 2;
+  }
+  if (opts.offerId.length === 0 || (opts.outcome !== 'delivered' && opts.outcome !== 'released')) {
+    err('caws message settle: requires <offer_id> and --outcome delivered|released.');
+    return 1;
+  }
+  const me = resolveMe('settle', rootResult.value.cawsDir, cwd, env, opts.me, err, showData);
+  if (me === null) return 1;
+  const settled = settleMessageOffer(rootResult.value.cawsDir, opts.offerId, me, opts.outcome);
+  if (!settled.ok) {
+    err('caws message settle: offer was not settled.');
+    err(renderDiagnostics(settled.errors, { showData }));
+    return 1;
+  }
+  if (opts.json === true) out(JSON.stringify({ ok: true, settlement: settled.value }));
+  else out(`${settled.value.outcome} offer ${settled.value.offerId}`);
   return 0;
 }
 
@@ -713,19 +769,21 @@ export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): n
       return 2;
     }
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: true,
-        read_only: true,
-        repo_wide: true,
-        count: all.value.count,
-        oldest_age_ms: all.value.oldestAgeMs,
-        messages: all.value.messages.map((entry) => ({
-          ...entry.message,
-          recipient: entry.recipient,
-          age_ms: entry.ageMs,
-        })),
-        diagnostics: all.value.diagnostics,
-      }));
+      out(
+        JSON.stringify({
+          ok: true,
+          read_only: true,
+          repo_wide: true,
+          count: all.value.count,
+          oldest_age_ms: all.value.oldestAgeMs,
+          messages: all.value.messages.map((entry) => ({
+            ...entry.message,
+            recipient: entry.recipient,
+            age_ms: entry.ageMs,
+          })),
+          diagnostics: all.value.diagnostics,
+        })
+      );
       return 0;
     }
     const oldest =
@@ -737,7 +795,9 @@ export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): n
     }
     for (const entry of all.value.messages) {
       const from = entry.message.actor.session_id ?? entry.message.actor.id;
-      out(`${entry.message.ts} ${from} -> ${entry.recipient} [queued ${formatAge(entry.ageMs)}]: ${entry.message.text}`);
+      out(
+        `${entry.message.ts} ${from} -> ${entry.recipient} [queued ${formatAge(entry.ageMs)}]: ${entry.message.text}`
+      );
     }
     return 0;
   }
@@ -754,14 +814,16 @@ export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): n
   }
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      me,
-      waiting: result.value.waiting,
-      messages: result.value.messages,
-      diagnostics: result.value.diagnostics,
-    }));
+    out(
+      JSON.stringify({
+        ok: true,
+        read_only: true,
+        me,
+        waiting: result.value.waiting,
+        messages: result.value.messages,
+        diagnostics: result.value.diagnostics,
+      })
+    );
     return 0;
   }
 
@@ -802,19 +864,23 @@ export function runMessageHistoryCommand(opts: MessageHistoryCommandOptions): nu
   }
   const limit = sanitizeLimit(opts.limit);
   const messages =
-    limit !== undefined ? result.value.slice(Math.max(0, result.value.length - limit)) : result.value;
+    limit !== undefined
+      ? result.value.slice(Math.max(0, result.value.length - limit))
+      : result.value;
   const channel = [me, opts.with].sort().join('::');
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      me,
-      with: opts.with,
-      channel,
-      total: result.value.length,
-      messages,
-    }));
+    out(
+      JSON.stringify({
+        ok: true,
+        read_only: true,
+        me,
+        with: opts.with,
+        channel,
+        total: result.value.length,
+        messages,
+      })
+    );
     return 0;
   }
 
@@ -832,8 +898,19 @@ export function runMessageHistoryCommand(opts: MessageHistoryCommandOptions): nu
 
 export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): number {
   const { cwd, out, err, showData } = defaults(opts);
-  if (opts.status !== 'delivered') {
-    err('caws message prune: --status delivered is required.');
+  // CAWS-DEFECT-MESSAGE-PRUNE-DEAD-RECIPIENT-01: the status axis is a closed
+  // enum. A bare `undelivered` is deliberately absent — pruning undelivered
+  // messages without proving the recipient cannot consume them would break
+  // deliver-once; the dead-recipient selector carries that proof.
+  const status =
+    opts.status === 'delivered' || opts.status === 'undelivered-to-dead-session'
+      ? opts.status
+      : null;
+  if (status === null) {
+    err(
+      `caws message prune: --status accepts delivered or undelivered-to-dead-session (got ${JSON.stringify(opts.status ?? '')}). ` +
+        `A bare --status undelivered is refused on purpose: undelivered messages are prunable only when the recipient is verifiably not live (no lease, or a heartbeat older than the TTL) and the message is older than the retention floor — use --status undelivered-to-dead-session.`
+    );
     return 1;
   }
 
@@ -845,7 +922,7 @@ export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): n
   }
 
   const result = pruneMessages(rootResult.value.cawsDir, {
-    status: 'delivered',
+    status,
     ...(typeof opts.olderThanMs === 'number' && Number.isFinite(opts.olderThanMs)
       ? { olderThanMs: Math.max(0, Math.floor(opts.olderThanMs)) }
       : {}),
@@ -860,23 +937,71 @@ export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): n
   }
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      dry_run: opts.apply !== true,
-      ...result.value,
-    }));
+    out(
+      JSON.stringify({
+        ok: true,
+        dry_run: opts.apply !== true,
+        ...result.value,
+      })
+    );
+    return 0;
+  }
+
+  if (status === 'undelivered-to-dead-session') {
+    const floorMs = result.value.dead_recipient_floor_ms ?? 0;
+    const mode = opts.apply === true ? 'applied' : 'dry-run';
+    out(
+      `Message prune (${mode}, status=undelivered-to-dead-session, floor ${formatAge(floorMs)}): ` +
+        `${result.value.candidates.length} candidate(s), ${result.value.skipped.length} skipped`
+    );
+    if (opts.apply === true) {
+      out(
+        `Pruned ${result.value.pruned_messages} undelivered message(s) to dead recipient(s). ` +
+          `Archived to .caws/messages.jsonl.archive with a selector marker (telemetry; not read for delivery state).`
+      );
+    } else {
+      out(
+        'No changes written. Pass --apply to prune the listed dead-recipient messages (retention floor applies).'
+      );
+    }
+    for (const candidate of result.value.candidates) {
+      out(`candidate ${renderPruneEntry(candidate)}`);
+    }
+    const preservedLive = result.value.skipped.filter(
+      (entry) => entry.reason === 'recipient-live' || entry.reason === 'recipient-idle'
+    ).length;
+    if (preservedLive > 0) {
+      out(
+        `Preserved ${preservedLive} message(s) for live or idle recipient(s) — deliver-once holds.`
+      );
+    }
+    const preservedFloor = result.value.skipped.filter(
+      (entry) => entry.reason === 'newer-than-floor' || entry.reason === 'offer-pending'
+    ).length;
+    if (preservedFloor > 0) {
+      out(
+        `Held back ${preservedFloor} message(s) newer than the floor or pending offer settlement.`
+      );
+    }
+    if (result.value.diagnostics.length > 0) {
+      err(renderDiagnostics(result.value.diagnostics, { showData }));
+    }
     return 0;
   }
 
   const mode = opts.apply === true ? 'applied' : 'dry-run';
-  out(`Message prune (${mode}, status=delivered): ${result.value.candidates.length} candidate(s), ${result.value.skipped.length} skipped`);
+  out(
+    `Message prune (${mode}, status=delivered): ${result.value.candidates.length} candidate(s), ${result.value.skipped.length} skipped`
+  );
   if (opts.apply === true) {
     out(
       `Pruned ${result.value.pruned_messages} delivered message(s); removed ${result.value.pruned_delivery_records} delivery marker(s). ` +
         `Archived to .caws/messages.jsonl.archive (telemetry; not read for delivery state).`
     );
   } else {
-    out('No changes written. Pass --apply with --older-than-ms or --include to prune selected delivered chat records.');
+    out(
+      'No changes written. Pass --apply with --older-than <duration> (or --older-than-ms) or --include to prune selected delivered chat records.'
+    );
   }
   for (const candidate of result.value.candidates) {
     out(`candidate ${renderPruneEntry(candidate)}`);

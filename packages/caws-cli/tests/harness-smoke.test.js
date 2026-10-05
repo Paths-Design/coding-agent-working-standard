@@ -18,11 +18,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const {
-  makeTempRepo,
-  cleanupAll,
-  git,
-} = require('./helpers/git-repo-factory');
+const { makeTempRepo, cleanupAll, git } = require('./helpers/git-repo-factory');
 const {
   installOnce,
   getInstallCount,

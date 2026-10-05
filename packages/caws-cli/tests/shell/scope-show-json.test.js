@@ -118,12 +118,9 @@ describe('buildScopeDecisionJson: admit via another worktree claim', () => {
   });
   test('remediation points to the owning worktree before edits', () => {
     expect(json.remediation).toMatchObject({
-      summary: "Path is admitted by worktree foo-wt's scope.in claim; enter that worktree before editing.",
+      summary:
+        'Verified: worktree foo-wt is bound to FOO-001, whose scope.in entry "packages/foo/bar.ts" admits this path. Edit it from inside foo-wt.',
       commands: [
-        {
-          command: 'caws worktree list --data',
-          mutates: false,
-        },
         {
           command: 'cd .caws/worktrees/foo-wt',
           mutates: false,

@@ -33,9 +33,7 @@ import { DOMAIN_SEPARATOR, type ChainedEvent, type EventBody, type Hash } from '
  *
  * The function is pure: same input → same hash, every time.
  */
-export function computeEventHash(
-  event: HashableEvent
-): Hash {
+export function computeEventHash(event: HashableEvent): Hash {
   // Strip event_hash if present so the result is the same whether the
   // caller passed a not-yet-hashed event or a fully-chained event.
   const { event_hash: _ignored, ...rest } = event as ChainedEvent;

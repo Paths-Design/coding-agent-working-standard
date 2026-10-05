@@ -9,10 +9,7 @@
 // chalk.<color>() call throws "chalk.red is not a function" on error paths.
 const chalkModule = require('chalk');
 const chalk = chalkModule.default || chalkModule;
-const {
-  ERROR_CATEGORIES,
-  getErrorCategory,
-} = require('./utils/error-categories');
+const { ERROR_CATEGORIES, getErrorCategory } = require('./utils/error-categories');
 
 /**
  * Enhanced error class with category and recovery suggestions
@@ -201,7 +198,9 @@ const COMMAND_SUGGESTIONS = {
       suggestions.push('For specs: caws specs list / caws specs show <id>');
       suggestions.push('For worktrees: caws worktree list');
     } else if (command.includes('evidence') || command.includes('record')) {
-      suggestions.push('To record test/gate/ac evidence: caws evidence record --type <kind> --spec <id> --data <json>');
+      suggestions.push(
+        'To record test/gate/ac evidence: caws evidence record --type <kind> --spec <id> --data <json>'
+      );
     }
 
     suggestions.push(`Available v11 commands: ${V11_COMMANDS.join(', ')}`);
@@ -313,7 +312,9 @@ function getRecoverySuggestions(error, category, context = {}) {
     case ERROR_CATEGORIES.VALIDATION:
       suggestions.push('Run: caws doctor for spec and policy drift detection');
       suggestions.push('Run: caws gates run --spec <id> for policy and quality gates');
-      suggestions.push('Check .caws/specs/<id>.yaml against the spec schema in packages/caws-cli/src/kernel/schemas/spec.v1.json');
+      suggestions.push(
+        'Check .caws/specs/<id>.yaml against the spec schema in packages/caws-cli/src/kernel/schemas/spec.v1.json'
+      );
       break;
 
     case ERROR_CATEGORIES.CONFIGURATION:
@@ -551,11 +552,7 @@ const TROUBLESHOOTING_GUIDES = {
       'Compare against existing specs in .caws/specs/ for shape',
       'See packages/caws-cli/src/kernel/schemas/spec.v1.json for the canonical spec schema',
     ],
-    commands: [
-      'caws doctor',
-      'caws specs show <id>',
-      'caws specs list',
-    ],
+    commands: ['caws doctor', 'caws specs show <id>', 'caws specs list'],
   },
 
   'monorepo-detection': {

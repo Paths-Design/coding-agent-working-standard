@@ -60,7 +60,7 @@ function seedSpec(caws, id, scopeIn) {
   // CAWS-PREPUSH-PROVENANCE-REWORK-001: merge now enforces lane provenance —
   // every lane commit must touch only paths inside the bound spec's scope.in.
   // Seed that scope so the fixture lanes stay mergeable.
-  const r = createSpec(caws, { id, title: 'x', mode: 'chore', riskTier: 3, actor: ACTOR, scopeIn });
+  const r = createSpec(caws, { id, title: 'x', mode: 'chore', actor: ACTOR, scopeIn });
   if (!r.ok || r.value.kind !== 'success') throw new Error('seed failed');
 }
 
@@ -123,15 +123,13 @@ describe('A1: concurrent merges both land; the base never moves backward', () =>
       ['first merge', rA.value.data.merge_commit],
       ['second merge', rB.value.data.merge_commit],
     ]) {
-      expect(() =>
-        git(repo, ['merge-base', '--is-ancestor', sha, finalBase])
-      ).not.toThrow(`${label} is not reachable from the final base`);
+      expect(() => git(repo, ['merge-base', '--is-ancestor', sha, finalBase])).not.toThrow(
+        `${label} is not reachable from the final base`
+      );
     }
 
     // And the base only ever moved FORWARD.
-    expect(() =>
-      git(repo, ['merge-base', '--is-ancestor', baseAtStart, finalBase])
-    ).not.toThrow();
+    expect(() => git(repo, ['merge-base', '--is-ancestor', baseAtStart, finalBase])).not.toThrow();
 
     // Both payloads are present on the merged base.
     const tree = git(repo, ['ls-tree', '-r', '--name-only', 'main']);

@@ -395,11 +395,11 @@ describe('A4: superseded snapshots are named on the single-spec read paths', () 
       }).status
     ).toBe(0);
 
-    const shown = spawnSync(
-      process.execPath,
-      [CLI, 'specs', 'show', 'ARCREP-031', '--archived'],
-      { cwd: root, encoding: 'utf8', env }
-    );
+    const shown = spawnSync(process.execPath, [CLI, 'specs', 'show', 'ARCREP-031', '--archived'], {
+      cwd: root,
+      encoding: 'utf8',
+      env,
+    });
     expect(shown.status).toBe(0);
     expect(shown.stderr).toContain('ARCREP-031.superseded-');
   });

@@ -31,7 +31,21 @@
 
 import type { HookPackV1 } from './types';
 
-export const KIMI_CODE_PACK_VERSION = 2;
+// Version 4: CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001. hooks/lib/
+// run-handlers.sh (the kimi-code override of the shared dispatch loop) guards
+// the same empty-handler-array expansion fixed in the shared pack, so a fully
+// disabled handler set for an event returns exit 0 instead of crashing with
+// "unbound variable" on bash 3.2 (macOS default /bin/bash).
+// Version 5: CAWS-MESSAGE-OFFER-SETTLEMENT-DELIVERY-01. The Kimi runner
+// preserves bounded advisory membership while retaining deny promotion.
+// Version 6: CAWS-HOOK-ADVISORY-BUDGET-TIERS-01. The Kimi dispatch override
+// adopts per-card advisory admission (truncate-to-fit with an explicit elided
+// marker) while retaining its exit-1-to-2 promotion and deny precedence.
+// Version 7: CAWS-HOOK-ADVISORY-SESSION-DEDUP-01. The Kimi dispatch override
+// adopts per-session advisory suppression keyed on exact text while retaining
+// its exit-1-to-2 promotion and deny precedence.
+// Hook port qualification: shared execution records and session-cache custody.
+export const KIMI_CODE_PACK_VERSION = 9;
 
 export const KIMI_CODE_PACK: HookPackV1 = {
   id: 'kimi-code',
@@ -45,14 +59,7 @@ export const KIMI_CODE_PACK: HookPackV1 = {
     'merged separately under --wire-user-config.',
   // config.toml is read at session start: a new kimi session is required.
   activation: 'restart_required',
-  lifecycleEvents: [
-    'pre_bash',
-    'pre_write',
-    'pre_edit',
-    'session_start',
-    'pre_compact',
-    'stop',
-  ],
+  lifecycleEvents: ['pre_bash', 'pre_write', 'pre_edit', 'session_start', 'pre_compact', 'stop'],
   stateModel: {
     reads: [
       '.caws/specs/*.yaml',

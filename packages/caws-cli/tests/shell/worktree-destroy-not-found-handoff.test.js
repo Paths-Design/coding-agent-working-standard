@@ -28,10 +28,10 @@ function snapshot(cawsDir) {
   return {
     registry: readBytes(path.join(cawsDir, 'worktrees.json')),
     events: readBytes(path.join(cawsDir, 'events.jsonl')),
-    specs: fs.readdirSync(path.join(cawsDir, 'specs')).sort().map((name) => [
-      name,
-      readBytes(path.join(cawsDir, 'specs', name)),
-    ]),
+    specs: fs
+      .readdirSync(path.join(cawsDir, 'specs'))
+      .sort()
+      .map((name) => [name, readBytes(path.join(cawsDir, 'specs', name))]),
     worktreeNames: fs.existsSync(path.join(cawsDir, 'worktrees'))
       ? fs.readdirSync(path.join(cawsDir, 'worktrees')).sort()
       : [],
@@ -42,6 +42,7 @@ function runDestroy(root, name) {
   const out = [];
   const err = [];
   const code = runWorktreeDestroyCommand({
+    env: { CAWS_SESSION_ID: 'fixture-session' },
     cwd: root,
     name,
     out: (line) => out.push(line),

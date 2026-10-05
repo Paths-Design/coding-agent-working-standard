@@ -451,11 +451,11 @@ components:
         id:
           type: string
           description: Unique tenant identifier
-          example: "tenant-org-123"
+          example: 'tenant-org-123'
         name:
           type: string
           description: Human-readable tenant name
-          example: "Acme Corporation"
+          example: 'Acme Corporation'
         status:
           $ref: '#/components/schemas/TenantStatus'
         config:
@@ -504,7 +504,7 @@ components:
         - suspended
         - inactive
       description: Tenant operational status
-      default: "active"
+      default: 'active'
 
     TenantConfig:
       type: object
@@ -578,7 +578,7 @@ components:
         content:
           type: string
           description: Memory content to store
-          example: "User prefers dark mode interface"
+          example: 'User prefers dark mode interface'
         type:
           $ref: '#/components/schemas/MemoryType'
         metadata:
@@ -586,14 +586,14 @@ components:
           description: Additional metadata for the memory
           additionalProperties: true
           example:
-            source: "user_preference"
+            source: 'user_preference'
             confidence: 0.95
         tags:
           type: array
           items:
             type: string
           description: Tags for categorization and search
-          example: ["ui", "preference", "theme"]
+          example: ['ui', 'preference', 'theme']
         generateEmbedding:
           type: boolean
           default: true
@@ -694,7 +694,7 @@ components:
         query:
           type: string
           description: Text query for semantic search
-          example: "user interface preferences"
+          example: 'user interface preferences'
         vector:
           type: array
           items:
@@ -705,8 +705,8 @@ components:
           description: Metadata filters
           additionalProperties: true
           example:
-            type: "preference"
-            tags: ["ui"]
+            type: 'preference'
+            tags: ['ui']
         tags:
           type: array
           items:
@@ -801,7 +801,7 @@ components:
         query:
           type: string
           description: Temporal reasoning query
-          example: "What changed in user preferences over the last month?"
+          example: 'What changed in user preferences over the last month?'
         timeRange:
           type: object
           required:
@@ -821,7 +821,7 @@ components:
           items:
             type: string
           description: Specific patterns to look for
-          example: ["preference_change", "behavior_shift"]
+          example: ['preference_change', 'behavior_shift']
         confidence:
           type: number
           minimum: 0
@@ -959,7 +959,7 @@ components:
         code:
           type: string
           description: Error code identifier
-          example: "TENANT_NOT_FOUND"
+          example: 'TENANT_NOT_FOUND'
         message:
           type: string
           description: Human-readable error message

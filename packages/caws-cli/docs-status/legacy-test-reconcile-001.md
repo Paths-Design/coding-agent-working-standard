@@ -53,10 +53,11 @@ Before any DELETE, list assertions worth porting to a new or adjacent suite. The
 **Proposed disposition:** `REWRITE`
 
 **Rationale:** The intent — "init produces a valid project structure, refuses invalid input, scaffolds correctly" — survives. The specific assertions encode v10 contracts and must be replaced with v11 equivalents:
-  - in-place init (no `<project-name>` arg)
-  - `.caws/specs/` exists with no `working-spec.yaml`
-  - `caws init --agent-surface claude-code` installs the hook pack (INIT-HOOK-PACKS-001)
-  - agents.md/caws.md fallback still applies (kept paths)
+
+- in-place init (no `<project-name>` arg)
+- `.caws/specs/` exists with no `working-spec.yaml`
+- `caws init --agent-surface claude-code` installs the hook pack (INIT-HOOK-PACKS-001)
+- agents.md/caws.md fallback still applies (kept paths)
 
 **Salvage:** Tests that already pass (version info, help info, agents.md guide creation, git repo init, scaffolding) stay as-is.
 
@@ -67,13 +68,14 @@ Before any DELETE, list assertions worth porting to a new or adjacent suite. The
 **Failure count:** Suite failed to run (zero tests executed)
 **Failure mode:** `SyntaxError: src/shell/index.ts: Support for the experimental syntax 'flow' isn't currently enabled` — the test imports a TypeScript source file directly, but Babel-Jest has no TS transformer configured.
 
-**v11 status:** Validation logic still exists in v11 (`caws doctor`, scope checks, gate evaluation). The test file *itself* is not asserting any specific v10/v11 contract; it's blocked at import time.
+**v11 status:** Validation logic still exists in v11 (`caws doctor`, scope checks, gate evaluation). The test file _itself_ is not asserting any specific v10/v11 contract; it's blocked at import time.
 
 **Proposed disposition:** `RETAIN` (with harness fix)
 
 **Rationale:** This is harness drift, not a contract problem. v11 shipped TS sources in `src/shell/`; the existing Babel config doesn't know to transform them. Two safe fixes:
-  1. Update the test to import from `dist/shell/` instead of `src/shell/` (matches every other passing test).
-  2. OR: configure Babel-Jest with `@babel/preset-typescript` so `src/*.ts` imports work.
+
+1. Update the test to import from `dist/shell/` instead of `src/shell/` (matches every other passing test).
+2. OR: configure Babel-Jest with `@babel/preset-typescript` so `src/*.ts` imports work.
 
 Option 1 is the minimum change and matches existing test patterns. The actual assertions inside the file need separate review once it can run.
 
@@ -108,9 +110,10 @@ Option 1 is the minimum change and matches existing test patterns. The actual as
 **Proposed disposition:** `REWRITE`
 
 **Rationale:** Perf budgets are still a valid concern in v11. The failing tests use the v10 init/scaffold contract; they should be rewritten to measure v11 equivalents:
-  - `caws init` (in-place) startup + completion budget
-  - `caws gates run` budget (the heaviest kept v11 command)
-  - `caws specs create` / `caws worktree create` budget
+
+- `caws init` (in-place) startup + completion budget
+- `caws gates run` budget (the heaviest kept v11 command)
+- `caws specs create` / `caws worktree create` budget
 
 **Salvage:** Keep all 5 currently-passing tests. Rewrite the 4 failing ones to v11 command paths.
 
@@ -127,8 +130,9 @@ Option 1 is the minimum change and matches existing test patterns. The actual as
 **Proposed disposition:** `REWRITE`
 
 **Rationale:** Accessibility regression coverage is durable value. The two failing tests need updating:
-  - The formatting test should snapshot v11's help, not v10's.
-  - The "accessible working spec format" test should be re-pointed at `.caws/specs/<id>.yaml` (v11 spec files) or removed if it's only checking working-spec.yaml shape.
+
+- The formatting test should snapshot v11's help, not v10's.
+- The "accessible working spec format" test should be re-pointed at `.caws/specs/<id>.yaml` (v11 spec files) or removed if it's only checking working-spec.yaml shape.
 
 **Salvage:** Keep all 7 passing tests. Update the 2 failing ones to v11 contract.
 
@@ -140,15 +144,16 @@ Option 1 is the minimum change and matches existing test patterns. The actual as
 **Failing tests:** `init command should create valid project structure` (asserts subdirectory + `.caws/working-spec.yaml`), `CLI should handle invalid arguments gracefully`, `tool configurations should have valid interfaces`, `generated spec should conform to documented schema`.
 **Passing tests:** semver compliance, working-spec schema validation against legacy schema (still on disk but unused in v11).
 
-**v11 status:** CLI contract is still a real concern — v11's 8-command surface deserves contract tests. But the *specific* contracts asserted here are v10.
+**v11 status:** CLI contract is still a real concern — v11's 8-command surface deserves contract tests. But the _specific_ contracts asserted here are v10.
 
 **Proposed disposition:** `REWRITE`
 
-**Rationale:** This file's intent ("v11 CLI must conform to its documented contract") is exactly the kind of test the cutover *needs*. Rewriting to v11:
-  - `init` creates in-place; refuses non-empty `.caws/` (idempotency invariant)
-  - Invalid argument handling: `caws unknown-cmd` exits non-zero with clear message
-  - "tool configurations" → v11 doesn't have an external tools registry; this assertion can be DELETEd
-  - Generated spec conforming to documented schema → assert against `.caws/specs/<id>.yaml` shape
+**Rationale:** This file's intent ("v11 CLI must conform to its documented contract") is exactly the kind of test the cutover _needs_. Rewriting to v11:
+
+- `init` creates in-place; refuses non-empty `.caws/` (idempotency invariant)
+- Invalid argument handling: `caws unknown-cmd` exits non-zero with clear message
+- "tool configurations" → v11 doesn't have an external tools registry; this assertion can be DELETEd
+- Generated spec conforming to documented schema → assert against `.caws/specs/<id>.yaml` shape
 
 **Salvage:** Keep semver test. Rewrite the rest against v11 contract.
 
@@ -164,7 +169,7 @@ Option 1 is the minimum change and matches existing test patterns. The actual as
 
 **Proposed disposition (revised after step-3 investigation):** `REWRITE` (one test only — delete the working-spec parity check)
 
-**Rationale:** The other 51 assertions are v11-valid (schema existence, JSON validity, title fields, working-spec schema validation against the *bundled* schema, worktree/waiver/scope/policy schemas, working-spec template-vs-runtime parity for the schemas that *are* deployed). Only the working-spec runtime check is moot in v11.
+**Rationale:** The other 51 assertions are v11-valid (schema existence, JSON validity, title fields, working-spec schema validation against the _bundled_ schema, worktree/waiver/scope/policy schemas, working-spec template-vs-runtime parity for the schemas that _are_ deployed). Only the working-spec runtime check is moot in v11.
 
 **Salvage:** Keep all 51 passing tests. Delete the single failing test (A2 working-spec parity) since the working-spec.yaml concept itself is removed.
 
@@ -180,12 +185,13 @@ Option 1 is the minimum change and matches existing test patterns. The actual as
 **Proposed disposition:** `REWRITE`
 
 **Rationale:** A v11 smoke workflow is high-value (the canonical path is exactly what's being smoke-tested manually in slice rehearsals). Rewrite to:
-  - `caws init` in-place
-  - `caws specs create FEAT-001` → `caws worktree create wt --spec FEAT-001` → commit on branch → `caws worktree merge wt` → assert auto-close
-  - `caws specs archive FEAT-001`
-  - "broken working spec" → "spec with bad lifecycle_state" recoverable via `caws doctor`
 
-**Salvage:** Zero passing tests to keep; this is a full rewrite. But the *file* should not be deleted — its name + intent (e2e smoke) is correct.
+- `caws init` in-place
+- `caws specs create FEAT-001` → `caws worktree create wt --spec FEAT-001` → commit on branch → `caws worktree merge wt` → assert auto-close
+- `caws specs archive FEAT-001`
+- "broken working spec" → "spec with bad lifecycle_state" recoverable via `caws doctor`
+
+**Salvage:** Zero passing tests to keep; this is a full rewrite. But the _file_ should not be deleted — its name + intent (e2e smoke) is correct.
 
 ---
 
@@ -215,9 +221,10 @@ Option 1 is the minimum change and matches existing test patterns. The actual as
 **Proposed disposition:** `RETAIN` (mostly) + 3 small REWRITEs
 
 **Rationale:** Most of this suite already passes — the v10 cursor hook scripts still exist in templates and are still wired correctly. The failing tests need targeted updates:
-  - `.cursor directory structure on init` → assert it appears when `--agent-surface cursor` is passed, not on plain init
-  - `hooks-and-agent-workflows.md should exist in docs` → either restore the doc or remove the assertion (need to check whether the doc was intentionally removed)
-  - `AGENTS.md should mention Cursor hooks` → AGENTS.md is in repo root and references hooks indirectly; need to check whether v11 AGENTS.md still has that section
+
+- `.cursor directory structure on init` → assert it appears when `--agent-surface cursor` is passed, not on plain init
+- `hooks-and-agent-workflows.md should exist in docs` → either restore the doc or remove the assertion (need to check whether the doc was intentionally removed)
+- `AGENTS.md should mention Cursor hooks` → AGENTS.md is in repo root and references hooks indirectly; need to check whether v11 AGENTS.md still has that section
 
 **Salvage:** 13 passing tests stay. 3 surgical rewrites.
 
@@ -234,9 +241,10 @@ Option 1 is the minimum change and matches existing test patterns. The actual as
 **Proposed disposition:** `SPLIT`
 
 **Rationale (revised):** Reviewer-flagged correction. Treating this as straight DELETE risks losing a durable v11 invariant: command output should be deterministic over a stable event log. The split rule:
-  - **DELETE** the assertions for `iterate`, `sidecar gaps`, `sidecar drift`, `sidecar waiver-draft`, and the dualWrite pre-condition (all removed-command/removed-mechanism).
-  - **EVALUATE** the `status` and `status --json` parity assertions: if they encode a v11-valid invariant (deterministic read from events.jsonl), REWRITE to the v11 status shape. If they only assert the v10 dual-write story, DELETE.
-  - **EVALUATE** the `gates` parity assertion (if present in the file body): same rule.
+
+- **DELETE** the assertions for `iterate`, `sidecar gaps`, `sidecar drift`, `sidecar waiver-draft`, and the dualWrite pre-condition (all removed-command/removed-mechanism).
+- **EVALUATE** the `status` and `status --json` parity assertions: if they encode a v11-valid invariant (deterministic read from events.jsonl), REWRITE to the v11 status shape. If they only assert the v10 dual-write story, DELETE.
+- **EVALUATE** the `gates` parity assertion (if present in the file body): same rule.
 
 After the split, if the file ends up with no surviving assertions, DELETE the file. Otherwise REWRITE in place around the surviving v11 invariants.
 
@@ -251,13 +259,14 @@ After the split, if the file ends up with no surviving assertions, DELETE the fi
 **Specific assertion:** `runGatesCli(testDir, ['--context=cli', '--json'])` → expected exit 0, received exit 1.
 
 **v11 status:** `caws gates` is a **kept v11 command** (§2). This is a real v11 surface that the test is exercising. The fact that every test fails suggests either:
-  (a) `caws gates run --json --context=cli` is broken
-  (b) the test fixture doesn't set up a valid v11 project before invoking gates
-  (c) the test uses an old gates invocation shape
+(a) `caws gates run --json --context=cli` is broken
+(b) the test fixture doesn't set up a valid v11 project before invoking gates
+(c) the test uses an old gates invocation shape
 
 **Proposed disposition (after step-1 sandbox investigation):** `REWRITE` (full file)
 
 **Investigation findings (sandbox-confirmed):**
+
 - The test at line 14 invokes `src/index.js` — **stale v10 entry-point still on disk**, not the v11 `dist/index.js`. The v11 cutover removed the command surface but left the old entry file.
 - Test fixture writes `.caws/working-spec.yaml` (line 83) — v11 removed working-spec.yaml; specs live at `.caws/specs/<id>.yaml`.
 - Test invokes `gates run --context=cli --json` — v11 requires `--spec <id>`, and the `--json` flag does not exist on v11 gates.
@@ -266,6 +275,7 @@ After the split, if the file ends up with no surviving assertions, DELETE the fi
 **Conclusion:** No v11 product regression. Pure fixture mismatch.
 
 **Salvage:** All intents (exit codes, gate disposition, scope-boundary blocking, budget enforcement) are durable v11 invariants. REWRITE to v11 shape:
+
 - Use `dist/index.js` (or the `runGatesRunCommand` in-process runner from `dist/shell`)
 - Create fixture via `caws init` + `caws specs create FEAT-001`
 - Invoke `gates run --spec FEAT-001 --context=cli`
@@ -286,14 +296,16 @@ After the split, if the file ends up with no surviving assertions, DELETE the fi
 **Proposed disposition (after step-2 sandbox investigation):** `REWRITE` (4 top-level block tests) + investigate 1 chained-dangerous case separately
 
 **Investigation findings (sandbox-confirmed):**
+
 - The hook architecture changed from "deny via exit 2 + bash regex fallback" to "JSON-decision via `permissionDecision` field, exit 0, single-semantic-layer (no regex fallback). Missing classifier → ask-latch."
 - Test setup (lines 62-69) **does not copy `classify_command.py`** to the test dir. The top-level block tests rely on the missing-classifier fallback path. With no classifier, the new hook architecture emits `permissionDecision: "ask"` + exit 0 (correct behavior: human review required).
 - For all four failing commands (`git push --force`, `git init`, `git reset --hard`, `python -m venv`), `classify_command.py` returns `{"decision": "ask"}` (sandbox-verified). Per `block-dangerous.sh:129-133`, an `ask` decision exits 0 with the JSON ask envelope.
-- This is *stricter* safety than the old model: instead of categorical deny, the hook routes destructive/authority-bearing commands through a human-approval gate.
+- This is _stricter_ safety than the old model: instead of categorical deny, the hook routes destructive/authority-bearing commands through a human-approval gate.
 
-**Conclusion:** No safety regression. The hook is *more* conservative than the test asserted. Test contract is outdated; safety architecture is improved.
+**Conclusion:** No safety regression. The hook is _more_ conservative than the test asserted. Test contract is outdated; safety architecture is improved.
 
 **Rewrite contract (per reviewer decision):**
+
 ```
 git push --force          → permissionDecision: ask
 git init                  → permissionDecision: ask
@@ -303,6 +315,7 @@ missing classifier        → permissionDecision: ask + latch
 ```
 
 Tests assert:
+
 - `exitCode === 0` (the new contract)
 - `stdout` parses as JSON
 - `hookSpecificOutput.hookEventName === "PreToolUse"`
@@ -334,25 +347,26 @@ Do NOT change the classifier to `deny` for any of these four. `deny` is reserved
 
 ## Disposition summary
 
-| Suite | Disposition | Tests affected |
-|---|---|---|
-| 1. `parallel-command.test.js` | DELETE | 16 |
-| 2. `index.test.js` | REWRITE | ~9 (keep 11 passing) |
-| 3. `validation.test.js` | RETAIN (harness fix: src → dist import) | suite-level |
-| 4. `schema-load-validation.test.js` | REWRITE (1 test only) | 1 |
-| 5. `perf-budgets.test.js` | REWRITE (4 tests) | 4 (keep 5 passing) |
-| 6. `axe/cli-accessibility.test.js` | REWRITE (2 tests) | 2 (keep 7 passing) |
-| 7. `contract/cli-contract.test.js` | REWRITE | 4 (keep 2 passing) |
-| 8. `contract/schema-contract.test.js` | REWRITE (1 test only — delete working-spec parity) | 1 (keep 51) |
-| 9. `e2e/smoke-workflow.test.js` | REWRITE (full file) | 5 |
-| 10. `integration/cli-workflow.test.js` | REWRITE (full file) | 5 |
-| 11. `integration/cursor-hooks.test.js` | RETAIN + 3 small REWRITEs | 3 (keep 13 passing) |
-| 12. `integration/event-log-read-parity.test.js` | SPLIT (delete iterate/sidecar; evaluate status/gates parity) | 8 |
-| 13. `integration/gates-cli.test.js` | REWRITE (post-investigation: fixture mismatch, no v11 regression) | 9 |
-| 14. `integration/lite-hooks.test.js` | REWRITE (post-investigation: stricter safety, JSON contract changed; assert `ask` semantics) | 4 top-level + 1 chained case to diagnose |
-| 15. `integration/tools-integration.test.js` | DELETE | 2 |
+| Suite                                           | Disposition                                                                                  | Tests affected                           |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| 1. `parallel-command.test.js`                   | DELETE                                                                                       | 16                                       |
+| 2. `index.test.js`                              | REWRITE                                                                                      | ~9 (keep 11 passing)                     |
+| 3. `validation.test.js`                         | RETAIN (harness fix: src → dist import)                                                      | suite-level                              |
+| 4. `schema-load-validation.test.js`             | REWRITE (1 test only)                                                                        | 1                                        |
+| 5. `perf-budgets.test.js`                       | REWRITE (4 tests)                                                                            | 4 (keep 5 passing)                       |
+| 6. `axe/cli-accessibility.test.js`              | REWRITE (2 tests)                                                                            | 2 (keep 7 passing)                       |
+| 7. `contract/cli-contract.test.js`              | REWRITE                                                                                      | 4 (keep 2 passing)                       |
+| 8. `contract/schema-contract.test.js`           | REWRITE (1 test only — delete working-spec parity)                                           | 1 (keep 51)                              |
+| 9. `e2e/smoke-workflow.test.js`                 | REWRITE (full file)                                                                          | 5                                        |
+| 10. `integration/cli-workflow.test.js`          | REWRITE (full file)                                                                          | 5                                        |
+| 11. `integration/cursor-hooks.test.js`          | RETAIN + 3 small REWRITEs                                                                    | 3 (keep 13 passing)                      |
+| 12. `integration/event-log-read-parity.test.js` | SPLIT (delete iterate/sidecar; evaluate status/gates parity)                                 | 8                                        |
+| 13. `integration/gates-cli.test.js`             | REWRITE (post-investigation: fixture mismatch, no v11 regression)                            | 9                                        |
+| 14. `integration/lite-hooks.test.js`            | REWRITE (post-investigation: stricter safety, JSON contract changed; assert `ask` semantics) | 4 top-level + 1 chained case to diagnose |
+| 15. `integration/tools-integration.test.js`     | DELETE                                                                                       | 2                                        |
 
 **Totals (post-investigation):**
+
 - DELETE: 2 suites (`parallel-command`, `tools-integration`)
 - SPLIT: 1 suite (`event-log-read-parity` — delete removed-command parts; evaluate status/gates parity)
 - REWRITE: 11 suites (everything else; gates-cli and lite-hooks moved here after investigation)

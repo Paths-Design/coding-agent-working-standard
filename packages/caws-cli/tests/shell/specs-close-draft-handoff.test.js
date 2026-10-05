@@ -98,9 +98,9 @@ describe('close on a non-active spec names the exit that applies', () => {
     ]);
 
     // Nothing was written: the spec is still a draft.
-    expect(
-      fs.readFileSync(path.join(cawsDir, 'specs', 'CLOSE-DRAFT-001.yaml'), 'utf8')
-    ).toContain('lifecycle_state: draft');
+    expect(fs.readFileSync(path.join(cawsDir, 'specs', 'CLOSE-DRAFT-001.yaml'), 'utf8')).toContain(
+      'lifecycle_state: draft'
+    );
   });
 
   test('an archived spec is told to restore, not to retire-draft', () => {
@@ -145,8 +145,8 @@ describe('close on a non-active spec names the exit that applies', () => {
 
     expect(result.ok).toBe(true);
     expect(result.value.kind).toBe('success');
-    expect(
-      fs.readFileSync(path.join(cawsDir, 'specs', 'CLOSE-ACTIVE-004.yaml'), 'utf8')
-    ).toContain('lifecycle_state: closed');
+    expect(fs.readFileSync(path.join(cawsDir, 'specs', 'CLOSE-ACTIVE-004.yaml'), 'utf8')).toContain(
+      'lifecycle_state: closed'
+    );
   });
 });

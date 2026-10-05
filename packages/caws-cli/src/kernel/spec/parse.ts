@@ -36,7 +36,7 @@ export function parseSpecYaml(source: string, options: ParseOptions = {}): Resul
         }),
         narrowRepair: 'Fix the YAML syntax error indicated by location.',
         data: { rawMessage: msg },
-      }),
+      })
     );
   }
 
@@ -48,7 +48,7 @@ export function parseSpecYaml(source: string, options: ParseOptions = {}): Resul
         message: 'Spec document is empty.',
         ...(options.sourcePath !== undefined && { subject: options.sourcePath }),
         narrowRepair: 'Provide a non-empty YAML document.',
-      }),
+      })
     );
   }
 
@@ -60,7 +60,7 @@ export function parseSpecYaml(source: string, options: ParseOptions = {}): Resul
         message: `Spec document must be a YAML object, got ${Array.isArray(parsed) ? 'array' : typeof parsed}.`,
         ...(options.sourcePath !== undefined && { subject: options.sourcePath }),
         narrowRepair: 'Wrap the document as a top-level YAML mapping.',
-      }),
+      })
     );
   }
 

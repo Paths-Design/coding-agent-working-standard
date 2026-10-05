@@ -132,14 +132,14 @@ export function loadOwnershipSessions(cawsDir: string): readonly {
 }[] {
   const loaded = loadLeases(cawsDir);
   if (!isOk(loaded)) return [];
-  return Object.values(loaded.value.leases).map(
-    (lease: AgentLease) => ({
-      session_id: lease.session_id,
-      platform: lease.platform,
-      ...(lease.claimed_paths !== undefined ? { claimed_paths: lease.claimed_paths } : {}),
-      ...(lease.last_modified_paths !== undefined ? { last_modified_paths: lease.last_modified_paths } : {}),
-    })
-  );
+  return Object.values(loaded.value.leases).map((lease: AgentLease) => ({
+    session_id: lease.session_id,
+    platform: lease.platform,
+    ...(lease.claimed_paths !== undefined ? { claimed_paths: lease.claimed_paths } : {}),
+    ...(lease.last_modified_paths !== undefined
+      ? { last_modified_paths: lease.last_modified_paths }
+      : {}),
+  }));
 }
 
 /** Read the current dirty-tree paths via `git status --porcelain`. */

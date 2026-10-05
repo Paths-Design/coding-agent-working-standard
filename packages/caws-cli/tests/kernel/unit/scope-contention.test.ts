@@ -42,10 +42,7 @@ describe('evaluateContention: claim detection (A1)', () => {
       'wt-a': { specId: 'A-1', baseBranch: BRANCH, path: '/x/wt-a' },
       'wt-b': { specId: 'B-1', baseBranch: BRANCH, path: '/x/wt-b' },
     });
-    const specs = [
-      spec('A-1', ['packages/foo']),
-      spec('B-1', ['packages/bar']),
-    ];
+    const specs = [spec('A-1', ['packages/foo']), spec('B-1', ['packages/bar'])];
     const r = evaluateContention({
       path: 'packages/foo/x.ts',
       worktrees,

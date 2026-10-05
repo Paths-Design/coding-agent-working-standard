@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: qwen-code
-# hook_pack_version: 1
+# hook_pack_version: 2
 # caws_min_major: 11
 # lineage_refs: 8,11,16,17,19,22,23,24,26
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it

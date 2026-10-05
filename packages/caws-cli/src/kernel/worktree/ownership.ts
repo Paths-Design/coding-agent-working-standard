@@ -100,7 +100,8 @@ export function assertOwnership(
         authority: 'kernel/worktree',
         message: `Worktree "${name}" has no recorded owner.`,
         subject: name,
-        narrowRepair: 'Run `caws claim` to surface ownership of this worktree (caws claim --takeover acquires it from a foreign session).',
+        narrowRepair:
+          'Run `caws claim` to surface ownership of this worktree (caws claim --takeover acquires it from a foreign session).',
       })
     );
   }
@@ -146,7 +147,10 @@ export function assertOwnership(
         subject: name,
         narrowRepair: `Pass { takeover: true } only with explicit user authorization. Stale heartbeat is NOT abandonment.`,
         data: {
-          owner: { session_id: owner.session_id, ...(owner.platform ? { platform: owner.platform } : {}) },
+          owner: {
+            session_id: owner.session_id,
+            ...(owner.platform ? { platform: owner.platform } : {}),
+          },
           last_heartbeat: heartbeat ?? null,
           incoming_session_id: me.session_id,
         },

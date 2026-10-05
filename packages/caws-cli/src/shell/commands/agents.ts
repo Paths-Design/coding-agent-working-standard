@@ -52,6 +52,7 @@ import {
 import {
   applyLeasePatch,
   loadLeases,
+  loadWorktrees,
   platformEngagement,
   pruneDeadLeases,
   pruneLeasesByStatus,
@@ -61,6 +62,7 @@ import {
 } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import { resolveSession } from '../session/resolve-session';
+import { CONJOINED_TEXT_DETAIL_LIMIT, deriveConjoiningTelemetry } from './agents-conjoining';
 
 // ─── kernel feature-detect guard ──────────────────────────────────────────
 //
@@ -240,8 +242,7 @@ function computeActiveSummary(
   // missing, fall back to an empty summary. Caller (register/heartbeat
   // --include-active-summary) receives `active_agent_count: 0` and an
   // empty active_agents array rather than a Node throw.
-  const summary = callSummarizeActiveAgentsSafe(registry, now, ttlMs)
-    ?? EMPTY_ACTIVITY_SUMMARY;
+  const summary = callSummarizeActiveAgentsSafe(registry, now, ttlMs) ?? EMPTY_ACTIVITY_SUMMARY;
   const entries: ActiveAgentSummaryEntry[] = summary.active.map((lease) => ({
     session_id: lease.session_id,
     bound_worktree: lease.bound_worktree ?? null,
@@ -544,39 +545,6 @@ export interface ListOpts extends BaseAgentsOpts {
   readonly staleTtlMs?: number;
 }
 
-/** Conjoined-session advisory (CAWS-AGENTS-FORK-IDENTITY-001): pairs of leases
- * with overlapping [started_at, last_active] activity windows (or windows
- * starting within the proximity threshold — two sessions created seconds
- * apart have zero-length windows that never overlap) on the same host and
- * repo. Display-only — never authority, never a write, never a refusal.
- */
-const CONJOINED_START_PROXIMITY_MS = 60_000;
-
-function conjoinedLeasePairs(leases: LeaseRegistry): ReadonlyArray<{ a: string; b: string }> {
-  const ids = Object.keys(leases);
-  const pairs: { a: string; b: string }[] = [];
-  for (let i = 0; i < ids.length; i++) {
-    const aId = ids[i] as string;
-    for (let j = i + 1; j < ids.length; j++) {
-      const bId = ids[j] as string;
-      const x = leases[aId];
-      const y = leases[bId];
-      if (x === undefined || y === undefined) continue;
-      if (x.hostname === undefined || y.hostname === undefined || x.hostname !== y.hostname) continue;
-      if (x.repo_root !== y.repo_root) continue;
-      const xs = Date.parse(x.started_at);
-      const xe = Date.parse(x.last_active);
-      const ys = Date.parse(y.started_at);
-      const ye = Date.parse(y.last_active);
-      if (!Number.isFinite(xs) || !Number.isFinite(xe) || !Number.isFinite(ys) || !Number.isFinite(ye)) continue;
-      const windowsOverlap = xs <= ye && ys <= xe;
-      const startsProximate = Math.abs(xs - ys) <= CONJOINED_START_PROXIMITY_MS;
-      if (windowsOverlap || startsProximate) pairs.push({ a: aId, b: bId });
-    }
-  }
-  return pairs;
-}
-
 /** Silent-platform badge (CAWS-MESSAGE-BEHAVIOR-001): platforms with at
  * least 5 inbound messages and an outbound/inbound ratio at or below 0.2 —
  * sessions of that platform receive mail but historically do not answer.
@@ -585,7 +553,9 @@ function conjoinedLeasePairs(leases: LeaseRegistry): ReadonlyArray<{ a: string; 
 const SILENT_MIN_INBOUND = 5;
 const SILENT_MAX_RATIO = 0.2;
 
-function silentPlatforms(engagement: Record<string, { to: number; from: number; ratio: number | null }>) {
+function silentPlatforms(
+  engagement: Record<string, { to: number; from: number; ratio: number | null }>
+) {
   const out: { platform: string; to: number; from: number }[] = [];
   for (const [platform, e] of Object.entries(engagement)) {
     if (e.to >= SILENT_MIN_INBOUND && e.ratio !== null && e.ratio <= SILENT_MAX_RATIO) {
@@ -593,6 +563,159 @@ function silentPlatforms(engagement: Record<string, { to: number; from: number; 
     }
   }
   return out.sort((a, b) => b.to - a.to);
+}
+
+// ─── worktree-binding join (CAWS-AGENTS-LIST-BINDING-JOIN-01) ─────────────
+//
+// `.caws/worktrees.json` is the AUTHORITY for worktree ownership; a lease is
+// operational cache. A lease does carry `bound_worktree` / `bound_spec_id`,
+// but their only writers are incidental — `caws status` and `caws claim`
+// populate them as a side effect, and the hook-driven register/heartbeat
+// path that creates most leases never does. Rendering those fields printed
+// `(no worktree)` for sessions that demonstrably owned one: an absence this
+// surface could not source.
+//
+// So the binding is JOINED from the registry at render time and never copied
+// back into the lease. A second copy of an authority fact is a copy that can
+// disagree with it, which is the failure class the read-surface authority
+// contract exists to prevent.
+
+interface OwnedWorktree {
+  readonly worktree: string;
+  readonly spec_id: string | null;
+}
+
+/**
+ * `resolved` means the registry was READ — so an empty owned-list is an
+ * observed absence and honest to state. `resolved: false` means it could not
+ * be read, and nothing about ownership may be asserted either way.
+ */
+type BindingIndex =
+  | { readonly resolved: true; readonly bySession: ReadonlyMap<string, readonly OwnedWorktree[]> }
+  | { readonly resolved: false };
+
+const BINDING_UNKNOWN = 'unknown';
+const BINDING_NO_WORKTREE = '(no worktree)';
+const BINDING_NO_SPEC = '(no spec)';
+const BINDING_SOURCE = '.caws/worktrees.json';
+
+function indexWorktreeBindings(cawsDir: string): BindingIndex {
+  const res = loadWorktrees(cawsDir);
+  if (!isOk(res)) return { resolved: false };
+
+  const bySession = new Map<string, OwnedWorktree[]>();
+  // Sorted by worktree name so a session owning several renders the same
+  // order on every run, and so the two text columns stay index-aligned.
+  for (const name of Object.keys(res.value).sort()) {
+    const record = res.value[name];
+    if (typeof record !== 'object' || record === null) continue;
+    const sessionId = record.owner?.session_id;
+    if (typeof sessionId !== 'string' || sessionId.length === 0) continue;
+    const specId =
+      typeof record.specId === 'string' && record.specId.length > 0 ? record.specId : null;
+    const entry: OwnedWorktree = { worktree: name, spec_id: specId };
+    const owned = bySession.get(sessionId);
+    if (owned === undefined) bySession.set(sessionId, [entry]);
+    else owned.push(entry);
+  }
+  return { resolved: true, bySession };
+}
+
+/**
+ * The worktree and spec columns for one session. Three outcomes that must
+ * never collapse into each other: registry unreadable → `unknown`; registry
+ * read and the session owns nothing → the placeholders; registry read and
+ * the session owns n ≥ 1 → every name, index-aligned with its spec column.
+ */
+function bindingColumns(index: BindingIndex, sessionId: string): [string, string] {
+  if (!index.resolved) return [BINDING_UNKNOWN, BINDING_UNKNOWN];
+  const owned = index.bySession.get(sessionId) ?? [];
+  if (owned.length === 0) return [BINDING_NO_WORKTREE, BINDING_NO_SPEC];
+  return [
+    owned.map((o) => o.worktree).join(','),
+    owned.map((o) => o.spec_id ?? BINDING_NO_SPEC).join(','),
+  ];
+}
+
+/**
+ * JSON parity for the same facts. When the registry is unreadable the map is
+ * OMITTED rather than emitted empty — an empty map would assert that every
+ * listed session owns nothing, which is exactly the claim we cannot source.
+ */
+function bindingsPayload(index: BindingIndex, sessionIds: readonly string[]) {
+  if (!index.resolved) return { source: BINDING_SOURCE, resolution: 'unreadable' as const };
+  const by_session: Record<string, readonly OwnedWorktree[]> = {};
+  for (const sessionId of sessionIds) {
+    by_session[sessionId] = index.bySession.get(sessionId) ?? [];
+  }
+  return { source: BINDING_SOURCE, resolution: 'resolved' as const, by_session };
+}
+
+const LEASE_SOURCE = '.caws/leases';
+/**
+ * A platform literally recorded as `unknown` on the lease. Deliberately NOT
+ * `BINDING_UNKNOWN`: that one means "we could not read the registry", which
+ * is the exact reading this constant exists to rule out. Same characters,
+ * opposite meanings — collapsing them would make the clarifier a coincidence.
+ */
+const RECORDED_UNKNOWN_PLATFORM = 'unknown';
+const LIVENESS_DISCLOSURE = `${LEASE_SOURCE} (operational cache — liveness only)`;
+
+/**
+ * One withheld bucket, and how to reveal it.
+ *
+ * `suppressed_by` exists because `--active` overrides `--include-stale` /
+ * `--include-stopped`: printing the bare flag to a caller who already passed
+ * it would name a remediation their own invocation defeats. An unsourceable
+ * absence and an unusable repair are the same failure — the reader acts on a
+ * sentence the surface cannot honour.
+ */
+interface HiddenBucket {
+  readonly bucket: 'stale' | 'stopped';
+  readonly count: number;
+  readonly flag: string;
+  readonly suppressed_by: string | null;
+}
+
+function hiddenBucket(
+  bucket: 'stale' | 'stopped',
+  flag: string,
+  count: number,
+  shown: boolean,
+  flagGiven: boolean,
+  activeOnly: boolean
+): HiddenBucket | null {
+  if (shown || count === 0) return null;
+  return { bucket, count, flag, suppressed_by: flagGiven && activeOnly ? '--active' : null };
+}
+
+function hiddenPhrase(h: HiddenBucket): string {
+  const how =
+    h.suppressed_by === null ? h.flag : `${h.flag} given; suppressed by ${h.suppressed_by}`;
+  return `${h.count} ${h.bucket} hidden (${how})`;
+}
+
+/**
+ * Printed on every run, including when nothing is withheld. A line that
+ * appears only when something is hidden makes its own absence load-bearing:
+ * the reader would have to know the rule to read silence as completeness.
+ */
+function visibilityLine(shown: number, total: number, hidden: readonly HiddenBucket[]): string {
+  const tail = hidden.length === 0 ? 'nothing hidden' : hidden.map(hiddenPhrase).join(' · ');
+  return `visibility: ${shown} of ${total} shown · ${tail}`;
+}
+
+/**
+ * Tier disclosure. The rows are lease-derived (operational cache); the
+ * worktree and spec columns are a join over the authority registry. When that
+ * registry could not be read the line says the columns are unavailable — it
+ * must not claim a join that did not happen.
+ */
+function sourceDisclosureLine(index: BindingIndex): string {
+  const binding = index.resolved
+    ? `worktree/spec columns joined from ${BINDING_SOURCE} (authority)`
+    : `worktree/spec columns unavailable: ${BINDING_SOURCE} unreadable`;
+  return `source: ${LIVENESS_DISCLOSURE} · ${binding}`;
 }
 
 export function runAgentsListCommand(opts: ListOpts = {}): number {
@@ -624,6 +747,7 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
     err(KERNEL_FEATURE_UNAVAILABLE_DIAGNOSTIC);
   }
   const summary = summaryRes ?? EMPTY_ACTIVITY_SUMMARY;
+  const conjoining = deriveConjoiningTelemetry(loadRes.value.leases, now);
 
   // Silent-platform badges (CAWS-MESSAGE-BEHAVIOR-001): derived, display-only.
   const engagementRes = platformEngagement(cawsDir);
@@ -635,11 +759,50 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
   const wantsStale = opts.includeStale === true && !(opts.activeOnly === true);
   const wantsStopped = opts.includeStopped === true && !(opts.activeOnly === true);
 
+  // Ownership is joined from authority, never read off the lease cache.
+  const bindings = indexWorktreeBindings(cawsDir);
+
+  const hidden = [
+    hiddenBucket(
+      'stale',
+      '--include-stale',
+      summary.stale.length,
+      wantsStale,
+      opts.includeStale === true,
+      opts.activeOnly === true
+    ),
+    hiddenBucket(
+      'stopped',
+      '--include-stopped',
+      summary.stopped.length,
+      wantsStopped,
+      opts.includeStopped === true,
+      opts.activeOnly === true
+    ),
+  ].filter((h): h is HiddenBucket => h !== null);
+  const shownCount =
+    summary.active.length +
+    (wantsStale ? summary.stale.length : 0) +
+    (wantsStopped ? summary.stopped.length : 0);
+
   if (json) {
+    const emittedSessions = [
+      ...summary.active.map((l) => l.session_id),
+      ...(wantsStale ? summary.stale.map((l) => l.session_id) : []),
+      ...(wantsStopped ? summary.stopped.map((l) => l.session_id) : []),
+    ];
     emitJson(out, {
       ok: true,
       now: now.toISOString(),
       stale_ttl_ms: ttl,
+      // Same two facts the text form discloses, structured: what was withheld,
+      // and which artifact each column came from.
+      visibility: { shown: shownCount, total: summary.total, hidden },
+      sources: {
+        liveness: LEASE_SOURCE,
+        worktree_binding: bindings.resolved ? BINDING_SOURCE : null,
+      },
+      worktree_bindings: bindingsPayload(bindings, emittedSessions),
       active: summary.active,
       ...(wantsStale ? { stale: summary.stale } : {}),
       ...(wantsStopped ? { stopped: summary.stopped } : {}),
@@ -649,7 +812,10 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
         stopped: summary.stopped.length,
         total: summary.total,
       },
-      conjoined_pairs: conjoinedLeasePairs(loadRes.value.leases),
+      // Compatibility field: now contains only identity-confirmed relations.
+      conjoined_pairs: conjoining.confirmed,
+      conjoined_unresolved_pairs: conjoining.unresolved,
+      conjoining_identity: conjoining.identity,
       silent_platforms: silent,
     });
   } else {
@@ -658,7 +824,8 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       // LEASE-WORK-STATE-001: append the visibility-only state tag when
       // declared; absent renders nothing extra.
       const stateTag = l.work_state !== undefined ? `  ${l.work_state}` : '';
-      out(`  ${l.session_id}  ${l.bound_worktree ?? '(no worktree)'}  ${l.bound_spec_id ?? '(no spec)'}${stateTag}`);
+      const [worktreeCol, specCol] = bindingColumns(bindings, l.session_id);
+      out(`  ${l.session_id}  ${worktreeCol}  ${specCol}${stateTag}`);
     }
     if (wantsStale) {
       out(`stale:  ${summary.stale.length}`);
@@ -668,12 +835,49 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       out(`stopped: ${summary.stopped.length}`);
       for (const l of summary.stopped) out(`  ${l.session_id}`);
     }
-    for (const pair of conjoinedLeasePairs(loadRes.value.leases)) {
-      out(`conjoined-hint: ${pair.a} <=> ${pair.b} (overlapping lease windows; display-only advisory)`);
+    out(visibilityLine(shownCount, summary.total, hidden));
+    for (const pair of conjoining.confirmed.slice(0, CONJOINED_TEXT_DETAIL_LIMIT)) {
+      out(`conjoined-confirmed: ${pair.child} -> ${pair.parent} (explicit fork identity)`);
+    }
+    if (conjoining.confirmed.length > CONJOINED_TEXT_DETAIL_LIMIT) {
+      out(
+        `conjoined-confirmed: ${conjoining.confirmed.length - CONJOINED_TEXT_DETAIL_LIMIT} more ` +
+          '(use --json for details)'
+      );
+    }
+    if (conjoining.unresolved.length > 0) {
+      // Two populations, two statements. The first counts lease PAIRS that
+      // overlap; the second counts LEASES in the retention window that
+      // declare identity. Stated in one sentence they read as a ratio, and
+      // dividing one by the other yields a number that means nothing.
+      out(
+        `conjoined-unresolved: ${conjoining.unresolved.length} lease pair(s) overlap on one ` +
+          'platform without complete fork identity (7d window; use --json for details)'
+      );
+      out(
+        `  identity coverage: ${conjoining.identity.classified_leases} of ` +
+          `${conjoining.identity.recent_leases} recent lease(s) declare fork identity`
+      );
+      // Forward-only by construction: a lease is written only by the session
+      // that owns it, which is what makes the write atomic. A repair line
+      // implying retroactive fixup would invite that invariant's violation.
+      out(
+        '  repair: a session declares its own identity with caws agents heartbeat ' +
+          '--session-kind <main|fork|subagent> (hook env CAWS_SESSION_KIND / ' +
+          'CAWS_FORKED_FROM); existing leases are never rewritten, because one session ' +
+          "must not write another session's lease file"
+      );
     }
     for (const s of silent) {
-      out(`silent-platform: ${s.platform} (${s.to} to, ${s.from} from)`);
+      // `unknown` is a recorded platform value, not a sentinel for a field we
+      // failed to read. Undisambiguated it reads as the second.
+      const recorded =
+        s.platform === RECORDED_UNKNOWN_PLATFORM
+          ? ' — `unknown` is the platform value recorded on those leases, not a missing field'
+          : '';
+      out(`silent-platform: ${s.platform} (${s.to} to, ${s.from} from)${recorded}`);
     }
+    out(sourceDisclosureLine(bindings));
   }
   if (loadRes.value.diagnostics.length > 0 && showData) {
     err(renderDiagnostics(loadRes.value.diagnostics, { showData }));
@@ -685,10 +889,67 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
 
 export interface ShowOpts extends BaseAgentsOpts {
   readonly id: string;
+  readonly staleTtlMs?: number;
+}
+
+// ─── liveness classification (CAWS-AGENTS-SHOW-LIVENESS-CLASSIFY-01) ──────
+//
+// The on-disk `status` enum is exactly {active, stopping, stopped}. The
+// kernel never writes 'stale': materializing it would mean one session
+// writing another session's lease file, which breaks the per-session-file
+// ownership that makes atomic lease writes safe. Staleness is therefore a
+// read-time TTL classification, and a surface that returns only the
+// persisted field hands the reader one value that answers two questions.
+//
+// The classification is obtained by calling the kernel's
+// summarizeActiveAgents with a single-entry registry — never by re-deriving
+// `now - last_active > ttl` here. One rule, one implementation: a second
+// copy is a second thing to drift, and the boundary (`>` vs `>=`) is exactly
+// where such a copy would diverge silently.
+
+interface LivenessVerdict {
+  readonly classification: 'active' | 'stale' | 'stopped' | 'unknown';
+  readonly source: 'derived';
+  readonly derivation: string;
+  readonly ttl_ms: number;
+  /** null when last_active does not parse — no age can be computed, and
+   *  reporting a number would be fabricating one. */
+  readonly last_active_age_ms: number | null;
+  readonly persisted_status: string;
+  /**
+   * Literal value comparison, not a semantic one. A `stopping` lease that is
+   * within its TTL classifies `active`, so this reads false even though
+   * nothing is wrong — `stopping` is a lifecycle phase and has no
+   * counterpart among the liveness buckets.
+   */
+  readonly agrees_with_persisted_status: boolean;
+}
+
+function classifyLeaseLiveness(lease: AgentLease, now: Date, ttlMs: number): LivenessVerdict {
+  const summary = callSummarizeActiveAgentsSafe({ [lease.session_id]: lease }, now, ttlMs);
+  let classification: LivenessVerdict['classification'] = 'unknown';
+  if (summary !== null) {
+    if (summary.stopped.length > 0) classification = 'stopped';
+    else if (summary.stale.length > 0) classification = 'stale';
+    else if (summary.active.length > 0) classification = 'active';
+  }
+
+  const lastActiveMs = Date.parse(lease.last_active);
+  const age = Number.isNaN(lastActiveMs) ? null : Math.max(0, now.getTime() - lastActiveMs);
+
+  return {
+    classification,
+    source: 'derived',
+    derivation: 'kernel summarizeActiveAgents(last_active, now, ttl_ms)',
+    ttl_ms: ttlMs,
+    last_active_age_ms: age,
+    persisted_status: lease.status,
+    agrees_with_persisted_status: classification === lease.status,
+  };
 }
 
 export function runAgentsShowCommand(opts: ShowOpts): number {
-  const { cwd, out, err, showData, json } = setupIO(opts);
+  const { cwd, nowFn, out, err, showData, json } = setupIO(opts);
 
   const repoRootResult = resolveRepoRoot(cwd);
   if (!isOk(repoRootResult)) {
@@ -721,9 +982,25 @@ export function runAgentsShowCommand(opts: ShowOpts): number {
     }
     return 1;
   }
+  const liveness = classifyLeaseLiveness(lease, nowFn(), opts.staleTtlMs ?? DEFAULT_STALE_TTL_MS);
+
   if (json) {
-    emitJson(out, { ok: true, lease });
+    emitJson(out, { ok: true, lease, liveness });
   } else {
+    const age =
+      liveness.last_active_age_ms === null
+        ? 'age unknown (last_active does not parse)'
+        : `last_active ${liveness.last_active_age_ms}ms ago`;
+    out(`session: ${lease.session_id}`);
+    out(
+      `persisted status: ${liveness.persisted_status}  ` +
+        `(on disk in .caws/leases/; that enum is {active, stopping, stopped} and never holds "stale")`
+    );
+    out(
+      `derived liveness: ${liveness.classification}  ` +
+        `(computed now, not persisted; ${liveness.derivation}; ttl ${liveness.ttl_ms}ms, ${age})`
+    );
+    out('record:');
     out(JSON.stringify(lease, null, 2));
   }
   return 0;
@@ -783,7 +1060,9 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
         out(`  ${tag} ${id}`);
       }
       if (r.value.skippedForeignHost.length > 0) {
-        out(`  (${r.value.skippedForeignHost.length} foreign-host lease(s) skipped — pid not checkable here)`);
+        out(
+          `  (${r.value.skippedForeignHost.length} foreign-host lease(s) skipped — pid not checkable here)`
+        );
       }
     }
     return 0;
@@ -791,7 +1070,9 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
 
   // ── Retention mode (status + age) ────────────────────────────────────
   if (opts.status === undefined || opts.olderThanMs === undefined) {
-    err('caws agents prune: --status and --older-than-ms are required unless --dead is used.');
+    err(
+      'caws agents prune: --status and --older-than <duration> (or --older-than-ms) are required unless --dead is used.'
+    );
     return 1;
   }
 
@@ -818,7 +1099,9 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
       diagnostics: r.value.diagnostics,
     });
   } else {
-    out(`prune (${opts.apply === true ? 'apply' : 'dry-run'}): ${r.value.candidates.length} candidate(s)`);
+    out(
+      `prune (${opts.apply === true ? 'apply' : 'dry-run'}): ${r.value.candidates.length} candidate(s)`
+    );
     for (const id of r.value.candidates) {
       const tag = r.value.deleted.includes(id) ? 'DELETED' : 'would-delete';
       out(`  ${tag} ${id}`);

@@ -29,6 +29,7 @@ const { execSync, spawnSync } = require('child_process');
 const {
   runReprieveGrantCommand,
   parseDurationToSeconds,
+  AGENT_SESSION_VARS,
 } = require('../../dist/shell/commands/reprieve');
 
 const SESSION = 'sess-relative-expiry';
@@ -83,6 +84,7 @@ function grant(repoRoot, opts) {
   const err = [];
   const code = runReprieveGrantCommand({
     cwd: repoRoot,
+    homeDir: path.join(repoRoot, 'machine-home'),
     env: {},
     now: () => NOW,
     out: (l) => out.push(l),
@@ -99,9 +101,10 @@ function grant(repoRoot, opts) {
 function readRecord(repoRoot) {
   const file = path.join(
     repoRoot,
-    '.claude',
-    'hooks',
+    'machine-home',
     'state',
+    'sessions',
+    SESSION,
     `guard-reprieve-${SESSION}.json`
   );
   return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -171,9 +174,18 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: --for grants (A1)', () => {
     const r = grant(repoRoot, { for: '0s' });
     expect(r.code).toBe(1);
     expect(r.err).toContain('must expire in the future');
-    expect(fs.existsSync(
-      path.join(repoRoot, '.claude', 'hooks', 'state', `guard-reprieve-${SESSION}.json`)
-    )).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(
+          repoRoot,
+          'machine-home',
+          'state',
+          'sessions',
+          SESSION,
+          `guard-reprieve-${SESSION}.json`
+        )
+      )
+    ).toBe(false);
   });
 
   it('refuses an unparseable duration and names the accepted units (A2)', () => {
@@ -253,24 +265,18 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: CLI parse path', () => {
   const cli = path.resolve(__dirname, '../../dist/index.js');
 
   function runCli(args, cwd) {
-    // The session resolver consults CLAUDE_SESSION_ID / CLAUDE_CODE_SESSION_ID
-    // BEFORE CAWS_SESSION_ID, and an agent harness exports those — so a test
-    // that only sets CAWS_SESSION_ID resolves to the ambient session and writes
-    // its record under a different filename. Delete the higher-precedence vars
-    // and pass --session explicitly so the id is the test's, in every context.
-    // Every agent-session var must be cleared, not just the higher-precedence
-    // ones: CAWS-REPRIEVE-NO-SELF-GRANT-001 refuses the grant if ANY is set,
-    // and CAWS_SESSION_ID is itself one of them. The session id is supplied via
-    // --session so the record is still deterministically named.
-    const env = { ...process.env };
-    for (const v of [
-      'CLAUDE_SESSION_ID',
-      'CLAUDE_CODE_SESSION_ID',
-      'CODEX_THREAD_ID',
-      'CAWS_SESSION_ID',
-      'HOOK_SESSION_ID',
-      'CURSOR_TRACE_ID',
-    ]) {
+    // The session resolver consults harness vars BEFORE CAWS_SESSION_ID, and
+    // an agent harness exports those — so a test that only sets CAWS_SESSION_ID
+    // resolves to the ambient session and writes its record under a different
+    // filename. Clear every var the guard consults and pass --session
+    // explicitly so the id is the test's, in every context. The clear-list is
+    // the exported AGENT_SESSION_VARS union itself (CAWS-REPRIEVE-NO-SELF
+    // -GRANT-001): a hand-maintained list drifted stale when the DSH and
+    // Qwen surfaces were added and the suite failed only inside those
+    // harnesses. Deriving it here makes that drift structurally impossible —
+    // a new surface var is cleared the moment the guard starts consulting it.
+    const env = { ...process.env, CAWS_HOME: path.join(cwd, 'machine-home') };
+    for (const v of AGENT_SESSION_VARS) {
       delete env[v];
     }
     return spawnSync('node', [cli, 'reprieve', 'grant', '--session', SESSION, ...args], {
@@ -286,7 +292,7 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: CLI parse path', () => {
       ['--handlers', 'protected-paths.sh', '--reason', 'r', '--approved-by', '@t', '--for', '30m'],
       repoRoot
     );
-    expect(r.stderr).not.toContain("unknown option");
+    expect(r.stderr).not.toContain('unknown option');
     expect(r.stderr).not.toContain("required option '--expires-at'");
     expect(r.status).toBe(0);
     const record = readRecord(repoRoot);
@@ -311,6 +317,7 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: CLI parse path', () => {
     const repoRoot = makeRepoRoot();
     const r = spawnSync('node', [cli, 'reprieve', 'grant', '--help'], {
       cwd: repoRoot,
+      homeDir: path.join(repoRoot, 'machine-home'),
       encoding: 'utf8',
     });
     expect(r.stdout).toContain('--for <duration>');

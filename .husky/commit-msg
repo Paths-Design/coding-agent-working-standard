@@ -1,0 +1,127 @@
+#!/bin/bash
+# CAWS commit-msg hook — repo-local to the caws monorepo.
+#
+# Enforces the base-branch commit policy documented in
+# .claude/rules/worktree-isolation.md: while worktrees are registered against
+# the branch being committed to, only these may land on it:
+#
+#   merge(worktree): <desc>   — merge a completed worktree branch
+#   wip(checkpoint): <desc>   — commit prior-session dirty files
+#   chore(caws): <desc>       — caws spec/worktree authoring (zero blast radius,
+#                               so sibling agents are not blocked from authoring)
+#   ...plus true git merge commits (MERGE_HEAD present).
+#
+# This hook is the ONLY enforcement point for that policy. pre-commit cannot see
+# the commit message and must not try to infer it by inspecting its parent
+# process — that guess is what made the previous version unreliable.
+
+set -uo pipefail
+
+COMMIT_MSG_FILE="${1:-}"
+if [ -z "$COMMIT_MSG_FILE" ] || [ ! -f "$COMMIT_MSG_FILE" ]; then
+  echo "commit-msg: no message file was passed; cannot validate the message." >&2
+  exit 1
+fi
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Resolve the canonical root. --git-common-dir points at the shared .git for a
+# linked worktree, so this resolves to the main checkout from any lane.
+CAWS_ROOT="."
+if command -v git >/dev/null 2>&1; then
+  _GIT_COMMON=$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")
+  if [ "$_GIT_COMMON" != ".git" ]; then
+    _CANDIDATE=$(cd "$_GIT_COMMON/.." 2>/dev/null && pwd || echo "")
+    if [ -n "$_CANDIDATE" ] && [ -d "$_CANDIDATE/.caws" ]; then
+      CAWS_ROOT="$_CANDIDATE"
+    fi
+  fi
+fi
+
+# Not a CAWS project: nothing to enforce.
+[ -d "$CAWS_ROOT/.caws" ] || exit 0
+
+REGISTRY="$CAWS_ROOT/.caws/worktrees.json"
+[ -f "$REGISTRY" ] || exit 0
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+[ -n "$CURRENT_BRANCH" ] || exit 0
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "commit-msg: node is required to read .caws/worktrees.json and was not found." >&2
+  echo "  Refusing rather than allowing an unchecked commit to '$CURRENT_BRANCH'." >&2
+  exit 1
+fi
+
+# Count lanes registered against THIS branch.
+#
+# Two shape rules, both load-bearing:
+#   1. v11 worktrees.json is a FLAT MAP (name -> record). v10 nested it under
+#      reg.worktrees. Read both, as every shared hook-pack reader does.
+#   2. v11 persists NO per-record status field — being registered IS the active
+#      state. listWorktreesPretty synthesizes status:'active' onto records it
+#      returns, so that value never reaches disk and filtering on it matches
+#      nothing. Filter on baseBranch alone.
+#
+# Values are passed as argv, never spliced into the JS source, so a branch name
+# containing a quote cannot corrupt the program.
+WT_INFO=$(node -e '
+  var fs = require("fs");
+  var file = process.argv[1];
+  var branch = process.argv[2];
+  try {
+    var reg = JSON.parse(fs.readFileSync(file, "utf8"));
+    var entries = (reg && reg.worktrees && typeof reg.worktrees === "object") ? reg.worktrees : reg;
+    if (!entries || typeof entries !== "object") {
+      console.log("ERR:registry root is not an object");
+      process.exit(0);
+    }
+    var names = Object.keys(entries).filter(function (k) {
+      var w = entries[k];
+      return w && typeof w === "object" && w.baseBranch === branch;
+    });
+    console.log(names.length + ":" + names.join(", "));
+  } catch (e) {
+    console.log("ERR:" + ((e && e.message) ? String(e.message).split("\n")[0] : "unreadable"));
+  }
+' "$REGISTRY" "$CURRENT_BRANCH" 2>/dev/null)
+
+# Fail CLOSED. The previous version printed "0" from its catch block, so an
+# unreadable registry silently allowed every commit.
+if [ -z "$WT_INFO" ] || [ "${WT_INFO%%:*}" = "ERR" ]; then
+  echo "BLOCKED: could not read $REGISTRY — ${WT_INFO#ERR:}" >&2
+  echo "  Refusing rather than allowing an unchecked commit to '$CURRENT_BRANCH'." >&2
+  echo "  Inspect with: caws worktree list" >&2
+  exit 1
+fi
+
+WT_COUNT="${WT_INFO%%:*}"
+WT_NAMES="${WT_INFO#*:}"
+
+[ "$WT_COUNT" -gt 0 ] 2>/dev/null || exit 0
+
+# A real git merge in progress is always allowed.
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || echo ".git")
+if [ -f "$GIT_DIR/MERGE_HEAD" ]; then
+  exit 0
+fi
+
+case "$COMMIT_MSG" in
+  "merge(worktree): "*|"wip(checkpoint): "*|"chore(caws): "*) exit 0 ;;
+esac
+
+echo "BLOCKED: direct commit to '$CURRENT_BRANCH' while $WT_COUNT worktree lane(s) target it." >&2
+echo "  Lanes: $WT_NAMES" >&2
+echo "" >&2
+echo "  Allowed on the base branch while lanes are open:" >&2
+echo "    merge(worktree): <description>   — land a completed lane" >&2
+echo "    wip(checkpoint): <description>   — commit prior-session dirty files" >&2
+echo "    chore(caws): <description>       — caws spec/worktree authoring" >&2
+echo "    a true git merge commit" >&2
+echo "" >&2
+echo "  Landing a lane? Use the governed path, which never checks out the base:" >&2
+echo "    caws worktree merge <name>" >&2
+echo "  Implementation work belongs in your lane:" >&2
+echo "    caws worktree list" >&2
+echo "" >&2
+echo "  Override (unsafe, unaudited): git commit --no-verify" >&2
+exit 1

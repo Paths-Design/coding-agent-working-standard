@@ -4,10 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { initProject } = require('../../dist/store/init-store');
-const {
-  groupScopePlanRemediations,
-  runScopePlanCommand,
-} = require('../../dist/shell/index');
+const { groupScopePlanRemediations, runScopePlanCommand } = require('../../dist/shell/index');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
 
 afterAll(() => {
@@ -52,13 +49,10 @@ describe('caws scope plan', () => {
   test('reads a paths file, ignores blanks/comments, and emits grouped JSON read-only', () => {
     const root = mkRepo();
     const pathsFile = path.join(root, 'paths.txt');
-    fs.writeFileSync(pathsFile, [
-      '# scope paths',
-      '',
-      'packages/a.ts',
-      'packages/b.ts',
-      '',
-    ].join('\n'));
+    fs.writeFileSync(
+      pathsFile,
+      ['# scope paths', '', 'packages/a.ts', 'packages/b.ts', ''].join('\n')
+    );
 
     const result = runPlan(root, {
       paths: ['packages/inline.ts'],
@@ -88,7 +82,8 @@ describe('caws scope plan', () => {
       },
       {
         command: 'caws worktree ensure <name> --spec <spec-id>',
-        description: 'Create-or-admit a governed worktree for the active spec that should own the edit.',
+        description:
+          'Create-or-admit a governed worktree for the active spec that should own the edit.',
         mutates: true,
         paths: ['packages/inline.ts', 'packages/a.ts', 'packages/b.ts'],
       },

@@ -327,11 +327,11 @@ components:
         id:
           type: string
           description: Unique agent identifier
-          example: "agent-gpt-4"
+          example: 'agent-gpt-4'
         name:
           type: string
           description: Human-readable agent name
-          example: "GPT-4 Code Assistant"
+          example: 'GPT-4 Code Assistant'
         capabilities:
           type: array
           items:
@@ -398,7 +398,7 @@ components:
         - error
         - maintenance
       description: Current agent operational status
-      example: "active"
+      example: 'active'
 
     AgentPerformance:
       type: object
@@ -434,11 +434,11 @@ components:
         domain:
           type: string
           description: Capability domain (e.g., 'javascript', 'python', 'design')
-          example: "javascript"
+          example: 'javascript'
         skill:
           type: string
           description: Specific skill within domain
-          example: "react-development"
+          example: 'react-development'
         confidence:
           type: number
           minimum: 0
@@ -452,7 +452,7 @@ components:
             - intermediate
             - expert
           description: Experience level
-          example: "expert"
+          example: 'expert'
 
     Task:
       type: object
@@ -465,7 +465,7 @@ components:
         id:
           type: string
           description: Unique task identifier
-          example: "task-uuid-123"
+          example: 'task-uuid-123'
         type:
           $ref: '#/components/schemas/TaskType'
         status:
@@ -559,7 +559,7 @@ components:
         - high
         - critical
       description: Task priority level
-      default: "normal"
+      default: 'normal'
 
     RoutingRequest:
       type: object
@@ -639,12 +639,12 @@ components:
             properties:
               status:
                 type: string
-                enum: ["pass", "fail", "warn"]
+                enum: ['pass', 'fail', 'warn']
               message:
                 type: string
               timestamp:
-                  type: string
-                  format: date-time
+                type: string
+                format: date-time
 
     Error:
       type: object
@@ -655,7 +655,7 @@ components:
         code:
           type: string
           description: Error code identifier
-          example: "AGENT_NOT_FOUND"
+          example: 'AGENT_NOT_FOUND'
         message:
           type: string
           description: Human-readable error message

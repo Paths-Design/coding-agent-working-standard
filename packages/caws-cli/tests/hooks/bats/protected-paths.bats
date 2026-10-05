@@ -80,8 +80,13 @@ teardown_file() {
   assert_success
 }
 
-@test "protected-paths: a non-Write/Edit tool is ignored" {
+@test "protected-paths: READING a guard script via Bash is admitted — only mutations are protected" {
   run_guard protected-paths.sh "$(hook_envelope Bash '' 'cat .claude/hooks/scope-guard.sh')"
+  assert_success
+}
+
+@test "protected-paths: a tool that is neither Write, Edit nor Bash is ignored" {
+  run_guard protected-paths.sh "$(hook_envelope Grep '' '')"
   assert_success
 }
 
@@ -95,4 +100,64 @@ teardown_file() {
   run_guard_missing_lib protected-paths.sh agent-surface.sh "$(hook_envelope Edit '.claude/hooks/scope-guard.sh')"
   refute [ "$status" -eq 0 ]
   assert_output --partial 'agent-surface.sh'
+}
+
+# --- Bash-channel parity (CAWS-PROTECTED-PATHS-BASH-CHANNEL-01) ---
+# The guard keyed on tool name (Write|Edit) rather than on the write itself, so
+# every shell-mediated mutation of a guard script was admitted: the hooks tree
+# had one guard watching two tools. A protected path must be protected on every
+# channel the harness exposes, and the Bash arm must consult the SAME matcher
+# as the Write/Edit arm so the two cannot diverge.
+
+@test "protected-paths: a shell redirect into a guard script under .caws/hooks/ is BLOCKED" {
+  run_guard protected-paths.sh \
+    "$(hook_envelope Bash '' 'echo x > .caws/hooks/protected-paths.sh')"
+  assert_failure 2
+  assert_output --partial 'is protected'
+}
+
+@test "protected-paths: an in-place sed of a guard script under the vendor hooks dir is BLOCKED" {
+  run_guard protected-paths.sh \
+    "$(hook_envelope Bash '' 'sed -i s/exit/return/ .claude/hooks/scope-guard.sh')"
+  assert_failure 2
+  assert_output --partial 'is protected'
+}
+
+@test "protected-paths: rm of a shared lib under .caws/hooks/lib/ is BLOCKED" {
+  run_guard protected-paths.sh \
+    "$(hook_envelope Bash '' 'rm .caws/hooks/lib/write-allowlist.sh')"
+  assert_failure 2
+}
+
+@test "protected-paths: a Bash write to a *.md under the hooks dir is admitted (docs-not-scripts parity)" {
+  # Same carve-out the Write/Edit arm applies on the same path — the Bash arm
+  # must not be stricter than the channel it is mirroring.
+  run_guard protected-paths.sh \
+    "$(hook_envelope Bash '' 'echo x > .caws/hooks/README.md')"
+  assert_success
+}
+
+@test "protected-paths: a Bash mutation OUTSIDE every hooks dir is admitted" {
+  # Discrimination control: without this, the arm above would pass even if the
+  # implementation blocked every Bash mutation regardless of path.
+  run_guard protected-paths.sh \
+    "$(hook_envelope Bash '' 'echo x > src/index.ts')"
+  assert_success
+}
+
+@test "protected-paths: a multi-operand Bash mutation is blocked on its SECOND target, not admitted by its first" {
+  # A command naming an admitted doc first and a guard script second must still
+  # block: adjudication continues past an admitted operand rather than
+  # returning a verdict on the strength of operand one.
+  run_guard protected-paths.sh \
+    "$(hook_envelope Bash '' 'sed -i s/a/b/ .caws/hooks/README.md .caws/hooks/protected-paths.sh')"
+  assert_failure 2
+  assert_output --partial 'protected-paths.sh is protected'
+}
+
+@test "protected-paths: with bash-mutation-targets.sh missing, a Bash write to a guard script does NOT silently pass — fails CLOSED" {
+  run_guard_missing_lib protected-paths.sh bash-mutation-targets.sh \
+    "$(hook_envelope Bash '' 'echo x > .caws/hooks/protected-paths.sh')"
+  assert_failure 2
+  assert_output --partial 'bash-mutation-targets.sh'
 }

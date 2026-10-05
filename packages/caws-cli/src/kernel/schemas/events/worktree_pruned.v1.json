@@ -2,10 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://caws.paths.design/schemas/events/worktree_pruned.v1.json",
   "title": "worktree_pruned event payload",
-  "$comment": "Class: OPTIONAL_SPEC_ID. Records the half-state REPAIR event 'a stale registry entry was removed for a worktree with no live git/canonical backing.' Distinct from worktree_destroyed, which records that a LIVE git worktree was removed (required branch/path). Emitted by caws worktree prune/repair for the unambiguous ghost-registry class (H1) authorized by WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002. WORKTREE-REPAIR-EVENT-CONTRACT-001.",
+  "$comment": "Records ghost-registry removal or revalidated absence of an exact creation. Reconciliation appends a receipt; it neither rewrites history nor asserts task completion.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["worktree_name", "h_class", "reason"],
+  "required": [
+    "worktree_name",
+    "h_class",
+    "reason"
+  ],
   "properties": {
     "worktree_name": {
       "type": "string",
@@ -13,9 +17,10 @@
       "description": "Name of the pruned worktree (the stale key removed from worktrees.json)."
     },
     "h_class": {
-      "type": "string",
-      "enum": ["ghost_registry"],
-      "description": "The §1.4 authorized half-state class this prune repaired. Only ghost_registry (H1) is repairable by prune; the enum is closed so a future class cannot be silently pruned without a doctrine update."
+      "enum": [
+        "ghost_registry",
+        "verified_dead_creation"
+      ]
     },
     "reason": {
       "type": "string",
@@ -26,6 +31,59 @@
       "type": "string",
       "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
       "description": "Optional: the spec id the ghost registry entry claimed, when present. A legitimate ghost may lack one."
+    },
+    "created_event_seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_event_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "h_class": {
+            "const": "verified_dead_creation"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "created_event_seq",
+          "created_event_hash",
+          "branch",
+          "path"
+        ],
+        "properties": {
+          "created_event_seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_event_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
 }

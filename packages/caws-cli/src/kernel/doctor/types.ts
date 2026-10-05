@@ -165,6 +165,18 @@ export interface DoctorInput {
   readonly initResidue?: {
     readonly workingSpecYaml: boolean;
     readonly workingSpecSchemaJson: boolean;
+    /**
+     * CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: every path at which a legacy
+     * project-local spec schema was found (repo-relative, posix separators)
+     * — today `.caws/working-spec.schema.json` and
+     * `.caws/schemas/working-spec.schema.json`. The kernel is the validator,
+     * so a file at any of these paths is dead authority a reader can still
+     * mistake for the governing schema. Supersedes `workingSpecSchemaJson`,
+     * which sees only the root path; that field is retained so an older
+     * snapshot writer stays valid, and the rule falls back to it when this
+     * list is undefined (unobserved, not "none found").
+     */
+    readonly legacySpecSchemaPaths?: readonly string[];
   };
 
   /**
@@ -211,8 +223,123 @@ export interface DoctorInput {
      * skipped (treated as "unobserved", not "absent").
      */
     readonly hookPackInstalled?: boolean;
+    /**
+     * CAWS-HARNESS-TELEMETRY-ADAPTER-001: the vendored telemetry rows
+     * (TELEMETRY_ROW_DEST_PATHS — agent-heartbeat.sh, agent-stop.sh,
+     * session-log.sh, session_log_renderer.py under .caws/hooks/) that are
+     * present on disk AND carry a `hook_pack: shared` CAWS-MANAGED-HOOK
+     * header, i.e. files CAWS itself installed. The store observes this;
+     * doctor only judges. Unmanaged files at those paths are NOT reported
+     * here (local growth is never a doctor target). Combined with a
+     * non-empty `adapterPackSurfaceMarkers`, doctor fires
+     * `HOOKS_STALE_TELEMETRY_PACK`. Optional; when undefined the rule is
+     * skipped (unobserved, not absent).
+     */
+    readonly managedTelemetryRowPaths?: readonly string[];
+    /**
+     * CAWS-HARNESS-TELEMETRY-ADAPTER-001: the adapter-covered surfaces
+     * (ADAPTER_COVERED_SURFACES) whose harness-pack marker is installed in
+     * this project (e.g. `['dsh']` when `.dsh/AGENTS.md` carries a
+     * `hook_pack: dsh` CAWS-MANAGED-HOOK header). There is no persisted
+     * surface receipt, so this marker observation is how doctor infers that
+     * a surface's telemetry adapter owns the telemetry plane. Optional;
+     * when undefined the rule is skipped (unobserved, not absent).
+     */
+    readonly adapterPackSurfaceMarkers?: readonly string[];
+    /**
+     * CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: the installed surfaces
+     * whose install set STILL CONTAINS the vendored telemetry rows (e.g.
+     * `['qwen-code', 'zcode']` when those packs are installed alongside an
+     * adapter-covered surface). Non-empty means the rows under .caws/hooks/
+     * are load-bearing for a co-installed surface — its dispatchers invoke
+     * them and its own init would reinstall them — so they are NOT stale
+     * dual-writers and `HOOKS_STALE_TELEMETRY_PACK` must stay silent.
+     *
+     * Without this, the finding fires on every mixed-surface repo and its
+     * prescribed repair (`caws init --agent-surface <covered>`) deletes
+     * telemetry another live surface depends on: a remediation that disarms
+     * a working plane is worse than the drift it discharges. Optional; when
+     * undefined the observation is unavailable and the rule falls back to
+     * its prior behavior (unobserved, not "nobody claims them").
+     */
+    readonly telemetryRowClaimantSurfaces?: readonly string[];
+    /**
+     * CAWS-GATED-SURFACE-SCOPE-GUARD-001: the trust-gated surfaces
+     * (qwen-code, zcode) with USER-scope CAWS hook wiring on this machine
+     * (observed from the user-scope configs; missing/unparseable = not
+     * present). Combined with the same surface appearing in
+     * `gatedProjectHookEntriesBySurface`, doctor fires
+     * `HOOKS_USER_SCOPE_DUAL_WIRING`. Optional; undefined = unobserved
+     * (silent), matching the hookPackInstalled convention.
+     */
+    readonly userScopeCawsWiringBySurface?: readonly string[];
+    /**
+     * CAWS-GATED-SURFACE-SCOPE-GUARD-001: the trust-gated surfaces with
+     * CAWS hook entries in the PROJECT-scope config
+     * (.qwen/settings.json / .zcode/config.json). Optional; undefined =
+     * unobserved (silent).
+     */
+    readonly gatedProjectHookEntriesBySurface?: readonly string[];
+    /**
+     * CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: the INSTALLED shared pack
+     * version (hook_pack_version header of an installed .caws/hooks row)
+     * and the SHIPPING SHARED_PACK_VERSION the store was built with. When
+     * both are present and installed < shipping, doctor fires
+     * HOOKS_INSTALLED_PACK_VERSION_LAG. Optional; either undefined =
+     * unobserved (silent).
+     */
+    readonly systemRuntime?: SystemRuntimeObservation;
+    readonly installedSharedPackVersion?: number;
+    readonly shippingSharedPackVersion?: number;
+    /**
+     * HOOKPACK-COPIED-PACK-LAG-VISIBILITY-001 /
+     * CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: installed copied
+     * shared hook files whose BODY differs from the shipping template once the
+     * install-time version stamp is normalized on both sides (see
+     * observeSharedPackBodyDrift), classified against the installer-written
+     * pristine baseline: localGrowth = installed body differs from its
+     * recorded baseline (deliberate repo-owned edits); upstreamChange =
+     * baseline differs from the current template (the retrofit must port
+     * those too); baselinePresent = false means NO baseline was recorded
+     * (installed before baselines shipped) — unobserved, never downgraded.
+     * Growth rows fire HOOKS_PACK_LOCAL_GROWTH (info); non-growth rows keep
+     * HOOKS_PACK_BODY_DRIFT (warning). Undefined or empty = clean (silent).
+     */
+    readonly installedSharedPackBodyDrift?: readonly SharedPackDriftRow[];
+    /**
+     * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy
+     * (.caws/hooks/hook-policy.json) with its fork provenance and compiled
+     * chain freshness already measured by the store. UNDEFINED means the repo
+     * has no policy file — silent, never a finding.
+     */
+    readonly repoHookPolicy?: RepoHookPolicyObservation;
+    /**
+     * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the superseded
+     * .caws/hooks/adapter-policy.json is still on disk. Deliberately
+     * independent of `repoHookPolicy`: the legacy frozen-chain file is most
+     * worth naming in a repo that has NOT adopted the replacement.
+     */
+    readonly legacyAdapterPolicyPresent?: boolean;
+    /**
+     * CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmp files in
+     * .caws/leases/ (names + ages, observed via the atomic-write lister).
+     * Optional; undefined = unobserved (silent).
+     */
+    readonly strandedLeaseTmpFiles?: readonly { readonly name: string; readonly ageMs: number }[];
+    /** Missing, unreadable, and present are distinct. Undefined is unobserved. */
+    readonly globalHomeObservation?: GlobalHomeObservation;
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
+    /**
+     * CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: for each name carried by a
+     * `worktree_created` event (latest event per name wins), whether the path
+     * the event recorded exists on disk. Used by §2e's verifiable-tombstone
+     * downgrade: an orphan whose recorded path is observed absent (and whose
+     * branch is absent, and which hosts no linked worktree) renders as INFO,
+     * not a warning nobody can discharge. A name missing from this map is
+     * UNOBSERVED — unobserved never downgrades.
+     */
+    readonly createdWorktreePathExistsByName?: Readonly<Record<string, boolean>>;
     /**
      * Count of yaml files at the top of `.caws/specs/.archive/`
      * (excludes `.unrecoverable/` subdirectory). Retained for
@@ -266,6 +393,14 @@ export interface DoctorInput {
     readonly currentBranch: string;
     readonly baseBranch: string;
   };
+  /**
+   * CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: local branch refs observed
+   * via `git for-each-ref --format=%(refname) refs/heads` (full ref names,
+   * e.g. `refs/heads/main`). Consumed by §2e's verifiable-tombstone
+   * downgrade to prove an event-orphan's recorded branch no longer exists.
+   * Undefined when the observation failed — unobserved never downgrades.
+   */
+  readonly localBranchRefs?: readonly string[];
 
   /**
    * Reason string when `git worktree list --porcelain` failed. Surfaced
@@ -308,4 +443,95 @@ export interface DoctorReport {
   };
   /** True iff zero error-severity findings. Warnings/infos do not unset clean. */
   readonly clean: boolean;
+}
+
+/** Byte integrity is an observation, not native activation or release authority. */
+export type GlobalHomeObservation =
+  | { readonly kind: 'absent'; readonly root: string }
+  | {
+      readonly kind: 'unreadable';
+      readonly root: string;
+      readonly error: { readonly code: string; readonly message: string };
+    }
+  | {
+      readonly kind: 'present';
+      readonly root: string;
+      readonly entries: readonly string[];
+      readonly stampPresent: boolean;
+      readonly runtime:
+        | { readonly status: 'absent' }
+        | { readonly status: 'verified'; readonly digest: string }
+        | { readonly status: 'invalid'; readonly error: string };
+    };
+
+/** Observed configured code source, not proof of native harness activation. */
+export interface SystemRuntimeObservation {
+  readonly surfaces: readonly string[];
+  readonly legacySurfaces: readonly string[];
+  readonly overrides: readonly string[];
+  readonly digest?: string;
+  readonly error?: string;
+}
+
+/**
+ * CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: one drifted shared
+ * hook file, classified against its pristine baseline. The kernel-local shape
+ * the store/init observer constructs (same pattern as GitWorktreeEntry) —
+ * doctor judges, it never reads baselines itself.
+ */
+/**
+ * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: one `forks` record in the repo-local
+ * hook policy, measured against the pack the running CLI ships.
+ *
+ * The kernel never reads a template. The store computes the comparison and
+ * hands the verdict over as data — which is why `upstreamChange` is optional
+ * rather than boolean: absent means the shipped counterpart could not be
+ * measured (the pack ships nothing by that name, or its template is
+ * unreadable), and unobserved must never render as "current".
+ */
+export interface RepoPolicyForkRow {
+  /** Which `surfaces` key carries the fork (`default` or a named surface). */
+  readonly surface: string;
+  readonly handler: string;
+  readonly recordedPack: string;
+  readonly recordedPackVersion: number;
+  /** SHARED_PACK_VERSION of the CLI that produced this observation. */
+  readonly shippingPackVersion: number;
+  /** The justification the fork recorded; rendered so review sees it. */
+  readonly reason: string;
+  /** Shipped body differs from the sha256 recorded at fork time. */
+  readonly upstreamChange?: boolean;
+}
+
+/** One event whose compiled `.chain` sidecar disagrees with the policy. */
+export interface RepoPolicyChainRow {
+  readonly event: string;
+  /** The staleness reason from the shared comparator, verbatim. */
+  readonly reason: string;
+}
+
+/**
+ * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy as doctor
+ * sees it. ABSENT is modelled by the field being undefined on the snapshot,
+ * not by a variant here — a repo that never opted in has nothing to report,
+ * and `invalid` must stay distinguishable from it. Treating an unparseable
+ * policy as absent would report a repo healthy at the moment its guard plane
+ * is failing closed on every tool call.
+ */
+export type RepoHookPolicyObservation =
+  | { readonly kind: 'invalid'; readonly error: string }
+  | {
+      readonly kind: 'valid';
+      readonly forks: readonly RepoPolicyForkRow[];
+      readonly staleChains: readonly RepoPolicyChainRow[];
+    };
+
+export interface SharedPackDriftRow {
+  readonly destPath: string;
+  /** A pristine baseline was recorded for this file. False = unobserved. */
+  readonly baselinePresent: boolean;
+  /** Installed body differs from the baseline: deliberate local growth. */
+  readonly localGrowth: boolean;
+  /** Baseline differs from the current template: upstream moved since install. */
+  readonly upstreamChange: boolean;
 }

@@ -96,7 +96,10 @@ describe('verifyChain: event_hash content tamper (A2 — the core integrity prop
     (_label, mutate) => {
       const chain = validChain(2);
       // Tamper the second event's content but KEEP its (now-stale) event_hash.
-      chain[1] = { ...mutate(chain[1] as ChainedEvent), event_hash: (chain[1] as ChainedEvent).event_hash };
+      chain[1] = {
+        ...mutate(chain[1] as ChainedEvent),
+        event_hash: (chain[1] as ChainedEvent).event_hash,
+      };
       const result = verifyChain(chain);
       expect(isErr(result)).toBe(true);
       expect(rulesOf(result)).toContain(EVIDENCE_RULES.CHAIN_EVENT_HASH_MISMATCH);
@@ -145,14 +148,20 @@ describe('verifyChain: seq integrity (A4)', () => {
   test('a seq gap (1, 2, 4) -> seq_gap', () => {
     const chain = validChain(3);
     chain[2] = { ...(chain[2] as ChainedEvent), seq: 4 };
-    chain[2] = { ...(chain[2] as ChainedEvent), event_hash: computeEventHash(chain[2] as ChainedEvent) };
+    chain[2] = {
+      ...(chain[2] as ChainedEvent),
+      event_hash: computeEventHash(chain[2] as ChainedEvent),
+    };
     expect(rulesOf(verifyChain(chain))).toContain(EVIDENCE_RULES.CHAIN_SEQ_GAP);
   });
 
   test('a duplicate seq -> seq_duplicate', () => {
     const chain = validChain(2);
     chain[1] = { ...(chain[1] as ChainedEvent), seq: 1 };
-    chain[1] = { ...(chain[1] as ChainedEvent), event_hash: computeEventHash(chain[1] as ChainedEvent) };
+    chain[1] = {
+      ...(chain[1] as ChainedEvent),
+      event_hash: computeEventHash(chain[1] as ChainedEvent),
+    };
     expect(rulesOf(verifyChain(chain))).toContain(EVIDENCE_RULES.CHAIN_SEQ_DUPLICATE);
   });
 
@@ -171,7 +180,10 @@ describe('verifyChain: seq integrity (A4)', () => {
   test('genesis seq != 1 -> seq_gap (genesis must be seq 1)', () => {
     const chain = validChain(1);
     chain[0] = { ...(chain[0] as ChainedEvent), seq: 5 };
-    chain[0] = { ...(chain[0] as ChainedEvent), event_hash: computeEventHash(chain[0] as ChainedEvent) };
+    chain[0] = {
+      ...(chain[0] as ChainedEvent),
+      event_hash: computeEventHash(chain[0] as ChainedEvent),
+    };
     expect(rulesOf(verifyChain(chain))).toContain(EVIDENCE_RULES.CHAIN_SEQ_GAP);
   });
 });
@@ -183,21 +195,30 @@ describe('verifyChain: prev_hash shape rules (A4)', () => {
       ...(chain[0] as ChainedEvent),
       prev_hash: ('sha256:' + 'b'.repeat(64)) as Hash,
     };
-    chain[0] = { ...(chain[0] as ChainedEvent), event_hash: computeEventHash(chain[0] as ChainedEvent) };
+    chain[0] = {
+      ...(chain[0] as ChainedEvent),
+      event_hash: computeEventHash(chain[0] as ChainedEvent),
+    };
     expect(rulesOf(verifyChain(chain))).toContain(EVIDENCE_RULES.CHAIN_GENESIS_PREV_HASH_NOT_NULL);
   });
 
   test('non-genesis prev_hash null -> non_genesis_prev_hash_null', () => {
     const chain = validChain(2);
     chain[1] = { ...(chain[1] as ChainedEvent), prev_hash: null };
-    chain[1] = { ...(chain[1] as ChainedEvent), event_hash: computeEventHash(chain[1] as ChainedEvent) };
+    chain[1] = {
+      ...(chain[1] as ChainedEvent),
+      event_hash: computeEventHash(chain[1] as ChainedEvent),
+    };
     expect(rulesOf(verifyChain(chain))).toContain(EVIDENCE_RULES.CHAIN_NON_GENESIS_PREV_HASH_NULL);
   });
 
   test('a malformed prev_hash (not sha256:<hex>) -> prev_hash_malformed', () => {
     const chain = validChain(2);
     chain[1] = { ...(chain[1] as ChainedEvent), prev_hash: 'not-a-hash' as Hash };
-    chain[1] = { ...(chain[1] as ChainedEvent), event_hash: computeEventHash(chain[1] as ChainedEvent) };
+    chain[1] = {
+      ...(chain[1] as ChainedEvent),
+      event_hash: computeEventHash(chain[1] as ChainedEvent),
+    };
     expect(rulesOf(verifyChain(chain))).toContain(EVIDENCE_RULES.CHAIN_PREV_HASH_MALFORMED);
   });
 });
@@ -225,7 +246,10 @@ describe('verifyChain: allErrors accumulation (A4 — midchain tamper does not h
     };
     // Fault 2: duplicate seq at index 2.
     chain[2] = { ...(chain[2] as ChainedEvent), seq: 1 };
-    chain[2] = { ...(chain[2] as ChainedEvent), event_hash: computeEventHash(chain[2] as ChainedEvent) };
+    chain[2] = {
+      ...(chain[2] as ChainedEvent),
+      event_hash: computeEventHash(chain[2] as ChainedEvent),
+    };
     const rules = rulesOf(verifyChain(chain));
     // The first fault does not stop the walk; both detectors fire.
     expect(rules).toContain(EVIDENCE_RULES.CHAIN_EVENT_HASH_MISMATCH);
@@ -270,7 +294,10 @@ describe('verifyChain: diagnostic message content (StringLiteral killers)', () =
   test('seq_duplicate message includes duplicate seq and chain index', () => {
     const chain = validChain(2);
     chain[1] = { ...(chain[1] as ChainedEvent), seq: 1 };
-    chain[1] = { ...(chain[1] as ChainedEvent), event_hash: computeEventHash(chain[1] as ChainedEvent) };
+    chain[1] = {
+      ...(chain[1] as ChainedEvent),
+      event_hash: computeEventHash(chain[1] as ChainedEvent),
+    };
     const result = verifyChain(chain);
     if (!isErr(result)) throw new Error('expected error');
     const d = result.errors.find((e) => e.rule === EVIDENCE_RULES.CHAIN_SEQ_DUPLICATE);
@@ -283,7 +310,10 @@ describe('verifyChain: diagnostic message content (StringLiteral killers)', () =
   test('seq_gap (non-genesis) message includes expected and got seq', () => {
     const chain = validChain(3);
     chain[2] = { ...(chain[2] as ChainedEvent), seq: 4 };
-    chain[2] = { ...(chain[2] as ChainedEvent), event_hash: computeEventHash(chain[2] as ChainedEvent) };
+    chain[2] = {
+      ...(chain[2] as ChainedEvent),
+      event_hash: computeEventHash(chain[2] as ChainedEvent),
+    };
     const result = verifyChain(chain);
     if (!isErr(result)) throw new Error('expected error');
     const d = result.errors.find((e) => e.rule === EVIDENCE_RULES.CHAIN_SEQ_GAP);
@@ -297,7 +327,10 @@ describe('verifyChain: diagnostic message content (StringLiteral killers)', () =
   test('seq_gap (genesis) message says genesis must have seq=1', () => {
     const chain = validChain(1);
     chain[0] = { ...(chain[0] as ChainedEvent), seq: 5 };
-    chain[0] = { ...(chain[0] as ChainedEvent), event_hash: computeEventHash(chain[0] as ChainedEvent) };
+    chain[0] = {
+      ...(chain[0] as ChainedEvent),
+      event_hash: computeEventHash(chain[0] as ChainedEvent),
+    };
     const result = verifyChain(chain);
     if (!isErr(result)) throw new Error('expected error');
     const d = result.errors.find((e) => e.rule === EVIDENCE_RULES.CHAIN_SEQ_GAP);
@@ -312,7 +345,10 @@ describe('verifyChain: diagnostic message content (StringLiteral killers)', () =
     const chain = validChain(1);
     const badHash = ('sha256:' + 'b'.repeat(64)) as Hash;
     chain[0] = { ...(chain[0] as ChainedEvent), prev_hash: badHash };
-    chain[0] = { ...(chain[0] as ChainedEvent), event_hash: computeEventHash(chain[0] as ChainedEvent) };
+    chain[0] = {
+      ...(chain[0] as ChainedEvent),
+      event_hash: computeEventHash(chain[0] as ChainedEvent),
+    };
     const result = verifyChain(chain);
     if (!isErr(result)) throw new Error('expected error');
     const d = result.errors.find((e) => e.rule === EVIDENCE_RULES.CHAIN_GENESIS_PREV_HASH_NOT_NULL);
@@ -327,7 +363,10 @@ describe('verifyChain: diagnostic message content (StringLiteral killers)', () =
   test('non_genesis_prev_hash_null message includes chain index', () => {
     const chain = validChain(2);
     chain[1] = { ...(chain[1] as ChainedEvent), prev_hash: null };
-    chain[1] = { ...(chain[1] as ChainedEvent), event_hash: computeEventHash(chain[1] as ChainedEvent) };
+    chain[1] = {
+      ...(chain[1] as ChainedEvent),
+      event_hash: computeEventHash(chain[1] as ChainedEvent),
+    };
     const result = verifyChain(chain);
     if (!isErr(result)) throw new Error('expected error');
     const d = result.errors.find((e) => e.rule === EVIDENCE_RULES.CHAIN_NON_GENESIS_PREV_HASH_NULL);
@@ -340,7 +379,10 @@ describe('verifyChain: diagnostic message content (StringLiteral killers)', () =
   test('prev_hash_malformed message includes chain index', () => {
     const chain = validChain(2);
     chain[1] = { ...(chain[1] as ChainedEvent), prev_hash: 'not-a-hash' as Hash };
-    chain[1] = { ...(chain[1] as ChainedEvent), event_hash: computeEventHash(chain[1] as ChainedEvent) };
+    chain[1] = {
+      ...(chain[1] as ChainedEvent),
+      event_hash: computeEventHash(chain[1] as ChainedEvent),
+    };
     const result = verifyChain(chain);
     if (!isErr(result)) throw new Error('expected error');
     const d = result.errors.find((e) => e.rule === EVIDENCE_RULES.CHAIN_PREV_HASH_MALFORMED);
@@ -382,7 +424,9 @@ describe('verifyChain: diagnostic message content (StringLiteral killers)', () =
     // Malformed check short-circuits; mismatch must NOT fire for the same event.
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
-      expect(result.errors.some((e) => e.rule === EVIDENCE_RULES.CHAIN_EVENT_HASH_MISMATCH)).toBe(false);
+      expect(result.errors.some((e) => e.rule === EVIDENCE_RULES.CHAIN_EVENT_HASH_MISMATCH)).toBe(
+        false
+      );
     }
   });
 
@@ -436,7 +480,10 @@ describe('verifyChain: conditional expression killers', () => {
     const chain = validChain(3);
     // seq at index 2 duplicates seq at index 0.
     chain[2] = { ...(chain[2] as ChainedEvent), seq: 1 };
-    chain[2] = { ...(chain[2] as ChainedEvent), event_hash: computeEventHash(chain[2] as ChainedEvent) };
+    chain[2] = {
+      ...(chain[2] as ChainedEvent),
+      event_hash: computeEventHash(chain[2] as ChainedEvent),
+    };
     const rules = rulesOf(verifyChain(chain));
     expect(rules).toContain(EVIDENCE_RULES.CHAIN_SEQ_DUPLICATE);
     // The gap rule also fires (seq 1 appears again instead of 3)
@@ -453,9 +500,17 @@ describe('verifyChain: conditional expression killers', () => {
     expect(isErr(result)).toBe(true);
     // Must find event_hash_malformed specifically — not mismatch.
     // With mutant [false], shape check skipped → mismatch fires instead → find returns undefined.
-    expect(isErr(result) ? result.errors.find((e) => e.rule === EVIDENCE_RULES.CHAIN_EVENT_HASH_MALFORMED) : undefined).toBeDefined();
+    expect(
+      isErr(result)
+        ? result.errors.find((e) => e.rule === EVIDENCE_RULES.CHAIN_EVENT_HASH_MALFORMED)
+        : undefined
+    ).toBeDefined();
     // Also assert: mismatch must NOT fire (malformed short-circuits re-hash).
-    expect(isErr(result) ? result.errors.some((e) => e.rule === EVIDENCE_RULES.CHAIN_EVENT_HASH_MISMATCH) : false).toBe(false);
+    expect(
+      isErr(result)
+        ? result.errors.some((e) => e.rule === EVIDENCE_RULES.CHAIN_EVENT_HASH_MISMATCH)
+        : false
+    ).toBe(false);
   });
 
   test('prev_hash_mismatch compound condition: prev is not null AND is a valid hash (L167)', () => {
@@ -478,7 +533,10 @@ describe('verifyChain: conditional expression killers', () => {
     // compare ev.seq(1) !== prev.seq - 1(1) = false, so NO gap fires. Real code:
     // ev.seq(1) !== prev.seq(2) + 1(3) = true, fires gap.
     chain[2] = { ...(chain[2] as ChainedEvent), seq: 1 };
-    chain[2] = { ...(chain[2] as ChainedEvent), event_hash: computeEventHash(chain[2] as ChainedEvent) };
+    chain[2] = {
+      ...(chain[2] as ChainedEvent),
+      event_hash: computeEventHash(chain[2] as ChainedEvent),
+    };
     const rules = rulesOf(verifyChain(chain));
     expect(rules).toContain(EVIDENCE_RULES.CHAIN_SEQ_GAP);
   });
@@ -493,7 +551,9 @@ describe('verifyChain: conditional expression killers', () => {
     const result = verifyChain(chain);
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
-      expect(result.errors.some((e) => e.rule === EVIDENCE_RULES.CHAIN_EVENT_HASH_MALFORMED)).toBe(true);
+      expect(result.errors.some((e) => e.rule === EVIDENCE_RULES.CHAIN_EVENT_HASH_MALFORMED)).toBe(
+        true
+      );
     }
   });
 

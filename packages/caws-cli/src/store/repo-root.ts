@@ -48,10 +48,7 @@ export interface RepoRoot {
  * caller distinguishes "not a git repo" by inspecting the thrown error's
  * stderr / status, which production execFileSync surfaces.
  */
-export type GitRunner = (
-  args: readonly string[],
-  options: { cwd: string }
-) => string;
+export type GitRunner = (args: readonly string[], options: { cwd: string }) => string;
 
 export const defaultGitRunner: GitRunner = (args, options) => {
   const execOptions: ExecFileSyncOptionsWithStringEncoding = {

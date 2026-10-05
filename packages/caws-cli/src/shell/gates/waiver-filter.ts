@@ -31,10 +31,7 @@
 //      are observational by construction. Leaving them untouched here
 //      preserves the existing `unmatchedViolations` surface.
 
-import {
-  effectiveWaiversForGate,
-  type Waiver,
-} from '../../kernel';
+import { effectiveWaiversForGate, type Waiver } from '../../kernel';
 
 import type { GatesReport, GatesViolation } from './gate-result-contract';
 
@@ -95,16 +92,12 @@ export interface WaiverFilterResult {
  * && (no spec_id OR matches input.specId)) is the only applicability
  * decision. Path scoping is not consulted (see file header).
  */
-export function filterWaivedViolations(
-  input: WaiverFilterInput
-): WaiverFilterResult {
+export function filterWaivedViolations(input: WaiverFilterInput): WaiverFilterResult {
   // Per-gate effective waivers, computed lazily so we don't pay the cost
   // for gates that have no violations in this report.
   const effectiveByGate = new Map<string, readonly Waiver[]>();
   const policyGateSet =
-    input.policyGateIds === undefined
-      ? undefined
-      : new Set<string>(input.policyGateIds);
+    input.policyGateIds === undefined ? undefined : new Set<string>(input.policyGateIds);
 
   function effectiveFor(gate: string): readonly Waiver[] {
     // Waivers only touch policy-declared gates. An unmatched report

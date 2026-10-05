@@ -2,6 +2,46 @@
 
 This project uses [CAWS](https://github.com/paths-design/caws) (Coding Agent Working Standard) for quality-assured AI-assisted development. CAWS v11.1+ ships a small set of governed commands; this guide assumes that surface.
 
+## Runtime setup
+
+Project `.caws/` owns governance. Shared executable hooks, dispatch and renderers
+live under `~/.caws` (absolute `CAWS_HOME` overrides it). Install once with
+`caws init adapters install`, configure the native harness with `adapters configure`,
+and retire reviewed legacy project registrations with `adapters migrate`.
+Preview each operation with `--plan`; consult its dedicated `--help`.
+New projects inherit configured system behavior through `caws init --agent-surface`.
+Agents in each harness must verify native lifecycle, guards and session rendering.
+Reprieves are human-granted exceptions covering one session in one repo (`--all-repos` widens); leases remain visibility.
+
+## Coding rigor: acceptance, review and evidence
+
+Apply this standard to reviews and implementation; scale verification to risk.
+The full guide is `docs/guides/coding-rigor.md` in the CAWS repository and in the
+installed CLI package. These requirements also apply without a local guide copy.
+
+- **Context and authority:** identify revision, actual diff/base, owned
+  worktree/spec and consumer contract. Review authorizes inspection and findings;
+  fixes, evidence recording and publication need corresponding authorization.
+- **Acceptance:** define observable results, specific tests/checks and a
+  counterexample that must fail. Rank failures by trigger, cost and resolve-now
+  or defer decision; identify irreversible choices and growing dependencies.
+- **Falsification:** trace the actual entry point to consumer-visible behavior,
+  including rejection, partial failure and cleanup. Assert semantic values and
+  state. Use meaningful negative controls or mutation checks for consequential
+  logic; never lower declared floors. Ask what could be wrong while tests pass.
+- **Evidence:** cite commands, cwd/revision, exit status, selected tests, output
+  and runtime artifacts. Inspect before/after state for side effects. Preserve
+  failed/skipped/interrupted attempts and artifact identity. Keep generated
+  receipts out of source commits.
+- **Bounded claims:** distinguish source review, tests, installed packages,
+  native execution, acceptance records, CI, merge and deployment. Passing gates
+  or exit zero alone do not establish completion. State unverified behavior and
+  the exact additional observation needed to close each material gap.
+- **Report:** lead with the highest-impact finding, its concrete trigger,
+  incorrect result, impact and correction. Separate next actions into
+  investigate / implement / change with where and why. Name the strongest
+  objection when changing course; say plainly when the plan is sound.
+
 ## Build & Test
 
 ```bash
@@ -18,7 +58,7 @@ caws doctor              # Project-wide CAWS drift detection
 .caws/
   specs/                 # Per-feature specs (canonical; the only spec location)
   specs/.archive/        # Archived specs (filesystem-authoritative)
-  policy.yaml            # Gates + risk_tier change budgets
+  policy.yaml            # Gates + legacy sizing goals (advisory)
   waivers/               # Per-id waiver files
   agents.json            # Session registry (gitignored runtime cache)
   leases/                # Per-session liveness leases (gitignored)
@@ -33,7 +73,7 @@ The governed command groups are:
 
 <!-- command-groups:start -->
 ```
-init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree
+init  doctor  status  tui  scope  hooks  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree  goal
 ```
 <!-- command-groups:end -->
 
@@ -50,7 +90,7 @@ For a new feature:
 ```bash
 # Created as a DRAFT — `active` means a worktree is bound and the slice is being
 # worked, which creation cannot claim. `--activate` opts out.
-caws specs create FEAT-001 --title "My Feature" --mode feature --risk-tier 3
+caws specs create FEAT-001 --title "My Feature" --mode feature
 # Then edit .caws/specs/FEAT-001.yaml to populate scope/invariants/acceptance/...
 git add .caws/specs/FEAT-001.yaml && git commit -m "chore(caws): create FEAT-001 spec"
 # Binding activates the draft in the same transaction.
@@ -58,13 +98,15 @@ caws worktree create wt-feat-001 --spec FEAT-001
 cd .caws/worktrees/wt-feat-001
 ```
 
-## v11 Spec Shape
+## Spec Shape
+
+New specs have no risk tier. Existing tiered specs remain readable without migration.
+Contracts, observability, rollback and security requirements can be supplied as needed.
 
 Specs at `.caws/specs/<id>.yaml` carry:
 
 - `id` (pattern `^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$`)
 - `title` (≤200 chars)
-- `risk_tier` (integer 1|2|3 — string forms like `"T3"` are rejected)
 - `mode` (`feature|refactor|fix|doc|chore` — v10 `development` is rejected)
 - `lifecycle_state` (`draft|active|closed|archived` — replaces v10 `status:`)
 - `blast_radius.modules` (non-empty string array)
@@ -72,7 +114,7 @@ Specs at `.caws/specs/<id>.yaml` carry:
 - `invariants` (non-empty array of strings)
 - `acceptance` (array of `{id: ^A\d+$, given, when, then}` — v10 `acceptance_criteria:` is rejected)
 - `non_functional` (object; admits exactly four subkeys — `accessibility`, `performance`, `reliability`, `security` — per `spec.v1.json`, which sets `additionalProperties: false`. Each value is an array of strings.)
-- `contracts` (`{name, type: api|schema|contract-test|behavior, path?, description?}`; tier-1/2 require non-empty)
+- `contracts` (`{name, type: api|schema|contract-test|behavior, path?, description?}`; optional entries)
 
 **v10 fields removed from the schema**: `type:`, `description:`, `notes:`, `non_goals:`, `bounded_claim:`, `dependencies:`, `status_rationale:`, `change_budget:`, `created:`.
 
@@ -134,6 +176,24 @@ caws reprieve show
 A `reprieve` skips a HOOK guard at dispatch time; a `waiver` bypasses a policy
 GATE at run time. They are not interchangeable.
 
+Three more surfaces round out multi-agent visibility (none of them authority):
+
+```bash
+# Retention for .caws/sessions/ turn logs (dry-run by default), and a way to
+# hand a paused session's context to a fresh one.
+caws session prune --apply
+caws session pickup --from <session-id> --paths <path>[,<path>...]
+
+# Uncommitted working-tree overlap with another session's declared paths.
+caws working-tree check
+caws working-tree ack
+
+# Portable handoff briefs (metadata only — never file contents) for
+# session-to-session continuity, written under .caws/handoffs/.
+caws handoff export
+caws handoff import <brief-path>
+```
+
 When a refusal fires, the warning includes the claimer's session id, heartbeat age, and a pointer to any `.caws/sessions/<sessionId>/` session-log directory — read that log for context before deciding to take over. A stale heartbeat does NOT mean the prior session is dead; it may be paused.
 
 ## Spec Lifecycle
@@ -148,19 +208,20 @@ caws specs archive <id>
 
 The `.caws/specs/.archive/` directory is filesystem-authoritative — `caws specs list` reports any file under it as `lifecycle_state: archived` regardless of YAML literal. `caws specs create` refuses ids that already exist in `.archive/`.
 
-> **Budget note**: `change_budget:` is not accepted as a top-level spec field in v11.
-> Budgets derive from `.caws/policy.yaml` `risk_tiers`. Adjust thresholds via `policy.yaml`,
-> not via spec edits.
+> **Budget note**: `change_budget:` is not a v11 spec field. Legacy risk-tier budgets live in
+> `.caws/policy.yaml` `risk_tiers` as an advisory sizing goal: `budget_limit` reports an
+> overage and never blocks, and no waiver is needed. Do not trim, defer or stub work to fit
+> one; if a change outgrows its plan, say so in the spec. New tierless specs have no legacy sizing goal.
 
 ## Key Rules
 
 1. **Stay in scope** — only edit files admitted by `scope.in`, never touch `scope.out`
-2. **Respect change budgets** — stay within `max_files` and `max_loc` limits derived from `risk_tier`
+2. **Treat budgets as a sizing goal** — legacy `max_files` / `max_loc` goals are advisory; never trim, defer or stub work to fit them, and say so in the spec when a change outgrows its plan
 3. **No shadow files** — edit in place, never create `*-enhanced.*`, `*-new.*`, `*-v2.*`, `*-final.*` copies
-4. **Tests first** — write failing tests before implementation
+4. **Pin behavior first** — behavior changes need tests that fail for the right reason; documentation-only changes use documentation checks
 5. **Deterministic code** — inject time, random, and UUID generators for testability
 6. **No fake implementations** — no placeholder stubs, no `TODO` in committed code, no in-memory arrays pretending to be persistence, no hardcoded mock responses
-7. **Prove claims** — never assert "production-ready", "complete", or "battle-tested" without passing gates. Provide evidence (test results, coverage reports), not assertions.
+7. **Support claims** — cite observed behavior and its limits; passing gates alone do not establish completion or production readiness
 8. **No marketing language in docs** — avoid "revolutionary", "cutting-edge", "state-of-the-art", "enterprise-grade" in documentation and comments
 9. **Ask first for risky changes** — changes touching >10 files, >300 LOC, crossing package boundaries, or affecting security/infrastructure require discussion before implementation
 
@@ -168,15 +229,15 @@ The `.caws/specs/.archive/` directory is filesystem-authoritative — `caws spec
 
 Gates are declared in `.caws/policy.yaml` with a `mode` (`block | warn | skip`). v11's five admissible gate names:
 
-| Gate | Typical mode | Purpose |
-|------|--------------|---------|
-| `budget_limit` | block | Enforce change_budget limits derived from `risk_tier` |
-| `spec_completeness` | block | Refuse load on schema-invalid specs |
-| `scope_boundary` | block | Refuse edits outside the bound spec's `scope.in` |
-| `god_object` | warn | Flag large/responsibility-overloaded modules |
-| `todo_detection` | warn | Flag TODOs/placeholders/dangling promises in committed code |
+| Gate                | Typical mode | Purpose                                                                         |
+| ------------------- | ------------ | ------------------------------------------------------------------------------- |
+| `budget_limit`      | warn         | Report a change over the `risk_tiers` sizing goal; advisory, never blocks       |
+| `spec_completeness` | block        | Refuse load on schema-invalid specs                                             |
+| `scope_boundary`    | block        | Refuse edits outside the bound spec's `scope.in`                                |
+| `god_object`        | warn         | Flag large/responsibility-overloaded modules                                    |
+| `todo_detection`    | warn         | Flag TODOs/placeholders/dangling promises in committed code                     |
 
-Risk tier governs change-budget thresholds but does NOT directly set per-gate enforcement levels — the gate `mode` is global. v10's "T1 90% coverage / T2 80% / T3 70%" table is gone; coverage and mutation gates were not ported into v11's gate vocabulary. Run those outside CAWS in CI if you need them.
+On legacy specs, risk tier selects the sizing goal but does NOT set per-gate enforcement — the gate `mode` is global, and `budget_limit` runs as advisory whatever mode is declared (a declared `block` is reported as not honored). v10's "T1 90% coverage / T2 80% / T3 70%" table is gone; coverage and mutation gates were not ported into v11's gate vocabulary. Run those outside CAWS in CI if you need them.
 
 Run `caws gates run --spec <id>` to evaluate all declared gates. Each evaluation appends a `gate_evaluated` event to `.caws/events.jsonl`.
 
@@ -201,13 +262,13 @@ Forbidden file name modifiers: `enhanced`, `unified`, `better`, `new`, `next`, `
 
 ## Modes
 
-| Mode | Contracts | New Files | Key Artifacts |
-|------|-----------|-----------|---------------|
-| **feature** | Required first | Allowed in scope.in | Migration plan, feature flag, perf budget |
-| **refactor** | Must not change | Discouraged | Codemod script + semantic diff |
-| **fix** | Unchanged | Discouraged | Red test → green; root cause note |
-| **doc** | N/A | Docs only | Updated README/usage snippets |
-| **chore** | N/A | Build/tools only | Version updates, dependency changes |
+| Mode         | Contracts       | New Files           | Key Artifacts                             |
+| ------------ | --------------- | ------------------- | ----------------------------------------- |
+| **feature**  | Required first  | Allowed in scope.in | Migration plan, feature flag, perf budget |
+| **refactor** | Must not change | Discouraged         | Codemod script + semantic diff            |
+| **fix**      | Unchanged       | Discouraged         | Red test → green; root cause note         |
+| **doc**      | N/A             | Docs only           | Updated README/usage snippets             |
+| **chore**    | N/A             | Build/tools only    | Version updates, dependency changes       |
 
 ## Waivers
 
@@ -226,13 +287,13 @@ Repeat `--gate` for multiple gates. Gate names must appear in `.caws/policy.yaml
 
 ## Pre-Submit Checklist
 
-- [ ] Canonical spec exists and validates (`caws doctor` reports 0 spec.schema.* errors)
+- [ ] Canonical spec exists and validates (`caws doctor` reports 0 spec.schema.\* errors)
 - [ ] All tests pass (`npm test`)
 - [ ] Coverage meets your CI thresholds (run outside CAWS — coverage is not a v11 gate)
 - [ ] Lints pass (`npm run lint`)
 - [ ] Types check (`npm run typecheck`)
 - [ ] No scope violations (`caws gates run --spec <id>` passes scope_boundary)
-- [ ] Change budget not exceeded (`caws gates run` passes budget_limit; check `policy.yaml risk_tiers` for the threshold)
+- [ ] Any `budget_limit` overage is explained in the spec, not trimmed away (it is advisory and never blocks)
 - [ ] Acceptance criteria proven (each `acceptance[i]` carries `test_nodeids:` or `evidence:`; record proofs via `caws specs evidence <id> --ac <ac> --status pass --evidence-ref "<test command>"` — the only writer of the `evidence:` block the close gate reads)
 - [ ] Conventional commit message
 
@@ -240,6 +301,8 @@ Repeat `--gate` for multiple gates. Gate names must appear in `.caws/policy.yaml
 
 The following v10 commands were removed in v11.0 and are not coming back:
 
-`scaffold`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive` (the standalone command — `caws specs archive` is the replacement), `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`.
+`scaffold`, `validate` (the top-level command — `caws specs validate <file>` checks one spec file), `evaluate`, `iterate`, `diagnose`, `burnup`, `archive` (the standalone command — `caws specs archive` is the replacement), `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`.
 
-If you see any of these in older project doctrine or hooks, the surface no longer exists — fold the intent into `doctor`, `gates run`, `status`, `specs`, or `evidence record`. The hash-chained `.caws/events.jsonl` is the audit surface.
+One exception, and it is the only one: `verify-acs` was on this list and came back. `caws specs verify-acs <id>` re-derives a spec's recorded acceptance evidence against reality — the cited commit, artifact and test — instead of trusting its `status` field. Use it; the rest of the list above still stands.
+
+If you see any of the removed names in older project doctrine or hooks, the surface no longer exists — fold the intent into `doctor`, `gates run`, `status`, `specs`, or `evidence record`. The hash-chained `.caws/events.jsonl` is the audit surface.

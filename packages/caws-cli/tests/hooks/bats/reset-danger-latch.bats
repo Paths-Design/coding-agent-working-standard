@@ -128,3 +128,46 @@ run_reset() {
   after=$(find "$CAWS_TEST_REPO" -path '*/hooks/state/danger-latch-sess-A2canon.json' 2>/dev/null | wc -l | tr -d ' ')
   [ "$after" = "0" ]
 }
+
+# --- DANGER-LATCH-QUARANTINE-TRAP-001: the reset fails closed ----------------
+#
+# The reset is the ONLY human release from the trap (and from the kill path
+# behind it), so "reports success while doing nothing" is unacceptable here:
+# a snapshot invoked without its env prefix, or any invocation that locates
+# ZERO vendor state dirs, must exit non-zero with the corrected command.
+
+@test "reset fail-closed: a machine snapshot invoked WITHOUT the env prefix exits 2 with the corrected command (A10)" {
+  local tmp snap
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/caws-reset-snap-XXXXXX")"
+  # The snapshot discriminator is the install PATH SHAPE
+  # (<home>/lib/runtimes/<digest>) plus the manifest.json belt.
+  snap="$tmp/lib/runtimes/db759a4ccb13108d81082cc8a64aa0172f32af5ebb9d90e21a7ae29ed321fc00"
+  mkdir -p "$snap"
+  cp "$CAWS_TEST_HOOKS_DIR/reset-danger-latch.sh" "$snap/"
+  # lib/ must ride along: a standalone copy dies at `source lib/agent-surface.sh`
+  # under set -e before reaching any logic (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001).
+  cp -R "$CAWS_TEST_HOOKS_DIR/lib" "$snap/lib"
+  # manifest.json sibling is the structural snapshot belt.
+  touch "$snap/manifest.json"
+  # Neutral non-repo cwd keeps agent-surface's git-walk from resolving the
+  # bats checkout as the project.
+  run bash -c "cd '$snap' && bash '$snap/reset-danger-latch.sh' --session probe-snap --reason test"
+  [ "$status" -eq 2 ]
+  assert_output --partial 'machine-runtime snapshot'
+  assert_output --partial 'CAWS_MACHINE_RUNTIME=1'
+  assert_output --partial 'CAWS_PROJECT_DIR'
+  rm -rf "$tmp"
+}
+
+@test "reset fail-closed: zero vendor state dirs searched exits 2, never success-by-absence (A10)" {
+  local lone
+  lone="$(mktemp -d "${TMPDIR:-/tmp}/caws-reset-lone-XXXXXX")"
+  cp "$CAWS_TEST_HOOKS_DIR/reset-danger-latch.sh" "$lone/"
+  cp -R "$CAWS_TEST_HOOKS_DIR/lib" "$lone/lib"
+  # No manifest marker; the install root derives to a tree with no vendor
+  # state dirs — the reset located NOTHING it could search.
+  run bash -c "cd '$lone' && bash '$lone/reset-danger-latch.sh' --session probe-zero --reason test"
+  [ "$status" -eq 2 ]
+  assert_output --partial 'ZERO vendor state dirs'
+  assert_output --partial 'success-by-absence'
+}

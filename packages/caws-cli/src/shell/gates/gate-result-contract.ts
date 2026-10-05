@@ -62,7 +62,11 @@ export interface GatesReport {
 
 // (CAWS-REFACTOR-SHARED-UTILS-001) diag delegates to storeDiagnostic.
 function diag(rule: string, message: string, data?: Record<string, unknown>): Diagnostic {
-  return storeDiagnostic(rule, message, data !== undefined ? { severity: 'error', data } : { severity: 'error' });
+  return storeDiagnostic(
+    rule,
+    message,
+    data !== undefined ? { severity: 'error', data } : { severity: 'error' }
+  );
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -72,11 +76,9 @@ function isObject(v: unknown): v is Record<string, unknown> {
 function validateViolation(value: unknown, idx: number): Result<GatesViolation> {
   if (!isObject(value)) {
     return err(
-      diag(
-        SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        `violations[${idx}] is not an object.`,
-        { index: idx }
-      )
+      diag(SHELL_RULES.GATES_REPORT_INVALID_SHAPE, `violations[${idx}] is not an object.`, {
+        index: idx,
+      })
     );
   }
   if (typeof value['gate'] !== 'string' || value['gate'].length === 0) {
@@ -103,11 +105,9 @@ function validateViolation(value: unknown, idx: number): Result<GatesViolation> 
 function validateWarning(value: unknown, idx: number): Result<GatesWarning> {
   if (!isObject(value)) {
     return err(
-      diag(
-        SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        `warnings[${idx}] is not an object.`,
-        { index: idx }
-      )
+      diag(SHELL_RULES.GATES_REPORT_INVALID_SHAPE, `warnings[${idx}] is not an object.`, {
+        index: idx,
+      })
     );
   }
   const out: GatesWarning = {};
@@ -136,12 +136,7 @@ export function validateGatesReport(raw: string): Result<GatesReport> {
     );
   }
   if (!isObject(parsed)) {
-    return err(
-      diag(
-        SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        'gate report is not a JSON object.'
-      )
-    );
+    return err(diag(SHELL_RULES.GATES_REPORT_INVALID_SHAPE, 'gate report is not a JSON object.'));
   }
 
   if (typeof parsed['timestamp'] !== 'string') {

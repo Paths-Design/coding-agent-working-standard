@@ -41,11 +41,7 @@ const FRESH = '2026-06-15T11:59:00.000Z';
  */
 const STALE_DISPLAY_ONLY = 'doctor.agent.stale_display_only';
 
-function lease(
-  sessionId: string,
-  status: 'active' | 'stopping' | 'stopped',
-  lastActive: string
-) {
+function lease(sessionId: string, status: 'active' | 'stopping' | 'stopped', lastActive: string) {
   return {
     lease_version: 1,
     session_id: sessionId,
@@ -61,7 +57,12 @@ function lease(
   };
 }
 
-function report(input: Partial<DoctorInput> = {}) {
+// Merge-patch rather than Partial<DoctorInput>: exactOptionalPropertyTypes
+// makes Partial reject explicitly-undefined fields, which the spread below
+// must keep applying.
+type DoctorInputPatch = { [K in keyof DoctorInput]?: DoctorInput[K] | undefined };
+
+function report(input: DoctorInputPatch = {}) {
   return inspectProjectState({
     now: NOW,
     worktrees: {},

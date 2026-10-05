@@ -87,7 +87,7 @@ if [[ -n "$HITS" ]]; then
   MSG="scan-secrets: possible secret detected in '$(basename "$FILE_PATH")':
 $(printf '%b' "$HITS")
 Do not commit credentials. Use environment variables or a secrets manager. (Advisory — allowed.)"
-  emit_additional_context "$MSG" "PostToolUse"
+  emit_additional_context "$MSG" "PreToolUse"
 fi
 
 exit 0
