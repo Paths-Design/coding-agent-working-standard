@@ -557,7 +557,7 @@ import { isAdapterCoveredSurface } from './types';
 // or given alongside a tree-ish) is now refused under its own label naming the
 // uncommitted-work overwrite; a ref is still a branch switch and branch
 // creation (-b/-B) is still admitted.
-export const SHARED_PACK_VERSION = 91;
+export const SHARED_PACK_VERSION = 92;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

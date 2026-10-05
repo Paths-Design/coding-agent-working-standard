@@ -1,7 +1,7 @@
 {
   "shared": {
-    "version": 91,
-    "fingerprint": "ca178c82c4fb040dde22774cf8f8c875b8ca531c6fc92b32102233b62011083d"
+    "version": 92,
+    "fingerprint": "d7a558dd0a155ac0a75345b9ba40c46f18253cf00e0a856da33294957afb1d43"
   },
   "claude-code": {
     "version": 25,
@@ -24,11 +24,11 @@
     "fingerprint": "15a8a3b26f677446a99de21734732decc0ef692ebbac8c8f10fd50519d0c10aa"
   },
   "kimi-code": {
-    "version": 9,
-    "fingerprint": "ad3188ae43992ae61d0b69915c5223fe02f3d0301e54f628329053fbcb907414"
+    "version": 10,
+    "fingerprint": "c018f40a29800c5842688be41047d1b77f425c905c1f0302a68622d6f610c9a6"
   },
   "qwen-code": {
-    "version": 2,
-    "fingerprint": "cc0114a1958633e6616f376ba63f8ba2e2fc5eede98762be0c86ee633c533dae"
+    "version": 3,
+    "fingerprint": "ad19769bca96a903dd37bd3723ab5d57c4165094dec0436ea435667df51dbedb"
   }
 }

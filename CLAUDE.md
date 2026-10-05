@@ -119,9 +119,16 @@ needs no waiver. Do not trim, defer or stub work to fit one; if a change
 outgrows its plan, say so in the spec. A declared `mode: block` on
 `budget_limit` is not honored, and `caws doctor` says so.
 
-Legitimate escape:
-`caws waiver create <id> --title "<title>" --gate <gate> --reason "..." --approved-by "..." --expires-at <iso8601>`
-(singular `waiver`, not plural; `--title` is required).
+What lifts a block depends on the block; a waiver lifts none of the three below
+(it only filters `caws gates run` violations):
+
+- A hook handler's refusal (`protected-paths.sh`, `scope-guard.sh` and the other
+  PreToolUse guards): `caws reprieve grant`, run by a human, session- and
+  repo-scoped and expiring. An agent cannot grant its own.
+- A `.caws/policy.yaml` change: an Edit under an active spec whose `scope.in`
+  admits the path (widen it with `caws specs amend-scope`). Never a naked
+  `rm`/`mv`.
+- `--no-verify` on a pre-commit hook: nothing. It is not an available escape.
 
 ## Spec authoring — the recurring traps
 

@@ -42,7 +42,7 @@
 
 import type { HookPackV1 } from './types';
 
-export const QWEN_CODE_PACK_VERSION = 2;
+export const QWEN_CODE_PACK_VERSION = 3;
 
 export const QWEN_CODE_PACK: HookPackV1 = {
   id: 'qwen-code',

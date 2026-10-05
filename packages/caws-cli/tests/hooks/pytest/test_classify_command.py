@@ -211,6 +211,18 @@ class TestDenyClass:
         # Bypassing `caws specs close|archive` via naked rm is a deny.
         assert decision_of(classify("rm .caws/specs/FOO-1.yaml")) == "deny"
 
+    @pytest.mark.parametrize("cmd", ["rm .caws/policy.yaml", "mv .caws/policy.yaml /tmp/p.yaml"])
+    def test_naked_rm_mv_on_policy_yaml_names_the_spec_path_and_no_waiver(self, classify, cmd):
+        # A waiver only filters `caws gates run`; it never lifts this hook deny.
+        # The refusal must name the path that does: an Edit under a spec.
+        decision, reason, _source, _enforcement = classify(cmd)
+        assert decision == "deny"
+        assert reason == (
+            "naked rm/mv on .caws/policy.yaml — policy is governed; "
+            "change it with Edit under an active spec whose scope admits it"
+        )
+        assert "waiver" not in reason.lower()
+
 
 # ---------------------------------------------------------------------------
 # Pipe-to-local-script carve-out
