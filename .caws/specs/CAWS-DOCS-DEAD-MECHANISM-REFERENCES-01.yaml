@@ -75,3 +75,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/dead-mechanism-references.test.js::AGENTS.md"
     commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
     test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "test.each row. Tier-selection steps removed from full-guide L64/L83-98/L1195, hooks-and-agent-workflows:353, caws-developer-guide:90; existing-tiered-spec text untouched"
+    recorded_at: "2026-10-05T07:17:22.981Z"
+    test_nodeid: "packages/caws-cli/tests/ci/dead-mechanism-references.test.js::docs/agents/full-guide.md"
+    commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+    test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
