@@ -40,3 +40,11 @@ non_functional: {}
 contracts:
   - name: 'stop-block-budget'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At 46875fdb67ca0e451404739449c9051d7db6ab66 (templates/hook-packs/runtime/caws-hook.py, STOP_UNDELIVERABLE_BUDGET=3, counter at $CAWS_HOME/state/sessions/<sid>/stop-undeliverable.json): five consecutive malformed Stop results exit [2,2,2,0,2]; the three refusals carry decision:block, the 4th prints a systemMessage stating it releases over an unmet, undeliverable condition (also on stderr) and resets the counter. Break-the-fix (release disabled) failed with Expected 0, Received 2 at the 4th stop. Not observed in a native Claude/Codex session; the runtime needs caws init adapters install to take effect."
+    recorded_at: "2026-10-05T04:56:07.151Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::an undeliverable Stop result is refused a finite number of consecutive times, then released explicitly"
+    commit_sha: "46875fdb67ca0e451404739449c9051d7db6ab66"
+    test_verified_at: "46875fdb67ca0e451404739449c9051d7db6ab66"
