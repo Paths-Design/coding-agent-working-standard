@@ -18,8 +18,9 @@ scope:
     - 'packages/caws-cli/tests/kernel/evidence'
   out: []
 invariants:
-  - 'An AC''s re-derivation verdict never degrades when an additional citation is supplied; adding a citation can only hold the verdict or improve it.'
-  - 'A check that is not re-derivable IN THE CURRENT MODE (a recorded --command, or a cited test under ''exists'' mode) is reported as not-applicable for that mode, never as a not_rederived check that outranks a sibling check which did re-derive.'
+  - 'A recorded --command, which re-derivation never executes by design, does not lower a verdict established by a sibling citation that did re-derive.'
+  - 'A cited test that was located but not executed stays not_rederived and keeps its rank: existence of a check is not execution, so it may not be treated as inapplicable.'
+  - 'A check that executed and disproved the claim (refuted) still outranks every other verdict.'
 acceptance:
   - id: A1
     given: 'an AC citing a reachable --commit-sha AND a recorded --command'
