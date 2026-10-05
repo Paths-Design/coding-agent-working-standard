@@ -2,10 +2,11 @@ id: CAWS-GATES-CHANGE-BASIS-002
 title: 'budget_limit and scope_boundary measure the canonical staged index, so committed work and worktree branches are invisible to them'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: i-gates-basis
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge i-gates-basis at b8ebfc8fc2f5faab94cdcfabd9db71c509a7ec63'
 created_at: '2026-09-06T07:54:47.187Z'
-updated_at: '2026-10-05T05:58:55.891Z'
+updated_at: '2026-10-05T06:35:32.640Z'
 created_by_session: 'e12db054-1b1d-4c96-b00b-2a3edb547f08'
 blast_radius:
   modules:
