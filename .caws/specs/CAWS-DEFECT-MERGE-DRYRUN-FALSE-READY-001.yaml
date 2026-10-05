@@ -19,9 +19,11 @@ invariants:
   - 'A readiness check that cannot detect the most common failure mode must say what it does NOT check, rather than reporting an unqualified ready.'
 acceptance:
   - id: A1
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'GIVEN a worktree branch that conflicts with its base WHEN caws worktree merge <name> --dry-run runs THEN it does not report an unqualified ready, and either names the conflicting paths or states explicitly that conflict detection was not performed'
+    given: 'a worktree branch that conflicts with its base'
+    when: 'caws worktree merge <name> --dry-run runs'
+    then: >-
+      it does not report an unqualified ready: it either names the conflicting paths
+      or states explicitly that conflict detection was not performed
   - id: A2
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
