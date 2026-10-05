@@ -38,3 +38,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/specs-amend.test.js::one combined call yields the same spec as the invariant edits and --add-ac run as two calls"
     commit_sha: "843286d15e2a1021a7f2e539ef8ae788936919f9"
     test_verified_at: "843286d15e2a1021a7f2e539ef8ae788936919f9"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "remove 2 + add 1 invariant + add-ac (net line shift): exit 0, no plan_rejected; a no-net-shift variant was shown not to bite and was replaced"
+    recorded_at: "2026-10-05T05:57:59.145Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-amend.test.js::the 2026-10-04 shape (remove invariants, add one, add-ac; net line shift) does not fail with duplicated mapping key"
+    commit_sha: "843286d15e2a1021a7f2e539ef8ae788936919f9"
+    test_verified_at: "843286d15e2a1021a7f2e539ef8ae788936919f9"
