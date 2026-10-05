@@ -11,6 +11,9 @@
     "dist",
     "README.md",
     "templates/hook-packs/**",
+    "!templates/hook-packs/**/__pycache__/**",
+    "!templates/hook-packs/**/*.pyc",
+    "!templates/hook-packs/**/*.pyo",
     "!templates/hook-packs/claude-code/tmp",
     "!templates/hook-packs/claude-code/tmp/**",
     "docs/**"
@@ -84,8 +87,6 @@
     "fs-extra": "^11.0.0",
     "inquirer": "8.2.7",
     "js-yaml": "4.3.2",
-    "micromatch": "4.0.8",
-    "minimatch": "^10.2.6",
     "picomatch": "4.0.4"
   },
   "devDependencies": {
@@ -105,13 +106,13 @@
     "esbuild": "0.25.10",
     "eslint": "^9.0.0",
     "husky": "9.1.7",
-    "jest": "30.1.3",
-    "lint-staged": "15.5.2",
+    "jest": "30.5.1",
+    "lint-staged": "16.4.0",
     "prettier": "^3.0.0",
-    "ts-jest": "29.4.1",
+    "ts-jest": "29.4.14",
     "turbo": "2.10.13",
     "typescript": "^5.0.0",
-    "typescript-eslint": "8.46.4"
+    "typescript-eslint": "8.71.0"
   },
   "engines": {
     "node": ">=18.0.0"

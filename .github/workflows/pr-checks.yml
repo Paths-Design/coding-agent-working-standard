@@ -41,7 +41,7 @@ jobs:
         run: npm run build
 
       - name: Security audit
-        run: npm run audit:dependencies
+        run: npm run audit:dependencies --workspaces=false
 
       - name: Block shadow file patterns
         env:

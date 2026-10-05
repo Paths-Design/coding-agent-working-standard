@@ -44,15 +44,48 @@ Bridge claims (`caws claim --spec`) ship and bind active specs. Agent leases,
 messages and manual handoff records provide visibility and provenance, not
 additional authority. Only session lifecycle start/checkpoint/end and the
 `parallel` orchestrator remain deferred. Removed v10 commands such as top-level
-`validate`, `evaluate`, `iterate` and `hooks` are not restored by global
-adoption.
+`validate`, `evaluate` and `iterate` are not restored by global adoption. The
+current `caws hooks` group manages repository hook policy; the historical
+`caws hooks install` command remains retired.
+
+## Coding rigor: acceptance, review and evidence
+
+Apply this standard to reviews and implementation; scale verification to the
+change's risk. Full procedure: [Coding rigor](docs/guides/coding-rigor.md).
+
+- **Establish context and authority.** Identify the revision, actual diff/base,
+  owned worktree/spec and relevant consumer contract. A review authorizes
+  inspection and findings; fixes, evidence recording and publication require the
+  corresponding authorization. Preserve unrelated work.
+- **Define acceptance before completion.** Give each criterion an observable
+  result, a specific test/check and a counterexample that must fail. Rank
+  failure modes by severity, with trigger, cost and resolve-now/defer decision;
+  flag irreversible choices and dependencies that grow expensive to change.
+- **Trace behavior and challenge the tests.** Follow the actual entry point to
+  the consumer-visible result, including rejection, partial failure and cleanup.
+  Assert semantic values and state, and use meaningful negative controls or
+  mutation checks for consequential logic. Ask what could remain wrong while the
+  tests pass. Never lower declared floors to manufacture success.
+- **Retain concrete evidence.** Cite command, cwd/revision, exit status,
+  selected tests, relevant output and runtime artifacts. Inspect before/after
+  state where side effects matter. Preserve failed/skipped/interrupted attempts
+  and artifact identity; generated receipts stay outside the source ledger.
+- **Bound every conclusion.** Distinguish source review, tests,
+  installed-package behavior, native execution, recorded acceptance, CI, merge
+  and deployment. Passing gates or exit zero alone do not establish
+  completeness. Name what was not verified and the exact observation needed to
+  close each material gap.
+- **Report actionable results.** Lead with the highest-impact finding and cite
+  its trigger, incorrect result, impact and correction. Give next actions as
+  investigate / implement / change, each with where and why. Name the strongest
+  objection when changing course; say plainly when the plan is sound.
 
 ## Command surface
 
 | Command                                                                                                                                                                                                                 | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `caws init`                                                                                                                                                                                                             | Initialize project governance. `init adapters install/configure/migrate/rollback` manage machine distribution and native adoption. `init migrate` previews reviewed legacy governance conversion; `migrate apply` executes. `diff`/`port` and overwrite/adopt flags are legacy pack maintenance.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `caws doctor`                                                                                                                                                                                                           | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `caws doctor`                                                                                                                                                                                                           | Drift detection over `.caws/` state. Exits 0 (no error-severity findings/load diagnostics; warnings may remain) / 1 (error-severity findings or load diagnostics) / 2 (composition failure).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `caws status`                                                                                                                                                                                                           | Read-only dashboard: project, current context, claim, doctor findings. Never mutates `.caws/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `caws scope show / check / contention`                                                                                                                                                                                  | Explain scope, enforce scope, or report cross-worktree path contention.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `caws claim [--takeover] [--spec <id>] [--release]`                                                                                                                                                                     | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover. `--spec`/`--release` manage BRIDGE bindings (AUTH-BINDING-BRIDGE-001): session↔spec authority for non-worktree contexts — `caws claim --spec <id>` bridges to an ACTIVE spec (same `scope.in` admission as a worktree binding; refuses worktree-held or foreign-held specs), `--takeover` transitions explicitly with audit, `--release` relinquishes. Retired (closed/archived) specs confer nothing; `worktree prune` cleans ghost bindings.                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -145,8 +178,10 @@ If `.caws/working-spec.yaml` exists, plain init refuses. Use a reviewed
 
 ```bash
 # 1. Author a spec for your work
-caws specs create FEAT-1 --title "Short title" --mode feature
-$EDITOR .caws/specs/FEAT-1.yaml          # fill in scope / invariants / acceptance
+caws specs create FEAT-1 --title "Short title" --mode feature --scope-in src/foo.ts
+caws specs amend FEAT-1 --add-invariant "State the invariant"
+caws specs amend FEAT-1 --set-ac A1 --given "Initial state" --when "Action" --then "Observable result"
+# Use specs amend-scope for later scope changes; governance edits stay audited.
 
 # 2. Verify scope/structure
 caws doctor
@@ -154,7 +189,11 @@ caws scope show src/foo.ts                 # explain the scope decision
 caws scope check src/foo.ts                # enforce; exits 1 if refused
 
 # 3. Implement, run tests, then evaluate gates
+git add <changed-paths>                   # unstaged/untracked files are not evaluated
 caws gates run --spec FEAT-1               # policy decides block/warn/skip
+# Bound lanes include committed changes against their recorded base branch.
+# Elsewhere, pass --base <ref> to include committed work; empty staged input
+# without a branch basis is unavailable, not a passing scope check.
 
 # 4. Record typed evidence (test results, AC closures)
 caws evidence record --type test --spec FEAT-1 \

@@ -27,12 +27,16 @@ jobs:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
         id: dependencies
-      - run: npm run audit:dependencies
+      - run: npm run audit:dependencies --workspaces=false
+      - run: npm run build -w @paths.design/caws-cli
+        id: build
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       - run: npm run typecheck -w @paths.design/caws-cli
       - run: npm run lint -w @paths.design/caws-cli
       - run: npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2
         env:
           CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
+          CAWS_RELEASE_ARTIFACT_DIR: ${{ github.workspace }}/release-scenarios
       - name: Retain coverage evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -49,7 +53,7 @@ jobs:
         env:
           CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
       - run: node --test packages/caws-cli/scripts/scope-runtime-smoke.test.mjs
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:
           CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
       - run: npm run test:pytest -w @paths.design/caws-cli
@@ -59,7 +63,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hook-bytes-${{ github.sha }}
-          path: hook-artifacts/
+          path: |
+            hook-artifacts/
+            release-scenarios/
           if-no-files-found: warn
 
   package-upgrade:

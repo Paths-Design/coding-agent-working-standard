@@ -21,6 +21,7 @@ function createJestConfig(surfaceId, tests) {
   const config = {
     rootDir: '.',
     testEnvironment: 'node',
+    setupFiles: ['<rootDir>/tests/helpers/isolate-session-env.js'],
     testMatch: tests.map((file) => `<rootDir>/${file}`),
     testPathIgnorePatterns: ['/node_modules/'],
     moduleFileExtensions: ['ts', 'js', 'json'],
@@ -53,7 +54,9 @@ function createStrykerConfig(surfaceId) {
     ignorePatterns: ['.stryker*-tmp', '/reports', '/coverage', '/tmp', '.venv'],
     testRunner: 'jest',
     testRunnerNodeArgs: [],
-    reporters: ['clear-text', 'json', 'html'],
+    // Retained CI/local logs need progress during long mutation runs, not only
+    // a baseline line followed by silence until the final report.
+    reporters: ['progress-append-only', 'clear-text', 'json', 'html'],
     htmlReporter: { fileName: `${surface.reportDir}/index.html` },
     jsonReporter: { fileName: `${surface.reportDir}/mutation-report.json` },
     coverageAnalysis: surface.coverageAnalysis,

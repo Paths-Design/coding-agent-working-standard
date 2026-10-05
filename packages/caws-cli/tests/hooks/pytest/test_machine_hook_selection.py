@@ -113,6 +113,21 @@ class MachineHookSelection(unittest.TestCase):
              'session_ended', '--system', '--describe'],
             cwd=self.repo, env=self.env, capture_output=True, input=b'{}')
         self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(b'Usage: caws-hook', result.stderr)
+        self.assertEqual(result.stdout, b'')
+
+    def test_invalid_flags_and_surface_do_not_report_lifecycle_success(self):
+        for surface, event, flags in [('codex', 'stop', ['--unknown']),
+                                      ('missing', 'session_end', ['--describe']),
+                                      ('codex', 'stop', ['--describe', '--describe'])]:
+            with self.subTest(surface=surface, event=event, flags=flags):
+                result = subprocess.run(
+                    ['python3', str(self.home / 'bin/caws-hook'), surface, event, '--system', *flags],
+                    cwd=self.repo, env=self.env, capture_output=True, input=b'{}')
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(b'Usage: caws-hook', result.stderr)
+                self.assertEqual(result.stdout, b'')
 
     def test_description_is_read_only_and_matches_executed_override(self):
         before = {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}

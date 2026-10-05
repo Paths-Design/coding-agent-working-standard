@@ -156,7 +156,8 @@ describe('Codex project instruction merge', () => {
   test('a stale valid block is replaced while bytes outside it are preserved', () => {
     const before = '# Before\n\n';
     const after = '\n\n# After with no final newline';
-    const stale = CODEX_INSTRUCTION_BLOCK.replace('(managed, v1)', '(managed, v0)');
+    const stale = CODEX_INSTRUCTION_BLOCK.replace(/\(managed, v\d+\)/, '(managed, v0)');
+    expect(stale).not.toBe(CODEX_INSTRUCTION_BLOCK);
     fs.writeFileSync(path.join(root, 'AGENTS.md'), `${before}${stale}${after}`);
 
     const applied = mergeCodexProjectInstructions(root);

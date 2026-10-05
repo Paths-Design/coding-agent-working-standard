@@ -701,14 +701,15 @@ test('an invocation keeps its selected driver and libraries when activation race
       `
 import runpy, sys
 from pathlib import Path
+bootstrap, pointer, next_pointer = sys.argv[1], sys.argv[3], sys.argv[4]
 original = runpy.run_path
 def activate_during_load(filename, *args, **kwargs):
     if filename.endswith('/launcher.py'):
-        Path(sys.argv[3]).write_text(sys.argv[4])
-        sys.argv = [sys.argv[0], 'codex', 'pre_tool_use']
+        Path(pointer).write_text(next_pointer)
     return original(filename, *args, **kwargs)
 runpy.run_path = activate_during_load
-original(sys.argv[1], run_name='__main__')
+sys.argv = [bootstrap, 'codex', 'pre_tool_use']
+original(bootstrap, run_name='__main__')
 `,
       first.launcher,
       repo,
@@ -727,7 +728,11 @@ original(sys.argv[1], run_name='__main__')
       }),
     }
   );
-  expect(raced.status).toBe(0);
+  expect({ status: raced.status, error: raced.error?.message, stdout: raced.stdout }).toEqual({
+    status: 0,
+    error: undefined,
+    stdout: '',
+  });
   expect(raced.stderr).toContain(`${first.digest} original`);
   expect(JSON.parse(fs.readFileSync(pointer)).digest).toBe(second.digest);
   expect(invoke(home, repo).stderr).toContain(`${second.digest} updated`);
@@ -782,7 +787,7 @@ test('a bootstrap-scope fault refuses the tool call but never the session exit',
   expect(stop.stderr).toContain('CAWS machine adapter');
 });
 
-test.each(['stop', 'session_end', 'pre_compact'])(
+test.each(['stop', 'session_end', 'pre_compact', 'session_start', 'post_tool_use'])(
   '%s is an exit too, so a bootstrap-scope fault does not block it',
   (event) => {
     const home = path.join(root, 'home');
@@ -797,6 +802,64 @@ test.each(['stop', 'session_end', 'pre_compact'])(
     });
   }
 );
+
+test.each([
+  [],
+  ['codex'],
+  ['unknown-surface', 'stop'],
+  ['codex', 'session_ended'],
+  ['codex', 'stop', '--unknown'],
+  ['codex', 'stop', '--system', '--system'],
+  ['codex', 'stop', 'extra'],
+])('installed bootstrap rejects invalid invocation %j before runtime lookup', (...args) => {
+  // Jest expands each row into arguments. An empty row deliberately exercises
+  // the zero-argument invocation rather than a valid lifecycle event.
+  const home = path.join(root, 'home');
+  const installed = installMachineRuntime({ home, templatesRoot });
+  fs.unlinkSync(path.join(home, 'state/adapter-runtime.json'));
+  const command = ['python3', installed.launcher, ...args];
+  const result = spawnSync(command[0], command.slice(1), {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, CAWS_HOME: home },
+    input: '{}',
+  });
+  if (process.env.CAWS_RELEASE_ARTIFACT_DIR) {
+    const receipt = {
+      command,
+      fixture: 'installed bootstrap with missing runtime pointer',
+      exit_status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
+    fs.mkdirSync(process.env.CAWS_RELEASE_ARTIFACT_DIR, { recursive: true });
+    fs.writeFileSync(
+      path.join(
+        process.env.CAWS_RELEASE_ARTIFACT_DIR,
+        `installed-invocation-${Buffer.from(JSON.stringify(args)).toString('hex')}.json`
+      ),
+      JSON.stringify(receipt, null, 2) + '\n'
+    );
+  }
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('Usage: caws-hook');
+  expect(result.stdout).toBe('');
+});
+
+test('bootstrap and selected driver recognize the same invocation vocabulary', () => {
+  const result = spawnSync(
+    'python3',
+    [
+      '-c',
+      "import json,runpy,sys; a=runpy.run_path(sys.argv[1]); b=runpy.run_path(sys.argv[2]); print(json.dumps({k:sorted(a[k])==sorted(b[k]) for k in ['EVENTS','SURFACES']}))",
+      path.join(templatesRoot, 'runtime/bootstrap.py'),
+      path.join(templatesRoot, 'runtime/caws-hook.py'),
+    ],
+    { encoding: 'utf8' }
+  );
+  expect(result.status).toBe(0);
+  expect(JSON.parse(result.stdout)).toEqual({ EVENTS: true, SURFACES: true });
+});
 
 test('the carve-out is by event, not by one error message', () => {
   const home = path.join(root, 'home');

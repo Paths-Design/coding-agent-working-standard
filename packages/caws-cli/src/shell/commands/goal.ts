@@ -174,12 +174,15 @@ export function runGoalSetCommand(opts: GoalCommandOptions): number {
     /* best effort — a stale counter costs blocks, it does not break the gate */
   }
 
-  out(`goal set: this session will not stop until ${specId} passes verify-acs.`);
+  out(`goal set: this session's stop checks ${specId} with verify-acs.`);
+  out('  Unmet conditions block only within the configured consecutive-stop budget;');
+  out('  exhausting that budget releases the stop with a warning, not acceptance.');
   out(`  criteria held: ${acceptance.map((a) => a.id).join(', ')}`);
   out(`  session:       ${ctx.sessionId}`);
   out('');
-  out('  Only verdict=verified counts as met. not_rederived is narrative-only');
-  out('  evidence, not proof — record real proof with: caws specs evidence');
+  out('  Only verdict=verified counts as met. not_rederived means the check');
+  out('  was not established — inspect citations with: caws specs verify-acs');
+  out('  Record citations with: caws specs evidence');
   out(`  Check the live verdicts any time with: caws specs verify-acs ${specId}`);
   out('  Release the goal with: caws goal clear');
   return 0;

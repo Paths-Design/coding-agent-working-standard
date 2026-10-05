@@ -141,7 +141,7 @@ describe('mutation policy topology contract', () => {
     // mutation target must reconcile policy AND this pin in the same change
     // (6abff54f reconciled the policy for agents-conjoining.ts but not the
     // pin — the pin is the forcing function, so bump it consciously).
-    expect(result.stdout).toMatch(/PASS: 156 source files accounted for exactly once/);
+    expect(result.stdout).toMatch(/PASS: 161 source files accounted for exactly once/);
     expect(result.stdout).toMatch(/20 mutation targets across 3 surfaces/);
   });
 
@@ -199,6 +199,9 @@ describe('mutation policy topology contract', () => {
   test.each(['kernel', 'store', 'shell'])(
     '%s sandbox excludes sibling runs while retaining source and tests',
     (surface) => {
+      expect(createStrykerConfig(surface).jest.config.setupFiles).toEqual([
+        '<rootDir>/tests/helpers/isolate-session-env.js',
+      ]);
       const dir = makeTempDir();
       const required = [
         'src/init/runtime.ts',

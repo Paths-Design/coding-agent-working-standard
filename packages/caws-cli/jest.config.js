@@ -21,12 +21,12 @@
 const mainProject = {
   displayName: 'caws-cli',
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/tests/helpers/isolate-session-env.js'],
   testTimeout: 60000,
   // maxWorkers stays default (parallel). The prior corpus deadlocked under
   // parallel workers; the rebuild fixes that at the fixture-isolation layer
   // (per-worker temp repos, no shared git index / .caws state) rather than
   // forcing --runInBand. See tests/helpers/git-repo-factory.js.
-  maxWorkers: '50%',
   testMatch: ['<rootDir>/tests/**/*.test.js', '<rootDir>/src/**/*.test.js'],
   // tests/helpers, tests/fixtures, AND tests/kernel (the kernel project owns it)
   // are not test files for THIS project.
@@ -53,6 +53,7 @@ const kernelProject = {
   // to match the new location.
   displayName: 'kernel',
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/tests/helpers/isolate-session-env.js'],
   rootDir: '.',
   testMatch: ['<rootDir>/tests/kernel/**/*.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
@@ -66,6 +67,7 @@ const kernelProject = {
 
 module.exports = {
   rootDir: __dirname,
+  maxWorkers: '50%',
   verbose: true,
   projects: [mainProject, kernelProject],
   // Jest reads coverage selection and thresholds from the global config,

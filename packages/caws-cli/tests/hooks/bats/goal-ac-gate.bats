@@ -98,20 +98,31 @@ make_python3_free_path() { _make_path_without 'python3*' nopy; }
 make_jq_free_path() { _make_path_without 'jq' nojq; }
 
 _make_path_without() {
-  local exclude="$1" mirror entry bin base
-  mirror="$STUB_DIR/$2"
-  mkdir -p "$mirror"
-  while IFS= read -r entry; do
-    [[ -d "$entry" ]] || continue
-    for bin in "$entry"/*; do
-      [[ -e "$bin" ]] || continue
-      base="$(basename "$bin")"
-      # shellcheck disable=SC2254
-      case "$base" in $exclude) continue ;; esac
-      [[ -e "$mirror/$base" ]] || ln -s "$bin" "$mirror/$base" 2>/dev/null
-    done
-  done < <(printf '%s' "$PATH" | tr ':' '\n')
-  printf '%s' "$mirror"
+  # Build the same first-entry-wins mirror in one process. Forking basename
+  # and ln for every binary made a single fixture take minutes on large PATHs.
+  # Python is used only by fixture setup, before the child receives its PATH.
+  python3 - "$STUB_DIR/$2" "$1" <<'PY'
+import fnmatch
+import os
+import sys
+
+mirror, excluded = sys.argv[1:]
+os.makedirs(mirror, exist_ok=True)
+seen = set()
+for directory in dict.fromkeys(os.get_exec_path()):
+    if not os.path.isdir(directory):
+        continue
+    for entry in os.scandir(directory):
+        if entry.name in seen or fnmatch.fnmatchcase(entry.name, excluded):
+            continue
+        if not os.path.exists(entry.path):
+            continue
+        target = os.path.join(mirror, entry.name)
+        if not os.path.lexists(target):
+            os.symlink(os.path.abspath(entry.path), target)
+        seen.add(entry.name)
+print(mirror)
+PY
 }
 
 report_unmet() {

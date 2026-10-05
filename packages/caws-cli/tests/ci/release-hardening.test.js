@@ -47,9 +47,42 @@ test('release qualification requires the same dependency audit as PR CI', () => 
   );
   expect(
     workflow.jobs.tests.steps.some(
-      (step) => step.run === 'npm run audit:dependencies' && !step.if && !step['continue-on-error']
+      (step) =>
+        step.run === 'npm run audit:dependencies --workspaces=false' &&
+        !step.if &&
+        !step['continue-on-error']
     )
   ).toBe(true);
+});
+
+test.each([0, 17])('real npm routes the workflow audit to root and preserves exit %s', (status) => {
+  const root = fixture();
+  fs.mkdirSync(path.join(root, 'packages/fixture'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.npmrc'), 'workspaces=true\n');
+  fs.writeFileSync(
+    path.join(root, 'package.json'),
+    JSON.stringify({
+      private: true,
+      workspaces: ['packages/*'],
+      scripts: {
+        'audit:dependencies': `node -e "console.log('ROOT_AUDIT_EXECUTED'); process.exit(${status})"`,
+      },
+    })
+  );
+  fs.writeFileSync(
+    path.join(root, 'packages/fixture/package.json'),
+    JSON.stringify({ name: 'fixture', version: '1.0.0' })
+  );
+  for (const name of ['pr-checks.yml', 'release-qualification.yml']) {
+    const workflow = yaml.load(
+      fs.readFileSync(path.join(repoRoot, '.github/workflows', name), 'utf8')
+    );
+    const steps = (workflow.jobs.sanity || workflow.jobs.tests).steps;
+    const step = steps.find((entry) => entry.run?.startsWith('npm run audit:dependencies'));
+    const result = spawnSync('/bin/bash', ['-e', '-c', step.run], { cwd: root, encoding: 'utf8' });
+    expect(result.stdout).toContain('ROOT_AUDIT_EXECUTED');
+    expect(result.status).toBe(status);
+  }
 });
 
 test('the effective coverage config includes unexecuted runtime files and enforces a real failing verdict', () => {
@@ -57,6 +90,10 @@ test('the effective coverage config includes unexecuted runtime files and enforc
   const root = fixture();
   fs.mkdirSync(path.join(root, 'dist/store'), { recursive: true });
   fs.mkdirSync(path.join(root, 'tests/helpers'), { recursive: true });
+  fs.copyFileSync(
+    path.join(packageRoot, 'tests/helpers/isolate-session-env.js'),
+    path.join(root, 'tests/helpers/isolate-session-env.js')
+  );
   fs.writeFileSync(path.join(root, 'dist/store/probe.js'), 'exports.value = () => 7;\n');
   fs.writeFileSync(
     path.join(root, 'dist/store/unexecuted.js'),

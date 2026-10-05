@@ -155,4 +155,7 @@ if (process.platform !== 'win32') {
   }
 }
 
+// Tests and consumers share the generated reference. A clean checkout must not
+// depend on docs left by an earlier pack/docs invocation.
+run(process.execPath, ['scripts/stage-consumer-docs.mjs'], pkgRoot);
 console.log('caws-cli build complete (v11 allowlist).');

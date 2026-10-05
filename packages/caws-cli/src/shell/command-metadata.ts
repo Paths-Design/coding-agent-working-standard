@@ -965,7 +965,8 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       options: [
         {
           flag: '--dry-run',
-          description: 'Validate prerequisites only; no git, no file writes, no events',
+          description:
+            'Check prerequisites and Git merge readiness; no ref, index, working-tree or event updates (may write unreachable Git objects)',
         },
         {
           flag: '--apply',
@@ -1727,6 +1728,11 @@ export const GATES_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--spec <id>',
           description: 'Spec id this gate run is about; aliases positional <spec>',
+        },
+        {
+          flag: '--base <ref>',
+          description:
+            'Evaluate committed changes from the merge base of this ref and HEAD, plus staged changes. Registered lanes use their recorded base. Without a base only a nonempty staged index is evaluated; unstaged and untracked work is excluded.',
         },
         {
           flag: '--context <ctx>',

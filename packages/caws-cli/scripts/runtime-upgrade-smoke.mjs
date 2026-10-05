@@ -42,7 +42,20 @@ export function isolatedEnvironment(root, inherited = process.env) {
 let receiptSequence = 0;
 export function observedSpawn(command, args, options) {
   const started = Date.now();
-  const result = spawnSync(command, args, options);
+  // The qualifier owns this process group. Killing only the adapter on timeout
+  // leaves its Bash handlers running while finally removes their repository.
+  const isolatedGroup = process.platform !== 'win32';
+  const result = spawnSync(command, args, { ...options, detached: isolatedGroup });
+  let timeoutCleanup = null;
+  if (result.error?.code === 'ETIMEDOUT' && isolatedGroup && result.pid) {
+    timeoutCleanup = { process_group: result.pid, signal: 'SIGKILL', result: 'signaled' };
+    try {
+      process.kill(-result.pid, 'SIGKILL');
+    } catch (error) {
+      timeoutCleanup.result = error.code === 'ESRCH' ? 'already_exited' : 'failed';
+      timeoutCleanup.error = error.message;
+    }
+  }
   const dir = options.env?.CAWS_QUALIFICATION_ARTIFACT_DIR;
   if (dir) {
     const receipt = {
@@ -54,6 +67,7 @@ export function observedSpawn(command, args, options) {
       signal: result.signal,
       error: result.error?.message ?? null,
       duration_ms: Date.now() - started,
+      timeout_cleanup: timeoutCleanup,
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
     };
@@ -101,6 +115,38 @@ function snapshot(root, accept = () => true) {
   visit(root);
   return result;
 }
+export function retainFixtureDiagnostics(root, artifacts) {
+  const retained = [];
+  for (const project of [
+    'codex-stock',
+    'codex-custom',
+    'claude-code-stock',
+    'claude-code-custom',
+    'fresh',
+    'linked',
+  ]) {
+    for (const relative of ['.caws/sessions', '.claude/logs', '.codex/logs']) {
+      const source = path.join(root, project, relative);
+      if (!fs.existsSync(source)) continue;
+      const destination = path.join(artifacts, 'failure-traces', project, relative);
+      fs.cpSync(source, destination, {
+        recursive: true,
+        filter: (file) => !fs.lstatSync(file).isSymbolicLink(),
+      });
+      retained.push(path.relative(artifacts, destination));
+    }
+  }
+  const scratch = path.join(root, 'tmp');
+  if (fs.existsSync(scratch)) {
+    for (const entry of fs.readdirSync(scratch, { withFileTypes: true })) {
+      if (!entry.isFile() || !/^caws-hook-(execution|offers)-.+\.jsonl$/.test(entry.name)) continue;
+      const destination = path.join(artifacts, 'failure-traces/runtime-exchange', entry.name);
+      write(destination, fs.readFileSync(path.join(scratch, entry.name)));
+      retained.push(path.relative(artifacts, destination));
+    }
+  }
+  return retained;
+}
 const governance = (repo) =>
   snapshot(path.join(repo, '.caws'), (rel) =>
     ['policy.yaml', 'specs', 'waivers', 'events.jsonl', 'worktrees.json', 'agents.json'].includes(
@@ -119,7 +165,16 @@ export function qualify({
   if (json(path.join(candidate, 'package.json')).name !== packageName)
     throw new Error('Expected CAWS CLI candidate');
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-runtime-upgrade-')));
-  const env = isolatedEnvironment(root);
+  // This fixture owns creation and cleanup of its private exchange directory.
+  // Keep the reusable environment builder pure and usable by other callers
+  // which have not provisioned this fixture-specific scratch path.
+  const fixtureScratch = path.join(root, 'tmp');
+  const env = {
+    ...isolatedEnvironment(root),
+    TMPDIR: fixtureScratch,
+    TMP: fixtureScratch,
+    TEMP: fixtureScratch,
+  };
   let artifacts = null;
   if (reportPath) {
     const parent = `${path.resolve(reportPath)}.artifacts`;
@@ -128,9 +183,13 @@ export function qualify({
   }
   if (artifacts) env.CAWS_QUALIFICATION_ARTIFACT_DIR = artifacts;
   fs.mkdirSync(env.HOME, { recursive: true });
+  fs.mkdirSync(env.TMPDIR, { recursive: true });
   // Detached npm installation: no workspace dependencies or lifecycle repair.
   const consumer = path.join(root, 'consumer');
   write(path.join(consumer, 'package.json'), '{"private":true}');
+  // Stock and custom handlers can invoke bare `caws`. Their CLI must come from
+  // this detached installation too, never from the developer's global PATH.
+  env.PATH = [path.join(consumer, 'node_modules/.bin'), env.PATH || ''].join(path.delimiter);
   const entry = path.join(consumer, 'node_modules', packageName, 'dist/index.js');
   const cli = (cwd, ...args) => run(process.execPath, [entry, ...args], cwd, env);
   const git = (cwd, ...args) =>
@@ -184,8 +243,28 @@ export function qualify({
     );
     const tarball = path.join(root, packed[0].filename);
     report.tarballSha256 = hash(fs.readFileSync(tarball));
+    report.packageFiles = {
+      count: packed[0].files.length,
+      bytecode: packed[0].files
+        .filter(({ path: file }) => /(?:__pycache__\/|\.py[co]$)/.test(file))
+        .map(({ path: file }) => file),
+    };
+    assert.deepEqual(report.packageFiles.bytecode, []);
+    if (artifacts) {
+      report.candidateArtifact = path.join(artifacts, 'candidate.tgz');
+      fs.copyFileSync(tarball, report.candidateArtifact);
+    }
     run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', tarball], consumer, env);
     assert.equal(cli(consumer, '--version').trim(), report.candidateVersion);
+    const resolvedCli = run('/bin/bash', ['-c', 'command -v caws'], consumer, env).trim();
+    assert.equal(fs.realpathSync(resolvedCli), fs.realpathSync(entry));
+    const hookCliVersion = run('caws', ['--version'], consumer, env).trim();
+    assert.equal(hookCliVersion, report.candidateVersion);
+    report.hookCli = {
+      resolvedPath: resolvedCli,
+      entrySha256: hash(fs.readFileSync(entry)),
+      version: hookCliVersion,
+    };
     // Consumer resolution does not inherit workspace overrides or its lockfile.
     // Audit the actual upgraded installation before trusting the package check.
     const audit = JSON.parse(
@@ -199,6 +278,37 @@ export function qualify({
     report.cases.push({ name: 'installed-production-audit', zeroFindings: true });
     const installed = JSON.parse(cli(consumer, 'init', 'adapters', 'install', '--json'));
     report.runtimeDigest = installed.digest;
+    // Exercise the installed bootstrap, not only the selected source driver:
+    // a missing pointer fails before the driver can classify an invalid event.
+    const boundaryResults = [];
+    for (const [event, expected] of [
+      ['session_ended', 2],
+      ['stop', 0],
+      ['pre_tool_use', 2],
+    ]) {
+      const result = observedSpawn(
+        'python3',
+        [path.join(env.CAWS_HOME, 'bin/caws-hook'), 'codex', event, '--system'],
+        {
+          cwd: consumer,
+          env: { ...env, CAWS_HOME: path.join(root, 'missing-runtime') },
+          encoding: 'utf8',
+          timeout: 30000,
+          input: '{}',
+        }
+      );
+      assert.equal(
+        result.status,
+        expected,
+        JSON.stringify({ event, stdout: result.stdout, stderr: result.stderr })
+      );
+      if (event === 'session_ended') assert.match(result.stderr, /Usage: caws-hook/);
+      else assert.match(result.stderr, /adapter-runtime\.json/);
+      if (event === 'pre_tool_use') assert.equal(JSON.parse(result.stdout).decision, 'block');
+      else assert.equal(result.stdout, '');
+      boundaryResults.push({ event, exitCode: result.status });
+    }
+    report.cases.push({ name: 'installed-invocation-boundary', results: boundaryResults });
     assert.equal(
       JSON.parse(cli(consumer, 'init', 'adapters', 'install', '--plan', '--json')).changed,
       false
@@ -479,6 +589,13 @@ export function qualify({
   } catch (error) {
     report.ok = false;
     report.error = { name: error.name, message: error.message };
+    if (artifacts) {
+      try {
+        report.failureTraces = retainFixtureDiagnostics(root, artifacts);
+      } catch (retentionError) {
+        report.failureTraceError = retentionError.message;
+      }
+    }
     throw error;
   } finally {
     if (reportPath) write(path.resolve(reportPath), JSON.stringify(report, null, 2) + '\n');

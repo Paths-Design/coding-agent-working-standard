@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stable version-1 bootstrap. Runtime updates replace only the active pointer.
+"""Version-1 bootstrap. The active pointer selects an immutable runtime snapshot.
 
 Keep this protocol fixed: verify the selected driver, then execute it with the
 selected digest pinned in-process. Runtime behavior belongs in caws-hook.py.
@@ -19,6 +19,12 @@ import sys
 # release exists. The driver draws the same line, but it cannot help here: by
 # the time anything below fails, the driver has not been reached.
 ENFORCING_EVENTS = {'pre_tool_use'}
+EVENTS = {'pre_tool_use', 'post_tool_use', 'session_start', 'stop', 'pre_compact', 'session_end'}
+SURFACES = {'codex', 'claude-code', 'kimi-code', 'qwen-code', 'zcode', 'opencode', 'dsh'}
+
+
+class InvocationError(ValueError):
+    """Malformed invocation is not a native lifecycle configuration failure."""
 
 
 def confined(root, relative):
@@ -36,6 +42,14 @@ def confined(root, relative):
 
 
 def main():
+    # Validate before touching the pointer: the driver cannot classify bad
+    # arguments when bootstrap resolution fails first. Keep this vocabulary
+    # aligned with the driver (the installed-entry contract tests compare it).
+    flags = sys.argv[3:]
+    if (len(sys.argv) < 3 or len(flags) != len(set(flags)) or
+            set(flags) - {'--system', '--describe'} or
+            sys.argv[1] not in SURFACES or sys.argv[2] not in EVENTS):
+        raise InvocationError('Usage: caws-hook <surface> <pre_tool_use|post_tool_use|session_start|stop|pre_compact|session_end> [--system] [--describe]')
     home = Path(os.environ.get('CAWS_HOME', str(Path.home() / '.caws')))
     if not home.is_absolute():
         raise ValueError('CAWS_HOME must be absolute')
@@ -60,6 +74,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except InvocationError as error:
+        print('[caws machine adapter] ' + str(error), file=sys.stderr)
+        sys.exit(2)
     except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
         message = 'CAWS machine adapter: ' + str(error)
         # Always loud on stderr. Degrading is not the same as going quiet, and

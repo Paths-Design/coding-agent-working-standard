@@ -491,7 +491,13 @@ describe('argv injection is refused before any spawn (A7)', () => {
 
   test('a shell metacharacter string reaches pytest as one operand after --, never a shell', () => {
     const { root } = mkFixtureRepo();
-    const hostile = 'py/tests/test_sample.py::; rm -rf /tmp/x';
+    const sentinel = path.join(root, 'injection-sentinel');
+    const original = 'sentinel must survive unchanged\n';
+    fs.writeFileSync(sentinel, original);
+    // If interpreted by a shell, this harmless fixture-owned overwrite is
+    // observable. A deletion payload paired with an absence assertion would
+    // incorrectly pass when the injection actually ran.
+    const hostile = `py/tests/test_sample.py::; printf compromised > '${sentinel}'`;
     const { fn, calls } = spyExec();
     outcomesFor(root, spec({ A1: { test_nodeid: hostile } }), { runTests: false, execFile: fn });
     expect(calls).toHaveLength(1);
@@ -499,7 +505,7 @@ describe('argv injection is refused before any spawn (A7)', () => {
     const args = calls[0].args;
     const dd = args.indexOf('--');
     expect(dd).toBeGreaterThan(-1);
-    expect(args.slice(dd + 1)).toEqual(['tests/test_sample.py::; rm -rf /tmp/x']);
+    expect(args.slice(dd + 1)).toEqual([hostile.replace(/^py\//, '')]);
     expect(calls[0].options.timeout).toBeGreaterThan(0);
     expect(calls[0].options.killSignal).toBe('SIGKILL');
     expect(calls[0].options.maxBuffer).toBeGreaterThan(0);
@@ -519,7 +525,33 @@ describe('argv injection is refused before any spawn (A7)', () => {
       expect(real.A1[0].outcome).toBe('unavailable');
       expect(real.A1[0].detail).toMatch(/No module named pytest|python3 not found/);
     }
-    expect(fs.existsSync('/tmp/x')).toBe(false);
+    expect(fs.readFileSync(sentinel, 'utf8')).toBe(original);
+    // Sensitivity control: the same payload executed by a shell must change
+    // the sentinel. It touches only this test's temporary repository.
+    execFileSync('/bin/sh', ['-c', hostile], { cwd: root, stdio: 'pipe' });
+    expect(fs.readFileSync(sentinel, 'utf8')).toBe('compromised');
+    if (process.env.CAWS_RELEASE_ARTIFACT_DIR) {
+      fs.mkdirSync(process.env.CAWS_RELEASE_ARTIFACT_DIR, { recursive: true });
+      fs.writeFileSync(
+        path.join(process.env.CAWS_RELEASE_ARTIFACT_DIR, 'injection-control.json'),
+        JSON.stringify(
+          {
+            nodeid: hostile,
+            safe_outcome: real.A1[0],
+            pytest_available: HAS_PYTEST,
+            sentinel_before: original,
+            sentinel_after_safe_runner: original,
+            unsafe_control: {
+              command: ['/bin/sh', '-c', hostile],
+              exit_status: 0,
+              sentinel_after: fs.readFileSync(sentinel, 'utf8'),
+            },
+          },
+          null,
+          2
+        ) + '\n'
+      );
+    }
   });
 });
 

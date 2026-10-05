@@ -13,6 +13,35 @@ New projects inherit configured system behavior through `caws init --agent-surfa
 Agents in each harness must verify native lifecycle, guards and session rendering.
 Reprieves are human-granted exceptions covering one session in one repo (`--all-repos` widens); leases remain visibility.
 
+## Coding rigor: acceptance, review and evidence
+
+Apply this standard to reviews and implementation; scale verification to risk.
+The full guide is `docs/guides/coding-rigor.md` in the CAWS repository and in the
+installed CLI package. These requirements also apply without a local guide copy.
+
+- **Context and authority:** identify revision, actual diff/base, owned
+  worktree/spec and consumer contract. Review authorizes inspection and findings;
+  fixes, evidence recording and publication need corresponding authorization.
+- **Acceptance:** define observable results, specific tests/checks and a
+  counterexample that must fail. Rank failures by trigger, cost and resolve-now
+  or defer decision; identify irreversible choices and growing dependencies.
+- **Falsification:** trace the actual entry point to consumer-visible behavior,
+  including rejection, partial failure and cleanup. Assert semantic values and
+  state. Use meaningful negative controls or mutation checks for consequential
+  logic; never lower declared floors. Ask what could be wrong while tests pass.
+- **Evidence:** cite commands, cwd/revision, exit status, selected tests, output
+  and runtime artifacts. Inspect before/after state for side effects. Preserve
+  failed/skipped/interrupted attempts and artifact identity. Keep generated
+  receipts out of source commits.
+- **Bounded claims:** distinguish source review, tests, installed packages,
+  native execution, acceptance records, CI, merge and deployment. Passing gates
+  or exit zero alone do not establish completion. State unverified behavior and
+  the exact additional observation needed to close each material gap.
+- **Report:** lead with the highest-impact finding, its concrete trigger,
+  incorrect result, impact and correction. Separate next actions into
+  investigate / implement / change with where and why. Name the strongest
+  objection when changing course; say plainly when the plan is sound.
+
 ## Build & Test
 
 ```bash
@@ -189,10 +218,10 @@ The `.caws/specs/.archive/` directory is filesystem-authoritative — `caws spec
 1. **Stay in scope** — only edit files admitted by `scope.in`, never touch `scope.out`
 2. **Treat budgets as a sizing goal** — legacy `max_files` / `max_loc` goals are advisory; never trim, defer or stub work to fit them, and say so in the spec when a change outgrows its plan
 3. **No shadow files** — edit in place, never create `*-enhanced.*`, `*-new.*`, `*-v2.*`, `*-final.*` copies
-4. **Tests first** — write failing tests before implementation
+4. **Pin behavior first** — behavior changes need tests that fail for the right reason; documentation-only changes use documentation checks
 5. **Deterministic code** — inject time, random, and UUID generators for testability
 6. **No fake implementations** — no placeholder stubs, no `TODO` in committed code, no in-memory arrays pretending to be persistence, no hardcoded mock responses
-7. **Prove claims** — never assert "production-ready", "complete", or "battle-tested" without passing gates. Provide evidence (test results, coverage reports), not assertions.
+7. **Support claims** — cite observed behavior and its limits; passing gates alone do not establish completion or production readiness
 8. **No marketing language in docs** — avoid "revolutionary", "cutting-edge", "state-of-the-art", "enterprise-grade" in documentation and comments
 9. **Ask first for risky changes** — changes touching >10 files, >300 LOC, crossing package boundaries, or affecting security/infrastructure require discussion before implementation
 

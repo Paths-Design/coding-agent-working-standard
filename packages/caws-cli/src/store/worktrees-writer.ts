@@ -2432,6 +2432,32 @@ export function mergeWorktree(
 
   // Dry-run: report and return without mutation.
   if (input.dryRun === true) {
+    // Compute in Git's object database, just like the real CAS merge. This
+    // may create unreachable objects, but never updates refs, index or files.
+    // Pin both tips so the observation names exactly what was checked; a later
+    // real merge still recomputes and uses compare-and-swap.
+    let mergeCheck: Record<string, unknown> = { status: 'not_checked' };
+    if (findings.length === 0 && entry.baseBranch !== undefined && entry.branch !== undefined) {
+      const repo = repoRootFromCawsDir(cawsDir);
+      const base = runGit(['rev-parse', '--verify', `${entry.baseBranch}^{commit}`], repo);
+      const branch = runGit(['rev-parse', '--verify', `${entry.branch}^{commit}`], repo);
+      if (!base.ok || !branch.ok) {
+        findings.push('merge preflight could not resolve both branch tips');
+        mergeCheck = { status: 'unavailable' };
+      } else {
+        const baseSha = base.stdout.trim();
+        const branchSha = branch.stdout.trim();
+        const tree = runGit(['merge-tree', '--write-tree', baseSha, branchSha], repo);
+        mergeCheck = {
+          status: tree.ok ? 'clean' : 'conflict_or_error',
+          base_sha: baseSha,
+          branch_sha: branchSha,
+          ...(tree.ok ? { tree_sha: tree.stdout.trim().split('\n')[0] } : { detail: tree.reason }),
+        };
+        if (!tree.ok)
+          findings.push(`merge preflight failed (conflict or Git error): ${tree.reason}`);
+      }
+    }
     return ok({
       kind: 'dry_run',
       name: input.name,
@@ -2440,6 +2466,7 @@ export function mergeWorktree(
       data: {
         read_only: true,
         dry_run: true,
+        merge_check: mergeCheck,
         can_proceed: findings.length === 0,
         findings,
         next_commands: mergeRecoveryNextCommands(input.name, entry),

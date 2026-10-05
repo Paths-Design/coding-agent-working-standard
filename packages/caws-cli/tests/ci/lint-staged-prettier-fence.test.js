@@ -46,7 +46,7 @@ function hookInvocation() {
 const FENCED = 'packages/pkg/docs/fenced.md';
 const LOOSE = 'packages/pkg/docs/loose.md';
 
-function runHookLintStaged(npxArgs, lintStagedArgs) {
+function runHookLintStaged(npxArgs, lintStagedArgs, explicitConfig = false) {
   const repo = makeTempRepo();
   const write = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true });
@@ -73,7 +73,13 @@ function runHookLintStaged(npxArgs, lintStagedArgs) {
       ([key]) => !key.startsWith('GIT_') && !key.toLowerCase().startsWith('npm_config_')
     )
   );
-  const result = spawnSync(NPX, [...npxArgs, 'lint-staged', ...lintStagedArgs], {
+  const argv = [
+    ...npxArgs,
+    'lint-staged',
+    ...lintStagedArgs,
+    ...(explicitConfig ? ['--config', path.join(repo, '.lintstagedrc.json')] : []),
+  ];
+  const result = spawnSync(NPX, argv, {
     cwd: repo,
     encoding: 'utf8',
     env: {
@@ -84,6 +90,30 @@ function runHookLintStaged(npxArgs, lintStagedArgs) {
     },
   });
   const read = (rel) => fs.readFileSync(path.join(repo, rel), 'utf8');
+  if (process.env.CAWS_RELEASE_ARTIFACT_DIR) {
+    fs.mkdirSync(process.env.CAWS_RELEASE_ARTIFACT_DIR, { recursive: true });
+    fs.writeFileSync(
+      path.join(
+        process.env.CAWS_RELEASE_ARTIFACT_DIR,
+        explicitConfig ? 'formatting-unsafe-control.json' : 'formatting-root-hook.json'
+      ),
+      JSON.stringify(
+        {
+          command: [NPX, ...argv],
+          exit_status: result.status,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          fenced_before: UNFORMATTED,
+          fenced_after: read(FENCED),
+          loose_after: read(LOOSE),
+        },
+        null,
+        2
+      ) + '\n'
+    );
+  }
+  if (result.status !== 0)
+    throw new Error(`lint-staged exit ${result.status}\n${result.stdout}\n${result.stderr}`);
   return { result, read };
 }
 
@@ -97,14 +127,18 @@ describe('the pre-commit lint-staged run honors the root .prettierignore', () =>
   }, 60000);
 
   // The control proves the scratch repo reproduces the defect, so the case
-  // above can fail for the right reason: drop --workspaces=false and npx runs
-  // lint-staged from the workspace, where no .prettierignore exists.
-  test('without --workspaces=false, the fenced file is reformatted', () => {
+  // above can fail for the right reason: npx runs lint-staged from the
+  // workspace, where no .prettierignore exists. Modern lint-staged refuses
+  // implicit config discovery there, so supply the SAME config explicitly
+  // to ensure this control reaches the formatter instead of failing earlier.
+  test('the workspace-cwd sensitivity control reformats the fenced file', () => {
     const { npxArgs, lintStagedArgs } = hookInvocation();
     expect(npxArgs).toContain('--workspaces=false');
     const bare = npxArgs.filter((arg) => arg !== '--workspaces=false');
-    const { result, read } = runHookLintStaged(bare, lintStagedArgs);
-    expect(result.status).toBe(0);
+    const { result, read } = runHookLintStaged(bare, lintStagedArgs, true);
+    expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toMatchObject({
+      status: 0,
+    });
     // Both formatted: prettier ran, and it ran without the fence.
     expect(read(LOOSE)).toBe(FORMATTED);
     expect(read(FENCED)).toBe(FORMATTED);
