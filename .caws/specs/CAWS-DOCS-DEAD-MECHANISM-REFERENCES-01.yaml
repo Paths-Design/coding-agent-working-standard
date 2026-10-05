@@ -53,3 +53,11 @@ acceptance:
     then: 'it finds none, with a positive control proving the scan reads the files'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "13 tests: per-surface scans, a positive control that every surface reads as non-empty bytes, and a break check that each census term is flagged when present"
+    recorded_at: "2026-10-05T07:16:19.745Z"
+    test_nodeid: packages/caws-cli/tests/ci/dead-mechanism-references.test.js
+    commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+    test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
