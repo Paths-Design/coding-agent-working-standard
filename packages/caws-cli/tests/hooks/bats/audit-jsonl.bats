@@ -14,6 +14,18 @@ teardown_file() {
   caws_teardown_pack
 }
 
+setup() {
+  caws_session_isolation_begin
+  # Some payloads here carry no `cwd`, so the hook would fall back to the
+  # runner's cwd; run from inside the fixture repo instead.
+  caws_enter_fixture
+}
+
+teardown() {
+  caws_assert_session_state_isolated audit-a1 audit-a2 audit-a3 audit-a4 \
+    "${CAWS_TEST_SESSION_ID:-}"
+}
+
 _log_file() { printf '%s' "$CAWS_TEST_REPO/.claude/logs/audit.log"; }
 
 _run_audit() { # $1 = event type, $2 = JSON envelope (no single quotes inside)

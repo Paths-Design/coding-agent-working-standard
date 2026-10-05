@@ -19,6 +19,19 @@ teardown_file() {
   caws_teardown_pack
 }
 
+setup() {
+  caws_session_isolation_begin
+  # Payloads carry no `cwd`, so the hook would fall back to the runner's cwd;
+  # run from inside the fixture repo instead.
+  caws_enter_fixture
+}
+
+teardown() {
+  caws_assert_session_state_isolated sess-a1-001 sess-a1-int sess-a2-owned \
+    sess-a2-foreign sess-a3-001 sess-a5-001 sess-a7-noreprieve sess-a8-canonical \
+    sess-a9-naive "${CAWS_TEST_SESSION_ID:-}"
+}
+
 # Write a reprieve state file for a session, mirroring `caws reprieve grant`'s
 # JSON shape + the shared sanitize_session filename transform. $1 = session id,
 # $2 = expires_at (ISO), $3 = handlers (comma-sep). The file lands at
