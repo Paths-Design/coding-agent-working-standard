@@ -69,3 +69,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/bats/reprieve.bats
     commit_sha: "3fb1002c0072430632d3bc76a3daba74d20486b1"
     test_verified_at: "3fb1002c0072430632d3bc76a3daba74d20486b1"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "every test's teardown asserts its own fixture session ids wrote no state newer than the test start under the REAL repo .caws/sessions (root derived from BATS_TEST_DIRNAME via git); removing caws_enter_fixture failed every test with 'session state written under the REAL repo .caws/sessions: .../quar-a9-96606'"
+    recorded_at: "2026-10-05T07:21:00.936Z"
+    test_nodeid: packages/caws-cli/tests/hooks/bats/agent-register-quarantine.bats
+    commit_sha: "3fb1002c0072430632d3bc76a3daba74d20486b1"
+    test_verified_at: "3fb1002c0072430632d3bc76a3daba74d20486b1"
