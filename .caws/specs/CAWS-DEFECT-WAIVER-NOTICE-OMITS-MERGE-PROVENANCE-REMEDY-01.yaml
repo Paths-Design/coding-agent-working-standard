@@ -37,7 +37,7 @@ acceptance:
     then: 'that hook guard is actually skipped for that session, proving the existing reprieve routing is still live at the hook rather than merely still documented'
   - id: A3
     given: 'a worktree whose branch history carries a commit touching a path outside laneScope, so caws worktree merge --dry-run refuses on lane provenance'
-    when: 'the operator reads the refusal together with the waiver and reprieve operator copy'
+    when: 'the operator reads the refusal together with the reprieve and merge operator copy'
     then: 'the routing they are given is caws specs amend-scope <spec> --add-support <path>, and neither the refusal nor the copy points them at caws reprieve or caws waiver for this class'
   - id: A4
     given: 'ONE fixture built once and reset to a common checkpoint between treatments, so only the governance artifact varies across arms'
