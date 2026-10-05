@@ -1,0 +1,25 @@
+id: CAWS-DOCS-PUSH-141-MECHANISM-CORRECTION-01
+title: 'full-guide.md attributes push exit 141 to the hook''s output pipe; the observed mechanism is the remote closing the idle SSH connection during the long pre-push hook'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-05T08:56:23.053Z'
+updated_at: '2026-10-05T08:56:23.053Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'docs/agents/full-guide.md Commit and push traps'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/agents/full-guide.md'
+  out: []
+invariants:
+  - 'Every mechanism a doc asserts is verified against live behavior or a recorded trial and labeled at the strength of that evidence.'
+acceptance:
+  - id: A1
+    given: 'two paired trials on 2026-09-19 and 2026-10-05 where git push exited 141 with nothing transferred after ''pre-push: all checks passed'' and the same push with GIT_SSH_COMMAND keepalive landed (2026-10-05: cfcff17e..0a3382c9)'
+    when: 'full-guide.md ''Commit and push traps'' is read'
+    then: 'it states the idle-SSH-connection mechanism at correlation strength, gives the keepalive invocation, and keeps ''compare ls-remote with rev-parse'' as the proof'
+non_functional: {}
+contracts: []
