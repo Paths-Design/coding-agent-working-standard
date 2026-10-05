@@ -70,3 +70,9 @@ evidence:
     recorded_at: "2026-10-05T08:24:33.644Z"
     artifact_path: docs/agents/full-guide.md
     commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "session-ownership-metadata.md 'Caller identity: one session, two resolvers': guard and CLI orders, harnessOverCanonicalSession conditions and why"
+    recorded_at: "2026-10-05T08:24:36.100Z"
+    artifact_path: docs/architecture/session-ownership-metadata.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
