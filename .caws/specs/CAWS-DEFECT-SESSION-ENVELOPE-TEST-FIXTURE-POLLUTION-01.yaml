@@ -61,3 +61,11 @@ non_functional: {}
 contracts:
   - name: 'session-envelope-hygiene'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "mechanism: parse-input.sh ~L136 replaces exported HOOK_CWD with payload cwd (empty when absent); session-cache.sh falls back to PWD and git-common-dir resolves to canonical. Suites now cd into the fixture repo. canonical .caws/sessions: 731 entries md5 a9ba3c83 before and after the 5-file run (reprieve, bash-write-guard, heredoc, parse-input, session-id-agent-pid); before the fix one quarantine run added 3 quar-* entries"
+    recorded_at: "2026-10-05T07:19:38.025Z"
+    test_nodeid: packages/caws-cli/tests/hooks/bats/reprieve.bats
+    commit_sha: "3fb1002c0072430632d3bc76a3daba74d20486b1"
+    test_verified_at: "3fb1002c0072430632d3bc76a3daba74d20486b1"
