@@ -74,3 +74,11 @@ contracts:
 # Tier 2 / mode fix: it changes a governed hook template (cross-cutting safety
 # surface) and needs the behavior contract above, but it is a narrow,
 # additive disambiguation, not a feature.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "path restore of package-lock.json: exit 2 with the path-restore label and the uncommitted-changes hazard line; branch-switch label absent. Refused-with-accurate-label, not admitted (invariant 3)"
+    recorded_at: "2026-10-05T05:42:56.542Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-checkout-pathspec.bats::worktree-guard: checkout of a tracked file is refused as a path restore, not a branch switch"
+    commit_sha: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
+    test_verified_at: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
