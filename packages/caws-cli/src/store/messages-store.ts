@@ -985,7 +985,7 @@ export function pruneMessages(
         return err(
           storeDiagnostic(
             STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-            'message prune --apply requires --older-than-ms or --include so broad chat-log cleanup is explicit.'
+            'message prune --apply requires --older-than <duration> (or --older-than-ms) or --include so broad chat-log cleanup is explicit.'
           )
         );
       }

@@ -154,7 +154,9 @@ describe('caws message prune retention cleanup', () => {
     const result = runPrune(root, { status: 'delivered', apply: true, json: true });
 
     expect(result.code).toBe(1);
-    expect(result.err).toContain('requires --older-than-ms or --include');
+    expect(result.err).toContain(
+      'requires --older-than <duration> (or --older-than-ms) or --include'
+    );
     expect(messagesBytes(root)).toBe(before);
   });
 

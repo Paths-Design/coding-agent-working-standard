@@ -36,6 +36,7 @@ import {
 import { loadLeases, resolveRepoRoot, storeDiagnostic } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import { SHELL_RULES } from '../rules';
+import { DURATION_UNITS_HELP, parseDurationToSeconds } from '../duration';
 // CAWS-AGENT-PID-SESSION-CORRELATION-001: the agent-PID record gives the
 // reprieve read path (show/revoke) a deterministic session id for no-env-var
 // callers, closing diagnosis point 2 of the motivating sterling review. The
@@ -668,55 +669,10 @@ function appendAudit(
 // caws reprieve grant
 // ---------------------------------------------------------------------------
 
-/**
- * Accepted duration units for `--for`. Longer aliases first so that "hr" is
- * matched before "h" — otherwise "1hr30m" parses "h" and then chokes on "r".
- */
-const DURATION_UNITS: ReadonlyArray<readonly [string, number]> = [
-  ['d', 86400],
-  ['hr', 3600],
-  ['h', 3600],
-  ['m', 60],
-  ['s', 1],
-];
-
-/** Human-facing list of what `--for` accepts; used in every refusal message. */
-export const DURATION_UNITS_HELP = 's (seconds), m (minutes), h/hr (hours), d (days)';
-
-/**
- * Parse a relative duration like "30m", "1h30m", "1hr30m", "120s", "2d" into
- * whole seconds. Returns null for anything unparseable.
- *
- * CAWS-REPRIEVE-RELATIVE-EXPIRY-001 A2: components may be concatenated and are
- * summed. A bare number ("30") is REFUSED rather than assumed to be minutes —
- * guessing the unit on an expiry is the "silently does something other than
- * what was asked" class, and the caller gets the unit list instead.
- */
-export function parseDurationToSeconds(raw: string): number | null {
-  const text = raw.trim().toLowerCase();
-  if (text.length === 0) return null;
-
-  let rest = text;
-  let total = 0;
-  let matched = 0;
-
-  while (rest.length > 0) {
-    const num = /^(\d+)/.exec(rest);
-    if (num === null) return null;
-    const value = Number.parseInt(num[1] as string, 10);
-    rest = rest.slice((num[1] as string).length);
-
-    const unit = DURATION_UNITS.find(([suffix]) => rest.startsWith(suffix));
-    if (unit === undefined) return null;
-    rest = rest.slice(unit[0].length);
-
-    total += value * unit[1];
-    matched += 1;
-  }
-
-  if (matched === 0) return null;
-  return total;
-}
+// The `--for` grammar lives in ../duration so the age and TTL flags
+// (`--older-than`, `--stale-ttl`) accept exactly what reprieve accepts.
+// Re-exported here because reprieve is where callers first met it.
+export { DURATION_UNITS_HELP, parseDurationToSeconds };
 
 export interface ReprieveGrantOptions extends ReprieveCommandBase {
   /** Comma-separated handler basenames to reprieve (e.g. "protected-paths.sh"). */

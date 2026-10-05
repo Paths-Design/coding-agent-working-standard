@@ -128,6 +128,7 @@
         "src/shell/commands/working-tree.ts",
         "src/shell/commands/worktree.ts",
         "src/shell/cwd-recovery.ts",
+        "src/shell/duration.ts",
         "src/shell/gates/gate-result-contract.ts",
         "src/shell/gates/local-evaluators/budget-limit.ts",
         "src/shell/gates/local-evaluators/diff-helpers.ts",

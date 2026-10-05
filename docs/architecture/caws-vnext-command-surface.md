@@ -583,9 +583,10 @@ events.jsonl, never read by the kernel for authority). Only per-session turn
 history (`turn-<NNN>.json`) is retention-eligible; `.session-envelope.json`,
 `.meta.json`, and top-level dotfiles are preserved (per-path exclusion). The
 current session and any session with a live lease are protected. `--apply`
-performs the prune; via `--older-than-ms` set the window (default 30 days). The
-session LIFECYCLE remains deferred (v11.3+). | | `caws claim --takeover` |
-Acquire ownership from a foreign session; writes `prior_owners` audit entry. | |
+performs the prune; `--older-than <duration>` (e.g. `7d`, or
+`--older-than-ms <ms>`) sets the window (default 30 days). The session LIFECYCLE
+remains deferred (v11.3+). | | `caws claim --takeover` | Acquire ownership from
+a foreign session; writes `prior_owners` audit entry. | |
 `caws claim --paths <path>` | Declare working-tree path ownership metadata on
 the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
 
@@ -667,7 +668,7 @@ by operators and agents inspecting session state.
 | `caws agents heartbeat --session-id <id> --throttle <ms> --json --include-active-summary` | Refresh `last_active` (respects throttle), and emit CAWS-native JSON describing all currently-active leases. Hook-invoked at PreToolUse; the hook script (not the CLI) composes Claude Code's `hookSpecificOutput.additionalContext` envelope from this JSON. |
 | `caws agents stop --session-id <id>`                                                      | Mark the session's lease as `status=stopped` with `stopped_at`. Hook-invoked at Stop; best-effort (SIGKILL/crash bypasses it — heartbeat staleness is the primary liveness signal).                                                                           |
 | `caws agents prune --dead [--apply]`                                                      | Operator-driven cleanup of active/stopping leases on this host whose owning process is gone. Default is dry-run. Never auto-runs.                                                                                                                             |
-| `caws agents prune --status <stopped\|stale> --older-than-ms <ms> [--apply]`              | Operator-driven retention cleanup of stopped or stale lease records. Default is dry-run. Never auto-runs.                                                                                                                                                     |
+| `caws agents prune --status <stopped\|stale> --older-than <duration> [--apply]`           | Operator-driven retention cleanup of stopped or stale lease records. Default is dry-run. Never auto-runs.                                                                                                                                                     |
 
 **Hook IO boundary:** the CLI is hook-protocol-agnostic.
 `caws agents heartbeat --json` emits CAWS-native JSON only. The Claude Code
