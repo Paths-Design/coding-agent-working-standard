@@ -65,3 +65,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/kernel/session-env-isolation.test.ts::setupFiles strips foreign identities exported by the runner shell"
     commit_sha: "7bacc170b59919da193cd3e6e567aa40d62ebfdd"
     test_verified_at: "7bacc170b59919da193cd3e6e567aa40d62ebfdd"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "re-derived with CAWS_SESSION_ID=@darianrosebrook exported to the verifier, so the jest child ran under the foreign id; message-behavior.test.js run under the same env passed too; with setupFiles emptied 4 message tests fail under a foreign CAWS_SESSION_ID"
+    recorded_at: "2026-10-05T05:53:31.445Z"
+    test_nodeid: packages/caws-cli/tests/shell/message-retention-prune.test.js
+    commit_sha: "7bacc170b59919da193cd3e6e567aa40d62ebfdd"
+    test_verified_at: "7bacc170b59919da193cd3e6e567aa40d62ebfdd"
