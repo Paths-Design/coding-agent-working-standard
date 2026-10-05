@@ -82,3 +82,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/dead-mechanism-references.test.js::docs/agents/full-guide.md"
     commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
     test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "test.each row. templates/CLAUDE.md and agents.md have readers (populate-doc-markers.mjs:181,188; agent-doc-examples and recovery-path-drift tests) so their waiver-as-scope-remedy lines were fixed; OIDC_SETUP.md had no reader and was removed (pinned by 'the unshipped OIDC_SETUP.md template stays removed')"
+    recorded_at: "2026-10-05T07:17:28.006Z"
+    test_nodeid: "packages/caws-cli/tests/ci/dead-mechanism-references.test.js::packages/caws-cli/templates/CLAUDE.md"
+    commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+    test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
