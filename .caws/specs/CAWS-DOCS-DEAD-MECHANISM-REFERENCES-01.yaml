@@ -1,0 +1,54 @@
+id: CAWS-DOCS-DEAD-MECHANISM-REFERENCES-01
+title: 'Docs, scripts and orphan templates name commands and flows that no longer exist (caws validate, waivers plural, risk tiers for new specs, parallel setup v11.3+)'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T06:31:04.620Z'
+updated_at: '2026-10-05T06:31:04.620Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'repo docs, release/verify scripts and unshipped templates'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/verify.sh'
+    - 'scripts/smoke-tests.mjs'
+    - 'scripts/release-tag-publish.mjs'
+    - 'README.md'
+    - 'AGENTS.md'
+    - 'docs/agents/full-guide.md'
+    - 'docs/guides/hooks-and-agent-workflows.md'
+    - 'docs/guides/caws-developer-guide.md'
+    - 'packages/caws-cli/templates/CLAUDE.md'
+    - 'packages/caws-cli/templates/agents.md'
+    - 'packages/caws-cli/templates/OIDC_SETUP.md'
+    - 'packages/caws-cli/tests/ci/dead-mechanism-references.test.js'
+  out: []
+invariants:
+  - 'Source of the census: the 2026-10-05 doc-check audit against the built CLI 12.2.0-rc.2 (115 help pages clean). Every finding is re-verified against the live CLI before it is changed; a doc is edited to describe the live surface, never to match an older one.'
+  - 'Waiver copy is out of scope here: CAWS-WAIVER-SURFACE-REMOVAL-001 owns every waiver mention, including README.md:148-153 (a waiver example on budget_limit, which never blocks).'
+  - 'A template is removed only after proving no reader (package.json files, src, scripts and init code), the same standard QUALITY-GATES-PACKAGE-REMOVE-001 used.'
+acceptance:
+  - id: A1
+    given: 'scripts/verify.sh runs caws validate and scripts/smoke-tests.mjs runs the removed plural waivers'
+    when: 'the change lands'
+    then: 'each invokes a command the live CLI accepts (or the step is removed), shown by running the script or the exact command against dist'
+  - id: A2
+    given: 'README.md:168 and AGENTS.md:231 call caws parallel setup deferred to v11.3+, while worktree-isolation.md says it does not exist and is not planned'
+    when: 'the change lands'
+    then: 'both say it does not exist and point at the per-spec caws worktree create loop'
+  - id: A3
+    given: 'docs/agents/full-guide.md (L64, L85-95, L1195), hooks-and-agent-workflows.md:353 and caws-developer-guide.md:90 tell authors to choose a risk tier'
+    when: 'the change lands'
+    then: 'none instructs choosing or inferring a tier for a new spec, matching full-guide.md:966'
+  - id: A4
+    given: 'packages/caws-cli/templates/CLAUDE.md, agents.md and OIDC_SETUP.md are not in the npm files list and name dead commands (caws attest, caws validate --security-scan, waiver as a scope-block remedy)'
+    when: 'no reader is proven'
+    then: 'they are removed, or each dead reference is fixed if a reader exists'
+  - id: A5
+    given: 'the census terms (caws validate, caws attest, waivers plural, parallel setup deferred, choose a risk tier)'
+    when: 'a repo-invariant test scans the in-scope docs and scripts'
+    then: 'it finds none, with a positive control proving the scan reads the files'
+non_functional: {}
+contracts: []
