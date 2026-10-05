@@ -69,3 +69,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_classify_command.py::TestConcludingMergeOfBase::test_the_whole_commit_deletions_remedy_is_admitted_and_completes_A3"
     commit_sha: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
     test_verified_at: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
+  - criterion_id: A4
+    status: pass
+    evidence_ref: Guard 2 refusal names no waiver in or out of a merge
+    recorded_at: "2026-10-05T09:07:20.115Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/merge-main-in-conclusion.test.js::the Guard 2 refusal does not present caws waiver create, in or out of a merge"
+    commit_sha: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
+    test_verified_at: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
