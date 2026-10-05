@@ -35,7 +35,7 @@ const {
   installHookPack,
   planHookPackInstall,
 } = require('../../dist/init/hook-install');
-const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
+const { SHARED_PACK, SHARED_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-shared');
 const { CLAUDE_CODE_PACK } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { OPENCODE_PACK } = require('../../dist/init/hook-packs/manifest-opencode');
 const { CODEX_PACK } = require('../../dist/init/hook-packs/manifest-codex');
@@ -486,6 +486,53 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
     // After re-stamp the body is unchanged and the version is current again.
     const after = parseManagedHeader(fs.readFileSync(abs(REL), 'utf8'));
     expect(after.hookPackVersion).toBe(SHARED_PACK.packVersion);
+  });
+
+  test('the plan of a byte-identical install proposes nothing: every destination is unchanged', () => {
+    const r = planHookPackInstall(SHARED_PACK, { repoRoot });
+    expect(r.readOnly).toBe(true);
+    expect(r.actions).toEqual(
+      SHARED_PACK.installedFiles.map(({ destPath }) => ({ destPath, action: 'unchanged' }))
+    );
+  });
+
+  test('the plan labels a stamp-only-behind hook as a re-stamp, and a content change is not one', () => {
+    const installed = fs.readFileSync(abs(REL), 'utf8');
+    fs.writeFileSync(abs(REL), installed.replace(/^(#\s*hook_pack_version:\s*)\d+/m, '$11'));
+
+    const stampOnly = planHookPackInstall(SHARED_PACK, { repoRoot }).actions.find(
+      (x) => x.destPath === REL
+    );
+    expect(stampOnly).toEqual({ destPath: REL, action: 'updated', restampOnly: true });
+
+    // Same stale stamp plus an edited body is drift, never a cosmetic re-stamp.
+    fs.writeFileSync(
+      abs(REL),
+      installed.replace(/^(#\s*hook_pack_version:\s*)\d+/m, '$11') + '\n# local growth\n'
+    );
+    const edited = planHookPackInstall(SHARED_PACK, { repoRoot }).actions.find(
+      (x) => x.destPath === REL
+    );
+    expect(edited.action).toBe('refused');
+    expect(edited.restampOnly).toBeUndefined();
+  });
+
+  test('every installed managed shared hook carries SHARED_PACK_VERSION, never the shipped placeholder', () => {
+    // The template literal ships a placeholder stamp that install must overwrite.
+    const shipped = fs.readFileSync(path.join(PACKS_ROOT, 'shared', 'scope-guard.sh'), 'utf8');
+    const placeholder = parseManagedHeader(shipped).hookPackVersion;
+    expect(placeholder).not.toBe(SHARED_PACK_VERSION);
+
+    const stamps = SHARED_PACK.installedFiles
+      .map(({ destPath }) => ({
+        destPath,
+        version: parseManagedHeader(fs.readFileSync(abs(destPath), 'utf8')).hookPackVersion,
+      }))
+      .filter(({ version }) => version !== undefined);
+    expect(stamps.length).toBeGreaterThan(0);
+    for (const { destPath, version } of stamps) {
+      expect([destPath, version]).toEqual([destPath, SHARED_PACK_VERSION]);
+    }
   });
 });
 
