@@ -166,6 +166,27 @@ const steeringSignalsPayload: TurnLogFixture = {
   },
 };
 
+/** Shapes session_log_renderer.py emits that a handcrafted fixture would not:
+ *  turn_summary is null when reasoning never reaches the summary floor, and
+ *  context.lineage is the transcript_lineage() dict when a parent session is
+ *  recorded (null otherwise). */
+const nullSummaryPayload: TurnLogFixture = {
+  ...fullRealShapedPayload,
+  turn_summary: null,
+};
+
+const lineageObject = {
+  parent_session_id: 'session-0d6c1f52-5d5b-4b0e-9c5e-3f8a2f7b9a10',
+  source: 'transcript_metadata',
+  authority: 'none',
+  source_path: '/Users/darianrosebrook/.codex/sessions/rollout-2026-09-01.jsonl',
+};
+
+const lineagePayload: TurnLogFixture = {
+  ...fullRealShapedPayload,
+  context: { ...fullRealShapedPayload.context, lineage: lineageObject },
+};
+
 // --- the contract ------------------------------------------------------------
 
 describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
@@ -286,6 +307,23 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
       ]) {
         expect(validate({ ...minimalDegradedPayload, ended_by: endedBy })).toBe(true);
       }
+    });
+
+    it('accepts a turn whose turn_summary is null (reasoning below the summary floor)', () => {
+      expect(nullSummaryPayload.turn_summary).toBeNull();
+      expect(validate(nullSummaryPayload)).toBe(true);
+      expect(validate.errors).toBeNull();
+    });
+
+    it('accepts context.lineage populated from transcript metadata', () => {
+      expect((lineagePayload.context as Record<string, unknown>).lineage).toEqual(lineageObject);
+      expect(validate(lineagePayload)).toBe(true);
+      expect(validate.errors).toBeNull();
+    });
+
+    it('accepts context.lineage null (the renderer emits null when no parent is recorded)', () => {
+      const context = { ...fullRealShapedPayload.context, lineage: null };
+      expect(validate({ ...fullRealShapedPayload, context })).toBe(true);
     });
 
     it('accepts a turn with no usage block at all', () => {
@@ -425,6 +463,39 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
     it('rejects missing required intersection keys', () => {
       const { turn_summary, ...withoutSummary } = minimalDegradedPayload;
       expectRejected(validate, withoutSummary, '', 'required');
+    });
+
+    it('rejects a turn_summary that is neither string nor null', () => {
+      expectRejected(
+        validate,
+        { ...minimalDegradedPayload, turn_summary: 5 },
+        '/turn_summary',
+        'type'
+      );
+    });
+
+    it('rejects a lineage object that claims authority', () => {
+      const context = {
+        ...fullRealShapedPayload.context,
+        lineage: { ...lineageObject, authority: 'parent' },
+      };
+      expectRejected(
+        validate,
+        { ...fullRealShapedPayload, context },
+        '/context/lineage/authority',
+        'const'
+      );
+    });
+
+    it('rejects a lineage object missing its parent session id', () => {
+      const { parent_session_id: _dropped, ...partial } = lineageObject;
+      const context = { ...fullRealShapedPayload.context, lineage: partial };
+      expectRejected(
+        validate,
+        { ...fullRealShapedPayload, context },
+        '/context/lineage',
+        'required'
+      );
     });
 
     it('rejects non-timestamps in ts_end (format is validating, not annotation)', () => {
