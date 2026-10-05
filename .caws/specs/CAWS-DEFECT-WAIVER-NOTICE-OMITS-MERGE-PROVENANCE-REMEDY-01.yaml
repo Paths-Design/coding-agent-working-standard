@@ -66,3 +66,11 @@ acceptance:
     then: 'the hook refusal is UNCHANGED, because scope.support does not lift a hook guard. This is a NON-INTERFERENCE control, not a remediation test: if scope.support ever became consulted by hook machinery, A4 could stay green while the authority boundaries had silently fused, which is the successful-but-architecturally-wrong repair this criterion exists to catch'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "real protected-paths.sh through the --system dispatcher: exit 2 BLOCKED before; exit 0 '[reprieve] protected-paths.sh skipped for session sess-hook-a' after grant; a different session still blocked"
+    recorded_at: "2026-10-05T06:25:03.494Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::A2: a real PreToolUse guard refuses, is skipped after caws reprieve grant for that session, and still refuses another session"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
