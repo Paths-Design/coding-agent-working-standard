@@ -106,7 +106,12 @@ describe('tier 0a: surface-pinned precedence (the shadowing fix)', () => {
 });
 
 describe('tier 0b: canonical CAWS_SESSION_ID read before the chain', () => {
-  test('canonical var beats every per-surface var', () => {
+  // A lone disagreeing harness payload id (CLAUDE_CODE_SESSION_ID or
+  // CODEX_THREAD_ID) wins over the canonical var
+  // (CAWS-DEFECT-SESSION-RESOLVER-CLI-GUARD-PARITY-01, pinned in
+  // tests/shell/session-resolver-parity.test.js). With a dsh var also present
+  // the harness is ambiguous, so the canonical var keeps precedence.
+  test('canonical var beats the per-surface vars when a dsh var makes the harness ambiguous', () => {
     const result = resolveWith({
       CAWS_SESSION_ID: 'canonical-id',
       DSH_SESSION_ID: 'dsh-id',

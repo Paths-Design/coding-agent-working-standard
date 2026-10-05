@@ -41,7 +41,7 @@ import { DURATION_UNITS_HELP, parseDurationToSeconds } from '../duration';
 // reprieve read path (show/revoke) a deterministic session id for no-env-var
 // callers, closing diagnosis point 2 of the motivating sterling review. The
 // grant path is human-side and remains env-free + lease-backed — unchanged.
-import { resolveAgentPidIdentity } from '../session/resolve-session';
+import { harnessOverCanonicalSession, resolveAgentPidIdentity } from '../session/resolve-session';
 
 // ---------------------------------------------------------------------------
 // Common option/result shapes.
@@ -556,14 +556,6 @@ export function resolveVendorDir(repoRoot: string, env: NodeJS.ProcessEnv): Vend
 }
 
 /**
- * Resolve the operating session id from env, mirroring the shell-side
- * resolve_caws_session_id precedence (lib/session-id.sh). The TS-side reprieve
- * command runs OUTSIDE the hook shell (it's a direct CLI invocation), so it
- * consults the boundary-crossing vars: CLAUDE_SESSION_ID → CLAUDE_CODE_SESSION_ID
- * → CODEX_THREAD_ID → CAWS_SESSION_ID → HOOK_SESSION_ID → CURSOR_TRACE_ID.
- * Returns null ("unknown") when none is set — grant refuses that.
- */
-/**
  * The env vars that indicate an agent session, in resolver precedence order.
  *
  * CAWS-REPRIEVE-NO-SELF-GRANT-001: the self-grant refusal keys on the UNION of
@@ -604,6 +596,19 @@ export function detectAgentSessionVars(env: NodeJS.ProcessEnv): string[] {
   return AGENT_SESSION_VARS.filter((name) => envHasValue(env, name));
 }
 
+/**
+ * Resolve the operating session id, mirroring the shell-side
+ * resolve_caws_session_id that the dispatcher uses to consult reprieves
+ * (lib/session-id.sh): the agent-PID record, then the payload id
+ * (HOOK_SESSION_ID), then the pinned surface var, then CAWS_SESSION_ID, then
+ * the per-surface chain. Returns "unknown" when nothing resolves; grant and
+ * revoke refuse that.
+ *
+ * CAWS_SESSION_ID yields to a disagreeing harness id under the same rule the
+ * session resolver applies (harnessOverCanonicalSession), so show/revoke look
+ * up the session the guards consult rather than a stray exported value
+ * (CAWS-DEFECT-SESSION-RESOLVER-CLI-GUARD-PARITY-01).
+ */
 function resolveSessionId(env: NodeJS.ProcessEnv, cawsDir?: string): string {
   // CAWS-AGENT-PID-SESSION-CORRELATION-001: consult the
   // agent-PID record (the same shared read the other two resolution surfaces
@@ -619,6 +624,8 @@ function resolveSessionId(env: NodeJS.ProcessEnv, cawsDir?: string): string {
   if (envHasValue(env, 'HOOK_SESSION_ID')) return env.HOOK_SESSION_ID as string;
   const pinned = SURFACE_PIN_VARS[env.CAWS_AGENT_SURFACE as AgentSurface];
   if (pinned && envHasValue(env, pinned)) return env[pinned] as string;
+  const harness = harnessOverCanonicalSession(env);
+  if (harness !== null) return harness.sessionId;
   if (envHasValue(env, 'CAWS_SESSION_ID')) return env.CAWS_SESSION_ID as string;
   for (const name of AGENT_SESSION_VARS) {
     if (envHasValue(env, name)) return env[name] as string;

@@ -5,6 +5,24 @@
 // fallbacks do not establish the invoking caller for ownership admission.
 // Source order:
 //
+//   0a. Surface pin           → when CAWS_AGENT_SURFACE names a surface with a
+//                                pinned var, that var wins; foreign vars cannot
+//                                shadow it (CAWS-DEFECT-SESSION-IDENTITY-ENV-
+//                                SHADOWING-01)
+//   0b. CAWS_SESSION_ID env   → the canonical var: normalized by the hook
+//                                dispatcher (caws_normalize_session_env) or
+//                                operator-set. Platform from CAWS_PLATFORM_FLAG,
+//                                else the pin, else "none".
+//                                One exception (harnessOverCanonicalSession):
+//                                in an agent's own shell, when exactly one
+//                                harness payload-id var (CLAUDE_CODE_SESSION_ID,
+//                                CODEX_THREAD_ID) disagrees with it, the
+//                                harness id wins and stderr names the ignored
+//                                CAWS_SESSION_ID. The hook guards resolve that
+//                                harness id from the tool payload, so stamping
+//                                CAWS_SESSION_ID would create an owner the
+//                                guards treat as foreign
+//                                (CAWS-DEFECT-SESSION-RESOLVER-CLI-GUARD-PARITY-01).
 //   1. CLAUDE_SESSION_ID env  → platform = "claude-code"
 //                                (operator-set override; deliberate)
 //   1.5. CLAUDE_CODE_SESSION_ID env → platform = "claude-code"
@@ -15,9 +33,7 @@
 //                                (Codex harness thread id; survives the tool
 //                                boundary — CAWS-SESSION-RESOLVER-GUARD-
 //                                DIVERGENCE-001 A1; the codex incident fix)
-//   1.7. CAWS_SESSION_ID env  → platform = surfaceFromEnv(env)
-//                                (generic escape hatch for any harness; same
-//                                slice)
+//   1.65. DSH_SESSION_ID env  → platform = "dsh"
 //   2. HOOK_SESSION_ID env    → platform = "claude-code"
 //                                (harness-stable id exported by the
 //                                Claude Code hook envelope via
@@ -76,6 +92,7 @@ import {
   type WorktreeRecord,
 } from '../../kernel';
 import { SHELL_RULES } from '../rules';
+import { SURFACE_ENV_VARS } from '../../init/hook-packs/surfaces.generated';
 import { writeFileAtomic } from '../../store/atomic-write';
 import { loadWorktrees } from '../../store';
 import { realpathSafe, repoRootFromCawsDir, storeDiagnostic } from '../../store/repo-root';
@@ -186,6 +203,110 @@ function surfaceFromEnv(env: NodeJS.ProcessEnv): AgentSurface {
     return flag;
   }
   return 'none';
+}
+
+function isUsableSessionId(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0 && v !== 'unknown';
+}
+
+// CAWS-DEFECT-SESSION-RESOLVER-CLI-GUARD-PARITY-01
+// The per-session ids a harness exports into every tool subprocess AND stamps
+// as `session_id` on every hook payload. The hook guards resolve the payload id
+// before CAWS_SESSION_ID (lib/session-id.sh), so in an agent's own shell these
+// vars are the CLI's only view of the id the guards will check.
+// Deliberately absent:
+//   - CLAUDE_SESSION_ID: an operator override no harness exports.
+//   - DSH_SESSION_ID: dsh identity rides DSH_SESSION_ID / CAWS_SESSION_ID, and
+//     the spec keeps those surfaces on their prior order.
+//   - QWEN_CODE_SESSION_ID: the caller chain has no qwen tier outside the pin,
+//     so there is no prior qwen resolution to align; qwen keeps its old order.
+const HARNESS_PAYLOAD_ID_VARS = [
+  { envVar: 'CLAUDE_CODE_SESSION_ID', surface: 'claude-code', source: 'claude_code_env' },
+  { envVar: 'CODEX_THREAD_ID', surface: 'codex', source: 'codex_thread_env' },
+] as const;
+
+export interface HarnessOverCanonical {
+  /** The harness session id that is used. */
+  readonly sessionId: string;
+  readonly envVar: (typeof HARNESS_PAYLOAD_ID_VARS)[number]['envVar'];
+  readonly surface: (typeof HARNESS_PAYLOAD_ID_VARS)[number]['surface'];
+  readonly source: (typeof HARNESS_PAYLOAD_ID_VARS)[number]['source'];
+  /** The CAWS_SESSION_ID value that is not used. */
+  readonly ignoredCanonical: string;
+}
+
+const emittedCanonicalNotices = new Set<string>();
+
+/**
+ * Decide whether a harness session id must win over a disagreeing
+ * CAWS_SESSION_ID, and if so write one stderr notice per process naming the
+ * ignored value. Shared by every CLI surface that resolves the caller (the
+ * session resolver and `caws reprieve show|revoke`) so they cannot disagree.
+ *
+ * The harness id wins only when the environment unambiguously describes one
+ * harness session that the guards identify by payload:
+ *   - CAWS_SESSION_ID is set and differs from the harness id;
+ *   - HOOK_SESSION_ID is absent. parse-input.sh exports it (possibly as
+ *     "unknown") only inside a hook process, where the dispatcher has already
+ *     normalized CAWS_SESSION_ID from the guards' own resolution (payload or
+ *     agent-PID anchor). There CAWS_SESSION_ID IS the guards' id;
+ *   - exactly one harness payload-id var is set, and no other surface's
+ *     session var is set. Two harness signals mean nested harnesses (a dsh or
+ *     codex process started from a Claude Code shell inherits
+ *     CLAUDE_CODE_SESSION_ID), and the environment cannot say which one is the
+ *     caller, so the prior order stands. CURSOR_TRACE_ID does not count: it is
+ *     an IDE trace id inherited by everything launched from Cursor's terminal;
+ *   - CAWS_AGENT_SURFACE / CAWS_PLATFORM_FLAG, when they name a surface, name
+ *     this harness's surface.
+ * Returns null whenever any condition fails; callers then keep their prior
+ * order.
+ */
+export function harnessOverCanonicalSession(env: NodeJS.ProcessEnv): HarnessOverCanonical | null {
+  const canonical = env['CAWS_SESSION_ID'];
+  if (!isUsableSessionId(canonical)) return null;
+  const hookId = env['HOOK_SESSION_ID'];
+  if (typeof hookId === 'string' && hookId.length > 0) return null;
+
+  const present = HARNESS_PAYLOAD_ID_VARS.filter((h) => isUsableSessionId(env[h.envVar]));
+  // The other-surface check below also rejects two present harness vars while
+  // the registry lists each under its own surface; this states the rule without
+  // depending on registry contents.
+  if (present.length !== 1) return null;
+  const harness = present[0]!;
+  const harnessId = env[harness.envVar] as string;
+  if (harnessId === canonical) return null;
+
+  for (const [surface, vars] of Object.entries(SURFACE_ENV_VARS)) {
+    if (surface === harness.surface || surface === 'cursor') continue;
+    if (vars.some((name) => isUsableSessionId(env[name]))) return null;
+  }
+  for (const key of ['CAWS_AGENT_SURFACE', 'CAWS_PLATFORM_FLAG']) {
+    const declared = env[key];
+    if (
+      typeof declared === 'string' &&
+      isAgentSurface(declared) &&
+      declared !== 'none' &&
+      declared !== harness.surface
+    ) {
+      return null;
+    }
+  }
+
+  const override: HarnessOverCanonical = {
+    sessionId: harnessId,
+    envVar: harness.envVar,
+    surface: harness.surface,
+    source: harness.source,
+    ignoredCanonical: canonical,
+  };
+  const noticeKey = `${canonical}\u0000${harnessId}`;
+  if (!emittedCanonicalNotices.has(noticeKey)) {
+    emittedCanonicalNotices.add(noticeKey);
+    process.stderr.write(
+      `caws: CAWS_SESSION_ID=${canonical} was not used. This process runs inside a ${harness.surface} session (${harness.envVar}=${harnessId}), and the hook guards resolve that session from the tool payload, so the session identity here is ${harnessId}. Unset CAWS_SESSION_ID in this shell to silence this notice.\n`
+    );
+  }
+  return override;
 }
 
 // CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001
@@ -1012,8 +1133,18 @@ function resolveSessionIdentity(
   //     BEFORE the per-surface chain so normalization is authoritative.
   //     Platform derives from CAWS_PLATFORM_FLAG when valid, else the
   //     surface pin, else 'none' (a generic id names no harness).
+  //     Inside an unambiguous harness session a disagreeing harness id wins
+  //     (see harnessOverCanonicalSession): the guards key on that id, so the
+  //     CLI must stamp and compare the same one.
   const canonicalId = env['CAWS_SESSION_ID'];
   if (typeof canonicalId === 'string' && canonicalId.length > 0 && canonicalId !== 'unknown') {
+    const harness = harnessOverCanonicalSession(env);
+    if (harness !== null) {
+      return ok({
+        identity: { session_id: harness.sessionId, platform: harness.surface },
+        source: harness.source,
+      });
+    }
     const flag = env['CAWS_PLATFORM_FLAG'];
     const canonicalPlatform =
       typeof flag === 'string' && isAgentSurface(flag)
@@ -1096,21 +1227,6 @@ function resolveSessionIdentity(
     return ok({
       identity: { session_id: dshSessionId, platform: 'dsh' },
       source: 'dsh_env',
-    });
-  }
-
-  // 1.7. CAWS_SESSION_ID env (authority source #1.7 — the generic CAWS escape
-  //      hatch, usable by any harness that does not have a dedicated per-
-  //      surface var). CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001: gives
-  //      opencode/zcode/windsurf a deterministic env path without falling into
-  //      the racy durable-envelope scan. The platform is derived from env via
-  //      surfaceFromEnv (which may return 'none' for the generic var — that is
-  //      an honest attribution, better than a wrong one).
-  const cawsId = env['CAWS_SESSION_ID'];
-  if (typeof cawsId === 'string' && cawsId.length > 0 && cawsId !== 'unknown') {
-    return ok({
-      identity: { session_id: cawsId, platform: surfaceFromEnv(env) },
-      source: 'caws_env',
     });
   }
 
