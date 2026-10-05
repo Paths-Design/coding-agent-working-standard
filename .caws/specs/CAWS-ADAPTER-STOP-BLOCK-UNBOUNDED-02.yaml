@@ -17,8 +17,9 @@ scope:
     - 'packages/caws-cli/tests/adapter/machine-runtime.test.js'
   out: []
 invariants:
-  - 'A Stop refusal must be bounded. A guard may refuse an exit a finite number of consecutive times; it may not refuse it indefinitely, because no CAWS-side actor can release it.'
   - 'Bounding a Stop refusal must not convert it to silent success: the release states plainly that it is releasing an unmet condition, so the drop is auditable in the transcript.'
+  - 'A Stop refusal that no actor can discharge - a malformed, unparseable or crashed handler result - is bounded: the adapter refuses it a finite number of consecutive times, then releases.'
+  - 'A well-formed block from a guard whose condition the agent can satisfy (for example the goal-ac-gate Stop hook) is not consumed by this budget; bounding it would disarm a designed gate.'
 acceptance:
   - id: A1
     given: 'a handler whose result is malformed on every stop'
