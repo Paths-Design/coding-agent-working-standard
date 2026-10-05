@@ -52,3 +52,9 @@ evidence:
     recorded_at: "2026-10-05T08:24:25.999Z"
     artifact_path: docs/failure-lineage.md
     commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Entry 45 in failure-lineage.md plus hook-pack-shared-core.md 'Payload cwd contract': per-surface table with evidence and the absent-cwd fail-closed rule mirrored by _CWD_CONTRACT_SURFACES"
+    recorded_at: "2026-10-05T08:24:28.584Z"
+    artifact_path: docs/architecture/hook-pack-shared-core.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
