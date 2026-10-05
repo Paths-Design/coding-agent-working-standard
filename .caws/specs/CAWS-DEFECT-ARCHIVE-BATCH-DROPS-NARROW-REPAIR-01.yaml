@@ -63,3 +63,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/specs-archive-batch.test.js::A3: archiveClosedSpecs failed entry carries the diagnostic narrowRepair"
     commit_sha: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
     test_verified_at: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "prune-drafts prints and serializes the retirement remedy, matching archive"
+    recorded_at: "2026-10-05T05:31:18.802Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-prune-drafts.test.js::A4: a retirement failure carrying narrowRepair surfaces it in text and --json"
+    commit_sha: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
+    test_verified_at: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
