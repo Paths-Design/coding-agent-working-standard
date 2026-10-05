@@ -45,3 +45,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts::accepts a turn whose turn_summary is null (reasoning below the summary floor)"
     commit_sha: b8789dab9dc6d31caef25ad366712423b7ebe9ec
     test_verified_at: b8789dab9dc6d31caef25ad366712423b7ebe9ec
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "context.lineage [object,null] with the 4 transcript_lineage fields; renaming lineage fails populated+null+2 rejection tests"
+    recorded_at: "2026-10-05T05:50:33.228Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts::accepts context.lineage populated from transcript metadata"
+    commit_sha: b8789dab9dc6d31caef25ad366712423b7ebe9ec
+    test_verified_at: b8789dab9dc6d31caef25ad366712423b7ebe9ec
