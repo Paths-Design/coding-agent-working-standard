@@ -89,3 +89,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-checkout-pathspec.bats::worktree-guard: checkout of the base branch is refused as a branch switch"
     commit_sha: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
     test_verified_at: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "checkout -b: exit 0, empty output (-B row also pinned)"
+    recorded_at: "2026-10-05T05:43:36.270Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-checkout-pathspec.bats::worktree-guard: branch creation with -b is admitted with no output"
+    commit_sha: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
+    test_verified_at: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
