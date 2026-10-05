@@ -2,9 +2,10 @@ id: CAWS-ADAPTER-STOP-BLOCK-UNBOUNDED-02
 title: 'A repeatedly-blocking Stop handler has no budget, so a broken handler result still traps the session'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: adapter-stop-budget
 created_at: '2026-09-19T03:03:41.343Z'
-updated_at: '2026-09-19T03:03:41.343Z'
+updated_at: '2026-10-05T03:34:56.292Z'
 created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
 blast_radius:
   modules:
