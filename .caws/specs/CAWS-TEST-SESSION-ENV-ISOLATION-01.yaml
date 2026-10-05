@@ -2,9 +2,11 @@ id: CAWS-TEST-SESSION-ENV-ISOLATION-01
 title: 'Test suites must not inherit the runner''s session identity; isolation belongs in setup, not per call site'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed via merge 3eab57b8 (--no-close). A1/A2 proven by two full-suite runs on main@e2906cca: harness env intact vs env -u CLAUDE_CODE_SESSION_ID with a foreign CAWS_SESSION_ID; 286/286 suites and 3855/3855 tests both, identical per-assertion verdict sha256 215a2f31..., 0 cross-repo refusals. A3/A4/A5 recorded earlier.'
 created_at: '2026-09-19T19:41:45.131Z'
-updated_at: '2026-10-05T05:02:38.508Z'
+updated_at: '2026-10-05T09:29:12.627Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
