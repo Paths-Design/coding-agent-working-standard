@@ -48,9 +48,17 @@ acceptance:
     when: 'merge readiness is evaluated three times - after creating a matching waiver, after granting a reprieve, and after caws specs amend-scope --add-support for the offending path'
     then: 'the waiver leaves readiness unchanged, the reprieve leaves readiness unchanged, and only --add-support flips it to ready. EVIDENCE BUNDLE required per arm, because otherwise a hidden coordinate can move between treatments and the fixture passes for the wrong reason: branch and base SHAs, the offending commit SHA, git merge-base, explicit proof the offending commit is STILL present in base..branch (including in the third arm, so the flip is attributed to scope.support and not to the commit leaving the range), the exact lane scope.in and scope.support state, and the complete worktree merge --dry-run disposition'
   - id: A5
-    given: 'the 13-site operator-copy census across 5 files - waiver.ts 256-257 as one concatenated notice; command-metadata.ts 1387, 1394, 1426, 1445, 1489; README.md 26; docs/command-reference.md 36, 295, 299, 362; docs/api/cli.md 507, 603'
+    given: >-
+      every operator-copy surface that presents waiver versus reprieve as the
+      available routes (waiver create notice, waiver/reprieve help in
+      command-metadata.ts, README.md, docs/command-reference.md, docs/api/cli.md),
+      located by a census grep whose query and positive control are recorded at
+      implementation time
     when: 'the change is graded'
-    then: 'TWO independent checks must both pass. LEXICAL - every site carries the merge-provenance route, with the census query and its positive control recorded so a later reader re-runs rather than trusts a count. SEMANTIC - the RENDERED surfaces are inspected, not the source lines, because a repair can delete every phrase this census matches and reinstate an equally closed formulation in new vocabulary, which the lexical arm would score as clean. Required runtime artifacts: actual captured output of caws waiver --help, caws waiver create --help, caws reprieve --help, and the LIVE post-create notice. The notice is built by template-literal concatenation, so its shipped bytes are not established by reading source at all'
+    then: >-
+      each surface names amend-scope --add-support as the route for a
+      lane-provenance merge refusal, checked lexically by re-running the census and
+      semantically on the rendered --help and notice output, not by trusting a count
   - id: A6
     given: 'the repaired copy and a session blocked by a genuine PreToolUse hook refusal'
     when: 'the operator adds the blocked path to a spec scope.support'
