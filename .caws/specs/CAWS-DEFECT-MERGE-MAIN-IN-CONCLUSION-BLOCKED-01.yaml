@@ -47,3 +47,11 @@ acceptance:
       (CAWS-WAIVER-SURFACE-REMOVAL-001)
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "real .husky/pre-commit Guard 2 + incoming deletions conclude a merge of main without --no-verify; classifier leg: packages/caws-cli/tests/hooks/pytest/test_classify_command.py::TestConcludingMergeOfBase::test_incoming_deletions_do_not_trip_the_guard_A1"
+    recorded_at: "2026-10-05T09:06:59.042Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/merge-main-in-conclusion.test.js::a merge whose staged policy.yaml and deletions all come from main concludes without --no-verify"
+    commit_sha: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
+    test_verified_at: ed03a68d39be4f864c8870e38ad9a11a0cf385dc
