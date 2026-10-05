@@ -95,3 +95,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::no sentence on any surface that discusses a lane-provenance refusal points at a waiver or a reprieve grant"
     commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
     test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "non-scope guard boundary: protected-paths.sh stdout/stderr byte-identical before and after the support entry landed (read back from the spec); scope-guard admits support by design per the amended invariant"
+    recorded_at: "2026-10-05T06:28:20.165Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::A6: adding the blocked path to scope.support leaves the hook refusal byte-identical"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
