@@ -3,7 +3,6 @@ title: 'Test suites must not inherit the runner''s session identity; isolation b
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-worktree: g-env-isolation
 created_at: '2026-09-19T19:41:45.131Z'
 updated_at: '2026-10-05T05:02:38.508Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
