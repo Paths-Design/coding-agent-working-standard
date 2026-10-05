@@ -150,3 +150,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/quality-gates-removed.test.js::no manifest declares the caws-quality-gates bin or depends on the removed package"
     commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
     test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "package-lock.json packages{} has no quality-gates entry"
+    recorded_at: "2026-10-05T06:10:07.792Z"
+    test_nodeid: "packages/caws-cli/tests/ci/quality-gates-removed.test.js::the lockfile installs no copy of the removed package"
+    commit_sha: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
+    test_verified_at: fe4c5750dc5e6d35e09bb055b5d99d49e214ddac
