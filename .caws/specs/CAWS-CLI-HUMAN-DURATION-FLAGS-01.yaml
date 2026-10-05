@@ -86,3 +86,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: the duration flag reaches each handler as milliseconds"
     commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
     test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Built binary at 6090be30. Seven invocations across specs archive, specs prune-drafts, agents prune, session prune, message prune (all with --apply) plus message status and agents list, with values 30, 10x, -5m, empty string, '2 days', soon: each exits 1, stderr starts 'caws <group> <leaf>: <flag> \"<value>\"' and lists the units; a byte snapshot of every file under .caws (including an old stopped lease that --apply would delete) is identical before and after. Bare 30 additionally names 30m/30h and --older-than-ms 30 (unit test in the same file)."
+    recorded_at: "2026-10-05T00:17:58.607Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
