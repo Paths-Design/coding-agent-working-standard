@@ -1,0 +1,32 @@
+id: CAWS-DEFECT-WRITE-GUARD-RELATIVE-PATH-UNRESOLVED-CWD-01
+title: 'worktree-write-guard resolves a relative file_path against a guessed root when the cwd is unresolvable, the same fail-open CLAIM-ORACLE-CWD fixed for Bash'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T07:18:17.990Z'
+updated_at: '2026-10-05T07:18:17.990Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'hook-packs shared: worktree-write-guard relative file_path resolution'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks'
+  out: []
+invariants:
+  - 'Found by the F3 lane (CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01): worktree-write-guard.sh ~L297-305 falls back for a relative file_path and passes it unresolved to the oracle (~L180-196) without the cwd-unresolved flag. Same fail-closed rule as bash-write-guard, and the same no-surface-regression requirement: a surface whose payload carries no cwd must not start refusing every relative write.'
+acceptance:
+  - id: A1
+    given: 'a Write/Edit payload with a relative file_path and no usable cwd, and a worktree owned by another session'
+    when: 'worktree-write-guard adjudicates it'
+    then: 'it asks (ask_uncertain cwd-unresolved) instead of passing as a canonical path'
+  - id: A2
+    given: 'an absolute file_path, or a relative one with a resolved cwd'
+    when: 'adjudicated'
+    then: 'the outcome is unchanged'
+non_functional: {}
+contracts: []
