@@ -1,9 +1,10 @@
 id: CAWS-DEFECT-SESSION-RESOLVER-CLI-GUARD-PARITY-01
 title: 'The CLI and the hook guards resolve different session identities when CAWS_SESSION_ID disagrees with the harness session, so the CLI stamps an owner the guards then treat as foreign'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: resolver-parity
 created_at: '2026-10-05T03:30:13.027Z'
-updated_at: '2026-10-05T03:30:13.027Z'
+updated_at: '2026-10-05T03:35:01.335Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
