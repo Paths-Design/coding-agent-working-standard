@@ -43,3 +43,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts::a passing citation beside a command is verified; the command is still listed, unexecuted"
     commit_sha: ae4758261358bb0c0827ea9af310126b0c8bc683
     test_verified_at: ae4758261358bb0c0827ea9af310126b0c8bc683
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "worst-wins preserved for executed checks: a failing test refutes beside a verified commit and a recorded command; best-wins mutant fails 7 tests"
+    recorded_at: "2026-10-05T05:52:30.190Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/evidence/rederive-worst-wins.test.ts::verified commit + failing test + recorded command -> refuted / test_failed"
+    commit_sha: ae4758261358bb0c0827ea9af310126b0c8bc683
+    test_verified_at: ae4758261358bb0c0827ea9af310126b0c8bc683
