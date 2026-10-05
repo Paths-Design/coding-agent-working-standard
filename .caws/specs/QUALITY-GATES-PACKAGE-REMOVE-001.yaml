@@ -66,7 +66,7 @@ acceptance:
     when: 'They are read.'
     then: 'They point users to hook-pack safety checks and caws evidence/doctor surfaces; no doc still recommends running caws-quality-gates as a current tool.'
   - id: A6
-    given: 'Any past consumer that pinned @paths.design/caws-quality-gates@2.x.'
+    given: 'Any past consumer that pinned @paths.design/quality-gates@2.x (bin caws-quality-gates).'
     when: 'They install that version from npm.'
     then: 'The installation still works as it did before this slice; this slice does not touch the registry.'
   - id: A7
