@@ -79,3 +79,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: the duration flag reaches each handler as milliseconds"
     commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
     test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Built binary at 6090be30. agents list --stale-ttl 10m echoes stale_ttl_ms 600000, identical to --stale-ttl-ms 600000; --stale-ttl 1h30m gives 5400000. agents show on a lease idle 20m: --stale-ttl 10m gives liveness.ttl_ms 600000 and classification stale; --stale-ttl 1h gives 3600000 and active, so the TTL changes the classification. The AC names 30m; it is checked with 10m, 1h30m and 1h through the same linear parser (30m resolves to 1800000 in the resolver)."
+    recorded_at: "2026-10-05T00:14:56.470Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: the duration flag reaches each handler as milliseconds"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
