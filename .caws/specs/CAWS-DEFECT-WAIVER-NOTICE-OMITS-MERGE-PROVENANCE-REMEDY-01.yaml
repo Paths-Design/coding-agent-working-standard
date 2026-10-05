@@ -2,10 +2,11 @@ id: CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01
 title: 'Waiver create notice and waiver/reprieve help route every non-gates-run block to reprieve, omitting the merge-time lane-provenance surface whose remedy is --add-support'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-merge-provenance-routing
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-merge-provenance-routing at ebfccbc99847c2335aac7ee87d5beb93bbd096d7'
 created_at: '2026-09-01T22:19:12.252Z'
-updated_at: '2026-09-01T23:03:35.159Z'
+updated_at: '2026-10-05T06:29:17.463Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/waiver.ts'
