@@ -24,7 +24,7 @@ scope:
 invariants:
   - 'The oracle''s answer must not depend on how the caller SPELLS the path. The same file, same session, same owner must produce the same outcome whether the path is given cwd-relative, canonical-absolute, or worktree-absolute.'
   - 'The fix must not weaken block_claimed for a genuine canonical-root write by a non-owner. A canonical-checkout session writing a path claimed by someone else''s worktree must still block, and the repair must carry a regression control proving that.'
-  - 'Fail closed on ambiguity. If the operating session''s cwd cannot be resolved, the oracle must NOT assume worktree-relative — an unresolvable cwd is ask/error_fail_closed, never a silent pass.'
+  - 'Fail closed on ambiguity where the payload contract promises a cwd. For surfaces whose PreToolUse payload carries cwd (claude-code, codex, opencode, qwen-code, kimi-code), an unresolvable cwd for a relative target is ask_uncertain, never a silent pass. For surfaces whose payload is not confirmed to carry cwd (zcode, dsh, unknown), the prior resolution stands: failing closed there would refuse every relative write, the false-refusal class the release stance ranks worse. Decided 2026-10-05; the unverified surfaces are tracked by CAWS-SURFACE-PAYLOAD-CWD-CONTRACT-01.'
 acceptance:
   - id: A1
     given: 'session S owns worktree W and the path P is in the bound spec''s scope.in'
