@@ -1,0 +1,40 @@
+id: CAWS-DEFECT-GUARD-COPY-OFFERS-WAIVER-FOR-HOOK-BLOCKS-01
+title: 'Shipped guard and pack copy tells a blocked agent a waiver will clear a hook, scope or policy block; waivers only filter caws gates run'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T06:32:31.872Z'
+updated_at: '2026-10-05T06:32:31.872Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'hook-pack copy (kimi-code, qwen-code, shared classifier) and repo doctrine'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/kimi-code/AGENTS.md'
+    - 'packages/caws-cli/templates/hook-packs/qwen-code/CAWS-HOOKS.md'
+    - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+    - 'packages/caws-cli/src/init/hook-packs'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks'
+    - 'CLAUDE.md'
+  out: []
+invariants:
+  - 'caws waiver --help states the live contract: a waiver filters caws gates run violations and never lifts a hook guard. Copy shown to a blocked agent must name a remedy that clears that block: caws reprieve grant (human) for a hook handler, amend-scope for a scope refusal, an Edit under a spec for policy.yaml.'
+  - 'Each pack whose template changes gets its version bump and fingerprint refresh, so the fix reaches installed hooks.'
+acceptance:
+  - id: A1
+    given: 'kimi-code/AGENTS.md:85-86 and qwen-code/CAWS-HOOKS.md:97-98 tell an agent blocked by a hook to create a waiver'
+    when: 'the change lands'
+    then: 'neither offers caws waiver for a hook block, and both name caws reprieve grant as the human-granted route'
+  - id: A2
+    given: 'classify_command.py:230 refuses naked rm/mv on .caws/policy.yaml with "use Edit and a CAWS waiver"'
+    when: 'rendered'
+    then: 'it names the sanctioned path (Edit under a spec) and no waiver, pinned by a test that asserts the exact message'
+  - id: A3
+    given: 'CLAUDE.md:122-124 presents caws waiver create as the legitimate escape under Governed paths'
+    when: 'the change lands'
+    then: 'the section names what actually lifts each block (reprieve for a hook handler, a spec for policy.yaml) and offers no waiver'
+non_functional: {}
+contracts: []
