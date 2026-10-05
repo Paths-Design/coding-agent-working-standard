@@ -58,3 +58,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::empty canonical index and invalid base are unavailable, not pass; no evaluation event is fabricated"
     commit_sha: "6141a61d1ae4348e362d6fa8c3ab26d2b4d0815f"
     test_verified_at: "6141a61d1ae4348e362d6fa8c3ab26d2b4d0815f"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "gate_evaluated carries change_basis {checkout, base_ref, head_sha}; the budget_limit event's basis is also asserted by the A1 test"
+    recorded_at: "2026-10-05T06:35:02.209Z"
+    test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::committed forbidden lane work is evaluated despite an empty canonical index; event carries its basis"
+    commit_sha: "6141a61d1ae4348e362d6fa8c3ab26d2b4d0815f"
+    test_verified_at: "6141a61d1ae4348e362d6fa8c3ab26d2b4d0815f"
