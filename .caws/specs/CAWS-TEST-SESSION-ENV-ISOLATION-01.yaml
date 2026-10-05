@@ -76,3 +76,8 @@ evidence:
     evidence_ref: "full caws-cli jest (2 projects) on main@e2906cca with harness env intact (CLAUDE_CODE_SESSION_ID set): 286/286 suites, 3855/3855 tests, 0 'rooted in another repository' refusals; verdict sha256 215a2f31e7ca03313d116610716a978ad56fa2ce36995a5faf1b2b49e6a8f4ba"
     recorded_at: "2026-10-05T09:28:53.484Z"
     commit_sha: e2906cca86f37f48a98e79f883c0fd4cce17103e
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "same suite with env -u CLAUDE_CODE_SESSION_ID and CAWS_SESSION_ID=@darianrosebrook: 286/286, 3855/3855; per-assertion verdict list sha256 215a2f31... identical to the intact-env run, symmetric difference 0"
+    recorded_at: "2026-10-05T09:28:58.600Z"
+    commit_sha: e2906cca86f37f48a98e79f883c0fd4cce17103e
