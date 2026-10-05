@@ -44,3 +44,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats::shortcut-language: a spec id containing the marker in a comment is an identifier"
     commit_sha: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
     test_verified_at: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 457b9e5998a8b7884ad82bb47755f7dac7490e5b: quoted literals (double, single, backtick) closing on their line are blanked before the code-line scan, and a comment opener inside such a literal no longer starts a comment record. Companion tests: single-quoted and template-literal constants, a scaffold string embedding a hash comment, an escaped quote before the marker. Break-the-fix: disabling string-stripping failed 20-23; disabling the opener mask failed 22. The old test pinning a double-quoted marker as a strike was changed to the unquoted form, which still strikes, because A2 defines quoted content as data. Gaps: regex-literal quotes and multi-line template literals untested."
+    recorded_at: "2026-10-05T04:59:02.681Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats::shortcut-language: a double-quoted constant whose value starts with the marker is data"
+    commit_sha: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+    test_verified_at: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
