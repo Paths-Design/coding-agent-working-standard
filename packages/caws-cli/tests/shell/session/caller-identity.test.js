@@ -61,7 +61,11 @@ test.each([1, 2])('%i cached sessions and a caller pointer cannot identify a cal
 });
 
 test.each([
-  [{ CAWS_SESSION_ID: 'caller', CODEX_THREAD_ID: 'neighbor' }, 'caller'],
+  // Inside a Codex session the thread id the guards read from the payload wins
+  // over a disagreeing CAWS_SESSION_ID, so the stray value cannot pass as owner
+  // (CAWS-DEFECT-SESSION-RESOLVER-CLI-GUARD-PARITY-01 A4).
+  [{ CAWS_SESSION_ID: 'neighbor', CODEX_THREAD_ID: 'caller' }, 'caller'],
+  [{ CAWS_SESSION_ID: 'caller', DSH_SESSION_ID: 'neighbor' }, 'caller'],
   [
     { CAWS_AGENT_SURFACE: 'codex', CODEX_THREAD_ID: 'caller', CAWS_SESSION_ID: 'neighbor' },
     'caller',
