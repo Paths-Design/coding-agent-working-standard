@@ -562,6 +562,9 @@ import { isAdapterCoveredSurface } from './types';
 // branch being merged while MERGE_HEAD exists (staged state equals a merge
 // parent that changed the path against the merge base), and its remedy during
 // a merge no longer prescribes `git commit -- <paths>`, which git rejects.
+// block-dangerous.sh prints that merge-aware reason as the single source of
+// truth for a mid-merge commit_deletions refusal instead of the fixed
+// pathspec text; the non-merge refusal text is unchanged.
 export const SHARED_PACK_VERSION = 92;
 
 /**

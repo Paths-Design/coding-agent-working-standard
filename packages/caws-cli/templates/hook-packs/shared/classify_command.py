@@ -1559,11 +1559,16 @@ def classify_commit_deletions(segment: str, cwd: Path | None) -> tuple[str, str]
         if not deleted:
             return None  # every staged deletion is incoming from the merge
         remediation = (
-            "a merge is in progress, and git rejects a pathspec commit during a "
-            "merge — so do not use `-- <paths>`. List the deletions the merge did "
-            "not bring in with: git diff --cached --diff-filter=D --name-only "
-            "MERGE_HEAD; if they are intended, conclude the merge with a bare "
-            "git commit -m <msg> and confirm this prompt"
+            "a merge is in progress: git rejects a pathspec commit during a "
+            "merge, and this refusal cannot be confirmed in any mode, so complete "
+            "the merge without a prompt. (1) List the deletions the merge did not "
+            "bring in: git diff --cached --diff-filter=D --name-only MERGE_HEAD. "
+            "(2) Unstage them; the files stay deleted in the working tree: "
+            "git restore --staged -- <those paths>. (3) Conclude the merge with a "
+            "bare git commit (or git commit --no-edit); every staged deletion "
+            "left is incoming from the merge. (4) After the merge, commit those "
+            "deletions on their own: git commit -m <msg> -- <deleted paths>. If "
+            "any of those deletions were not intended, stop and ask the user"
         )
     shown = ", ".join(deleted[:3]) + (", …" if len(deleted) > 3 else "")
     return (

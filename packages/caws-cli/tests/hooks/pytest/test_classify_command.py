@@ -843,8 +843,15 @@ class TestConcludingMergeOfBase:
         assert "gone-a.txt" not in reason
         # The prescribed pathspec form is rejected by git during a merge, so the
         # remedy must not offer it as the way out.
-        assert "-- <paths>" not in reason.replace("do not use `-- <paths>`", "")
-        assert "bare git commit -m <msg>" in reason
+        assert "-- <paths>" not in reason
+        assert "confirm this prompt" not in reason  # no prompt exists in bypass mode
+        for step in (
+            "git diff --cached --diff-filter=D --name-only MERGE_HEAD",
+            "git restore --staged -- <those paths>",
+            "bare git commit (or git commit --no-edit)",
+            "git commit -m <msg> -- <deleted paths>",
+        ):
+            assert step in reason, step
         # Following the remedy literally: git itself concludes the merge.
         done = _git_ok(merge_in_progress, "commit", "-q", "-m", "merge main")
         assert done.returncode == 0, done.stderr

@@ -758,6 +758,16 @@ case "$DECISION" in
       # agent's own hands, so ordinary deletions get one refusal-with-
       # remediation, never a session freeze. Keyed on the classifier source
       # so it cannot swallow any other confirm-class ask.
+      if [[ "$SOURCE" == "commit_deletions" && "$REASON" == *"a merge is in progress"* ]]; then
+        # Concluding a merge (MERGE_HEAD exists): the classifier's reason already
+        # carries the complete remedy, and the fixed pathspec step below is
+        # rejected by git mid-merge — so print the reason as the single source
+        # of truth and do not append the pathspec text.
+        # (CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01)
+        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed. Command was: $COMMAND"
+        emit_block_json "$FULL_REASON"
+        exit 0
+      fi
       if [[ "$SOURCE" == "commit_deletions" ]]; then
         FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed. Do this instead: (1) inspect what is actually staged: git status && git diff --cached --stat; (2) if the staged set is exactly what you intend, commit it with the paths named explicitly: git commit -m \"<msg>\" -- <paths>; (3) if the staged set contains work that is NOT yours (another session's files, a half-applied revert), STOP and ask the user before unstaging anything. Do NOT rephrase the same bare commit to evade this. Command was: $COMMAND"
         emit_block_json "$FULL_REASON"
