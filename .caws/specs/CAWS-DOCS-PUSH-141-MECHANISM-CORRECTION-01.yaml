@@ -1,9 +1,10 @@
 id: CAWS-DOCS-PUSH-141-MECHANISM-CORRECTION-01
 title: 'full-guide.md attributes push exit 141 to the hook''s output pipe; the observed mechanism is the remote closing the idle SSH connection during the long pre-push hook'
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: docs-push141
 created_at: '2026-10-05T08:56:23.053Z'
-updated_at: '2026-10-05T08:56:23.053Z'
+updated_at: '2026-10-05T08:56:24.664Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
