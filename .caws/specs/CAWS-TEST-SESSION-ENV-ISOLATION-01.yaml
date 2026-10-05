@@ -40,5 +40,11 @@ acceptance:
     given: 'the shared isolation setup'
     when: 'a test in the kernel project and a test in the caws-cli project each read the isolated variable'
     then: 'both observe the isolated value, proving setupFiles ran in both projects'
+  - id: A5
+    given: >-
+      the runner's shell exports CAWS_SESSION_ID to an unrelated value (observed
+      2026-10-04: @darianrosebrook)
+    when: 'tests/shell/message-retention-prune.test.js and tests/shell/message-behavior.test.js run'
+    then: 'they pass exactly as they do with CAWS_SESSION_ID unset'
 non_functional: {}
 contracts: []
