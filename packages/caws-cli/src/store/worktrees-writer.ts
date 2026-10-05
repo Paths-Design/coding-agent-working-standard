@@ -403,6 +403,49 @@ function getCurrentBranch(repoRoot: string): string | null {
   return r.stdout.trim();
 }
 
+/** The distinct out-of-scope paths across a lane-provenance refusal, sorted. */
+function laneProvenancePaths(
+  foreignCommits: readonly LaneForeignCommit[]
+): string[] {
+  return [
+    ...new Set(foreignCommits.flatMap((fc) => fc.outOfScopePaths)),
+  ].sort();
+}
+
+/**
+ * The remedy line for a lane-provenance refusal.
+ *
+ * The refusal has to carry its own remedy, because an operator who goes
+ * looking for one will not find it. This check is neither the `caws gates
+ * run` waiver filter nor a PreToolUse hook guard, so neither a waiver nor a
+ * reprieve reaches it — and the waiver/reprieve help presents those two as
+ * the choice available, which routes the operator somewhere that cannot
+ * help. This line also surfaces candidateSpecIds, which the verifier already
+ * computes and which previously reached only the structured `--data`
+ * payload, where a human reading the refusal never sees it.
+ * [CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01]
+ */
+function laneProvenanceRemedy(
+  specId: string,
+  foreignCommits: readonly LaneForeignCommit[]
+): string {
+  const paths = laneProvenancePaths(foreignCommits);
+  const candidates = [
+    ...new Set(foreignCommits.flatMap((fc) => fc.candidateSpecIds)),
+  ].sort();
+  const remedy =
+    `remedy: admit the path(s) with \`caws specs amend-scope ${specId} ` +
+    `--add-support ${paths.join(' --add-support ')}\` — support admits a path ` +
+    `this lane's history touched without claiming ownership of it. This is a ` +
+    `merge-readiness check: a waiver does not reach it (waivers filter ` +
+    `\`caws gates run\` only) and neither does a reprieve (those skip ` +
+    `PreToolUse hook guards)`;
+  return candidates.length > 0
+    ? `${remedy}. If the commit belongs to a different lane instead, these ` +
+        `active specs already admit the path: ${candidates.join(', ')}`
+    : remedy;
+}
+
 function mergeRecoveryNextCommands(
   name: string,
   entry:
@@ -410,14 +453,28 @@ function mergeRecoveryNextCommands(
         readonly branch?: string;
         readonly baseBranch?: string;
         readonly path?: string;
+        readonly specId?: string;
       }
-    | undefined
+    | undefined,
+  foreignCommits: readonly LaneForeignCommit[] = []
 ): string[] {
-  const commands = [
+  const commands: string[] = [];
+  // A lane-provenance refusal has a specific remedy, and it is not among the
+  // generic diagnostics below — those are the same list for every refusal
+  // reason, so they tell an operator how to look harder, never what to do.
+  // Lead with the remedy. [CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01]
+  if (foreignCommits.length > 0 && entry?.specId !== undefined) {
+    for (const path of laneProvenancePaths(foreignCommits)) {
+      commands.push(
+        `caws specs amend-scope ${entry.specId} --add-support ${path}`
+      );
+    }
+  }
+  commands.push(
     `caws worktree merge ${name} --dry-run --data`,
     'caws worktree list --data',
-    `caws worktree cleanup-plan --include ${name} --json`,
-  ];
+    `caws worktree cleanup-plan --include ${name} --json`
+  );
   if (entry?.branch !== undefined && entry.baseBranch !== undefined) {
     commands.push(`git rev-list --left-right --count ${entry.baseBranch}...${entry.branch}`);
     commands.push(`git merge-tree --write-tree ${entry.baseBranch} ${entry.branch}`);
@@ -435,10 +492,14 @@ function mergeRepairHint(
         readonly branch?: string;
         readonly baseBranch?: string;
         readonly path?: string;
+        readonly specId?: string;
       }
-    | undefined
+    | undefined,
+  foreignCommits: readonly LaneForeignCommit[] = []
 ): string {
-  return `Run ${mergeRecoveryNextCommands(name, entry).map((command) => `\`${command}\``).join('; ')}.`;
+  return `Run ${mergeRecoveryNextCommands(name, entry, foreignCommits)
+    .map((command) => `\`${command}\``)
+    .join('; ')}.`;
 }
 
 // Clean-tree gate for destroy/merge. Verified CAWS artifact links —
