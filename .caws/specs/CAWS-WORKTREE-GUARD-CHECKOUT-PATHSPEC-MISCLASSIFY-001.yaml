@@ -96,3 +96,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-checkout-pathspec.bats::worktree-guard: branch creation with -b is admitted with no output"
     commit_sha: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
     test_verified_at: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "whole 14-test suite: path/ref/create forms plus collision, remote-only, nonexistent and no-worktree controls; 7 guard mutants each killed by targeted rows"
+    recorded_at: "2026-10-05T05:44:32.199Z"
+    test_nodeid: packages/caws-cli/tests/hooks/bats/worktree-guard-checkout-pathspec.bats
+    commit_sha: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
+    test_verified_at: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
