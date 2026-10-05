@@ -51,3 +51,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: git restore of a lockfile is admitted from canonical with lanes active"
     commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
     test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "lockfile+source is refused with the path-restore label; classifier leg: test_lockfile_exemption_does_not_widen"
+    recorded_at: "2026-10-05T08:29:33.438Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: checkout of a lockfile plus source is refused with the path-restore label"
+    commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+    test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
