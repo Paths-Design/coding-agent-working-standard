@@ -57,3 +57,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats::claim-oracle-cwd: a canonical-checkout session writing a path the worktree claims is still blocked"
     commit_sha: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
     test_verified_at: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "before: HOOK_CWD unset -> status 0, empty output (silent pass). after: permissionDecision ask 'ask_uncertain: the operating cwd could not be resolved for the relative path scratch.txt'. Scoped to cwd-contract surfaces (claude-code, codex, opencode, qwen-code, kimi-code) per the amended invariant; zcode/dsh/unknown keep prior behavior (controls in the same suite); opencode payload now carries cwd (opencode-plugin-payload-cwd.test.js)"
+    recorded_at: "2026-10-05T07:47:04.586Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats::claim-oracle-cwd: a relative target with no cwd asks instead of passing as a canonical path"
+    commit_sha: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
+    test_verified_at: b8f5fe6cdd935414138cd439ab15c8f5f40e056e
