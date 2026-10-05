@@ -71,3 +71,11 @@ acceptance:
     then: 'the existing reprieve relative-expiry tests pass unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Built binary (dist/index.js, spawned per case) at 6090be30. specs prune-drafts, specs archive, session prune, message status --mine --queued and message prune each echo the applied threshold in --json; --older-than 10m and --older-than-ms 600000 both yield 600000, and --older-than 1h30m yields 5400000, so the value is forwarded, not defaulted. agents prune echoes nothing, so a fixture with stopped leases aged 2h and 1m discriminates: --older-than 10m and --older-than-ms 600000 both select only stopped-2h; 3h selects none; 0s selects both. Mutation probe: a register.ts mutant that drops the duration value failed all 8 cases in this describe (18 suite-wide)."
+    recorded_at: "2026-10-05T00:11:17.961Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: the duration flag reaches each handler as milliseconds"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
