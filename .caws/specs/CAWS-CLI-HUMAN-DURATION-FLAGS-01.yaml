@@ -107,3 +107,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
     commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
     test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Built dist metadata at 6090be30: all nine leaf/flag pairs (specs prune-drafts, specs archive, agents list, agents show, agents prune x2, session prune, message status, message prune) declare '<flag> <duration>' and keep '<flag>-ms <ms>'; rendered 'caws specs archive --help' shows --older-than <duration>, --older-than-ms <ms> and the unit list. tests/docs/cli-help-context.test.js also passes with --older-than added to its cleanup-leaf expectations."
+    recorded_at: "2026-10-05T00:25:52.025Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::help lists each duration flag beside its -ms flag"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
