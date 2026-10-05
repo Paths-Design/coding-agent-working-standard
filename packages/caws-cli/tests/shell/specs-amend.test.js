@@ -476,18 +476,18 @@ describe('combined invariant and acceptance edits in one amend call', () => {
     expect(combinedYaml).not.toContain("'drop'");
   });
 
-  test('the 2026-10-04 shape (remove one invariant, add a long folded one, add-ac) does not fail with duplicated mapping key', () => {
+  test('the 2026-10-04 shape (remove invariants, add one, add-ac; net line shift) does not fail with duplicated mapping key', () => {
     const longInvariant =
       'Every adapter stop-block decision is bounded by an explicit retry budget so that a stuck session can never be blocked forever by the guard';
     const { root, specPath } = setupRepo(
       'AMEND-COMBO-002',
       'draft',
       ['m1'],
-      ['old invariant', 'second']
+      ['old invariant', 'second', 'third']
     );
 
     const result = runAmend(root, 'AMEND-COMBO-002', {
-      removeInvariant: ['old invariant'],
+      removeInvariant: ['old invariant', 'second'],
       addInvariant: [longInvariant],
       ...AC,
     });
