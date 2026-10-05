@@ -48,3 +48,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::an undeliverable Stop result is refused a finite number of consecutive times, then released explicitly"
     commit_sha: "46875fdb67ca0e451404739449c9051d7db6ab66"
     test_verified_at: "46875fdb67ca0e451404739449c9051d7db6ab66"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 46875fdb67ca0e451404739449c9051d7db6ab66: after two malformed stops the state is 2; an exit-0 Stop result sets it to 0, after which three fresh refusals precede a release (a lifetime cap would not). Break-the-fix (reset disabled) failed the state-0 assertion."
+    recorded_at: "2026-10-05T04:56:37.347Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a successful Stop resets the consecutive counter so the budget is per run of failures"
+    commit_sha: "46875fdb67ca0e451404739449c9051d7db6ab66"
+    test_verified_at: "46875fdb67ca0e451404739449c9051d7db6ab66"
