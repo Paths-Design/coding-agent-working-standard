@@ -64,3 +64,11 @@ non_functional: {}
 contracts:
   - name: 'worktree-destroy-audit-commit'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Three destroy cases on temp repos at 964491b8b90b5404f8a126d9ebc46ddd9d997351: archived+gitignored body and archived+tracked body both return audit_commit {kind:'committed', sha:''} with HEAD unchanged and an empty index; a live spec lands a real commit whose git show --name-only is exactly the live spec path. Break-the-fix (both source edits reverted) reproduced the 2026-08-15 surface: git add failed: fatal: pathspec '.caws/specs/<id>.yaml' did not match any files, refused_dirty. Not reproduced on the original wt-merge-notes lane."
+    recorded_at: "2026-10-05T04:55:08.145Z"
+    test_nodeid: "packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js::A1: destroy of a worktree bound to an archived spec"
+    commit_sha: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
+    test_verified_at: "964491b8b90b5404f8a126d9ebc46ddd9d997351"
