@@ -296,13 +296,44 @@ interface CawsPluginCtx {
   client?: CawsClient;
 }
 
-function buildPayload(toolName: string, toolInput: Record<string, unknown>): string {
-  return JSON.stringify({
+// The directory a tool call's relative paths resolve against. The shared guards
+// read it from the payload's `cwd` (HOOK_CWD); without it a relative Bash
+// mutation target cannot be attributed to a checkout, and bash-write-guard asks
+// about it — which on this surface, having no ask, is a block.
+//
+// ctx.directory is the directory opencode runs the session (and its bash tool)
+// in. ctx.worktree is the git root, which differs from it in a subdirectory
+// launch, and resolving relative paths against it would silently name the wrong
+// file, so it is NOT a fallback: an unknown directory is reported as unknown
+// (no cwd) and the guard decides. A bash call's own `workdir` argument, when
+// given, is where that command runs.
+function resolveAgentCwd(
+  ctx: CawsPluginCtx,
+  toolName: string,
+  toolInput: Record<string, unknown>
+): string | null {
+  const base = typeof ctx.directory === 'string' && ctx.directory.length > 0 ? ctx.directory : null;
+  if (!base) return null;
+  const workdir = toolInput.workdir;
+  if (toolName === 'Bash' && typeof workdir === 'string' && workdir.length > 0) {
+    return path.resolve(base, workdir);
+  }
+  return base;
+}
+
+function buildPayload(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  cwd: string | null
+): string {
+  const payload: Record<string, unknown> = {
     tool_name: toolName,
     tool_input: toolInput,
     tool_use_id: '',
     session_id: currentSessionId || '',
-  });
+  };
+  if (cwd) payload.cwd = cwd;
+  return JSON.stringify(payload);
 }
 
 async function advisoryLog(client: CawsClient | undefined, message: string) {
@@ -335,7 +366,7 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
 
         const toolName = mapToolName(input?.tool || '');
         const toolInput = normalizeArgs(output?.args);
-        const payload = buildPayload(toolName, toolInput);
+        const payload = buildPayload(toolName, toolInput, resolveAgentCwd(ctx, toolName, toolInput));
 
         const res = dispatch(root, 'pre_tool_use.sh', payload);
         const decision = readDecision(res.stdout, res.exitCode);
@@ -363,7 +394,7 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
         if (root === UNKNOWN_ROOT) return;
         const toolName = mapToolName(input?.tool || '');
         const toolInput = normalizeArgs(output?.args);
-        const payload = buildPayload(toolName, toolInput);
+        const payload = buildPayload(toolName, toolInput, resolveAgentCwd(ctx, toolName, toolInput));
         const res = dispatch(root, 'post_tool_use.sh', payload);
         const decision = readDecision(res.stdout, res.exitCode);
         const combined = [decision.warn, decision.context].filter(Boolean).join('\n\n');

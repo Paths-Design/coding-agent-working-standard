@@ -1,7 +1,7 @@
 {
   "shared": {
-    "version": 91,
-    "fingerprint": "ca178c82c4fb040dde22774cf8f8c875b8ca531c6fc92b32102233b62011083d"
+    "version": 92,
+    "fingerprint": "66b11ad571efb8569645e9662434ee5a3c36b55ff1d38fb48108cb39da673feb"
   },
   "claude-code": {
     "version": 25,
@@ -16,8 +16,8 @@
     "fingerprint": "e2c1aafe6f10ecb283c59e77888624bf69ecf5619cef2ae50dc992e46e498ca6"
   },
   "opencode": {
-    "version": 7,
-    "fingerprint": "f45c119624d0b7ae326b092b7c97fda150b50b078928c81fc21386dc1f46957c"
+    "version": 8,
+    "fingerprint": "538fea81df43ff817da8fbbe6286c69c1ca54a270aa4b95da1f662baa15c8605"
   },
   "zcode": {
     "version": 2,

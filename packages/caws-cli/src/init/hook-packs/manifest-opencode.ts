@@ -65,7 +65,13 @@ import type { HookPackV1 } from './types';
 // Behavior-identical (same fields, same truthiness, same precedence); the pack
 // fingerprint changed, so the version bumps per the pack-fingerprint guard
 // (CAWS-CHORE-LINT-COVERAGE-HYGIENE-01).
-export const OPENCODE_PACK_VERSION = 7;
+// Version 8: the dispatcher payload carries `cwd` (CAWS-DEFECT-CLAIM-ORACLE-
+// CWD-RELATIVE-PATH-01). The plugin sent no working directory, so the shared
+// guards could not resolve a relative Bash mutation target; with the shared
+// pack now asking when the cwd is unknown, and opencode having no ask, every
+// relative write would have been refused. cwd is ctx.directory (or the bash
+// call's own workdir), never the git root.
+export const OPENCODE_PACK_VERSION = 8;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',

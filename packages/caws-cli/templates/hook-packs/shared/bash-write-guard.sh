@@ -131,6 +131,29 @@ PROJECT_DIR="$(_realpath "$PROJECT_DIR")"
 
 AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 
+# The operating cwd is KNOWN only when the payload named a directory that
+# exists. Otherwise AGENT_CWD above is a guess (the canonical root), and a
+# relative mutation target resolved against a guess carries no ownership answer:
+# `echo x > file.txt` may really mean another worktree's file. Relative targets
+# are then handed to the oracle UNRESOLVED, flagged, so it answers
+# ask_uncertain instead of classifying them as canonical paths.
+#
+# That fail-closed answer applies only to surfaces whose payload contract
+# carries `cwd` (decision recorded in CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-
+# PATH-01): there a missing cwd is a degraded payload and asking is right. On a
+# surface whose contract is unverified, an absent cwd is the normal case, and
+# asking would refuse every relative write (a false refusal, ranked worse than
+# the narrow fail-open), so those keep the prior behavior of resolving against
+# the guess. Adding a surface whose payload is verified to carry `cwd` (zcode,
+# dsh) is a one-word change to this list.
+_CWD_CONTRACT_SURFACES=" claude-code codex opencode qwen-code kimi-code "
+# CAWS_AGENT_SURFACE is set by lib/agent-surface.sh (sourced above), which
+# defaults an unset value to claude-code.
+_CWD_CONTRACT=0
+[[ -n "${CAWS_AGENT_SURFACE:-}" && "$_CWD_CONTRACT_SURFACES" == *" $CAWS_AGENT_SURFACE "* ]] && _CWD_CONTRACT=1
+_CWD_RESOLVED=0
+[[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]] && _CWD_RESOLVED=1
+
 # CAWS-BASH-GUARD-BOUNDARY-DIVERGENCE-01: the cross-repository boundary.
 #
 # scope-guard hard-blocks a Write/Edit whose target is in a different repository
@@ -329,9 +352,18 @@ while IFS= read -r cand; do
       _CAND_ALLOWLISTED=1
     fi
   fi
+  _ORACLE_PATH="$abs"
+  _CWD_UNRESOLVED=""
+  if [[ "$_CWD_RESOLVED" != "1" && "$_CWD_CONTRACT" == "1" ]]; then
+    case "$cand" in
+      /*) ;;
+      *) _ORACLE_PATH="$cand"; _CWD_UNRESOLVED=1 ;;
+    esac
+  fi
   out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
-    CAWS_ORACLE_REL_PATH="$abs" \
+    CAWS_ORACLE_REL_PATH="$_ORACLE_PATH" \
+    CAWS_ORACLE_CWD_UNRESOLVED="$_CWD_UNRESOLVED" \
     CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
     node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
   _first="${out%%$'\n'*}"
@@ -359,7 +391,9 @@ while IFS= read -r cand; do
       # ownership must not block a docs/** or .caws/** coordination edit.
       # Only a positive claim (block_claimed/block_foreign_worktree, handled
       # above) overrides the allowlist. Non-allowlisted paths escalate normally.
-      if [[ "$_CAND_ALLOWLISTED" == "1" ]]; then
+      # An unresolved cwd is the exception: the allowlist names paths relative
+      # to the project, which a guessed root cannot establish.
+      if [[ "$_CAND_ALLOWLISTED" == "1" && "$detail" != cwd-unresolved:* ]]; then
         :
       else
         escalate ask "$detail" "$outcome"
@@ -512,6 +546,12 @@ case "$WORST" in
     exit 2 ;;
   ask)
     case "$WORST_KIND" in
+      ask_uncertain)
+        if [[ "$WORST_DETAIL" == cwd-unresolved:* ]]; then
+          _REASON="[$_BG_ID] ask_uncertain: the operating cwd could not be resolved for the relative path '${WORST_DETAIL#cwd-unresolved:}', so which file it names (this checkout or another worktree's payload) cannot be decided. Approve only if you know the target is yours to mutate, or rerun with an absolute path."
+        else
+          _REASON="[$_BG_ID] This Bash command targets a worktree-claimed or worktree-payload path and ownership could not be confirmed ($WORST_KIND:$WORST_DETAIL). Approve only if you own the target worktree; otherwise route the mutation through the owning worktree's session."
+        fi ;;
       error_fail_closed)
         # A toolchain fault (oracle spawn failure, registry parse error, etc.) —
         # NOT an ownership conflict. Name it as such so the user is not misled
