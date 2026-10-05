@@ -1,0 +1,32 @@
+id: CAWS-WAIVER-SURFACE-REMOVAL-001
+title: 'Remove the legacy waiver surface: superseded by reprieves; only caws gates run still reads it'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-05T05:17:46.894Z'
+updated_at: '2026-10-05T05:17:46.894Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'caws-cli: caws waiver command, gates-run waiver filter, store waiver loaders, waiver docs and agent doctrine'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/waiver.ts'
+    - 'packages/caws-cli/src/shell/gates/waiver-filter.ts'
+    - 'packages/caws-cli/src/shell/commands/gates.ts'
+  out: []
+invariants:
+  - 'No governed surface, hook, doc or agent instruction offers caws waiver as a remedy after removal'
+  - 'caws gates run disposition is computed without a waiver filter, and existing .caws/waivers/ files are retired through a governed, recoverable path rather than silently ignored'
+acceptance:
+  - id: A1
+    given: 'the 2026-10-04 census (64 src files, 778 lines mention waiver; .caws/waivers holds WV-0001, WV-0002 and one retrofit waiver; CI ci-matrix.yml runs caws gates run)'
+    when: 'removal lands'
+    then: 'caws waiver is gone or answers with a removed-command diagnostic naming caws reprieve, and gates run no longer reads .caws/waivers'
+  - id: A2
+    given: 'CLAUDE.md, AGENTS.md, docs and .husky/pre-commit Guard 2'
+    when: 'searched'
+    then: 'none presents caws waiver create as a remedy'
+non_functional: {}
+contracts: []
