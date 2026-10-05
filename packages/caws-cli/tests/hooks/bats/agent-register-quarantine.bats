@@ -73,11 +73,21 @@ _clear_runtime_fixture() {
 # Every drift test installs machine-home state; clear it so the "no pointer" case
 # cannot inherit a previous test's fixture (all tests share one CAWS_TEST_HOME),
 # and restore the project pack so an edited stock handler cannot leak forward.
+setup() {
+  caws_session_isolation_begin
+  # The hook falls back to the runner's cwd when the envelope carries no `cwd`
+  # (these envelopes carry only session_id), so the cwd must be the fixture.
+  caws_enter_fixture
+}
+
 teardown() {
   _clear_runtime_fixture
   if [[ -n "${CAWS_PRISTINE_HOOKS:-}" && -d "$CAWS_PRISTINE_HOOKS" ]]; then
     cp -R "$CAWS_PRISTINE_HOOKS/." "$CAWS_TEST_HOOKS_DIR/"
   fi
+  # No session state for this suite's ids may land in the real repo.
+  caws_assert_session_state_isolated "quar-a9-$$" "quar-none-$$" "quar-bad-$$" \
+    "drift-a1-$$" "drift-a2-$$" "drift-a3-$$" "drift-a4-$$" "${CAWS_TEST_SESSION_ID:-}"
 }
 
 @test "quarantine read: a trapped session id is told it is TRAPPED at session start (A9)" {

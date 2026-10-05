@@ -131,7 +131,7 @@ run_guard() {
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
-    bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/$guard'"
+    bash -c "cd '$CAWS_TEST_REPO' && printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/$guard'"
 }
 
 # Run an installed guard against an ISOLATED COPY of the hooks dir with one
@@ -157,7 +157,7 @@ run_guard_missing_lib() {
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \
-    bash -c "printf '%s' '$envelope' | bash '$broken_hooks/$guard'"
+    bash -c "cd '$broken_repo' && printf '%s' '$envelope' | bash '$broken_hooks/$guard'"
   rm -rf "$broken_repo"
 }
 
@@ -180,6 +180,64 @@ run_dispatcher_missing_lib() {
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \
-    bash -c "printf '%s' '$envelope' | bash '$broken_hooks/dispatch/pre_tool_use.sh'"
+    bash -c "cd '$broken_repo' && printf '%s' '$envelope' | bash '$broken_hooks/dispatch/pre_tool_use.sh'"
   rm -rf "$broken_repo"
+}
+
+# --- Session-state isolation -------------------------------------------------
+#
+# The hooks resolve the durable session-envelope root as
+# `git -C ${HOOK_CWD:-$PWD} rev-parse --git-common-dir`. parse-input.sh
+# overwrites HOOK_CWD with the payload's `cwd` (empty when the payload has
+# none), so an exported HOOK_CWD never survives, and the root becomes the
+# RUNNER's working directory: inside this repo (or any of its linked worktrees)
+# that is the real checkout's .caws/sessions/. A fixture must therefore run with
+# its working directory INSIDE the fixture repo, never rely on HOOK_CWD alone.
+
+# Enter the fixture repo for the rest of the current test. Call from setup().
+caws_enter_fixture() {
+  cd "$CAWS_TEST_REPO" || return 1
+}
+
+# Mark "now" so a later assertion can tell state this test wrote from state an
+# earlier run left behind. Call from setup().
+caws_session_isolation_begin() {
+  CAWS_SESSION_MARKER="$BATS_TEST_TMPDIR/session-isolation-marker"
+  : >"$CAWS_SESSION_MARKER"
+}
+
+# Roots whose .caws/sessions must stay untouched: the checkout that owns the
+# suite files and the canonical repo behind it. Derived from BATS_TEST_DIRNAME
+# (an absolute path inside the real repo), never from the environment.
+_caws_real_session_roots() {
+  local top common
+  top="$(git -C "$BATS_TEST_DIRNAME" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  printf '%s\n' "$top/.caws/sessions"
+  common="$(git -C "$BATS_TEST_DIRNAME" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
+  printf '%s\n' "$(cd "$common/.." && pwd -P)/.caws/sessions"
+}
+
+# Fail when any listed session id has state under the REAL repo's .caws/sessions
+# that was written after caws_session_isolation_begin. Call from teardown().
+# Usage: caws_assert_session_state_isolated <session-id>...
+caws_assert_session_state_isolated() {
+  local roots root id leaked=""
+  [[ -n "${CAWS_SESSION_MARKER:-}" && -e "$CAWS_SESSION_MARKER" ]] || {
+    echo "caws_session_isolation_begin was not called in setup" >&2
+    return 1
+  }
+  roots="$(_caws_real_session_roots)" || { echo "cannot derive the real repo root from $BATS_TEST_DIRNAME" >&2; return 1; }
+  [[ -n "$roots" ]] || return 1
+  while IFS= read -r root; do
+    for id in "$@"; do
+      [[ -n "$id" && -e "$root/$id" ]] || continue
+      if [[ -n "$(find "$root/$id" -newer "$CAWS_SESSION_MARKER" -print -quit 2>/dev/null)" ]]; then
+        leaked+="$root/$id"$'\n'
+      fi
+    done
+  done <<<"$roots"
+  if [[ -n "$leaked" ]]; then
+    printf 'session state written under the REAL repo .caws/sessions:\n%s' "$leaked" >&2
+    return 1
+  fi
 }

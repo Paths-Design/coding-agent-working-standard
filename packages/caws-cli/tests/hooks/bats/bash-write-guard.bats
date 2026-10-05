@@ -37,6 +37,18 @@ teardown_file() {
   [[ -n "${CAWS_JSYAML_BLOCKER:-}" ]] && rm -f "$CAWS_JSYAML_BLOCKER"
 }
 
+setup() {
+  caws_session_isolation_begin
+  # Envelopes here carry no `cwd`, so the hook would fall back to the runner's
+  # cwd; run from inside the fixture repo instead.
+  caws_enter_fixture
+}
+
+teardown() {
+  caws_assert_session_state_isolated my-session other-session owner-session \
+    "${CAWS_TEST_SESSION_ID:-}"
+}
+
 # Seed an active worktree with a bound spec so the oracle's canonical-claim path
 # is reached (findClaimants must read spec YAML — which js-yaml-blocked fails).
 _seed_active_worktree() {
