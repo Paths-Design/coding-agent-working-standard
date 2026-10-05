@@ -54,3 +54,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::worktree create stamps the Claude Code session, claim recognizes it, and the write guard admits that owner"
     commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
     test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "one parity test: CLI resolver and shipped parse-input.sh+session-id.sh over a real PreToolUse payload return the same id (claude, codex and agreeing rows)"
+    recorded_at: "2026-10-05T05:36:17.758Z"
+    test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::claude-code session with a stray CAWS_SESSION_ID"
+    commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
+    test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
