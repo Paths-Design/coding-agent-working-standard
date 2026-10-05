@@ -93,3 +93,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
     commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
     test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Built binary at 6090be30. specs archive --older-than 10m --older-than-ms 600000 and agents show --stale-ttl 10m --stale-ttl-ms 600000 both exit 1 with 'pass --<flag> <duration> or --<flag>-ms <ms>, not both'; the resolver unit test pins the exact message naming both values."
+    recorded_at: "2026-10-05T00:20:34.916Z"
+    test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: refusals exit 1, name the flag, and change nothing"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
