@@ -137,6 +137,20 @@ AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 # `echo x > file.txt` may really mean another worktree's file. Relative targets
 # are then handed to the oracle UNRESOLVED, flagged, so it answers
 # ask_uncertain instead of classifying them as canonical paths.
+#
+# That fail-closed answer applies only to surfaces whose payload contract
+# carries `cwd` (decision recorded in CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-
+# PATH-01): there a missing cwd is a degraded payload and asking is right. On a
+# surface whose contract is unverified, an absent cwd is the normal case, and
+# asking would refuse every relative write (a false refusal, ranked worse than
+# the narrow fail-open), so those keep the prior behavior of resolving against
+# the guess. Adding a surface whose payload is verified to carry `cwd` (zcode,
+# dsh) is a one-word change to this list.
+_CWD_CONTRACT_SURFACES=" claude-code codex opencode qwen-code kimi-code "
+# CAWS_AGENT_SURFACE is set by lib/agent-surface.sh (sourced above), which
+# defaults an unset value to claude-code.
+_CWD_CONTRACT=0
+[[ -n "${CAWS_AGENT_SURFACE:-}" && "$_CWD_CONTRACT_SURFACES" == *" $CAWS_AGENT_SURFACE "* ]] && _CWD_CONTRACT=1
 _CWD_RESOLVED=0
 [[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]] && _CWD_RESOLVED=1
 
@@ -340,7 +354,7 @@ while IFS= read -r cand; do
   fi
   _ORACLE_PATH="$abs"
   _CWD_UNRESOLVED=""
-  if [[ "$_CWD_RESOLVED" != "1" ]]; then
+  if [[ "$_CWD_RESOLVED" != "1" && "$_CWD_CONTRACT" == "1" ]]; then
     case "$cand" in
       /*) ;;
       *) _ORACLE_PATH="$cand"; _CWD_UNRESOLVED=1 ;;

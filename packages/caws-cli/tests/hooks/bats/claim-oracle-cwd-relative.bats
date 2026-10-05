@@ -69,21 +69,22 @@ setup() {
 }
 
 # _bwg <session> <cwd|-> <command> — run the guard. cwd "-" omits cwd from the
-# payload and from the environment entirely.
+# payload and from the environment entirely. The surface is BWG_SURFACE
+# (default claude-code, a surface whose payload contract carries cwd).
 _bwg() {
   local sid="$1" cwd="$2" command="$3" envelope
   if [[ "$cwd" == "-" ]]; then
     envelope="$(jq -nc --arg c "$command" --arg s "$sid" \
       '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s}')"
     run env -u HOOK_CWD NODE_PATH="$NODE_PATH" \
-      CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE=claude-code \
+      CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="${BWG_SURFACE:-claude-code}" \
       HOOK_SESSION_ID="$sid" CAWS_GUARD_NO_ASK=0 \
       bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/bash-write-guard.sh'"
   else
     envelope="$(jq -nc --arg c "$command" --arg s "$sid" --arg d "$cwd" \
       '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s, cwd:$d}')"
     run env NODE_PATH="$NODE_PATH" \
-      CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE=claude-code \
+      CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="${BWG_SURFACE:-claude-code}" \
       HOOK_CWD="$cwd" HOOK_SESSION_ID="$sid" CAWS_GUARD_NO_ASK=0 \
       bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/bash-write-guard.sh'"
   fi
@@ -152,6 +153,52 @@ _assert_cwd_ask() {
 @test "claim-oracle-cwd: an allowlisted relative path with no cwd still asks (the allowlist cannot be applied to an unknown root)" {
   _bwg owner-session - "echo x > docs/note.txt"
   _assert_cwd_ask docs/note.txt
+}
+
+# --- the fail-closed answer is scoped to surfaces whose payload carries cwd ----
+#
+# On a surface whose contract is unverified (zcode, dsh) an absent cwd is the
+# normal case; asking would refuse every relative write there, so those keep
+# the prior behavior: the relative target is resolved against the project root
+# and adjudicated, with nothing new on stdout.
+
+@test "claim-oracle-cwd: every surface whose payload carries cwd asks on a relative target with no cwd" {
+  local surface
+  for surface in claude-code codex opencode qwen-code kimi-code; do
+    BWG_SURFACE="$surface" _bwg owner-session - "echo x > scratch.txt"
+    _assert_cwd_ask scratch.txt
+  done
+}
+
+@test "claim-oracle-cwd: zcode keeps the prior pass behavior for a relative target with no cwd" {
+  BWG_SURFACE=zcode _bwg owner-session - "echo x > scratch.txt"
+  assert_success
+  assert_output ''
+}
+
+@test "claim-oracle-cwd: dsh keeps the prior pass behavior for a relative target with no cwd" {
+  BWG_SURFACE=dsh _bwg owner-session - "echo x > scratch.txt"
+  assert_success
+  assert_output ''
+}
+
+@test "claim-oracle-cwd: an unrecognized surface keeps the prior pass behavior and emits no ask" {
+  BWG_SURFACE=some-new-harness _bwg owner-session - "echo x > scratch.txt"
+  assert_success
+  refute_output --partial 'permissionDecision'
+  refute_output --partial 'operating cwd could not be resolved'
+}
+
+@test "claim-oracle-cwd: zcode with a cwd naming a missing directory keeps the prior pass behavior" {
+  BWG_SURFACE=zcode _bwg owner-session "$REPO_ROOT/does-not-exist" "echo x > scratch.txt"
+  assert_success
+  assert_output ''
+}
+
+@test "claim-oracle-cwd: zcode still blocks a foreign-payload target given by absolute path with no cwd" {
+  BWG_SURFACE=zcode _bwg other-session - "echo x > $WT_ROOT/$CLAIMED_REL"
+  assert_equal "$status" 2
+  assert_output --partial "BLOCKED: this Bash command mutates worktree 'wt-seed''s payload"
 }
 
 # --- the oracle itself: the unresolved-cwd flag changes only relative answers -
