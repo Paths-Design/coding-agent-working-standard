@@ -50,16 +50,17 @@ acceptance:
       cannot move between treatments
   - id: A5
     given: >-
-      every operator-copy surface that presents waiver versus reprieve as the
-      available routes (waiver create notice, waiver/reprieve help in
+      every operator-copy surface that presents remedies for a refused action (the
+      lane-provenance merge refusal, reprieve help and other remedy copy in
       command-metadata.ts, README.md, docs/command-reference.md, docs/api/cli.md),
       located by a census grep whose query and positive control are recorded at
       implementation time
     when: 'the change is graded'
     then: >-
       each surface names amend-scope --add-support as the route for a
-      lane-provenance merge refusal, checked lexically by re-running the census and
-      semantically on the rendered --help and notice output, not by trusting a count
+      lane-provenance merge refusal and none presents caws waiver as a remedy,
+      checked lexically by re-running the census and semantically on the rendered
+      --help and refusal output
   - id: A6
     given: 'the repaired copy and a session blocked by a genuine PreToolUse hook refusal'
     when: 'the operator adds the blocked path to a spec scope.support'
