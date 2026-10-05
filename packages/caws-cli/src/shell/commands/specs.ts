@@ -1527,6 +1527,7 @@ export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): 
       }
       for (const entry of outcome.failed) {
         out(`  failed ${entry.id}: ${entry.reason}`);
+        if (entry.narrowRepair !== undefined) out(`    next: ${entry.narrowRepair}`);
       }
     }
     surfaceAuditCommit(outcome.data?.audit_commit, err, undefined);
@@ -2572,6 +2573,7 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
       }
       for (const failed of outcome.failed) {
         out(`  failed ${failed.id}: ${failed.reason}`);
+        if (failed.narrowRepair !== undefined) out(`    next: ${failed.narrowRepair}`);
       }
     }
     for (const warning of outcome.warnings ?? []) {
