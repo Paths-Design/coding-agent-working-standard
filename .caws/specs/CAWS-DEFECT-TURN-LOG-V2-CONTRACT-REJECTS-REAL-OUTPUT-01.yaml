@@ -37,3 +37,11 @@ contracts:
   - name: 'turn-log-v2'
     type: schema
     path: 'packages/caws-cli/src/kernel/schemas/telemetry/turn-log.v2.json'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "turn_summary type [string,null], still required; reverting to string fails this test"
+    recorded_at: "2026-10-05T05:50:25.092Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts::accepts a turn whose turn_summary is null (reasoning below the summary floor)"
+    commit_sha: b8789dab9dc6d31caef25ad366712423b7ebe9ec
+    test_verified_at: b8789dab9dc6d31caef25ad366712423b7ebe9ec
