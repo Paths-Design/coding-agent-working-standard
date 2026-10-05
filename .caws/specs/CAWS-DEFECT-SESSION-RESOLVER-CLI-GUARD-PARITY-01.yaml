@@ -61,3 +61,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::claude-code session with a stray CAWS_SESSION_ID"
     commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
     test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "no harness var: resolves {X, none} from caws_env with no notice (unchanged control)"
+    recorded_at: "2026-10-05T05:36:42.945Z"
+    test_nodeid: "packages/caws-cli/tests/shell/session-resolver-parity.test.js::resolves CAWS_SESSION_ID as the caws_env source with no notice"
+    commit_sha: "10b0958cf9368570b26f6822ab590508f2586921"
+    test_verified_at: "10b0958cf9368570b26f6822ab590508f2586921"
