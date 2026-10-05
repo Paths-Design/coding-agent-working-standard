@@ -51,3 +51,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats::shortcut-language: a double-quoted constant whose value starts with the marker is data"
     commit_sha: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
     test_verified_at: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "At 457b9e5998a8b7884ad82bb47755f7dac7490e5b: genuine stubs still strike - bare comment marker beside an id-shaped one, uppercase marker as a code value, marker followed by lowercase prose, marker after a complete or unterminated string, stray apostrophe before a line comment, and both not-implemented throw forms. Break-the-fix: disarming the code scan failed 39, 44, 45; disarming the comment scan failed 37; stripping unterminated strings failed 45. Suite 35 -> 49 tests, all pass."
+    recorded_at: "2026-10-05T04:59:17.374Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/shortcut-language-check.bats::shortcut-language: a bare marker comment strikes even beside an id-shaped one"
+    commit_sha: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
+    test_verified_at: "457b9e5998a8b7884ad82bb47755f7dac7490e5b"
