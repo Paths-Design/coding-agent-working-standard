@@ -121,3 +121,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/duration-flags.test.js::CLI: archive dry-run echoes the duration form"
     commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
     test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "The parser moved verbatim to src/shell/duration.ts; reprieve.ts imports and re-exports it. reprieve-relative-expiry.test.js has no diff against main and passes at 6090be30 (full file 9.4s run earlier this session, plus this re-derivation). duration-flags.test.js asserts reprieve.parseDurationToSeconds and DURATION_UNITS_HELP are the same objects as the shared module's, so the grammar has one source."
+    recorded_at: "2026-10-05T00:31:31.025Z"
+    test_nodeid: "packages/caws-cli/tests/shell/reprieve-relative-expiry.test.js::CAWS-REPRIEVE-RELATIVE-EXPIRY-001: parseDurationToSeconds"
+    commit_sha: "6090be30353545d3ec091152b89d821fbd997957"
+    test_verified_at: "6090be30353545d3ec091152b89d821fbd997957"
