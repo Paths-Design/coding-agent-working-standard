@@ -111,11 +111,11 @@ evidence:
     test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
   - criterion_id: A3
     status: pass
-    evidence_ref: "reports/release-audit-003/scenarios/merge-cli-clean.json and merge-cli-conflict.json: actual public CLI exits 0/1 and prints ready/NOT ready; before/after refs, indexes, files and events are identical. The store merge_check also distinguishes clean from conflict_or_error. scope-merge-cli-final.log exit 0. Generated artifacts remain ignored; this named test re-derives both scenarios."
-    recorded_at: "2026-10-04T02:00:32.462Z"
+    evidence_ref: "Re-verified 2026-10-04 at 956e9a9624bc24cc4d8bf839833a25d096484204 after merging main into this lane (takeover by session 3fda9a6f, user-approved). Full caws-cli suite at this HEAD: 273/273 suites, 3739/3739 tests. The mutation topology is now 161 sources (src/shell/duration.ts arrived from main via CAWS-CLI-HUMAN-DURATION-FLAGS-01; pin updated in 956e9a96). The original scenario artifacts and narrative remain in this criterion's earlier ac_recorded event under reports/release-audit-003/."
+    recorded_at: "2026-10-05T03:25:12.578Z"
     test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::merge preview distinguishes clean and conflicting branches without changing refs, indexes, files or events"
-    commit_sha: "09fa09d3"
-    test_verified_at: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+    commit_sha: "956e9a9624bc24cc4d8bf839833a25d096484204"
+    test_verified_at: "956e9a9624bc24cc4d8bf839833a25d096484204"
   - criterion_id: A7
     status: pass
     evidence_ref: "Manually inspected actual command receipts: reports/release-audit-003/audit-command-comparison.json (both workspace routes exit 0, 817 dependencies, zero findings); qualification-pinned.json (all 10 cases pass, detached production audit total 0, exact candidate ea563eec9a74b103f45501e1b297ab692c628d8816b7381b84c9c9cd3641cb7f). Not a --verify re-execution. Generated receipts intentionally untracked."
