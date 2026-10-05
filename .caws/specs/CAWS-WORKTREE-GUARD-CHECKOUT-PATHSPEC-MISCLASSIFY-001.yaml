@@ -82,3 +82,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-checkout-pathspec.bats::worktree-guard: checkout of a tracked file is refused as a path restore, not a branch switch"
     commit_sha: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
     test_verified_at: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "git checkout main: exit 2 with the branch-switch label; path-restore label absent"
+    recorded_at: "2026-10-05T05:43:12.792Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-checkout-pathspec.bats::worktree-guard: checkout of the base branch is refused as a branch switch"
+    commit_sha: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
+    test_verified_at: "7dd0189dc567fcf4be2112b3d1e9a67203abb0f3"
