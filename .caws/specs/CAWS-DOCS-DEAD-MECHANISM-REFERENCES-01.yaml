@@ -68,3 +68,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/dead-mechanism-references.test.js::scripts/verify.sh"
     commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
     test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "test.each row 'AGENTS.md names no dead mechanism' (case-insensitive -t also runs the templates/agents.md row). README.md:168 and AGENTS.md:231 now say parallel setup does not exist and is not planned; restoring the old line fails with term 'parallel setup deferred'"
+    recorded_at: "2026-10-05T07:17:17.306Z"
+    test_nodeid: "packages/caws-cli/tests/ci/dead-mechanism-references.test.js::AGENTS.md"
+    commit_sha: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
+    test_verified_at: "4774e73529c6d1b60064b0da0128e4245e3a8db5"
