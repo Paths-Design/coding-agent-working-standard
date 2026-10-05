@@ -1,0 +1,27 @@
+id: CAWS-SESSION-ID-LIB-HEADER-PRECEDENCE-DRIFT-01
+title: 'lib/session-id.sh header ''THE CANONICAL PRECEDENCE'' contradicts the order resolve_caws_session_id implements'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T08:27:17.396Z'
+updated_at: '2026-10-05T08:27:17.396Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'shared hook pack: lib/session-id.sh header comment'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'The file-header precedence list and the resolve_caws_session_id doc state the order the function implements: live agent-PID anchor, payload id, surface pin, CAWS_SESSION_ID, per-surface chain.'
+acceptance:
+  - id: A1
+    given: 'the header list (CLAUDE_SESSION_ID ''always wins'', CAWS_SESSION_ID fifth) versus the function doc and code (agent-PID anchor, payload, pin, CAWS_SESSION_ID, chain)'
+    when: 'the header is rewritten to match the code'
+    then: 'tests/shell/session-resolver-parity.test.js still passes and no executable line changes'
+non_functional: {}
+contracts: []
