@@ -41,8 +41,13 @@ acceptance:
     then: 'the routing they are given is caws specs amend-scope <spec> --add-support <path>, and neither the refusal nor the copy points them at caws reprieve or caws waiver for this class'
   - id: A4
     given: 'ONE fixture built once and reset to a common checkpoint between treatments, so only the governance artifact varies across arms'
-    when: 'merge readiness is evaluated three times - after creating a matching waiver, after granting a reprieve, and after caws specs amend-scope --add-support for the offending path'
-    then: 'the waiver leaves readiness unchanged, the reprieve leaves readiness unchanged, and only --add-support flips it to ready. EVIDENCE BUNDLE required per arm, because otherwise a hidden coordinate can move between treatments and the fixture passes for the wrong reason: branch and base SHAs, the offending commit SHA, git merge-base, explicit proof the offending commit is STILL present in base..branch (including in the third arm, so the flip is attributed to scope.support and not to the commit leaving the range), the exact lane scope.in and scope.support state, and the complete worktree merge --dry-run disposition'
+    when: >-
+      merge readiness is evaluated after granting a reprieve, and separately after
+      caws specs amend-scope --add-support for the offending path
+    then: >-
+      the reprieve leaves readiness unchanged and only --add-support flips it to
+      ready, with before/after readiness captured per arm so a hidden coordinate
+      cannot move between treatments
   - id: A5
     given: >-
       every operator-copy surface that presents waiver versus reprieve as the
