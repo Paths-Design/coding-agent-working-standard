@@ -1,0 +1,41 @@
+id: CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01
+title: 'A conflicted merge of base into a lane cannot be concluded: two guards treat incoming base changes as authored, and their pathspec remedy fails mid-merge'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-05T03:50:13.205Z'
+updated_at: '2026-10-05T03:50:13.205Z'
+created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
+blast_radius:
+  modules:
+    - 'repo git hooks: .husky/pre-commit Guard 2 (policy isolation)'
+    - 'shared hook pack: classify_command.py bare-commit-over-deletions guard'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/pre-commit'
+    - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+  out: []
+invariants:
+  - 'Merging the base branch into a lane (the sanctioned alternative to rebase) can always be concluded through the governed path without --no-verify'
+  - 'A guard that refuses an action names a remedy that actually completes it; while MERGE_HEAD exists that remedy must work for a merge'
+  - 'Exempting a merge never exempts an authored change: only paths whose staged content equals one merge parent are treated as incoming'
+acceptance:
+  - id: A1
+    given: 'a lane mid-merge with base (MERGE_HEAD = base) whose staged deletions and .caws/policy.yaml all equal the base parent byte-for-byte (reproduced 2026-10-04 in wt-merge-provenance-routing: 73 deletions, policy identical to main)'
+    when: 'the merge is concluded with git commit'
+    then: 'neither the commit-deletions guard nor pre-commit Guard 2 refuses it'
+  - id: A2
+    given: 'the same merge plus one authored edit to .caws/policy.yaml that matches neither parent'
+    when: 'the merge is concluded'
+    then: 'Guard 2 still refuses, naming that path'
+  - id: A3
+    given: 'either guard refusing during a merge'
+    when: 'its remediation text is followed literally'
+    then: 'the remediation completes rather than prescribing git commit -- <paths>, which git rejects as a partial commit during a merge'
+  - id: A4
+    given: 'the Guard 2 refusal text'
+    when: 'rendered'
+    then: 'it presents caws waiver create as a remedy only if waivers remain a supported surface'
+non_functional: {}
+contracts: []
