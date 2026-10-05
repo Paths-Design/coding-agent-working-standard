@@ -64,3 +64,9 @@ evidence:
     recorded_at: "2026-10-05T08:24:31.154Z"
     artifact_path: docs/guides/hook-packs.md
     commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "full-guide.md 'Verified acceptance evidence (--verify)' (run from the lane; leaf-name, test.each row literal, pytest, bats full-name node ids) and 'Commit and push traps' (lint-staged MM recovery; push exit 141 vs ls-remote)"
+    recorded_at: "2026-10-05T08:24:33.644Z"
+    artifact_path: docs/agents/full-guide.md
+    commit_sha: d13bf10c2fe25846ae2e8357a63ac81095e02c1c
