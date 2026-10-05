@@ -58,3 +58,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: checkout of a lockfile plus source is refused with the path-restore label"
     commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
     test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "index-only restore admitted, including the Guard 2 remedy git restore --staged --source=MERGE_HEAD -- .caws/policy.yaml (bats L192); classifier leg: test_index_only_restore_is_allowed"
+    recorded_at: "2026-10-05T08:29:46.516Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/worktree-guard-lockfile-restore.bats::worktree-guard: git restore --staged of a source file is admitted with no discard label"
+    commit_sha: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
+    test_verified_at: f8bf1457551f7f17960ec8c6eb41c3eca43cb5e0
