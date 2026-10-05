@@ -29,6 +29,12 @@ acceptance:
     given: 'the same handler after any successful stop'
     when: 'it next emits a malformed result'
     then: 'the consecutive counter has reset, so the budget is per-run of failures and not a lifetime cap'
+  - id: A3
+    given: >-
+      a handler that returns a well-formed, legitimate Stop block (a guard whose
+      condition is unmet but dischargeable)
+    when: 'the session stops more than N consecutive times'
+    then: 'every stop is still refused and the malformed-result counter is unchanged'
 non_functional: {}
 contracts:
   - name: 'stop-block-budget'
