@@ -56,3 +56,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/specs-archive-batch.test.js::A2: --json failed entry carries narrowRepair as a field"
     commit_sha: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
     test_verified_at: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "store archiveClosedSpecs failed entry carries narrowRepair via narrowRepairField (specs-writer.ts)"
+    recorded_at: "2026-10-05T05:31:06.011Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-archive-batch.test.js::A3: archiveClosedSpecs failed entry carries the diagnostic narrowRepair"
+    commit_sha: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
+    test_verified_at: b45f1cbfd8edb6ec8204325d7a78ee610e00fac4
