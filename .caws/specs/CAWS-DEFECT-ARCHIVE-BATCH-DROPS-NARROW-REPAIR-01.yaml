@@ -32,5 +32,11 @@ acceptance:
     given: 'archiveClosedSpecs (store) fails one selected spec whose diagnostic carries a narrowRepair'
     when: 'the batch outcome is returned'
     then: 'the failed entry for that spec carries the narrowRepair text, so no renderer can lose it'
+  - id: A4
+    given: >-
+      specs prune-drafts --apply where one candidate fails retirement with a
+      diagnostic carrying a narrowRepair
+    when: 'the batch output and --json are rendered'
+    then: 'the failed line and JSON entry carry that remedy, matching archive'
 non_functional: {}
 contracts: []
