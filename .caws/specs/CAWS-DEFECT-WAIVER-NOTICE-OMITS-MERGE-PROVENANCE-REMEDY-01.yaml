@@ -88,3 +88,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::one fixture, reset to a common checkpoint between arms"
     commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
     test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "sentence-level census over command-metadata.ts, packages/caws-cli/README.md, docs/api/cli.md, docs/command-reference.md, waiver.ts; asserts >=4 provenance sentences found; rendered worktree merge and reprieve --help name --add-support (sibling tests)"
+    recorded_at: "2026-10-05T06:26:54.178Z"
+    test_nodeid: "packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js::no sentence on any surface that discusses a lane-provenance refusal points at a waiver or a reprieve grant"
+    commit_sha: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
+    test_verified_at: "3fd77190a2e9d380cd394f7ea5e32758c993a798"
