@@ -25,8 +25,8 @@ acceptance:
       it does not report an unqualified ready: it either names the conflicting paths
       or states explicitly that conflict detection was not performed
   - id: A2
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'GIVEN a dry-run that reports ready WHEN the real merge runs immediately after with no intervening base movement THEN the merge succeeds'
+    given: 'a dry-run that reports ready'
+    when: 'the real caws worktree merge runs immediately after, with no intervening base movement'
+    then: 'the merge succeeds and lands the commit the preview described'
 non_functional: {}
 contracts: []
