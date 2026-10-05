@@ -1,9 +1,10 @@
 id: CAWS-RELEASE-AUDIT-REPAIRS-003
 title: 'Repair release qualification and truthful runtime contracts'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: release-audit-repairs
 created_at: '2026-10-03T21:37:19.652Z'
-updated_at: '2026-10-03T21:37:19.652Z'
+updated_at: '2026-10-04T04:09:13.987Z'
 created_by_session: '01a1039e-0b4e-7fd3-84b3-0684232a7628'
 blast_radius:
   modules:
@@ -20,6 +21,7 @@ scope:
     - 'docs'
     - 'AGENTS.md'
     - 'CLAUDE.md'
+    - CONTRIBUTING.md
   out: []
 invariants:
   - 'No lowered gate floors, fabricated evidence, publication, foreign ownership takeover, or weakened guarded-write enforcement'
@@ -57,9 +59,81 @@ acceptance:
     given: 'current implementation and registry observations'
     when: 'release guidance and notes are inspected'
     then: 'docs describe shipped commands and bounded goals, registry discrepancy is accounted for, and missing remote or native evidence is explicit'
+  - id: A9
+    given: 'repository agent instructions, contributor guidance and shipped agent templates'
+    when: 'the coding-rigor standard is read and consumer docs are staged'
+    then: >-
+      each entry point carries acceptance, falsification, evidence and authorization
+      requirements; the detailed guide is reachable through repo links and shipped
+      consumer docs; documentation checks pass without claiming native adoption or
+      release qualification
 observability:
   - 'Retain commands, exit statuses, logs, fixture state and checksums under ignored canonical evidence storage'
 rollback:
   - 'Revert each logical source commit before publication; do not alter registry versions or installed shared runtime'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/scenarios/scope-lane.json; scope-staged.json; scope-empty-index.json; scope-invalid-base.json; scope-rename.json; scope-index-identity.json. Real CLI exits 1 for committed/staged violations, 2 for unavailable inputs; event records exact basis."
+    recorded_at: "2026-10-03T23:47:52.569Z"
+    test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::committed forbidden lane work is evaluated despite an empty canonical index; event carries its basis"
+    commit_sha: a6c9c5df
+    test_verified_at: a6c9c5df6e84a3e16bcfb6e06547b92b2a4e2c62
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/audit-routing.json; mutation-inventory.log; entrypoint-final.log. Actual npm root routing preserves exits 0 and 17; all 160 sources classified once; fresh source-only installed entrypoint builds and executes. Parameter-expanded citation was refused without writes; this stable workflow test is re-derived and routing runtime receipts were inspected separately."
+    recorded_at: "2026-10-04T01:07:07.946Z"
+    test_nodeid: "packages/caws-cli/tests/ci/release-hardening.test.js::release qualification requires the same dependency audit as PR CI"
+    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/bootstrap-final.log: 18 installed-bootstrap and activation-race checks pass. scenarios/installed-invocation-*.json retain seven actual malformed-input usage refusals (exit 2). Selected test re-derives PreToolUse=2/block and Stop=0 on bootstrap failure. Packaged bootstrap boundary passed in qualification-final.json; that overall run failed later on a separate 60-second hook timeout."
+    recorded_at: "2026-10-04T01:07:58.575Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a bootstrap-scope fault refuses the tool call but never the session exit"
+    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/scenarios/injection-control.json. Actual pytest receives the hostile nodeid as one operand and preserves sentinel bytes; deliberate shell control overwrites it and is detected."
+    recorded_at: "2026-10-04T01:08:47.957Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a shell metacharacter string reaches pytest as one operand after --, never a shell"
+    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/reports/release-audit-003/scenarios/renderer-receipt.json; rendered-turn-001.json; pack-policy.json; qualification-final.json packageFiles. Actual Python renderer validates with AJV, malformed shapes fail, real npm pack excludes planted bytecode and installed candidate has 911 files with zero bytecode paths."
+    recorded_at: "2026-10-04T01:09:41.385Z"
+    test_nodeid: "packages/caws-cli/tests/ci/artifact-contracts.test.js::real renderer bytes validate with nullable summary and lineage; malformed shapes are rejected"
+    commit_sha: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+    test_verified_at: "906fd421637ebce8b401713cf9fed1c7b4b3da7b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "reports/release-audit-003/scenarios/merge-cli-clean.json and merge-cli-conflict.json: actual public CLI exits 0/1 and prints ready/NOT ready; before/after refs, indexes, files and events are identical. The store merge_check also distinguishes clean from conflict_or_error. scope-merge-cli-final.log exit 0. Generated artifacts remain ignored; this named test re-derives both scenarios."
+    recorded_at: "2026-10-04T02:00:32.462Z"
+    test_nodeid: "packages/caws-cli/tests/shell/release-runtime-contracts.test.js::merge preview distinguishes clean and conflicting branches without changing refs, indexes, files or events"
+    commit_sha: "09fa09d3"
+    test_verified_at: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Manually inspected actual command receipts: reports/release-audit-003/audit-command-comparison.json (both workspace routes exit 0, 817 dependencies, zero findings); qualification-pinned.json (all 10 cases pass, detached production audit total 0, exact candidate ea563eec9a74b103f45501e1b297ab692c628d8816b7381b84c9c9cd3641cb7f). Not a --verify re-execution. Generated receipts intentionally untracked."
+    recorded_at: "2026-10-04T02:20:57.598Z"
+    command: "npm run audit:dependencies --workspaces=false -- --json; node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-pinned.json"
+    exit_code: 0
+    commit_sha: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Manually inspected docs-final.log, merge-help-final.log, registry-final.json, goal-bats-final.log, and docs/release-readiness.md. Current npm latest 12.1.0 and next 12.2.0-rc.2 accounted; earlier RC lookup failure is not publication failure. Local package ten-case qualification passes; remote CI, supported platform matrix, actual native trust/delivery, and fresh publication version remain separate release requirements. No native/global adoption or publication performed. Not a --verify semantic re-execution."
+    recorded_at: "2026-10-04T02:22:15.221Z"
+    command: "npm run docs:check --workspace @paths.design/caws-cli; npm view @paths.design/caws-cli dist-tags --json --prefer-online; node packages/caws-cli/dist/index.js worktree merge --help"
+    exit_code: 0
+    commit_sha: "09fa09d35f7f1d76701d71fb9f545c1290073c6a"
+  - criterion_id: A9
+    status: pass
+    evidence_ref: "Manual content/link review across root CLAUDE.md, AGENTS.md, CONTRIBUTING.md, legacy templates, shipped Claude hook guide and Codex managed block. docs:check stages 10 consumer documents; guide strict metadata valid, staged bytes SHA256 ba87c6744feffe9877311c13db68552f0da85d5967ab5f8f78c303f7d96581af match author; actual npm preview contains guide, Claude hook guide and compiled instruction carrier. Five suites/70 tests pass (reports/coding-rigor-docs/tests.log). instructions-runtime.json shows v1-to-v2 updated, second merge unchanged and outside bytes preserved. --verify checks tracked guide custody; semantic conclusions were inspected manually. Initial wrong-cwd test invocation, restricted default npm cache and excluded legacy template assumptions were corrected; stale-version fixture was repaired. No native/global adoption or current release qualification claim."
+    recorded_at: "2026-10-04T04:33:17.396Z"
+    command: "npm run docs:check --workspace @paths.design/caws-cli; npm run typecheck --workspace @paths.design/caws-cli; jest selected instruction/doc suites; npm pack --dry-run --json --ignore-scripts with owned cache; managed-block runtime fixture"
+    exit_code: 0
+    artifact_path: docs/guides/coding-rigor.md

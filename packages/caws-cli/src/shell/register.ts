@@ -146,6 +146,12 @@ import {
   type EvidenceKind,
 } from './index';
 import type { LeaseReason } from '../kernel';
+import {
+  OLDER_THAN_FLAGS,
+  STALE_TTL_FLAGS,
+  resolveDurationOption,
+  type DurationFlagPair,
+} from './duration';
 
 export interface RegisterShellCommandsOptions {
   /**
@@ -305,6 +311,28 @@ function parseCommaSeparatedList(raw: string | undefined): string[] | undefined 
     .split(',')
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
+}
+
+/**
+ * Resolve an age / TTL flag pair (`--older-than` / `--older-than-ms`,
+ * `--stale-ttl` / `--stale-ttl-ms`) to milliseconds at the parse layer, so
+ * every command reads one grammar (CAWS-CLI-HUMAN-DURATION-FLAGS-01).
+ * Returns undefined when neither spelling was passed, or null after writing
+ * the refusal to stderr — the caller exits 1 on null. An invalid value is
+ * never dropped in favour of the command's default.
+ */
+function resolveDurationFlagOrRefuse(
+  command: string,
+  flags: DurationFlagPair,
+  duration: string | undefined,
+  ms: string | undefined
+): number | undefined | null {
+  const resolved = resolveDurationOption(flags, duration, ms);
+  if (!resolved.ok) {
+    process.stderr.write(`${command}: ${resolved.error}\n`);
+    return null;
+  }
+  return resolved.ms;
 }
 
 function parseOptionalNonNegativeInteger(raw: string | undefined): number | undefined {
@@ -1468,6 +1496,7 @@ export function registerShellCommands(
 
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'prune-drafts')).action(
     (opts: {
+      olderThan?: string;
       olderThanMs?: string;
       include?: string;
       exclude?: string;
@@ -1477,10 +1506,20 @@ export function registerShellCommands(
       json?: boolean;
       data?: boolean;
     }) => {
+      const olderThanMs = resolveDurationFlagOrRefuse(
+        'caws specs prune-drafts',
+        OLDER_THAN_FLAGS,
+        opts.olderThan,
+        opts.olderThanMs
+      );
+      if (olderThanMs === null) {
+        exit(1);
+        return;
+      }
       const include = parseCommaSeparatedList(opts.include);
       const exclude = parseCommaSeparatedList(opts.exclude);
       const code = runSpecsPruneDraftsCommand({
-        ...(opts.olderThanMs !== undefined ? { olderThanMs: opts.olderThanMs } : {}),
+        ...(olderThanMs !== undefined ? { olderThanMs } : {}),
         ...(include !== undefined ? { include } : {}),
         ...(exclude !== undefined ? { exclude } : {}),
         ...(opts.includeBound === true ? { includeBound: true } : {}),
@@ -1706,6 +1745,7 @@ export function registerShellCommands(
         status?: string;
         include?: string;
         exclude?: string;
+        olderThan?: string;
         olderThanMs?: string;
         updatedBefore?: string;
         withoutWorktree?: boolean;
@@ -1720,6 +1760,16 @@ export function registerShellCommands(
       },
       command: Command
     ) => {
+      const olderThanMs = resolveDurationFlagOrRefuse(
+        'caws specs archive',
+        OLDER_THAN_FLAGS,
+        opts.olderThan,
+        opts.olderThanMs
+      );
+      if (olderThanMs === null) {
+        exit(1);
+        return;
+      }
       const include = parseCommaSeparatedList(opts.include);
       const exclude = parseCommaSeparatedList(opts.exclude);
       // The parent `specs` command declares a group-level `--status` compat
@@ -1739,7 +1789,7 @@ export function registerShellCommands(
         ...(status !== undefined ? { status } : {}),
         ...(include !== undefined ? { include } : {}),
         ...(exclude !== undefined ? { exclude } : {}),
-        ...(opts.olderThanMs !== undefined ? { olderThanMs: opts.olderThanMs } : {}),
+        ...(olderThanMs !== undefined ? { olderThanMs } : {}),
         ...(opts.updatedBefore !== undefined ? { updatedBefore: opts.updatedBefore } : {}),
         ...(opts.withoutWorktree === true ? { withoutWorktree: true } : {}),
         ...(opts.apply === true ? { apply: true } : {}),
@@ -2120,16 +2170,26 @@ export function registerShellCommands(
       includeStale?: boolean;
       includeStopped?: boolean;
       active?: boolean;
+      staleTtl?: string;
       staleTtlMs?: string;
       json?: boolean;
       data?: boolean;
     }) => {
-      const ttl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
+      const ttl = resolveDurationFlagOrRefuse(
+        'caws agents list',
+        STALE_TTL_FLAGS,
+        opts.staleTtl,
+        opts.staleTtlMs
+      );
+      if (ttl === null) {
+        exit(1);
+        return;
+      }
       const code = runAgentsListCommand({
         includeStale: opts.includeStale === true,
         includeStopped: opts.includeStopped === true,
         activeOnly: opts.active === true,
-        ...(ttl !== undefined && Number.isFinite(ttl) ? { staleTtlMs: ttl } : {}),
+        ...(ttl !== undefined ? { staleTtlMs: ttl } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
@@ -2138,11 +2198,23 @@ export function registerShellCommands(
   );
 
   defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'show')).action(
-    (id: string, opts: { json?: boolean; data?: boolean; staleTtlMs?: string }) => {
-      const ttl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
+    (
+      id: string,
+      opts: { json?: boolean; data?: boolean; staleTtl?: string; staleTtlMs?: string }
+    ) => {
+      const ttl = resolveDurationFlagOrRefuse(
+        'caws agents show',
+        STALE_TTL_FLAGS,
+        opts.staleTtl,
+        opts.staleTtlMs
+      );
+      if (ttl === null) {
+        exit(1);
+        return;
+      }
       const code = runAgentsShowCommand({
         id,
-        ...(ttl !== undefined && Number.isFinite(ttl) ? { staleTtlMs: ttl } : {}),
+        ...(ttl !== undefined ? { staleTtlMs: ttl } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
@@ -2176,7 +2248,9 @@ export function registerShellCommands(
     (opts: {
       dead?: boolean;
       status?: string;
+      olderThan?: string;
       olderThanMs?: string;
+      staleTtl?: string;
       staleTtlMs?: string;
       apply?: boolean;
       json?: boolean;
@@ -2184,9 +2258,13 @@ export function registerShellCommands(
     }) => {
       // PID-liveness mode: --dead is mutually exclusive with --status.
       if (opts.dead === true) {
-        if (opts.status !== undefined || opts.olderThanMs !== undefined) {
+        if (
+          opts.status !== undefined ||
+          opts.olderThan !== undefined ||
+          opts.olderThanMs !== undefined
+        ) {
           process.stderr.write(
-            'caws agents prune: --dead cannot be combined with --status / --older-than-ms.\n'
+            'caws agents prune: --dead cannot be combined with --status / --older-than / --older-than-ms.\n'
           );
           exit(1);
           return;
@@ -2213,19 +2291,37 @@ export function registerShellCommands(
         RETENTION_STATUSES.includes(value as RetentionStatus);
 
       const status = isRetentionStatus(opts.status) ? opts.status : null;
-      const olderThanMs = Number(opts.olderThanMs);
-      if (status === null || !Number.isFinite(olderThanMs)) {
+      const olderThanMs = resolveDurationFlagOrRefuse(
+        'caws agents prune',
+        OLDER_THAN_FLAGS,
+        opts.olderThan,
+        opts.olderThanMs
+      );
+      if (olderThanMs === null) {
+        exit(1);
+        return;
+      }
+      if (status === null || olderThanMs === undefined) {
         process.stderr.write(
-          `caws agents prune: pass --dead, or --status <${RETENTION_STATUSES.join('|')}> with a numeric --older-than-ms.\n`
+          `caws agents prune: pass --dead, or --status <${RETENTION_STATUSES.join('|')}> with --older-than <duration> (e.g. 7d) or --older-than-ms <ms>.\n`
         );
         exit(1);
         return;
       }
-      const staleTtl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
+      const staleTtl = resolveDurationFlagOrRefuse(
+        'caws agents prune',
+        STALE_TTL_FLAGS,
+        opts.staleTtl,
+        opts.staleTtlMs
+      );
+      if (staleTtl === null) {
+        exit(1);
+        return;
+      }
       const code = runAgentsPruneCommand({
         status,
         olderThanMs,
-        ...(staleTtl !== undefined && Number.isFinite(staleTtl) ? { staleTtlMs: staleTtl } : {}),
+        ...(staleTtl !== undefined ? { staleTtlMs: staleTtl } : {}),
         apply: opts.apply === true,
         json: opts.json === true,
         showData: opts.data === true,
@@ -2376,11 +2472,21 @@ export function registerShellCommands(
         json?: boolean;
         mine?: boolean;
         queued?: boolean;
+        olderThan?: string;
         olderThanMs?: string;
         data?: boolean;
       }
     ) => {
-      const olderThanMs = opts.olderThanMs !== undefined ? Number(opts.olderThanMs) : undefined;
+      const olderThanMs = resolveDurationFlagOrRefuse(
+        'caws message status',
+        OLDER_THAN_FLAGS,
+        opts.olderThan,
+        opts.olderThanMs
+      );
+      if (olderThanMs === null) {
+        exit(1);
+        return;
+      }
       const code = runMessageStatusCommand({
         id: opts.id ?? '',
         ...(typeof messageId === 'string' && messageId.length > 0
@@ -2388,7 +2494,7 @@ export function registerShellCommands(
           : {}),
         ...(opts.mine === true ? { mine: true } : {}),
         ...(opts.queued === true ? { queued: true } : {}),
-        ...(olderThanMs !== undefined && Number.isFinite(olderThanMs) ? { olderThanMs } : {}),
+        ...(olderThanMs !== undefined ? { olderThanMs } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
@@ -2399,6 +2505,7 @@ export function registerShellCommands(
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'prune')).action(
     (opts: {
       status?: string;
+      olderThan?: string;
       olderThanMs?: string;
       include?: string;
       exclude?: string;
@@ -2406,10 +2513,16 @@ export function registerShellCommands(
       json?: boolean;
       data?: boolean;
     }) => {
-      const olderThanMs =
-        opts.olderThanMs !== undefined
-          ? parseOptionalNonNegativeInteger(opts.olderThanMs)
-          : undefined;
+      const olderThanMs = resolveDurationFlagOrRefuse(
+        'caws message prune',
+        OLDER_THAN_FLAGS,
+        opts.olderThan,
+        opts.olderThanMs
+      );
+      if (olderThanMs === null) {
+        exit(1);
+        return;
+      }
       const include = parseCommaSeparatedList(opts.include);
       const exclude = parseCommaSeparatedList(opts.exclude);
       const code = runMessagePruneCommand({
@@ -2432,11 +2545,23 @@ export function registerShellCommands(
   applyGroupMeta(sessionCmd, SESSION_COMMAND_META);
 
   defineLeaf(sessionCmd, leafMeta(SESSION_COMMAND_META, 'prune')).action(
-    (opts: { olderThanMs?: string; apply?: boolean; json?: boolean; data?: boolean }) => {
-      const olderThanMs =
-        opts.olderThanMs !== undefined
-          ? parseOptionalNonNegativeInteger(opts.olderThanMs)
-          : undefined;
+    (opts: {
+      olderThan?: string;
+      olderThanMs?: string;
+      apply?: boolean;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const olderThanMs = resolveDurationFlagOrRefuse(
+        'caws session prune',
+        OLDER_THAN_FLAGS,
+        opts.olderThan,
+        opts.olderThanMs
+      );
+      if (olderThanMs === null) {
+        exit(1);
+        return;
+      }
       const code = runSessionPruneCommand({
         ...(olderThanMs !== undefined ? { olderThanMs } : {}),
         apply: opts.apply === true,

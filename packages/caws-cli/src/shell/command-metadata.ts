@@ -365,8 +365,14 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         'Plan or apply stale draft cleanup. Dry-run by default: classifies draft specs as candidates, skipped, or refused using age, include/exclude selectors, and worktree binding state. --apply retires only candidate drafts through the governed retire-draft path.',
       options: [
         {
+          flag: '--older-than <duration>',
+          description:
+            'Stale threshold as a duration, e.g. 10m, 2h, 7d (default: 7d; units: s, m, h/hr, d; combine as 1h30m). Mutually exclusive with --older-than-ms.',
+        },
+        {
           flag: '--older-than-ms <ms>',
-          description: 'Stale threshold in milliseconds (default: 604800000 = 7 days)',
+          description:
+            'Stale threshold in milliseconds (default: 604800000 = 7 days). Prefer --older-than.',
         },
         {
           flag: '--include <ids>',
@@ -384,7 +390,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--apply',
           description:
-            'Retire selected candidate drafts. Requires --include or explicit --older-than-ms.',
+            'Retire selected candidate drafts. Requires --include or an explicit --older-than / --older-than-ms.',
         },
         {
           flag: '--reason <text>',
@@ -722,9 +728,14 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           description: 'Comma-separated spec ids to exclude from batch mode',
         },
         {
+          flag: '--older-than <duration>',
+          description:
+            'Batch selector: archive only closed specs whose updated_at/created_at age is at least this duration, e.g. 10m, 2h, 7d (units: s, m, h/hr, d; combine as 1h30m). Mutually exclusive with --older-than-ms.',
+        },
+        {
           flag: '--older-than-ms <ms>',
           description:
-            'Batch selector: archive only closed specs whose updated_at/created_at age is at least this many milliseconds',
+            'Batch selector: archive only closed specs whose updated_at/created_at age is at least this many milliseconds. Prefer --older-than.',
         },
         {
           flag: '--updated-before <timestamp>',
@@ -2229,8 +2240,14 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
             'Active-only (overrides --include-* flags); TTL-classified active, not raw status field',
         },
         {
+          flag: '--stale-ttl <duration>',
+          description:
+            'TTL for stale classification as a duration, e.g. 30m, 2h (default: 30m; units: s, m, h/hr, d; combine as 1h30m). Mutually exclusive with --stale-ttl-ms.',
+        },
+        {
           flag: '--stale-ttl-ms <ms>',
-          description: 'TTL for stale classification (default: 1800000 = 30m)',
+          description:
+            'TTL for stale classification in milliseconds (default: 1800000 = 30m). Prefer --stale-ttl.',
         },
         { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
         DATA_OPTION,
@@ -2244,9 +2261,14 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
         'Show one lease by session id, with its derived TTL liveness classification. Read-only.',
       options: [
         {
+          flag: '--stale-ttl <duration>',
+          description:
+            'TTL for the derived liveness classification as a duration, e.g. 30m, 2h (default: 30m; units: s, m, h/hr, d; combine as 1h30m); the persisted status is unaffected. Mutually exclusive with --stale-ttl-ms.',
+        },
+        {
           flag: '--stale-ttl-ms <ms>',
           description:
-            'TTL for the derived liveness classification (default: 1800000 = 30m); the persisted status is unaffected',
+            'TTL for the derived liveness classification in milliseconds (default: 1800000 = 30m); the persisted status is unaffected. Prefer --stale-ttl.',
         },
         { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
         DATA_OPTION,
@@ -2279,7 +2301,7 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'prune',
       description:
-        'Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. Never invoked by hooks. Three modes: --dead (PID-liveness: remove active/stopping leases on THIS host whose owning process is gone), --status <stopped|stale|legacy> --older-than-ms <ms> (retention-based; legacy is status-agnostic and reaches v10/early-v11 records with no status field), or --status legacy for age-based cleanup of orphan records.',
+        'Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. Never invoked by hooks. Three modes: --dead (PID-liveness: remove active/stopping leases on THIS host whose owning process is gone), --status <stopped|stale|legacy> --older-than <duration> (or --older-than-ms <ms>; retention-based; legacy is status-agnostic and reaches v10/early-v11 records with no status field), or --status legacy for age-based cleanup of orphan records.',
       options: [
         {
           flag: '--dead',
@@ -2292,12 +2314,23 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
             'stopped | stale | legacy (required unless --dead). legacy is status-agnostic — selects by last_active age alone, reaching records with no status field.',
         },
         {
+          flag: '--older-than <duration>',
+          description:
+            'Retention threshold as a duration, e.g. 12h, 7d (units: s, m, h/hr, d; combine as 1h30m). --status requires this or --older-than-ms.',
+        },
+        {
           flag: '--older-than-ms <ms>',
-          description: 'Retention threshold in milliseconds (required with --status)',
+          description: 'Retention threshold in milliseconds. Prefer --older-than.',
+        },
+        {
+          flag: '--stale-ttl <duration>',
+          description:
+            'TTL for stale classification as a duration (used with --status stale; default 30m). Mutually exclusive with --stale-ttl-ms.',
         },
         {
           flag: '--stale-ttl-ms <ms>',
-          description: 'TTL for stale classification (used with --status stale; default 30m)',
+          description:
+            'TTL for stale classification in milliseconds (used with --status stale; default 30m). Prefer --stale-ttl.',
         },
         { flag: '--apply', description: 'Actually delete (default: dry-run)' },
         { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
@@ -2432,8 +2465,13 @@ export const SESSION_COMMAND_META: GroupCommandMeta = {
         'Dry-run-default retention for .caws/sessions/: classify each session log dir by last turn activity and report what is older than the retention window. Only per-session turn history (turn-<NNN>.json) is retention-eligible; the identity capsule (.session-envelope.json), .meta.json, and top-level dotfiles are preserved (per-path exclusion). The current session and any session with a live lease are protected and never pruned. --apply performs the prune; without it nothing is deleted. Operational cache only — never appends an event, never touches governed state.',
       options: [
         {
+          flag: '--older-than <duration>',
+          description:
+            'Retention window as a duration, e.g. 7d, 12h (default: 30d; units: s, m, h/hr, d; combine as 1h30m). Mutually exclusive with --older-than-ms.',
+        },
+        {
           flag: '--older-than-ms <ms>',
-          description: 'Retention window in milliseconds (default: 30 days)',
+          description: 'Retention window in milliseconds (default: 30 days). Prefer --older-than.',
         },
         { flag: '--apply', description: 'Perform the prune instead of dry-running it' },
         { flag: '--json', description: 'Emit the plan or apply outcome as JSON.' },
@@ -2655,9 +2693,14 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
             'With --mine: restrict to still-undelivered sends (required pairing for the dead-letter view).',
         },
         {
+          flag: '--older-than <duration>',
+          description:
+            'With --mine --queued: only list sends queued at least this long, e.g. 30m, 2h (default 1h; units: s, m, h/hr, d; combine as 1h30m). Mutually exclusive with --older-than-ms.',
+        },
+        {
           flag: '--older-than-ms <ms>',
           description:
-            'With --mine --queued: only list sends queued at least this long (default 3600000 = 1h).',
+            'With --mine --queued: the same window in milliseconds (default 3600000 = 1h). Prefer --older-than.',
         },
         {
           flag: '--json',
@@ -2680,9 +2723,14 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
           allowedValues: ['delivered', 'undelivered-to-dead-session'],
         },
         {
+          flag: '--older-than <duration>',
+          description:
+            'Age threshold as a duration, e.g. 1h, 7d (units: s, m, h/hr, d; combine as 1h30m). For delivered: select messages older than this. For undelivered-to-dead-session: override the retention floor (default 7d; 0s = immediate). Mutually exclusive with --older-than-ms.',
+        },
+        {
           flag: '--older-than-ms <ms>',
           description:
-            'Age threshold in milliseconds. For delivered: select messages older than this. For undelivered-to-dead-session: override the retention floor (default 604800000 = 7 days; 0 = immediate).',
+            'Age threshold in milliseconds (same semantics as --older-than; default floor 604800000 = 7 days; 0 = immediate). Prefer --older-than.',
         },
         {
           flag: '--include <ids>',

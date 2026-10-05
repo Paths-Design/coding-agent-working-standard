@@ -1070,7 +1070,9 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
 
   // ── Retention mode (status + age) ────────────────────────────────────
   if (opts.status === undefined || opts.olderThanMs === undefined) {
-    err('caws agents prune: --status and --older-than-ms are required unless --dead is used.');
+    err(
+      'caws agents prune: --status and --older-than <duration> (or --older-than-ms) are required unless --dead is used.'
+    );
     return 1;
   }
 

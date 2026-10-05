@@ -70,7 +70,7 @@ const CLEANUP_LEAF_EXPECTATIONS = [
   {
     group: 'specs',
     leaf: 'prune-drafts',
-    options: ['--older-than-ms', '--include', '--exclude', '--apply', '--json'],
+    options: ['--older-than', '--older-than-ms', '--include', '--exclude', '--apply', '--json'],
     terms: ['dry-run by default', 'include/exclude selectors', '--apply', 'candidate drafts'],
   },
   {
@@ -80,6 +80,7 @@ const CLEANUP_LEAF_EXPECTATIONS = [
       '--status',
       '--include',
       '--exclude',
+      '--older-than',
       '--older-than-ms',
       '--updated-before',
       '--without-worktree',
@@ -137,13 +138,21 @@ const CLEANUP_LEAF_EXPECTATIONS = [
   {
     group: 'agents',
     leaf: 'prune',
-    options: ['--dead', '--status', '--older-than-ms', '--apply', '--json'],
+    options: ['--dead', '--status', '--older-than', '--older-than-ms', '--apply', '--json'],
     terms: ['defaults to dry-run', 'pass --apply', '--dead', '--status'],
   },
   {
     group: 'message',
     leaf: 'prune',
-    options: ['--status', '--older-than-ms', '--include', '--exclude', '--apply', '--json'],
+    options: [
+      '--status',
+      '--older-than',
+      '--older-than-ms',
+      '--include',
+      '--exclude',
+      '--apply',
+      '--json',
+    ],
     // cb2a364a reworded prune help to the dead-recipient-proof guarantee;
     // the preservation claim now reads "every recipient that could still
     // consume ... is preserved" — pin the current wording, not the old phrase.

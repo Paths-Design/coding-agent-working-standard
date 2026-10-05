@@ -83,6 +83,7 @@ import { resolveSession } from '../session/resolve-session';
 import { lifecycleContainmentAdmits } from '../session/session-origin';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
+import { formatDurationMs } from '../duration';
 
 // --mode / --resolution validation reads the kernel's single enum source
 // (SPEC_MODES / SPEC_RESOLUTIONS) rather than re-declaring the values here.
@@ -2501,7 +2502,15 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
           selector.include.length > 0 ? ` --include ${selector.include.join(',')}` : '';
         const excludeArg =
           selector.exclude.length > 0 ? ` --exclude ${selector.exclude.join(',')}` : '';
-        const olderArg = olderThanMs !== undefined ? ` --older-than-ms ${olderThanMs}` : '';
+        // Echo the threshold in the duration form when it round-trips exactly,
+        // so the apply line reads `--older-than 10m`, not `--older-than-ms 600000`.
+        const olderDuration = olderThanMs !== undefined ? formatDurationMs(olderThanMs) : null;
+        const olderArg =
+          olderThanMs === undefined
+            ? ''
+            : olderDuration !== null
+              ? ` --older-than ${olderDuration}`
+              : ` --older-than-ms ${olderThanMs}`;
         const updatedBeforeArg =
           opts.updatedBefore !== undefined ? ` --updated-before ${opts.updatedBefore}` : '';
         const withoutWorktreeArg = opts.withoutWorktree === true ? ' --without-worktree' : '';
