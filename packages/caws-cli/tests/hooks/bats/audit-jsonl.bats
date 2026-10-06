@@ -79,3 +79,55 @@ _run_audit() { # $1 = event type, $2 = JSON envelope (no single quotes inside)
     printf '%s' "$line" | jq -e . >/dev/null
   done < "$(_log_file)"
 }
+
+@test "audit: a >=131072-byte tool payload still records one tool_use line (A5)" {
+  # CAWS-DEFECT-AUDIT-TOOLJSON-EMPTY-ARGJSON-001. At or above the inline
+  # payload ceiling, parse_hook_input switches to file transport and exports
+  # HOOK_TOOL_INPUT_JSON/RESPONSE empty by design. Pre-fix, the tool-use
+  # branch passed those empty strings straight to `jq --argjson`, jq exited
+  # 2 with "invalid JSON text passed to --argjson", and `set -e` turned the
+  # logging hook's crash into a post_tool_use block — with NO audit record
+  # for exactly the largest tool calls. The envelope is read from a file so
+  # the payload never becomes part of a shell command line.
+  local payload_file="$BATS_TEST_TMPDIR/big-envelope-a5.json"
+  jq -nc '{tool_name:"Write",session_id:"audit-a5",tool_use_id:"tu-5",
+           tool_input:{file_path:"/tmp/big.bin",content:("x" * 140000)},
+           tool_response:{bytes:140000,marker:"big-payload-marker"},cwd:"/tmp"}' \
+    > "$payload_file"
+  rm -f "$(_log_file)"
+  run env CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$CAWS_TEST_REPO" TMPDIR="$BATS_TEST_TMPDIR" \
+    bash -c "cat '$payload_file' | bash '$CAWS_TEST_HOOKS_DIR/audit.sh' 'tool-use'"
+  assert_success
+  local log
+  log="$(_log_file)"
+  [ "$(wc -l < "$log" | tr -d ' ')" = "1" ]
+  [ "$(jq -r '.tool_use_id' "$log")" = "tu-5" ]
+  [ "$(jq -r '.tool_input.file_path' "$log")" = "/tmp/big.bin" ]
+  [ "$(jq -r '.tool_response.marker' "$log")" = "big-payload-marker" ]
+  [ "$(jq -r '.is_error' "$log")" = "false" ]
+}
+
+@test "audit: file-transport record coerces non-dict tool objects to {} (A6)" {
+  # The parser dict-coerces tool_input/tool_response before exporting the
+  # inline JSON; the payload-file read must apply the same coercion, so a
+  # harness envelope carrying a scalar/array object still yields a valid
+  # record (and the is_error filter still evaluates). Forcing the ceiling
+  # down to 10 bytes exercises file transport without a large fixture.
+  local payload_file="$BATS_TEST_TMPDIR/odd-envelope-a6.json"
+  jq -nc '{tool_name:"Bash",session_id:"audit-a6",tool_use_id:"tu-6",
+           tool_input:"flat-string-not-object",
+           tool_response:[1,2,3],cwd:"/tmp"}' > "$payload_file"
+  rm -f "$(_log_file)"
+  run env CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES=10 \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$CAWS_TEST_REPO" TMPDIR="$BATS_TEST_TMPDIR" \
+    bash -c "cat '$payload_file' | bash '$CAWS_TEST_HOOKS_DIR/audit.sh' 'tool-use'"
+  assert_success
+  local log
+  log="$(_log_file)"
+  [ "$(wc -l < "$log" | tr -d ' ')" = "1" ]
+  [ "$(jq -c '.tool_input' "$log")" = '{}' ]
+  [ "$(jq -c '.tool_response' "$log")" = '{}' ]
+  [ "$(jq -r '.is_error' "$log")" = "false" ]
+}

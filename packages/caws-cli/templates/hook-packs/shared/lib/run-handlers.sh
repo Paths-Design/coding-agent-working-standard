@@ -487,6 +487,46 @@ run_handlers() {
     _dedup_pending=$(mktemp 2>/dev/null) || _dedup_pending=""
   fi
 
+  # CAWS-DEFECT-RUNHANDLERS-STDIN-EPIPE-NOISE-001: decide ONCE per dispatch
+  # how handlers receive the payload. Handlers run in dispatcher fast-path
+  # (HOOK_* already parsed) and legitimately never read stdin, so the old
+  # `printf '%s' "$HOOK_INPUT_JSON" | handler` form left the pipe undrained:
+  # any payload larger than the kernel pipe buffer blocked the writer and
+  # then broke it -- one `printf: write error: Broken pipe` per handler per
+  # dispatch on stderr, and in the command-substitution subshell the SIGPIPE
+  # could take the whole dispatch down (exit 141). Feed handlers from a file
+  # instead: the parse stage's payload file when transport already moved the
+  # bytes to disk, or a dispatch-scoped stage of the inline payload once it
+  # exceeds a pipe-safe bound (32KiB is below every kernel pipe buffer, so
+  # the pipe path never blocks). Small inline payloads keep the historical
+  # pipe: no temp I/O on the common path. Staging failure is fail-open --
+  # the pipe path still delivers, only the noise class remains.
+  # Declared unconditionally (see the bash 3.2 / set -u note above): this is
+  # read inside the handler loop on every path.
+  local stdin_file="${HOOK_PAYLOAD_FILE:-}"
+  if [[ -z "$stdin_file" ]]; then
+    # bash 3.2 has no ${#var-} length-with-default form; stage the value
+    # first so the length expansion stays unset-safe under set -u.
+    local _rh_payload_json="${HOOK_INPUT_JSON-}"
+    local _rh_payload_len=${#_rh_payload_json}
+    if (( _rh_payload_len > 32768 )); then
+      stdin_file=$(mktemp "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || stdin_file=""
+      if [[ -n "$stdin_file" ]] \
+        && printf '%s' "$HOOK_INPUT_JSON" > "$stdin_file" 2>/dev/null; then
+        if [[ -n "${CAWS_TEMP_FILES+x}" ]]; then
+          CAWS_TEMP_FILES+=("$stdin_file")
+        else
+          CAWS_TEMP_FILES=("$stdin_file")
+        fi
+      else
+        [[ -n "$stdin_file" ]] && rm -f "$stdin_file" 2>/dev/null
+        stdin_file=""
+      fi
+    fi
+  fi
+  # Only a readable file may back stdin; anything else degrades to the pipe.
+  [[ -n "$stdin_file" && -f "$stdin_file" ]] || stdin_file=""
+
   # CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001: bash 3.2 (macOS default
   # /bin/bash) throws "unbound variable" expanding "${entries[@]}" when
   # entries is a zero-length array under `set -u` -- even though the intended
@@ -569,8 +609,15 @@ run_handlers() {
     fi
 
     local stdout_buf
-    stdout_buf=$(printf '%s' "$HOOK_INPUT_JSON" \
-                  | "$handler_path" "$@" 2>"$stderr_file")
+    if [[ -n "$stdin_file" ]]; then
+      # Payload staged to disk (CAWS-DEFECT-RUNHANDLERS-STDIN-EPIPE-NOISE-001):
+      # stdin comes from the file, so a handler that exits without reading it
+      # cannot strand a blocked writer on a pipe.
+      stdout_buf=$("$handler_path" "$@" < "$stdin_file" 2>"$stderr_file")
+    else
+      stdout_buf=$(printf '%s' "$HOOK_INPUT_JSON" \
+                    | "$handler_path" "$@" 2>"$stderr_file")
+    fi
     local exit_code=$?
     _rh_record_execution "$handler" "$handler_path" completed "$exit_code" "$stderr_file" "$stdout_buf"
     local offer_action="released"

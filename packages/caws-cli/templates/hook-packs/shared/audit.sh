@@ -91,9 +91,20 @@ case "$EVENT_TYPE" in
 
   tool-use)
     # Tool-specific info lifted from HOOK_* env vars set by parse_hook_input.
-    # HOOK_TOOL_INPUT_JSON and HOOK_TOOL_RESPONSE_JSON are pre-serialized
-    # JSON strings, always valid (empty "{}" at minimum), so jq --argjson
-    # below never trips on missing fields.
+    # Inline mode: HOOK_TOOL_INPUT_JSON/RESPONSE are pre-serialized,
+    # dict-coerced JSON objects ("{}" at minimum). File-transport mode
+    # (CAWS-DEFECT-HOOK-PAYLOAD-ENV-E2BIG-01) exports them EMPTY by design --
+    # the payload bytes live in HOOK_PAYLOAD_FILE, so the tool objects are
+    # read back from there with the same dict coercion the parser applies
+    # inline.
+    #
+    # CAWS-DEFECT-AUDIT-TOOLJSON-EMPTY-ARGJSON-001: handing the empty string
+    # to `jq --argjson` is a usage error (exit 2), and under `set -e` this
+    # logging hook then crashed with "jq: invalid JSON text passed to
+    # --argjson" -- so every tool call large enough to switch transport
+    # produced NO audit record and its exit 2 BLOCKED post_tool_use after
+    # the tool had already run. Every path below must leave TOOL_INPUT and
+    # TOOL_RESPONSE as valid JSON; any residual empty value coerces to {}.
     #
     # AUDIT-JSONL-EMISSION-001: the record carries the tool payload
     # (tool_use_id / tool_input / tool_response) and a derived is_error so a
@@ -101,6 +112,16 @@ case "$EVENT_TYPE" in
     # (-c) emission keeps one record on one line for line-wise consumers.
     TOOL_INPUT="$HOOK_TOOL_INPUT_JSON"
     TOOL_RESPONSE="$HOOK_TOOL_RESPONSE_JSON"
+    if [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == "1" && -n "${HOOK_PAYLOAD_FILE:-}" && -f "${HOOK_PAYLOAD_FILE:-}" ]]; then
+      TOOL_INPUT=$(jq -c 'if (.tool_input | type) == "object" then .tool_input else {} end' \
+        "$HOOK_PAYLOAD_FILE" 2>/dev/null || printf '{}')
+      TOOL_RESPONSE=$(jq -c 'if (.tool_response | type) == "object" then .tool_response else {} end' \
+        "$HOOK_PAYLOAD_FILE" 2>/dev/null || printf '{}')
+    fi
+    # Fail-open parser path (no inline vars, no payload file): --argjson
+    # must still receive valid JSON.
+    [[ -n "$TOOL_INPUT" ]] || TOOL_INPUT='{}'
+    [[ -n "$TOOL_RESPONSE" ]] || TOOL_RESPONSE='{}'
     TOOL_USE_ID="$HOOK_TOOL_USE_ID"
     FILE_PATH="$HOOK_FILE_PATH"
     COMMAND="$HOOK_COMMAND"
