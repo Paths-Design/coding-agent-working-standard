@@ -44,3 +44,13 @@ non_functional:
   security:
     - 'Payload bytes move only between the dispatch process, a dispatch-scoped mktemp file, and handler stdin; no payload content reaches argv, exported env, or logs beyond the existing audit record'
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: npx bats tests/hooks/bats/audit-jsonl.bats
+    recorded_at: "2026-10-06T16:41:08.473Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/audit-jsonl.bats::audit: a >=131072-byte tool payload still records one tool_use line (A5)"
+    command: npx bats tests/hooks/bats/audit-jsonl.bats
+    exit_code: 0
+    commit_sha: "4756b1af"
+    test_verified_at: "4756b1af3d154c7a4c96be01c821a5fd2e5a15af"
