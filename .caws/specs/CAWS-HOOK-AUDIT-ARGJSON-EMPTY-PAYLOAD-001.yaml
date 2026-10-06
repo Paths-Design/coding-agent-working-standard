@@ -63,3 +63,12 @@ evidence:
     exit_code: 0
     commit_sha: "4756b1af"
     test_verified_at: "4756b1af3d154c7a4c96be01c821a5fd2e5a15af"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats (537/537) + npx jest tests/hooks (100/100)"
+    recorded_at: "2026-10-06T16:41:31.780Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/parse-input-payload-transport.bats::payload transport: a small payload keeps the historical inline representation"
+    command: npx bats tests/hooks/bats
+    exit_code: 0
+    commit_sha: "4756b1af"
+    test_verified_at: "4756b1af3d154c7a4c96be01c821a5fd2e5a15af"
