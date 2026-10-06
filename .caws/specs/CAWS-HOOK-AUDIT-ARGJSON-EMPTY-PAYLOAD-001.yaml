@@ -1,10 +1,11 @@
 id: CAWS-HOOK-AUDIT-ARGJSON-EMPTY-PAYLOAD-001
 title: 'Hook large-payload dispatch: audit tool_use crash and broken-pipe noise'
 mode: fix
-lifecycle_state: active
-worktree: hook-payload-audit-fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hook-payload-audit-fix at ef08c97e452d13ef10d05d1ce8287eb6050668b8'
 created_at: '2026-10-06T16:04:04.794Z'
-updated_at: '2026-10-06T16:04:20.359Z'
+updated_at: '2026-10-06T16:42:11.644Z'
 created_by_session: 'session-c938156d-96d8-408b-bb2d-cd2659e47830'
 blast_radius:
   modules:
