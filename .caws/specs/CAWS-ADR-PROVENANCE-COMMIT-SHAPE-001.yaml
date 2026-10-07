@@ -33,3 +33,9 @@ acceptance:
     then: 'concrete measurable triggers are named (measured harm in log-dependent workflows, pack-size or tooling-latency growth, cross-machine forensics need)'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "docs/architecture/adr/0002-provenance-commit-shape.md (decision + measured basis table, snapshot 2026-10-07 09:37 PDT; lane commit d2e37931)"
+    recorded_at: "2026-10-07T19:16:59.827Z"
+    artifact_path: docs/architecture/adr/0002-provenance-commit-shape.md
