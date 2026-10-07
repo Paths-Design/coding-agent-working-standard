@@ -39,3 +39,8 @@ evidence:
     evidence_ref: "docs/architecture/adr/0002-provenance-commit-shape.md (decision + measured basis table, snapshot 2026-10-07 09:37 PDT; lane commit d2e37931)"
     recorded_at: "2026-10-07T19:16:59.827Z"
     artifact_path: docs/architecture/adr/0002-provenance-commit-shape.md
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "ADR 0002 Decision section D1-D3: each alternative (squash/batch/rewrite/orphan ledger ref/committed event chain/anchor file) names its failure mechanism; lane commit d2e37931"
+    recorded_at: "2026-10-07T19:17:01.494Z"
+    artifact_path: docs/architecture/adr/0002-provenance-commit-shape.md
