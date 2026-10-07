@@ -1,10 +1,11 @@
 id: CAWS-ADR-PROVENANCE-COMMIT-SHAPE-001
 title: 'ADR 0002: the provenance commit shape is an accepted operating cost'
 mode: doc
-lifecycle_state: active
-worktree: adr-prov-shape
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge adr-prov-shape at 5f138d15203623e8d5aa36f95badc5d14e909609'
 created_at: '2026-10-07T19:13:57.051Z'
-updated_at: '2026-10-07T19:14:08.343Z'
+updated_at: '2026-10-07T19:17:43.746Z'
 created_by_session: 'session-b3e01cef-12ef-4c66-bcb8-c0a370f61d34'
 blast_radius:
   modules:
