@@ -21,7 +21,8 @@ scope:
     - 'packages/caws-cli/tests/shell/specs-list-session-id.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Session filtering is read-only: specs list --session-id never mutates specs, bridges, the worktree registry, or the event log.'
+  - 'Session identity comparison is prefix-normalized (a leading session- on either side is stripped) per CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001; no other fuzzy matching is permitted.'
 acceptance:
   - id: A1
     given: 'a repo where session S1 created a spec, holds a bridge claim on another, and owns a worktree bound to a third'
