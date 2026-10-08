@@ -1,0 +1,47 @@
+id: CAWS-SPECS-LIST-SESSION-ID-001
+title: 'specs list --session-id: session work-surface view with binding-state actions'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-08T15:28:36.886Z'
+updated_at: '2026-10-08T15:28:36.886Z'
+created_by_session: 'session-e41fec94-8319-4cbd-ada9-25b3f0adac6b'
+blast_radius:
+  modules:
+    - 'specs-store'
+    - 'specs-cli'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/store/specs-list-session-filter.test.js'
+    - 'packages/caws-cli/tests/shell/specs-list-session-id.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a repo where session S1 created a spec, holds a bridge claim on another, and owns a worktree bound to a third'
+    when: 'caws specs list --session-id S1 runs'
+    then: 'exactly those three specs are listed, each labeled with its relation (created, bridge, worktree <name>)'
+  - id: A2
+    given: 'specs stamped with both bare-uuid and session-prefixed forms of the same session id per CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001'
+    when: 'filtering by either form'
+    then: 'both stampings match (prefix-normalized comparison)'
+  - id: A3
+    given: 'related specs in active+bound, active+unbound, draft, and archived states'
+    when: 'the listing renders'
+    then: 'each row shows its binding state and the state-appropriate action (continue in worktree / activate-or-deactivate / tee-up-or-retire-draft / no action for archived)'
+  - id: A4
+    given: 'the built CLI'
+    when: 'caws specs list --help runs'
+    then: '--session-id <id> appears with a description'
+  - id: A5
+    given: 'a session id matching no spec'
+    when: 'caws specs list --session-id <id> runs'
+    then: 'exit 0 with an explicit no-specs-for-session message naming the session id'
+non_functional: {}
+contracts: []
