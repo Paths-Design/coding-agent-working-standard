@@ -1,0 +1,38 @@
+id: CAWS-HOOK-PACK-RENDERER-ADOPT-STERLING-001
+title: 'hook-pack session-log renderer adopts the sterling renderer lineage'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-08T23:47:43.726Z'
+updated_at: '2026-10-08T23:47:43.726Z'
+created_by_session: 'session-b2c0e83d-8497-4257-aa85-a43ef70303a5'
+blast_radius:
+  modules:
+    - 'hook-pack shared session-log renderer template'
+    - 'renderer pytest suite'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/session_log_renderer.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib'
+    - 'packages/caws-cli/tests/hooks/pytest'
+  out: []
+invariants:
+  - 'Template-only features are preserved: harness_kimi, the CAWS_SESSION_TRANSCRIPT_ADAPTER machine-runtime path, malformed-JSONL diagnostics, and hook_audit events'
+  - 'Sterling renderer capabilities land upstream: thinking capture, usage/model/stop_reason rollups, env anchors, session-index.json, CAWS_AGENT_SURFACE attribution'
+  - 'The three-way divergence resolves with the pristine install copy as merge base; no installed feature regresses'
+acceptance:
+  - id: A1
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'given the pristine shared renderer as merge base; when sterling current and template current are merged; then the merged renderer passes the renderer pytest suite including kimi and machine-adapter arms'
+  - id: A2
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'given a synthetic claude transcript with thinking and usage rows; when rendered by the merged template; then turn-NNN.json carries thinking provenance, usage rollup, and a session-index.json is emitted'
+  - id: A3
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'given the hook-pack render tests; when run; then they pass on the merged template'
+non_functional: {}
+contracts: []
