@@ -417,6 +417,21 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
       );
     });
 
+    it('accepts a null ts on a timeline item (timestampless transcript row)', () => {
+      // Real sessions render null-ts items: rows that carry no timestamp are
+      // legitimate records. (Measured: 76 of 344 items in turn-043 of the
+      // sterling corpus.) Only non-string, non-null values are malformed.
+      const withNullTs = JSON.parse(JSON.stringify(fullRealShapedPayload));
+      withNullTs.timeline[0].ts = null;
+      expect(validate(withNullTs)).toBe(true);
+    });
+
+    it('rejects a numeric ts on a timeline item', () => {
+      const withNumericTs = JSON.parse(JSON.stringify(fullRealShapedPayload));
+      withNumericTs.timeline[0].ts = 1735689600000;
+      expectRejected(validate, withNumericTs, '/timeline/0/ts', 'type');
+    });
+
     it('rejects a rewind_kind outside the two classifications', () => {
       expectRejected(
         validate,

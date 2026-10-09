@@ -273,7 +273,11 @@
           "description": "Entry class, e.g. 'tool_call' or 'reasoning'. Per-kind payload fields (output, command, file, text, ...) are renderer-owned and intentionally unpinned here."
         },
         "ts": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "UTC ISO-8601, a hook-provided local timestamp string, or null when the transcript row carried no timestamp (measured: 76 of 344 timeline items in a real 43-turn session render null-ts; a timestampless row is a legitimate record, not a contract violation)."
         },
         "provenance": {
           "type": "string"
