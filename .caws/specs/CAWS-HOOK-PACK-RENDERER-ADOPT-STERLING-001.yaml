@@ -53,3 +53,9 @@ evidence:
     recorded_at: "2026-10-09T02:59:06.555Z"
     test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestTurnUsageAccounting::test_multi_block_reply_and_fork_copy_count_as_one_request"
     test_verified_at: "8529617de7194e8bdd867432befe5ecbda0fe9a4"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "pytest packages/caws-cli/tests/hooks/pytest full suite: 431 passed, 0 failed"
+    recorded_at: "2026-10-09T02:59:20.956Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_installed_session_fidelity.py::InstalledSessionFidelity::test_dsh_kimi_claude_qwen_and_zcode_native_rows_reach_installed_renderers"
+    test_verified_at: "8529617de7194e8bdd867432befe5ecbda0fe9a4"
