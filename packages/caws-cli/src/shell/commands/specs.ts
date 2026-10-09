@@ -59,7 +59,10 @@ import {
   supersededArchiveSnapshots,
   SPECS_LIST_STATUSES,
   unsatisfiedAcceptanceCriteria,
+  type ArchivedSpecsListEntry,
+  type SpecsListEntry,
   type SpecsListStatus,
+  type SpecsSessionRelation,
 } from '../../store/specs-writer';
 import { amendSpecBody } from '../../store/specs-body-writer';
 import {
@@ -1035,6 +1038,12 @@ export interface SpecsListOptions extends BaseCommandOptions {
   readonly draft?: boolean;
   /** Alias for --status closed. */
   readonly closed?: boolean;
+  /**
+   * CAWS-SPECS-LIST-SESSION-ID-001: session work-surface view. Filter to
+   * specs the session relates to (created_by_session, bridge claim, or
+   * worktree ownership) and render each row's binding state + action.
+   */
+  readonly sessionId?: string;
 }
 
 function parseSpecsListStatus(raw: string | undefined): SpecsListStatus | undefined | null {
@@ -1069,6 +1078,105 @@ function resolveSpecsListStatus(opts: SpecsListOptions): string | undefined | { 
   return selectors[0]?.status;
 }
 
+/** CAWS-SPECS-LIST-SESSION-ID-001: prefix-normalized session equality (the
+ * same comparison the store filter uses, so shell wording matches filtering). */
+function sameSessionId(a: string, b: string): boolean {
+  const strip = (s: string) => (s.startsWith('session-') ? s.slice('session-'.length) : s);
+  return a.length > 0 && b.length > 0 && strip(a) === strip(b);
+}
+
+function relationLabel(relation: SpecsSessionRelation): string {
+  if (relation.kind === 'worktree') return `worktree ${relation.worktree}`;
+  return relation.kind;
+}
+
+function specsListSessionState(
+  entry: SpecsListEntry | ArchivedSpecsListEntry
+): 'active+bound' | 'active+unbound' | 'draft' | 'closed' | 'archived' {
+  if ((entry as ArchivedSpecsListEntry).archived_at !== undefined) return 'archived';
+  const active = entry as SpecsListEntry;
+  if (active.lifecycle_state === 'draft') return 'draft';
+  if (active.lifecycle_state === 'closed') return 'closed';
+  return active.bound_worktree !== null && active.bound_worktree !== undefined
+    ? 'active+bound'
+    : 'active+unbound';
+}
+
+function specsListSessionAction(
+  state: ReturnType<typeof specsListSessionState>,
+  entry: SpecsListEntry | ArchivedSpecsListEntry,
+  sessionId: string
+): string {
+  const id = entry.id;
+  if (state === 'archived') {
+    const ts = Date.parse((entry as ArchivedSpecsListEntry).archived_at);
+    const ageDays = Number.isFinite(ts)
+      ? Math.max(0, Math.floor((Date.now() - ts) / 86_400_000))
+      : null;
+    return `no action (archived ${ageDays !== null ? `${ageDays}d ago` : ''}; recover: caws specs recover ${id})`;
+  }
+  if (state === 'closed') {
+    return `no action (concluded; reopen: caws specs reopen ${id})`;
+  }
+  if (state === 'draft') {
+    return `tee up: caws worktree create <name> --spec ${id} | abandon: caws specs retire-draft ${id}`;
+  }
+  const active = entry as SpecsListEntry;
+  const bound = active.bound_worktree;
+  if (bound !== null && bound !== undefined) {
+    if (bound.owner_session_id === undefined) {
+      return `bound to ${bound.name} (unowned) — claim: cd .caws/worktrees/${bound.name} && caws claim`;
+    }
+    if (sameSessionId(bound.owner_session_id, sessionId)) {
+      return `continue: cd .caws/worktrees/${bound.name} && caws claim`;
+    }
+    return (
+      `bound to ${bound.name} (owner ${bound.owner_session_id}) — ` +
+      `takeover from inside it: cd .caws/worktrees/${bound.name} && caws claim --takeover | ` +
+      `deactivate: caws specs deactivate ${id}`
+    );
+  }
+  return `activate: caws worktree create <name> --spec ${id} | deactivate: caws specs deactivate ${id}`;
+}
+
+function renderSpecsListSessionView(
+  out: (line: string) => void,
+  sessionId: string,
+  active: readonly SpecsListEntry[],
+  archived: readonly ArchivedSpecsListEntry[]
+): void {
+  const rows: {
+    entry: SpecsListEntry | ArchivedSpecsListEntry;
+    state: string;
+    relations: readonly SpecsSessionRelation[];
+  }[] = [
+    ...active.map((entry) => ({
+      entry,
+      state: specsListSessionState(entry),
+      relations: entry.relations ?? [],
+    })),
+    ...archived.map((entry) => ({
+      entry,
+      state: specsListSessionState(entry),
+      relations: entry.relations ?? [],
+    })),
+  ];
+  out(`session ${sessionId} — ${rows.length} related spec(s)`);
+  if (rows.length === 0) return;
+  out('');
+  for (const row of rows) {
+    out(`${row.entry.id.padEnd(28)} ${row.state}`);
+    const title = (row.entry as SpecsListEntry).title;
+    if (typeof title === 'string' && title.length > 0) {
+      out(`  title:    ${title}`);
+    }
+    out(`  relation: ${row.relations.map(relationLabel).join(', ') || '(unattributed)'}`);
+    out(
+      `  action:   ${specsListSessionAction(row.state as ReturnType<typeof specsListSessionState>, row.entry, sessionId)}`
+    );
+  }
+}
+
 export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
   const { cwd, out, err, showData } = setupIO(opts);
   const rawStatus = resolveSpecsListStatus(opts);
@@ -1081,12 +1189,19 @@ export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
     renderSpecsStatusError(String(opts.status), err);
     return 1;
   }
+  const sessionId = opts.sessionId;
+  if (sessionId !== undefined && sessionId.length === 0) {
+    err('caws specs list: --session-id requires a non-empty session id.');
+    err('Use: caws specs list --session-id <session-id>');
+    return 1;
+  }
   const ctx = resolveCawsCtx(cwd, err, showData, 'list');
   if (ctx === null) return 2;
 
   const result = listSpecs(ctx.cawsDir, {
     includeArchived: opts.includeArchived === true,
     ...(status !== undefined ? { status } : {}),
+    ...(sessionId !== undefined ? { sessionId } : {}),
   });
   if (!isOk(result)) {
     err('caws specs list: failed.');
@@ -1094,6 +1209,16 @@ export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
     return 1;
   }
   const { active, archived } = result.value;
+
+  if (sessionId !== undefined) {
+    if (active.length === 0 && archived.length === 0) {
+      out(`(no specs for session ${sessionId})`);
+      return 0;
+    }
+    renderSpecsListSessionView(out, sessionId, active, archived);
+    return 0;
+  }
+
   if (active.length === 0 && archived.length === 0) {
     if (status !== undefined) {
       out(`(no specs with status ${status})`);

@@ -588,7 +588,15 @@ import { isAdapterCoveredSurface } from './types';
 // which git rejects. block-dangerous.sh prints that merge-aware reason as the
 // single source of truth for a mid-merge commit_deletions refusal instead of
 // the fixed pathspec text; the non-merge refusal text is unchanged.
-export const SHARED_PACK_VERSION = 95;
+// 96 (CAWS-SPECS-LIST-SESSION-ID-001): the generated surfaces registry
+// (templates/hook-packs/shared/lib/surfaces-registry.sh, regenerated from
+// command metadata by scripts/generate-surface-registry.mjs at build time)
+// now carries specs list's --session-id option, so the shared pack template
+// tree changed. Fingerprint baseline updated in the same slice per the
+// pack-fingerprint guard contract: template change => new fingerprint AND a
+// packVersion bump, so installed copies report the refresh instead of
+// silently lagging the shipping template.
+export const SHARED_PACK_VERSION = 96;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
