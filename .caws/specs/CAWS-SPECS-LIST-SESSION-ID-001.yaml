@@ -72,3 +72,9 @@ evidence:
     recorded_at: "2026-10-09T00:56:27.529Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-list-session-id.test.js::help surface declares --session-id <id> (A4)"
     test_verified_at: "563195981b7cb9078abd97192b892a3b9e38956a"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/shell/specs-list-session-id.test.js::unknown session id exits 0 with an explicit message naming the session"
+    recorded_at: "2026-10-09T00:56:40.970Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-list-session-id.test.js::unknown session id exits 0 with an explicit message naming the session"
+    test_verified_at: "563195981b7cb9078abd97192b892a3b9e38956a"
