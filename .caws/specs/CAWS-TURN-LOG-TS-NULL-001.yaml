@@ -1,10 +1,11 @@
 id: CAWS-TURN-LOG-TS-NULL-001
 title: 'turn-log.v2 timelineItem.ts accepts null for timestampless rows'
 mode: fix
-lifecycle_state: active
-worktree: turn-log-ts-null
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge turn-log-ts-null at 49584a6bbf362290a32cad91128a0a1dfdfe69fa'
 created_at: '2026-10-09T03:14:01.625Z'
-updated_at: '2026-10-09T03:14:19.569Z'
+updated_at: '2026-10-09T03:16:54.155Z'
 created_by_session: 'session-b2c0e83d-8497-4257-aa85-a43ef70303a5'
 blast_radius:
   modules:
