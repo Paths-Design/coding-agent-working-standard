@@ -37,3 +37,9 @@ evidence:
     recorded_at: "2026-10-09T03:16:41.897Z"
     test_nodeid: "packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts::accepts a null ts on a timeline item (timestampless transcript row)"
     test_verified_at: ea20edc19ae0184dc2d3393cbcfe47369c6cc56e
+  - criterion_id: A2
+    status: pass
+    evidence_ref: renderer suite 76 passed incl. contract arms on the merged template
+    recorded_at: "2026-10-09T03:16:45.750Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestRenderedPayloadsSatisfyBothContracts::test_rendered_turns_validate_against_the_kernel_producer_contract"
+    test_verified_at: ea20edc19ae0184dc2d3393cbcfe47369c6cc56e
