@@ -30,3 +30,10 @@ acceptance:
     then: 'given a timestampless transcript row; when rendered; then the emitted timeline item validates without special-casing the contract'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "real turn-043 (76 null-ts items) validates clean; jest telemetry-turn-log-schema 39/39"
+    recorded_at: "2026-10-09T03:16:41.897Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts::accepts a null ts on a timeline item (timestampless transcript row)"
+    test_verified_at: ea20edc19ae0184dc2d3393cbcfe47369c6cc56e
