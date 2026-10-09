@@ -157,12 +157,10 @@ const steeringSignalsPayload: TurnLogFixture = {
   rewound_from: 3,
   rewind_kind: 'edited_prompt',
   usage: {
-    requests: 2,
-    input: 24,
-    cache_read: 60000,
-    cache_write: 1400,
-    output: 982,
-    models: ['claude-opus-5'],
+    input_tokens: 24,
+    cache_read_input_tokens: 60000,
+    cache_creation_input_tokens: 1400,
+    output_tokens: 982,
   },
 };
 
@@ -232,8 +230,21 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
     it('closes the usage object so an unaccounted token class cannot slip in', () => {
       const usage = turnLogSchema.properties.usage;
       expect(usage.additionalProperties).toBe(false);
-      expect([...usage.required].sort()).toEqual(
-        ['requests', 'input', 'cache_read', 'cache_write', 'output', 'models'].sort()
+      // Class sets are harness-dependent (codex emits cached/reasoning/total;
+      // claude emits the four cache/input/output classes), so no class is
+      // required — closure on the declared set is the invariant, not a
+      // mandated class list.
+      expect(usage.required).toBeUndefined();
+      expect(Object.keys(usage.properties).sort()).toEqual(
+        [
+          'input_tokens',
+          'cached_input_tokens',
+          'cache_read_input_tokens',
+          'cache_creation_input_tokens',
+          'reasoning_output_tokens',
+          'output_tokens',
+          'total_tokens',
+        ].sort()
       );
     });
 
@@ -383,12 +394,15 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
       );
     });
 
-    it('rejects a usage block missing a token class rather than defaulting it', () => {
-      const { output: _dropped, ...partial } = steeringSignalsPayload.usage as Record<
-        string,
-        unknown
-      >;
-      expectRejected(validate, { ...steeringSignalsPayload, usage: partial }, '/usage', 'required');
+    it('accepts a codex-shaped usage block without cache classes', () => {
+      // Harness class sets vary; the contract mandates none of them.
+      const {
+        cache_read_input_tokens: _dropped,
+        cache_creation_input_tokens: _dropped2,
+        ...codexShaped
+      } = steeringSignalsPayload.usage as Record<string, unknown>;
+      const result = validate({ ...steeringSignalsPayload, usage: codexShaped });
+      expect(result).toBe(true);
     });
 
     it('rejects a negative token count', () => {
@@ -396,9 +410,9 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
         validate,
         {
           ...steeringSignalsPayload,
-          usage: { ...(steeringSignalsPayload.usage as object), output: -1 },
+          usage: { ...(steeringSignalsPayload.usage as object), output_tokens: -1 },
         },
-        '/usage/output',
+        '/usage/output_tokens',
         'minimum'
       );
     });

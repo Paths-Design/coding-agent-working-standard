@@ -142,6 +142,7 @@ def _js_code_positions(source: str) -> list[bool]:
     return code
 
 
+
 def extract_codex_inner_actions(source: str) -> list[dict[str, Any]]:
     """Conservatively project tools.* calls from a functions.exec program.
 
@@ -193,6 +194,18 @@ def extract_codex_inner_actions(source: str) -> list[dict[str, Any]]:
             action["args_preview"] = _truncate(args.strip(), 3000)
         actions.append(action)
 
+    # Promise-all batches commonly place commands in [label, command] tuples
+    # and call exec_command({cmd, ...}) with the loop variable. Recover those
+    # exact literals when the direct call above cannot name its command.
+    if "exec_command({cmd" in source and "Promise.all" in source:
+        tuple_commands: list[str] = []
+        for match in re.finditer(rf"\[\s*{JS_STRING_TOKEN}\s*,\s*{JS_STRING_TOKEN}\s*\]", source, re.DOTALL):
+            command = decode_js_string(match.group(2))
+            if command:
+                tuple_commands.append(command)
+        unresolved = [action for action in actions if action["tool"] == "exec_command" and not action.get("command")]
+        if unresolved and tuple_commands:
+            unresolved[0]["batch_commands"] = tuple_commands
     return actions
 
 
@@ -223,28 +236,101 @@ def codex_output_is_error(raw: str, decoded: str) -> bool:
 
 
 def _matches_codex(row: dict[str, Any]) -> bool:
-    return row.get("type") in {"turn_context", "response_item"}
+    # token_usage_record and event_msg are claimed here so their interesting
+    # members (usage rollups, turn_aborted) can be normalized; the many
+    # uninteresting event_msg subtypes (item_completed, token_count, ...)
+    # return [] below, and no other adapter matches these row types.
+    return row.get("type") in {"turn_context", "response_item", "token_usage_record", "event_msg"}
 
 
 def normalize_codex_row(obj: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]:
     ts = parse_timestamp(obj.get("timestamp"))
+    if obj.get("type") == "token_usage_record":
+        payload = obj.get("payload")
+        usage_raw = payload.get("usage") if isinstance(payload, dict) else None
+        if not isinstance(usage_raw, dict):
+            return []
+        usage = {
+            key: usage_raw[key]
+            for key in (
+                "input_tokens",
+                "output_tokens",
+                "cached_input_tokens",
+                "cache_read_input_tokens",
+                "cache_creation_input_tokens",
+                "reasoning_output_tokens",
+                "total_tokens",
+            )
+            if isinstance(usage_raw.get(key), (int, float))
+        }
+        return [{"ev": "assistant_meta", "usage": usage or None, "ts": ts}]
+
+    if obj.get("type") == "event_msg":
+        payload = obj.get("payload")
+        if not isinstance(payload, dict) or payload.get("type") != "turn_aborted":
+            return []
+        # turn_aborted carries reason + wall duration — the codex analogue of
+        # Claude's ended_by=user_interrupt, plus how long the aborted turn ran.
+        control: dict[str, Any] = {
+            "ev": "control",
+            "subtype": "turn_aborted",
+            "ts": ts,
+        }
+        if payload.get("reason"):
+            control["text"] = str(payload["reason"])
+        if isinstance(payload.get("duration_ms"), (int, float)):
+            control["duration_ms"] = payload["duration_ms"]
+        return [control]
+
     payload = obj.get("payload")
     if not isinstance(payload, dict):
         return []
     if obj.get("type") == "turn_context":
         state["codex_turn_seen"] = True
-        return [{"ev": "turn_boundary", "turn_id": payload.get("turn_id"), "ts": ts}]
+        boundary: dict[str, Any] = {"ev": "turn_boundary", "turn_id": payload.get("turn_id"), "ts": ts}
+        # Environment anchors the turn ran under (model / effort / cwd /
+        # sandbox / approval). All dropped before 2026-09-26; the boundary
+        # event is the natural carrier since it opens the turn.
+        for key in ("model", "effort", "cwd", "approval_policy", "sandbox_policy"):
+            value = payload.get(key)
+            if isinstance(value, (str, int, float)) and str(value).strip():
+                boundary[key] = value
+        return [boundary]
     if obj.get("type") != "response_item":
         return []
 
     item_type = payload.get("type")
+    if item_type == "reasoning":
+        # Codex reasoning items are mostly encrypted_content with an empty
+        # summary[] (measured across four rollouts: 11,985 of 11,985 items
+        # encrypted in three; 627 of 1,638 carried plaintext summaries in the
+        # fourth). Only the plaintext summaries are recoverable deliberation;
+        # encrypted-only items are skipped rather than emitted as ciphertext
+        # noise (their existence stays inferable from the token rollups).
+        reasoning_events: list[dict[str, Any]] = []
+        summary = payload.get("summary")
+        if isinstance(summary, list):
+            for entry in summary:
+                if not isinstance(entry, dict):
+                    continue
+                text = entry.get("text")
+                if isinstance(text, str) and text.strip():
+                    reasoning_events.append({"ev": "reasoning", "text": text, "ts": ts})
+        return reasoning_events
     if item_type == "message":
         role = payload.get("role")
-        if role not in ("user", "assistant") or payload.get("channel") == "analysis":
+        # analysis-channel messages are the model's internal deliberation
+        # trace, captured via the reasoning items instead — emitting them as
+        # assistant text duplicated every reply.
+        if role not in ("user", "assistant", "developer") or payload.get("channel") == "analysis":
             return []
         content = payload.get("content")
         if not isinstance(content, list):
             return []
+        # Codex front-ends annotate injected (non-human) user content blocks
+        # with per-block kinds; only blocks kinded "user.*" are real human
+        # input. Without this filter the injected context opens a phantom
+        # turn of its own.
         metadata = payload.get("internal_chat_message_metadata_passthrough")
         kinds = metadata.get("content_item_kinds") if isinstance(metadata, dict) else None
         if role == "user" and isinstance(kinds, list):
@@ -262,6 +348,31 @@ def normalize_codex_row(obj: dict[str, Any], state: dict[str, Any]) -> list[dict
         # It is instruction material, not a human turn.
         if role == "user" and texts and texts[0].startswith(AGENTS_MD_PREFIX):
             return []
+        if role == "developer":
+            if not state.get("codex_turn_seen"):
+                return []
+            events: list[dict[str, Any]] = []
+            for text in texts:
+                if not text.strip():
+                    continue
+                hook_match = re.match(r"^\[([^\]]+)\]", text.strip())
+                context_authority = parse_context_authority_block(text)
+                events.append({
+                    "ev": "hook_context",
+                    "kind": "context_authority" if context_authority else "developer_context",
+                    "hook_name": (
+                        hook_match.group(1)
+                        if hook_match
+                        else "casr-context.sh" if context_authority else "codex"
+                    ),
+                    "hook_event": "PreToolUse" if state.get("codex_pending_tool_id") else "Context",
+                    "tool_use_id": state.get("codex_pending_tool_id"),
+                    "additional_context": text,
+                    "context_authority": context_authority,
+                    "provenance": "codex_developer_message",
+                    "ts": ts,
+                })
+            return events
         event_kind = "user_text" if role == "user" else "assistant_text"
         return [{"ev": event_kind, "text": text, "ts": ts} for text in texts if text.strip()]
 
@@ -270,6 +381,9 @@ def normalize_codex_row(obj: dict[str, Any], state: dict[str, Any]) -> list[dict
         state["codex_pending_tool_id"] = call_id
         name = payload.get("name", "")
         args = decode_mapping(payload.get("arguments", payload.get("input")))
+        # Codex names its shell tool exec_command and stores the command line
+        # under "cmd"; downstream consumers read the Bash tool's "command"
+        # field, so normalize at this boundary.
         if name in ("exec_command", "functions.exec_command", "shell_command"):
             name = "Bash"
             args = {**args, "command": args.get("cmd", args.get("command", ""))}

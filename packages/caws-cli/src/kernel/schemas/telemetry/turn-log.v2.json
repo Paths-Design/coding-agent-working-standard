@@ -30,39 +30,69 @@
       "$ref": "#/$defs/turnContext",
       "description": "Session/identity context captured at turn start. Optional: degraded turns may omit it entirely."
     },
-    "ts_start": { "type": "string", "format": "date-time" },
-    "ts_end": { "type": "string", "format": "date-time" },
-    "user": { "type": "string" },
-    "user_ts": { "type": "string" },
-    "turn_summary": { "type": ["string", "null"] },
+    "ts_start": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ts_end": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "user": {
+      "type": "string"
+    },
+    "user_ts": {
+      "type": "string"
+    },
+    "turn_summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "status": {
-      "enum": ["ok", "error", "blocked", "rewound"],
+      "enum": [
+        "ok",
+        "error",
+        "blocked",
+        "rewound"
+      ],
       "description": "ok = normal completion; error = the turn ended in an error state; blocked = a blocking_issue stopped the turn; rewound = the user rewound past this turn and re-sent, so whatever it produced was discarded. rewound outranks the other three: a turn that errored and was then rewound past reports rewound, because that error belongs to abandoned work."
     },
     "usage": {
       "type": "object",
-      "description": "API cost of this turn. requests counts UNIQUE (message id, request id) pairs, not transcript rows: a producer that writes one row per assistant content block repeats the same usage block on each, so a row count roughly doubles every figure. OMITTED ENTIRELY when the harness records no usage — a zero-filled block would assert the turn cost nothing rather than that nothing was measured.",
-      "required": [
-        "requests",
-        "input",
-        "cache_read",
-        "cache_write",
-        "output",
-        "models"
-      ],
+      "description": "Additive token accounting summed from assistant_meta (claude per-message usage) and codex token_usage_record rows. Classes are the raw transcript token keys; a harness's class set varies — codex emits cached/reasoning/total, claude emits the four cache/input/output classes — so no class is required, but an UNDECLARED class is rejected rather than silently unaccounted. Emitted only when the session's harness supplied usage.",
+      "additionalProperties": false,
       "properties": {
-        "requests": { "type": "integer", "minimum": 0 },
-        "input": { "type": "integer", "minimum": 0 },
-        "cache_read": { "type": "integer", "minimum": 0 },
-        "cache_write": { "type": "integer", "minimum": 0 },
-        "output": { "type": "integer", "minimum": 0 },
-        "models": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "description": "Distinct models seen, in first-seen order."
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cached_input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_read_input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_creation_input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reasoning_output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0
         }
-      },
-      "additionalProperties": false
+      }
     },
     "rewound_from": {
       "type": "integer",
@@ -70,11 +100,17 @@
       "description": "The turn number this turn replaced: the user rewound past it and re-sent on the same conversational slot. Absent unless this turn is a rewind."
     },
     "rewind_kind": {
-      "enum": ["same_prompt", "edited_prompt"],
+      "enum": [
+        "same_prompt",
+        "edited_prompt"
+      ],
       "description": "Whether the re-sent prompt was byte-identical to the one it replaced, or edited. Present exactly when rewound_from is."
     },
     "ended_by": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "What ended the turn, when known (e.g. the lifecycle event name). Open vocabulary; null when the producer cannot attribute it."
     },
     "decisions": {
@@ -82,22 +118,68 @@
       "description": "Deferred detail (CAWS-HARNESS-TELEMETRY-ADAPTER-001): the vendored renderer may populate it; adapter folds leave it absent for this slice. Shape is renderer-owned."
     },
     "next_action": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Deferred detail: renderer-populated; adapter folds leave it absent for this slice."
     },
     "blocking_issue": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Deferred detail: renderer-populated; a non-null value pairs with status 'blocked'."
     },
     "refs": {
       "type": "object",
       "description": "Deferred detail: file/search/command/agent/artifact references. Structure is renderer-owned."
     },
-    "hook_contexts": { "type": "array" },
-    "interjections": { "type": "array" },
+    "hook_contexts": {
+      "type": "array"
+    },
+    "interjections": {
+      "type": "array"
+    },
     "timeline": {
       "type": "array",
-      "items": { "$ref": "#/$defs/timelineItem" }
+      "items": {
+        "$ref": "#/$defs/timelineItem"
+      }
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Distinct models that produced the turn's assistant steps, in first-use order. Present only when the harness recorded per-message models."
+    },
+    "payloads_sha256": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "description": "Content addresses carried by payloads_sidecar."
+    },
+    "payloads_sidecar": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Sibling sidecar file holding full bytes of payloads over the retention ceiling; null when the turn spilled nothing."
+    },
+    "stop_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "How the turn's FINAL assistant step ended (tool_use / end_turn / max_tokens / ...). Present only when the harness recorded stop reasons."
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment anchors carried on the turn boundary (codex turn_context): model, effort, cwd, approval_policy, sandbox_policy.",
+      "additionalProperties": true
     }
   },
   "$defs": {
@@ -116,25 +198,63 @@
         "dirty_files"
       ],
       "properties": {
-        "session_id": { "type": "string", "minLength": 1 },
-        "project": { "type": "string" },
-        "cwd": { "type": "string" },
-        "model": { "type": "string" },
-        "session_started_at": { "type": "string" },
-        "branch": { "type": "string" },
-        "head_sha": { "type": "string" },
-        "start_sha": { "type": "string" },
-        "dirty_files": { "type": "integer", "minimum": 0 },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "session_started_at": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "head_sha": {
+          "type": "string"
+        },
+        "start_sha": {
+          "type": "string"
+        },
+        "dirty_files": {
+          "type": "integer",
+          "minimum": 0
+        },
         "lineage": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "description": "Producer transcript lineage when available; operational provenance, never authority.",
           "additionalProperties": false,
-          "required": ["parent_session_id", "source", "authority", "source_path"],
+          "required": [
+            "parent_session_id",
+            "source",
+            "authority",
+            "source_path"
+          ],
           "properties": {
-            "parent_session_id": { "type": "string", "minLength": 1 },
-            "source": { "const": "transcript_metadata" },
-            "authority": { "const": "none" },
-            "source_path": { "type": "string", "minLength": 1 }
+            "parent_session_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source": {
+              "const": "transcript_metadata"
+            },
+            "authority": {
+              "const": "none"
+            },
+            "source_path": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         }
       }
@@ -142,14 +262,22 @@
     "timelineItem": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["kind", "ts", "provenance"],
+      "required": [
+        "kind",
+        "ts",
+        "provenance"
+      ],
       "properties": {
         "kind": {
           "type": "string",
           "description": "Entry class, e.g. 'tool_call' or 'reasoning'. Per-kind payload fields (output, command, file, text, ...) are renderer-owned and intentionally unpinned here."
         },
-        "ts": { "type": "string" },
-        "provenance": { "type": "string" }
+        "ts": {
+          "type": "string"
+        },
+        "provenance": {
+          "type": "string"
+        }
       }
     }
   }

@@ -596,7 +596,12 @@ import { isAdapterCoveredSurface } from './types';
 // pack-fingerprint guard contract: template change => new fingerprint AND a
 // packVersion bump, so installed copies report the refresh instead of
 // silently lagging the shipping template.
-export const SHARED_PACK_VERSION = 96;
+// 97 (CAWS-HOOK-PACK-RENDERER-ADOPT-STERLING-001): the shared session-log
+// renderer adopts the sterling renderer lineage (thinking provenance,
+// assistant_meta usage rollups, session-index.json, payload-spill sidecars)
+// and the kernel turn-log.v2 producer contract adopts the same unified
+// shape, so the shared pack template tree changed again after v96.
+export const SHARED_PACK_VERSION = 97;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

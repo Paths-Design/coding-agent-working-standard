@@ -625,7 +625,16 @@ def _render(rows):
 
 
 class TestTurnUsageAccounting:
-    """A1: exactly one api_request per unique (message id, request id)."""
+    """A1: each unique (message id, request id) contributes usage exactly once.
+
+    The unified renderer accumulates assistant_meta (claude per-message usage;
+    codex token_usage_record) with session-scoped dedup on that pair — Claude
+    Code repeats message.usage verbatim on every row of a multi-block reply,
+    and a fork/resume copies rows verbatim into a new transcript head. Emitted
+    shape is the raw token-key map (input_tokens / output_tokens /
+    cache_read_input_tokens / cache_creation_input_tokens) plus the turn-level
+    models rollup.
+    """
 
     def test_multi_block_reply_and_fork_copy_count_as_one_request(self):
         reply = _assistant_rows("msg_A", "req_A", [
@@ -638,13 +647,12 @@ class TestTurnUsageAccounting:
         turns = _render([_user_row("do the thing", "u1")] + reply + reply)
         assert len(turns) == 1
         assert turns[0]["usage"] == {
-            "requests": 1,
-            "input": 12,
-            "cache_read": 30000,
-            "cache_write": 700,
-            "output": 491,
-            "models": ["claude-opus-5"],
+            "input_tokens": 12,
+            "cache_read_input_tokens": 30000,
+            "cache_creation_input_tokens": 700,
+            "output_tokens": 491,
         }
+        assert turns[0]["models"] == ["claude-opus-5"]
 
     def test_fork_copy_in_a_later_turn_is_not_counted_again(self):
         reply = _assistant_rows("msg_A", "req_A", _reply("first answer"))
@@ -653,7 +661,7 @@ class TestTurnUsageAccounting:
             + [_user_row("second", "u2")] + reply
         )
         assert len(turns) == 2
-        assert turns[0]["usage"]["requests"] == 1
+        assert turns[0]["usage"]["input_tokens"] == 12
         # Second turn saw only the duplicate, so it records no usage at all
         # rather than a zero-filled block.
         assert "usage" not in turns[1]
@@ -664,9 +672,8 @@ class TestTurnUsageAccounting:
             + _assistant_rows("msg_A", "req_A", _reply("step one"))
             + _assistant_rows("msg_B", "req_B", _reply("step two"))
         )
-        assert turns[0]["usage"]["requests"] == 2
-        assert turns[0]["usage"]["output"] == 982
-        assert turns[0]["usage"]["input"] == 24
+        assert turns[0]["usage"]["input_tokens"] == 24
+        assert turns[0]["usage"]["output_tokens"] == 982
 
     def test_same_message_id_under_a_new_request_id_counts_twice(self):
         # The dedup key is the PAIR. A retry reuses the message id but is a
@@ -676,7 +683,7 @@ class TestTurnUsageAccounting:
             + _assistant_rows("msg_A", "req_A", _reply("attempt"))
             + _assistant_rows("msg_A", "req_RETRY", _reply("attempt"))
         )
-        assert turns[0]["usage"]["requests"] == 2
+        assert turns[0]["usage"]["input_tokens"] == 24
 
     def test_models_are_listed_once_each_in_first_seen_order(self):
         turns = _render(
@@ -685,7 +692,7 @@ class TestTurnUsageAccounting:
             + _assistant_rows("msg_B", "req_B", _reply("b"), model="claude-haiku-4-5")
             + _assistant_rows("msg_C", "req_C", _reply("c"), model="claude-opus-5")
         )
-        assert turns[0]["usage"]["models"] == ["claude-opus-5", "claude-haiku-4-5"]
+        assert turns[0]["models"] == ["claude-opus-5", "claude-haiku-4-5"]
 
     def test_transcript_without_usage_renders_no_usage_block(self):
         # Invariant: absent, never zero-filled — a zero block would read as
@@ -881,7 +888,10 @@ class TestRenderedPayloadsSatisfyBothContracts:
         assert payloads[0]["status"] == "rewound"
         assert payloads[1]["rewound_from"] == 1
         assert payloads[1]["rewind_kind"] == "edited_prompt"
-        assert payloads[0]["usage"]["requests"] == 1
+        # Unified usage shape: one (message id, request id) pair contributes
+        # its raw token classes exactly once.
+        assert payloads[0]["usage"]["input_tokens"] == 12
+        assert payloads[0]["usage"]["output_tokens"] == 491
 
         # Two violations in this contract predate this slice and are filed as
         # CAWS-DEFECT-TURN-LOG-V2-CONTRACT-REJECTS-REAL-OUTPUT-01: the schema
@@ -1139,6 +1149,50 @@ class TestSessionEndSealing:
         assert sealed["usage"]["output"] == 50
 
 
+class TestPublicRenderSession:
+    """The lock-wrapping public entry renders, cleans orphaned sidecars, and
+    writes the session index. The unit suite elsewhere drives
+    _render_session_unlocked directly; these pins exist because a merge once
+    left the session-index/orphan sweep referencing names that only exist in
+    the writer's scope, which crashed every installed-pack render while the
+    unit suite stayed green."""
+
+    def test_public_entry_writes_index_and_sweeps_orphan_sidecars(self):
+        directory = Path(tempfile.mkdtemp(prefix="caws-slr-public-"))
+        transcript = directory / "transcript.jsonl"
+        rows = [
+            {"type": "user", "timestamp": "2026-09-15T00:00:00Z",
+             "message": {"role": "user", "content": "produce a turn"}},
+            {"type": "assistant", "timestamp": "2026-09-15T00:00:02Z",
+             "message": {"role": "assistant", "id": "msg_pub_1",
+                 "model": "claude-opus-5", "stop_reason": "end_turn",
+                 "content": [
+                     {"type": "text", "text": "Turn complete for the public entry."}],
+                 "usage": {"input_tokens": 5, "output_tokens": 3}}},
+        ]
+        transcript.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        # Stale residue from a prior larger render: a payloads sidecar whose
+        # turn no longer exists must be swept by the public entry.
+        stale = directory / "turn-009.payloads.json"
+        stale.write_text('{"ghost": true}', encoding="utf-8")
+
+        slr.render_session(
+            log_dir=str(directory), cwd="/repo", session_id="public-entry",
+            started_at="2026-09-15T00:00:00Z", model="claude-opus-5",
+            branch="main", head_sha="abc1234", dirty_count="0",
+            start_sha="abc1234", transcript_path=str(transcript),
+        )
+
+        assert stale.exists() is False, "orphaned payloads sidecar was not swept"
+        index = json.loads((directory / "session-index.json").read_text(encoding="utf-8"))
+        assert index["turn_count"] == 1
+        assert index["models"] == ["claude-opus-5"]
+        turns = [json.loads(p.read_text(encoding="utf-8"))
+                 for p in sorted(directory.glob("turn-*.json"))
+                 if not p.name.endswith(".payloads.json")]
+        assert len(turns) == 1 and turns[0]["usage"]["input_tokens"] == 5
+
+
 class TestRealTranscriptUsageParity:
     """A6: rendered session usage matches an independent dedup over the file."""
 
@@ -1183,15 +1237,16 @@ class TestRealTranscriptUsageParity:
                 request_id = row.get("requestId")
                 key = (message_id, request_id if isinstance(request_id, str) else None)
                 seen.setdefault(key, usage)
-        totals = {"requests": len(seen), "input": 0, "cache_read": 0,
-                  "cache_write": 0, "output": 0}
-        source = {"input": "input_tokens", "cache_read": "cache_read_input_tokens",
-                  "cache_write": "cache_creation_input_tokens", "output": "output_tokens"}
+        # Same four raw token classes the renderer's assistant_meta rollup
+        # emits. The dedup proof lives in the sums: a non-deduplicating
+        # renderer would roughly double them on multi-block replies.
+        totals = {"input_tokens": 0, "output_tokens": 0,
+                  "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
         for usage in seen.values():
-            for target, field in source.items():
+            for field in totals:
                 value = usage.get(field)
                 if isinstance(value, int) and not isinstance(value, bool):
-                    totals[target] += value
+                    totals[field] += value
         return totals
 
     def test_session_totals_match_an_independent_dedup_count(self):
@@ -1209,9 +1264,10 @@ class TestRealTranscriptUsageParity:
             transcript_path=str(path),
         )
         payloads = [json.loads(p.read_text(encoding="utf-8"))
-                    for p in sorted(directory.glob("turn-*.json"))]
-        rendered = {"requests": 0, "input": 0, "cache_read": 0,
-                    "cache_write": 0, "output": 0}
+                    for p in sorted(directory.glob("turn-*.json"))
+                    if not p.name.endswith(".payloads.json")]
+        rendered = {"input_tokens": 0, "output_tokens": 0,
+                    "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
         for payload in payloads:
             usage = payload.get("usage")
             if not usage:
@@ -1225,5 +1281,5 @@ class TestRealTranscriptUsageParity:
               f"rendered={rendered} oracle={oracle} "
               f"rewinds={[(p['turn'], p['rewound_from'], p['rewind_kind']) for p in payloads if 'rewound_from' in p]} "
               f"interrupts={[(p['turn'], p['ended_by']) for p in payloads if p['ended_by']]}")
-        assert oracle["requests"] > 0, f"{path} carries no usage to compare"
+        assert any(value > 0 for value in oracle.values()), f"{path} carries no usage to compare"
         assert rendered == oracle
