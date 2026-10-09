@@ -1413,6 +1413,7 @@ export function registerShellCommands(
         draft?: boolean;
         closed?: boolean;
         archived?: boolean;
+        sessionId?: string;
         data?: boolean;
       },
       command: Command
@@ -1432,6 +1433,7 @@ export function registerShellCommands(
         draft: opts.draft === true,
         closed: opts.closed === true,
         includeArchived: opts.archived === true,
+        ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
         showData: opts.data === true,
       });
       exit(code);

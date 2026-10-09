@@ -48,7 +48,9 @@ import {
 } from '../kernel';
 
 import { appendEvent, loadEvents } from './events-store';
+import { loadBridges } from './bridge-store';
 import { loadSpecs } from './specs-store';
+import { loadWorktrees } from './worktrees-store';
 import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommit';
 import { runLifecycleTransaction, type LifecycleTransactionResult } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
@@ -4050,11 +4052,34 @@ function mapTxnToOutcome(
 
 // ─── list / show helpers ────────────────────────────────────────────────
 
+/**
+ * How a session relates to a spec (CAWS-SPECS-LIST-SESSION-ID-001).
+ * Populated only when the listing is filtered by `--session-id`.
+ */
+export type SpecsSessionRelation =
+  | { readonly kind: 'created' }
+  | { readonly kind: 'bridge' }
+  | {
+      readonly kind: 'worktree';
+      readonly worktree: string;
+      readonly owner_session_id?: string;
+    };
+
+/** Live worktree binding state for a spec, read from the registry. */
+export interface SpecsBoundWorktree {
+  readonly name: string;
+  readonly owner_session_id?: string;
+}
+
 export interface SpecsListEntry {
   readonly id: string;
   readonly title: string;
   readonly lifecycle_state: string;
   readonly path: string;
+  /** Present only when the listing is filtered by a session id. */
+  readonly relations?: readonly SpecsSessionRelation[];
+  /** Present only when the listing is filtered by a session id. */
+  readonly bound_worktree?: SpecsBoundWorktree | null;
 }
 
 export interface ArchivedSpecsListEntry {
@@ -4068,6 +4093,8 @@ export interface ArchivedSpecsListEntry {
    * case uses git log --follow fallback.
    */
   readonly blob_sha: string | null;
+  /** Present only when the listing is filtered by a session id. */
+  readonly relations?: readonly SpecsSessionRelation[];
 }
 
 export interface SpecsListResult {
@@ -4077,6 +4104,97 @@ export interface SpecsListResult {
 
 export const SPECS_LIST_STATUSES = ['active', 'draft', 'closed', 'archived'] as const;
 export type SpecsListStatus = (typeof SPECS_LIST_STATUSES)[number];
+
+/**
+ * Session-identity comparison per CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001:
+ * a bare `<uuid>` and its `session-<uuid>` stamping are the same session lane,
+ * so both sides are prefix-normalized before equality. This is the ONLY fuzzy
+ * aspect; anything else is exact string equality.
+ */
+function normalizeSessionIdForCompare(raw: string): string {
+  return raw.startsWith('session-') ? raw.slice('session-'.length) : raw;
+}
+
+function sameSession(a: string, b: string): boolean {
+  return (
+    a.length > 0 &&
+    b.length > 0 &&
+    normalizeSessionIdForCompare(a) === normalizeSessionIdForCompare(b)
+  );
+}
+
+/**
+ * Attribution inputs for the `--session-id` filter. Loaded once per call:
+ * bridges (session↔spec claims) and the worktree registry (owner↔spec
+ * bindings). Malformed authority stores fail the listing rather than
+ * silently dropping the relations they carry.
+ */
+interface SessionRelationIndex {
+  readonly bridgeHolders: ReadonlyMap<string, string>; // specId → session_id
+  readonly boundWorktrees: ReadonlyMap<string, SpecsBoundWorktree>; // specId → binding
+}
+
+function loadSessionRelationIndex(cawsDir: string): Result<SessionRelationIndex> {
+  const bridges = loadBridges(cawsDir);
+  if (!isOk(bridges)) return err(bridges.errors);
+  const worktrees = loadWorktrees(cawsDir);
+  if (!isOk(worktrees)) return err(worktrees.errors);
+
+  const bridgeHolders = new Map<string, string>();
+  for (const [specId, entry] of Object.entries(bridges.value.bridges)) {
+    if (typeof entry?.session_id === 'string' && entry.session_id.length > 0) {
+      bridgeHolders.set(specId, entry.session_id);
+    }
+  }
+
+  const boundWorktrees = new Map<string, SpecsBoundWorktree>();
+  for (const [name, entry] of Object.entries(worktrees.value)) {
+    const specId = (entry as { specId?: unknown } | undefined)?.specId;
+    if (typeof specId !== 'string' || specId.length === 0) continue;
+    const owner = (entry as { owner?: { session_id?: unknown } } | undefined)?.owner;
+    boundWorktrees.set(specId, {
+      name,
+      ...(typeof owner?.session_id === 'string' && owner.session_id.length > 0
+        ? { owner_session_id: owner.session_id }
+        : {}),
+    });
+  }
+  return ok({ bridgeHolders, boundWorktrees });
+}
+
+/**
+ * Compute every way `sessionId` relates to a spec. `createdBy` is the body's
+ * `created_by_session` (active specs) or the `spec_created` event actor
+ * (archived specs, whose bodies are tombstoned).
+ */
+function sessionRelationsFor(
+  specId: string,
+  sessionId: string,
+  createdBy: string | null,
+  index: SessionRelationIndex
+): SpecsSessionRelation[] {
+  const relations: SpecsSessionRelation[] = [];
+  if (createdBy !== null && sameSession(createdBy, sessionId)) {
+    relations.push({ kind: 'created' });
+  }
+  const bridgeHolder = index.bridgeHolders.get(specId);
+  if (bridgeHolder !== undefined && sameSession(bridgeHolder, sessionId)) {
+    relations.push({ kind: 'bridge' });
+  }
+  const bound = index.boundWorktrees.get(specId);
+  if (
+    bound !== undefined &&
+    bound.owner_session_id !== undefined &&
+    sameSession(bound.owner_session_id, sessionId)
+  ) {
+    relations.push({
+      kind: 'worktree',
+      worktree: bound.name,
+      ...(bound.owner_session_id !== undefined ? { owner_session_id: bound.owner_session_id } : {}),
+    });
+  }
+  return relations;
+}
 
 /**
  * List specs by lifecycle state, optionally including archived ones.
@@ -4090,32 +4208,92 @@ export type SpecsListStatus = (typeof SPECS_LIST_STATUSES)[number];
  * Latest-write-wins per spec_id: if a spec was archived, recovered,
  * recreated, and re-archived, only the most recent spec_archived
  * event surfaces.
+ *
+ * When `sessionId` is set (CAWS-SPECS-LIST-SESSION-ID-001), the listing
+ * becomes the session work-surface view: only specs the session relates
+ * to survive the filter, each entry carrying its `relations` and the
+ * registry-derived `bound_worktree` state. Relation sources:
+ * the spec body's `created_by_session`, a bridge claim, and worktree
+ * ownership in the registry. Archived specs are attributed through the
+ * `spec_created` event actor (the durable audit record for tombstoned
+ * bodies). Read-only: this path never mutates state.
  */
 export function listSpecs(
   cawsDir: string,
   options: {
     readonly includeArchived?: boolean;
     readonly status?: SpecsListStatus;
+    readonly sessionId?: string;
   } = {}
 ): Result<SpecsListResult> {
+  const sessionId = options.sessionId;
+  let index: SessionRelationIndex | null = null;
+  let sessionFilter: string | null = null;
+  if (sessionId !== undefined) {
+    if (sessionId.length === 0) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LEASE_SESSION_ID_INVALID,
+          'caws specs list: --session-id requires a non-empty session id.',
+          { subject: 'specs.list.session_id' }
+        )
+      );
+    }
+    const loaded = loadSessionRelationIndex(cawsDir);
+    if (!isOk(loaded)) return err(loaded.errors);
+    index = loaded.value;
+    sessionFilter = sessionId;
+  }
+
   const activeResult = loadSpecs(cawsDir);
   const activeIds = new Set(activeResult.specs.map((s) => s.id));
-  const active: SpecsListEntry[] = activeResult.specs
-    .filter((spec) =>
-      options.status === undefined || options.status === 'archived'
-        ? true
-        : spec.lifecycle_state === options.status
-    )
-    .map((spec) => ({
+  const active: SpecsListEntry[] = [];
+  for (const spec of activeResult.specs) {
+    if (
+      options.status !== undefined &&
+      options.status !== 'archived' &&
+      spec.lifecycle_state !== options.status
+    ) {
+      continue;
+    }
+    const basePath = {
       id: spec.id,
       title: spec.title,
       lifecycle_state: spec.lifecycle_state,
       path: specPath(cawsDir, spec.id),
-    }));
+    };
+    if (sessionFilter === null || index === null) {
+      active.push(basePath);
+      continue;
+    }
+    const relations = sessionRelationsFor(
+      spec.id,
+      sessionFilter,
+      spec.created_by_session ?? null,
+      index
+    );
+    if (relations.length === 0) continue;
+    const bound = index.boundWorktrees.get(spec.id);
+    active.push({
+      ...basePath,
+      relations,
+      bound_worktree: bound ?? null,
+    });
+  }
 
+  // Session view includes archived rows by default (the four-state surface);
+  // an explicit --status narrowing wins over that default.
+  const wantsArchived =
+    options.includeArchived === true ||
+    options.status === 'archived' ||
+    (sessionId !== undefined && options.status === undefined);
   let archived: ArchivedSpecsListEntry[] = [];
-  if (options.includeArchived === true || options.status === 'archived') {
-    archived = readArchivedFromEventLog(cawsDir, activeIds);
+  if (wantsArchived) {
+    archived = readArchivedFromEventLog(
+      cawsDir,
+      activeIds,
+      sessionId !== undefined && index !== null ? { sessionId, index } : undefined
+    );
     if (options.status !== 'archived') {
       return ok({ active, archived });
     }
@@ -4132,7 +4310,8 @@ export function listSpecs(
  */
 function readArchivedFromEventLog(
   cawsDir: string,
-  activeIds: ReadonlySet<string>
+  activeIds: ReadonlySet<string>,
+  attribution?: { readonly sessionId: string; readonly index: SessionRelationIndex }
 ): ArchivedSpecsListEntry[] {
   const eventsPath = path.join(cawsDir, 'events.jsonl');
   if (!fs.existsSync(eventsPath)) return [];
@@ -4144,6 +4323,10 @@ function readArchivedFromEventLog(
   }
   // Map: spec_id → most recent spec_archived event payload+ts.
   const latest = new Map<string, { ts: string; path: string; blob_sha: string | null }>();
+  // CAWS-SPECS-LIST-SESSION-ID-001: spec_id → spec_created actor session_id
+  // (last create wins — the creator of the current body). Tombstoned bodies
+  // are not readable here, so the event actor is the durable attribution.
+  const creators = new Map<string, string>();
   for (const line of raw.split('\n')) {
     if (line.length === 0) continue;
     let parsed: unknown;
@@ -4152,14 +4335,27 @@ function readArchivedFromEventLog(
     } catch {
       continue;
     }
+    if (typeof parsed !== 'object' || parsed === null) continue;
+    const envelope = parsed as {
+      event?: unknown;
+      ts?: unknown;
+      spec_id?: unknown;
+      actor?: { session_id?: unknown };
+      data?: unknown;
+    };
     if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      (parsed as { event?: unknown }).event !== 'spec_archived'
+      attribution !== undefined &&
+      envelope.event === 'spec_created' &&
+      typeof envelope.spec_id === 'string' &&
+      typeof envelope.actor?.session_id === 'string'
     ) {
+      creators.set(envelope.spec_id, envelope.actor.session_id);
       continue;
     }
-    const evt = parsed as {
+    if (envelope.event !== 'spec_archived') {
+      continue;
+    }
+    const evt = envelope as {
       ts?: string;
       spec_id?: string;
       data?: { from_path?: string; to_path?: string; blob_sha?: string };
@@ -4182,12 +4378,24 @@ function readArchivedFromEventLog(
   const out: ArchivedSpecsListEntry[] = [];
   for (const [specId, info] of latest) {
     if (activeIds.has(specId)) continue; // re-created after archive — active wins
-    out.push({
+    const base = {
       id: specId,
       path: info.path,
       archived_at: info.ts,
       blob_sha: info.blob_sha,
-    });
+    };
+    if (attribution !== undefined) {
+      const relations = sessionRelationsFor(
+        specId,
+        attribution.sessionId,
+        creators.get(specId) ?? null,
+        attribution.index
+      );
+      if (relations.length === 0) continue;
+      out.push({ ...base, relations });
+      continue;
+    }
+    out.push(base);
   }
   // Stable sort: by id ascending.
   out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
