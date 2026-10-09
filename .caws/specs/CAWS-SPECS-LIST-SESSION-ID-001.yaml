@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: specs-list-session-id
 created_at: '2026-10-08T15:28:36.886Z'
-updated_at: '2026-10-08T15:37:52.880Z'
+updated_at: '2026-10-09T01:29:18.407Z'
 created_by_session: 'session-e41fec94-8319-4cbd-ada9-25b3f0adac6b'
 blast_radius:
   modules:
@@ -20,6 +20,8 @@ scope:
     - 'packages/caws-cli/src/shell/command-metadata.ts'
     - 'packages/caws-cli/tests/store/specs-list-session-filter.test.js'
     - 'packages/caws-cli/tests/shell/specs-list-session-id.test.js'
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
   out: []
 invariants:
   - 'Session filtering is read-only: specs list --session-id never mutates specs, bridges, the worktree registry, or the event log.'
