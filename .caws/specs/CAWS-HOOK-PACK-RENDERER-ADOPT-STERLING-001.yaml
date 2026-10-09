@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: hook-pack-renderer-sterling-sync
 created_at: '2026-10-08T23:47:43.726Z'
-updated_at: '2026-10-09T01:57:56.396Z'
+updated_at: '2026-10-09T02:57:31.406Z'
 created_by_session: 'session-b2c0e83d-8497-4257-aa85-a43ef70303a5'
 blast_radius:
   modules:
@@ -19,6 +19,7 @@ scope:
     - 'packages/caws-cli/tests/hooks/pytest'
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/src/kernel/schemas/telemetry/turn-log.v2.json
+    - packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts
   out: []
 invariants:
   - 'Template-only features are preserved: harness_kimi, the CAWS_SESSION_TRANSCRIPT_ADAPTER machine-runtime path, malformed-JSONL diagnostics, and hook_audit events'
