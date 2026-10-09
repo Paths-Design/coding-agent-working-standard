@@ -47,3 +47,9 @@ evidence:
     recorded_at: "2026-10-09T02:59:03.310Z"
     test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestPublicRenderSession::test_public_entry_writes_index_and_sweeps_orphan_sidecars"
     test_verified_at: "8529617de7194e8bdd867432befe5ecbda0fe9a4"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "pytest usage accounting + session-index pins on the merged renderer"
+    recorded_at: "2026-10-09T02:59:06.555Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestTurnUsageAccounting::test_multi_block_reply_and_fork_copy_count_as_one_request"
+    test_verified_at: "8529617de7194e8bdd867432befe5ecbda0fe9a4"
