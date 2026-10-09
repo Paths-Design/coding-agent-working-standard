@@ -47,3 +47,10 @@ acceptance:
     then: 'exit 0 with an explicit no-specs-for-session message naming the session id'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/store/specs-list-session-filter.test.js::filters to related specs and labels every relation kind"
+    recorded_at: "2026-10-09T00:54:42.724Z"
+    test_nodeid: "packages/caws-cli/tests/store/specs-list-session-filter.test.js::filters to related specs and labels every relation kind"
+    test_verified_at: "563195981b7cb9078abd97192b892a3b9e38956a"
