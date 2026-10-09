@@ -34,9 +34,39 @@ from typing import Any
 
 from harness_common import (
     TranscriptRowAdapter,
+    as_bool,
     parse_hook_stdout,
     parse_timestamp,
 )
+
+# tool_use input keys Claude Code has been observed to stringify ('true'/
+# 'false' on Agent dispatches, measured 2026-09-26) even though the renderer
+# and schema treat them as booleans. Coerced at this boundary so downstream
+# artifacts stay schema-valid without weakening the schema.
+STRINGIFIED_BOOL_INPUT_KEYS = ("run_in_background",)
+
+
+def _row_lineage(obj: dict[str, Any]) -> dict[str, Any]:
+    """Carry a row's identity and its parent's onto the canonical event.
+
+    The renderer needs both to detect a rewind: a re-typed prompt re-parents
+    onto the record that closed the earlier turn (observed: a
+    `system/turn_duration` row), so two turn-opening prompts sharing a
+    parent_uuid are the same conversational slot occupied twice.
+
+    A null/absent parentUuid is NOT lineage — it is the transcript's root, and
+    every resumed session can carry several of them. Emitting it would make
+    every root-parented prompt collide with every other, so it is dropped here
+    rather than filtered downstream.
+    """
+    lineage: dict[str, Any] = {}
+    uuid_value = obj.get("uuid")
+    parent_value = obj.get("parentUuid")
+    if isinstance(uuid_value, str) and uuid_value:
+        lineage["uuid"] = uuid_value
+    if isinstance(parent_value, str) and parent_value:
+        lineage["parent_uuid"] = parent_value
+    return lineage
 
 # User-role rows Claude Code injects that are not human turns: slash-command
 # echoes, local-command wrappers, session-continuation banners, and hook-block
@@ -155,83 +185,86 @@ def _normalize_interjection(text: str) -> str:
 
 
 def _matches_claude(row: dict[str, Any]) -> bool:
-    return row.get("type") in {"user", "assistant", "attachment"}
+    return row.get("type") in {"user", "assistant", "attachment", "ai-title", "cost-state", "queue-operation", "system"}
 
 
-def _row_lineage(obj: dict[str, Any]) -> dict[str, Any]:
-    """Carry a row's identity and its parent's onto the canonical event.
+# system-row subtypes that carry governance/outcome signal. Everything else
+# (stop_hook_summary with empty content, future subtypes) returns no events.
+_CLAUDE_SYSTEM_SUBTYPES = {"turn_duration", "informational"}
 
-    The renderer needs both to detect a rewind: a re-typed prompt re-parents
-    onto the record that closed the earlier turn (observed: a
-    `system/turn_duration` row), so two turn-opening prompts sharing a
-    parent_uuid are the same conversational slot occupied twice.
 
-    A null/absent parentUuid is NOT lineage — it is the transcript's root, and
-    every resumed session can carry several of them. Emitting it would make
-    every root-parented prompt collide with every other, so it is dropped here
-    rather than filtered downstream.
+def _claude_control_event(row: dict[str, Any], ts: str | None) -> dict[str, Any] | None:
+    """Translate one Claude Code governance/lifecycle row to a control event.
+
+    These rows are the only record of: per-turn wall duration, hook blocks
+    from NON-CAWS vendor hooks ("UserPromptSubmit operation blocked by
+    hook:"), session cost totals, AI-generated session titles, and the
+    user's message-queue operations (steering cadence). All were dropped
+    before 2026-09-26.
     """
-    lineage: dict[str, Any] = {}
-    uuid_value = obj.get("uuid")
-    parent_value = obj.get("parentUuid")
-    if isinstance(uuid_value, str) and uuid_value:
-        lineage["uuid"] = uuid_value
-    if isinstance(parent_value, str) and parent_value:
-        lineage["parent_uuid"] = parent_value
-    return lineage
-
-
-def _token_count(value: Any) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
-
-
-def _api_request_event(
-    obj: dict[str, Any], message: dict[str, Any], ts: str | None
-) -> dict[str, Any] | None:
-    """One event per API response, carrying that response's usage.
-
-    Claude Code writes ONE transcript row per assistant content block, and
-    every row of a multi-block reply repeats the same `message.usage`
-    verbatim (verified: zero rows sharing (message.id, requestId) carried a
-    differing token tuple across a 1,124-row transcript). So usage is
-    deduplicated downstream on that key and taken once — summing the rows
-    would roughly double every count.
-
-    A row with no `message.usage` yields no event at all, so a harness that
-    records no usage renders the block absent rather than zero-filled.
-    """
-    usage = message.get("usage")
-    message_id = message.get("id")
-    if not isinstance(usage, dict) or not isinstance(message_id, str) or not message_id:
+    kind = row.get("type")
+    if kind == "ai-title":
+        title = row.get("aiTitle")
+        if isinstance(title, str) and title.strip():
+            return {"ev": "control", "subtype": "session_title", "text": title, "ts": ts}
         return None
-    request_id = obj.get("requestId")
-    model = message.get("model")
-    return {
-        "ev": "api_request",
-        "message_id": message_id,
-        "request_id": request_id if isinstance(request_id, str) and request_id else None,
-        "model": model if isinstance(model, str) and model else None,
-        "usage": {
-            "input": _token_count(usage.get("input_tokens")),
-            "cache_read": _token_count(usage.get("cache_read_input_tokens")),
-            "cache_write": _token_count(usage.get("cache_creation_input_tokens")),
-            "output": _token_count(usage.get("output_tokens")),
-        },
-        "ts": ts,
-    }
+    if kind == "cost-state":
+        event: dict[str, Any] = {"ev": "control", "subtype": "cost_state", "ts": ts}
+        if isinstance(row.get("totalCostUSD"), (int, float)):
+            event["cost_usd"] = row["totalCostUSD"]
+        for src_key, dst_key in (
+            ("totalAPIDuration", "api_duration_ms"),
+            ("totalToolDuration", "tool_duration_ms"),
+            ("totalLinesAdded", "lines_added"),
+            ("totalLinesRemoved", "lines_removed"),
+        ):
+            if isinstance(row.get(src_key), (int, float)):
+                event[dst_key] = row[src_key]
+        model_usage = row.get("modelUsage")
+        if isinstance(model_usage, dict) and model_usage:
+            event["models"] = sorted(k for k in model_usage if isinstance(k, str))
+        return event
+    if kind == "queue-operation":
+        operation = row.get("operation")
+        if isinstance(operation, str) and operation:
+            return {"ev": "control", "subtype": "queue_operation", "text": operation, "ts": ts}
+        return None
+    if kind == "system":
+        subtype = row.get("subtype")
+        if subtype == "turn_duration":
+            event = {"ev": "control", "subtype": "turn_duration", "ts": ts}
+            if isinstance(row.get("durationMs"), (int, float)):
+                event["duration_ms"] = row["durationMs"]
+            if isinstance(row.get("messageCount"), (int, float)):
+                event["message_count"] = int(row["messageCount"])
+            return event
+        if subtype == "informational":
+            content = row.get("content")
+            text = content if isinstance(content, str) else ""
+            if not text.strip():
+                return None
+            event = {"ev": "control", "subtype": "system_notice", "text": text, "ts": ts}
+            level = row.get("level")
+            if isinstance(level, str) and level:
+                event["level"] = level
+            return event
+        return None
+    return None
 
 
 def normalize_claude_row(obj: dict[str, Any], _state: dict[str, Any]) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     ts = parse_timestamp(obj.get("timestamp"))
     kind = obj.get("type")
+    if kind in {"ai-title", "cost-state", "queue-operation", "system"}:
+        control = _claude_control_event(obj, ts)
+        return [control] if control is not None else []
     if kind == "user":
         content = obj.get("message", {}).get("content")
-        lineage = _row_lineage(obj)
         if isinstance(content, str):
             shell = _shell_event(content, ts)
             events.append(
-                shell if shell else {"ev": "user_text", "text": content, "ts": ts, **lineage}
+                shell if shell else {"ev": "user_text", "text": content, "ts": ts, **_row_lineage(obj)}
             )
         elif isinstance(content, list):
             for item in content:
@@ -250,14 +283,10 @@ def normalize_claude_row(obj: dict[str, Any], _state: dict[str, Any]) -> list[di
                     text = item.get("text", "")
                     shell = _shell_event(text, ts)
                     events.append(
-                        shell if shell else {"ev": "user_text", "text": text, "ts": ts, **lineage}
+                        shell if shell else {"ev": "user_text", "text": text, "ts": ts, **_row_lineage(obj)}
                     )
     elif kind == "assistant":
-        message = obj.get("message")
-        message = message if isinstance(message, dict) else {}
-        api_request = _api_request_event(obj, message, ts)
-        if api_request is not None:
-            events.append(api_request)
+        message = obj.get("message", {})
         content = message.get("content", [])
         if isinstance(content, list):
             for item in content:
@@ -265,14 +294,74 @@ def normalize_claude_row(obj: dict[str, Any], _state: dict[str, Any]) -> list[di
                     continue
                 if item.get("type") == "text":
                     events.append({"ev": "assistant_text", "text": item.get("text", ""), "ts": ts})
+                elif item.get("type") == "thinking":
+                    # Extended-thinking blocks are the model's deliberation
+                    # trace — the "why" a replay reader needs. Dropped here
+                    # before 2026-09-26, so decision/summary heuristics ran on
+                    # visible text only. Emitted as a distinct `reasoning`
+                    # event (not assistant_text) so the renderer can mark
+                    # provenance=thinking without string-sniffing.
+                    thinking_text = item.get("thinking", "") or item.get("text", "") or ""
+                    if isinstance(thinking_text, str) and thinking_text.strip():
+                        events.append({"ev": "reasoning", "text": thinking_text, "ts": ts})
                 elif item.get("type") == "tool_use":
+                    tool_input = item.get("input", {}) if isinstance(item.get("input"), dict) else {}
+                    if any(
+                        key in tool_input and isinstance(tool_input.get(key), str)
+                        for key in STRINGIFIED_BOOL_INPUT_KEYS
+                    ):
+                        tool_input = dict(tool_input)
+                        for key in STRINGIFIED_BOOL_INPUT_KEYS:
+                            if key in tool_input:
+                                tool_input[key] = as_bool(tool_input[key])
                     events.append({
                         "ev": "tool_use",
                         "name": item.get("name", ""),
                         "id": item.get("id", ""),
-                        "input": item.get("input", {}) if isinstance(item.get("input"), dict) else {},
+                        "input": tool_input,
                         "ts": ts,
                     })
+        # Per-message model/usage/stop_reason: the outcome and cost record for
+        # this assistant step (66/66 assistant rows carry usage in a typical
+        # Claude session; none of it reached the turn artifacts before
+        # 2026-09-26). Slimmed to the fields the turn rollup consumes.
+        if isinstance(message, dict):
+            usage_raw = message.get("usage")
+            usage = None
+            if isinstance(usage_raw, dict):
+                usage = {
+                    key: usage_raw[key]
+                    for key in (
+                        "input_tokens",
+                        "output_tokens",
+                        "cache_read_input_tokens",
+                        "cache_creation_input_tokens",
+                    )
+                    if isinstance(usage_raw.get(key), (int, float))
+                }
+                if not usage:
+                    usage = None
+            model = message.get("model")
+            stop_reason = message.get("stop_reason")
+            if usage or model or stop_reason:
+                # message_id/request_id let the renderer dedup usage across the
+                # rows of one multi-block reply (Claude Code repeats
+                # message.usage verbatim on every row; naive per-row sums
+                # roughly double every count).
+                meta: dict[str, Any] = {"ev": "assistant_meta", "ts": ts}
+                message_id = message.get("id") if isinstance(message, dict) else None
+                request_id = obj.get("requestId")
+                if isinstance(message_id, str) and message_id:
+                    meta["message_id"] = message_id
+                if isinstance(request_id, str) and request_id:
+                    meta["request_id"] = request_id
+                if usage:
+                    meta["usage"] = usage
+                if model:
+                    meta["model"] = model
+                if stop_reason:
+                    meta["stop_reason"] = stop_reason
+                events.append(meta)
     elif kind == "attachment":
         attachment = obj.get("attachment")
         if isinstance(attachment, str):

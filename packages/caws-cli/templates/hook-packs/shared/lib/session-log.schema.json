@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://caws.dev/schemas/session-log.schema.json",
+  "$id": "https://sterling.local/schemas/caws/session-log.schema.json",
   "title": "CAWS Session Log Artifact",
   "description": "CAWS-MANAGED-HOOK hook_pack=shared hook_pack_version=1 caws_min_major=11 edit_stance: YOURS TO EDIT. This is a starting schema, not a locked one — extend it as your session-log contract grows. JSON carries the managed marker in this description field because JSON has no comment syntax; the marker is only how caws init finds the file it can offer updates for, not a keep-out sign. JSON artifacts stored under .caws/sessions/<session-id>/ by .caws/hooks/session-log.sh and its renderer.",
   "oneOf": [
@@ -14,6 +14,9 @@
       "$ref": "#/$defs/sessionPointerArtifact"
     },
     {
+      "$ref": "#/$defs/sessionIndexArtifact"
+    },
+    {
       "$ref": "#/$defs/legacySessionIndexArtifact"
     },
     {
@@ -25,64 +28,26 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "properties": {}
     },
     "nonEmptyString": {
       "type": "string",
-      "minLength": 1
-    },
-    "turnUsage": {
-      "type": "object",
-      "description": "API cost of one turn (or, on the session artifact, of the whole session). requests counts UNIQUE (message id, request id) pairs: Claude Code writes one transcript row per assistant content block and repeats the same usage block on each, so a row count would roughly double every figure. Token classes are the four billed classes; a class the harness omits reads as 0, but a harness that reports no usage at all omits this object entirely.",
-      "required": [
-        "requests",
-        "input",
-        "cache_read",
-        "cache_write",
-        "output",
-        "models"
-      ],
-      "properties": {
-        "requests": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "input": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "cache_read": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "cache_write": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "output": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "models": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/nonEmptyString"
-          },
-          "description": "Distinct models seen, in first-seen order."
-        }
-      },
-      "additionalProperties": false
+      "minLength": 1,
+      "properties": {}
     },
     "timestampLike": {
       "type": [
         "string",
         "null"
       ],
-      "description": "UTC ISO-8601 or hook-provided local timestamp string."
+      "description": "UTC ISO-8601 or hook-provided local timestamp string.",
+      "properties": {}
     },
     "pathString": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "properties": {}
     },
     "fileRefs": {
       "type": "object",
@@ -119,6 +84,13 @@
         "command": {
           "type": "string"
         },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Human description attached to the command by the emitting agent."
+        },
         "output_preview": {
           "type": [
             "string",
@@ -142,16 +114,7 @@
           "minimum": 0
         },
         "ts": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "description": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/timestampLike"
         },
         "provenance": {
           "type": [
@@ -252,6 +215,30 @@
             "null"
           ],
           "minimum": 0
+        },
+        "subagent": {
+          "type": "object",
+          "description": "Fork linkage joined from agent-*.meta.json beside the parent transcript: where the fork's own transcript lives and what it was. Present only for harnesses that record fork metadata (claude-code).",
+          "properties": {
+            "transcript": {
+              "type": "string",
+              "description": "Fork transcript filename within the session's subagents directory."
+            },
+            "agent_type": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "spawn_depth": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true
@@ -274,7 +261,7 @@
     },
     "artifactRef": {
       "type": "object",
-      "description": "The renderer emits three artifact shapes, all keyed by type: file_edit/file_write carry `path`; git_commit/test_run carry `command`; plan carries `content`. Only `type` is universal.",
+      "description": "The renderer emits three artifact shapes, all keyed by type: file_edit/file_write carry `path`; git_commit/test_run carry `command`; plan carries `content` (+ content_truncated when the plan text exceeded the artifact bound). Only `type` is universal.",
       "required": [
         "type"
       ],
@@ -294,6 +281,10 @@
         },
         "content": {
           "type": "string"
+        },
+        "content_truncated": {
+          "type": "boolean",
+          "description": "plan artifacts: the content was bounded to the artifact limit."
         },
         "ts": {
           "$ref": "#/$defs/timestampLike"
@@ -348,7 +339,7 @@
     },
     "timelineItem": {
       "type": "object",
-      "description": "One ordered event of the turn. Variants are discriminated by `kind`: reasoning carries `text`; tool_call carries the tool-specific fields below (Bash: command/description/run_in_background; Edit: file/old_string/new_string with *_length + *_truncated; Write: file/content_preview/content_length; Agent: prompt/subagent_type/isolation; Skill: skill/args; ExitPlanMode: plan; codex exec: input_raw/input_length/input_truncated/inner_actions); interjection carries `text` (mid-turn user steering, inline at arrival position); user_shell carries a !-command the USER ran (command/stdout/stderr, entity-unescaped, input+output rows merged into one item; a trailing `! git push` is recorded on the turn whose work it shipped); audit_action and context_authority are hook-derived. Truncation contract: any clipped field X carries X_truncated=true and X_length = the ORIGINAL length (output uses output_truncated/output_length); Bash/Agent/Task outputs are never truncated.",
+      "description": "One ordered event of the turn. Variants are discriminated by `kind`: reasoning carries `text` (assistant prose, provenance=assistant_reasoning; model deliberation, provenance=thinking — claude thinking blocks, codex plaintext reasoning summaries, qwen thought-flagged parts — with thought=true and optional text_truncated/text_length/text_ref bounding); tool_call carries the tool-specific fields below (Bash: command/description/run_in_background; Edit: file/old_string/new_string with *_length + *_truncated; Write: file/content_preview/content_length; Agent: prompt/subagent_type/isolation; Skill: skill/args; ExitPlanMode: plan; codex exec: input_raw/input_length/input_truncated/inner_actions); interjection carries `text` (mid-turn user steering, inline at arrival position); user_shell carries a !-command the USER ran (command/stdout/stderr, entity-unescaped, input+output rows merged into one item; a trailing `! git push` is recorded on the turn whose work it shipped); control carries harness governance/steering events (subtype + text: codex turn_aborted, dsh session_title/approval_policy/permission_preset/sandbox_mode/subagent_descriptor/agent_inbox_spliced) inline at the position they occurred; audit_action and context_authority are hook-derived. Truncation contract: any clipped field X carries X_truncated=true and X_length = the ORIGINAL length; substantive payloads at or under the full-retention ceiling (20000 chars) are emitted WHOLE with only the flag set — a flag means bounded, output_cut=true means bytes were actually cut, and a cut field X carries X_ref = {sha256, length} addressing the full bytes in turn-NNN.payloads.json; Bash/Agent/Task outputs follow the same contract.",
       "required": [
         "kind"
       ],
@@ -362,7 +353,8 @@
             "interjection",
             "user_shell",
             "audit_action",
-            "context_authority"
+            "context_authority",
+            "control"
           ]
         },
         "text": {
@@ -370,6 +362,56 @@
             "string",
             "null"
           ]
+        },
+        "text_truncated": {
+          "type": "boolean",
+          "description": "reasoning items: the thinking text was bounded per the truncation contract."
+        },
+        "text_length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "reasoning items: ORIGINAL thinking text length before bounding."
+        },
+        "text_ref": {
+          "$ref": "#/$defs/payloadRef",
+          "description": "reasoning items: content address of the full thinking text in the payloads sidecar."
+        },
+        "thought": {
+          "type": "boolean",
+          "description": "reasoning items: true when the text is model deliberation (claude thinking block, codex reasoning summary, qwen thought-flagged part) rather than assistant prose."
+        },
+        "subtype": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "control items: the harness governance event class (session_title, approval_policy, permission_preset, sandbox_mode, subagent_descriptor, agent_inbox_spliced, turn_aborted)."
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "control items: where the governance value came from (e.g. dsh 'delegation')."
+        },
+        "duration_ms": {
+          "type": [
+            "number",
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "control items: wall duration for events that carry one (e.g. codex turn_aborted)."
+        },
+        "permission_mode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "audit_action items: the permission mode the hook observed."
         },
         "ts": {
           "$ref": "#/$defs/timestampLike"
@@ -445,7 +487,7 @@
             "array",
             "object"
           ],
-          "description": "Tool result. Complete for Bash/Agent/Task; other tools clip per the truncation contract. Usually a string, but tools whose results are structured content blocks (tool_reference lists from EnterWorktree/TaskCreate/SendMessage/MCP tools, etc.) pass through as the raw array/object \u2014 code over this field must handle both."
+          "description": "Tool result. Complete for Bash/Agent/Task; other tools clip per the truncation contract. Usually a string, but tools whose results are structured content blocks (tool_reference lists from EnterWorktree/TaskCreate/SendMessage/MCP tools, etc.) pass through as the raw array/object — code over this field must handle both."
         },
         "output_length": {
           "type": [
@@ -457,6 +499,14 @@
         },
         "output_truncated": {
           "type": "boolean"
+        },
+        "output_cut": {
+          "type": "boolean",
+          "description": "True only when output bytes were actually CUT (the full payload lives in the turn's payloads sidecar). A whole-inlined over-limit payload is output_truncated=true but output_cut=false."
+        },
+        "output_ref": {
+          "$ref": "#/$defs/payloadRef",
+          "description": "Content address of the full output in turn-NNN.payloads.json, present only when the output was cut."
         },
         "file": {
           "type": [
@@ -481,6 +531,9 @@
         "old_string_truncated": {
           "type": "boolean"
         },
+        "old_string_ref": {
+          "$ref": "#/$defs/payloadRef"
+        },
         "new_string": {
           "type": [
             "string",
@@ -497,6 +550,9 @@
         "new_string_truncated": {
           "type": "boolean"
         },
+        "new_string_ref": {
+          "$ref": "#/$defs/payloadRef"
+        },
         "content_preview": {
           "type": [
             "string",
@@ -510,12 +566,75 @@
           ],
           "minimum": 0
         },
+        "content_truncated": {
+          "type": "boolean"
+        },
+        "content_ref": {
+          "$ref": "#/$defs/payloadRef"
+        },
+        "source_harness": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Harness the tool_call row originated from (claude-code / codex / ...)."
+        },
+        "prompt_length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "ORIGINAL Agent dispatch prompt length before any bounding."
+        },
+        "prompt_truncated": {
+          "type": "boolean"
+        },
+        "prompt_ref": {
+          "$ref": "#/$defs/payloadRef"
+        },
+        "plan_length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "plan_truncated": {
+          "type": "boolean"
+        },
+        "plan_ref": {
+          "$ref": "#/$defs/payloadRef"
+        },
+        "input_preview": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "audit_action: bounded JSON of the tool input."
+        },
+        "input_ref": {
+          "$ref": "#/$defs/payloadRef"
+        },
+        "response": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "audit_action: bounded JSON of the tool response."
+        },
+        "response_truncated": {
+          "type": "boolean"
+        },
+        "response_ref": {
+          "$ref": "#/$defs/payloadRef"
+        },
         "prompt": {
           "type": [
             "string",
             "null"
           ],
-          "description": "Agent dispatch prompt (clipped, unflagged: preview only)."
+          "description": "Agent dispatch prompt (bounded and flagged per the truncation contract; whole text inlined at or under the full-retention ceiling)."
         },
         "subagent_type": {
           "type": [
@@ -591,12 +710,28 @@
             "$ref": "#/$defs/hookContext"
           },
           "description": "Hook contexts attached to this specific tool call (in addition to the turn-level hook_contexts array)."
-        },
-        "source_harness": {
-          "type": "string"
         }
       },
       "additionalProperties": true
+    },
+    "payloadRef": {
+      "type": "object",
+      "description": "Content address of a full payload stored in the turn's payloads sidecar (turn-NNN.payloads.json), keyed by sha256 of the UTF-8 bytes.",
+      "required": [
+        "sha256",
+        "length"
+      ],
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
     },
     "contextAuthority": {
       "type": "object",
@@ -674,6 +809,41 @@
             "null"
           ]
         },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Handler status as recorded by the hook-outcome sidecar (completed / blocked / ...)."
+        },
+        "tool_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Tool the hook event adjudicated, when the sidecar recorded one."
+        },
+        "stdout": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Raw handler stdout from the hook-outcome sidecar."
+        },
+        "stderr": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Raw handler stderr from the hook-outcome sidecar."
+        },
+        "provenance": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Where the hook context came from (hook_outcome_sidecar, codex_developer_message, ...)."
+        },
         "duration_ms": {
           "type": [
             "number",
@@ -684,36 +854,6 @@
         },
         "ts": {
           "$ref": "#/$defs/timestampLike"
-        },
-        "status": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "tool_name": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "stdout": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "stderr": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "provenance": {
-          "type": [
-            "string",
-            "null"
-          ]
         },
         "observation_boundary": {
           "type": [
@@ -771,6 +911,21 @@
         "turn": {
           "type": "integer",
           "minimum": 1
+        },
+        "payloads_sidecar": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Sibling sidecar file holding full bytes of payloads over the retention ceiling; null when the turn spilled nothing."
+        },
+        "payloads_sha256": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "description": "Content addresses carried by payloads_sidecar."
         },
         "ts_start": {
           "$ref": "#/$defs/timestampLike"
@@ -849,11 +1004,67 @@
               "type": "null"
             }
           ],
-          "description": "How the turn ended when it did not end normally \u2014 the user pressed escape mid-action ('[Request interrupted' event), the strongest steering signal a session records. user_interrupt_tool = the user vetoed a specific action the agent proposed ('for tool use'); user_interrupt_generation = the user cut the reply off. null/absent = the agent finished on its own. user_interrupt is the legacy collapsed value: still accepted so artifacts written before the split keep validating, never emitted now."
+          "description": "How the turn ended when it did not end normally — the user pressed escape mid-action ('[Request interrupted' event), the strongest steering signal a session records. user_interrupt_tool = the user vetoed a specific action the agent proposed ('for tool use'); user_interrupt_generation = the user cut the reply off. null/absent = the agent finished on its own. user_interrupt is the legacy collapsed value: still accepted so artifacts written before the split keep validating, never emitted now."
+        },
+        "interjections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/interjection"
+          }
         },
         "usage": {
-          "$ref": "#/$defs/turnUsage",
-          "description": "Absent \u2014 not zero-filled \u2014 when the harness transcript records no usage, so 'not measured' never reads as 'cost nothing'."
+          "type": "object",
+          "description": "Token usage summed over the turn's assistant steps (claude per-message usage; codex token_usage_record). Present only when the harness supplied usage data.",
+          "properties": {
+            "input_tokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "output_tokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cache_read_input_tokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cache_creation_input_tokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cached_input_tokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "reasoning_output_tokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "total_tokens": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": true
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Distinct models that produced the turn's assistant steps, in first-use order. Present only when the harness recorded per-message models."
+        },
+        "stop_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "How the turn's FINAL assistant step ended (tool_use / end_turn / max_tokens / ...). Present only when the harness recorded stop reasons."
+        },
+        "env": {
+          "type": "object",
+          "description": "Environment anchors carried on the turn boundary (codex turn_context): model, effort, cwd, approval_policy, sandbox_policy.",
+          "additionalProperties": true
         },
         "rewound_from": {
           "type": "integer",
@@ -867,12 +1078,6 @@
             "edited_prompt"
           ],
           "description": "Whether the re-sent prompt was byte-identical to the one it replaced or edited. Present exactly when rewound_from is."
-        },
-        "interjections": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/interjection"
-          }
         }
       },
       "additionalProperties": true
@@ -950,8 +1155,12 @@
           "additionalProperties": false
         },
         "usage": {
-          "$ref": "#/$defs/turnUsage",
-          "description": "Sum of the rendered turn usage blocks, sealed at SessionEnd. Absent when no turn recorded usage."
+          "type": "object",
+          "description": "Token usage summed over all turns.",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
         }
       },
       "additionalProperties": true
@@ -981,6 +1190,67 @@
             "string",
             "null"
           ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "sessionIndexArtifact": {
+      "type": "object",
+      "description": "Orientation index written beside a session's turn files (session-index.json): the entry point for reorienting on a session's history or reviewing it remotely without local access. Title, models, and usage appear only when the session's harness supplied them; model is recovered from the transcript when the SessionStart metadata said 'unknown'.",
+      "required": [
+        "schema_version",
+        "session_id",
+        "turn_count"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "session_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "project": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "description": "Session title (claude ai-title / dsh session/title); the last one observed."
+        },
+        "model": {
+          "type": "string",
+          "description": "First model the session's assistant steps actually used."
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Distinct models used across the session, first-use order."
+        },
+        "turn_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ts_start": {
+          "$ref": "#/$defs/timestampLike"
+        },
+        "ts_end": {
+          "$ref": "#/$defs/timestampLike"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "head_sha": {
+          "type": "string"
+        },
+        "usage": {
+          "type": "object",
+          "description": "Token usage summed over all turns.",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
         }
       },
       "additionalProperties": true

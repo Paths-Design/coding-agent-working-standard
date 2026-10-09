@@ -96,9 +96,7 @@ DEFAULT_TRANSCRIPT_ROW_ADAPTERS: tuple[TranscriptRowAdapter, ...] = tuple(
     adapter for module in HARNESS_MODULES for adapter in module.adapters
 )
 
-NOISE_PREFIXES: tuple[str, ...] = tuple(
-    prefix for module in HARNESS_MODULES for prefix in module.noise_prefixes
-)
+NOISE_PREFIXES: tuple[str, ...] = tuple(prefix for module in HARNESS_MODULES for prefix in module.noise_prefixes)
 
 SESSION_EVENT_PREFIXES = (
     "<task-notification>",
@@ -225,9 +223,60 @@ def compact_ws(text: str | None, limit: int = 160) -> str:
     return value[:limit] + "..."
 
 
-def bounded_text(text: str | None, limit: int) -> tuple[str, bool]:
+# Full-retention ceiling (SESSION-LOG-REMOTE-DEBRIEF-001 A6): a substantive
+# payload at or under this size is emitted WHOLE — flagged via *_truncated,
+# but never cut. A flagged whole payload is reconstructable; a cut one is not,
+# and 28% of corpus edits were silently clipped at 1800 chars. Only above this
+# ceiling do we cut to the field bound and spill the full bytes to the turn's
+# payloads sidecar (turn-NNN.payloads.json).
+FULL_RETAIN_LIMIT = 20000
+# When a cut does happen, keep the tail as well as the head: tool outputs carry
+# their results, errors, and test failures at the END — head-only cuts deleted
+# exactly the bytes a downstream agent needed most.
+CUT_TAIL_CHARS = 1500
+
+
+def head_tail_cut(value: str, limit: int) -> str:
+    head_len = max(limit - CUT_TAIL_CHARS - 80, 0)
+    tail_len = min(CUT_TAIL_CHARS, max(limit // 4, 1))
+    omitted = len(value) - head_len - tail_len
+    return (
+        value[:head_len]
+        + f"\n...[renderer: {omitted} middle characters truncated; full text in payloads sidecar]...\n"
+        + value[-tail_len:]
+    )
+
+
+def bounded_text_ref(
+    text: str | None, limit: int, spill: dict[str, str] | None = None
+) -> tuple[str, bool, dict[str, Any] | None]:
+    """Bound a substantive payload, retaining as much as possible.
+
+    Returns (inline_text, truncated, sidecar_ref). At or under `limit` the text
+    is returned whole and untruncated. Between limit and FULL_RETAIN_LIMIT the
+    WHOLE text is returned inline with truncated=True — a flag, not a cut.
+    Above FULL_RETAIN_LIMIT the inline text is head+tail cut to `limit`, the
+    full bytes are stored under spill[sha256] when a spill dict is supplied,
+    and sidecar_ref carries the content address {"sha256", "length"}.
+    """
     value = text or ""
-    return (truncate(value, limit), len(value) > limit)
+    if len(value) <= limit:
+        return value, False, None
+    if len(value) <= FULL_RETAIN_LIMIT:
+        return value, True, None
+    inline = head_tail_cut(value, limit)
+    ref: dict[str, Any] | None = None
+    if spill is not None:
+        encoded = value.encode("utf-8")
+        digest = hashlib.sha256(encoded).hexdigest()
+        spill[digest] = value
+        ref = {"sha256": digest, "length": len(value)}
+    return inline, True, ref
+
+
+def bounded_text(text: str | None, limit: int) -> tuple[str, bool]:
+    inline, truncated, _ref = bounded_text_ref(text, limit)
+    return inline, truncated
 
 
 def extract_heuristic_fields(reasoning_texts: list[str]) -> tuple[list[dict[str, str]], str | None, str | None]:
@@ -279,11 +328,13 @@ def parse_control_event(text: str, ts: str | None) -> dict[str, Any]:
     command = re.search(r"<command-message>(.*?)</command-message>", text, re.DOTALL)
     event_type = "task_notification" if text.startswith("<task-notification>") else "control"
     preview = summary.group(1).strip() if summary else command.group(1).strip() if command else compact_ws(text, 180)
+    raw_bounded, raw_truncated = bounded_text(text, 1800)
     return {
         "type": event_type,
         "task_id": task_id.group(1).strip() if task_id else None,
         "preview": preview,
-        "raw": truncate(text, 1200),
+        "raw": raw_bounded,
+        "raw_truncated": raw_truncated,
         "ts": ts,
     }
 
@@ -292,6 +343,9 @@ def new_turn(user_text: str | None = None, ts: str | None = None) -> dict[str, A
     return {
         "user": user_text,
         "user_ts": ts,
+        # Content-addressed spill for payloads over FULL_RETAIN_LIMIT: keyed by
+        # sha256, drained into the turn's payloads sidecar at write time.
+        "payload_spill": {},
         "timeline": [],
         "hook_contexts": [],
         "interjections": [],
@@ -302,6 +356,15 @@ def new_turn(user_text: str | None = None, ts: str | None = None) -> dict[str, A
         "agent_runs": [],
         "artifacts": [],
         "control_events": [],
+        # assistant_meta accumulation (token usage, per-message model,
+        # stop_reason) — summed over the turn, emitted on the payload only
+        # when at least one contributing event arrived.
+        "usage": {},
+        "models": [],
+        "stop_reason": None,
+        # Environment anchors carried on a turn_boundary (codex turn_context:
+        # model/effort/cwd/approval_policy/sandbox_policy).
+        "env": {},
     }
 
 
@@ -315,13 +378,31 @@ def make_transcript_adapter_factory(
 ) -> Callable[[dict[str, Any], dict[str, Any]], list[dict[str, Any]]]:
     """Build an injectable native-row to canonical-event dispatcher."""
 
+    # opencode and zcode have no row adapter of their own: their reconstruct
+    # scripts emit Claude-shaped rows consumed by the claude adapter, so the
+    # adapter's name would label every tool_call source_harness="claude" — a
+    # false attribution for those surfaces. session-log.sh exports
+    # CAWS_AGENT_SURFACE for the render subprocess; when the surface maps to a
+    # known harness name that differs from the adapter's, the surface wins.
+    surface = os.environ.get("CAWS_AGENT_SURFACE", "")
+    surface_harness = {
+        "claude-code": "claude",
+        "codex": "codex",
+        "dsh": "dsh",
+        "qwen-code": "qwen-code",
+        "opencode": "opencode",
+        "zcode": "zcode",
+    }.get(surface)
+
     def normalize(row: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]:
         for adapter in adapters:
             if adapter.matches(row):
                 events = adapter.normalize(row, state)
                 for event in events:
                     if event.get("ev") == "tool_use":
-                        event["source_harness"] = adapter.name
+                        event["source_harness"] = (
+                            surface_harness if surface_harness is not None else adapter.name
+                        )
                 return events
         return []
 
@@ -500,18 +581,20 @@ def parse_audit_events(path: str, session_id: str) -> list[dict[str, Any]]:
             tool_input["command"] = row["command"]
         if row.get("file") and not tool_input.get("file_path"):
             tool_input["file_path"] = row["file"]
-        events.append({
-            "ev": "audit_action",
-            "tool": row.get("tool", ""),
-            "id": row.get("tool_use_id", ""),
-            "input": tool_input,
-            "response": row.get("tool_response") if isinstance(row.get("tool_response"), dict) else {},
-            "is_error": bool(row.get("is_error")),
-            "cwd": row.get("cwd"),
-            "permission_mode": row.get("permission_mode"),
-            "ts": parse_timestamp(row.get("timestamp")),
-            "provenance": "hook_audit",
-        })
+        events.append(
+            {
+                "ev": "audit_action",
+                "tool": row.get("tool", ""),
+                "id": row.get("tool_use_id", ""),
+                "input": tool_input,
+                "response": row.get("tool_response") if isinstance(row.get("tool_response"), dict) else {},
+                "is_error": bool(row.get("is_error")),
+                "cwd": row.get("cwd"),
+                "permission_mode": row.get("permission_mode"),
+                "ts": parse_timestamp(row.get("timestamp")),
+                "provenance": "hook_audit",
+            }
+        )
     return events
 
 
@@ -620,15 +703,19 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
     session_events: list[dict[str, Any]] = []
     current = new_turn()
     pending_tools: dict[str, dict[str, Any]] = {}
+    # Turn-boundary environment anchors (codex turn_context) arrive BEFORE the
+    # user_text that opens the turn; user_text then replaces `current`, so the
+    # anchors must ride here and be applied to the turn that actually opens.
+    pending_env: dict[str, Any] = {}
     # user_shell items arriving before any turn has opened (a session that
     # STARTS with a !-command). They prepend to the first turn that opens; if
     # no turn ever opens, they emit as one synthetic turn — capture beats
     # purity for a session whose only content is user shell activity.
     pending_shell: list[dict[str, Any]] = []
-    # Deduplication for api_request usage, SESSION-scoped rather than
-    # per-turn: a fork or resume copies earlier rows verbatim into the head of
-    # the new transcript, so the same (message id, request id) can reappear in
-    # a different turn. A per-turn set would count those copies again.
+    # Usage dedup for assistant_meta, SESSION-scoped rather than per-turn: a
+    # fork or resume copies earlier rows verbatim into the head of the new
+    # transcript, so the same (message id, request id) can reappear in a
+    # different turn. A per-turn set would count those copies again.
     seen_requests: set[tuple[str, str | None]] = set()
     # parent_uuid -> the turn opened by the prompt that most recently claimed
     # that conversational slot. A second turn-opening prompt on the same
@@ -636,12 +723,7 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
     prompt_parents: dict[str, dict[str, Any]] = {}
 
     def _turn_is_open(turn: dict[str, Any]) -> bool:
-        return bool(
-            turn.get("user")
-            or turn["timeline"]
-            or turn["control_events"]
-            or turn["interjections"]
-        )
+        return bool(turn.get("user") or turn["timeline"] or turn["control_events"] or turn["interjections"])
 
     for entry in events:
         ev = entry.get("ev")
@@ -651,6 +733,15 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
             if current["user"] or current["timeline"] or current["control_events"] or current["interjections"] or current["hook_contexts"]:
                 turns.append(current)
             current = new_turn(ts=ts)
+            # codex turn_context anchors ride the boundary event; they are
+            # ALSO staged in pending_env because user_text replaces `current`
+            # with a fresh turn when it opens the real turn.
+            pending_env = {
+                key: entry[key]
+                for key in ("model", "effort", "cwd", "approval_policy", "sandbox_policy")
+                if entry.get(key) is not None
+            }
+            current["env"].update(pending_env)
             continue
 
         if ev == "user_text":
@@ -684,6 +775,12 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
             if current["user"] or current["timeline"] or current["control_events"] or current["interjections"] or current["hook_contexts"]:
                 turns.append(current)
             current = new_turn(text, ts)
+            # Apply the most recent boundary anchors to the turn that actually
+            # opens (codex turn_context precedes its user message).
+            if pending_env:
+                current["env"].update(pending_env)
+                pending_env = {}
+
             # Rewind detection. Only a prompt that OPENS a turn reaches here —
             # noise rows and interrupts were filtered above, and tool_use /
             # tool_result events never open a turn. That is what keeps the two
@@ -711,33 +808,6 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                 pending_shell = []
             continue
 
-        if ev == "api_request":
-            message_id = entry.get("message_id")
-            if not isinstance(message_id, str) or not message_id:
-                continue
-            request_id = entry.get("request_id")
-            key = (message_id, request_id if isinstance(request_id, str) else None)
-            if key in seen_requests:
-                continue
-            seen_requests.add(key)
-            usage = entry.get("usage")
-            if not isinstance(usage, dict):
-                continue
-            totals = current.get("usage")
-            if totals is None:
-                totals = {"requests": 0, "input": 0, "cache_read": 0,
-                          "cache_write": 0, "output": 0, "models": []}
-                current["usage"] = totals
-            totals["requests"] += 1
-            for token_class in ("input", "cache_read", "cache_write", "output"):
-                value = usage.get(token_class)
-                if isinstance(value, int) and not isinstance(value, bool):
-                    totals[token_class] += value
-            model = entry.get("model")
-            if isinstance(model, str) and model:
-                append_unique(totals["models"], model)
-            continue
-
         if ev == "user_shell":
             # !-command activity (`! git push` and its output). Attaches to
             # the still-open turn it followed — a post-turn push concludes
@@ -749,12 +819,7 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
             target = current["timeline"] if _turn_is_open(current) else pending_shell
             is_output = "stdout" in entry or "stderr" in entry
             last = target[-1] if target else None
-            if (
-                is_output
-                and last is not None
-                and last.get("kind") == "user_shell"
-                and "stdout" not in last
-            ):
+            if is_output and last is not None and last.get("kind") == "user_shell" and "stdout" not in last:
                 last["stdout"] = entry.get("stdout", "")
                 last["stderr"] = entry.get("stderr", "")
                 if ts:
@@ -773,6 +838,98 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                 target.append(item)
             continue
 
+        if ev == "reasoning":
+            # Extended-thinking / deliberation text (claude thinking blocks,
+            # codex plaintext reasoning summaries). Same kind as assistant
+            # prose but provenance=thinking, so the timeline records WHY the
+            # agent acted, not just what it said. Bounded under the same
+            # truncation contract; over-ceiling bytes spill to the sidecar.
+            text = entry.get("text", "") or ""
+            if text.strip():
+                bounded, was_truncated, ref = bounded_text_ref(text, 2000, spill=current["payload_spill"])
+                item = {
+                    "kind": "reasoning",
+                    "text": bounded,
+                    "ts": ts,
+                    "provenance": "thinking",
+                }
+                if was_truncated:
+                    item["text_truncated"] = True
+                    item["text_length"] = len(text)
+                if ref is not None:
+                    item["text_ref"] = ref
+                current["timeline"].append(item)
+            continue
+
+        if ev == "assistant_meta":
+            # Token/model/stop_reason rollup contributions (claude per-message
+            # usage; codex token_usage_record). Sums land on the turn payload
+            # at build time; nothing is emitted per-event to the timeline.
+            # Usage dedup shares seen_requests: Claude Code repeats
+            # message.usage verbatim on every assistant row of one multi-block
+            # reply, and a fork/resume copies those rows verbatim into a new
+            # transcript head — so the same (message_id, request_id) counts
+            # once per session, and only when the adapter supplied both ids.
+            message_id = entry.get("message_id")
+            request_id = entry.get("request_id")
+            repeat = (
+                isinstance(message_id, str) and bool(message_id)
+                and (message_id, request_id if isinstance(request_id, str) else None) in seen_requests
+            )
+            if isinstance(message_id, str) and bool(message_id) and not repeat:
+                seen_requests.add((message_id, request_id if isinstance(request_id, str) else None))
+            usage = entry.get("usage")
+            if isinstance(usage, dict) and not repeat:
+                for key, value in usage.items():
+                    if isinstance(value, (int, float)):
+                        current["usage"][key] = current["usage"].get(key, 0) + value
+            model = entry.get("model")
+            if isinstance(model, str) and model and model not in current["models"]:
+                current["models"].append(model)
+            stop_reason = entry.get("stop_reason")
+            if isinstance(stop_reason, str) and stop_reason:
+                current["stop_reason"] = stop_reason
+            continue
+
+        if ev == "control":
+            # Harness governance/steering events (codex turn_aborted; dsh
+            # session title, approval policy, permission preset, sandbox mode,
+            # subagent descriptors, spliced inbox messages). These answer
+            # when/under-what-authority; they are timeline items, not turn
+            # summaries, because position relative to the tool calls is the
+            # record.
+            subtype = entry.get("subtype") or "control"
+            text = entry.get("text", "") or ""
+            control_item: dict[str, Any] = {
+                "kind": "control",
+                "subtype": subtype,
+                "ts": ts,
+                "provenance": entry.get("provenance", f"harness:{subtype}"),
+            }
+            if text:
+                control_item["text"] = compact_ws(text, 400)
+            if isinstance(entry.get("duration_ms"), (int, float)):
+                control_item["duration_ms"] = entry["duration_ms"]
+            if isinstance(entry.get("model"), str) and entry["model"]:
+                control_item["model"] = entry["model"]
+            if isinstance(entry.get("source"), str) and entry["source"]:
+                control_item["source"] = entry["source"]
+            if isinstance(entry.get("step"), int):
+                control_item["step"] = entry["step"]
+            # Structured fields specific control subtypes carry (cost_state
+            # totals, turn_duration counts, system_notice levels).
+            for field in (
+                "cost_usd", "api_duration_ms", "tool_duration_ms",
+                "lines_added", "lines_removed", "message_count", "level",
+            ):
+                value = entry.get(field)
+                if isinstance(value, (int, float, str)):
+                    control_item[field] = value
+            if isinstance(entry.get("models"), list):
+                control_item["models"] = [m for m in entry["models"] if isinstance(m, str)]
+            current["timeline"].append(control_item)
+            continue
+
         if ev == "assistant_text":
             text = entry.get("text", "")
             # "No response requested." is the model's boilerplate ack to a
@@ -783,14 +940,18 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
             if text.strip() == "No response requested.":
                 continue
             if text.strip():
-                current["timeline"].append(
-                    {
-                        "kind": "reasoning",
-                        "text": text,
-                        "ts": ts,
-                        "provenance": "assistant_reasoning",
-                    }
-                )
+                reasoning_item: dict[str, Any] = {
+                    "kind": "reasoning",
+                    "text": text,
+                    "ts": ts,
+                    "provenance": "assistant_reasoning",
+                }
+                if entry.get("thought") is True:
+                    # qwen deliberation parts: same kind, flagged and
+                    # re-provenanced so thought vs final prose stays legible.
+                    reasoning_item["thought"] = True
+                    reasoning_item["provenance"] = "thinking"
+                current["timeline"].append(reasoning_item)
             continue
 
         if ev == "tool_use":
@@ -876,17 +1037,30 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                     # output_truncated convention: 28% of corpus edits were
                     # silently clipped at this limit, corrupting any patch
                     # reconstruction with no way to detect it
-                    # (SESSION-LOG-REMOTE-DEBRIEF-001 A6).
+                    # (SESSION-LOG-REMOTE-DEBRIEF-001 A6). Over the full-
+                    # retention ceiling the whole string spills to the turn's
+                    # payloads sidecar, so patch reconstruction is always
+                    # recoverable.
                     for key in ("old_string", "new_string"):
                         raw_value = tool_input.get(key, "") or ""
-                        bounded, was_truncated = bounded_text(raw_value, 1200)
+                        bounded, was_truncated, ref = bounded_text_ref(
+                            raw_value, 1800, spill=current["payload_spill"]
+                        )
                         tool_entry[key] = bounded
                         tool_entry[f"{key}_length"] = len(raw_value)
                         tool_entry[f"{key}_truncated"] = was_truncated
+                        if ref is not None:
+                            tool_entry[f"{key}_ref"] = ref
                 else:
                     content = tool_input.get("content", "") or ""
-                    tool_entry["content_preview"] = truncate(content, 1600)
+                    bounded, was_truncated, ref = bounded_text_ref(
+                        content, 1600, spill=current["payload_spill"]
+                    )
+                    tool_entry["content_preview"] = bounded
                     tool_entry["content_length"] = len(content)
+                    tool_entry["content_truncated"] = was_truncated
+                    if ref is not None:
+                        tool_entry["content_ref"] = ref
                 current["artifacts"].append(
                     {
                         "type": "file_edit" if name == "Edit" else "file_write",
@@ -934,7 +1108,14 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
 
             elif name in ("Agent", "Task"):
                 prompt = tool_input.get("prompt", "") or ""
-                tool_entry["prompt"] = truncate(prompt, 1200)
+                prompt_bounded, prompt_truncated, prompt_ref = bounded_text_ref(
+                    prompt, 1800, spill=current["payload_spill"]
+                )
+                tool_entry["prompt"] = prompt_bounded
+                tool_entry["prompt_length"] = len(prompt)
+                tool_entry["prompt_truncated"] = prompt_truncated
+                if prompt_ref is not None:
+                    tool_entry["prompt_ref"] = prompt_ref
                 tool_entry["subagent_type"] = tool_input.get("subagent_type")
                 tool_entry["run_in_background"] = tool_input.get("run_in_background")
                 tool_entry["isolation"] = tool_input.get("isolation")
@@ -956,12 +1137,21 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
 
             elif name == "ExitPlanMode":
                 plan_text = tool_input.get("plan") or ""
-                tool_entry["plan"] = truncate(plan_text, 6000)
+                plan_bounded, plan_truncated, plan_ref = bounded_text_ref(
+                    plan_text, 6000, spill=current["payload_spill"]
+                )
+                tool_entry["plan"] = plan_bounded
+                tool_entry["plan_length"] = len(plan_text)
+                tool_entry["plan_truncated"] = plan_truncated
+                if plan_ref is not None:
+                    tool_entry["plan_ref"] = plan_ref
                 tool_entry["provenance"] = "plan_approval"
+                artifact_content, artifact_truncated = bounded_text(plan_text, 2500)
                 current["artifacts"].append(
                     {
                         "type": "plan",
-                        "content": truncate(plan_text, 2500),
+                        "content": artifact_content,
+                        "content_truncated": artifact_truncated,
                         "ts": ts,
                     }
                 )
@@ -984,14 +1174,20 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                 "provenance": "hook_audit",
             }
             input_text = json.dumps(tool_input, ensure_ascii=False, sort_keys=True)
-            action["input_preview"], action["input_truncated"] = bounded_text(input_text, 2000)
+            action["input_preview"], action["input_truncated"], input_ref = bounded_text_ref(
+                input_text, 2000, spill=current["payload_spill"]
+            )
+            if input_ref is not None:
+                action["input_ref"] = input_ref
             action["input_length"] = len(input_text)
             if response:
-                response_text, response_truncated = bounded_text(
-                    json.dumps(response, ensure_ascii=False, sort_keys=True), 3000
+                response_text, response_truncated, response_ref = bounded_text_ref(
+                    json.dumps(response, ensure_ascii=False, sort_keys=True), 3000, spill=current["payload_spill"]
                 )
                 action["response"] = response_text
                 action["response_truncated"] = response_truncated
+                if response_ref is not None:
+                    action["response_ref"] = response_ref
 
             file_path = rel_path(tool_input.get("file_path") or tool_input.get("path"), cwd)
             command = tool_input.get("command") or tool_input.get("cmd") or ""
@@ -1005,21 +1201,25 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
             elif name in ("Grep", "Glob"):
                 query = tool_input.get("pattern") or tool_input.get("path") or ""
                 if query:
-                    current["searches"].append({
-                        "tool": name,
-                        "query": query,
-                        "ts": ts,
-                        "provenance": "hook_audit",
-                    })
+                    current["searches"].append(
+                        {
+                            "tool": name,
+                            "query": query,
+                            "ts": ts,
+                            "provenance": "hook_audit",
+                        }
+                    )
             if name in ("Bash", "exec_command") and command:
                 if not any(ref.get("command") == command for ref in current["commands"]):
-                    current["commands"].append({
-                        "command": command,
-                        "description": "Audited inner tool action",
-                        "ts": ts,
-                        "provenance": "hook_audit",
-                        "is_error": bool(entry.get("is_error")),
-                    })
+                    current["commands"].append(
+                        {
+                            "command": command,
+                            "description": "Audited inner tool action",
+                            "ts": ts,
+                            "provenance": "hook_audit",
+                            "is_error": bool(entry.get("is_error")),
+                        }
+                    )
             current["timeline"].append(action)
             continue
 
@@ -1035,17 +1235,27 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                     result_text = decode_structured_text_payload(content)
                 if name == "Read":
                     result_text = content
-                if is_codex or name in ("Bash", "Agent", "Task", "exec", "wait"):
-                    pass
-                elif name in ("Read", "Write", "Edit"):
-                    result_text = truncate(result_text, 2500)
-                else:
-                    result_text = truncate(result_text, 3000)
+                # Every tool output follows the same retention contract now,
+                # Bash/Agent/Task included: at or under FULL_RETAIN_LIMIT the
+                # whole output is inlined (previously Bash was inlined whole
+                # at ANY size, which is exactly how turn files ballooned);
+                # above it, head+tail cut and the full bytes spill to the
+                # payloads sidecar — nothing is lost either way.
+                output_limit = 2500 if name in ("Read", "Write", "Edit") else 3000
+                result_text, output_cut, output_ref = bounded_text_ref(
+                    result_text, output_limit, spill=current["payload_spill"]
+                )
+                if output_ref is not None:
+                    tool_info["output_ref"] = output_ref
 
                 duration = seconds_between(tool_info.get("ts"), ts)
                 tool_info["output"] = result_text
                 tool_info["output_length"] = len(decode_structured_text_payload(content))
                 tool_info["output_truncated"] = tool_info["output_length"] > len(result_text)
+                # True only when bytes were actually CUT (sidecar holds the
+                # whole payload); a whole-inlined over-limit payload is
+                # truncated=True but cut=False.
+                tool_info["output_cut"] = "payloads sidecar]..." in result_text
                 tool_info["is_error"] = bool(entry.get("is_error"))
                 tool_info["result_ts"] = ts
                 tool_info["duration_s"] = duration
@@ -1069,11 +1279,13 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                             break
                 continue
 
+            orphan_content, orphan_truncated = bounded_text(content, 3000)
             current["timeline"].append(
                 {
                     "kind": "tool_output",
                     "id": tool_id,
-                    "content": truncate(content, 3000),
+                    "content": orphan_content,
+                    "content_truncated": orphan_truncated,
                     "is_error": bool(entry.get("is_error")),
                     "ts": ts,
                     "provenance": "tool_output_orphan",
@@ -1089,12 +1301,14 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                 # timeline is THE ordered record — a reader should see WHERE
                 # in the tool sequence the steering landed without a ts-join
                 # (SESSION-LOG-REMOTE-DEBRIEF-001 A5).
-                current["timeline"].append({
-                    "kind": "interjection",
-                    "text": text,
-                    "ts": ts,
-                    "provenance": "user_interjection",
-                })
+                current["timeline"].append(
+                    {
+                        "kind": "interjection",
+                        "text": text,
+                        "ts": ts,
+                        "provenance": "user_interjection",
+                    }
+                )
             continue
 
         if ev == "hook_context":
@@ -1212,6 +1426,12 @@ def build_turn_payload(
         # .meta.json), so it must say which session/repo/model produced it
         # (SESSION-LOG-REMOTE-DEBRIEF-001 A1).
         "context": context,
+        # Content addresses of payloads too large for inline retention; the
+        # full bytes live in the sibling payloads sidecar written next to
+        # this turn file (SESSION-LOG-TRUNCATION-HEAD-TAIL-AND-PAYLOAD-
+        # SIDECAR-01 A4).
+        "payloads_sidecar": f"turn-{number:03d}.payloads.json" if turn.get("payload_spill") else None,
+        "payloads_sha256": sorted(turn.get("payload_spill", {})),
         "ts_start": ts_start,
         "ts_end": ts_end,
         "user": turn.get("user"),
@@ -1232,13 +1452,19 @@ def build_turn_payload(
         "interjections": turn["interjections"],
         "timeline": turn["timeline"],
     }
-
-    # Both blocks are added only when the signal exists. A harness whose
-    # transcript carries no usage must render NO usage key — a zero-filled
-    # block would read as "this turn cost nothing" instead of "not recorded".
-    usage = turn.get("usage")
-    if usage:
-        payload["usage"] = usage
+    # Additive outcome/cost record (emitted only when the session's harness
+    # supplied the data — older transcripts and harnesses without usage
+    # render exactly as before). usage sums every assistant_meta
+    # contribution across the turn; stop_reason is the LAST step's reason
+    # (how the turn's final model step ended: tool_use / end_turn / ...).
+    if turn["usage"]:
+        payload["usage"] = turn["usage"]
+    if turn["models"]:
+        payload["models"] = turn["models"]
+    if turn["stop_reason"]:
+        payload["stop_reason"] = turn["stop_reason"]
+    if turn["env"]:
+        payload["env"] = turn["env"]
 
     # rewound_from is a TURN NUMBER, and numbers are assigned only after the
     # non-substantive turns are filtered out, so accumulate_turns hands over an
@@ -1279,7 +1505,9 @@ def build_git_snapshot(cwd: str, start_sha: str, branch: str, head_sha: str, dir
         "start_sha": start_sha,
         "dirty_files": int(dirty_count or "0"),
         "status": run_git(cwd, ["status", "--porcelain"], 6000),
-        "log": run_git(cwd, ["log", "--oneline", f"{start_sha}..HEAD"] if start_sha else ["log", "--oneline", "-10"], 5000),
+        "log": run_git(
+            cwd, ["log", "--oneline", f"{start_sha}..HEAD"] if start_sha else ["log", "--oneline", "-10"], 5000
+        ),
         "diff_stat": run_git(cwd, ["diff", "--stat", f"{start_sha}..HEAD"] if start_sha else ["diff", "--stat"], 5000),
         "diff_excerpt": run_git(cwd, ["diff", f"{start_sha}..HEAD"] if start_sha else ["diff"], 8000),
     }
@@ -1289,6 +1517,112 @@ def build_git_snapshot(cwd: str, start_sha: str, branch: str, head_sha: str, dir
 
 
 TURN_FILE_RE = re.compile(r"turn-\d+\.(json|txt)$")
+
+
+def resolve_subagents_dir(transcript_path: str, session_id: str) -> Path | None:
+    """Locate the per-session subagents dir for a transcript.
+
+    Claude Code layout: <projects-slug>/<sid>.jsonl with sibling
+    <projects-slug>/<sid>/subagents/agent-*.jsonl(+.meta.json). Qwen variant
+    (verified in session-log.sh): chats/<sid>.jsonl with SIBLING
+    ../subagents/<sid>/agent-*.jsonl. Mirrors resolve_subagent_transcripts
+    so the renderer needs no argv/daemon-protocol change to link forks.
+    """
+    if not transcript_path:
+        return None
+    parent = Path(transcript_path).parent
+    candidate = parent / session_id / "subagents"
+    if candidate.is_dir():
+        return candidate
+    qwen_candidate = parent.parent / "subagents" / session_id
+    if qwen_candidate.is_dir():
+        return qwen_candidate
+    return None
+
+
+def load_subagent_metas(subagents_dir: Path | None) -> dict[str, dict[str, Any]]:
+    """Map toolUseId -> subagent linkage from agent-*.meta.json files."""
+    if subagents_dir is None:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    try:
+        metas = sorted(subagents_dir.glob("agent-*.meta.json"))
+    except OSError:
+        return {}
+    for meta_path in metas:
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        tool_use_id = meta.get("toolUseId")
+        if not isinstance(tool_use_id, str) or not tool_use_id:
+            continue
+        transcript = meta_path.with_suffix("")  # agent-*.jsonl sibling
+        entry: dict[str, Any] = {"transcript": transcript.name}
+        if isinstance(meta.get("agentType"), str):
+            entry["agent_type"] = meta["agentType"]
+        if isinstance(meta.get("model"), str):
+            entry["model"] = meta["model"]
+        if isinstance(meta.get("spawnDepth"), int):
+            entry["spawn_depth"] = meta["spawnDepth"]
+        if isinstance(meta.get("description"), str) and meta["description"]:
+            entry["description"] = meta["description"][:200]
+        out[tool_use_id] = entry
+    return out
+
+
+def build_session_index(
+    turn_payloads: list[dict[str, Any]],
+    context: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Orientation index written beside the turn files (session-index.json).
+
+    The entry point for 'reorient on this session's history' and for remote
+    review with no local access: title, models, cost rollup, turn count, time
+    range. Always written alongside turn files; title/usage/models sections
+    appear only when the session's harness supplied them.
+    """
+    title = None
+    usage_total: dict[str, Any] = {}
+    models: list[str] = []
+    ts_values: list[str] = []
+    for payload in turn_payloads:
+        for item in payload.get("timeline", []):
+            if item.get("kind") == "control" and item.get("subtype") == "session_title":
+                text = item.get("text")
+                if isinstance(text, str) and text.strip():
+                    title = text
+        for key, value in (payload.get("usage") or {}).items():
+            if isinstance(value, (int, float)):
+                usage_total[key] = usage_total.get(key, 0) + value
+        for model in payload.get("models") or []:
+            if model not in models:
+                models.append(model)
+        env_model = (payload.get("env") or {}).get("model")
+        if isinstance(env_model, str) and env_model and env_model not in models:
+            models.append(env_model)
+        for key in ("ts_start", "ts_end"):
+            value = payload.get(key)
+            if isinstance(value, str):
+                ts_values.append(value)
+    index: dict[str, Any] = {
+        "schema_version": 1,
+        "session_id": context.get("session_id"),
+        "project": context.get("project"),
+        "turn_count": len(turn_payloads),
+        "ts_start": min(ts_values) if ts_values else None,
+        "ts_end": max(ts_values) if ts_values else None,
+        "branch": context.get("branch"),
+        "head_sha": context.get("head_sha"),
+    }
+    if title:
+        index["title"] = title
+    if models:
+        index["models"] = models
+        index["model"] = models[0]
+    if usage_total:
+        index["usage"] = usage_total
+    return index
 
 
 def remove_legacy_aggregates(log_dir: Path) -> None:
@@ -1400,6 +1734,22 @@ def _render_session_unlocked(
             dirty = int(dirty_count or "0")
         except ValueError:
             dirty = 0
+        # Model recovery: continued/compact/DSH sessions often reach the
+        # renderer with model="unknown" (the SessionStart meta never saw a
+        # model). The transcript itself knows — recover from the models the
+        # assistant steps actually used, falling back to the passed value.
+        observed_models: list[str] = []
+        for turn in substantive:
+            for model in turn.get("models") or []:
+                if model not in observed_models:
+                    observed_models.append(model)
+            # codex records the turn model on turn_context (env), not on
+            # usage events — consult it for recovery too.
+            env_model = (turn.get("env") or {}).get("model")
+            if isinstance(env_model, str) and env_model and env_model not in observed_models:
+                observed_models.append(env_model)
+        if (not model or model == "unknown") and observed_models:
+            model = observed_models[0]
         context = {
             "session_id": session_id,
             "project": Path(cwd).name,
@@ -1419,6 +1769,20 @@ def _render_session_unlocked(
             build_turn_payload(turn, idx + 1, context, turn_numbers)
             for idx, turn in enumerate(substantive)
         ]
+        # Subagent fork linkage: agent-*.meta.json files beside the parent
+        # transcript carry toolUseId -> fork identity. Joined onto
+        # refs.agents so a remote reader can follow what each fork was and
+        # where its transcript lives without local filesystem knowledge.
+        subagent_metas = load_subagent_metas(resolve_subagents_dir(transcript_path, session_id))
+        if subagent_metas:
+            for payload in turn_payloads:
+                for agent in payload.get("refs", {}).get("agents", []):
+                    linkage = subagent_metas.get(agent.get("id") or "")
+                    if linkage is not None:
+                        agent["subagent"] = linkage
+        # Parallel spill payloads (content-addressed full bytes over the
+        # retention ceiling), aligned with turn_payloads by index.
+        turn_spills = [dict(turn.get("payload_spill") or {}) for turn in substantive]
 
     if not turn_payloads:
         # Preservation is observable staleness, never a successful current render.
@@ -1432,8 +1796,27 @@ def _render_session_unlocked(
     # Sweep tmp residue from crashed writes. Only files older than 60s: a
     # concurrent render's in-flight tmp must not be unlinked mid-write.
     written: set[str] = set()
-    for payload in turn_payloads:
+    for index, payload in enumerate(turn_payloads):
         name = f"turn-{payload['turn']:03d}.json"
+        # Spill sidecar FIRST: the turn file names it, so the reference must
+        # never dangle (write-order invariant, same reason the tmp+rename
+        # atomicity exists below).
+        spill = turn_spills[index] if index < len(turn_spills) else {}
+        if spill:
+            sidecar_name = f"turn-{payload['turn']:03d}.payloads.json"
+            sidecar_target = output_dir / sidecar_name
+            sidecar_serialized = json.dumps(spill, indent=2, ensure_ascii=False, sort_keys=True)
+            try:
+                if not (
+                    sidecar_target.is_file()
+                    and sidecar_target.read_text(encoding="utf-8") == sidecar_serialized
+                ):
+                    tmp_sidecar = output_dir / f"{sidecar_name}.tmp.{os.getpid()}"
+                    tmp_sidecar.write_text(sidecar_serialized, encoding="utf-8")
+                    tmp_sidecar.replace(sidecar_target)
+            except OSError:
+                pass
+            written.add(sidecar_name)
         target = output_dir / name
         serialized = json.dumps(payload, indent=2)
         # Skip byte-identical rewrites. The renderer runs once per turn (Stop
@@ -1462,6 +1845,26 @@ def _render_session_unlocked(
     for path in existing:
         if path.name not in written:
             path.unlink(missing_ok=True)
+
+    for stray in output_dir.glob("turn-*.payloads.json"):
+        if stray.name not in written:
+            stray.unlink(missing_ok=True)
+
+    # Session orientation index (title / models / usage rollup / turn count /
+    # time range). Written with the same byte-identical skip + atomic rename
+    # as the turn files; removed when a re-render yields nothing to orient on.
+    index_path = output_dir / "session-index.json"
+    session_index = build_session_index(turn_payloads, context or {})
+    if session_index is not None:
+        index_serialized = json.dumps(session_index, indent=2, ensure_ascii=False)
+        try:
+            if not (index_path.is_file() and index_path.read_text(encoding="utf-8") == index_serialized):
+                tmp_index = output_dir / f"session-index.json.tmp.{os.getpid()}"
+                tmp_index.write_text(index_serialized, encoding="utf-8")
+                tmp_index.replace(index_path)
+        except OSError:
+            pass
+
     return {"status": "rendered", "outputs_current": True}
 
 
@@ -1523,7 +1926,10 @@ def render_session(**kwargs: Any) -> None:
 
 def main() -> int:
     if len(sys.argv) not in (11, 13):
-        print("usage: session_log_renderer.py <log_dir> <cwd> <session_id> <started_at> <model> <branch> <head_sha> <dirty_count> <start_sha> <transcript_path> [<audit_path> <hook_outcome_path>]", file=sys.stderr)
+        print(
+            "usage: session_log_renderer.py <log_dir> <cwd> <session_id> <started_at> <model> <branch> <head_sha> <dirty_count> <start_sha> <transcript_path> [<audit_path> <hook_outcome_path>]",
+            file=sys.stderr,
+        )
         return 1
 
     render_session(

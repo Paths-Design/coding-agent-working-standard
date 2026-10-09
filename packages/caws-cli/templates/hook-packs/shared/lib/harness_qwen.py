@@ -149,7 +149,15 @@ def _normalize_assistant(row: dict[str, Any], ts: str | None) -> list[dict[str, 
             continue
         text = part.get("text")
         if isinstance(text, str) and text.strip():
-            events.append({"ev": "assistant_text", "text": text, "ts": ts})
+            event: dict[str, Any] = {"ev": "assistant_text", "text": text, "ts": ts}
+            # Qwen marks deliberation parts with thought=True (measured: 93%
+            # of assistant output chars in a typical session). The renderer
+            # stamps provenance=thinking on flagged events so thought and
+            # final prose stay distinguishable in the turn timeline without
+            # changing the emitted kind (additive: unflagged parts unchanged).
+            if part.get("thought") is True:
+                event["thought"] = True
+            events.append(event)
             continue
         call = part.get("functionCall")
         if isinstance(call, dict):

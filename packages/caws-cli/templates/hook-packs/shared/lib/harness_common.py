@@ -25,6 +25,25 @@ modules, not here.
 
 from __future__ import annotations
 
+
+def as_bool(value: Any) -> Any:
+    """Normalize harness-stringified booleans, passing everything else through.
+
+    Claude Code's native transcript types `run_in_background` inconsistently:
+    a real JSON boolean on Bash tool_use and the STRING 'true'/'false' on Agent
+    tool_use (measured on 2026-09-26, sessions 0ed3e414/57941879). The renderer
+    passes tool input through verbatim, and session-log.schema.json declares
+    the field boolean|null — so the string form made ~60 live turn artifacts
+    fail schema validation. Adapters call this on the handful of known-boolean
+    input keys; unknown values pass through untouched rather than being
+    guessed into a truthiness.
+    """
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    return value
+
 import json
 import re
 from dataclasses import dataclass

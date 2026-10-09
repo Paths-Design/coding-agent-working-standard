@@ -588,7 +588,7 @@ import { isAdapterCoveredSurface } from './types';
 // which git rejects. block-dangerous.sh prints that merge-aware reason as the
 // single source of truth for a mid-merge commit_deletions refusal instead of
 // the fixed pathspec text; the non-merge refusal text is unchanged.
-export const SHARED_PACK_VERSION = 95;
+export const SHARED_PACK_VERSION = 96;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
