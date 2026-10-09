@@ -1,0 +1,31 @@
+id: CAWS-TURN-LOG-TS-NULL-001
+title: 'turn-log.v2 timelineItem.ts accepts null for timestampless rows'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-09T03:14:01.625Z'
+updated_at: '2026-10-09T03:14:01.625Z'
+created_by_session: 'session-b2c0e83d-8497-4257-aa85-a43ef70303a5'
+blast_radius:
+  modules:
+    - 'kernel turn-log producer contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/schemas/telemetry/turn-log.v2.json'
+    - 'packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts'
+  out: []
+invariants:
+  - 'The contract accepts every shape the renderer actually emits for timeline items: ts is UTC ISO-8601, a hook-provided local timestamp string, or null when the transcript row carried no timestamp'
+  - 'Non-string, non-null ts values stay rejected (numbers, objects)'
+acceptance:
+  - id: A1
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'given the real sterling session turn-043 timeline (76 null-ts items); when validated against turn-log.v2.json; then zero violations and a numeric ts still rejects with minimum/type'
+  - id: A2
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'given a timestampless transcript row; when rendered; then the emitted timeline item validates without special-casing the contract'
+non_functional: {}
+contracts: []
