@@ -65,9 +65,9 @@ evidence:
   - criterion_id: A3
     status: pass
     evidence_ref: "packages/caws-cli/tests/shell/specs-list-session-id.test.js::renders every binding state with its state-appropriate action"
-    recorded_at: "2026-10-09T00:55:29.331Z"
+    recorded_at: "2026-10-09T01:50:13.316Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-list-session-id.test.js::renders every binding state with its state-appropriate action"
-    test_verified_at: "563195981b7cb9078abd97192b892a3b9e38956a"
+    test_verified_at: fdf1617d28bcfb828eaa6a6bd5803c17b40d596e
   - criterion_id: A4
     status: pass
     evidence_ref: "packages/caws-cli/tests/shell/specs-list-session-id.test.js::help surface declares --session-id <id> (A4)"
