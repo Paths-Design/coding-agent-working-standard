@@ -1,9 +1,10 @@
 id: CAWS-HOOK-PACK-RENDERER-ADOPT-STERLING-001
 title: 'hook-pack session-log renderer adopts the sterling renderer lineage'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: hook-pack-renderer-sterling-sync
 created_at: '2026-10-08T23:47:43.726Z'
-updated_at: '2026-10-08T23:47:43.726Z'
+updated_at: '2026-10-09T02:57:31.406Z'
 created_by_session: 'session-b2c0e83d-8497-4257-aa85-a43ef70303a5'
 blast_radius:
   modules:
@@ -16,6 +17,9 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/shared/session_log_renderer.py'
     - 'packages/caws-cli/templates/hook-packs/shared/lib'
     - 'packages/caws-cli/tests/hooks/pytest'
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/src/kernel/schemas/telemetry/turn-log.v2.json
+    - packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts
   out: []
 invariants:
   - 'Template-only features are preserved: harness_kimi, the CAWS_SESSION_TRANSCRIPT_ADAPTER machine-runtime path, malformed-JSONL diagnostics, and hook_audit events'
@@ -36,3 +40,22 @@ acceptance:
     then: 'given the hook-pack render tests; when run; then they pass on the merged template'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "pytest tests/hooks/pytest full suite: 431 passed"
+    recorded_at: "2026-10-09T02:59:03.310Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestPublicRenderSession::test_public_entry_writes_index_and_sweeps_orphan_sidecars"
+    test_verified_at: "8529617de7194e8bdd867432befe5ecbda0fe9a4"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "pytest usage accounting + session-index pins on the merged renderer"
+    recorded_at: "2026-10-09T02:59:06.555Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestTurnUsageAccounting::test_multi_block_reply_and_fork_copy_count_as_one_request"
+    test_verified_at: "8529617de7194e8bdd867432befe5ecbda0fe9a4"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "pytest packages/caws-cli/tests/hooks/pytest full suite: 431 passed, 0 failed"
+    recorded_at: "2026-10-09T02:59:20.956Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_installed_session_fidelity.py::InstalledSessionFidelity::test_dsh_kimi_claude_qwen_and_zcode_native_rows_reach_installed_renderers"
+    test_verified_at: "8529617de7194e8bdd867432befe5ecbda0fe9a4"

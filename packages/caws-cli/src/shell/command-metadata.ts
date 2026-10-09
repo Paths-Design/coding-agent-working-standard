@@ -282,6 +282,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         { flag: '--draft', description: 'Alias for --status draft' },
         { flag: '--closed', description: 'Alias for --status closed' },
         { flag: '--archived', description: 'Include archived specs in the listing' },
+        {
+          flag: '--session-id <id>',
+          description:
+            'Session work-surface view: list only specs this session relates to (created it, holds its bridge claim, or owns a worktree bound to it), each with its binding state and suggested action. Includes archived specs unless --status narrows the view.',
+        },
         DATA_OPTION,
       ],
     },
