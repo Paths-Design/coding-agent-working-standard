@@ -46,3 +46,11 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/tests/shell/gates-change-basis-budget.test.js
     commit_sha: "033859eb9412c60e6b9f52e2b242dc596304fda8"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Executed at 033859eb9412c60e6b9f52e2b242dc596304fda8: packages/caws-cli/tests/shell/release-runtime-contracts.test.js::explicit committed basis and staged renames retain both paths; Git failure throws AND ::empty canonical index and invalid base are unavailable, not pass; no evaluation event is fabricated. Retained execution: /private/tmp/caws-git-capture-01a138da/committed-focused.log (exit 0; 51 passing cases/4 suites; log SHA256 461ae40b545685d528afa1621278d213062eb0d7a321458a782becd815578aeb). Assertions require unavailable Git reads to throw, both rename paths to remain, invalid base and empty/no-basis CLI reads to exit 2 without Overall OK or changed event bytes. Raw controls: /private/tmp/caws-git-capture-01a138da/committed-release-controls/scope-invalid-base.json and scope-empty-index.json; invalid-base Git stderr says Needed a single revision; each has exit_status 2 and events_unchanged true. This recording verifies committed artifact/commit existence only; no test rerun. Proof is the inspected retained execution. Nonclaims: concurrent index mutation and 64 MiB overflow boundary are not exercised, installed-global behavior is not exercised, and pre-existing package-wide telemetry TS2339 remains outside this lane."
+    recorded_at: "2026-10-14T06:26:36.257Z"
+    command: "env CAWS_RELEASE_ARTIFACT_DIR=/private/tmp/caws-git-capture-01a138da/committed-release-controls node node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/shell/gates-change-basis-budget.test.js tests/shell/gates-budget-advisory.test.js tests/shell/gates-disposition.test.js tests/shell/release-runtime-contracts.test.js"
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/shell/release-runtime-contracts.test.js
+    commit_sha: "033859eb9412c60e6b9f52e2b242dc596304fda8"
