@@ -23,6 +23,8 @@ function runGit(args: readonly string[], cwd: string): string {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    // Full indexes can exceed Node's 1 MiB default; retain a finite capture bound.
+    maxBuffer: 64 * 1024 * 1024,
   }).toString();
 }
 
