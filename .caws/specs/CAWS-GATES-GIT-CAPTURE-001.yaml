@@ -37,3 +37,12 @@ non_functional:
 contracts:
   - name: 'gate-change-basis'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Executed at 033859eb9412c60e6b9f52e2b242dc596304fda8: packages/caws-cli/tests/shell/gates-change-basis-budget.test.js::an index larger than 1 MiB retains its full fingerprint and exact committed and staged source delta. Retained execution: /private/tmp/caws-git-capture-01a138da/committed-focused.log (exit 0; 51 passing cases/4 suites; log SHA256 461ae40b545685d528afa1621278d213062eb0d7a321458a782becd815578aeb). Real index 1434272 bytes; full index SHA256 d1f2bf0570442e83e16d8eb34b13fd8ed419db2d336a15c61c28372cca68bdb4; assertions compare complete basis and exact five committed-plus-staged deltas, binary counts, tab/newline pathname, and staged-only reads. Original-source falsifier /private/tmp/caws-git-capture-01a138da/original-source-large-index-falsifier.log exits 1 with runGit ENOBUFS. This recording verifies committed artifact/commit existence only; no test rerun. Proof is the inspected retained execution. Nonclaims: 64 MiB overflow boundary and installed-global behavior are not exercised; pre-existing package-wide telemetry TS2339 is outside this lane."
+    recorded_at: "2026-10-14T06:24:28.841Z"
+    command: "env CAWS_RELEASE_ARTIFACT_DIR=/private/tmp/caws-git-capture-01a138da/committed-release-controls node node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/shell/gates-change-basis-budget.test.js tests/shell/gates-budget-advisory.test.js tests/shell/gates-disposition.test.js tests/shell/release-runtime-contracts.test.js"
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/shell/gates-change-basis-budget.test.js
+    commit_sha: "033859eb9412c60e6b9f52e2b242dc596304fda8"
