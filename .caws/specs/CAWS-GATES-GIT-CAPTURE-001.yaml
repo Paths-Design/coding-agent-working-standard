@@ -1,10 +1,11 @@
 id: CAWS-GATES-GIT-CAPTURE-001
 title: 'Bounded Git capture for large gate indexes'
 mode: fix
-lifecycle_state: active
-worktree: gates-git-capture-maxbuffer
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'A1 and A2 are recorded pass against candidate 033859eb9412c60e6b9f52e2b242dc596304fda8 and read back with ac_recorded sequences 8916 and 8917. Root supplied completed independent read-only review and direct grounding; candidate source is unchanged. Retained committed execution in /private/tmp/caws-git-capture-01a138da/committed-focused.log exercises 51 cases in 4 suites, including full 1434272-byte index fingerprint and exact source delta, invalid-base refusal without fabricated events, and Git failure propagation. Five source gates passed over exactly two paths. Evidence citation verification checks committed artifact and commit existence, not a new test execution. Local source acceptance and retirement only: global CLI/adapters/hooks/runtime/template adoption is outside authorization; unrelated shared-pack 96-to-97 source constant and pre-existing telemetry TS2339 are unchanged. Concurrent index mutation and 64 MiB overflow boundary are not claimed as exercised.'
 created_at: '2026-10-14T05:23:42.507Z'
-updated_at: '2026-10-14T05:23:56.932Z'
+updated_at: '2026-10-14T06:28:52.043Z'
 created_by_session: '01a138da-064b-7cf0-b8bd-0f5c4466f39a'
 blast_radius:
   modules:
