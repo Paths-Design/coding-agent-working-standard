@@ -1,0 +1,38 @@
+id: CAWS-GATES-GIT-CAPTURE-001
+title: 'Bounded Git capture for large gate indexes'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-14T05:23:42.507Z'
+updated_at: '2026-10-14T05:23:42.507Z'
+created_by_session: '01a138da-064b-7cf0-b8bd-0f5c4466f39a'
+blast_radius:
+  modules:
+    - 'Local gate Git change-basis reader'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/gates/local-evaluators/diff-helpers.ts'
+    - 'packages/caws-cli/tests/shell/gates-change-basis-budget.test.js'
+  out: []
+invariants:
+  - 'Capture remains finite at 64 MiB; full index hashing, all source deltas, and Git failure propagation remain intact.'
+acceptance:
+  - id: A1
+    given: 'a real Git index larger than 1 MiB with committed and staged source changes'
+    when: 'readGateChanges evaluates the stable repository'
+    then: 'the full index fingerprint and exact combined source delta are returned without truncation.'
+  - id: A2
+    given: 'unavailable Git inputs or invalid base references'
+    when: 'local gate Git helpers evaluate them'
+    then: 'errors propagate rather than yielding an empty successful result.'
+observability:
+  - 'Raw baseline, falsifier, focused checks, gates and executable byte comparison retained outside tracked source.'
+rollback:
+  - 'Revert the isolated source commit through ordinary reviewed Git workflow.'
+non_functional:
+  security:
+    - 'Git output remains bounded and acquisition failures are fail-closed.'
+contracts:
+  - name: 'gate-change-basis'
+    type: behavior
