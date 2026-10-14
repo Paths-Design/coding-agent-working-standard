@@ -1,9 +1,10 @@
 id: CAWS-GATES-GIT-CAPTURE-001
 title: 'Bounded Git capture for large gate indexes'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: gates-git-capture-maxbuffer
 created_at: '2026-10-14T05:23:42.507Z'
-updated_at: '2026-10-14T05:23:42.507Z'
+updated_at: '2026-10-14T05:23:56.932Z'
 created_by_session: '01a138da-064b-7cf0-b8bd-0f5c4466f39a'
 blast_radius:
   modules:
