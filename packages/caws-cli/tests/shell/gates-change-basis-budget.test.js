@@ -11,7 +11,13 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
+const { resolveGitBinary } = require('../../dist/store/git-binary');
+const {
+  readGateChanges,
+  listStagedChanges,
+} = require('../../dist/shell/gates/local-evaluators/diff-helpers');
 const { initProject } = require('../../dist/store/init-store');
 const { createSpec } = require('../../dist/store/specs-writer');
 const { createWorktree } = require('../../dist/store/worktrees-writer');
@@ -162,4 +168,76 @@ test('a worktree branch within the budget reports no budget_limit overage', () =
     base_ref: 'main',
     files_evaluated: 2,
   });
+});
+
+test('an index larger than 1 MiB retains its full fingerprint and exact committed and staged source delta', () => {
+  const root = fs.realpathSync(makeTempRepo());
+  const captureGit = (args, options = {}) =>
+    execFileSync(resolveGitBinary(), ['-C', root, ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 64 * 1024 * 1024,
+      ...options,
+    });
+  const blob = captureGit(['hash-object', '-w', '--stdin'], {
+    input: 'fixture\n',
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+    .toString()
+    .trim();
+  // Real index entries share a real blob; no thousands of working files are needed.
+  const paths = Array.from(
+    { length: 6000 },
+    (_, i) => `src/index-fixture/${'wide-'.repeat(32)}/${String(i).padStart(5, '0')}.txt`
+  );
+  captureGit(['update-index', '--index-info'], {
+    input: paths.map((file) => `100644 ${blob}\t${file}\n`).join(''),
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  fs.mkdirSync(path.join(root, 'src'));
+  fs.writeFileSync(path.join(root, 'src/changed.txt'), 'first\nsecond\n');
+  fs.writeFileSync(path.join(root, 'src/removed.txt'), 'removed\n');
+  git(root, ['add', 'src/changed.txt', 'src/removed.txt']);
+  git(root, ['commit', '-q', '-m', 'large index baseline']);
+  const base = git(root, ['rev-parse', 'HEAD']);
+  fs.writeFileSync(path.join(root, 'src/changed.txt'), 'first\nbranch\n');
+  fs.writeFileSync(path.join(root, 'src/branch-only.txt'), 'branch only\n');
+  git(root, ['add', 'src/changed.txt', 'src/branch-only.txt']);
+  git(root, ['commit', '-q', '-m', 'committed source delta']);
+  fs.writeFileSync(path.join(root, 'src/changed.txt'), 'first\nbranch\nstaged\n');
+  const stagedPath = 'src/staged\tline\n.txt';
+  fs.writeFileSync(path.join(root, stagedPath), 'staged only\n');
+  fs.writeFileSync(path.join(root, 'src/binary.bin'), Buffer.from([0, 1, 2]));
+  git(root, ['add', 'src/changed.txt', stagedPath, 'src/binary.bin']);
+  git(root, ['rm', 'src/removed.txt']);
+  const index = captureGit(['ls-files', '--stage', '-z']);
+  expect(index.length).toBeGreaterThan(1024 * 1024);
+  const fingerprint = createHash('sha256').update(index).digest('hex');
+  console.log('large-index evidence: ' + JSON.stringify({ bytes: index.length, fingerprint }));
+
+  const delta = [
+    { path: 'src/binary.bin', insertions: null, deletions: null },
+    { path: 'src/branch-only.txt', insertions: 1, deletions: 0 },
+    { path: 'src/changed.txt', insertions: 2, deletions: 1 },
+    { path: 'src/removed.txt', insertions: 0, deletions: 1 },
+    { path: stagedPath, insertions: 1, deletions: 0 },
+  ];
+  const result = readGateChanges(root, base);
+  expect(result.changes).toEqual(delta);
+  expect(result.basis).toEqual({
+    kind: 'branch_and_staged',
+    checkout: root,
+    head_sha: git(root, ['rev-parse', 'HEAD']),
+    base_ref: base,
+    base_sha: base,
+    merge_base_sha: base,
+    index_sha256: fingerprint,
+    files_evaluated: delta.length,
+  });
+  const stagedDelta = delta
+    .filter((change) => change.path !== 'src/branch-only.txt')
+    .map((change) =>
+      change.path === 'src/changed.txt' ? { ...change, insertions: 1, deletions: 0 } : change
+    );
+  expect(listStagedChanges(root)).toEqual(stagedDelta);
+  expect(readGateChanges(root).changes).toEqual(stagedDelta);
 });
