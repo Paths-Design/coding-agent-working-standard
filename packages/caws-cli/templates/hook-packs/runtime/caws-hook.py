@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 EVENTS = {
@@ -541,6 +542,70 @@ def describe_selection(identity, canonical, runtime, home, surface, event, hooks
                        'Reprieves and runtime disable lists can skip selected handlers.']}
 
 
+def supplied_context(payload):
+    """Transport observations only; session coordinates are not execution authority."""
+    def fields(value):
+        return sorted(key[:128] for key in value)[:128] if isinstance(value, dict) else []
+
+    def scalar(value):
+        if isinstance(value, str):
+            return value if len(value) <= 2048 else {'status': 'over_limit', 'type': 'string'}
+        return {'status': 'unavailable', 'type': type(value).__name__}
+
+    tool = payload.get('tool_input')
+    tool = tool if isinstance(tool, dict) else {}
+    explicit = {key: scalar(tool[key]) for key in
+                ('cwd', 'workdir', 'actor_id', 'agent_id', 'subagent_id') if key in tool}
+    return {'session_id': scalar(payload.get('session_id')),
+            'session_cwd': scalar(payload.get('cwd')),
+            'tool_name': scalar(payload.get('tool_name')),
+            'tool_use_id': scalar(payload.get('tool_use_id')),
+            'top_level_fields': fields(payload), 'tool_input_fields': fields(tool),
+            'explicit_tool_context': explicit,
+            'execution_workdir': {key: explicit[key] for key in ('cwd', 'workdir') if key in explicit}
+                                or {'status': 'unavailable'}}
+
+
+def append_invocation(path, metadata, stage, **values):
+    """Retain one observation before the next stage; no power-loss/delivery claim."""
+    if path is None:
+        return
+    try:
+        data = (json.dumps(dict(metadata, stage=stage, timestamp_ms=time.time_ns() // 1000000,
+                                **values), separators=(',', ':')) + '\n').encode()
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW)
+        try:
+            if os.write(fd, data) != len(data):
+                raise OSError('partial invocation record append')
+        finally:
+            os.close(fd)
+    except (OSError, ValueError, TypeError) as error:
+        print('[caws invocation record] incomplete: ' + str(error), file=sys.stderr)
+
+
+def start_invocation(canonical, selection, invocation_id, raw, payload, root):
+    metadata = {'schema': 'caws.hook_invocation.v1', 'invocation_id': invocation_id,
+                'surface': selection['surface'], 'event': selection['event'],
+                'runtime_digest': selection['runtime_digest'], 'input_sha256': digest(raw),
+                'delivery': 'not_observed'}
+    try:
+        sid = payload.get('session_id')
+        if (not isinstance(sid, str) or len(sid) > 128 or
+                not re.fullmatch(r'[A-Za-z0-9_.@:-]+', sid) or sid in {'.', '..'}):
+            raise ValueError('no safe supplied session identity; invocation journal unavailable')
+        target = confined(canonical, f'.caws/sessions/{sid}/hook-invocations/{invocation_id}.jsonl')
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        os.close(fd)
+    except (OSError, ValueError) as error:
+        print('[caws invocation record] incomplete: ' + str(error), file=sys.stderr)
+        return None, metadata
+    append_invocation(target, metadata, 'invocation_started',
+                      supplied_context=supplied_context(payload), dispatch_cwd=str(root),
+                      selected_handlers=selection['handlers'])
+    return target, metadata
+
+
 def retain_execution_records(path, canonical, selection, invocation_id, raw, result):
     """Append occurrence-qualified handler observations to each resolved session.
 
@@ -721,6 +786,13 @@ def main():
     if describe:
         print(json.dumps(selection, indent=2, sort_keys=True))
         return 0
+    invocation_id = str(uuid.uuid4())
+    invocation_file, invocation_metadata = start_invocation(
+        canonical, selection, invocation_id, raw, payload, root)
+    # Replace inherited diagnostics; they never select policy or grant authority.
+    env['CAWS_HOOK_INVOCATION_FILE'] = str(invocation_file) if invocation_file else ''
+    env['CAWS_HOOK_INVOCATION_METADATA'] = json.dumps(invocation_metadata)
+    env['CAWS_HOOK_INVOCATION_SELECTION'] = json.dumps(selection['handlers'])
     settlement_file = tempfile.NamedTemporaryFile(
         prefix='caws-hook-offers-', suffix='.jsonl', delete=False)
     settlement_file.close()
@@ -728,7 +800,6 @@ def main():
     execution_file = tempfile.NamedTemporaryFile(prefix='caws-hook-execution-', suffix='.jsonl', delete=False)
     execution_file.close()
     env['CAWS_HOOK_EXECUTION_FILE'] = execution_file.name
-    invocation_id = str(uuid.uuid4())
     env['PYTHONDONTWRITEBYTECODE'] = '1'
     payload['hook_event_name'] = EVENTS[event]
     result = None
@@ -741,17 +812,26 @@ def main():
             _STOP_BUDGET_FILE = None
     _DISPATCHED = True
     try:
+        append_invocation(invocation_file, invocation_metadata, 'dispatch_started')
         result = subprocess.run(['/bin/bash', str(runtime / 'dispatch.sh'), surface, event, str(hooks), *handlers],
                                 cwd=root, env=env, input=json.dumps(payload).encode(),
                                 stdout=subprocess.PIPE, check=False)
+        append_invocation(invocation_file, invocation_metadata, 'dispatch_completed',
+                          exit_code=result.returncode)
         if surface == 'codex':
             emit_codex_result(event, result, identity)
         else:
             sys.stdout.buffer.write(result.stdout)
         sys.stdout.buffer.flush()
         adapter_handoff = True
+        append_invocation(invocation_file, invocation_metadata, 'adapter_stdout_handoff',
+                          exit_code=result.returncode, observation_boundary='local_stdout_flush')
         if event == 'stop' and result.returncode == 0:
             reset_stop_budget()
+    except Exception as error:
+        append_invocation(invocation_file, invocation_metadata, 'adapter_error',
+                          error_type=type(error).__name__)
+        raise
     finally:
         retain_execution_records(execution_file.name, canonical, selection, invocation_id, raw, result)
         if result is not None:
@@ -763,6 +843,8 @@ def main():
             Path(execution_file.name).unlink()
         except OSError:
             pass
+    append_invocation(invocation_file, invocation_metadata, 'adapter_finished',
+                      exit_code=result.returncode)
     return result.returncode
 
 

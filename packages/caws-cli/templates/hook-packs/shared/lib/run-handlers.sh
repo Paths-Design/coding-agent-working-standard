@@ -364,9 +364,46 @@ _rh_dedup_flush() {
 # ---------------------------------------------------------------------------
 # run_handlers [--short-circuit-on-block] <handler-entry>...
 # ---------------------------------------------------------------------------
+_rh_record_progress() {
+  # Adapter-owned per-invocation journal. Each write precedes the next stage,
+  # including the next handler. A failed record never changes a guard verdict.
+  [[ -n "${CAWS_HOOK_INVOCATION_FILE:-}" ]] || return 0
+  printf '%s' "$6" | python3 -c '
+import json, os, sys, time
+try:
+    handler, path, status, code, stderr_path, index, sid = sys.argv[1:]
+    row = json.loads(os.environ["CAWS_HOOK_INVOCATION_METADATA"])
+    selected = next((item for item in json.loads(os.environ["CAWS_HOOK_INVOCATION_SELECTION"])
+                     if item["path"] == path), None)
+    if selected is None:
+        raise ValueError("handler selection mismatch")
+    row.update(stage="handler_" + status, timestamp_ms=time.time_ns() // 1000000,
+               handler=handler, path=path, handler_index=int(index),
+               resolved_session_id=sid, source_sha256=selected["sha256"],
+               source_digest_boundary="before_dispatch", exit_code=json.loads(code))
+    stdout = sys.stdin.read()
+    if status != "started":
+        with open(stderr_path, errors="replace") as stream:
+            row.update(stdout=stdout, stderr=stream.read())
+    data = (json.dumps(row, separators=(",", ":")) + "\n").encode()
+    fd = os.open(os.environ["CAWS_HOOK_INVOCATION_FILE"],
+                 os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW)
+    try:
+        if os.write(fd, data) != len(data):
+            raise OSError("partial invocation record append")
+    finally:
+        os.close(fd)
+except (OSError, ValueError, TypeError, KeyError, IndexError) as error:
+    print("[caws invocation record] incomplete: " + str(error), file=sys.stderr)
+' "$1" "$2" "$3" "$4" "$5" "$_rh_handler_index" "$_rh_session_id" || \
+    printf '[caws invocation record] could not record %s %s\n' "$1" "$3" >&2
+  return 0
+}
+
 _rh_record_execution() {
   # The machine launcher owns this private per-dispatch file. Recording is
   # provenance-only: failure is visible and never changes a guard decision.
+  _rh_record_progress "$@"
   [[ -n "${CAWS_HOOK_EXECUTION_FILE:-}" ]] || return 0
   printf '%s' "$6" | jq -Rsc \
     --arg session_id "$_rh_session_id" --arg handler "$1" --arg path "$2" \
@@ -540,7 +577,9 @@ run_handlers() {
   if (( ${#entries[@]} > 0 )); then
 
   local entry
+  local _rh_handler_index=-1
   for entry in "${entries[@]}"; do
+    _rh_handler_index=$(( _rh_handler_index + 1 ))
     # Split on whitespace: first token = script, rest = positional args.
     # shellcheck disable=SC2086
     set -- $entry
@@ -608,6 +647,7 @@ run_handlers() {
       t_start=$(_rh_ms_now)
     fi
 
+    _rh_record_progress "$handler" "$handler_path" started null /dev/null ""
     local stdout_buf
     if [[ -n "$stdin_file" ]]; then
       # Payload staged to disk (CAWS-DEFECT-RUNHANDLERS-STDIN-EPIPE-NOISE-001):
