@@ -54,3 +54,8 @@ evidence:
     evidence_ref: "Inspected installed-bootstrap diagnostics (10 tests exit0), normal/refused/post-filter/storage-failure journals and source-identities.json under /Users/darianrosebrook/Desktop/Projects/caws/.archive/hook-execution-diagnostics/20261015-candidate. Source bytes match8cdb727f and installed runtime408c06a7. Supplied session context is distinct from execution workdir. Output/exit and refusal preservation established for bounded fixtures. CLI --verify checks commit citation only; runtime receipts are ignored and were inspected directly, not re-executed by this recording command."
     recorded_at: "2026-10-15T17:40:14.154Z"
     commit_sha: "8cdb727f7b0000804ba9b1b19d2b8fc113ec84cf"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/Desktop/Projects/caws/.archive/hook-execution-diagnostics/20261015-candidate/diagnostics/selection-irowk7db killed-15.command.json and killed-9.command.json (host exits -15/-9), hanging-entered marker, both hook-invocations journals. Earlier stdout/stderr/exit0 persisted and hanging handler had unmatched start; no dispatch_completed/adapter_finished. Fixture process-group kill, not native timeout cause or power-loss proof. CLI --verify checks commit citation only; runtime receipts are ignored and were inspected directly, not re-executed by this recording command."
+    recorded_at: "2026-10-15T17:40:21.689Z"
+    commit_sha: "8cdb727f7b0000804ba9b1b19d2b8fc113ec84cf"
