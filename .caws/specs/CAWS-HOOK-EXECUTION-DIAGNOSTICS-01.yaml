@@ -59,3 +59,8 @@ evidence:
     evidence_ref: "Inspected /Users/darianrosebrook/Desktop/Projects/caws/.archive/hook-execution-diagnostics/20261015-candidate/diagnostics/selection-irowk7db killed-15.command.json and killed-9.command.json (host exits -15/-9), hanging-entered marker, both hook-invocations journals. Earlier stdout/stderr/exit0 persisted and hanging handler had unmatched start; no dispatch_completed/adapter_finished. Fixture process-group kill, not native timeout cause or power-loss proof. CLI --verify checks commit citation only; runtime receipts are ignored and were inspected directly, not re-executed by this recording command."
     recorded_at: "2026-10-15T17:40:21.689Z"
     commit_sha: "8cdb727f7b0000804ba9b1b19d2b8fc113ec84cf"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/Desktop/Projects/caws/.archive/hook-execution-diagnostics/20261015-install installed-identity.json (113 manifest hashes; committed source matches), native-pwd.json and native-transcript-events.json (actual package cwd, exit0, native Pre/Post journals), native-refusal.json (protected-paths exit2, target absent). Fullchain /Users/darianrosebrook/Desktop/Projects/caws/.archive/hook-execution-diagnostics/20261015-fullchain runs under45s. Native execution workdir remains unavailable; fixture/native observations distinguished; delivery not_observed. CLI --verify checks commit citation only; runtime receipts are ignored and were inspected directly, not re-executed by this recording command."
+    recorded_at: "2026-10-15T17:40:28.003Z"
+    commit_sha: "8cdb727f7b0000804ba9b1b19d2b8fc113ec84cf"
