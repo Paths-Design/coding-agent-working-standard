@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: hook-execution-journal
 created_at: '2026-10-15T16:42:30.628Z'
-updated_at: '2026-10-15T16:59:42.311Z'
+updated_at: '2026-10-15T17:05:47.216Z'
 created_by_session: '01a14036-9a0a-7b92-ad8f-d361de8c02b9'
 blast_radius:
   modules:
@@ -18,7 +18,10 @@ scope:
     - 'packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py'
     - 'packages/caws-cli/tests/hooks/pytest/test_hook_execution_diagnostics.py'
     - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - packages/caws-cli/tests/init/pack-fingerprints.json
   out: []
+  support:
+    - test-output/hook-execution-diagnostics
 invariants:
   - 'Diagnostics grant no authority and never substitute session history for the current tool execution context.'
   - 'Blocking guards preserve their refusal behavior and diagnostic failures never silently weaken pre-tool enforcement.'
