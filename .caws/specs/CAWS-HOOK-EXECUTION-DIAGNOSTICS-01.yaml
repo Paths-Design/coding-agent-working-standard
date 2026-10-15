@@ -1,0 +1,46 @@
+id: CAWS-HOOK-EXECUTION-DIAGNOSTICS-01
+title: 'Retain hook execution context and interrupted handler evidence'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-15T16:42:30.628Z'
+updated_at: '2026-10-15T16:42:30.628Z'
+created_by_session: '01a14036-9a0a-7b92-ad8f-d361de8c02b9'
+blast_radius:
+  modules:
+    - 'Machine hook adapter and execution diagnostics'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/runtime'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
+    - 'packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py'
+    - 'packages/caws-cli/tests/hooks/pytest/test_hook_execution_diagnostics.py'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+  out: []
+invariants:
+  - 'Diagnostics grant no authority and never substitute session history for the current tool execution context.'
+  - 'Blocking guards preserve their refusal behavior and diagnostic failures never silently weaken pre-tool enforcement.'
+acceptance:
+  - id: A1
+    given: 'a selected handler chain and supplied execution context'
+    when: 'dispatch succeeds or refuses'
+    then: 'durable records bind invocation and handler identity to the supplied cwd and session and preserve outputs and exit codes.'
+  - id: A2
+    given: 'a handler that stalls or a dispatcher killed during execution'
+    when: 'the external process ends before normal adapter completion'
+    then: 'durable started and completed observations identify the interrupted invocation without falsely marking it completed.'
+  - id: A3
+    given: 'the committed installed candidate'
+    when: 'native Codex and bounded hostile fixtures exercise the adapter'
+    then: 'retained artifacts distinguish native observations from fixture-only results and preserve safety refusals.'
+observability:
+  - 'Invocation and handler lifecycle records retain execution coordinates, timing and original exit/output with explicit delivery nonclaims.'
+rollback:
+  - 'Restore the preceding immutable runtime through the supported adapter rollback operation.'
+non_functional:
+  security:
+    - 'Do not persist additional raw command payloads or infer write authority from diagnostics.'
+contracts:
+  - name: 'hook-execution-observation'
+    type: behavior
