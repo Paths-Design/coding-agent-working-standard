@@ -1,10 +1,11 @@
 id: CAWS-HOOK-EXECUTION-DIAGNOSTICS-01
 title: 'Retain hook execution context and interrupted handler evidence'
 mode: fix
-lifecycle_state: active
-worktree: hook-execution-journal
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Retained per-invocation progress, supplied context and original guard outputs/exits. Committed8cdb727f; independent review inspected; fixture interruptions and hostile paths plus native allowed/refused calls verified against installed408c06a7. A1-A3 evidence and ac_recorded read back. Native executor/workdir production and Sterling parser repair remain separate open obligations; no native timeout-cause or power-loss claim.'
 created_at: '2026-10-15T16:42:30.628Z'
-updated_at: '2026-10-15T17:05:47.216Z'
+updated_at: '2026-10-15T17:44:02.848Z'
 created_by_session: '01a14036-9a0a-7b92-ad8f-d361de8c02b9'
 blast_radius:
   modules:
