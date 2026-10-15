@@ -1,10 +1,9 @@
 id: CAWS-HOOK-EXECUTION-DIAGNOSTICS-01
 title: 'Retain hook execution context and interrupted handler evidence'
 mode: fix
-lifecycle_state: active
-worktree: hook-execution-diagnostics
+lifecycle_state: draft
 created_at: '2026-10-15T16:42:30.628Z'
-updated_at: '2026-10-15T16:46:33.229Z'
+updated_at: '2026-10-15T16:58:14.027Z'
 created_by_session: '01a14036-9a0a-7b92-ad8f-d361de8c02b9'
 blast_radius:
   modules:
