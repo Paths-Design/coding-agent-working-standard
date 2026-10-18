@@ -36,6 +36,8 @@ channel.
   compatible transitive fixes, and upgrade Jest, lint-staged, ts-jest and
   typescript-eslint to eliminate the vulnerable development-tool chain.
   Dependency qualification requires both workspace and detached-consumer audits.
+- Update the transitive development dependency Handlebars to 4.7.10 for its
+  template compiler security fixes, preserving direct dependency ranges.
 
 ### Fixes and diagnostics
 
