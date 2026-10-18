@@ -1,11 +1,10 @@
 #[cfg(not(unix))]
 compile_error!("caws-native currently requires POSIX process groups");
 
+mod cancellation;
 mod cli;
 mod protocol;
 mod runner;
-
-use std::io::{self, Write};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -13,7 +12,8 @@ fn main() {
     let guarded = args
         .windows(2)
         .any(|v| v[0] == "--event" && v[1] == "pre_tool_use");
-    let result = cli::Config::parse(&args)
+    let result = cancellation::install()
+        .and_then(|()| cli::Config::parse(&args))
         .map_err(runner::Failure::configuration)
         .and_then(|config| {
             let deadline = std::time::Instant::now() + config.timeout;
@@ -58,10 +58,11 @@ fn main() {
             )
         }
     };
-    // A consumer that has closed its output is not a successful delivery.
-    if io::stdout().write_all(stdout.as_bytes()).is_err()
-        || io::stderr().write_all(stderr.as_bytes()).is_err()
-    {
+    // Bounded local writes are not an acknowledgment from the native consumer.
+    if let Err(error) = runner::write_native(&stdout, &stderr) {
+        runner::write_diagnostic(&format!(
+            "{stderr}CAWS native output delivery failed: {error}. Output may be partial; consumer receipt is unconfirmed.\n"
+        ));
         std::process::exit(2);
     }
     std::process::exit(code.into());

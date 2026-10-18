@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const mode = process.env.CAWS_NATIVE_TEST_MODE || 'exact';
+if (process.env.CAWS_NATIVE_TEST_ENGINE_PID) fs.writeFileSync(process.env.CAWS_NATIVE_TEST_ENGINE_PID, String(process.pid));
 if (mode === 'no-read') {
   setInterval(() => {}, 1000);
 } else {
@@ -15,6 +16,7 @@ if (mode === 'no-read') {
       runtimeDigest: request.runtimeDigest,
       result: { exitCode: 7, stdout: 'native\n雪\u0000exact', stderr: 'diagnostic\nexact\n' },
     };
+    if (mode === 'large-native-result' || mode === 'late-large-native-result') response.result.stdout = 'x'.repeat(1_000_000);
     if (mode === 'id') response.id += '-foreign';
     if (mode === 'digest') response.runtimeDigest = 'b'.repeat(64);
     if (mode === 'schema') response.schema = 'caws.runtime.response.v2';
@@ -33,6 +35,10 @@ if (mode === 'no-read') {
       fs.writeFileSync(process.env.CAWS_NATIVE_TEST_CHILD, String(child.pid));
       process.stdout.write(JSON.stringify(response));
       setTimeout(() => process.exit(0), 30);
+      return;
+    }
+    if (mode === 'late-large-native-result') {
+      setTimeout(() => process.stdout.write(JSON.stringify(response)), Math.max(0, request.deadlineEpochMs - Date.now() - 150));
       return;
     }
     process.stdout.write(JSON.stringify(response));

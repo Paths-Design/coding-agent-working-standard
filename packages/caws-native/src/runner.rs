@@ -7,12 +7,14 @@ use std::{
         unix::process::CommandExt,
     },
     process::{Child, Command, Stdio},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 pub const MAX_PAYLOAD: usize = 1_048_576;
 const MAX_RESPONSE: usize = 4_194_304;
 const MAX_ENGINE_STDERR: usize = 65_536;
+const CLEANUP_BUDGET: Duration = Duration::from_millis(500);
+const DELIVERY_BUDGET: Duration = Duration::from_millis(500);
 
 pub struct Failure {
     pub started: bool,
@@ -46,6 +48,17 @@ fn nonblocking(fd: RawFd) -> Result<i32, String> {
 }
 
 fn poll(fds: &mut [libc::pollfd], deadline: Instant) -> Result<(), String> {
+    poll_with_cancellation(fds, deadline, true)
+}
+
+fn poll_with_cancellation(
+    fds: &mut [libc::pollfd],
+    deadline: Instant,
+    observe_cancellation: bool,
+) -> Result<(), String> {
+    if observe_cancellation {
+        crate::cancellation::check()?;
+    }
     let remaining = deadline
         .checked_duration_since(Instant::now())
         .ok_or("request deadline expired")?;
@@ -56,6 +69,9 @@ fn poll(fds: &mut [libc::pollfd], deadline: Instant) -> Result<(), String> {
         if error.kind() != io::ErrorKind::Interrupted {
             return Err(format!("pipe polling: {error}"));
         }
+    }
+    if observe_cancellation {
+        crate::cancellation::check()?;
     }
     Ok(())
 }
@@ -118,30 +134,43 @@ pub fn read_payload(deadline: Instant) -> Result<(Map<String, Value>, String), S
 
 struct OwnedGroup {
     child: Child,
-    reaped: bool,
+    cleanup_attempted: bool,
 }
 impl OwnedGroup {
     fn finish(&mut self) -> Result<std::process::ExitStatus, String> {
+        self.cleanup_attempted = true;
         // The direct child is deliberately NOT reaped before signaling: its PID
         // pins the group identity, preventing a recycled PID from targeting others.
         // SAFETY: pre_exec successfully made this child its own group leader.
         unsafe {
             libc::kill(-(self.child.id() as i32), libc::SIGKILL);
         }
-        let status = self.child.wait().map_err(|e| format!("engine reap: {e}"))?;
-        self.reaped = true;
-        Ok(status)
+        let deadline = Instant::now() + CLEANUP_BUDGET;
+        loop {
+            if let Some(status) = self
+                .child
+                .try_wait()
+                .map_err(|e| format!("engine reap: {e}"))?
+            {
+                return Ok(status);
+            }
+            if Instant::now() >= deadline {
+                return Err("owned engine was signaled but could not be reaped within the 500ms cleanup budget".into());
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
     }
 }
 impl Drop for OwnedGroup {
     fn drop(&mut self) {
-        if !self.reaped {
+        if !self.cleanup_attempted {
             let _ = self.finish();
         }
     }
 }
 
 pub fn invoke(config: &Config, request: &[u8], deadline: Instant) -> Result<Vec<u8>, Failure> {
+    crate::cancellation::check().map_err(Failure::configuration)?;
     if Instant::now() >= deadline {
         return Err(Failure::configuration(
             "request deadline expired before engine spawn".into(),
@@ -168,9 +197,20 @@ pub fn invoke(config: &Config, request: &[u8], deadline: Instant) -> Result<Vec<
         .map_err(|e| Failure::configuration(format!("engine spawn: {e}")))?;
     let mut group = OwnedGroup {
         child,
-        reaped: false,
+        cleanup_attempted: false,
     };
-    run(&mut group, request, deadline).map_err(Failure::execution)
+    let outcome = crate::cancellation::check().and_then(|()| run(&mut group, request, deadline));
+    if !group.cleanup_attempted
+        && let Err(cleanup) = group.finish()
+    {
+        return Err(Failure::execution(format!(
+            "{}; cleanup: {cleanup}",
+            outcome
+                .err()
+                .unwrap_or_else(|| "engine transport ended".into())
+        )));
+    }
+    outcome.map_err(Failure::execution)
 }
 
 fn run(group: &mut OwnedGroup, request: &[u8], deadline: Instant) -> Result<Vec<u8>, String> {
@@ -238,6 +278,7 @@ fn run(group: &mut OwnedGroup, request: &[u8], deadline: Instant) -> Result<Vec<
     // Pipes can close before the process exits. A nonblocking waitid observes
     // termination WITHOUT reaping, preserving ownership until group cleanup.
     loop {
+        crate::cancellation::check()?;
         let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
         // SAFETY: valid child PID and initialized writable siginfo storage.
         let result = unsafe {
@@ -265,4 +306,100 @@ fn run(group: &mut OwnedGroup, request: &[u8], deadline: Instant) -> Result<Vec<
         return Err(format!("engine process exited unsuccessfully ({status})"));
     }
     Ok(out)
+}
+
+struct Flags {
+    fd: RawFd,
+    original: i32,
+}
+impl Flags {
+    fn nonblocking(fd: RawFd) -> Result<Self, String> {
+        Ok(Self {
+            fd,
+            original: nonblocking(fd)?,
+        })
+    }
+}
+impl Drop for Flags {
+    fn drop(&mut self) {
+        // SAFETY: these borrowed process stdio descriptors remain live here.
+        unsafe {
+            libc::fcntl(self.fd, libc::F_SETFL, self.original);
+        }
+    }
+}
+
+fn write_output(
+    stdout: &[u8],
+    stderr: &[u8],
+    budget: Duration,
+    observe_cancellation: bool,
+) -> Result<(), String> {
+    if observe_cancellation {
+        crate::cancellation::check()?;
+    }
+    let _stdout_flags = Flags::nonblocking(libc::STDOUT_FILENO)?;
+    let _stderr_flags = Flags::nonblocking(libc::STDERR_FILENO)?;
+    let buffers = [stdout, stderr];
+    let descriptors = [libc::STDOUT_FILENO, libc::STDERR_FILENO];
+    let mut offsets = [0_usize; 2];
+    let deadline = Instant::now() + budget;
+    while offsets[0] < stdout.len() || offsets[1] < stderr.len() {
+        let mut fds = [
+            libc::pollfd {
+                fd: if offsets[0] < stdout.len() {
+                    descriptors[0]
+                } else {
+                    -1
+                },
+                events: libc::POLLOUT,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: if offsets[1] < stderr.len() {
+                    descriptors[1]
+                } else {
+                    -1
+                },
+                events: libc::POLLOUT,
+                revents: 0,
+            },
+        ];
+        poll_with_cancellation(&mut fds, deadline, observe_cancellation)
+            .map_err(|e| format!("bounded output write: {e}"))?;
+        for index in 0..2 {
+            if fds[index].revents == 0 {
+                continue;
+            }
+            let bytes =
+                &buffers[index][offsets[index]..buffers[index].len().min(offsets[index] + 16_384)];
+            // SAFETY: bytes is readable for its length; stdio remains live and nonblocking.
+            let count =
+                unsafe { libc::write(descriptors[index], bytes.as_ptr().cast(), bytes.len()) };
+            if count < 0 {
+                let error = io::Error::last_os_error();
+                if !matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+                ) {
+                    return Err(format!("native output write: {error}"));
+                }
+            } else if count == 0 {
+                return Err("native output write made no progress".into());
+            } else {
+                offsets[index] += count as usize;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn write_native(stdout: &str, stderr: &str) -> Result<(), String> {
+    write_output(stdout.as_bytes(), stderr.as_bytes(), DELIVERY_BUDGET, true)
+}
+
+pub fn write_diagnostic(stderr: &str) {
+    // Cancellation diagnostics are best effort with their own 100ms ceiling;
+    // they must not recurse through the cancellation that caused the failure.
+    let _ = write_output(&[], stderr.as_bytes(), Duration::from_millis(100), false);
 }

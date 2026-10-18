@@ -52,6 +52,7 @@ impl Fixture {
             .env("CAWS_NATIVE_TEST_MODE", mode)
             .env("CAWS_NATIVE_TEST_RECEIPT", self.dir.join("requests.jsonl"))
             .env("CAWS_NATIVE_TEST_CHILD", self.dir.join("child"))
+            .env("CAWS_NATIVE_TEST_ENGINE_PID", self.dir.join("engine"))
             // Native execution uses the absolute Node path; no Python or shell is available.
             .env("PATH", "");
         command
@@ -99,7 +100,7 @@ fn execute(mut command: Command, input: Vec<u8>) -> Output {
             break status;
         }
         if started.elapsed() > Duration::from_secs(8) {
-            child.kill().unwrap();
+            stop_test_child(&mut child);
             panic!("native invocation exceeded test watchdog");
         }
         thread::sleep(Duration::from_millis(5));
@@ -372,5 +373,292 @@ fn runtime_surface_subset_is_grounded_in_canonical_registry() {
             registry["surfaces"].get(surface).is_some(),
             "runtime surface absent from canonical registry: {surface}"
         );
+    }
+}
+
+fn wait_for_file(path: &std::path::Path) -> String {
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Ok(text) = fs::read_to_string(path) {
+            return text;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "fixture did not create {}",
+            path.display()
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn wait_bounded(child: &mut std::process::Child) -> std::process::ExitStatus {
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status;
+        }
+        if started.elapsed() > Duration::from_secs(4) {
+            stop_test_child(child);
+            panic!("native cancellation exceeded watchdog");
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn stop_test_child(child: &mut std::process::Child) {
+    // Give native cleanup a chance before the watchdog's unavoidable SIGKILL fallback.
+    // SAFETY: this is the direct test-owned process, not an inferred process group.
+    unsafe {
+        libc::kill(child.id() as i32, libc::SIGTERM);
+    }
+    let deadline = Instant::now() + Duration::from_millis(700);
+    while Instant::now() < deadline {
+        if child.try_wait().unwrap().is_some() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn captured(child: &mut std::process::Child) -> Output {
+    let status = wait_bounded(child);
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_end(&mut stdout)
+        .unwrap();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_end(&mut stderr)
+        .unwrap();
+    Output {
+        status,
+        stdout,
+        stderr,
+    }
+}
+
+fn assert_not_running(pid: &str) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let state = Command::new("ps")
+            .args(["-p", pid.trim(), "-o", "stat="])
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&state.stdout);
+        if text.trim().is_empty() || text.trim().starts_with('Z') {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "owned process {pid} remains running: {text}"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_processes() {
+    for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        for mode in ["input", "timeout", "pipe-holder"] {
+            let fixture = Fixture::new();
+            let mut unrelated = Command::new(&fixture.node)
+                .args(["-e", "setInterval(() => {},1000)"])
+                .spawn()
+                .unwrap();
+            let mut child = fixture
+                .command(
+                    if mode == "input" { "exact" } else { mode },
+                    "pre_tool_use",
+                    "5000",
+                )
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut input = child.stdin.take().unwrap();
+            input.write_all(b"{}").unwrap();
+            let mut engine_pid = None;
+            let mut descendant_pid = None;
+            if mode == "input" {
+                // The native process is waiting for the still-open original stdin.
+                thread::sleep(Duration::from_millis(100));
+            } else {
+                drop(input);
+                engine_pid = Some(wait_for_file(&fixture.dir.join("engine")));
+                if mode == "pipe-holder" {
+                    descendant_pid = Some(wait_for_file(&fixture.dir.join("child")));
+                }
+            }
+            let started = Instant::now();
+            // SAFETY: signal only the direct native child created by this test.
+            assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
+            let output = captured(&mut child);
+            assert!(
+                started.elapsed() < Duration::from_millis(1500),
+                "{mode}, signal {signal}"
+            );
+            assert_eq!(output.status.code(), Some(2));
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains(&format!("cancelled by signal {signal}")),
+                "{stderr}"
+            );
+            assert!(
+                stderr.contains("consumer receipt is unconfirmed"),
+                "{stderr}"
+            );
+            assert!(
+                unrelated.try_wait().unwrap().is_none(),
+                "foreign process terminated"
+            );
+            unrelated.kill().unwrap();
+            unrelated.wait().unwrap();
+            if let Some(pid) = engine_pid {
+                assert_not_running(&pid);
+            }
+            if let Some(pid) = descendant_pid {
+                assert_not_running(&pid);
+            }
+            if mode == "input" {
+                assert!(!fixture.dir.join("engine").exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn caller_death_cancels_and_cleans_owned_engine_group() {
+    let fixture = Fixture::new();
+    let engine = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/engine.cjs");
+    let script = r#"
+      const fs = require('node:fs');
+      const {spawn} = require('node:child_process');
+      const child = spawn(process.env.NATIVE, ['invoke','--engine',process.env.ENGINE,'--node',process.execPath,'--surface','codex','--event','pre_tool_use','--runtime-digest','a'.repeat(64),'--timeout-ms','5000'], {stdio:['pipe','ignore','ignore']});
+      fs.writeFileSync(process.env.NATIVE_PID, String(child.pid));
+      child.stdin.end('{}');
+      const timer = setInterval(() => { if (fs.existsSync(process.env.CAWS_NATIVE_TEST_ENGINE_PID)) { clearInterval(timer); process.exit(0); } }, 5);
+    "#;
+    let mut parent = Command::new(&fixture.node)
+        .args(["-e", script])
+        .env("NATIVE", env!("CARGO_BIN_EXE_caws-native"))
+        .env("ENGINE", engine)
+        .env("NATIVE_PID", fixture.dir.join("native"))
+        .env("CAWS_NATIVE_TEST_ENGINE_PID", fixture.dir.join("engine"))
+        .env("CAWS_NATIVE_TEST_MODE", "timeout")
+        .spawn()
+        .unwrap();
+    assert!(wait_bounded(&mut parent).success());
+    assert_not_running(&wait_for_file(&fixture.dir.join("native")));
+    assert_not_running(&wait_for_file(&fixture.dir.join("engine")));
+}
+
+#[test]
+fn closed_caller_output_channel_cancels_engine_before_request_deadline() {
+    let fixture = Fixture::new();
+    let mut child = fixture
+        .command("timeout", "pre_tool_use", "5000")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"{}").unwrap();
+    let engine_pid = wait_for_file(&fixture.dir.join("engine"));
+    drop(child.stdout.take());
+    let started = Instant::now();
+    let status = wait_bounded(&mut child);
+    assert!(started.elapsed() < Duration::from_millis(1500));
+    assert_eq!(status.code(), Some(2));
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert!(stderr.contains("caller output channel closed"), "{stderr}");
+    assert_not_running(&engine_pid);
+}
+
+#[test]
+fn output_backpressure_is_bounded_and_never_claims_consumer_receipt() {
+    let fixture = Fixture::new();
+    let mut child = fixture
+        .command("late-large-native-result", "pre_tool_use", "1000")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"{}").unwrap();
+    let started = Instant::now();
+    // Do not read stdout until the native writer has terminated.
+    let output = captured(&mut child);
+    assert!(
+        started.elapsed() >= Duration::from_millis(1000),
+        "fixture did not exercise late engine completion plus blocked native delivery"
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(2100),
+        "configured1000ms + cleanup500ms + delivery500ms + diagnostic100ms ceiling exceeded"
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.len() < 1_000_000);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("bounded output write: request deadline expired"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("Output may be partial; consumer receipt is unconfirmed"),
+        "{stderr}"
+    );
+    assert_not_running(&wait_for_file(&fixture.dir.join("engine")));
+}
+
+#[test]
+fn valid_null_and_regular_file_outputs_do_not_cancel_native_execution() {
+    for null in [true, false] {
+        let fixture = Fixture::new();
+        let path = if null {
+            PathBuf::from("/dev/null")
+        } else {
+            fixture.dir.join("output")
+        };
+        let output = fs::OpenOptions::new()
+            .write(true)
+            .create(!null)
+            .truncate(!null)
+            .open(&path)
+            .unwrap();
+        let mut child = fixture
+            .command("exact", "pre_tool_use", "2000")
+            .stdin(Stdio::piped())
+            .stdout(output)
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(b"{}").unwrap();
+        assert_eq!(wait_bounded(&mut child).code(), Some(7));
+        let mut stderr = Vec::new();
+        child
+            .stderr
+            .take()
+            .unwrap()
+            .read_to_end(&mut stderr)
+            .unwrap();
+        assert_eq!(stderr, b"diagnostic\nexact\n");
+        if !null {
+            assert_eq!(fs::read(path).unwrap(), "native\n雪\0exact".as_bytes());
+        }
     }
 }
