@@ -9,6 +9,7 @@ created_by_session: '01a150f0-0f54-78f1-902e-92e66137ba34'
 blast_radius:
   modules:
     - 'CLI release metadata and publication qualification'
+    - 'Turn-log producer contract compile validation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -30,6 +31,14 @@ acceptance:
     given: 'the committed release candidate'
     when: 'checks and independent review are inspected'
     then: 'required evidence is recorded and the publication decision identifies every unresolved requirement before any release tag is pushed'
+  - id: A3
+    given: >-
+      the token-class schema has no required field and the baseline typecheck
+      rejects the test property access
+    when: 'the document pin uses a type-compatible absence assertion'
+    then: >-
+      typechecking and the existing valid and hostile turn-log contract fixtures
+      pass without changing the producer schema
 observability:
   - 'Retain raw local check output and remote run URLs with exact candidate identities outside tracked source'
 rollback:
