@@ -1,0 +1,72 @@
+id: CAWS-NATIVE-RUNTIME-001
+title: 'Replace Python runtime implementations with Rust and typed Node services'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-18T22:36:56.919Z'
+updated_at: '2026-10-18T22:36:56.919Z'
+created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
+blast_radius:
+  modules:
+    - 'Native hook client and TypeScript daemon, authority adapters, installation, transcripts, developer tools and internal migration tracker'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/'
+    - 'packages/caws-cli/src/runtime/'
+    - 'packages/caws-cli/tests/runtime/'
+    - 'packages/caws-cli/scripts/'
+    - 'packages/caws-cli/templates/hook-packs/'
+    - 'packages/caws-cli/src/init/'
+    - 'packages/caws-cli/src/store/'
+    - 'packages/caws-cli/tsconfig.vnext.json'
+    - 'packages/caws-cli/package.json'
+    - 'scripts/'
+    - 'docs/architecture/caws-native-runtime.md'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
+  - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
+  - 'Preserve independently supported consumer contracts and project overrides; migration evidence distinguishes implementation, installation and native execution.'
+acceptance:
+  - id: A1
+    given: 'the inspected CAWS baseline and original user scope'
+    when: 'the migration tracker and architecture are maintained'
+    then: 'every first-party Python implementation and runtime feature has a destination, dependency, owner, status, falsifiable acceptance and concrete evidence or an explicit remaining obligation.'
+  - id: A2
+    given: 'supported hook inputs and current governance'
+    when: 'the Rust client invokes the typed runtime'
+    then: 'native decisions, refusals, context and provenance match independently derived consumer contracts without the first-party per-handler interpreter fan-out.'
+  - id: A3
+    given: 'concurrent starters, missing heartbeats, version changes, crashes and interrupted requests'
+    when: 'runtime lifecycle transitions execute'
+    then: 'startup is single-owner, in-flight work survives idle eligibility, stale authority cannot permit operations, and interrupted outcomes are explicit without unsafe replay.'
+  - id: A4
+    given: 'first-party production and developer Python implementations'
+    when: 'the migration completes'
+    then: 'comparable Rust or typed TypeScript implementations and consumers replace them, packaging requires no first-party Python execution, and preserved foreign scripts or historical fixtures are explicitly classified.'
+  - id: A5
+    given: 'supported harnesses, stock guards, CLI authority and project overrides'
+    when: 'parity and installed native validation run'
+    then: 'required refusals, lifecycle operations, output precedence, audit custody and extension behavior remain supported with per-feature evidence.'
+  - id: A6
+    given: 'declared workloads and machine conditions'
+    when: 'baseline and candidate latency, memory, queueing and child-process behavior are measured'
+    then: 'the tracker records reproducible cold and warm distributions, bounded overload behavior and demonstrated removal of stock orchestration fan-out.'
+  - id: A7
+    given: 'built packages and prior installed generations'
+    when: 'installation, upgrade and rollback are exercised'
+    then: 'runtime and protocol identity, trust/adoption, immutable generation recovery and consumer documentation are verified before replacing the shared machine runtime.'
+observability:
+  - 'Per-request runtime identity, stage timings, terminal outcome, interrupted state and separate transport delivery observation.'
+rollback:
+  - 'Retain old immutable runtime generation and existing governance bytes until replacement installation and native refusal/lifecycle proof; rollback via supported adapters command.'
+non_functional:
+  security:
+    - 'Private authenticated local transport, bounded request sizes and deadlines, explicit client/session/project provenance and no stale-authority grant.'
+contracts:
+  - name: 'native-hook-protocol'
+    type: schema
+  - name: 'governance-and-hook-parity'
+    type: contract-test
