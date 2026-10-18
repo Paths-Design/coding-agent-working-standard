@@ -39,6 +39,14 @@ acceptance:
     then: >-
       typechecking and the existing valid and hostile turn-log contract fixtures
       pass without changing the producer schema
+  - id: A4
+    given: >-
+      the committed workspace lockfile contains Handlebars 4.7.9 through ts-jest and
+      the registry audit reports a critical finding
+    when: 'the compatible patched transitive release is selected'
+    then: >-
+      the lockfile uses Handlebars 4.7.10 without changing direct dependency ranges
+      and the workspace audit reports zero findings
 observability:
   - 'Retain raw local check output and remote run URLs with exact candidate identities outside tracked source'
 rollback:
