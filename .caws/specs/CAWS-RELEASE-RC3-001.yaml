@@ -4,7 +4,7 @@ mode: chore
 lifecycle_state: active
 worktree: release-12-2-rc3
 created_at: '2026-10-18T21:40:25.174Z'
-updated_at: '2026-10-18T21:41:28.006Z'
+updated_at: '2026-10-18T21:42:21.752Z'
 created_by_session: '01a150f0-0f54-78f1-902e-92e66137ba34'
 blast_radius:
   modules:
@@ -16,6 +16,7 @@ scope:
     - 'packages/caws-cli/package.json'
     - 'packages/caws-cli/CHANGELOG.md'
     - 'package-lock.json'
+    - packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts
   out: []
 invariants:
   - 'Publish only a fresh version whose package, lockfile, changelog and tag agree'
