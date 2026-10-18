@@ -1,4 +1,7 @@
-## [Unreleased]
+## [12.2.0-rc.3] (2026-10-18)
+
+Third release candidate for the shared machine runtime; targets the `next`
+channel.
 
 ### Behavior and workflow changes since rc.2
 
@@ -34,9 +37,27 @@
   typescript-eslint to eliminate the vulnerable development-tool chain.
   Dependency qualification requires both workspace and detached-consumer audits.
 
-Release qualification and publication are separate decisions. No version or
-channel is selected by this entry; see `docs/release-readiness.md` in the source
-repository for acceptance and evidence requirements.
+### Fixes and diagnostics
+
+- Preserve hook invocation progress, execution context and interrupted-handler
+  evidence; handle large audit payloads without broken-pipe noise.
+- Adopt the Sterling session renderer and accept nullable timestamps emitted
+  by its turn-log producer. Keep the optional token-class schema assertion
+  compatible with TypeScript's inferred JSON shape.
+- Resolve CLI and guard session identity consistently, propagate OpenCode's
+  session directory, and refuse unresolved relative Bash targets on surfaces
+  that supply a working directory.
+- Admit supported index-only and lockfile restores and completion of conflicted
+  lane merges. Refusal messages identify applicable provenance repairs and
+  distinguish gate waivers from hook reprieves.
+- Preserve narrow repair guidance in batch spec operations, support combined
+  spec amendments, and audit archived or absent spec paths correctly.
+- Add a session-scoped spec work surface, human duration flags and bounded Stop
+  refusal handling. Bound Git output capture for large gate indexes.
+
+Release qualification and publication are separate decisions. See
+`docs/release-readiness.md` in the source repository for acceptance and evidence
+requirements; this entry does not establish qualification or native adoption.
 
 ## [12.2.0-rc.2] (2026-09-16)
 
