@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-RUNTIME-001
 title: 'Replace Python runtime implementations with Rust and typed Node services'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-18T22:36:56.919Z'
+updated_at: '2026-10-18T22:37:06.653Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
