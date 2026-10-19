@@ -73,6 +73,7 @@ function gitPolicy(
   let subcommand = '';
   let commandOffset = words.length;
   const targets: { name: string; value: string }[] = [];
+  let metadataRoutingKnown = true;
   for (const [name, values] of env) {
     if (!name.startsWith('GIT_')) continue;
     if (name === 'GIT_PAGER' && values?.every((value) => value === '' || value === 'cat')) {
@@ -80,11 +81,14 @@ function gitPolicy(
       continue;
     }
     if (!['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR'].includes(name)) {
+      metadataRoutingKnown = false;
       ctx.reason(node, 'git-environment', `Unmodeled Git environment override ${name}.`);
       continue;
     }
-    if (!values) ctx.reason(node, 'git-environment', `Unknown Git environment override ${name}.`);
-    else for (const value of values) targets.push({ name, value });
+    if (!values) {
+      metadataRoutingKnown = false;
+      ctx.reason(node, 'git-environment', `Unknown Git environment override ${name}.`);
+    } else for (const value of values) targets.push({ name, value });
   }
   for (let i = 0; i < words.length; i++) {
     const word = words[i]!;
@@ -111,8 +115,10 @@ function gitPolicy(
     ) {
       const equal = word.indexOf('=');
       const value = equal < 0 ? words[++i] : word.slice(equal + 1);
-      if (value === undefined) ctx.reason(node, 'git-option', 'Missing Git metadata target.');
-      else
+      if (value === undefined) {
+        metadataRoutingKnown = false;
+        ctx.reason(node, 'git-option', 'Missing Git metadata target.');
+      } else
         targets.push({ name: word.startsWith('--git-dir') ? 'GIT_DIR' : 'GIT_WORK_TREE', value });
       continue;
     }
@@ -254,8 +260,22 @@ function gitPolicy(
       'git-effects-unresolved',
       'This Git subcommand has no admitted effect profile.'
     );
+  const metadata: {
+    subcommand: 'add' | 'commit';
+    overrides: Record<string, string>;
+    known: boolean;
+  } | null =
+    ctx.gitMetadata && (subcommand === 'add' || subcommand === 'commit')
+      ? {
+          subcommand,
+          overrides: {},
+          known: metadataRoutingKnown && cwd !== null && !state.filesystemChanged,
+        }
+      : null;
   for (const target of targets) {
+    if (metadata && target.name === 'GIT_INDEX_FILE') metadata.known = false;
     if (target.name === 'GIT_COMMON_DIR' && !isAbsolute(target.value)) {
+      if (metadata) metadata.known = false;
       ctx.reason(
         node,
         'git-target-unresolved',
@@ -265,9 +285,11 @@ function gitPolicy(
     }
     const resolved = resolveDirectory(target.value, cwd ?? state.cwd);
     if (!resolved) {
+      if (metadata) metadata.known = false;
       ctx.reason(node, 'git-target-unresolved', `${target.name} cannot be resolved.`);
       continue;
     }
+    if (metadata) metadata.overrides[target.name] = resolved;
     const own =
       inside(resolved, ctx.worktree) ||
       (target.name !== 'GIT_WORK_TREE' && ownMetadata !== null && inside(resolved, ownMetadata));
@@ -279,6 +301,12 @@ function gitPolicy(
         true
       );
   }
+  if (metadata)
+    ctx.gitMetadata?.({
+      node,
+      subcommand: metadata.subcommand,
+      input: metadata.known && cwd ? { cwd, overrides: metadata.overrides } : null,
+    });
   if (state.filesystemChanged)
     ctx.reason(
       node,

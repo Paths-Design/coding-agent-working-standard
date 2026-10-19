@@ -9,14 +9,90 @@ const RUNNER = String(async function main() {
   const { projectMutationView } = require(process.argv[1]);
   const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
   const output = [];
-  for (const request of input)
+  for (const request of input) {
+    const queries = [];
+    let next = 0;
+    const dependencies = request.metadataResults
+      ? {
+          gitContext: (input, onFailure) => {
+            queries.push({ cwd: input.cwd, overrides: { ...input.overrides } });
+            if (next >= request.metadataResults.length) throw Error('Unexpected metadata query');
+            const value = request.metadataResults[next++];
+            if (value === 'throw') throw Error('Controlled metadata resolver failure');
+            if (typeof value === 'string') {
+              onFailure(value);
+              return null;
+            }
+            if (value && Object.hasOwn(value, 'failure')) {
+              onFailure(value.failure);
+              return value.context;
+            }
+            return value;
+          },
+        }
+      : {};
     output.push({
       id: request.id,
       activeMutant: process.env.__STRYKER_ACTIVE_MUTANT__ ?? '',
-      view: await projectMutationView(request.input),
+      view: await projectMutationView(request.input, dependencies),
+      queries,
     });
+  }
   process.stdout.write(JSON.stringify(output));
 });
+// These Bash builtin names have no admitted projection profile. A name in a
+// data operand must not create an invocation with unmodeled effects.
+const BUILTINS = [
+  '.',
+  'alias',
+  'bg',
+  'bind',
+  'break',
+  'builtin',
+  'caller',
+  'compgen',
+  'complete',
+  'compopt',
+  'continue',
+  'declare',
+  'dirs',
+  'disown',
+  'enable',
+  'eval',
+  'exit',
+  'export',
+  'fc',
+  'fg',
+  'getopts',
+  'hash',
+  'help',
+  'history',
+  'jobs',
+  'kill',
+  'let',
+  'local',
+  'logout',
+  'mapfile',
+  'popd',
+  'pushd',
+  'readarray',
+  'readonly',
+  'return',
+  'set',
+  'shift',
+  'shopt',
+  'source',
+  'suspend',
+  'times',
+  'trap',
+  'type',
+  'typeset',
+  'ulimit',
+  'umask',
+  'unalias',
+  'unset',
+  'wait',
+];
 const CASES = [
   ['node-arrow-argument', "node -e 'const fn = x => x;'"],
   ['node-arrow-heredoc', "node <<'JS'\nconst fn = x => x;\nJS\n"],
@@ -60,9 +136,14 @@ const CASES = [
   ['python-import-path', "env PYTHONPATH=/tmp/untrusted python3 -c 'import os'"],
   ['unknown-cwd-nested', "bash -c 'cd /; touch relative'"],
   ['unknown-cwd-node', "node <<'JS'\nconsole.log(1);\nJS\n"],
+  ['sed-combined-edit', 'sed -ni -e p /foreign/out'],
+  ['uniq-output', 'uniq /dev/null /foreign/out'],
+  ['sort-output', 'sort -o /foreign/out /dev/null'],
+  ['all-builtins-as-data', "printf '%s' '" + BUILTINS.join(' ') + "'"],
+  ...BUILTINS.map((name) => ['builtin-profile-' + name, name + ' fixture']),
 ];
 describe('mutation view uses shared traversal without granting scope', () => {
-  let root, locations, requests, views;
+  let root, locations, requests, views, metadataCases, metadataQueries, metadataContext;
   const expand = (value) => value.replace(/\{\{([A-Z]+)\}\}/g, (_, key) => locations[key]);
   const view = (id) => views.get(id);
   const words = (id) =>
@@ -78,6 +159,18 @@ describe('mutation view uses shared traversal without granting scope', () => {
       MARKER: path.join(root, 'must-not-exist'),
     };
     for (const directory of [locations.PROJECT, locations.FOREIGN]) fs.mkdirSync(directory);
+    locations.META = path.join(root, 'metadata');
+    locations.COMMON = path.join(root, 'common');
+    locations.INDEX = path.join(locations.FOREIGN, 'index');
+    fs.mkdirSync(locations.META);
+    fs.mkdirSync(locations.COMMON);
+    fs.writeFileSync(locations.INDEX, '');
+    for (let i = 0; i < 9; i++) fs.mkdirSync(path.join(locations.PROJECT, 'context' + i));
+    metadataContext = {
+      directory: fs.realpathSync.native(locations.META),
+      common: fs.realpathSync.native(locations.COMMON),
+      worktree: fs.realpathSync.native(locations.PROJECT),
+    };
     requests = CASES.map(([id, command]) => ({
       id,
       input: {
@@ -86,6 +179,170 @@ describe('mutation view uses shared traversal without granting scope', () => {
         project: locations.PROJECT,
       },
     }));
+    const query = { cwd: fs.realpathSync.native(locations.PROJECT), overrides: {} };
+    const contextQuery = (index) => ({
+      cwd: fs.realpathSync.native(path.join(locations.PROJECT, 'context' + index)),
+      overrides: {},
+    });
+    metadataCases = [
+      {
+        id: 'metadata-add',
+        command: 'git add -- file',
+        plan: [metadataContext],
+        queries: [query],
+        rows: ['add'],
+      },
+      {
+        id: 'metadata-commit',
+        command: 'git commit -m note',
+        plan: [metadataContext],
+        queries: [query],
+        rows: ['commit'],
+      },
+      { id: 'metadata-read-only', command: 'git status', plan: [], queries: [], rows: [] },
+      {
+        id: 'metadata-opaque-argv',
+        command: 'git add "$FILE"',
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'git-unknown-argument',
+      },
+      {
+        id: 'metadata-null-cwd',
+        command: "git -C '{{PROJECT}}' add -- file",
+        cwd: null,
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
+      {
+        id: 'metadata-missing-cwd',
+        command: "git -C '{{PROJECT}}/missing' add -- file",
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
+      {
+        id: 'metadata-missing-override',
+        command: "GIT_DIR='{{PROJECT}}/missing' git add -- file",
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
+      {
+        id: 'metadata-redirected-index',
+        command: "GIT_INDEX_FILE='{{INDEX}}' git add -- file",
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
+      {
+        id: 'metadata-earlier-effects',
+        command: 'printf x > note; git add -- file',
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
+      {
+        id: 'metadata-cache-shared-jobs',
+        command: "git add -- one; bash -c 'git commit -m two'; git add -- three",
+        plan: [metadataContext],
+        queries: [query],
+        rows: ['add', 'add', 'commit'],
+      },
+      {
+        id: 'metadata-timeout-cached',
+        command: 'git add -- one; git commit -m two',
+        plan: ['git-discovery-timeout'],
+        queries: [query],
+        rows: [],
+        code: 'metadata-discovery-timeout',
+        occurrences: 2,
+      },
+      {
+        id: 'metadata-protocol',
+        command: 'git add -- file',
+        plan: ['git-discovery-protocol'],
+        queries: [query],
+        rows: [],
+        code: 'metadata-discovery-failure',
+      },
+      {
+        id: 'metadata-null',
+        command: 'git add -- file',
+        plan: [null],
+        queries: [query],
+        rows: [],
+        code: 'metadata-discovery-failure',
+      },
+      {
+        id: 'metadata-bare',
+        command: 'git add -- file',
+        plan: [{ ...metadataContext, worktree: null }],
+        queries: [query],
+        rows: [],
+        code: 'metadata-discovery-failure',
+      },
+      {
+        id: 'metadata-exception',
+        command: 'git add -- file',
+        plan: ['throw'],
+        queries: [query],
+        rows: [],
+        code: 'metadata-discovery-failure',
+      },
+      {
+        id: 'metadata-budget',
+        command: Array.from(
+          { length: 9 },
+          (_, index) => "git -C '{{PROJECT}}/context" + index + "' add -- file"
+        ).join('; '),
+        plan: Array(8).fill(metadataContext),
+        queries: Array.from({ length: 8 }, (_, index) => contextQuery(index)),
+        rows: Array(8).fill('add'),
+        code: 'metadata-discovery-budget',
+      },
+      {
+        id: 'metadata-explicit-routing',
+        command: "GIT_DIR='{{META}}' git add -- file",
+        plan: [metadataContext],
+        queries: [{ ...query, overrides: { GIT_DIR: metadataContext.directory } }],
+        rows: ['add'],
+      },
+      ...['directory', 'common', 'worktree'].map((field) => ({
+        id: 'metadata-relative-' + field,
+        command: 'git add -- file',
+        plan: [{ ...metadataContext, [field]: 'relative-coordinate' }],
+        queries: [query],
+        rows: [],
+        code: 'metadata-discovery-failure',
+      })),
+      {
+        id: 'metadata-contradictory-result',
+        command: 'git add -- file',
+        plan: [{ failure: 'git-discovery-protocol', context: metadataContext }],
+        queries: [query],
+        rows: [],
+        code: 'metadata-discovery-failure',
+      },
+    ];
+    requests.push(
+      ...metadataCases.map((fixture) => ({
+        id: fixture.id,
+        metadataResults: fixture.plan,
+        input: {
+          command: expand(fixture.command),
+          cwd: fixture.cwd === null ? null : locations.PROJECT,
+          project: locations.PROJECT,
+        },
+      }))
+    );
     const active = String(
       globalThis.__stryker__?.activeMutant ?? process.env.__STRYKER_ACTIVE_MUTANT__ ?? ''
     );
@@ -110,12 +367,69 @@ describe('mutation view uses shared traversal without granting scope', () => {
         JSON.stringify({ status: child.status, error: child.error?.message, stderr: child.stderr })
       );
     const batch = JSON.parse(child.stdout);
-    expect(batch).toHaveLength(CASES.length);
+    expect(batch).toHaveLength(requests.length);
     for (const item of batch) expect(item.activeMutant).toBe(active);
     views = new Map(batch.map((item) => [item.id, item.view]));
+    metadataQueries = new Map(batch.map((item) => [item.id, item.queries]));
   });
   afterAll(() => {
     if (root) fs.rmSync(root, { recursive: true, force: true });
+  });
+  test('Git metadata writes preserve actual coordinates, bounded discovery, and source custody', () => {
+    for (const fixture of metadataCases) {
+      const actual = view(fixture.id);
+      const command = requests.find((item) => item.id === fixture.id).input.command;
+      expect(metadataQueries.get(fixture.id)).toEqual(fixture.queries);
+      expect(actual.gitMetadata.map((row) => row.subcommand)).toEqual(fixture.rows);
+      for (const row of actual.gitMetadata) {
+        expect(row.directory).toBe(metadataContext.directory);
+        expect(row.common).toBe(metadataContext.common);
+        expect(row.worktree).toBe(metadataContext.worktree);
+        expect(Number.isInteger(row.start)).toBe(true);
+        expect(row.start).toBeGreaterThanOrEqual(0);
+        expect(Number.isInteger(row.end)).toBe(true);
+        expect(row.end).toBeGreaterThan(row.start);
+        expect(row.end).toBeLessThanOrEqual(command.length);
+      }
+      if (fixture.code) {
+        expect(actual.issues.map((item) => item.code)).toContain(fixture.code);
+        if (fixture.occurrences !== undefined) {
+          const failures = actual.issues.filter((item) => item.code === fixture.code);
+          expect(failures).toHaveLength(fixture.occurrences);
+          expect(failures.map((item) => command.slice(item.start, item.end))).toEqual([
+            'git add -- one',
+            'git commit -m two',
+          ]);
+        }
+      } else expect(actual.issues).toEqual([]);
+      if (fixture.id === 'metadata-add' || fixture.id === 'metadata-commit') {
+        expect(actual.gitMetadata[0].start).toBe(0);
+        expect(actual.gitMetadata[0].end).toBe(command.length);
+      }
+    }
+    const nested = view('metadata-cache-shared-jobs');
+    const nestedCommand = requests.find((item) => item.id === 'metadata-cache-shared-jobs').input
+      .command;
+    expect(nested.gitMetadata.map((row) => nestedCommand.slice(row.start, row.end))).toEqual([
+      'git add -- one',
+      'git add -- three',
+      "'git commit -m two'",
+    ]);
+    const budget = view('metadata-budget');
+    const budgetCommand = requests.find((item) => item.id === 'metadata-budget').input.command;
+    expect(budget.gitMetadata.map((row) => budgetCommand.slice(row.start, row.end))).toEqual(
+      Array.from(
+        { length: 8 },
+        (_, i) => "git -C '" + locations.PROJECT + '/context' + i + "' add -- file"
+      )
+    );
+    const exhausted = budget.issues.filter((item) => item.code === 'metadata-discovery-budget');
+    expect(exhausted).toHaveLength(1);
+    expect(budgetCommand.slice(exhausted[0].start, exhausted[0].end)).toBe(
+      "git -C '" + locations.PROJECT + "/context8' add -- file"
+    );
+    expect(metadataQueries.get('metadata-redirected-index')).toEqual([]);
+    expect(view('metadata-redirected-index').gitMetadata).toEqual([]);
   });
   test.each(CASES)('%s preserves source spans and the non-authoritative carrier', (id) => {
     const actual = view(id),
@@ -132,7 +446,12 @@ describe('mutation view uses shared traversal without granting scope', () => {
         id.startsWith('unknown-cwd-') ? null : fs.realpathSync.native(locations.PROJECT)
       );
     }
-    for (const item of [...actual.tokens, ...actual.issues, ...actual.interpreters]) {
+    for (const item of [
+      ...actual.tokens,
+      ...actual.issues,
+      ...actual.interpreters,
+      ...actual.gitMetadata,
+    ]) {
       expect(Number.isInteger(item.start)).toBe(true);
       expect(item.start).toBeGreaterThanOrEqual(0);
       expect(item.end).toBeGreaterThanOrEqual(item.start);
@@ -229,6 +548,9 @@ describe('mutation view uses shared traversal without granting scope', () => {
     ['posix-shell', 'mutation-shell-dialect'],
     ['node-preload', 'environment-change'],
     ['python-import-path', 'environment-change'],
+    ['sed-combined-edit', 'sed-option'],
+    ['uniq-output', 'reader-output'],
+    ['sort-output', 'reader-option'],
   ])('%s exposes unresolved facts', (id, code) => expect(codes(id)).toContain(code));
   test('input and descriptor duplication do not become file writes', () => {
     expect(
@@ -267,5 +589,10 @@ describe('mutation view uses shared traversal without granting scope', () => {
     expect(view('unknown-cwd-node').interpreters).toHaveLength(1);
     expect(view('unknown-cwd-node').interpreters[0].cwd).toBe(null);
     expect(view('unknown-cwd-node').issues).toEqual([]);
+  });
+  test.each(BUILTINS)('%s keeps its unprofiled builtin limitation explicit', (name) => {
+    expect(codes('builtin-profile-' + name)).toContain('mutation-shell-builtin');
+    expect(view('all-builtins-as-data').issues).toEqual([]);
+    expect(words('all-builtins-as-data')).toContain(BUILTINS.join(' '));
   });
 });

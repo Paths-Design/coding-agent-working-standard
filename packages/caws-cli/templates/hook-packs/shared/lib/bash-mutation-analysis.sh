@@ -6,6 +6,8 @@
 # Syntax observations only. Mutation roles and ownership policy remain downstream.
 CAWS_AST_VALUE=(); CAWS_AST_KIND=(); CAWS_AST_DYNAMIC=(); CAWS_AST_RESOLUTION=()
 CAWS_AST_UNREPR=(); CAWS_AST_CWD=(); CAWS_AST_ISSUES=(); CAWS_AST_LITERALS=()
+CAWS_AST_GIT_SUBCOMMAND=(); CAWS_AST_GIT_DIRECTORY=(); CAWS_AST_GIT_COMMON=()
+CAWS_AST_GIT_WORKTREE=(); CAWS_AST_GIT_START=(); CAWS_AST_GIT_END=()
 CAWS_BASH_ANALYSIS_READY=0
 
 _caws_ast_payload() {
@@ -93,7 +95,10 @@ caws_bash_prepare_analysis() {
   fi
   CAWS_AST_VALUE=(); CAWS_AST_KIND=(); CAWS_AST_DYNAMIC=(); CAWS_AST_RESOLUTION=()
   CAWS_AST_UNREPR=(); CAWS_AST_CWD=(); CAWS_AST_ISSUES=(); CAWS_AST_LITERALS=()
+  CAWS_AST_GIT_SUBCOMMAND=(); CAWS_AST_GIT_DIRECTORY=(); CAWS_AST_GIT_COMMON=()
+  CAWS_AST_GIT_WORKTREE=(); CAWS_AST_GIT_START=(); CAWS_AST_GIT_END=()
   local tag value kind dynamic resolution unrepr coordinate start end language argc count isnull verbs payload
+  local subcommand directory common worktree
   local complete=0 malformed=0
   local -a arguments=()
   while IFS= read -r -d '' tag; do
@@ -110,6 +115,17 @@ caws_bash_prepare_analysis() {
       issue)
         IFS= read -r -d '' value || { malformed=1; break; }
         CAWS_AST_ISSUES+=( "$value" ) ;;
+      git_metadata)
+        IFS= read -r -d '' subcommand && IFS= read -r -d '' directory &&
+        IFS= read -r -d '' common && IFS= read -r -d '' worktree &&
+        IFS= read -r -d '' start && IFS= read -r -d '' end || { malformed=1; break; }
+        if [[ "$directory$common$worktree" == *$'\n'* || "$directory$common$worktree" == *$'\r'* || "$directory$common$worktree" == *$'\t'* ]]; then
+          CAWS_AST_ISSUES+=( git_metadata_unrepresentable )
+        else
+          CAWS_AST_GIT_SUBCOMMAND+=( "$subcommand" ); CAWS_AST_GIT_DIRECTORY+=( "$directory" )
+          CAWS_AST_GIT_COMMON+=( "$common" ); CAWS_AST_GIT_WORKTREE+=( "$worktree" )
+          CAWS_AST_GIT_START+=( "$start" ); CAWS_AST_GIT_END+=( "$end" )
+        fi ;;
       interpreter)
         IFS= read -r -d '' language && IFS= read -r -d '' coordinate &&
         IFS= read -r -d '' argc || { malformed=1; break; }
@@ -136,9 +152,11 @@ caws_bash_prepare_analysis() {
     def span: (.start|type)=="number" and (.end|type)=="number" and
       .start>=0 and .end>=.start and .start==(.start|floor) and .end==(.end|floor);
     def coordinate: (.cwd==null and $unknown_cwd) or ((.cwd|type)=="string" and (.cwd|startswith("/")));
+    def absolute: type=="string" and startswith("/");
     def valid:
       type=="object" and .schema=="caws.shell_mutation_view.v1" and
       (.tokens|type)=="array" and (.issues|type)=="array" and (.interpreters|type)=="array" and
+      (.gitMetadata|type)=="array" and
       all(.tokens[]; (.value|type)=="string" and
         (.kind as $k | ["word","op","redirect","input_redirect","unsupported_nesting"]|index($k))!=null and
         (.dynamic|type)=="boolean" and (.resolution=="" or .resolution=="runtime") and
@@ -150,6 +168,8 @@ caws_bash_prepare_analysis() {
         (.argv|type)=="array" and (.argv|length)>0 and all(.argv[]; .==null or type=="string") and
         (.payloads|type)=="array" and all(.payloads[];
           (.text|type)=="string" and (.origin=="argument" or .origin=="heredoc") and span)) and
+      all(.gitMetadata[]; (.subcommand=="add" or .subcommand=="commit") and
+        (.directory|absolute) and (.common|absolute) and (.worktree|absolute) and span) and
       all(..|strings; contains("\u0000")|not);
     def frame: .[] | tostring + "\u0000";
     if length!=1 then error("one mutation-view document required") else .[0] end |
@@ -161,6 +181,7 @@ caws_bash_prepare_analysis() {
         (["interpreter",.language,(.cwd//""),(.argv|length)]|frame),
         (.argv[] | [(if .==null then 1 else 0 end),(.//"")] | frame),
         ([(.payloads|length)]|frame), (.payloads[] | [.text]|frame)),
+      (.gitMetadata[] | ["git_metadata",.subcommand,.directory,.common,.worktree,.start,.end]|frame),
       (["complete"]|frame)
     else error("invalid caws.shell_mutation_view.v1 response") end
   ' <<< "$json")

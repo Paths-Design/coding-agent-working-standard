@@ -125,6 +125,11 @@ try {
   fs.writeFileSync(
     path.join(project, '.caws/worktrees.json'),
     JSON.stringify({
+      own: {
+        name: 'own',
+        path: own,
+        owner: { session_id: 'package-fixture' },
+      },
       foreign: {
         name: 'foreign',
         spec_id: 'FOREIGN',
@@ -172,6 +177,11 @@ try {
   assert.equal(fs.existsSync(marker), false);
   assert.equal(fs.existsSync(path.join(foreign, 'never-written')), false);
   assert.equal(fs.existsSync(path.join(foreign, 'nested-never-written')), false);
+  const ownMetadata = writeGuard('git add -- package-never-written');
+  assert.equal(ownMetadata.status, 0, ownMetadata.stderr);
+  const foreignMetadata = writeGuard(`git -C '${foreign}' add -- package-never-written`);
+  assert.equal(foreignMetadata.status, 2, foreignMetadata.stderr);
+  assert.match(foreignMetadata.stderr, /Git metadata for worktree 'foreign'/);
   console.log(
     JSON.stringify({
       tarballSha256,
@@ -184,6 +194,8 @@ try {
       packagedWriteGuardBenign: benignInterpreter.status,
       packagedWriteGuardForeign: finiteForeign.status,
       packagedWriteGuardNestedForeign: nestedForeign.status,
+      packagedWriteGuardOwnMetadata: ownMetadata.status,
+      packagedWriteGuardForeignMetadata: foreignMetadata.status,
     })
   );
 } finally {

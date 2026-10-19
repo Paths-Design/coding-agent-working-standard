@@ -99,6 +99,14 @@ test('an actual Node payload still blocks a foreign literal write', () => {
   );
   expect(fs.existsSync(path.join(fx.sibling, 'x.txt'))).toBe(false);
 });
+test.each([
+  ['combined sed in-place options', (target) => 'sed -ni -e p ' + quote(target), 'sed-option'],
+  ['uniq output operand', (target) => 'uniq /dev/null ' + quote(target), 'reader-output'],
+  ['sort output option', (target) => 'sort -o ' + quote(target) + ' /dev/null', 'reader-option'],
+])('%s cannot discard an unmodeled write role', (_label, command, reason) => {
+  refused(command(path.join(fx.sibling, 'out')), reason);
+  expect(fs.existsSync(path.join(fx.sibling, 'out'))).toBe(false);
+});
 test('a shell-fed heredoc retains its real shell write', () => {
   refused("bash <<'SH'\necho x > " + fx.sibling + '/x.txt\nSH', fx.sibling);
 });
@@ -201,8 +209,196 @@ function protocolToken(value, kind = 'word') {
   };
 }
 function protocolView(tokens) {
-  return { schema: 'caws.shell_mutation_view.v1', tokens, issues: [], interpreters: [] };
+  return {
+    schema: 'caws.shell_mutation_view.v1',
+    tokens,
+    issues: [],
+    interpreters: [],
+    gitMetadata: [],
+  };
 }
+function git(command, cwd = fx.project) {
+  return execFileSync('git', command, {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
+  }).trim();
+}
+function metadataWorktrees() {
+  git([
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-q',
+    '--allow-empty',
+    '-m',
+    'fixture',
+  ]);
+  const own = path.join(fx.project, '.caws/worktrees/own');
+  fs.rmdirSync(fx.foreign);
+  git(['worktree', 'add', '-q', '-b', 'fixture-foreign', fx.foreign]);
+  git(['worktree', 'add', '-q', '-b', 'fixture-own', own]);
+  const registry = JSON.parse(fs.readFileSync(path.join(fx.project, '.caws/worktrees.json')));
+  registry.own = { name: 'own', path: own, owner: { session_id: 'consumer-fixture-session' } };
+  fs.writeFileSync(path.join(fx.project, '.caws/worktrees.json'), JSON.stringify(registry));
+  return { own, registry };
+}
+test.each(['add -- new-file', 'commit --allow-empty -m note'])(
+  'Git metadata %s admits canonical and owned contexts but refuses foreign ownership',
+  (operation) => {
+    const { own } = metadataWorktrees();
+    for (const cwd of [fx.project, own]) {
+      const result = guard('git -C ' + quote(cwd) + ' ' + operation);
+      expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+    }
+    const foreign = refused(
+      'git -C ' + quote(fx.foreign) + ' ' + operation,
+      "Git metadata for worktree 'foreign'"
+    );
+    expect(foreign.stderr).toContain('DIFFERENT session');
+    refused('git -C ' + quote(fx.sibling) + ' ' + operation, 'DIFFERENT repository');
+    // Submitted operations are never executed by preflight.
+    expect(git(['log', '--format=%s'])).toBe('fixture');
+    expect(git(['status', '--porcelain'], own)).toBe('');
+  }
+);
+test('Git metadata uses the actual common directory and preserves stronger foreign facts', () => {
+  const { own } = metadataWorktrees();
+  const normal = guard('git -C ' + quote(fx.sibling) + ' status --short');
+  expect(normal.status).toBe(0);
+  const mixed = refused(
+    'git -C ' + quote(fx.foreign) + ' add -- file; touch "$UNKNOWN"',
+    'Git metadata'
+  );
+  expect(mixed.stderr).toContain('DIFFERENT session');
+  const view = protocolView([]);
+  view.gitMetadata.push({
+    subcommand: 'add',
+    directory: path.join(fx.project, '.git'),
+    common: path.join(fx.sibling, '.git'),
+    worktree: own,
+    start: 0,
+    end: 0,
+  });
+  const result = guard('fixture', protocolBackend(JSON.stringify(view)));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('DIFFERENT repository');
+});
+test.each(['pass:no-active-worktrees', 'git_metadata:pass:unclaimed', 'git_metadata:unknown:x'])(
+  'old or incompatible metadata oracle cannot grant admission: %s',
+  (response) => {
+    fs.writeFileSync(
+      path.join(fx.hooks, 'lib/worktree-claim-oracle.cjs'),
+      'process.stdout.write(' + JSON.stringify(response + '\n') + ');'
+    );
+    refused('git add -- file', 'git-metadata-oracle-protocol');
+  }
+);
+test('a protective metadata oracle result survives a later nonzero failure', () => {
+  fs.writeFileSync(
+    path.join(fx.hooks, 'lib/worktree-claim-oracle.cjs'),
+    'process.stdout.write("git_metadata:block_foreign_worktree:foreign:other\\nlate failure\\n"); process.exitCode=1;'
+  );
+  refused('git add -- file', "Git metadata for worktree 'foreign'");
+});
+test.each(['unregistered', 'missing-owner', 'duplicate', 'missing-session', 'missing-registry'])(
+  'Git metadata refuses uncertain ownership: %s',
+  (kind) => {
+    const { own, registry } = metadataWorktrees();
+    if (kind === 'unregistered') delete registry.own;
+    if (kind === 'missing-owner') delete registry.own.owner;
+    if (kind === 'duplicate') registry.alias = { ...registry.own, name: 'alias' };
+    fs.writeFileSync(path.join(fx.project, '.caws/worktrees.json'), JSON.stringify(registry));
+    if (kind === 'missing-registry') fs.unlinkSync(path.join(fx.project, '.caws/worktrees.json'));
+    const result = guard(
+      'git -C ' + quote(own) + ' add -- file',
+      kind === 'missing-session'
+        ? {
+            HOOK_SESSION_ID: '',
+            CAWS_SESSION_ID: '',
+            CODEX_THREAD_ID: '',
+            CLAUDE_SESSION_ID: '',
+            CLAUDE_CODE_SESSION_ID: '',
+            QWEN_CODE_SESSION_ID: '',
+            DSH_SESSION_ID: '',
+            CURSOR_TRACE_ID: '',
+            CAWS_CALLER_PID: '',
+          }
+        : {}
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('Git metadata ownership could not be established');
+  }
+);
+test('Git metadata registry identity uses physical paths through an alias', () => {
+  const { own, registry } = metadataWorktrees();
+  const alias = path.join(fx.root, 'own-alias');
+  fs.symlinkSync(own, alias);
+  registry.own.path = alias;
+  fs.writeFileSync(path.join(fx.project, '.caws/worktrees.json'), JSON.stringify(registry));
+  expect(guard('git -C ' + quote(own) + ' add -- file').status).toBe(0);
+});
+test.each(['directory', 'common'])(
+  'external unmarked Git metadata %s needs an explicit ownership answer',
+  (field) => {
+    const outside = path.join(fx.root, 'external-metadata');
+    fs.mkdirSync(outside);
+    const view = protocolView([]);
+    view.gitMetadata.push({
+      subcommand: 'add',
+      directory: path.join(fx.project, '.git'),
+      common: path.join(fx.project, '.git'),
+      worktree: fx.project,
+      start: 0,
+      end: 0,
+      [field]: outside,
+    });
+    const result = guard('fixture', protocolBackend(JSON.stringify(view)));
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('metadata-outside-project');
+  }
+);
+test.each(['directory', 'common', 'worktree'])(
+  'unrepresentable Git metadata %s is never split into a grant',
+  (field) => {
+    const view = protocolView([]);
+    view.gitMetadata.push({
+      subcommand: 'add',
+      directory: path.join(fx.project, '.git'),
+      common: path.join(fx.project, '.git'),
+      worktree: fx.project,
+      start: 0,
+      end: 0,
+      [field]: fx.project + '/line\nfield\t',
+    });
+    const result = guard('fixture', protocolBackend(JSON.stringify(view)));
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('git_metadata_unrepresentable');
+  }
+);
+test('metadata protocol requires the channel even for a read-only result', () => {
+  const view = protocolView([]);
+  expect(guard('fixture', protocolBackend(JSON.stringify(view))).status).toBe(0);
+  delete view.gitMetadata;
+  const result = guard('fixture', protocolBackend(JSON.stringify(view)));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('invalid or incomplete contract');
+});
+test('metadata discovery cannot borrow an unknown cwd or ignore index routing', () => {
+  const unknown = guard('git add -- file', { HOOK_CWD: '' });
+  expect(unknown.status).toBe(2);
+  expect(unknown.stderr).toContain('metadata-coordinate-unresolved');
+  refused(
+    'GIT_INDEX_FILE=' + quote(path.join(fx.sibling, 'index')) + ' git add -- file',
+    'metadata-coordinate-unresolved'
+  );
+});
+test('missing ownership infrastructure in a governed project fails closed', () => {
+  fs.unlinkSync(path.join(fx.hooks, 'lib/worktree-claim-oracle.cjs'));
+  refused('git add -- file', 'Ownership infrastructure unavailable');
+});
 test('NUL framing preserves an empty BSD sed suffix without inventing a target', () => {
   const view = protocolView(
     ['sed', '-i', '', 's/a/b/', path.join(fx.foreign, 'out')].map((value) => protocolToken(value))

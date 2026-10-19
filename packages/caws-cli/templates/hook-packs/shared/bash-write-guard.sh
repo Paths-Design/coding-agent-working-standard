@@ -114,8 +114,6 @@ if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
 fi
 
 CAWS_CLAIM_ORACLE="$SCRIPT_DIR/lib/worktree-claim-oracle.cjs"
-[[ -f "$CAWS_CLAIM_ORACLE" ]] || exit 0
-command -v node >/dev/null 2>&1 || exit 0
 
 # Resolve canonical root.
 if command -v resolve_canonical_dir >/dev/null 2>&1; then
@@ -127,7 +125,11 @@ fi
 # A logical alias such as /tmp or a symlinked project root is still this repo.
 PROJECT_DIR="$(_realpath "$PROJECT_DIR")"
 
-[[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] || exit 0
+[[ -d "$PROJECT_DIR/.caws" ]] || exit 0
+if [[ ! -f "$CAWS_CLAIM_ORACLE" ]] || ! command -v node >/dev/null 2>&1; then
+  echo '[bash-write-guard] Ownership infrastructure unavailable in a governed project; failing closed. Restore the shared runtime with caws init adapters install.' >&2
+  exit 2
+fi
 
 AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 
@@ -375,7 +377,7 @@ while IFS= read -r cand; do
       *) _ORACLE_PATH="$cand"; _CWD_UNRESOLVED=1 ;;
     esac
   fi
-  out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
+  out="$(CAWS_ORACLE_OPERATION=file CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
     CAWS_ORACLE_REL_PATH="$_ORACLE_PATH" \
     CAWS_ORACLE_CWD_UNRESOLVED="$_CWD_UNRESOLVED" \
@@ -416,6 +418,72 @@ while IFS= read -r cand; do
       ;;
   esac
 done < <(extract_targets "$COMMAND"; scan_interpreter_targets "$COMMAND")
+
+# Git add/commit write Git metadata rather than a payload FILE. Validate both
+# metadata roots at the repository boundary, then query the actual worktree's
+# owner through a distinct, capability-namespaced oracle operation.
+_GM_INDEX=0; _GM_SEEN_WORKTREES=()
+while [[ $_GM_INDEX -lt ${#CAWS_AST_GIT_WORKTREE[@]} ]]; do
+  _GM_WORKTREE="${CAWS_AST_GIT_WORKTREE[$_GM_INDEX]}"
+  _GM_FOREIGN=''
+  for _GM_PATH in "${CAWS_AST_GIT_DIRECTORY[$_GM_INDEX]}" "${CAWS_AST_GIT_COMMON[$_GM_INDEX]}"; do
+    if ! _GM_PHYSICAL="$(_realpath "$_GM_PATH")" || [[ "$_GM_PHYSICAL" != /* ]]; then
+      escalate ask metadata-path-unresolved ask_git_metadata
+      continue
+    fi
+    if [[ "$_GM_PHYSICAL" == *$'\n'* || "$_GM_PHYSICAL" == *$'\r'* || "$_GM_PHYSICAL" == *$'\t'* ]]; then
+      escalate ask metadata-path-unrepresentable ask_git_metadata
+      continue
+    fi
+    _GM_REPO="$(foreign_repo_root "$_GM_PHYSICAL")"
+    [[ -z "$_GM_REPO" ]] || _GM_FOREIGN="$_GM_REPO"
+    case "$_GM_PHYSICAL" in
+      "$PROJECT_DIR"|"${PROJECT_DIR%/}/"*) ;;
+      *) escalate ask metadata-outside-project ask_git_metadata ;;
+    esac
+  done
+  _GM_INDEX=$((_GM_INDEX+1))
+  if [[ -n "$_GM_FOREIGN" ]]; then
+    escalate block "$_GM_FOREIGN" block_foreign_repo
+    continue
+  fi
+  _GM_SEEN=0
+  for _GM_PRIOR in ${_GM_SEEN_WORKTREES[@]+"${_GM_SEEN_WORKTREES[@]}"}; do
+    [[ "$_GM_PRIOR" != "$_GM_WORKTREE" ]] || _GM_SEEN=1
+  done
+  [[ $_GM_SEEN == 0 ]] || continue
+  _GM_SEEN_WORKTREES+=( "$_GM_WORKTREE" )
+  _GM_STATUS=0
+  _GM_OUT="$(CAWS_ORACLE_OPERATION=git-metadata CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
+    CAWS_ORACLE_CURRENT_BRANCH='' CAWS_ORACLE_REL_PATH='' \
+    CAWS_ORACLE_GIT_WORKTREE="$_GM_WORKTREE" CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
+    node "$CAWS_CLAIM_ORACLE" 2>&1)" || _GM_STATUS=$?
+  _GM_FIRST="${_GM_OUT%%$'\n'*}"
+  if [[ "$_GM_FIRST" != git_metadata:* || "$_GM_FIRST" == *$'\r'* || "$_GM_FIRST" == *$'\t'* ]]; then
+    escalate ask git-metadata-oracle-protocol ask_git_metadata
+    continue
+  fi
+  _GM_VERDICT="${_GM_FIRST#git_metadata:}"
+  _GM_OUTCOME="${_GM_VERDICT%%:*}"; _GM_DETAIL="${_GM_VERDICT#*:}"
+  case "$_GM_OUTCOME" in
+    block_foreign_worktree)
+      case "$_GM_DETAIL" in
+        ?*:?*) escalate block "$_GM_DETAIL" block_git_metadata ;;
+        *) escalate ask git-metadata-oracle-protocol ask_git_metadata ;;
+      esac ;;
+    pass)
+      if [[ $_GM_STATUS != 0 || "$_GM_OUT" != "$_GM_FIRST" ]]; then
+        escalate ask git-metadata-oracle-protocol ask_git_metadata
+      else
+        case "$_GM_DETAIL" in
+          git-canonical-metadata|owner-self:?*) ;;
+          *) escalate ask git-metadata-oracle-protocol ask_git_metadata ;;
+        esac
+      fi ;;
+    ask_uncertain|error_fail_closed) escalate ask "$_GM_DETAIL" ask_git_metadata ;;
+    *) escalate ask git-metadata-oracle-protocol ask_git_metadata ;;
+  esac
+done
 
 # --- DYNAMIC operands -------------------------------------------------------
 # A dynamic operand (rm core/*.py) names a file-scoped mutation whose target
@@ -533,7 +601,11 @@ case "$WORST" in
       echo "  Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this." >&2
       exit 2
     fi
-    if [[ "$WORST_KIND" == "block_foreign_worktree" ]]; then
+    if [[ "$WORST_KIND" == "block_git_metadata" ]]; then
+      _OWN_WT="${WORST_DETAIL%%:*}"
+      echo "[$_BG_ID] BLOCKED: this Bash command writes Git metadata for worktree '$_OWN_WT', owned by a DIFFERENT session." >&2
+      echo '  Run the operation through the session that owns that worktree.' >&2
+    elif [[ "$WORST_KIND" == "block_foreign_worktree" ]]; then
       _OWN_WT="$(printf '%s' "$WORST_DETAIL" | cut -d: -f1)"
       echo "[$_BG_ID] BLOCKED: this Bash command mutates worktree '$_OWN_WT''s payload (.caws/worktrees/$_OWN_WT/...), owned by a DIFFERENT session." >&2
       echo "  A Bash mutation of another session's worktree files is the same isolation breach as a foreign Write/Edit — it is blocked at the same boundary." >&2
@@ -582,6 +654,8 @@ case "$WORST" in
         _REASON="[$_BG_ID] ask_unsupported_nesting: $WORST_DETAIL. The nested command is outside this recognizer's parser envelope, so any write it performs was never adjudicated. Approve only if you know what the nested command writes." ;;
       ask_dynamic_unconfined|ask_dynamic_unresolved)
         _REASON="[$_BG_ID] $WORST_KIND: $WORST_DETAIL. The target is resolved at EXECUTION time, so ownership cannot be decided from the command text. Approve only if every path it can resolve to is yours to mutate." ;;
+      ask_git_metadata)
+        _REASON="[$_BG_ID] Git metadata ownership could not be established ($WORST_DETAIL). Approve only if the repository metadata and working tree belong to this session." ;;
       *)
         _REASON="[$_BG_ID] This Bash command targets a worktree-claimed or worktree-payload path and ownership could not be confirmed ($WORST_KIND:$WORST_DETAIL). Approve only if you own the target worktree; otherwise route the mutation through the owning worktree's session." ;;
     esac

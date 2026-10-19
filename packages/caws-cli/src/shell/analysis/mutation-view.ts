@@ -1,7 +1,9 @@
-import { basename } from 'node:path';
+import { basename, isAbsolute } from 'node:path';
 import { analyzeCommand } from './analyze';
+import { resolveGitContext } from './git-context';
+import type { GitContext, GitContextResolver } from './git-context';
 import type { Command, Redirection } from './parser-types';
-import type { Argument, Location, State, Value } from './types';
+import type { Argument, GitMetadataObservation, Location, State, Value } from './types';
 
 export interface MutationViewRequest {
   command: string;
@@ -46,6 +48,18 @@ export interface MutationView {
   tokens: MutationToken[];
   issues: MutationIssue[];
   interpreters: MutationInterpreter[];
+  gitMetadata: GitMetadataWrite[];
+}
+export interface GitMetadataWrite {
+  subcommand: 'add' | 'commit';
+  directory: string;
+  common: string;
+  worktree: string;
+  start: number;
+  end: number;
+}
+export interface MutationViewDependencies {
+  gitContext?: GitContextResolver;
 }
 type Invocation = {
   node: Command;
@@ -129,13 +143,6 @@ const POLICY_ONLY = new Set([
   'git-discovery-unresolved',
   'git-discovery-failed',
   'git-discovery-protocol',
-  'git-option',
-  'git-global-option',
-  'git-option-unmodeled',
-  'git-effects-unresolved',
-  'sed-option',
-  'reader-option',
-  'reader-output',
 ]);
 
 /**
@@ -145,13 +152,23 @@ const POLICY_ONLY = new Set([
  * Nested -c uses its whole original Word as coarse provenance: quote removal
  * can prevent a faithful character-by-character source map.
  */
-export async function projectMutationView(request: MutationViewRequest): Promise<MutationView> {
+export async function projectMutationView(
+  request: MutationViewRequest,
+  dependencies: MutationViewDependencies = {}
+): Promise<MutationView> {
   const view: MutationView = {
     schema: 'caws.shell_mutation_view.v1',
     tokens: [],
     issues: [],
     interpreters: [],
+    gitMetadata: [],
   };
+  type MetadataResult = {
+    context: GitContext | null;
+    failure: 'metadata-discovery-timeout' | 'metadata-discovery-failure' | null;
+  };
+  const metadataCache = new Map<string, MetadataResult>();
+  const metadataRows = new Set<string>();
   const issueKeys = new Set<string>();
   const jobs: ScriptJob[] = [];
   let exhausted = false,
@@ -509,6 +526,85 @@ export async function projectMutationView(request: MutationViewRequest): Promise
         token(';', 'op', false, span({ pos: node.end, end: node.end }), state.cwd);
       }
     };
+    const observeGitMetadata = ({ node, subcommand, input }: GitMetadataObservation): void => {
+      if (exhausted) return;
+      const original = span(node);
+      if (request.cwd === null || input === null) {
+        issue(
+          'metadata-coordinate-unresolved',
+          'Git metadata write coordinates are not proven.',
+          original
+        );
+        return;
+      }
+      if (view.gitMetadata.length >= MAX_TOKENS) {
+        exhaust(original);
+        return;
+      }
+      const key = JSON.stringify([input.cwd, Object.entries(input.overrides).sort()]);
+      let outcome = metadataCache.get(key);
+      if (!outcome) {
+        if (metadataCache.size >= 8) {
+          issue(
+            'metadata-discovery-budget',
+            'At most eight distinct metadata contexts are inspected.',
+            original
+          );
+          return;
+        }
+        outcome = { context: null, failure: null };
+        try {
+          const context = (dependencies.gitContext ?? resolveGitContext)(input, (failure) => {
+            outcome!.failure =
+              failure === 'git-discovery-timeout'
+                ? 'metadata-discovery-timeout'
+                : 'metadata-discovery-failure';
+          });
+          if (
+            !outcome.failure &&
+            context &&
+            [context.directory, context.common, context.worktree].every(
+              (value) => typeof value === 'string' && isAbsolute(value)
+            )
+          ) {
+            outcome.context = context;
+          } else outcome.failure ??= 'metadata-discovery-failure';
+        } catch {
+          outcome.context = null;
+          outcome.failure = 'metadata-discovery-failure';
+        }
+        metadataCache.set(key, outcome);
+      }
+      if (!outcome.context || outcome.failure) {
+        const code = outcome.failure ?? 'metadata-discovery-failure';
+        issue(
+          code,
+          code === 'metadata-discovery-timeout'
+            ? 'Constant Git metadata discovery exceeded its 500 ms query budget.'
+            : 'Constant Git metadata discovery did not establish a non-bare repository context.',
+          original
+        );
+        return;
+      }
+      const { directory, common, worktree } = outcome.context;
+      if (worktree === null) {
+        issue('metadata-discovery-failure', 'Git metadata has no proven working tree.', original);
+        return;
+      }
+      const row = {
+        subcommand,
+        directory,
+        common,
+        worktree,
+        start: original.pos,
+        end: original.end,
+      };
+      const rowKey = JSON.stringify(row);
+      if (metadataRows.has(rowKey) || !text(directory + '\0' + common + '\0' + worktree, original))
+        return;
+      metadataRows.add(rowKey);
+      view.gitMetadata.push(row);
+    };
     const analysis = await analyzeCommand(
       {
         command: job.command,
@@ -521,7 +617,11 @@ export async function projectMutationView(request: MutationViewRequest): Promise
       {
         context: { canonical: request.project, worktree: request.project },
         gitContext: () => null,
-        observers: { invocation: observeInvocation, redirection: observeRedirect },
+        observers: {
+          invocation: observeInvocation,
+          redirection: observeRedirect,
+          gitMetadata: observeGitMetadata,
+        },
       }
     );
     for (const reason of analysis.reasons) {

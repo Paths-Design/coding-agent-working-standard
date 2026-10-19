@@ -282,6 +282,7 @@ export async function runHooksMutationViewCommand(
       schema: 'caws.shell_mutation_view.v1',
       tokens: [],
       interpreters: [],
+      gitMetadata: [],
       issues: [
         {
           code: 'analysis-unavailable',

@@ -806,4 +806,64 @@ cases.push({
   ],
 });
 
+// The same directory has different authority in metadata and checkout roles.
+add('own-explicit-metadata', "git --git-dir='{{OWN_METADATA}}' status");
+add(
+  'metadata-as-checkout',
+  "git --work-tree='{{OWN_METADATA}}' status",
+  'deny',
+  'foreign-git-target'
+);
+for (const operation of ['merge', 'create', 'destroy', 'ensure']) {
+  cases.push({
+    id: 'lifecycle-canonical-' + operation,
+    cwd: 'canonical',
+    command: 'caws worktree ' + operation + ' lane',
+    decision: 'allow',
+  });
+}
+for (const [id, command] of [
+  ['wrong-executable', 'helper worktree merge lane'],
+  ['wrong-group', 'caws specs merge lane'],
+  ['opaque-destination', 'caws worktree merge "$LANE"'],
+])
+  cases.push({
+    id: 'lifecycle-canonical-' + id,
+    cwd: 'canonical',
+    command,
+    decision: 'deny',
+    reason: 'outside-cwd',
+  });
+for (const flag of ['-nZ', '--n']) {
+  add('cat-unknown-boundary-' + flag, 'cat ' + flag + ' file', 'unresolved', 'reader-option');
+  add('cat-data-boundary-' + flag, 'cat -- ' + flag);
+}
+for (const value of ['12x', 'x12'])
+  add(
+    'test-invalid-integer-' + value,
+    'test ' + value + ' -eq 12',
+    'unresolved',
+    'test-expression'
+  );
+add('test-invalid-unary-suffix', 'test -nX value', 'unresolved', 'test-expression');
+add('test-valid-unary-control', 'test -n value');
+for (const name of [
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'PYTHONPATH',
+  'PYTHONHOME',
+  'PYTHONSTARTUP',
+  'PYTHONINSPECT',
+  'LD_PRELOAD',
+  'DYLD_INSERT_LIBRARIES',
+]) {
+  add('runtime-environment-' + name, name + '=value; printf x', 'unresolved', 'environment-change');
+  add(
+    'runtime-environment-data-' + name,
+    name + '_DATA=value; printf x',
+    /^(?:LD_|DYLD_)/.test(name) ? 'unresolved' : 'allow',
+    /^(?:LD_|DYLD_)/.test(name) ? 'environment-change' : undefined
+  );
+}
+
 module.exports = cases;

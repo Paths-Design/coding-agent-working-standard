@@ -73,7 +73,8 @@ var fs = require('fs');
 var path = require('path');
 
 function emit(outcome, detail) {
-  process.stdout.write(outcome + ':' + (detail || '') + '\n');
+  var namespace = process.env.CAWS_ORACLE_OPERATION === 'git-metadata' ? 'git_metadata:' : '';
+  process.stdout.write(namespace + outcome + ':' + (detail || '') + '\n');
   process.exit(0);
 }
 
@@ -278,7 +279,69 @@ function findClaimants(projectDir, currentBranch, logicalPath, worktrees) {
 // Main decision.
 // ---------------------------------------------------------------------------
 
+function metadataPhysicalDirectory(value) {
+  if (typeof value !== 'string' || !path.isAbsolute(value) || /[\r\n\t]/.test(value)) {
+    throw new Error('invalid-directory');
+  }
+  var physical = fs.realpathSync(value);
+  if (/[\r\n\t]/.test(physical) || !fs.statSync(physical).isDirectory()) {
+    throw new Error('invalid-physical-directory');
+  }
+  return physical;
+}
+
+// Metadata writes have no payload FILE operand. Resolve ownership through the
+// actual Git working tree, independently of scope globs and optional YAML.
+function decideGitMetadata() {
+  var project, worktree;
+  try {
+    project = metadataPhysicalDirectory(process.env.CAWS_ORACLE_PROJECT_DIR);
+    worktree = metadataPhysicalDirectory(process.env.CAWS_ORACLE_GIT_WORKTREE);
+  } catch (_) {
+    emit('error_fail_closed', 'git-metadata-coordinate');
+  }
+  if (worktree === project) emit('pass', 'git-canonical-metadata');
+  var registry;
+  try {
+    registry = JSON.parse(fs.readFileSync(path.join(project, '.caws', 'worktrees.json'), 'utf8'));
+  } catch (_) {
+    emit('error_fail_closed', 'git-metadata-registry-unreadable');
+  }
+  var entries = entriesOf(registry), matches = [];
+  for (var i = 0; i < entries.length; i++) {
+    var entry = entries[i];
+    if (entry.status === 'destroyed' || entry.status === 'missing') continue;
+    var stored = typeof entry.path === 'string' && entry.path ? entry.path : null;
+    if (!stored) {
+      if (typeof entry.name !== 'string' || !entry.name || entry.name === '.' || entry.name === '..' || /[\\/\r\n\t]/.test(entry.name)) {
+        emit('ask_uncertain', 'git-metadata-registry-path');
+      }
+      stored = path.join(project, '.caws', 'worktrees', entry.name);
+    }
+    var physical;
+    try { physical = metadataPhysicalDirectory(stored); }
+    catch (error) {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') continue;
+      emit('error_fail_closed', 'git-metadata-registry-path');
+    }
+    if (physical === worktree) matches.push(entry);
+  }
+  if (matches.length !== 1) emit('ask_uncertain', matches.length ? 'git-metadata-duplicate-owner' : 'git-metadata-unregistered');
+  var named = matches[0];
+  var name = named.name;
+  var owner = ownerSessionId(named);
+  var session = process.env.CAWS_ORACLE_SESSION_ID;
+  if (typeof name !== 'string' || !name || /[:\r\n\t]/.test(name)) emit('ask_uncertain', 'git-metadata-name');
+  if (typeof owner !== 'string' || !owner || owner === 'unknown' || /[\r\n\t]/.test(owner)) emit('ask_uncertain', 'git-metadata-owner');
+  if (typeof session !== 'string' || !session || session === 'unknown' || /[\r\n\t]/.test(session)) emit('ask_uncertain', 'git-metadata-session');
+  if (owner === session) emit('pass', 'owner-self:' + name);
+  emit('block_foreign_worktree', name + ':' + owner);
+}
+
 function main() {
+  var operation = process.env.CAWS_ORACLE_OPERATION || 'file';
+  if (operation === 'git-metadata') return decideGitMetadata();
+  if (operation !== 'file') emit('error_fail_closed', 'unsupported-operation');
   var projectDir = process.env.CAWS_ORACLE_PROJECT_DIR || '';
   var currentBranch = process.env.CAWS_ORACLE_CURRENT_BRANCH;
   var candidate = process.env.CAWS_ORACLE_REL_PATH || '';

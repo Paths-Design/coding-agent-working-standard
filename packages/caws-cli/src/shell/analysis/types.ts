@@ -1,4 +1,4 @@
-import type { GitContextResolver } from './git-context';
+import type { GitContextRequest, GitContextResolver } from './git-context';
 import type { Command, Redirection } from './parser-types';
 
 export interface AnalysisRequest {
@@ -28,11 +28,17 @@ export interface Argument {
   value: string | null;
   source?: Location;
 }
+export interface GitMetadataObservation {
+  node: Location;
+  subcommand: 'add' | 'commit';
+  input: GitContextRequest | null;
+}
 /** Trusted in-process instrumentation; never populated from submitted JSON. */
 export interface AnalysisDependencies {
   gitContext?: GitContextResolver;
   context?: { canonical: string; worktree: string };
   observers?: {
+    gitMetadata?: (observation: GitMetadataObservation) => void;
     invocation?: (observation: {
       node: Command;
       argv: Argument[];
@@ -66,6 +72,7 @@ export interface AnalysisContext {
   visits: number;
   gitInvocations: Location[];
   gitContext: GitContextResolver;
+  gitMetadata?: (observation: GitMetadataObservation) => void;
   reason: (node: Location, code: string, message: string, deny?: boolean) => void;
   trace: (node: Location, kind: string, detail: string) => void;
 }

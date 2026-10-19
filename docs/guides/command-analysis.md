@@ -16,10 +16,11 @@ audience: consumer
 `caws hooks mutation-view --json --cwd <execution-cwd> --project <canonical-root>`,
 with the original decoded command in a JSON stdin object. This separate
 `caws.shell_mutation_view.v1` contract supplies shell tokens, source spans,
-observed directories, interpreter payloads and unresolved issues. It has no
-permission verdict. Existing utility operand rules and the claim oracle
-determine whether a recognized write is authorized. A missing or malformed
-backend fails closed without falling back to the legacy lexer.
+observed directories, interpreter payloads, Git metadata coordinates and
+unresolved issues. It has no permission verdict. Existing utility operand rules
+and the claim oracle determine whether a recognized write is authorized. A
+missing or malformed backend fails closed without falling back to the legacy
+lexer.
 
 Unknown execution cwd is carried as `null`, including through nested source. The
 project directory may anchor syntax traversal but never becomes an observed
@@ -35,6 +36,20 @@ recursive shell inspection. Other shell semantics, opaque executable stdin,
 unmodeled state-changing builtins and known execution-bearing options remain
 unresolved. Source changes to interpreter preload/import environments also
 remain unresolved.
+
+Known `git add` and `git commit` operations carry their actual Git directory,
+common directory and working tree in a distinct metadata channel. A constant
+read-only Git query resolves these coordinates; the submitted operation is never
+executed. Discovery caches at most eight contexts per projection, including
+failures, with a 500 ms deadline and 64 KiB output limit per query and no retry.
+Unproven cwd, prior filesystem effects, redirected index files and failed or
+bare-repository discovery remain unresolved. Both metadata directories receive
+the foreign-repository check. External metadata layouts without an established
+project boundary remain unresolved. The oracle separately matches the physical
+working tree to a unique registry entry and its stamped owner. Canonical
+metadata is admitted; unknown identity, missing ownership and duplicate matches
+cannot grant admission for a linked working tree. A namespaced response prevents
+an older file-only oracle from silently accepting a metadata operation.
 
 The interpreter check retains a limited write-verb/path co-occurrence heuristic
 over actual payloads and bounded entry-script reads. It is weaker evidence than

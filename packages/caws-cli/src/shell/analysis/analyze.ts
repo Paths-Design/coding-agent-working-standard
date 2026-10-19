@@ -85,6 +85,9 @@ export async function analyzeCommand(
     outside: !inside(cwd, worktree),
     visits: 0,
     gitInvocations: [],
+    ...(dependencies.observers?.gitMetadata
+      ? { gitMetadata: dependencies.observers.gitMetadata }
+      : {}),
     gitContext: (input) => {
       const key = JSON.stringify([input.cwd, Object.entries(input.overrides).sort()]);
       if (gitContexts.has(key)) return gitContexts.get(key)!;
