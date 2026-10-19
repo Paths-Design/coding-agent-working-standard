@@ -94,7 +94,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; terminal bridge exercises selected explicit-session Codex Bash path and larger/escaped latch state, E51–E56; complete containment parity open | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races and unqualified compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced compatibility gap, E57; unreplaced | Legacy cold start survives and serves the next request; native calls return 0 and render correctly while both daemon attempts disappear and the second render falls back inline. Explicit service binding/client integration, source retirement, startup races and cancellation outcomes remain open |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced compatibility gap, E57; unreplaced | Legacy cold start survives and serves the next request; native calls return 0 and retain expected user-turn strings while both daemon attempts disappear and the second render falls back inline. Explicit service binding/client integration, source retirement, startup races and cancellation outcomes remain open |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
@@ -672,6 +672,13 @@ Additional bounded evidence and unresolved dependencies:
   fresh lease outside the foreign PID-only reaper threshold during a bounded
   35s hook call. Concurrent starters, cancellation, generation retirement,
   all-harness behavior and service lifetime repair remain unqualified.
+  Render completeness checks only user strings; retained tool/assistant/timeline
+  projections are not semantic assertions. A read-only control removes the
+  first legacy turn's timeline entries while its user check remains true.
+  Broader rendering parity needs assertions over those retained fields. Service
+  survival also needs a removed-ordinary-request-child control before it can
+  justify an ownership change; a blanket cleanup exemption could pass reuse
+  while leaking request descendants.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint

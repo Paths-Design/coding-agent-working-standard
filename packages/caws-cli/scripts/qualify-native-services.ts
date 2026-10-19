@@ -715,6 +715,7 @@ void run()
         'No installed runtime or real Sterling daemon/settings/data was exercised.',
         'A pre-exec witness alone does not establish interpreter exec or readiness.',
         'No daemon wait status or independent cause of process disappearance.',
+        'Render completeness checks user strings only; tool, assistant and timeline semantics are unqualified.',
         'Inactive samples account only for witnessed instances, not every descendant.',
         'No concurrent starters, generation retirement, reaper safety or request-child canary.',
         'No service ownership implementation, Python retirement or full parity.',
