@@ -55,12 +55,16 @@ unsupported query output and query failures are unresolved. Mapping gitfiles
 must be ordinary, singly linked files.
 
 Each analysis caches at most eight distinct discovery contexts. A query has a
-500 ms deadline and a 64 KiB output limit. Submitted file writes and lifecycle
-effects invalidate subsequent Git admission, including effects inside pipelines
-and subshells; shell-local cwd and bindings retain their separate scope. Known
-Git metadata writes are unresolved. Git configuration, repository creation and
-other unprofiled subcommands are unresolved. This prevents a source-visible
-change from borrowing a repository fact measured before that change.
+500 ms deadline and a 64 KiB output limit. One timed-out metadata query may be
+retried per analysis, for at most nine query attempts and 4.5 seconds of query
+deadlines. Protocol and I/O failures are not retried; an unsuccessful recovery
+remains unresolved. This retry never executes submitted source. Submitted file
+writes and lifecycle effects invalidate subsequent Git admission, including
+effects inside pipelines and subshells; shell-local cwd and bindings retain
+their separate scope. Known Git metadata writes are unresolved. Git
+configuration, repository creation and other unprofiled subcommands are
+unresolved. This prevents a source-visible change from borrowing a repository
+fact measured before that change.
 
 Conditional `test`/`[` profiles admit data-only string/file predicates and
 literal integer comparisons. Variable-reference predicates and compound

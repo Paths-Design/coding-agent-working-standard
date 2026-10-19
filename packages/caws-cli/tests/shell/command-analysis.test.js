@@ -59,8 +59,21 @@ const gitContext = input => {
         out.push({id:request.id, context:resolveGitContext(request.contextQuery)});
         continue;
       }
-      const resolver = request.gitFailure ? (_input, onFailure) => {onFailure(request.gitFailure); return null;} : gitContext;
-      out.push({id: request.id, activeMutant:process.env.__STRYKER_ACTIVE_MUTANT__ ?? '', first: await analyzeCommand(request.input,{gitContext:resolver}), repeated: await analyzeCommand(request.input,{gitContext:resolver})});
+      const inspect = async () => {
+        const calls = [];
+        let next = 0;
+        const resolver = request.discoveryPlan ? (input, onFailure) => {
+          calls.push(input);
+          if (next >= request.discoveryPlan.length) throw Error('Unexpected metadata query');
+          const outcome = request.discoveryPlan[next++];
+          if (outcome === 'own') return request.ownContext;
+          if (outcome !== 'null') onFailure(outcome);
+          return null;
+        } : request.gitFailure ? (_input, onFailure) => {onFailure(request.gitFailure); return null;} : gitContext;
+        return {analysis: await analyzeCommand(request.input,{gitContext:resolver}), calls};
+      };
+      const first = await inspect(), repeated = await inspect();
+      out.push({id: request.id, activeMutant:process.env.__STRYKER_ACTIVE_MUTANT__ ?? '', first:first.analysis, repeated:repeated.analysis, discoveryCalls:first.calls, repeatedDiscoveryCalls:repeated.calls});
     } finally {
       for(const [key,value] of previous) { if(value === undefined) delete process.env[key]; else process.env[key]=value; }
     }
@@ -152,6 +165,12 @@ describe('bounded shell analysis contract', () => {
           Object.entries(fixture.environment || {}).map(([key, value]) => [key, expand(value)])
         ),
         gitFailure: fixture.gitFailure,
+        discoveryPlan: fixture.discoveryPlan,
+        ownContext: {
+          directory: locations.OWN_METADATA,
+          common: path.join(locations.CANONICAL, '.git'),
+          worktree: locations.OWN,
+        },
         input: {
           command,
           cwd: fixture.cwdPath
@@ -223,6 +242,14 @@ describe('bounded shell analysis contract', () => {
     expect(actual.first.reasons.map((item) => item.code)).not.toContain('analysis-failure');
     if (fixture.decision !== 'allow') expect(actual.first.reasons.length).toBeGreaterThan(0);
     expect(actual.repeated).toEqual(actual.first);
+    if (fixture.discoveryQueries) {
+      const expected = fixture.discoveryQueries.map((cwd) => ({
+        cwd: fs.realpathSync.native(expand(cwd)),
+        overrides: {},
+      }));
+      expect(actual.discoveryCalls).toEqual(expected);
+      expect(actual.repeatedDiscoveryCalls).toEqual(expected);
+    }
     if (fixture.reason)
       expect(actual.first.reasons.map((item) => item.code)).toContain(fixture.reason);
     for (const code of fixture.absentReasons || [])

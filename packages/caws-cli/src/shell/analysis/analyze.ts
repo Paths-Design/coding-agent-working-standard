@@ -12,7 +12,7 @@ import { loadParser } from './load-parser';
 import { inside, inspectInvocation, resolveDirectory, sensitiveBinding } from './policies';
 import { basename, dirname } from 'node:path';
 import { resolveGitContext } from './git-context';
-import type { GitContext, GitContextResolver } from './git-context';
+import type { GitContext, GitContextResolver, GitDiscoveryFailure } from './git-context';
 import { expandWord } from './words';
 import type {
   AnalysisContext,
@@ -72,6 +72,7 @@ export async function analyzeCommand(
   }
   if (result.decision !== 'allow') return result;
   const gitContexts = new Map<string, GitContext | null>();
+  let discoveryRetryAvailable = true;
   const ctx: AnalysisContext = {
     result,
     worktree,
@@ -90,7 +91,26 @@ export async function analyzeCommand(
         );
         return null;
       }
-      const context = (dependencies.gitContext ?? resolveGitContext)(input, (failure) =>
+      const query = () => {
+        const attempt: { context: GitContext | null; failure?: GitDiscoveryFailure } = {
+          context: null,
+        };
+        attempt.context = (dependencies.gitContext ?? resolveGitContext)(input, (failure) => {
+          attempt.failure = failure;
+        });
+        return attempt;
+      };
+      let attempt = query();
+      if (
+        attempt.context === null &&
+        attempt.failure === 'git-discovery-timeout' &&
+        discoveryRetryAvailable
+      ) {
+        discoveryRetryAvailable = false;
+        attempt = query();
+      }
+      if (attempt.failure) {
+        const failure = attempt.failure;
         reason(
           whole,
           failure,
@@ -99,10 +119,11 @@ export async function analyzeCommand(
             : failure === 'git-discovery-protocol'
               ? 'Read-only Git discovery returned an unsupported protocol or repository kind.'
               : 'Read-only Git discovery failed; inspect Git availability and repository paths.'
-        )
-      );
-      gitContexts.set(key, context);
-      return context;
+        );
+        attempt.context = null;
+      }
+      gitContexts.set(key, attempt.context);
+      return attempt.context;
     },
     reason,
     trace: (node, kind, detail) =>

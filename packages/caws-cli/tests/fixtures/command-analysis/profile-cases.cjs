@@ -309,6 +309,90 @@ for (const [id, command, decision] of [
 ])
   add(id, command, decision, decision === 'unresolved' ? 'git-context-changed' : undefined);
 
+const queryAt = (index) => `git -C '{{OWN}}/context${index}' status`;
+for (const [id, sourceContexts, plan, queryContexts, decision, reason] of [
+  ['cold-timeout-recovers', [0, 0, 1], ['git-discovery-timeout', 'own', 'own'], [0, 0, 1], 'allow'],
+  [
+    'two-timeouts-stay-unknown',
+    [0, 0],
+    ['git-discovery-timeout', 'git-discovery-timeout'],
+    [0, 0],
+    'unresolved',
+    'git-discovery-timeout',
+  ],
+  [
+    'retry-shared-across-contexts',
+    [0, 1, 1],
+    ['git-discovery-timeout', 'own', 'git-discovery-timeout'],
+    [0, 0, 1],
+    'unresolved',
+    'git-discovery-timeout',
+  ],
+  [
+    'protocol-is-not-retried',
+    [0],
+    ['git-discovery-protocol', 'own'],
+    [0],
+    'unresolved',
+    'git-discovery-protocol',
+  ],
+  [
+    'io-is-not-retried',
+    [0],
+    ['git-discovery-failed', 'own'],
+    [0],
+    'unresolved',
+    'git-discovery-failed',
+  ],
+  [
+    'untyped-null-is-not-retried',
+    [0],
+    ['null', 'own'],
+    [0],
+    'unresolved',
+    'git-discovery-unresolved',
+  ],
+  [
+    'protocol-does-not-consume-retry',
+    [0, 1],
+    ['git-discovery-protocol', 'git-discovery-timeout', 'own'],
+    [0, 1, 1],
+    'unresolved',
+    'git-discovery-protocol',
+  ],
+  [
+    'recovery-keeps-final-failure',
+    [0],
+    ['git-discovery-timeout', 'git-discovery-protocol'],
+    [0, 0],
+    'unresolved',
+    'git-discovery-protocol',
+  ],
+  [
+    'recovery-keeps-context-budget',
+    [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    ['git-discovery-timeout', ...Array(8).fill('own')],
+    [0, 0, 1, 2, 3, 4, 5, 6, 7],
+    'unresolved',
+    'git-discovery-budget',
+  ],
+])
+  cases.push({
+    id: 'discovery-' + id,
+    command: sourceContexts.map(queryAt).join('; '),
+    decision,
+    ...(reason ? { reason } : {}),
+    ...([
+      'cold-timeout-recovers',
+      'protocol-does-not-consume-retry',
+      'recovery-keeps-final-failure',
+    ].includes(id)
+      ? { absentReasons: ['git-discovery-timeout'] }
+      : {}),
+    discoveryPlan: plan,
+    discoveryQueries: queryContexts.map((index) => `{{OWN}}/context${index}`),
+  });
+
 for (const [failure, fact] of [
   ['git-discovery-timeout', '500 ms'],
   ['git-discovery-protocol', 'protocol'],
@@ -652,12 +736,13 @@ cases.push({
   reason: 'tilde-expansion',
   reasonSource: '~',
 });
-add(
-  'declaration-append-producer',
-  'export A+="$(git -C \'{{FOREIGN}}\' status)"',
-  'deny',
-  'foreign-git-target'
-);
+cases.push({
+  id: 'profile-declaration-append-producer',
+  command: 'export A+="$(git -C \'{{FOREIGN}}\' status)"',
+  decision: 'deny',
+  reason: 'foreign-git-target',
+  reasonSource: "git -C '{{FOREIGN}}' status",
+});
 add(
   'declaration-wrapper-producer',
   'command export A="$(git -C \'{{FOREIGN}}\' status)"',
