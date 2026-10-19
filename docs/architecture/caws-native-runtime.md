@@ -130,7 +130,12 @@ production extension routing through a partial environment projection.
 
 Parity includes guard strength and the complete caller-to-effect chain. Neither
 compatible nouns and interfaces nor a successful local output handoff establish
-that a prohibited tool was withheld or a latched agent terminated.
+that a prohibited tool was withheld or a latched agent terminated. The
+containment qualification includes a subsequent request whose session identity
+is absent. Agreement with a baseline that misses the latch is a failed safety
+result, not acceptance. Effective surface-library selection must be traced
+before attributing cache-production or recovery behavior to a shared
+implementation.
 
 First-party helpers execute through typed worker-local interfaces. A worker must
 not wait for nested work queued behind its own state owner or a saturated worker

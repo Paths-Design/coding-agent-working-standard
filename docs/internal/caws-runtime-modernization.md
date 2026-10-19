@@ -76,7 +76,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
-| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking dependency investigation; unreplaced | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution; use owned disposable targets and a surviving sibling control. Root/review-subagent shared PID is observed; other user-chat sharing and effective deployed kill policy require verification |
+| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; E43 demonstrates a common missing-identity lookup gap in the isolated selected Codex guard | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution; use owned disposable targets and a surviving sibling control. Root/review-subagent shared PID is observed; other user-chat sharing and effective deployed kill policy require verification |
 | R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking compatibility gap; unreplaced | Cold renderer start must survive request cleanup and serve the next request; source-change retirement and concurrent startup must not duplicate or kill the service. Existing warm-daemon evidence does not cover first-start group ownership |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
@@ -388,6 +388,10 @@ Additional bounded evidence and unresolved dependencies:
   stdout/stderr bytes. Both readbacks exit 0; committed-build identity must
   be checked separately. All cases
   explicitly disable termination and do not execute proposed tools.
+  At committed revision `8acc4b7675e8d1de78d2e12854b322555be0946b`,
+  `check-committed-build.cjs` exits 0. Its raw build record and comparison
+  match all 21 runtime modules and the native binary to the final scenario;
+  the canonical-control mutation report also matches the committed source.
 - E42: The initial control-helper mutation probe is retained at
   `reports/mutation-runtime-controls/mutation-report.json`: 23 killed and six
   survived of 29, score 79.31%, exit 1 against the unchanged 80% floor.
@@ -401,6 +405,41 @@ Additional bounded evidence and unresolved dependencies:
   mutation score. Two focused suites pass 99 checks, and strict test TypeScript
   and ESLint checks exit 0. These checks exercise control representation,
   bounds and payload custody, not process ownership or termination.
+- E43: The selected-Codex latch sequence is retained under
+  `packages/caws-native/target/qualification/latch-identity-selected-codex-2026-10-19/`.
+  A compiled disposable ancestor is observed and stamped with the same
+  PID/start/full-comm tuple in both isolated modes. Each actual adapter
+  evaluates five input texts without executing them: unlatched allow (0),
+  catastrophic arm (2), subsequent missing-session request (0), explicit
+  latched-session control (2, one strike), and unlatched sibling ID (0).
+  `run.cjs` exits 0 because the baseline and candidate agree.
+  `evaluate-safety.cjs` exits 1 and writes `safety-evaluation.json` with
+  `baselineAgreement: true` and `safetySatisfied: false`: the missing-session
+  request misses latch A and records no strike in either mode. This isolated
+  guard result is an inherited safety gap, not evidence of complete behavioral
+  parity or a demonstrated native-only regression. Kill mode is explicitly 0;
+  no signal, actual harness withholding or agent termination is established.
+  The selected parser is the Codex surface file (`04a21ee0…0a73c61`), which
+  writes a durable envelope but no PID record. The shared parser's PID writer
+  is not that selected producer; a prior source prediction using it is
+  withdrawn. Neither mode produces a PID record here. The baseline creates
+  the durable envelope while the direct candidate path omits it; downstream
+  legacy attribution effects require a separate consumer probe and confer no
+  ownership authority. Preseeded-cache, actual ingress, process-exit and
+  surviving-sibling controls remain required. Earlier attempts remain at
+  `latch-identity-red-2026-10-19/` (copied launcher SIGKILL before ancestry
+  observation) and `latch-identity-retry-2026-10-19/` (incorrect basename-only
+  comm oracle); neither is counted as a completed differential.
+- E44: R33 source inspection confirms native `OwnedGroup::finish` signals the
+  engine group after normal settlement as well as failure, the selected shell
+  inherits that group, and Sterling's `slrd_spawn` redirects stdio without
+  transferring group ownership. Its daemon also checks a live lease before
+  binding/publishing without an exclusive startup lock. Concurrent requests
+  against a warm daemon do not test concurrent starters. A declared service
+  lifetime owner, startup coordination, process-instance identity and readiness
+  are required; a blanket child exemption or bare detachment does not discharge
+  them. Cold-start survival, ordinary-child cleanup, interrupted ownership
+  transfer and generation retirement have not been executed in the prototype.
 
 The executable embedded-Python surface is 15 shell files, 19 inline bodies and
 seven external callsites. A textual `python` hit is not sufficient: seven broader
