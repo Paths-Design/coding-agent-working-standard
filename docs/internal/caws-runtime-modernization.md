@@ -60,9 +60,11 @@ and client integration, alongside the remaining R32 process-domain and identity
 contracts. E61 exercises the R07 payload-cwd repair through the isolated native
 consumer with refusal and ordinary-file controls. E62 exposes an R05 guard-strength
 regression: an earlier advisory masks a later confirmation-class command
-substitution. E63 restores substitution precedence with statement-specific proof
-and observes selected-shell warning/latch effects; native-client qualification
-remains the next check before expanding the replacement runtime.
+substitution. E63 restores substitution precedence with statement-specific proof;
+E65 observes its typed execution, selected-shell warning/latch effects and native
+handoff in a private installation. E64's complete native suite passes without
+attributing the earlier backpressure timeout. The next implementation boundary
+is R33's selected-client/service ownership contract.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -82,7 +84,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R02 | `runtime/caws-hook.py`: configuration, selection, overrides | TS invocation engine and existing authority adapters | isolated one-shot selection exercised; complete enforcement open | Shared validators and freshness/override fixtures plus E33 selected stock path; full authority and override execution require qualification |
 | R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | one-shot journal/composer/local ACK integrated; resident open | E33 retains actual input/handler/index/native-output artifacts; crash persistence, production message settlement and resident admission remain open |
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | selected production refusal and native Stop fixture exercised | E33 nonlatching refusal; E34 real native budget with fixture context. Complete event/harness/Stop producer behavior remains unqualified |
-| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | substitution precedence repaired and selected-shell consumer tested, E63; native-client replay pending | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open |
+| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | substitution precedence repaired; typed execution, selected-shell state and native handoff exercised, E63/E65 | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
@@ -100,7 +102,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R20 | Python developer/harvest/qualification scripts | Typed TS tooling | inventoried; unreplaced | Nine tracked script/experiment paths listed below; output/consumer equivalence remains unproven |
 | R21 | Python-owned regression tests | TS/native behavioral tests | unreplaced | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes |
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
-| R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation and incremental delimiter scanning component tested, E64 | Signal/parent/output cancellation and bounded cleanup/delivery checked; actual typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
+| R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
 | R25 | Demand-start, warm residency and idle exit | Rust startup + TS resident host | unreplaced | Machine-wide bounded capacity, fair project/session admission, owner-specific serialization, single starter, no heartbeat authority, no active-request eviction, drain/version tests |
 | R26 | Persistent request outcomes / deferred queue | TS journal/spool and bounded scheduler | unreplaced | Crash/reconnect/unknown outcomes, no blind mutation replay, isolation and bounded disk/queue |
@@ -831,7 +833,7 @@ Additional bounded evidence and unresolved dependencies:
   not native-client or actual-harness withholding. The typed opt-in runner
   `scripts/qualify-native-substitution.ts` retains private input, commands,
   channels, state, journals, hashes and hostile oracle controls; its native replay
-  remains pending. Inert text and the three first-warning forms precede any
+  is exercised in E65. Inert text and the three first-warning forms precede any
   latch, so another session's sentinel cannot force fallback and mask their
   typed admission behavior. Strict runner compilation and scoped ESLint exit 0.
 
@@ -845,8 +847,54 @@ Additional bounded evidence and unresolved dependencies:
   `scan evidence: received=24, examined=24`. Strict all-target Clippy exits 0.
   This measures delimiter comparisons, not complete parsing/copy cost or a
   latency improvement. The E62 pre-proposal timeout's cause remains unverified;
-  neither this repair nor a passing rerun attributes it. Full native executable
-  checks and the selected-client substitution replay remain integration work.
+  neither this repair nor a passing rerun attributes it. Serial full Cargo on
+  clean `6b842b69` exits 0: 29 library, 21 binary and 24 executable checks,
+  including cancellation, foreign-process preservation and output backpressure.
+  Raw output is retained at
+  `packages/caws-native/target/qualification/integration-checks-2026-10-19T11-58-57-433Z/cargo.log`.
+  E65 changes only the qualification runner after that Rust check.
+
+- E65: From clean `8e9fcc079e07309ac6bf5eb91ab62c056bf9a7aa`, package command
+  `npm run qualify:native:substitution -- <CLI> <native> <Node> /usr/bin/python3 /usr/bin/jq <new-artifacts>`
+  exits 0; the exact six absolute arguments and build output are retained in
+  `packages/caws-native/target/qualification/substitution-native-2026-10-19T12-09-23-816Z.log`.
+  Its sibling artifact directory retains `manifest.json` with that revision,
+  empty `sourceStatus`, selected runtime digest
+  `3693319d0858383518063676ad3b91adb31da0437b687009d3236e3f25f70551`,
+  ten observations and no reported problems. Literal single-quoted input remains
+  advisory twice with no warning/latch. Dollar substitution, backticks and the
+  inverse segment order each produce a first warning with exit 0/no latch and
+  a repeated-risk block with native exit 2/matching command, reason and generation.
+  `regression-first/stderr.bin` contains `WARN, first capability ask — not blocked`;
+  its `warn.json` names `command substitution: destructive operation (K8S_DELETE)`.
+  `regression-repeat/stdout.bin` contains `decision: block`, and its `latch.json`
+  retains generation `9386ca1d1d4e2df23323e3baa0a8f203`. The ordinary sibling has
+  empty output and no session warning/latch; the fresh session receives its own
+  warning without borrowing a latch. State snapshots preserve existing files.
+  Per-case journals pin original-input SHA, selected handler path/SHA and session,
+  completed execution, local stdout handoff and adapter finish. These are local
+  delivery observations, not actual-harness withholding.
+  Private V8 files and `typed-execution.json` observe `classifyCommand: 1` and
+  `tryExecuteStockHandler: 1` in all three pre-latch first-warning cases and both
+  literal controls. Exact module URLs, source ranges and recomputed compiled
+  module hashes bind these witnesses; the classifier module SHA is
+  `d3e046dd12c7c69c444b130f21c3436a8596c8b3ee8e8909c982511dea1d1bf4`.
+  Fresh-session classification count is 0 because existing foreign sentinels
+  select shell fallback; this control establishes state isolation, not fresh
+  typed admission. Six corruptions of state/output/finalization and two omitted
+  execution witnesses are rejected in the retained oracle-control files.
+  Before/after source, build, immutable-runtime and executable hash assertions
+  pass. Hash identity does not prove build derivation, and observing a function
+  call alone does not prove its result governs output; E63's failing-before and
+  repaired consumer controls provide separate sensitivity evidence.
+  The complete runtime Jest directory exits 0 with 616 checks in sixteen suites;
+  `runtime-jest.json` and `runtime-jest.log` in this directory retain the raw
+  result. `tsc -p tsconfig.vnext.test.json --pretty false` exits 0. These checks
+  exercise typed module contracts, not installed native harness execution.
+  Killing is disabled and Python remains selected for stateful confirmation.
+  This replay does not establish PID termination, exclusive process ownership,
+  complete guard/harness parity, thirteen-session workload, installation or
+  retirement. EOF does not establish descendant cleanup. R32/R33 remain open.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -937,11 +985,8 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-First replay E63 through the native client with both segment orders, inert text,
-fresh sessions and the actual selected handler's warning/repeated-risk latch
-artifacts. The repaired selected-shell executor checks do not alone establish the
-native handoff. Then
-continue the dependency order below. Keep the failed backpressure witness;
+E65 supplies the bounded substitution replay through the native client; full
+acceptance remains open. Continue the dependency order below. Keep the failed backpressure witness;
 instrument startup, ancestor capture, proposal arrival and output delivery before
 attributing its timeout or claiming concurrent performance.
 
