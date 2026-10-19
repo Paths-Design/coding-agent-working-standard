@@ -73,7 +73,20 @@ caws_install_pack_once() {
     cd "$CAWS_TEST_REPO" &&
     CI=true NO_COLOR=1 node "$CLI_DIST_ENTRY" init --agent-surface "$surface" 2>&1
   )"; then
-    if [[ -x "$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh" ]]; then
+    if [[ -x "$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh" &&
+          -r "$CAWS_TEST_HOOKS_DIR/lib/bash-mutation-analysis.sh" ]]; then
+      local node_bin
+      node_bin="$(command -v node)" || { caws_teardown_pack; return 1; }
+      export CAWS_TEST_CLI="$CAWS_TEST_HOME/bin/caws"
+      if ! {
+        mkdir -p "$CAWS_TEST_HOME/bin" &&
+        printf '#!/bin/bash\nexec %q %q "$@"\n' "$node_bin" "$CLI_DIST_ENTRY" > "$CAWS_TEST_CLI" &&
+        chmod +x "$CAWS_TEST_CLI"
+      }; then
+        caws_teardown_pack
+        return 1
+      fi
+      export CAWS_BIN="$CAWS_TEST_CLI"
       # CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01: attest that these guards are
       # running under a test harness, not a real session. Without it the
       # claude-code surface resolves CAWS_TRAP_KILL=1 + names="claude", and a
@@ -86,7 +99,7 @@ caws_install_pack_once() {
       return 0
     fi
     init_status=1
-    printf 'fixture install did not produce local hooks for %s\n' "$surface" >&2
+    printf 'fixture install did not produce complete local hooks for %s\n' "$surface" >&2
   else
     init_status=$?
   fi
@@ -102,7 +115,10 @@ caws_teardown_pack() {
   if [[ -n "${CAWS_TEST_HOME:-}" && -d "$CAWS_TEST_HOME" ]]; then
     rm -rf "$CAWS_TEST_HOME"
   fi
-  unset CAWS_TEST_REPO CAWS_TEST_HOME CAWS_TEST_HOOKS_DIR CAWS_TEST_SESSION_ID
+  if [[ -n "${CAWS_TEST_CLI:-}" && "${CAWS_BIN:-}" == "$CAWS_TEST_CLI" ]]; then
+    unset CAWS_BIN
+  fi
+  unset CAWS_TEST_REPO CAWS_TEST_HOME CAWS_TEST_HOOKS_DIR CAWS_TEST_SESSION_ID CAWS_TEST_CLI
 }
 
 # Build a hook-input envelope JSON. Usage: hook_envelope <tool> <file_path> <command>

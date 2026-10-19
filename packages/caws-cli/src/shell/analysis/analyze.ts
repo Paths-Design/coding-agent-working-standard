@@ -12,10 +12,11 @@ import { loadParser } from './load-parser';
 import { inside, inspectInvocation, resolveDirectory, sensitiveBinding } from './policies';
 import { basename, dirname } from 'node:path';
 import { resolveGitContext } from './git-context';
-import type { GitContext, GitContextResolver, GitDiscoveryFailure } from './git-context';
+import type { GitContext, GitDiscoveryFailure } from './git-context';
 import { expandWord } from './words';
 import type {
   AnalysisContext,
+  AnalysisDependencies,
   AnalysisRequest,
   AnalysisResult,
   Argument,
@@ -34,7 +35,7 @@ const clone = (state: State): State => ({ ...state, bindings: new Map(state.bind
 /** A bounded abstract interpreter. It inspects source; it never executes it. */
 export async function analyzeCommand(
   request: AnalysisRequest,
-  dependencies: { gitContext?: GitContextResolver } = {}
+  dependencies: AnalysisDependencies = {}
 ): Promise<AnalysisResult> {
   const result: AnalysisResult = { decision: 'allow', reasons: [], trace: [] };
   const whole = { pos: 0, end: request.command.length };
@@ -58,9 +59,13 @@ export async function analyzeCommand(
     reason(whole, 'source-budget', 'Command exceeds 64 KiB or contains a NUL byte.');
     return result;
   }
-  const worktree = resolveDirectory(request.worktree, '/');
+  const worktree = resolveDirectory(dependencies.context?.worktree ?? request.worktree, '/');
   const marker = request.worktree.indexOf('/.caws/worktrees/');
-  const canonical = marker < 0 ? null : resolveDirectory(request.worktree.slice(0, marker), '/');
+  const canonical = dependencies.context
+    ? resolveDirectory(dependencies.context.canonical, '/')
+    : marker < 0
+      ? null
+      : resolveDirectory(request.worktree.slice(0, marker), '/');
   const cwd = resolveDirectory(request.cwd, '/');
   if (!worktree || !canonical || !cwd) {
     reason(
@@ -214,7 +219,9 @@ export async function analyzeCommand(
   }
   function word(node: Word, state: State, depth: number, assignment = false): Argument[][] {
     budget(node, depth);
-    return expandWord(node, state, ctx, substitution, depth, assignment);
+    return expandWord(node, state, ctx, substitution, depth, assignment).map((variant) =>
+      variant.map((argument) => ({ ...argument, source: { pos: node.pos, end: node.end } }))
+    );
   }
   function assign(node: Assignment, state: State, depth: number): State {
     const next = clone(state);
@@ -273,7 +280,8 @@ export async function analyzeCommand(
       return;
     }
     if (node.type === 'HereString') {
-      if (node.target) word(node.target, state, depth, true);
+      const targets = node.target ? word(node.target, state, depth, true) : [];
+      dependencies.observers?.redirection?.({ node, targets, state: clone(state), reader });
       return;
     }
     if (!node.target) {
@@ -281,6 +289,7 @@ export async function analyzeCommand(
       return;
     }
     const values = word(node.target, state, depth);
+    dependencies.observers?.redirection?.({ node, targets: values, state: clone(state), reader });
     if (['>&', '<&'].includes(node.operator)) {
       if (values.some((args) => args.length !== 1 || !/^(?:[0-9]+|-)$/.test(args[0]?.value ?? '')))
         reason(node, 'redirect-descriptor', 'Only literal descriptor duplication is modeled.');
@@ -364,6 +373,13 @@ export async function analyzeCommand(
       if (name.startsWith('GIT_')) env.set(name, value);
     const out = vectors.flatMap((argv) => {
       const before = clone(state);
+      dependencies.observers?.invocation?.({
+        node,
+        argv: argv.map((argument) => ({ ...argument })),
+        state: clone(before),
+        environment: new Map(env),
+        reader,
+      });
       const next = inspectInvocation(argv, before, env, ctx, node, reader);
       // A directory change can fail. Keeping both states also avoids treating
       // a failed cd as a successful repair of a preceding foreign directory.

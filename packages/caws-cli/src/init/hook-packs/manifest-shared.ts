@@ -602,7 +602,7 @@ import { isAdapterCoveredSurface } from './types';
 // and the kernel turn-log.v2 producer contract adopts the same unified
 // shape, so the shared pack template tree changed again after v96.
 // v98: retain per-invocation handler progress before subsequent handlers run.
-export const SHARED_PACK_VERSION = 98;
+export const SHARED_PACK_VERSION = 99;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -820,6 +820,12 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/bash-mutation-targets.sh',
       sourcePath: 'lib/bash-mutation-targets.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/bash-mutation-analysis.sh',
+      sourcePath: 'lib/bash-mutation-analysis.sh',
       executable: false,
       managed: true,
     },

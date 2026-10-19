@@ -39,6 +39,7 @@ CAWS_TOK_PREFIX_BASIS=() # lexically_proven | none
 # time, before any serialization -- once a record has been split the
 # authority-bearing information is already gone.
 CAWS_TOK_UNREPR=()
+CAWS_TOK_CWD=() # per-token execution cwd, populated only by the required AST view
 
 # A command substitution has TWO simultaneous semantic roles and the recognizer
 # must preserve BOTH: the outer word is runtime-resolved (its value is decided at
@@ -458,50 +459,54 @@ _caws_tok_is_opt() { [[ "${CAWS_TOK_VALUE[$1]}" == -* ]]; }
 # BROAD -- "a directory-scoped operation" and "a file-scoped operation over an
 # unresolved population" are different facts needing different policies.
 _caws_emit_operand() {
-  local i="$1"
-  # Representability is adjudicated FIRST: an operand the record stream cannot
-  # carry must never reach a channel whose consumer would split it.
-  if [[ ${coordinate_changed:-0} -eq 1 && "${CAWS_TOK_VALUE[$i]}" != /* ]]; then
-    CAWS_REC_UNSUPPORTED+=( changed_working_directory )
-    return
+  local i="$1" value="${CAWS_TOK_VALUE[$1]}" ast=0
+  [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 ]] && ast=1
+  if [[ $ast == 0 && ${coordinate_changed:-0} -eq 1 && "$value" != /* ]]; then
+    CAWS_REC_UNSUPPORTED+=( changed_working_directory ); return 0
   fi
-  if [[ "${CAWS_TOK_UNREPR[$i]}" == "1" ]]; then
-    CAWS_REC_UNREPR+=( "${CAWS_TOK_VALUE[$i]}" )
-    return 0
+  if [[ "${CAWS_TOK_UNREPR[$i]}" == 1 ]]; then
+    CAWS_REC_UNREPR+=( "$value" ); return 0
   fi
-  if [[ "${CAWS_TOK_DYNAMIC[$i]}" == "1" ]]; then
-    # Tab-separated: expression, resolution_kind, static_prefix, prefix_basis.
-    # The guard CONSUMES these; it must never reparse the expression to invent a
-    # prefix, which would restore two interpreters across the shared boundary.
-    printf -v _rec '%s\t%s\t%s\t%s' \
-      "${CAWS_TOK_VALUE[$i]}" "${CAWS_TOK_RESKIND[$i]}" \
+  if [[ "${CAWS_TOK_DYNAMIC[$i]}" == 1 ]]; then
+    if [[ -z "$value" ]]; then
+      CAWS_REC_UNSUPPORTED+=( dynamic_operand_without_source_label ); return 0
+    fi
+    printf -v _rec '%s\t%s\t%s\t%s' "$value" "${CAWS_TOK_RESKIND[$i]}" \
       "${CAWS_TOK_PREFIX[$i]}" "${CAWS_TOK_PREFIX_BASIS[$i]}"
     CAWS_REC_DYNAMIC+=( "$_rec" )
   else
-    CAWS_REC_FILE+=( "${CAWS_TOK_VALUE[$i]}" )
+    [[ -n "$value" ]] || return 0
+    if [[ $ast == 1 && "$value" != /* ]]; then
+      if [[ -n "${CAWS_TOK_CWD[$i]-}" ]]; then
+        value="${CAWS_TOK_CWD[$i]}/$value"
+      fi
+    fi
+    if [[ "$value" == *$'\n'* || "$value" == *$'\t'* ]]; then
+      CAWS_REC_UNREPR+=( "$value" ); return 0
+    fi
+    CAWS_REC_FILE+=( "$value" )
   fi
+  return 0
 }
 
 _caws_bash_scan_tokens() {
   local cmd="$1"
   CAWS_REC_FILE=(); CAWS_REC_BROAD=(); CAWS_REC_DYNAMIC=()
   CAWS_REC_UNREPR=(); CAWS_REC_UNSUPPORTED=()
-  # CAWS-GUARD-HEREDOC-BODY-READ-AS-COMMAND-01: a heredoc body is a PAYLOAD, not
-  # a command line. Blanking safelisted sinks' bodies is load-bearing and its
-  # loss is a real defect, not a simplification: measured 2026-09-11 over the
-  # frozen A6 population, the unblanked path lexed TypeScript and Python heredoc
-  # payloads as shell, so `const f = () => { g(h) }` produced the operand `{`
-  # (bash really does read `=>` as `=` followed by a redirect) and eight
-  # commands gained fabricated targets that the previous implementation did not
-  # emit. The rewrite dropped this call while the file header kept claiming it,
-  # so the documentation described behavior the code no longer had.
-  # An interpreter heredoc deliberately keeps its body visible (lib/heredoc.sh),
-  # and CAWS_HEREDOC_FILE_SINKS is a safelist both consumers inherit alike.
-  if declare -F caws_blank_heredoc_bodies >/dev/null 2>&1; then
-    cmd="$(caws_blank_heredoc_bodies "$cmd")"
+  if [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 ]]; then
+    if ! declare -F caws_bash_load_analysis_tokens >/dev/null 2>&1 ||
+        ! caws_bash_load_analysis_tokens "$cmd"; then
+      CAWS_REC_UNSUPPORTED+=( mutation_analysis_unavailable ); return 0
+    fi
+    CAWS_REC_UNSUPPORTED=( ${CAWS_AST_ISSUES[@]+"${CAWS_AST_ISSUES[@]}"} )
+  else
+    # Other consumers retain their declared legacy lexical envelope.
+    if declare -F caws_blank_heredoc_bodies >/dev/null 2>&1; then
+      cmd="$(caws_blank_heredoc_bodies "$cmd")"
+    fi
+    _caws_lex "$cmd"
+    _caws_mutation_argv_view
   fi
-  _caws_lex "$cmd"
-  _caws_mutation_argv_view
   local _u=0
   while [[ $_u -lt ${#CAWS_TOK_VALUE[@]} ]]; do
     [[ "${CAWS_TOK_KIND[$_u]}" == unsupported_nesting ]] && \
@@ -632,6 +637,10 @@ _caws_bash_scan_tokens() {
         done
         i=$j; continue ;;
       git)
+        if [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 &&
+              "${CAWS_TOK_CWD[$i]-}" != "${AGENT_CWD:-}" ]]; then
+          coordinate_changed=1
+        fi
         local g=$((i+1)) git_coordinate=$coordinate_changed
         while [[ $g -lt $n && "${CAWS_TOK_VALUE[$g]}" == -* ]]; do
           case "${CAWS_TOK_VALUE[$g]}" in
@@ -963,7 +972,7 @@ CAWS_NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|c
 #   heredoc body, and a nested inline quote.
 _caws_interp_payload_literals() {
   local payload="$1" verbs_re="$2" frag
-  printf '%s' "$payload" | grep -qE "$verbs_re" || return 0
+  grep -qE "$verbs_re" <<< "$payload" || return 0
   while IFS= read -r frag; do
     [[ -z "$frag" ]] && continue
     printf '%s\n' "$frag"
@@ -986,6 +995,10 @@ _caws_interp_payload_literals() {
 #   a real residual; callers must state it rather than imply completeness.
 caws_bash_interpreter_write_literals() {
   local cmd="$1" cwd="${2:-.}" verbs_re=""
+  if [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 ]]; then
+    caws_bash_analysis_interpreter_literals "$cmd"
+    return $?
+  fi
   # Detect an interpreter as a COMMAND TOKEN, tokenizing the way the verb
   # extractors do, so `node` inside a path (./node_modules/.bin/tsc) never
   # matches and a chained invocation still does.

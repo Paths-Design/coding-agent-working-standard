@@ -187,7 +187,7 @@ foreign_repo_root() {
 # recognizer without sourcing this guard (which parses input, resolves session
 # state and then invokes the ownership oracle). The guard keeps its own
 # fail-CLOSED posture on a missing lib; CASR keeps its fail-open posture. The
-# consumer loop below is unchanged, so candidate sequences are identical.
+# AST-required mode supplies typed expansions to the existing utility-role rules.
 # Governance: CASR-CONTEXT-DELIVERED-BY-TOOL-NAME-NOT-WRITE-TARGET-01.
 if [[ -r "$SCRIPT_DIR/lib/bash-mutation-targets.sh" ]]; then
   # shellcheck source=lib/bash-mutation-targets.sh
@@ -210,6 +210,16 @@ for _fn in caws_foreign_repo_root caws_bash_interpreter_write_literals; do
   fi
 done
 
+# The analyzer supplies syntax observations. Existing mutation policies decide.
+CAWS_BASH_ANALYSIS_REQUIRED=1
+if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ]] ||
+    ! source "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ||
+    ! declare -F caws_bash_prepare_analysis >/dev/null 2>&1 ||
+    ! caws_bash_prepare_analysis "$COMMAND" "$AGENT_CWD" "$PROJECT_DIR"; then
+  echo "[bash-write-guard] UNRESOLVED: ${CAWS_BASH_ANALYSIS_ERROR:-command mutation analysis bridge is unavailable}. Failing CLOSED; no legacy fallback." >&2
+  exit 2
+fi
+
 extract_targets() {
   # Two channels, both consumed, because an ownership gate wants every path a
   # command might touch:
@@ -218,9 +228,8 @@ extract_targets() {
   #                    before this split. A prefix test is what "might this
   #                    touch a claimed path?" wants, so the conservative root is
   #                    the right answer HERE even though CASR declines it.
-  # The shared library reads no ambient state; this call site is the only place
-  # AGENT_CWD enters extraction, so the guard's posture stays the guard's own
-  # decision rather than a hidden property of the library.
+  # FILE operands retain each observation's directory. Unknown coordinates stay
+  # relative and are refused by the specific cwd policy before any guessed root.
   caws_bash_mutation_candidates "$1"
   if declare -F caws_bash_broad_mutations >/dev/null 2>&1; then
     caws_bash_broad_mutations "$1" "$AGENT_CWD" | cut -f2
@@ -248,8 +257,9 @@ abspath() {
 # The scan closes the detectable half: write targets that appear as PATH
 # LITERALS inside the interpreter's payload. It lives in
 # lib/bash-mutation-targets.sh (caws_bash_interpreter_write_literals, with the
-# co-occurrence rationale) so block-dangerous reads the SAME answer when it
-# chooses which remediation to print
+# co-occurrence rationale). AST-required mode restricts interpreter provenance
+# to actual invocations and withholds recognized writes lacking a path fragment.
+# Other consumers retain their declared legacy extraction envelope
 # (CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01). The wrapper below adds
 # only the sentinel the decide loop dispatches on.
 #
@@ -258,8 +268,7 @@ abspath() {
 # evidence that the script may write there, not proof that it will; feeding
 # that to the ownership oracle would turn any in-project path merely MENTIONED
 # in a script into a claim conflict. The spec's invariant is that existing
-# behavior is unchanged everywhere else, so the high-confidence predicate is
-# the only one that acts on this weaker evidence.
+# weak observations must not confer scope authority.
 #
 # What it cannot see: a target COMPUTED at runtime — concatenated from shell
 # variables, read out of a config file, or piped in via `python3 -`. That is a
@@ -304,6 +313,12 @@ while IFS= read -r cand; do
   # file.py"` arrives as one operand containing its space. The sentinel
   # restoration and quote stripping that stood here undid damage the old
   # tokenizer did and were removed with it.
+  if [[ "$_INTERP" != 1 && "$_CWD_RESOLVED" != 1 && "$_CWD_CONTRACT" == 1 && "$cand" != /* ]]; then
+    # Relative bytes carry no filesystem coordinate, including when the
+    # registry has no active worktrees. Never resolve them against a guess.
+    escalate ask "cwd-unresolved:$cand" "ask_uncertain"
+    continue
+  fi
   abs="$(abspath "$cand")"
   # CAWS-GUARD-ALLOWLIST-SYNC-001 + CAWS-GUARD-SCOPE-PRIORITY-001: record
   # whether this target is on the unconditional allowlist (docs/*, .caws/*

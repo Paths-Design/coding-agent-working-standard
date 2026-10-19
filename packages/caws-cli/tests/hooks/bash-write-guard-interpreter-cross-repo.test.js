@@ -46,6 +46,10 @@ const TEMPLATES = path.join(CLI_PKG_ROOT, 'templates', 'hook-packs', 'shared');
 const BASH_GUARD = path.join(TEMPLATES, 'bash-write-guard.sh');
 const SCOPE_GUARD = path.join(TEMPLATES, 'scope-guard.sh');
 
+function shellQuote(value) {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
 /**
  * A fake project with a .caws registry, plus a sibling git repo under a fake
  * $HOME. The sibling sits under HOME on purpose: the observed bypass composed
@@ -64,7 +68,17 @@ function makeFixture() {
   fs.mkdirSync(sibling, { recursive: true });
   execFileSync('git', ['init', '-q'], { cwd: sibling });
   fs.writeFileSync(path.join(sibling, 'README.md'), 'sibling\n');
-  return { root, projectDir, home, sibling };
+  const cli = path.join(root, 'caws');
+  fs.writeFileSync(
+    cli,
+    '#!/bin/sh\nexec ' +
+      shellQuote(process.execPath) +
+      ' ' +
+      shellQuote(path.join(CLI_PKG_ROOT, 'dist/index.js')) +
+      ' "$@"\n',
+    { mode: 0o755 }
+  );
+  return { root, projectDir, home, sibling, cli };
 }
 
 /** Run the template guard as a standalone handler with a fake session env. */
@@ -75,6 +89,7 @@ function runGuard(command, fixture) {
     HOOK_COMMAND: command,
     HOOK_CWD: fixture.projectDir,
     CAWS_PROJECT_DIR: fixture.projectDir,
+    CAWS_BIN: fixture.cli,
     CAWS_AGENT_SURFACE: 'claude-code',
     HOME: fixture.home,
   };

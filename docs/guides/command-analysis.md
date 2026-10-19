@@ -10,6 +10,52 @@ audience: consumer
 
 # Bounded command analysis
 
+## Active write-guard integration
+
+`bash-write-guard.sh` requires
+`caws hooks mutation-view --json --cwd <execution-cwd> --project <canonical-root>`,
+with the original decoded command in a JSON stdin object. This separate
+`caws.shell_mutation_view.v1` contract supplies shell tokens, source spans,
+observed directories, interpreter payloads and unresolved issues. It has no
+permission verdict. Existing utility operand rules and the claim oracle
+determine whether a recognized write is authorized. A missing or malformed
+backend fails closed without falling back to the legacy lexer.
+
+Unknown execution cwd is carried as `null`, including through nested source. The
+project directory may anchor syntax traversal but never becomes an observed
+coordinate. Relative writes retain the specific unresolved-cwd refusal; absolute
+targets remain independently checked. Unverified harness surfaces retain their
+declared legacy project-coordinate assumption.
+
+JavaScript and Python heredoc bodies remain interpreter data, so an arrow or
+object literal does not become a shell redirect or brace expansion. Only actual
+interpreter invocations produce payload records; quoted search text mentioning
+an interpreter does not. Literal Bash heredoc and `-c` programs receive bounded
+recursive shell inspection. Other shell semantics, opaque executable stdin,
+unmodeled state-changing builtins and known execution-bearing options remain
+unresolved. Source changes to interpreter preload/import environments also
+remain unresolved.
+
+The interpreter check retains a limited write-verb/path co-occurrence heuristic
+over actual payloads and bounded entry-script reads. It is weaker evidence than
+a shell operand and feeds only the foreign-repository check, never the claim
+oracle. A recognized write verb without an extractable path remains unresolved.
+This does not prove arbitrary Node, Python or external programs read-only;
+indirect calls, imports, dynamically selected behavior and concurrent file
+replacement remain outside this source-level recognizer.
+
+The projection shares the expansion engine's limits and adds shared limits of
+4,096 emitted tokens, eight nested shell levels, 32 source jobs, 64 KiB
+cumulative source and 256 KiB carried text. It stops projecting on exhaustion
+and retains an unresolved issue. Original source is never executed to obtain an
+expansion or trace. Inline nested source uses the original code word as a coarse
+span when quote removal prevents character-level mapping.
+
+This integration concerns the active write-guard handler. The optional
+worktree-pin policy below is a separate consumer with a narrower admission
+profile. Handler fixture checks do not establish live machine deployment or
+custody through later native interceptors.
+
 The admitted subset leaves unmodeled build tools such as `npm test` unresolved.
 Enabling this optional guard for a full development workflow requires additional
 program profiles or a separately defined runtime policy. Unknown effects do not

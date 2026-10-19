@@ -18,7 +18,12 @@ import type { Command } from 'commander';
 // hidden option via `new Option(flag, desc).hideHelp()` — Commander's
 // `.option(...)` convenience method has no hide-from-help variant.
 import { Option } from 'commander';
-import { runHooksAnalyzeCommand, type HooksAnalyzeOptions } from './commands/hooks';
+import {
+  runHooksAnalyzeCommand,
+  runHooksMutationViewCommand,
+  type HooksAnalyzeOptions,
+  type HooksMutationViewOptions,
+} from './commands/hooks';
 
 import {
   INIT_COMMAND_META,
@@ -622,6 +627,12 @@ export function registerShellCommands(
   defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'analyze')).action(
     async (opts: HooksAnalyzeOptions) => {
       exit(await runHooksAnalyzeCommand(opts));
+    }
+  );
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'mutation-view')).action(
+    async (opts: HooksMutationViewOptions) => {
+      exit(await runHooksMutationViewCommand(opts));
     }
   );
 

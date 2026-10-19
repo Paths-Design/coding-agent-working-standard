@@ -30,6 +30,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import * as nodePath from 'node:path';
 
 import { analyzeCommand } from '../analysis/analyze';
+import { projectMutationView } from '../analysis/mutation-view';
 import { isOk } from '../../kernel';
 import { resolveRepoRoot } from '../../store';
 import { machineHome } from '../../init/machine-adapters';
@@ -239,6 +240,65 @@ export async function runHooksAnalyzeCommand(options: HooksAnalyzeOptions = {}):
     }
   }
   return result.decision === 'allow' ? 0 : result.decision === 'deny' ? 1 : 2;
+}
+
+export interface HooksMutationViewOptions {
+  readonly cwd?: string;
+  readonly cwdUnresolved?: boolean;
+  readonly project?: string;
+  readonly shell?: string;
+  readonly json?: boolean;
+}
+
+/** Lexical facts for the write guard; this response never grants write authority. */
+export async function runHooksMutationViewCommand(
+  options: HooksMutationViewOptions = {}
+): Promise<number> {
+  let view: Awaited<ReturnType<typeof projectMutationView>>;
+  let status = 0;
+  try {
+    const input: unknown = JSON.parse(process.stdin.isTTY ? '' : readFileSync(0, 'utf8'));
+    if (
+      input === null ||
+      typeof input !== 'object' ||
+      Array.isArray(input) ||
+      typeof (input as Record<string, unknown>).command !== 'string' ||
+      typeof options.cwd !== 'string' ||
+      !nodePath.isAbsolute(options.cwd) ||
+      typeof options.project !== 'string' ||
+      !nodePath.isAbsolute(options.project)
+    ) {
+      throw new Error('invalid-input');
+    }
+    view = await projectMutationView({
+      command: (input as { command: string }).command,
+      cwd: options.cwdUnresolved === true ? null : options.cwd,
+      project: options.project,
+      ...(options.shell === undefined ? {} : { shell: options.shell }),
+    });
+  } catch {
+    status = 2;
+    view = {
+      schema: 'caws.shell_mutation_view.v1',
+      tokens: [],
+      interpreters: [],
+      issues: [
+        {
+          code: 'analysis-unavailable',
+          message: 'Mutation projection could not complete.',
+          start: 0,
+          end: 0,
+        },
+      ],
+    };
+  }
+  if (options.json === true) process.stdout.write(`${JSON.stringify(view)}\n`);
+  else {
+    process.stdout.write(`caws hooks mutation-view: ${view.issues.length} unresolved issue(s)\n`);
+    for (const issue of view.issues)
+      process.stdout.write(`  ${issue.code} [${issue.start}:${issue.end}]: ${issue.message}\n`);
+  }
+  return status;
 }
 
 // ─── hooks list ────────────────────────────────────────────────────────────

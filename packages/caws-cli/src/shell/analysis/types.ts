@@ -1,4 +1,5 @@
 import type { GitContextResolver } from './git-context';
+import type { Command, Redirection } from './parser-types';
 
 export interface AnalysisRequest {
   command: string;
@@ -25,6 +26,27 @@ export interface AnalysisResult {
 }
 export interface Argument {
   value: string | null;
+  source?: Location;
+}
+/** Trusted in-process instrumentation; never populated from submitted JSON. */
+export interface AnalysisDependencies {
+  gitContext?: GitContextResolver;
+  context?: { canonical: string; worktree: string };
+  observers?: {
+    invocation?: (observation: {
+      node: Command;
+      argv: Argument[];
+      state: State;
+      environment: Map<string, Value>;
+      reader: boolean;
+    }) => void;
+    redirection?: (observation: {
+      node: Redirection;
+      targets: Argument[][];
+      state: State;
+      reader: boolean;
+    }) => void;
+  };
 }
 export type Value = readonly string[] | null;
 export interface State {

@@ -1519,6 +1519,25 @@ export const HOOKS_COMMAND_META: GroupCommandMeta = {
   subcommands: [
     {
       kind: 'leaf',
+      name: 'mutation-view',
+      description:
+        'Project bounded shell tokens for the write guard without execution. Reads {command} JSON on stdin. Facts confer no write authority. Exits 0 for a valid projection (including unresolved issues), 2 for unavailable analysis.',
+      options: [
+        { flag: '--cwd <path>', description: 'Actual absolute execution directory' },
+        {
+          flag: '--cwd-unresolved',
+          description: 'Retain unknown coordinates; cwd is only a syntax-traversal placeholder',
+        },
+        { flag: '--project <path>', description: 'Absolute project root supplied by the guard' },
+        { flag: '--shell <shell>', description: 'Declared shell (supported: bash)' },
+        {
+          flag: '--json',
+          description: 'Emit tokens, interpreter provenance and unresolved issues',
+        },
+      ],
+    },
+    {
+      kind: 'leaf',
       name: 'analyze',
       description:
         'Analyze Bash command effects without executing the command. Reads a JSON request or native tool payload from stdin unless --command is supplied. Exits 0 for allow, 1 for deny and 2 for unresolved.',

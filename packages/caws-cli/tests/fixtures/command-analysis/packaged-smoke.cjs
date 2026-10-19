@@ -28,6 +28,8 @@ try {
   for (const file of [
     'dist/shell/analysis/load-parser.js',
     'dist/shell/analysis/analyze.js',
+    'dist/shell/analysis/mutation-view.js',
+    'templates/hook-packs/shared/lib/bash-mutation-analysis.sh',
     'docs/guides/command-analysis.md',
   ])
     assert(
@@ -119,6 +121,57 @@ try {
   const marker = path.join(root, 'payload-executed');
   assert.equal(analyze(`printf '%s' '$(touch ${marker})'`).decision, 'allow');
   assert.equal(fs.existsSync(marker), false);
+  const project = path.join(root, 'project');
+  fs.writeFileSync(
+    path.join(project, '.caws/worktrees.json'),
+    JSON.stringify({
+      foreign: {
+        name: 'foreign',
+        spec_id: 'FOREIGN',
+        path: foreign,
+        owner: { session_id: 'other' },
+      },
+    })
+  );
+  function writeGuard(command) {
+    return run(
+      '/bin/bash',
+      [path.join(installedPkg, 'templates/hook-packs/shared/bash-write-guard.sh')],
+      {
+        cwd: own,
+        input: '',
+        env: {
+          ...process.env,
+          HOME: home,
+          CAWS_HOME: path.join(home, '.caws'),
+          CAWS_PROJECT_DIR: project,
+          CAWS_BIN: path.join(prefix, 'node_modules/.bin/caws'),
+          CAWS_AGENT_SURFACE: 'codex',
+          HOOK_TOOL_NAME: 'Bash',
+          HOOK_COMMAND: command,
+          HOOK_CWD: own,
+          HOOK_SESSION_ID: 'package-fixture',
+          HOOK_PERMISSION_MODE: 'bypassPermissions',
+        },
+      }
+    );
+  }
+  const benignInterpreter = writeGuard(
+    "node <<'JS'\nconst f = () => { console.log(1, 2); }; const obj = { a: 1, b: 2 }; f();\nJS"
+  );
+  assert.equal(benignInterpreter.status, 0, benignInterpreter.stderr);
+  const finiteForeign = writeGuard(`DEST='${foreign}/never-written'; touch "$DEST"`);
+  assert.equal(finiteForeign.status, 2, JSON.stringify(finiteForeign));
+  assert.match(finiteForeign.stderr, /worktree 'foreign'/);
+  const nestedForeign = writeGuard(`bash <<'SH'\nprintf x > '${foreign}/nested-never-written'\nSH`);
+  assert.equal(nestedForeign.status, 2, JSON.stringify(nestedForeign));
+  const inertInterpreter = writeGuard(
+    `node -e 'require("node:fs").writeFileSync("${marker}", "bad")'`
+  );
+  assert.equal(inertInterpreter.status, 0, inertInterpreter.stderr);
+  assert.equal(fs.existsSync(marker), false);
+  assert.equal(fs.existsSync(path.join(foreign, 'never-written')), false);
+  assert.equal(fs.existsSync(path.join(foreign, 'nested-never-written')), false);
   console.log(
     JSON.stringify({
       tarballSha256,
@@ -128,6 +181,9 @@ try {
       installedBenign: benign.decision,
       installedHostile: hostile.decision,
       submittedSideEffectObserved: false,
+      packagedWriteGuardBenign: benignInterpreter.status,
+      packagedWriteGuardForeign: finiteForeign.status,
+      packagedWriteGuardNestedForeign: nestedForeign.status,
     })
   );
 } finally {
