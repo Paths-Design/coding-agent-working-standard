@@ -129,3 +129,8 @@ evidence:
     command: node tests/fixtures/command-analysis/replay.cjs /tmp/caws-shell-historical-replay.json /tmp/caws-sed-warning-count.json /tmp/caws-shell-historical-adjudications.json /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/shell-analysis /tmp/caws-shell-replay-result.json
     exit_code: 0
     commit_sha: "52089e3cb549960029fbd2d595acda68706d06f5"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Scoped pure analyzer proof: full1318 semantic/projection baseline passed in fresh3355-mutant run; supported benign source, deterministic traces and sentinel absence asserted by tests/shell/command-analysis.test.js. All5 embedded mutation sources independently matched current4bde/2b2 bytes. Scores83.43/98.46/82.71/80.59/91.30%,zero timeouts; sensitivity is not general correctness/native execution proof. Manually inspected ignored packages/caws-cli/reports/mutation-analysis/mutation-report-2b2d1a01.json SHAa39790b4f1560dc9344d2eb235db67bb82731c02cd7aa9832c8c1cc44741bcc9 and full run-2b2d1a01.log. Initial structured artifact --verify correctly refused untracked generated evidence; nothing written. This citation verifies commit identity only; behavioral adjudication is manual, artifacts intentionally uncommitted."
+    recorded_at: "2026-10-19T20:55:40.998Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
