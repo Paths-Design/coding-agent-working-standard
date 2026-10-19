@@ -52,11 +52,21 @@ beforeEach(() => {
   fx = { root, project, sibling, hooks, foreign, cli };
 });
 afterEach(() => fs.rmSync(fx.root, { recursive: true, force: true }));
-function guard(command, extra = {}) {
+function guard(command, extra = {}, transport = {}) {
+  const nativeCwd = Object.hasOwn(extra, 'HOOK_CWD') ? extra.HOOK_CWD : fx.project;
+  const envelope = transport.envelope ?? {
+    tool_name: 'Bash',
+    // An empty parsed cache models absent native cwd, not an explicit malformed
+    // wire value. Malformed envelopes are supplied through transport.envelope.
+    ...(nativeCwd === '' ? {} : { cwd: nativeCwd }),
+    session_id: 'consumer-fixture-session',
+    permission_mode: 'bypassPermissions',
+    tool_input: { command },
+  };
   return spawnSync('/bin/bash', [path.join(fx.hooks, 'bash-write-guard.sh')], {
     cwd: fx.project,
     encoding: 'utf8',
-    input: '',
+    input: transport.input ?? JSON.stringify(envelope),
     timeout: 15000,
     env: {
       ...process.env,
@@ -84,6 +94,184 @@ function refused(command, message) {
   expect(result.stderr).toContain(message);
   return result;
 }
+test('missing original input cannot borrow parsed scalar authority', () => {
+  const missing = guard('printf safe', {}, { input: '' });
+  expect(missing.status).toBe(2);
+  expect(missing.stderr).toContain('original tool metadata');
+  const nonShell = guard(
+    'ignored',
+    { CAWS_BIN: '/nonexistent-cli' },
+    {
+      envelope: { tool_name: 'Write', tool_input: { file_path: 'example.txt' } },
+    }
+  );
+  expect(nonShell.status).toBe(0);
+});
+test('an explicit malformed native cwd cannot borrow parsed cache authority', () => {
+  const result = guard(
+    'printf safe',
+    {},
+    {
+      envelope: { tool_name: 'Bash', cwd: '', tool_input: { command: 'printf safe' } },
+    }
+  );
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('invalid-cwd');
+});
+test('an enclosing loop redirect remains a write in the mandatory consumer', () => {
+  const scratch = path.join(fx.root, 'loop-report.txt');
+  const foreign = path.join(fx.sibling, 'loop-report.txt');
+  const source = (target) => 'for name in one; do printf "%s" "$name"; done > ' + quote(target);
+  expect(guard(source(scratch)).status).toBe(0);
+  refused(source(foreign), fx.sibling);
+  expect(fs.existsSync(scratch)).toBe(false);
+  expect(fs.existsSync(foreign)).toBe(false);
+});
+test('native shell and startup metadata cannot disappear behind Bash scalar exports', () => {
+  for (const [metadata, reason] of [
+    [{}, 'shell-dialect'],
+    [{ shell: '/bin/zsh', login: false }, 'shell-dialect'],
+    [{ shell: '/bin/bash' }, 'shell-startup'],
+    [{ shell: '/bin/bash', login: true }, 'shell-startup'],
+    [{ shell: '/bin/bash', login: 'false' }, 'invalid-input'],
+  ]) {
+    const result = guard(
+      'printf harmless-scalar',
+      {},
+      {
+        envelope: {
+          tool_name: 'exec_command',
+          cwd: fx.project,
+          tool_input: { cmd: 'printf safe', ...metadata },
+        },
+      }
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(reason);
+  }
+  const supported = guard(
+    'printf harmless-scalar',
+    {},
+    {
+      envelope: {
+        tool_name: 'exec_command',
+        cwd: fx.project,
+        tool_input: { cmd: 'printf safe', shell: '/bin/bash', login: false },
+      },
+    }
+  );
+  expect({ status: supported.status, stderr: supported.stderr }).toEqual({ status: 0, stderr: '' });
+});
+test('native command conflicts retain no harmless source substitute', () => {
+  const marker = path.join(fx.sibling, 'source-must-not-execute');
+  for (const input of [
+    { cmd: 'touch ' + quote(marker), command: 'printf safe' },
+    { cmd: null, command: 'printf safe' },
+  ]) {
+    const result = guard(
+      'printf harmless-scalar',
+      {},
+      {
+        envelope: {
+          tool_name: 'exec_command',
+          cwd: fx.project,
+          tool_input: { ...input, shell: '/bin/bash', login: false },
+        },
+      }
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('command mutation analyzer failed');
+    expect(fs.existsSync(marker)).toBe(false);
+  }
+});
+test('unmodeled native execution fields cannot borrow the launcher environment or cwd', () => {
+  const tool_input = {
+    cmd: 'printf safe',
+    shell: '/bin/bash',
+    login: false,
+    description: 'ordinary metadata',
+    timeout_ms: 1000,
+  };
+  function invoke(fields) {
+    return guard(
+      'printf harmless-scalar',
+      {},
+      {
+        envelope: {
+          tool_name: 'exec_command',
+          cwd: fx.project,
+          tool_input: { ...tool_input, ...fields },
+        },
+      }
+    );
+  }
+  expect(invoke({}).status).toBe(0);
+  for (const fields of [{ cwd: fx.sibling }, { env: {} }, { environment: null }]) {
+    const result = invoke(fields);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('unsupported-execution-context');
+  }
+});
+test('native workdir reaches downstream relative-target ownership', () => {
+  function at(workdir, base = fx.project) {
+    return guard(
+      'printf harmless-scalar',
+      { HOOK_CWD: fx.project },
+      {
+        envelope: {
+          tool_name: 'exec_command',
+          ...(base === undefined ? {} : { cwd: base }),
+          tool_input: { cmd: 'touch available.txt', workdir, shell: '/bin/bash', login: false },
+        },
+      }
+    );
+  }
+  expect(at(fx.project).status).toBe(0);
+  for (const directory of [fx.sibling, fx.foreign, '.caws/worktrees/foreign']) {
+    const result = at(directory);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(directory === fx.sibling ? 'DIFFERENT repository' : 'foreign');
+    expect(result.stderr).not.toContain('operating cwd could not be resolved');
+  }
+  const unknown = at('relative-without-base', null);
+  expect(unknown.status).toBe(2);
+  expect(unknown.stderr).toContain('operating cwd could not be resolved');
+});
+test.each(['standalone', 'dispatcher', 'file'])(
+  'original native source remains authoritative through %s transport',
+  (mode) => {
+    const marker = path.join(fx.sibling, 'transport-must-not-execute');
+    const envelope = {
+      tool_name: 'exec_command',
+      cwd: fx.project,
+      tool_input: { cmd: 'touch ' + quote(marker), shell: '/bin/bash', login: false },
+    };
+    const extra = mode === 'standalone' ? { HOOK_TOOL_NAME: undefined } : {};
+    if (mode === 'file') {
+      const file = path.join(fx.root, 'original-payload.json');
+      fs.writeFileSync(file, JSON.stringify(envelope));
+      Object.assign(extra, {
+        HOOK_PAYLOAD_FILE: file,
+        HOOK_TOOL_INPUT_JSON: '',
+        HOOK_PAYLOAD_TRUNCATED: '1',
+      });
+    }
+    const result = guard('printf harmless-scalar', extra, {
+      envelope:
+        mode === 'file'
+          ? { tool_name: 'Bash', cwd: fx.project, tool_input: { command: 'printf decoy' } }
+          : envelope,
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('DIFFERENT repository');
+    expect(fs.existsSync(marker)).toBe(false);
+  }
+);
+test('missing advertised payload file never falls back to harmless stdin', () => {
+  const result = guard('printf safe', { HOOK_PAYLOAD_FILE: path.join(fx.root, 'missing-payload') });
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('original payload transport file');
+});
 test('Node arrow/object data does not fabricate a shell target', () => {
   const result = guard(
     "node <<'NODE'\nconst f = () => { console.log(1, 2); }; const obj = { a: 1, b: 2 }; f();\nNODE"
@@ -238,9 +426,11 @@ function protocolToken(value, kind = 'word') {
     end: 0,
   };
 }
-function protocolView(tokens) {
+function protocolView(tokens, command = 'fixture') {
   return {
     schema: 'caws.shell_mutation_view.v1',
+    execution: { command, cwd: fs.realpathSync.native(fx.project) },
+    singleLifecycle: null,
     tokens,
     issues: [],
     interpreters: [],
@@ -507,6 +697,18 @@ test('metadata protocol requires the channel even for a read-only result', () =>
   expect(result.status).toBe(2);
   expect(result.stderr).toContain('invalid or incomplete contract');
 });
+test('execution context and exact source echo are mandatory protocol fields', () => {
+  const view = protocolView([]);
+  expect(guard('fixture', protocolBackend(JSON.stringify(view))).status).toBe(0);
+  for (const replacement of [undefined, null, { command: 'printf decoy', cwd: fx.project }]) {
+    const result = guard(
+      'fixture',
+      protocolBackend(JSON.stringify({ ...view, execution: replacement }))
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('invalid or incomplete contract');
+  }
+});
 test('metadata discovery cannot borrow an unknown cwd or ignore index routing', () => {
   const unknown = guard('git add -- file', { HOOK_CWD: '' });
   expect(unknown.status).toBe(2);
@@ -522,7 +724,8 @@ test('missing ownership infrastructure in a governed project fails closed', () =
 });
 test('NUL framing preserves an empty BSD sed suffix without inventing a target', () => {
   const view = protocolView(
-    ['sed', '-i', '', 's/a/b/', path.join(fx.foreign, 'out')].map((value) => protocolToken(value))
+    ['sed', '-i', '', 's/a/b/', path.join(fx.foreign, 'out')].map((value) => protocolToken(value)),
+    'fixture source'
   );
   const result = guard('fixture source', protocolBackend(JSON.stringify(view)));
   expect(result.status).toBe(2);
@@ -530,13 +733,13 @@ test('NUL framing preserves an empty BSD sed suffix without inventing a target',
   expect(result.stderr).not.toContain('invalid or incomplete contract');
 });
 test('NUL framing retains trailing newline bytes for unrepresentable-target refusal', () => {
-  const view = protocolView([protocolToken('touch'), protocolToken('name\n')]);
+  const view = protocolView([protocolToken('touch'), protocolToken('name\n')], 'fixture source');
   const result = guard('fixture source', protocolBackend(JSON.stringify(view)));
   expect(result.status).toBe(2);
   expect(result.stderr).toContain('newline or tab');
 });
 test('an empty filename is not projected to the execution directory', () => {
-  const view = protocolView([protocolToken('touch'), protocolToken('')]);
+  const view = protocolView([protocolToken('touch'), protocolToken('')], 'fixture source');
   const result = guard('fixture source', protocolBackend(JSON.stringify(view)));
   expect(result.status).toBe(0);
   expect(result.stderr).toBe('');
@@ -547,7 +750,7 @@ test.each(['invalid-boolean', 'embedded-nul', 'multiple-documents', 'nonzero'])(
     const token = protocolToken('touch');
     if (kind === 'invalid-boolean') token.dynamic = 'false';
     if (kind === 'embedded-nul') token.value = 'a\0b';
-    const view = JSON.stringify(protocolView([token]));
+    const view = JSON.stringify(protocolView([token], 'fixture source'));
     const response = kind === 'multiple-documents' ? view + '\n' + view : view;
     const result = guard('fixture source', protocolBackend(response, kind === 'nonzero' ? 1 : 0));
     expect(result.status).toBe(2);

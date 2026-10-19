@@ -108,10 +108,37 @@ caws_source_lib heredoc.sh 2>/dev/null || true
 TOOL_NAME="$HOOK_TOOL_NAME"
 COMMAND="$HOOK_COMMAND"
 
-# Self-filter: Bash only.
-if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
-  exit 0
+# Parsed exports are observations, not a replacement execution envelope. In a
+# dispatcher child the original stdin is replayed even when parsing fast-paths;
+# a standalone parser instead keeps the full local JSON or its transport file.
+if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+  if [[ ! -f "$HOOK_PAYLOAD_FILE" || ! -r "$HOOK_PAYLOAD_FILE" ]]; then
+    echo '[bash-write-guard] UNRESOLVED: original payload transport file is unavailable.' >&2
+    exit 2
+  fi
+elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+  HOOK_INPUT_JSON="$(cat)" || exit 2
+  export -n HOOK_INPUT_JSON 2>/dev/null || true
 fi
+original_payload() {
+  if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then cat "$HOOK_PAYLOAD_FILE"
+  else printf '%s' "${HOOK_INPUT_JSON:-}"; fi
+}
+ORIGINAL_TOOL="$(original_payload | node -e '
+const fs = require("node:fs");
+try {
+  const value = JSON.parse(fs.readFileSync(0, "utf8"));
+  if (!value || typeof value.tool_name !== "string" || !value.tool_name) process.exit(1);
+  process.stdout.write(value.tool_name);
+} catch { process.exit(1); }
+' 2>/dev/null)" || {
+  echo '[bash-write-guard] UNRESOLVED: original tool metadata is missing or malformed.' >&2
+  exit 2
+}
+case "$ORIGINAL_TOOL" in
+  Bash|exec_command|functions.exec_command|shell_command|functions.shell_command) ;;
+  *) exit 0 ;;
+esac
 
 CAWS_CLAIM_ORACLE="$SCRIPT_DIR/lib/worktree-claim-oracle.cjs"
 

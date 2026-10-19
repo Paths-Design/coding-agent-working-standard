@@ -14,13 +14,52 @@ audience: consumer
 
 `bash-write-guard.sh` requires
 `caws hooks mutation-view --json --cwd <execution-cwd> --project <canonical-root>`,
-with the original decoded command in a JSON stdin object. This separate
+with the original native execution envelope on JSON stdin. The CLI's literal
+`{command}` request form is also available for direct callers. This separate
 `caws.shell_mutation_view.v1` contract supplies shell tokens, source spans,
 observed directories, interpreter payloads, Git metadata coordinates and
 unresolved issues. It has no permission verdict. Existing utility operand rules
 and the claim oracle determine whether a recognized write is authorized. A
 missing or malformed backend fails closed without falling back to the legacy
 lexer.
+
+The CLI response adds `execution: {command, cwd}` and `singleLifecycle` to the
+projection. The bridge requires the exact decoded source to match all supplied
+native `command`/`cmd` fields and uses the returned execution directory for
+downstream ownership checks. A known directory is physical; an unknown directory
+stays `null`. Invalid source or unavailable analysis returns `execution:null`,
+empty facts and a bounded issue. Returned bounded facts survive later projection
+uncertainty so an independently observed foreign write retains precedence.
+
+Native `exec_command`/`shell_command` spellings require explicit Bash and
+`tool_input.login:false`. Their `workdir` resolves against the original native
+base `cwd`, never a CLI or session-root fallback. An existing absolute `workdir`
+can establish a coordinate without a base; malformed supplied context remains an
+issue. Supplied source, dialect and startup conflicts cannot select a harmless
+substitute. `tool_input.cwd`, `env` and `environment` are explicitly unmodeled;
+their presence is unresolved rather than interpreted as the launcher's context.
+Ordinary metadata such as descriptions and timeouts has no such restriction. The
+literal `Bash` protocol retains its existing Bash assumption when no shell is
+supplied. That compatibility assumption does not establish a host's
+normalization or default executor settings.
+
+The
+[Codex 0.163.0 producer](https://github.com/openai/codex/blob/83086188ae0614bd882818ff1aa23f3194962012/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs)
+constructs `Bash.command` from raw `cmd`. Its executor separately selects shell,
+login mode and per-call workdir; the hook's
+[cwd comes from the turn environment](https://github.com/openai/codex/blob/83086188ae0614bd882818ff1aa23f3194962012/codex-rs/core/src/hook_runtime.rs).
+Updating `command` preserves those hidden original arguments. This producer
+projection cannot certify the execution contract above. Native adoption requires
+complete producer metadata or a controlled execution boundary; an explicit-Bash
+fixture alone cannot establish that contract for other calls.
+
+`singleLifecycle` is a syntax fact, not permission. It identifies only one
+foreground, literal `caws worktree merge|destroy` invocation with a name and
+closed option arities. Assignments, redirections, expansions, pipelines and
+compound neighbors receive no fact. `quiet-merge.sh` verifies source and
+directory custody before prefixing a shell-quoted canonical directory. Missing
+facts or backend failures leave the command untouched. Quoted lifecycle mentions
+cannot reroot another command after the write guard has checked it.
 
 Unknown execution cwd is carried as `null`, including through nested source. The
 project directory may anchor syntax traversal but never becomes an observed
@@ -110,8 +149,10 @@ caws hooks analyze --worktree /project/.caws/worktrees/own --cwd /project/.caws/
 For tooling, send a JSON object on stdin containing `command`, `cwd`,
 `worktree`, and optionally `shell`. A native
 `{tool_name:"Bash", tool_input: {command:...}, cwd:...}` envelope is also
-accepted. Caller arguments override payload fields. `--worktree` is the trusted
-pin in the installed guard; command text cannot choose it. The JSON schema is
+accepted. `--command` selects direct source mode; `--cwd` configures literal
+requests, while native execution cwd comes from the original envelope. Supplied
+shell declarations must agree. `--worktree` is the trusted pin in the installed
+guard; command text cannot choose it. The JSON schema is
 `caws.hooks_analyze.v1`; reasons and trace entries use half-open JavaScript
 string indices into the original source. The source budget counts UTF-8 bytes.
 Custody refers to the exact decoded command string in a valid JSON envelope, not
@@ -192,6 +233,12 @@ targeting the canonical checkout or another worktree is denied. Git targeting
 the pinned lane or scratch outside the canonical project remains admitted. Git
 metadata overrides are checked separately. A missing pinned directory releases
 the pin so a merged session can create its next lane.
+
+An `allow` from this pin policy is not a read-only certificate or write
+ownership. Known top-level output redirections can satisfy the pin policy; their
+effects invalidate later Git observations. The mandatory write guard
+independently checks their projected target operands. Output inside a read
+substitution remains outside the reader profile.
 
 This is a source-level guard, not a process sandbox. Its load-bearing host
 contract is non-POSIX Bash with its keyword option disabled, default IFS,

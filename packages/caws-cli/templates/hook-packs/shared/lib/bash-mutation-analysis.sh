@@ -76,12 +76,10 @@ _caws_ast_entry_script() {
 
 caws_bash_prepare_analysis() {
   local command="$1" cwd="$2" project="$3" cli="${CAWS_BIN:-caws}" json
-  local unknown_cwd=false
   local -a context_args=()
   if [[ ${_CWD_RESOLVED:-0} != 1 ]]; then
     cwd="$project"
     if [[ ${_CWD_CONTRACT:-0} == 1 ]]; then
-      unknown_cwd=true
       context_args+=( --cwd-unresolved )
     fi
   fi
@@ -89,9 +87,18 @@ caws_bash_prepare_analysis() {
   CAWS_BASH_ANALYSIS_ERROR='command mutation analysis is unavailable'
   command -v jq >/dev/null 2>&1 || return 2
   command -v "$cli" >/dev/null 2>&1 || return 2
-  if ! json="$(jq -nc --arg command "$command" '{command:$command}' |
+  declare -F original_payload >/dev/null 2>&1 || return 2
+  # The original envelope owns execution context. Parsed scalar exports cannot
+  # replace its command aliases, dialect, startup choices or working directory.
+  if ! json="$(original_payload |
       "$cli" hooks mutation-view --json --cwd "$cwd" --project "$project" ${context_args[@]+"${context_args[@]}"})"; then
-    CAWS_BASH_ANALYSIS_ERROR='command mutation analyzer failed'; return 2
+    local codes
+    codes="$(jq -ser '
+      if length==1 and .[0].schema=="caws.shell_mutation_view.v1" and (.[0].issues|type)=="array"
+      then [.[0].issues[].code | select(type=="string" and length>0 and length<=64 and test("^[a-z0-9_-]+$"))][:8] | unique | join(", ")
+      else empty end
+    ' <<< "$json" 2>/dev/null)" || codes=''
+    CAWS_BASH_ANALYSIS_ERROR="command mutation analyzer failed${codes:+ ($codes)}"; return 2
   fi
   CAWS_AST_VALUE=(); CAWS_AST_KIND=(); CAWS_AST_DYNAMIC=(); CAWS_AST_RESOLUTION=()
   CAWS_AST_UNREPR=(); CAWS_AST_CWD=(); CAWS_AST_ISSUES=(); CAWS_AST_LITERALS=()
@@ -99,11 +106,15 @@ caws_bash_prepare_analysis() {
   CAWS_AST_GIT_WORKTREE=(); CAWS_AST_GIT_START=(); CAWS_AST_GIT_END=()
   local tag value kind dynamic resolution unrepr coordinate start end language argc count isnull verbs payload
   local subcommand directory common worktree
-  local complete=0 malformed=0
+  local complete=0 malformed=0 execution_seen=0 execution_command='' execution_cwd=''
   local -a arguments=()
   while IFS= read -r -d '' tag; do
     [[ $complete == 0 ]] || { malformed=1; break; }
     case "$tag" in
+      execution)
+        [[ $execution_seen == 0 ]] || { malformed=1; break; }
+        IFS= read -r -d '' execution_command && IFS= read -r -d '' execution_cwd || { malformed=1; break; }
+        execution_seen=1 ;;
       token)
         IFS= read -r -d '' value && IFS= read -r -d '' kind &&
         IFS= read -r -d '' dynamic && IFS= read -r -d '' resolution &&
@@ -148,23 +159,30 @@ caws_bash_prepare_analysis() {
       complete) complete=1 ;;
       *) malformed=1; break ;;
     esac
-  done < <(jq -sj --argjson unknown_cwd "$unknown_cwd" '
+  done < <(jq -sj --slurpfile request <(original_payload) '
     def span: (.start|type)=="number" and (.end|type)=="number" and
       .start>=0 and .end>=.start and .start==(.start|floor) and .end==(.end|floor);
-    def coordinate: (.cwd==null and $unknown_cwd) or ((.cwd|type)=="string" and (.cwd|startswith("/")));
+    def coordinate($unknown_cwd): (.cwd==null and $unknown_cwd) or ((.cwd|type)=="string" and (.cwd|startswith("/")));
     def absolute: type=="string" and startswith("/");
     def valid:
+      . as $document |
       type=="object" and .schema=="caws.shell_mutation_view.v1" and
+      (.execution|type)=="object" and (.execution.command|type)=="string" and
+      (.execution.command|utf8bytelength)<=65536 and
+      (.execution.cwd==null or (.execution.cwd|absolute)) and
+      ($request|length)==1 and ($request[0].tool_input|type)=="object" and
+      ([$request[0].tool_input|to_entries[]|select(.key=="command" or .key=="cmd")|.value] as $sources |
+        ($sources|length)>0 and all($sources[]; type=="string" and .==$document.execution.command)) and
       (.tokens|type)=="array" and (.issues|type)=="array" and (.interpreters|type)=="array" and
       (.gitMetadata|type)=="array" and
       all(.tokens[]; (.value|type)=="string" and
         (.kind as $k | ["word","op","redirect","input_redirect","unsupported_nesting"]|index($k))!=null and
         (.dynamic|type)=="boolean" and (.resolution=="" or .resolution=="runtime") and
         (.dynamic == (.resolution=="runtime")) and .prefix=="" and .prefixBasis=="none" and
-        (.unrepresentable|type)=="boolean" and coordinate and span and
+        (.unrepresentable|type)=="boolean" and coordinate($document.execution.cwd==null) and span and
         (.unrepresentable or ((.value|contains("\n")|not) and (.value|contains("\t")|not)))) and
       all(.issues[]; (.code|type)=="string" and (.message|type)=="string" and span) and
-      all(.interpreters[]; (.language=="node" or .language=="python") and coordinate and span and
+      all(.interpreters[]; (.language=="node" or .language=="python") and coordinate($document.execution.cwd==null) and span and
         (.argv|type)=="array" and (.argv|length)>0 and all(.argv[]; .==null or type=="string") and
         (.payloads|type)=="array" and all(.payloads[];
           (.text|type)=="string" and (.origin=="argument" or .origin=="heredoc") and span)) and
@@ -174,6 +192,7 @@ caws_bash_prepare_analysis() {
     def frame: .[] | tostring + "\u0000";
     if length!=1 then error("one mutation-view document required") else .[0] end |
     if valid then
+      (["execution",.execution.command,(.execution.cwd//"")]|frame),
       (.tokens[] | ["token",.value,.kind,(if .dynamic then 1 else 0 end),.resolution,
         (if .unrepresentable then 1 else 0 end),(.cwd//""),.start,.end] | frame),
       (.issues[] | ["issue",(.code+": "+.message)] | frame),
@@ -185,10 +204,18 @@ caws_bash_prepare_analysis() {
       (["complete"]|frame)
     else error("invalid caws.shell_mutation_view.v1 response") end
   ' <<< "$json")
-  if [[ $complete != 1 || $malformed != 0 ]]; then
+  if [[ $complete != 1 || $malformed != 0 || $execution_seen != 1 ]]; then
     CAWS_BASH_ANALYSIS_ERROR='command mutation analyzer returned an invalid or incomplete contract'; return 2
   fi
-  CAWS_BASH_ANALYSIS_COMMAND="$command"; CAWS_BASH_ANALYSIS_READY=1
+  # All downstream roles, relative-path checks and cache identity use the same
+  # decoded context as projection. A project placeholder never becomes proof.
+  COMMAND="$execution_command"
+  if [[ -n "$execution_cwd" ]]; then
+    AGENT_CWD="$execution_cwd"; _CWD_RESOLVED=1
+  else
+    AGENT_CWD="$project"; _CWD_RESOLVED=0; _CWD_CONTRACT=1
+  fi
+  CAWS_BASH_ANALYSIS_COMMAND="$execution_command"; CAWS_BASH_ANALYSIS_READY=1
   return 0
 }
 

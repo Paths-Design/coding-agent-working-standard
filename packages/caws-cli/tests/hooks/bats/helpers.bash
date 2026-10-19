@@ -124,8 +124,9 @@ caws_teardown_pack() {
 # Build a hook-input envelope JSON. Usage: hook_envelope <tool> <file_path> <command>
 hook_envelope() {
   local tool="$1" file_path="${2:-}" command="${3:-}"
-  printf '{"tool_name":"%s","tool_input":{"file_path":"%s","command":"%s"}}' \
-    "$tool" "$file_path" "$command"
+  jq -nc --arg tool "$tool" --arg file "$file_path" --arg command "$command" \
+    --arg cwd "$CAWS_TEST_REPO" --arg session "$CAWS_TEST_SESSION_ID" \
+    '{tool_name:$tool,cwd:$cwd,session_id:$session,tool_input:{file_path:$file,command:$command}}'
 }
 
 # Build a content-bearing Write/Edit envelope (for content scanners like
@@ -147,7 +148,8 @@ run_guard() {
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
-    bash -c "cd '$CAWS_TEST_REPO' && printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/$guard'"
+    bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
+    "$CAWS_TEST_REPO" "$envelope" "$CAWS_TEST_HOOKS_DIR/$guard"
 }
 
 # Run an installed guard against an ISOLATED COPY of the hooks dir with one
@@ -173,7 +175,8 @@ run_guard_missing_lib() {
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \
-    bash -c "cd '$broken_repo' && printf '%s' '$envelope' | bash '$broken_hooks/$guard'"
+    bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
+    "$broken_repo" "$envelope" "$broken_hooks/$guard"
   rm -rf "$broken_repo"
 }
 
@@ -196,7 +199,8 @@ run_dispatcher_missing_lib() {
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \
-    bash -c "cd '$broken_repo' && printf '%s' '$envelope' | bash '$broken_hooks/dispatch/pre_tool_use.sh'"
+    bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
+    "$broken_repo" "$envelope" "$broken_hooks/dispatch/pre_tool_use.sh"
   rm -rf "$broken_repo"
 }
 

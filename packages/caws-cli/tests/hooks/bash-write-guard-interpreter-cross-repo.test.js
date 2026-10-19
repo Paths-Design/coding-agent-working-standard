@@ -97,7 +97,13 @@ function runGuard(command, fixture) {
     const stdout = execFileSync('bash', [BASH_GUARD], {
       env,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      input: JSON.stringify({
+        tool_name: 'Bash',
+        cwd: fixture.projectDir,
+        session_id: 'interpreter-fixture-session',
+        tool_input: { command },
+      }),
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     return { exit: 0, stdout, stderr: '' };
   } catch (e) {
