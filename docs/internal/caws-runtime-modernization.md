@@ -51,7 +51,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | component tested; not integrated | Explicit context and injected Stop budget; consumer migration and transport-Stop recovery remain open |
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component tested; not integrated | Wrapped deletion, effective-checkout Git proofs, wrong-index and linked-HEAD controls checked with real Git/FS fixtures; full corpus/native-consumer proof remains open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
-| R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | implementing; consumer unreplaced | Actual shell consumer is `shared/hook-utilities.sh`; lockfile restore belongs to the classifier, not this utility |
+| R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component tested; consumer unreplaced | Actual shell consumer is `shared/hook-utilities.sh`; real Git index and heredoc/routing controls exercised; lockfile restore belongs to the classifier, not this utility |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence | TS transcript store | unreplaced | Atomic replacement, identity, replay custody, malformed and concurrent inputs |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization | TS normalization interfaces/common implementation | unreplaced | Lossless occurrence/provenance and explicit unavailable fields |
@@ -207,6 +207,15 @@ Additional component evidence:
   ceiling and mandatory child/foreign-process checks. Both corrected focused
   executable tests passed. This is not a fresh all-suite pass or typed-engine
   integration proof.
+
+- E26: Strict CLI build and runtime TypeScript check passed. Ten combined suites
+  passed 647 checks in 82.779 seconds, including classifier, guard utilities,
+  caller context, protocol, composer, scheduler, selection, native response,
+  guard configuration and shared policy validation. Classifier controls cover
+  `env -S` option/argument custody, substitution-local directories, unsupported
+  routing and deep nesting; utility controls include real Git index immutability,
+  inert heredocs and executing substitutions. These checks do not establish
+  native engine integration, installed behavior or complete shell soundness.
 
 ## Embedded and developer implementation coverage
 

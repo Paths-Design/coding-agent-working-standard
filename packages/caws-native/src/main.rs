@@ -23,6 +23,11 @@ fn main() {
                 .map_err(runner::Failure::configuration)?;
             let bytes = serde_json::to_vec(&request)
                 .map_err(|e| runner::Failure::configuration(format!("request encoding: {e}")))?;
+            if bytes.len() > runner::MAX_REQUEST {
+                return Err(runner::Failure::configuration(
+                    "request exceeds byte limit".into(),
+                ));
+            }
             let response = runner::invoke(&config, &bytes, deadline)?;
             protocol::validate_response(&response, &request).map_err(runner::Failure::execution)
         });

@@ -24,14 +24,15 @@ pub struct Config {
     pub node: PathBuf,
     pub surface: String,
     pub event: String,
+    pub configuration: String,
     pub digest: String,
     pub timeout: Duration,
 }
 
 impl Config {
     pub fn parse(args: &[String]) -> Result<Self, String> {
-        if args.first().map(String::as_str) != Some("invoke") || args.len() != 13 {
-            return Err("usage: caws-native invoke --engine <absolute JS> --node <absolute Node> --surface <surface> --event <event> --runtime-digest <64lowerhex> --timeout-ms <1..120000>".into());
+        if args.first().map(String::as_str) != Some("invoke") || args.len() != 15 {
+            return Err("usage: caws-native invoke --engine <absolute JS> --node <absolute Node> --surface <surface> --event <event> --runtime-digest <64lowerhex> --timeout-ms <1..120000> --configuration <system|project>".into());
         }
         let mut flags = HashMap::new();
         for pair in args[1..].chunks_exact(2) {
@@ -42,6 +43,7 @@ impl Config {
                 "--event",
                 "--runtime-digest",
                 "--timeout-ms",
+                "--configuration",
             ]
             .contains(&pair[0].as_str())
                 || flags.insert(pair[0].as_str(), pair[1].as_str()).is_some()
@@ -65,6 +67,10 @@ impl Config {
         if !SURFACES.contains(&surface) || !EVENTS.contains(&event) {
             return Err("unsupported runtime surface or event".into());
         }
+        let configuration = get("--configuration")?;
+        if !["system", "project"].contains(&configuration) {
+            return Err("unsupported runtime entry configuration".into());
+        }
         let digest = get("--runtime-digest")?;
         if !valid_digest(digest) {
             return Err("runtime digest must be 64 lowercase hexadecimal characters".into());
@@ -80,6 +86,7 @@ impl Config {
             node,
             surface: surface.into(),
             event: event.into(),
+            configuration: configuration.into(),
             digest: digest.into(),
             timeout: Duration::from_millis(timeout),
         })
@@ -111,6 +118,8 @@ mod tests {
             &"a".repeat(64),
             "--timeout-ms",
             "1000",
+            "--configuration",
+            "system",
         ]
         .into_iter()
         .map(String::from)
@@ -125,6 +134,7 @@ mod tests {
             (10, vec!["", "A", &"A".repeat(64)]),
             (12, vec!["0", "120001", "-1", "NaN"]),
             (2, vec!["relative.js"]),
+            (14, vec!["legacy", "true", ""]),
         ] {
             for value in values {
                 let mut input = args();
@@ -135,5 +145,8 @@ mod tests {
         let mut duplicate = args();
         duplicate[11] = "--node".into();
         assert!(Config::parse(&duplicate).is_err());
+        let mut project = args();
+        project[14] = "project".into();
+        assert_eq!(Config::parse(&project).unwrap().configuration, "project");
     }
 }

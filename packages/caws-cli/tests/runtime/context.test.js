@@ -57,6 +57,9 @@ test.each([
   ['/valid', { 'A=B': 'value' }],
   ['/valid', { '': 'value' }],
   ['/valid', { X: 'bad\0value' }],
+  ['/valid' + String.fromCharCode(0xd800), {}],
+  ['/valid', { X: String.fromCharCode(0xd800) }],
+  ['/valid', { [String.fromCharCode(0xd800)]: 'value' }],
 ])('rejects invalid native caller context %#', (cwd, env) => {
   expect(() => caller(cwd, env)).toThrow(/Caller/);
 });

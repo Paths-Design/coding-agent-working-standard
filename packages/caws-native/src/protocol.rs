@@ -2,7 +2,38 @@ use crate::cli::Config;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+#[derive(Serialize)]
+struct Caller {
+    cwd: String,
+    environment: BTreeMap<String, String>,
+}
+
+impl Caller {
+    fn capture() -> Result<Self, String> {
+        let cwd = std::env::current_dir()
+            .map_err(|_| "caller cwd is unavailable")?
+            .into_os_string()
+            .into_string()
+            .map_err(|_| "caller cwd is not valid UTF-8")?;
+        let mut environment = BTreeMap::new();
+        for (name, value) in std::env::vars_os() {
+            let name = name
+                .into_string()
+                .map_err(|_| "caller environment name is not valid UTF-8")?;
+            let value = value
+                .into_string()
+                .map_err(|_| "caller environment value is not valid UTF-8")?;
+            if name.is_empty() || name.contains('=') {
+                return Err("caller environment name is invalid".into());
+            }
+            environment.insert(name, value);
+        }
+        Ok(Self { cwd, environment })
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +43,8 @@ pub struct Request {
     pub runtime_digest: String,
     surface: String,
     event: String,
+    configuration: String,
+    caller: Caller,
     deadline_epoch_ms: u64,
     payload: Map<String, Value>,
     input_json: String,
@@ -40,6 +73,8 @@ impl Request {
             runtime_digest: config.digest.clone(),
             surface: config.surface.clone(),
             event: config.event.clone(),
+            configuration: config.configuration.clone(),
+            caller: Caller::capture()?,
             deadline_epoch_ms: deadline as u64,
             payload,
             input_json,

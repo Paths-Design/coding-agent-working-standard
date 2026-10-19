@@ -19,6 +19,8 @@ const request = (changes = {}) => ({
   ...identity,
   surface: 'codex',
   event: 'pre_tool_use',
+  configuration: 'system',
+  caller: { cwd: '/project', environment: { PATH: '/usr/bin', MARKER: 'request-1' } },
   deadlineEpochMs: now + 1_000,
   inputJson: '{ "tool_input": {"command":"pwd"} }\n',
   payload: { tool_input: { command: 'pwd' } },
@@ -39,6 +41,8 @@ describe('native runtime protocol', () => {
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.payload)).toBe(true);
     expect(Object.isFrozen(result.payload.tool_input)).toBe(true);
+    expect(Object.isFrozen(result.caller)).toBe(true);
+    expect(Object.isFrozen(result.caller.environment)).toBe(true);
   });
 
   test.each([
@@ -68,6 +72,19 @@ describe('native runtime protocol', () => {
     { surface: 'cursor' },
     { surface: 'windsurf' },
     { surface: 'none' },
+    { configuration: undefined },
+    { configuration: 'legacy' },
+    { configuration: true },
+    { caller: undefined },
+    { caller: { cwd: 'relative', environment: {} } },
+    { caller: { cwd: '/valid\0bad', environment: {} } },
+    { caller: { cwd: '/valid', environment: [] } },
+    { caller: { cwd: '/valid', environment: { X: false } } },
+    { caller: { cwd: '/valid', environment: { X: null } } },
+    { caller: { cwd: '/valid', environment: { 'A=B': 'value' } } },
+    { caller: { cwd: '/valid', environment: { X: 'bad\0value' } } },
+    { caller: { cwd: '/valid', environment: {}, authority: 'other' } },
+    { caller: { cwd: '/valid', environment: { X: String.fromCharCode(0xd800) } } },
     { deadlineEpochMs: now },
     { deadlineEpochMs: now - 1 },
     { deadlineEpochMs: now + MAX_REQUEST_DURATION_MS + 1 },
@@ -94,6 +111,28 @@ describe('native runtime protocol', () => {
       b: 2,
       a: 1,
     });
+  });
+
+  test('keeps caller context and entry mode isolated across interleaved decoded requests', () => {
+    const ambient = process.env.MARKER;
+    const first = decode({
+      configuration: 'project',
+      caller: { cwd: '/one', environment: { MARKER: 'one', GIT_DIR: '/foreign-one' } },
+    });
+    const second = decode({
+      caller: { cwd: '/two', environment: { MARKER: 'two', GIT_DIR: '/foreign-two' } },
+    });
+    expect(first.caller).toEqual({
+      cwd: '/one',
+      environment: { MARKER: 'one', GIT_DIR: '/foreign-one' },
+    });
+    expect(second.caller).toEqual({
+      cwd: '/two',
+      environment: { MARKER: 'two', GIT_DIR: '/foreign-two' },
+    });
+    expect(first.configuration).toBe('project');
+    expect(second.configuration).toBe('system');
+    expect(process.env.MARKER).toBe(ambient);
   });
 
   test('bounds structure without recursive comparison overflow', () => {

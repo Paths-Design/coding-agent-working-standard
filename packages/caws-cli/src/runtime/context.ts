@@ -21,14 +21,17 @@ export function invocationCaller(
   cwd: string,
   environment: Readonly<NodeJS.ProcessEnv>
 ): InvocationCaller {
-  if (!isAbsolute(cwd) || cwd.includes('\0')) throw new TypeError('Caller cwd must be absolute.');
+  const nativeText = (value: string): boolean =>
+    !value.includes('\0') && Buffer.from(value, 'utf8').toString('utf8') === value;
+  if (!isAbsolute(cwd) || !nativeText(cwd))
+    throw new TypeError('Caller cwd must be absolute UTF-8 native text.');
   const snapshot = Object.fromEntries(
     Object.entries(environment).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string'
     )
   );
   for (const [name, value] of Object.entries(snapshot)) {
-    if (!name || name.includes('=') || name.includes('\0') || value.includes('\0')) {
+    if (!name || name.includes('=') || !nativeText(name) || !nativeText(value)) {
       throw new TypeError('Caller environment contains an invalid native entry.');
     }
   }

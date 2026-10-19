@@ -3,6 +3,7 @@ import { TextDecoder } from 'node:util';
 import type { AgentSurface } from '../init/hook-packs/types';
 import { MACHINE_EVENTS } from '../init/native-hook-identification';
 import type { HookEvent, NativeResult, NativeTextResult } from './types';
+import { invocationCaller, type InvocationCaller } from './context';
 
 export const REQUEST_SCHEMA = 'caws.runtime.request.v1';
 export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
@@ -30,6 +31,9 @@ export interface RuntimeRequest {
   readonly runtimeDigest: string;
   readonly surface: AgentSurface;
   readonly event: HookEvent;
+  readonly configuration: 'system' | 'project';
+  /** Ephemeral native caller snapshot: never include in durable request journals. */
+  readonly caller: InvocationCaller;
   readonly deadlineEpochMs: number;
   /** Exact native stdin text: hashing a reserialization would lose custody. */
   readonly inputJson: string;
@@ -137,6 +141,8 @@ export function decodeRuntimeRequest(
       'runtimeDigest',
       'surface',
       'event',
+      'configuration',
+      'caller',
       'deadlineEpochMs',
       'inputJson',
       'payload',
@@ -156,6 +162,22 @@ export function decodeRuntimeRequest(
   }
   if (typeof value.event !== 'string' || !Object.hasOwn(MACHINE_EVENTS, value.event)) {
     throw new RuntimeProtocolError('Unsupported runtime hook event');
+  }
+  if (!['system', 'project'].includes(value.configuration as string))
+    throw new RuntimeProtocolError('Unsupported runtime entry configuration');
+  if (
+    !record(value.caller) ||
+    !exactKeys(value.caller, ['cwd', 'environment']) ||
+    typeof value.caller.cwd !== 'string' ||
+    !record(value.caller.environment) ||
+    Object.values(value.caller.environment).some((entry) => typeof entry !== 'string')
+  )
+    throw new RuntimeProtocolError('Invalid native caller snapshot');
+  let caller: InvocationCaller;
+  try {
+    caller = invocationCaller(value.caller.cwd, value.caller.environment as Record<string, string>);
+  } catch {
+    throw new RuntimeProtocolError('Invalid native caller snapshot');
   }
   if (
     !Number.isSafeInteger(nowEpochMs) ||
@@ -185,6 +207,8 @@ export function decodeRuntimeRequest(
     runtimeDigest: value.runtimeDigest,
     surface: value.surface as AgentSurface,
     event: value.event as HookEvent,
+    configuration: value.configuration as 'system' | 'project',
+    caller,
     deadlineEpochMs: value.deadlineEpochMs,
     inputJson: value.inputJson,
     payload: freezeJson(payload),

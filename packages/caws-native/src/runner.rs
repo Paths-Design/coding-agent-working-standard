@@ -11,6 +11,7 @@ use std::{
 };
 
 pub const MAX_PAYLOAD: usize = 1_048_576;
+pub const MAX_REQUEST: usize = 8 * 1024 * 1024;
 const MAX_RESPONSE: usize = 4_194_304;
 const MAX_ENGINE_STDERR: usize = 65_536;
 const CLEANUP_BUDGET: Duration = Duration::from_millis(500);

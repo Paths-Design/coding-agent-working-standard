@@ -1,6 +1,7 @@
 use std::{
     fs,
     io::{Read, Write},
+    os::unix::fs::PermissionsExt,
     path::PathBuf,
     process::{Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
@@ -21,6 +22,8 @@ impl Fixture {
             SERIAL.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&dir).unwrap();
+        // Caller snapshots include environment values; test receipts remain private.
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
         let resolved = Command::new("node")
             .args(["-p", "process.execPath"])
             .output()
@@ -32,6 +35,15 @@ impl Fixture {
         }
     }
     fn command(&self, mode: &str, event: &str, timeout: &str) -> Command {
+        self.command_with_configuration(mode, event, timeout, "system")
+    }
+    fn command_with_configuration(
+        &self,
+        mode: &str,
+        event: &str,
+        timeout: &str,
+        configuration: &str,
+    ) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_caws-native"));
         command
             .args([
@@ -48,6 +60,8 @@ impl Fixture {
                 &"a".repeat(64),
                 "--timeout-ms",
                 timeout,
+                "--configuration",
+                configuration,
             ])
             .env("CAWS_NATIVE_TEST_MODE", mode)
             .env("CAWS_NATIVE_TEST_RECEIPT", self.dir.join("requests.jsonl"))
@@ -142,6 +156,9 @@ fn exact_native_result_and_original_payload_are_delivered_without_path_interpret
     assert_eq!(request["runtimeDigest"], "a".repeat(64));
     assert_eq!(request["surface"], "codex");
     assert_eq!(request["event"], "pre_tool_use");
+    assert_eq!(request["configuration"], "system");
+    assert_eq!(request["caller"]["environment"]["PATH"], "");
+    assert!(std::path::Path::new(request["caller"]["cwd"].as_str().unwrap()).is_absolute());
     assert_eq!(
         request["inputJson"],
         r#"{"tool_input":{"command":"echo hi"},"unknown":{"preserve":[null,3,true]}}"#
@@ -200,6 +217,65 @@ fn opaque_native_channels_deliver_invalid_utf8_nul_and_every_byte_exactly() {
     assert_eq!(output.stdout, [0xff, 0x00, 0x61]);
     assert_eq!(output.stderr, (0..=255).collect::<Vec<u8>>());
     assert_eq!(fixture.requests().len(), 1);
+}
+
+#[test]
+fn concurrent_callers_keep_their_own_cwd_environment_and_entry_mode() {
+    let first = Fixture::new();
+    let second = Fixture::new();
+    let first_cwd = fs::canonicalize(&first.dir).unwrap();
+    let second_cwd = fs::canonicalize(&second.dir).unwrap();
+    let mut one = first.command_with_configuration("exact", "pre_tool_use", "3000", "project");
+    one.current_dir(&first_cwd)
+        .env("CAWS_CALLER_MARKER", "first");
+    let mut two = second.command("exact", "pre_tool_use", "3000");
+    two.current_dir(&second_cwd)
+        .env("CAWS_CALLER_MARKER", "second");
+    let one = thread::spawn(move || execute(one, b"{}".to_vec()));
+    let two = thread::spawn(move || execute(two, b"{}".to_vec()));
+    assert_eq!(one.join().unwrap().status.code(), Some(7));
+    assert_eq!(two.join().unwrap().status.code(), Some(7));
+    for (fixture, cwd, marker, configuration) in [
+        (&first, first_cwd, "first", "project"),
+        (&second, second_cwd, "second", "system"),
+    ] {
+        let requests = fixture.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["caller"]["cwd"], cwd.to_str().unwrap());
+        assert_eq!(
+            requests[0]["caller"]["environment"]["CAWS_CALLER_MARKER"],
+            marker
+        );
+        assert_eq!(requests[0]["configuration"], configuration);
+    }
+}
+
+#[test]
+fn non_utf8_caller_environment_is_explicit_configuration_failure_before_dispatch() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+    // The Darwin fixture filesystem rejects non-UTF8 names at mkdir itself;
+    // environment bytes exercise the native validation boundary on this host.
+    for invalid in ["name", "value"] {
+        let fixture = Fixture::new();
+        let mut command = fixture.command("exact", "pre_tool_use", "2000");
+        match invalid {
+            "name" => {
+                command.env(OsString::from_vec(b"BAD_\xff".to_vec()), "value");
+            }
+            "value" => {
+                command.env("BAD_CALLER", OsString::from_vec(b"bad_\xff".to_vec()));
+            }
+            _ => unreachable!(),
+        }
+        let output = execute(command, b"{}".to_vec());
+        failure(&output, 2, "configuration");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("not valid UTF-8"));
+        assert!(
+            !fixture.dir.join("engine").exists(),
+            "{invalid} started an engine"
+        );
+        assert!(!fixture.dir.join("requests.jsonl").exists());
+    }
 }
 
 #[test]
@@ -266,18 +342,28 @@ fn engine_exit_with_grandchild_held_pipes_is_bounded_and_owned_child_is_killed()
         .args(["-e", "setInterval(() => {},1000)"])
         .spawn()
         .unwrap();
+    let started = Instant::now();
     let output = execute(
-        fixture.command("pipe-holder", "pre_tool_use", "350"),
+        fixture.command("pipe-holder", "pre_tool_use", "2000"),
         b"{}".to_vec(),
     );
     failure(&output, 2, "execution");
+    assert!(
+        started.elapsed() < Duration::from_millis(3500),
+        "held pipes exceeded request and cleanup allowance"
+    );
     assert!(
         unrelated.try_wait().unwrap().is_none(),
         "foreign process was terminated"
     );
     unrelated.kill().unwrap();
     unrelated.wait().unwrap();
-    let pid = fs::read_to_string(fixture.dir.join("child")).unwrap();
+    let pid = fs::read_to_string(fixture.dir.join("child")).unwrap_or_else(|error| {
+        panic!(
+            "pipe-holder fixture did not start its child: {error}; native stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
         let state = Command::new("ps")
@@ -558,7 +644,7 @@ fn caller_death_cancels_and_cleans_owned_engine_group() {
     let script = r#"
       const fs = require('node:fs');
       const {spawn} = require('node:child_process');
-      const child = spawn(process.env.NATIVE, ['invoke','--engine',process.env.ENGINE,'--node',process.execPath,'--surface','codex','--event','pre_tool_use','--runtime-digest','a'.repeat(64),'--timeout-ms','5000'], {stdio:['pipe','ignore','ignore']});
+      const child = spawn(process.env.NATIVE, ['invoke','--engine',process.env.ENGINE,'--node',process.execPath,'--surface','codex','--event','pre_tool_use','--runtime-digest','a'.repeat(64),'--timeout-ms','5000','--configuration','system'], {stdio:['pipe','ignore','ignore']});
       fs.writeFileSync(process.env.NATIVE_PID, String(child.pid));
       child.stdin.end('{}');
       const timer = setInterval(() => { if (fs.existsSync(process.env.CAWS_NATIVE_TEST_ENGINE_PID)) { clearInterval(timer); process.exit(0); } }, 5);
