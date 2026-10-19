@@ -94,3 +94,11 @@ non_functional:
 contracts:
   - name: 'bounded-shell-analysis'
     type: behavior
+evidence:
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Counterfactual replay at 52089e3cb549960029fbd2d595acda68706d06f5: indexed207 = allow68/unresolved139; 2 extra = allow1/unresolved1. Stored payloads never executed. Nine independently adjudicated representatives: two supported safe admits, one safe-but-cwd-dependent unresolved, other unsupported/dangerous-for-read-exemption cases held. Historical cwd known27; environment, ownership and native execution unverified. Private transcripts/artifacts remain uncommitted in /tmp/caws-shell-*. --verify here checks cited commit existence, not replay semantics; executed replay output was inspected."
+    recorded_at: "2026-10-19T13:49:47.232Z"
+    command: node tests/fixtures/command-analysis/replay.cjs /tmp/caws-shell-historical-replay.json /tmp/caws-sed-warning-count.json /tmp/caws-shell-historical-adjudications.json /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/shell-analysis /tmp/caws-shell-replay-result.json
+    exit_code: 0
+    commit_sha: "52089e3cb549960029fbd2d595acda68706d06f5"
