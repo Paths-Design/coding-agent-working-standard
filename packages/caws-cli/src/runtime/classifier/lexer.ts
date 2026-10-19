@@ -48,6 +48,50 @@ function heredocAt(raw: string, index: number): string | null {
   return /^<<[ \t]*['"]?([^ \t\n'"\)]+)/.exec(raw.slice(index))?.[1] ?? null;
 }
 
+/** Find one balanced executing substitution without borrowing its quote state. */
+function commandSubstitutionAt(raw: string, start: number): { body: string; end: number } | null {
+  if (raw[start] === '`') {
+    for (let end = start + 1; end < raw.length; end++) {
+      if (raw[end] === '\\' && end + 1 < raw.length) end++;
+      else if (raw[end] === '`') return { body: raw.slice(start + 1, end), end: end + 1 };
+    }
+    return null;
+  }
+  if (raw.slice(start, start + 2) !== '$(') return null;
+  const frames = [{ depth: 1, single: false, double: false }];
+  for (let end = start + 2; end < raw.length; end++) {
+    const char = raw[end];
+    const frame = frames[frames.length - 1]!;
+    if (char === '\\' && !frame.single && end + 1 < raw.length) {
+      end++;
+      continue;
+    }
+    if (!frame.single && raw.slice(end, end + 2) === '$(') {
+      // Input nesting must not consume the JavaScript call stack before the
+      // classification recursion budget can require confirmation.
+      frames.push({ depth: 1, single: false, double: false });
+      end++;
+      continue;
+    }
+    if (!frame.single && char === '`') {
+      const nested = commandSubstitutionAt(raw, end);
+      if (nested === null) return null;
+      end = nested.end - 1;
+      continue;
+    }
+    if (char === "'" && !frame.double) frame.single = !frame.single;
+    else if (char === '"' && !frame.single) frame.double = !frame.double;
+    else if (!frame.single && !frame.double) {
+      if (char === '(') frame.depth++;
+      else if (char === ')' && --frame.depth === 0) {
+        frames.pop();
+        if (!frames.length) return { body: raw.slice(start + 2, end), end: end + 1 };
+      }
+    }
+  }
+  return null;
+}
+
 export function segmentCommand(raw: string): string[] {
   const segments: string[] = [];
   let current = '';
@@ -86,6 +130,14 @@ export function segmentCommand(raw: string): string[] {
       current += raw.slice(index, index + 2);
       index += 2;
       continue;
+    }
+    if (!single && (raw.slice(index, index + 2) === '$(' || char === '`')) {
+      const substitution = commandSubstitutionAt(raw, index);
+      if (substitution !== null) {
+        current += raw.slice(index, substitution.end);
+        index = substitution.end;
+        continue;
+      }
     }
     if (char === "'" && !double) single = !single;
     else if (char === '"' && !single) double = !double;
@@ -160,6 +212,7 @@ export function stripQuotedRegions(raw: string): string {
 export function extractCommandSubstitutions(raw: string): string[] {
   const bodies: string[] = [];
   let single = false;
+  let double = false;
   let heredoc: string | null = null;
   for (let index = 0; index < raw.length; ) {
     if (heredoc !== null) {
@@ -169,7 +222,7 @@ export function extractCommandSubstitutions(raw: string): string[] {
       index = newline + 1;
       continue;
     }
-    if (!single) {
+    if (!single && !double) {
       const marker = heredocAt(raw, index);
       if (marker !== null) {
         heredoc = marker;
@@ -179,12 +232,17 @@ export function extractCommandSubstitutions(raw: string): string[] {
       }
     }
     const char = raw[index] ?? '';
-    if (char === '\\' && index + 1 < raw.length) {
+    if (char === '\\' && !single && index + 1 < raw.length) {
       index += 2;
       continue;
     }
-    if (char === "'") {
+    if (char === "'" && !double) {
       single = !single;
+      index++;
+      continue;
+    }
+    if (char === '"' && !single) {
+      double = !double;
       index++;
       continue;
     }
@@ -192,45 +250,11 @@ export function extractCommandSubstitutions(raw: string): string[] {
       index++;
       continue;
     }
-    if (raw.slice(index, index + 2) === '$(') {
-      let depth = 1;
-      let end = index + 2;
-      let innerSingle = false;
-      let innerDouble = false;
-      for (; end < raw.length; end++) {
-        const inner = raw[end];
-        if (inner === '\\' && end + 1 < raw.length) {
-          end++;
-          continue;
-        }
-        if (!innerDouble && inner === "'") innerSingle = !innerSingle;
-        else if (!innerSingle && inner === '"') innerDouble = !innerDouble;
-        else if (!innerSingle && !innerDouble) {
-          if (inner === '(') depth++;
-          else if (inner === ')' && --depth === 0) {
-            bodies.push(raw.slice(index + 2, end));
-            end++;
-            break;
-          }
-        }
-      }
-      index = end;
-      continue;
-    }
-    if (char === '`') {
-      let end = index + 1;
-      for (; end < raw.length; end++) {
-        if (raw[end] === '\\' && end + 1 < raw.length) {
-          end++;
-          continue;
-        }
-        if (raw[end] === '`') {
-          bodies.push(raw.slice(index + 1, end));
-          end++;
-          break;
-        }
-      }
-      index = end;
+    if (raw.slice(index, index + 2) === '$(' || char === '`') {
+      const substitution = commandSubstitutionAt(raw, index);
+      if (substitution === null) break;
+      bodies.push(substitution.body);
+      index = substitution.end;
       continue;
     }
     index++;

@@ -127,6 +127,38 @@ function classify(
   for (const segment of segmentCommand(raw)) {
     const tokens = shellTokens(segment);
     const normalized = tokens === null ? null : normalizeCommandTokens(tokens);
+    const commandWord = tokens && normalized ? basename(tokens[normalized.index] ?? '') : '';
+    if (
+      /^[(){}]/.test(commandWord) ||
+      [
+        'if',
+        'then',
+        'elif',
+        'else',
+        'fi',
+        'for',
+        'while',
+        'until',
+        'do',
+        'done',
+        'case',
+        'esac',
+        'select',
+        'function',
+        '!',
+      ].includes(commandWord)
+    ) {
+      // Conditional/grouped execution is not modeled as a sequence of plain
+      // commands. Neither this branch nor later commands can borrow the
+      // original directory or Git observation context.
+      statementProof = { directoryKnown: false, gitKnown: false };
+      escalate(
+        'ask',
+        'unmodeled shell control flow — cannot prove execution context',
+        'classifier_error',
+        'confirm'
+      );
+    }
     const segmentProof = {
       directoryKnown:
         statementProof.directoryKnown &&
@@ -145,6 +177,13 @@ function classify(
           classify(body, context, ports, adapters, trusted, depth + 1, statementProof),
           'command substitution: '
         );
+    if (normalized?.unproven)
+      escalate(
+        'ask',
+        'unmodeled env split-string syntax — cannot prove execution context',
+        'classifier_error',
+        'confirm'
+      );
     if (
       tokens &&
       normalized?.nested === null &&

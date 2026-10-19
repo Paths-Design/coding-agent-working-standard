@@ -56,10 +56,21 @@ describe('typed command classifier parsing and provenance', () => {
     expect(extractCommandSubstitutions('echo $(echo $(pwd))')).toEqual(['echo $(pwd)']);
   });
   test.each([
+    'echo $(cd /outside; git cherry-pick topic; echo done)',
+    'echo `cd /outside; git cherry-pick topic; echo done`',
+  ])('keeps balanced substitution statements inside their execution context: %s', (command) => {
+    expect(segmentCommand(`${command}; pwd`)).toEqual([command, 'pwd']);
+  });
+  test('retains deep substitution nesting until the classification recursion budget asks', () => {
+    const command = `echo ${'$('.repeat(12000)}pwd${')'.repeat(12000)}`;
+    expect(segmentCommand(command)).toEqual([command]);
+    expect(classify(command).decision).toBe('ask');
+  });
+  test.each([
     [['A=x', 'env', '-u', 'NAME', 'git', 'status'], { index: 4, nested: null }],
     [['time', '-o', 'timings', 'command', 'git', 'status'], { index: 4, nested: null }],
-    [['env', '-S', 'git status'], { index: 1, nested: 'git status' }],
-    [['env', '--split-string=git', 'status'], { index: 1, nested: 'git status' }],
+    [['env', '-S', 'git status'], { index: 1, nested: 'env git status' }],
+    [['env', '--split-string=git', 'status'], { index: 1, nested: 'env git status' }],
     [['nohup', '/bin/bash', '-lc', 'git status'], { index: 1, nested: 'git status' }],
     [
       ['/usr/bin/env', '-u', 'FOO', 'nice', '-n', '10', '/bin/rm', '-rf', '/'],
@@ -111,6 +122,28 @@ describe('typed command classifier parsing and provenance', () => {
 });
 
 describe('typed command classifier historical safety controls', () => {
+  test.each([
+    "env -S '-uFOO rm -rf /'",
+    "env -S '-C /outside rm -rf /'",
+    "env -S 'bash -c' 'rm -rf /'",
+    "env --split-string='-uFOO rm -rf /'",
+    "env --split-string='bash -c' 'rm -rf /'",
+  ])('split-string retains env option context and remaining argument boundaries: %s', (command) => {
+    expect(classify(command).decision).toBe('deny');
+  });
+  test('split-string directory changes cannot grant relative scratch exemptions', () => {
+    expect(classify("env -S '-C /outside rm -rf /project/node_modules'").decision).toBe('allow');
+    expect(classify("echo \"env -S 'bash -c' 'rm -rf /'\"").decision).toBe('allow');
+    expect(classify('env -S \'echo "rm -rf /"\'').decision).toBe('allow');
+    expect(classify("env -S '-C /outside rm -rf ./node_modules'").decision).toBe('ask');
+  });
+  test.each(["env -S 'rm\\_-rf\\_/'", "env -S '${UNPROVEN_EXECUTABLE} -rf /'"])(
+    'split-string syntax outside the modeled quote grammar cannot grant an exemption: %s',
+    (command) => expect(classify(command).decision).toBe('ask')
+  );
+  test('split-string uncertainty preserves independently executing catastrophic substitution denial', () => {
+    expect(classify('env -S \'${UNPROVEN_EXECUTABLE}\' "$(rm -rf /)"').decision).toBe('deny');
+  });
   test.each([
     'git reset --hard HEAD',
     'git push --force origin main',
@@ -396,6 +429,67 @@ describe('typed classifier real Git and filesystem observations', () => {
     git('commit', '-qm', 'fixture baseline');
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+  test('real env split-string preserves option context and argument boundaries without executing payload text', () => {
+    const outside = path.join(root, 'outside argv');
+    fs.mkdirSync(outside);
+    const script =
+      'process.stdout.write(JSON.stringify({cwd:process.cwd(),args:process.argv.slice(1),marker:process.env.CAWS_CLASSIFIER_FIXTURE ?? null}))';
+    const actual = JSON.parse(
+      execFileSync(
+        '/usr/bin/env',
+        [
+          '-S',
+          `-uCAWS_CLASSIFIER_FIXTURE -C ${JSON.stringify(outside)} ${JSON.stringify(process.execPath)} -e`,
+          script,
+          'one two',
+          'semi;colon',
+        ],
+        { encoding: 'utf8', env: { PATH: process.env.PATH, CAWS_CLASSIFIER_FIXTURE: 'remove-me' } }
+      )
+    );
+    expect(actual).toEqual({ cwd: outside, args: ['one two', 'semi;colon'], marker: null });
+  });
+  test('substitution-local directory changes cannot borrow a spec-only original topic', () => {
+    fs.mkdirSync(path.join(root, '.caws/specs'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.caws/specs/A.yaml'), 'id: A\n');
+    git('add', '--', '.caws/specs/A.yaml');
+    git('commit', '-qm', 'canonical spec-only topic');
+    git('branch', 'topic');
+    const outside = path.join(root, 'outside');
+    fs.mkdirSync(outside);
+    git('-C', outside, 'init', '-q');
+    fs.writeFileSync(path.join(outside, 'foreign-source.txt'), 'foreign source\n');
+    git('-C', outside, 'add', '--', 'foreign-source.txt');
+    git('-C', outside, 'commit', '-qm', 'foreign source topic');
+    git('-C', outside, 'branch', 'topic');
+    expect(git('show', '--format=', '--name-only', 'topic')).toBe('.caws/specs/A.yaml');
+    expect(git('-C', outside, 'show', '--format=', '--name-only', 'topic')).toBe(
+      'foreign-source.txt'
+    );
+    expect(run('echo "$(git cherry-pick topic; echo done)"').decision).toBe('allow');
+    expect(run("echo '$(cd /outside; git cherry-pick topic; echo done)'").decision).toBe('allow');
+    expect(run('echo "literal ; git cherry-pick topic"').decision).toBe('allow');
+    const routed = execFileSync(
+      '/bin/sh',
+      ['-c', 'printf "%s" "$(cd "$1"; git rev-parse --show-toplevel)"', 'caws-fixture', outside],
+      { encoding: 'utf8', env: classificationEnvironment() }
+    );
+    expect(routed).toBe(outside);
+    const { createClassifierPorts } = require('../../dist/runtime/classifier');
+    const original = createClassifierPorts(classificationEnvironment());
+    const observe = jest.fn(original.git);
+    const ports = { ...original, git: observe };
+    const commands = [
+      `echo $(cd ${JSON.stringify(outside)}; git cherry-pick topic; echo done)`,
+      `echo \`cd ${JSON.stringify(outside)}; git cherry-pick topic; echo done\``,
+      `echo $(if true; then cd ${JSON.stringify(outside)}; fi; git cherry-pick topic; echo done)`,
+      `echo $( (cd ${JSON.stringify(outside)}; git cherry-pick topic); echo done)`,
+    ];
+    expect(commands.map((command) => run(command, { ports }).decision)).toEqual(
+      commands.map(() => 'ask')
+    );
+    expect(observe).not.toHaveBeenCalled();
+  });
   test('staged foreign deletions require named paths; additions and explicit pathspecs remain admitted', () => {
     expect(run('git commit -m message').decision).toBe('allow');
     git('rm', '--', 'tracked.txt');

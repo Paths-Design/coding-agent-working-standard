@@ -3,9 +3,33 @@ import * as data from './data';
 import { shellTokens } from './lexer';
 
 export const isAssignmentToken = (token: string): boolean => /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
+const quoteArgument = (token: string): string =>
+  /^[A-Za-z0-9_./:@%+=,-]+$/.test(token) ? token : `'${token.replace(/'/g, "'\\''")}'`;
+
+function splitEnvCommand(
+  tokens: readonly string[],
+  index: number,
+  split: string,
+  remaining: number
+): { index: number; nested: string | null; unproven?: true } {
+  // env -S has expansion/escape rules beyond shellTokens' quote grammar.
+  // Do not turn unmodeled syntax into an executable or an exemption.
+  const expanded = /[\\$`]/.test(split) ? null : shellTokens(split);
+  if (expanded === null) return { index, nested: null, unproven: true };
+  return {
+    index,
+    // Keep env itself: split words can begin with more env options. The
+    // remaining original argv elements must retain their individual bounds.
+    nested: [...tokens.slice(0, index), ...expanded, ...tokens.slice(remaining)]
+      .map(quoteArgument)
+      .join(' '),
+  };
+}
+
 export function normalizeCommandTokens(tokens: readonly string[]): {
   index: number;
   nested: string | null;
+  unproven?: true;
 } {
   let index = 0;
   while (index < tokens.length) {
@@ -32,12 +56,12 @@ export function normalizeCommandTokens(tokens: readonly string[]): {
         }
         if (['-u', '--unset', '-C', '--chdir', '-S', '--split-string'].includes(option)) {
           if (['-S', '--split-string'].includes(option) && index + 1 < tokens.length)
-            return { index, nested: tokens.slice(index + 1).join(' ') };
+            return splitEnvCommand(tokens, index, tokens[index + 1] ?? '', index + 2);
           index += 2;
           continue;
         }
         if (option.startsWith('--split-string='))
-          return { index, nested: [option.slice(15), ...tokens.slice(index + 1)].join(' ') };
+          return splitEnvCommand(tokens, index, option.slice(15), index + 1);
         if (option.startsWith('--unset=') || option.startsWith('--chdir=')) {
           index++;
           continue;
