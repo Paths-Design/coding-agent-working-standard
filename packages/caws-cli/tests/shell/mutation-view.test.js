@@ -13,7 +13,10 @@ const RUNNER = String(async function main() {
     const previous = new Map(
       Object.keys(request.environment || {}).map((key) => [key, process.env[key]])
     );
-    Object.assign(process.env, request.environment || {});
+    for (const [key, value] of Object.entries(request.environment || {})) {
+      if (value === null) delete process.env[key];
+      else process.env[key] = value;
+    }
     try {
       const queries = [];
       let next = 0;
@@ -254,6 +257,67 @@ describe('mutation view uses shared traversal without granting scope', () => {
       overrides: {},
     });
     metadataCases = [
+      {
+        id: 'metadata-nested-disabled-exported-pager',
+        command: "GIT_PAGER=cat; bash -c 'git log --oneline'",
+        environment: { GIT_PAGER: 'less' },
+        plan: [],
+        queries: [],
+        rows: [],
+      },
+      {
+        id: 'metadata-deep-disabled-exported-pager',
+        command: "GIT_PAGER=cat; bash <<'SH'\nbash -c 'git log --oneline'\nSH\n",
+        environment: { GIT_PAGER: 'less' },
+        plan: [],
+        queries: [],
+        rows: [],
+      },
+      {
+        id: 'metadata-nested-disabled-pager-overwritten',
+        command: `GIT_PAGER=cat; bash -c 'GIT_PAGER="printf pager > {{MARKER}}"; git log --oneline'`,
+        environment: { GIT_PAGER: 'less' },
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'git-environment',
+      },
+      {
+        id: 'metadata-nested-disabled-exported-pager-expansion',
+        command: `GIT_PAGER=cat; bash -c 'touch "{{FOREIGN}}/$GIT_PAGER"'`,
+        environment: { GIT_PAGER: 'less' },
+        plan: [],
+        queries: [],
+        rows: [],
+        expectedWord: '{{FOREIGN}}/cat',
+      },
+      {
+        id: 'metadata-nested-disabled-unexported-pager-expansion',
+        command: `GIT_PAGER=cat; bash -c 'touch "{{FOREIGN}}/$GIT_PAGER"'`,
+        environment: { GIT_PAGER: null },
+        plan: [],
+        queries: [],
+        rows: [],
+        expectedDynamic: true,
+      },
+      {
+        id: 'metadata-nested-disabled-exported-fallback-pager-expansion',
+        command: `PAGER=cat; bash -c 'touch "{{FOREIGN}}/$PAGER"'`,
+        environment: { PAGER: 'less' },
+        plan: [],
+        queries: [],
+        rows: [],
+        expectedWord: '{{FOREIGN}}/cat',
+      },
+      {
+        id: 'metadata-nested-disabled-empty-pager-expansion',
+        command: `GIT_PAGER=''; bash -c 'touch "{{FOREIGN}}/$GIT_PAGER"'`,
+        environment: { GIT_PAGER: 'less' },
+        plan: [],
+        queries: [],
+        rows: [],
+        expectedWord: '{{FOREIGN}}/',
+      },
       {
         id: 'metadata-nested-rebound-export',
         command: "GIT_DIR='{{FOREIGN}}'; bash -c 'git add -- file'",
@@ -615,6 +679,13 @@ describe('mutation view uses shared traversal without granting scope', () => {
         queries: fixture.queries,
       });
       expect(actual.gitMetadata.map((row) => row.subcommand)).toEqual(fixture.rows);
+      if (fixture.expectedWord) expect(words(fixture.id)).toContain(expand(fixture.expectedWord));
+      if (fixture.expectedDynamic) {
+        expect(
+          actual.tokens.some((token) => token.dynamic && token.value.includes('$GIT_PAGER'))
+        ).toBe(true);
+        expect(words(fixture.id)).not.toContain(locations.FOREIGN + '/cat');
+      }
       for (const row of actual.gitMetadata) {
         expect(row.directory).toBe(metadataContext.directory);
         expect(row.common).toBe(metadataContext.common);

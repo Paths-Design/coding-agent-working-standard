@@ -85,6 +85,7 @@ type ScriptJob = {
     caller: string;
     inheritedEffects: boolean;
     gitEnvironmentUnresolved: boolean;
+    disabledPagers: ReadonlyMap<string, Value>;
   };
   writeRedirect: boolean;
   unmodeledInvocations: Set<string>;
@@ -295,6 +296,18 @@ export async function projectMutationView(
       job,
       caller: JSON.stringify([node.pos, node.end]),
       inheritedEffects: state.filesystemChanged === true,
+      // An inherited environment entry is exported. Preserve only proven
+      // disabled pager bindings; absent entries must not become child variables.
+      disabledPagers: new Map(
+        [...state.bindings].filter(
+          ([name, values]) =>
+            (name === 'GIT_PAGER' || name === 'PAGER') &&
+            process.env[name] !== undefined &&
+            values !== null &&
+            values.length > 0 &&
+            values.every((value) => value === '' || value === 'cat')
+        )
+      ),
       // Export attributes are not modeled. Rebinding an inherited exported
       // variable changes a child process's environment, so its original
       // launcher value cannot supply proof for nested Git coordinates.
@@ -702,6 +715,7 @@ export async function projectMutationView(
       {
         context: { canonical: request.project, worktree: request.project },
         gitContext: () => null,
+        ...(job.parent ? { inheritedBindings: job.parent.disabledPagers } : {}),
         observers: {
           invocation: observeInvocation,
           redirection: observeRedirect,

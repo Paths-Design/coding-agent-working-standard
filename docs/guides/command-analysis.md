@@ -207,17 +207,19 @@ value through a shell when stdout is a terminal. This check preserves the
 trusted inherited-configuration assumption and does not require non-terminal
 execution. Nested Bash jobs retain uncertainty at Git consumers when source
 rebindings could change exported Git or pager variables; they cannot borrow the
-launcher's earlier environment as proof. Export attributes are not modeled.
-Stronger containment requires runtime filesystem/process policy. Native
-`exec_command`/`shell_command` inputs require an explicit supported shell;
-native Bash also requires `login:false`. Native `workdir` is the execution cwd,
-resolved against the caller's base cwd; conflicting command fields are
-unresolved. The normalized name `Bash` alone does not establish a native
-command's dialect. `CAWS_BIN` and the pin environment are trusted launcher
-configuration; validating a response schema does not authenticate a malicious
-replacement CLI. Known inherited POSIX/keyword settings are refused. Their
-assignment rules can change the executable or Git environment selected by later
-source. The
+launcher's earlier environment as proof. Known inherited pager entries are
+exported; source bindings that disable those pagers are preserved in nested
+analysis, including their exact expansion values. Other export transitions are
+not modeled. Stronger containment requires runtime filesystem/process policy.
+Native `exec_command`/`shell_command` inputs require an explicit supported
+shell; native Bash also requires `login:false`. Native `workdir` is the
+execution cwd, resolved against the caller's base cwd; conflicting command
+fields are unresolved. The normalized name `Bash` alone does not establish a
+native command's dialect. `CAWS_BIN` and the pin environment are trusted
+launcher configuration; validating a response schema does not authenticate a
+malicious replacement CLI. Known inherited POSIX/keyword settings are refused.
+Their assignment rules can change the executable or Git environment selected by
+later source. The
 [Bash mode contract](https://www.gnu.org/s/bash/manual/html_node/Bash-POSIX-Mode.html)
 and
 [environment rules](https://www.gnu.org/software/bash/manual/html_node/Environment.html)

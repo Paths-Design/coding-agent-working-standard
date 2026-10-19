@@ -107,6 +107,8 @@ test('source-selected Git pager code remains unresolved while ordinary data is a
   expect(fs.existsSync(marker)).toBe(false);
 });
 test('nested Git cannot borrow launcher coordinates after source rebinds an exported variable', () => {
+  const disabled = guard("GIT_PAGER=cat; bash -c 'git log --oneline'", { GIT_PAGER: 'less' });
+  expect({ status: disabled.status, stderr: disabled.stderr }).toEqual({ status: 0, stderr: '' });
   const inherited = { GIT_DIR: path.join(fx.project, '.git') };
   const rebound = guard(
     'GIT_DIR=' + quote(path.join(fx.sibling, '.git')) + "; bash -c 'git add -- file'",

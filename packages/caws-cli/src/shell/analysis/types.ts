@@ -35,6 +35,8 @@ export interface GitMetadataObservation {
 }
 /** Trusted in-process instrumentation; never populated from submitted JSON. */
 export interface AnalysisDependencies {
+  /** Proven inherited scalar values for trusted nested-source consumers. */
+  inheritedBindings?: ReadonlyMap<string, Value>;
   gitContext?: GitContextResolver;
   context?: { canonical: string; worktree: string };
   observers?: {

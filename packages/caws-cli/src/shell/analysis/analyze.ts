@@ -183,6 +183,9 @@ export async function analyzeCommand(
       );
   }
 
+  for (const [name, value] of dependencies.inheritedBindings ?? [])
+    initial.bindings.set(name, value === null ? null : [...value]);
+
   function budget(node: Location, depth: number): void {
     if (++ctx.visits > MAX_VISITS || depth > MAX_DEPTH) {
       reason(node, 'analysis-budget', 'AST visit/depth budget exceeded.');
