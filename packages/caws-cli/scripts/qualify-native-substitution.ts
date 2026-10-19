@@ -248,6 +248,7 @@ async function invoke(
 }
 
 const regression = 'git init; echo "$(kubectl delete pod demo)"';
+const backtick = 'git init; echo `kubectl delete pod demo`';
 const inverse = 'echo "$(kubectl delete pod demo)"; git init';
 const literal = "git init; echo '$(kubectl delete pod demo)'";
 const capabilityReason = 'command substitution: destructive operation (K8S_DELETE)';
@@ -488,14 +489,16 @@ async function run(): Promise<void> {
   assert.deepEqual(selection.overrides, {});
   assert.deepEqual(selection.libraryOverrides, {});
   const cases: Array<[string, string, string, Expected]> = [
+    ['single-quoted-first', 'literal', literal, 'advisory'],
+    ['single-quoted-repeat', 'literal', literal, 'advisory'],
     ['regression-first', 'regression', regression, 'warning'],
-    ['regression-repeat', 'regression', regression, 'latch'],
+    ['backtick-first', 'backtick', backtick, 'warning'],
     ['inverse-first', 'inverse', inverse, 'warning'],
+    ['regression-repeat', 'regression', regression, 'latch'],
+    ['backtick-repeat', 'backtick', backtick, 'latch'],
     ['inverse-repeat', 'inverse', inverse, 'latch'],
     ['ordinary-sibling', 'ordinary', 'echo safe', 'ordinary'],
     ['fresh-session', 'fresh', regression, 'warning'],
-    ['single-quoted-first', 'literal', literal, 'advisory'],
-    ['single-quoted-repeat', 'literal', literal, 'advisory'],
   ];
   const allState = (): Record<string, string> => {
     const directory = path.join(repo, '.codex/hooks/state');

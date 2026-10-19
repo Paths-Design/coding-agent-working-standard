@@ -831,7 +831,9 @@ Additional bounded evidence and unresolved dependencies:
   not native-client or actual-harness withholding. The typed opt-in runner
   `scripts/qualify-native-substitution.ts` retains private input, commands,
   channels, state, journals, hashes and hostile oracle controls; its native replay
-  remains pending. Strict runner compilation and scoped ESLint exit 0.
+  remains pending. Inert text and the three first-warning forms precede any
+  latch, so another session's sentinel cannot force fallback and mask their
+  typed admission behavior. Strict runner compilation and scoped ESLint exit 0.
 
 - E64: The native frame reader retains a delimiter-search cursor instead of
   searching its previously checked prefix again. Instrumenting the original
