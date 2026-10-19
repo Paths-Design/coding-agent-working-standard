@@ -821,6 +821,21 @@ interfaces. The architecture's reconstruction falsifiers translate the user's
 Sterling inversion reference into checks against actual CAWS consumer behavior.
 The reference itself grants no implementation or acceptance authority.
 
+The original bound spec retains the complete A1–A8 acceptance obligation.
+`worktree merge --no-close` removes its lane and leaves a finished slice for
+merged-revision validation, evidence and close; it is not the continuation path
+for this unfinished migration. Preserve the original lane and its ignored
+qualification artifacts while separately qualifying completed component units.
+Each component's scope must cover every imported commit path: merge provenance
+checks current component scope, not the original commit's spec assignment.
+CAWS create uses the same base to start a branch and select its merge target;
+it has no independent start-ref. A component created against main therefore
+needs a separately admitted ordinary Git integration of the committed candidate,
+with main as an ancestor for a fast-forward. Actual admission, integrated checks
+and component acceptance remain unverified. Narrowing the original write scope
+to tracker/architecture responsibility follows source landing, not an assertion
+that the whole migration is complete; its full acceptance criteria remain.
+
 | Milestone | Observed state | Proof required to advance |
 | --- | --- | --- |
 | Component foundations | Tested components; installed hooks use the original runtime | Committed source and checks remain scoped to what actually ran |
