@@ -602,7 +602,7 @@ import { isAdapterCoveredSurface } from './types';
 // and the kernel turn-log.v2 producer contract adopts the same unified
 // shape, so the shared pack template tree changed again after v96.
 // v98: retain per-invocation handler progress before subsequent handlers run.
-export const SHARED_PACK_VERSION = 101;
+export const SHARED_PACK_VERSION = 102;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

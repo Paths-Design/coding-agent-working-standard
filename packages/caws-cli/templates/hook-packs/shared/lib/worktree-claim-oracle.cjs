@@ -294,7 +294,7 @@ function metadataPointer(file) {
   var stat = fs.lstatSync(file);
   if (!stat.isFile() || stat.nlink !== 1 || stat.size > 16384) throw new Error('invalid-pointer');
   var value = fs.readFileSync(file, 'utf8').replace(/\n$/, '');
-  if (!value || /[\r\n\t\x00]/.test(value)) throw new Error('invalid-pointer-value');
+  if (!value || value.indexOf('\0') !== -1 || /[\r\n\t]/.test(value)) throw new Error('invalid-pointer-value');
   return value;
 }
 

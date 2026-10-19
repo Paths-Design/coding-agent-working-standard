@@ -171,6 +171,7 @@ async function main() {
       })
     ),
     corpusSha256: sha256(fs.readFileSync(recordsPath)),
+    indexSha256: sha256(fs.readFileSync(indexPath)),
     oracleSha256: sha256(fs.readFileSync(oraclesPath)),
     oracleCoverage: full ? 'full-adjudication' : 'representatives',
     buildIdentity: buildIdentity(),
@@ -206,6 +207,7 @@ async function main() {
         compared: oracleComparisons.length,
         disagreements: disagreements.length,
         corpusSha256: report.corpusSha256,
+        indexSha256: report.indexSha256,
         oracleSha256: report.oracleSha256,
         buildFiles: report.buildIdentity.length,
         outputSha256: sha256(fs.readFileSync(output)),
