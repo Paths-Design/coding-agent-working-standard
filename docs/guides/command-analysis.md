@@ -101,7 +101,10 @@ applications, inline interpreters, functions, arithmetic, process substitution,
 parameter operations, background execution and other unsupported syntax are
 unresolved. A parser recovery/error, dependency failure, or exceeded budget is
 also unresolved. Limits are 64 KiB source, 4,096 visits, 16 AST depth, 32 states
-or argument alternatives, 32 loop iterations and eight wrapper levels.
+or argument alternatives, 32 loop iterations and eight wrapper levels. The first
+visit or depth exhaustion ends interpretation with one budget reason; an earlier
+denial remains a denial. The source-size limit applies before parsing, but the
+visit limit does not establish a bound on the parser's own work.
 
 ## Policy and assumptions
 

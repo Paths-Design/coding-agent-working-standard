@@ -254,6 +254,10 @@ describe('bounded shell analysis contract', () => {
       expect(actual.first.reasons.map((item) => item.code)).toContain(fixture.reason);
     for (const code of fixture.absentReasons || [])
       expect(actual.first.reasons.map((item) => item.code)).not.toContain(code);
+    for (const [code, count] of Object.entries(fixture.reasonCounts || {}))
+      expect(actual.first.reasons.filter((item) => item.code === code)).toHaveLength(count);
+    if (fixture.maxTraceEntries !== undefined)
+      expect(actual.first.trace.length).toBeLessThanOrEqual(fixture.maxTraceEntries);
     if (fixture.reasonIncludes)
       expect(
         actual.first.reasons

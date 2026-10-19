@@ -4,6 +4,19 @@
 // These commands are inert analysis inputs. They do not certify every GNU/BSD
 // version, successful utility execution, or an unrestricted shell sandbox.
 const cases = [];
+for (const priorDenial of [false, true])
+  cases.push({
+    id: priorDenial ? 'budget-pipeline-preserves-denial' : 'budget-pipeline-stops-globally',
+    command: (priorDenial ? "git -C '{{FOREIGN}}' status; " : '') + '{{PAYLOAD}}:',
+    payload: { value: ':|', repeat: 2999 },
+    decision: priorDenial ? 'deny' : 'unresolved',
+    reason: 'analysis-budget',
+    reasonCounts: {
+      'analysis-budget': 1,
+      ...(priorDenial ? { 'foreign-git-target': 1 } : {}),
+    },
+    maxTraceEntries: 4096,
+  });
 function add(id, command, decision = 'allow', reason) {
   cases.push({ id: `profile-${id}`, command, decision, ...(reason ? { reason } : {}) });
 }

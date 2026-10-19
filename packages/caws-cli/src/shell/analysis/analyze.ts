@@ -130,6 +130,7 @@ export async function analyzeCommand(
       result.trace.push({ kind, detail, start: node.pos, end: node.end }),
   };
   const initial: State = { cwd, bindings: new Map() };
+  const budgetExhausted = Symbol();
   // Shell startup/aliases/functions and executable identity are a declared host
   // contract, not a fact the source parser can establish. Refuse known inherited
   // overrides rather than pretending they cannot affect profiled programs.
@@ -174,12 +175,11 @@ export async function analyzeCommand(
       );
   }
 
-  function budget(node: Location, depth: number): boolean {
+  function budget(node: Location, depth: number): void {
     if (++ctx.visits > MAX_VISITS || depth > MAX_DEPTH) {
       reason(node, 'analysis-budget', 'AST visit/depth budget exceeded.');
-      return false;
+      throw budgetExhausted;
     }
-    return true;
   }
   function bounded(states: State[], node: Location): State[] {
     const unique = new Map<string, State>();
@@ -213,7 +213,7 @@ export async function analyzeCommand(
     );
   }
   function word(node: Word, state: State, depth: number, assignment = false): Argument[][] {
-    if (!budget(node, depth)) return [[{ value: null }]];
+    budget(node, depth);
     return expandWord(node, state, ctx, substitution, depth, assignment);
   }
   function assign(node: Assignment, state: State, depth: number): State {
@@ -372,7 +372,7 @@ export async function analyzeCommand(
     return bounded(out, node);
   }
   function walk(node: PipelineNode | AndOr, state: State, reader: boolean, depth: number): State[] {
-    if (!budget(node, depth)) return [state];
+    budget(node, depth);
     switch (node.type) {
       case 'Command':
         return command(node, state, reader, depth);
@@ -489,7 +489,7 @@ export async function analyzeCommand(
   ): State[] {
     let states = input;
     for (const node of nodes) {
-      if (!budget(node, depth)) return states;
+      budget(node, depth);
       if (node.background)
         reason(node, 'background', 'Background state and execution ordering are not modeled.');
       states = bounded(
@@ -503,12 +503,13 @@ export async function analyzeCommand(
   try {
     const { parse } = await loadParser();
     script(parse(request.command), [initial], false, 0);
-  } catch {
-    reason(
-      whole,
-      'analysis-failure',
-      'Parser or analyzer failed; no admission proof is available.'
-    );
+  } catch (error) {
+    if (error !== budgetExhausted)
+      reason(
+        whole,
+        'analysis-failure',
+        'Parser or analyzer failed; no admission proof is available.'
+      );
   }
   if (!request.command.trim())
     reason(whole, 'empty-command', 'No executable command was supplied.');
