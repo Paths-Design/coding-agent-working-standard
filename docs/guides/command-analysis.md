@@ -39,9 +39,9 @@ issue. Supplied source, dialect and startup conflicts cannot select a harmless
 substitute. `tool_input.cwd`, `env` and `environment` are explicitly unmodeled;
 their presence is unresolved rather than interpreted as the launcher's context.
 Ordinary metadata such as descriptions and timeouts has no such restriction. The
-literal `Bash` protocol retains its existing Bash assumption when no shell is
-supplied. That compatibility assumption does not establish a host's
-normalization or default executor settings.
+literal `Bash` compatibility profile retains its Bash assumption when no shell
+is supplied, except for the known incompatible Codex producer. That assumption
+does not establish a host's normalization or default executor settings.
 
 The
 [Codex 0.163.0 producer](https://github.com/openai/codex/blob/83086188ae0614bd882818ff1aa23f3194962012/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs)
@@ -52,6 +52,14 @@ Updating `command` preserves those hidden original arguments. This producer
 projection cannot certify the execution contract above. Native adoption requires
 complete producer metadata or a controlled execution boundary; an explicit-Bash
 fixture alone cannot establish that contract for other calls.
+
+The trusted launcher's `CAWS_AGENT_SURFACE=codex` makes native envelopes return
+`execution-contract` unresolved in both CLI consumers, including envelopes with
+caller-supplied shell fields or native aliases. CLI shell flags cannot lift this
+restriction. Literal diagnostic analysis remains available and confers no native
+permission. Installing this candidate would therefore block affected Codex shell
+calls. The deployed runtime must be retained until a qualified producer or the
+owned execution boundary is demonstrated; this refusal is not benign admission.
 
 `singleLifecycle` is a restricted lifecycle fact, not permission. It identifies
 only one foreground, literal `caws worktree merge|destroy` invocation with a
@@ -153,7 +161,8 @@ caws hooks analyze --worktree /project/.caws/worktrees/own --cwd /project/.caws/
 For tooling, send a JSON object on stdin containing `command`, `cwd`,
 `worktree`, and optionally `shell`. A native
 `{tool_name:"Bash", tool_input: {command:...}, cwd:...}` envelope is also
-accepted. `--command` selects direct source mode; `--cwd` configures literal
+accepted under the declared compatibility profile, excluding native Codex
+admission. `--command` selects direct source mode; `--cwd` configures literal
 requests, while native execution cwd comes from the original envelope. Supplied
 shell declarations must agree. `--worktree` is the trusted pin in the installed
 guard; command text cannot choose it. The JSON schema is
@@ -333,6 +342,13 @@ contract. It places preparation, authorization and launch under one owner. A
 parser or an optional command wrapper cannot supply that ownership by itself.
 The matching Codex release's reduced hook payload is insufficient input.
 
+The existing interpreter recognizer applies weak path-literal observations only
+at the cross-repository boundary. It can allow Node write source targeting
+another worktree inside the same project; those hints do not enter the ownership
+oracle. This retained consumer limit is not write authority. The proposed
+boundary must establish an effect profile or enforce confinement before
+admitting opaque interpreter programs.
+
 The prerequisite is a trusted integration at the host's final launch point. That
 integration must associate the call with its authenticated session, provide
 every effective execution parameter, and require the CAWS result for every
@@ -356,7 +372,10 @@ The proposed internal sequence is:
    state, never from caller assertions. Select a versioned effect profile and
    bounded deadline, output and cleanup limits. Unsupported or missing context
    produces unresolved without launching the user program.
-2. **Authorize.** Analyze the prepared source without executing expansions.
+2. **Authorize.** Analyze the prepared source without executing expansions. Run
+   potentially uncooperative parser/dependency work in a killable analysis
+   worker with a pre-spawn deadline; a same-process timer cannot interrupt a
+   synchronous parser. Analysis failure or timeout leaves zero user launches.
    Evaluate pin constraints separately from binding, ownership and scope. A
    lexical `allow` is not a read-only classification or write permission. An
    opaque program with no recognized writes receives no permission merely
@@ -434,8 +453,13 @@ The shared `quiet-merge.sh` interceptor follows blocking guards and can prepend
 a canonical-root `cd`. A decision about its input cannot authorize that changed
 invocation. Full-chain validation or rechecking after transformations is an
 adoption prerequisite; direct installed-handler tests establish only the payload
-boundary they exercise. The guard remains opt-in while that integration is
-unverified.
+boundary they exercise. The worktree pin guard is opt-in. The shared bash-write
+guard is mandatory; ordinary runtime installation changes the default handlers
+consumed by existing enabled registrations. Documentation is not an activation
+gate. The candidate's native Codex refusal prevents reduced metadata from
+producing admission, but does not qualify a rollout that blocks benign commands.
+Native adoption requires demonstrated execution-contract support and an isolated
+canary before replacing the deployed runtime.
 
 `tests/shell/command-analysis.test.js` drives the compiled consumer over stdin
 and checks decisions, deterministic traces, source spans and absent side
@@ -462,12 +486,15 @@ variable or a refusal is not a false-positive judgment; in-place edits and
 computed scripts need separate adjudication.
 
 The replay driver uses an explicit counterfactual owned-worktree context and
-never executes retained commands. Nine independently labeled examples provide
-representative comparisons; they do not establish ground truth for every record.
-A benign-labeled command naming a deleted historical worktree retains its
-admission disagreement and context limit. A sanitized equivalent in an existing
-worktree tests the finite-loop mechanism separately. Replay admission counts are
-not historical false-positive rates.
+never executes retained commands. Independent source labels cover the complete
+209-record union; source review resolves differences between those labels and
+the declared policy before a fresh replay. The frozen adjudication retains the
+original expectations and each changed expectation's rationale. Its prior
+observations never supply the replay oracle. Full mode verifies corpus and label
+hashes, matches each source hash and compares every adjudicated expectation;
+representative mode remains available without implying full coverage. Replay
+admission counts are not historical false-positive rates or native execution
+proof. Retained private labels and reports remain outside the source ledger.
 
 Investigate the smallest unsupported pattern with a live decision behind it;
 implement its role/value refinement with independent controls; change runtime

@@ -79,7 +79,8 @@ function guard(command, extra = {}, transport = {}) {
       HOOK_PERMISSION_MODE: 'bypassPermissions',
       CAWS_PROJECT_DIR: fx.project,
       CAWS_HOOKS_DIR: fx.hooks,
-      CAWS_AGENT_SURFACE: 'codex',
+      // A synthetic declared Bash profile, not the reduced Codex producer.
+      CAWS_AGENT_SURFACE: 'claude-code',
       CAWS_BIN: fx.cli,
       ...extra,
     },
@@ -106,6 +107,12 @@ test('missing original input cannot borrow parsed scalar authority', () => {
     }
   );
   expect(nonShell.status).toBe(0);
+});
+test('known Codex native projection is held even when source appears harmless', () => {
+  const result = guard("node -e 'const data = { value: 1 };'", { CAWS_AGENT_SURFACE: 'codex' });
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('execution-contract');
 });
 test('an explicit malformed native cwd cannot borrow parsed cache authority', () => {
   const result = guard(

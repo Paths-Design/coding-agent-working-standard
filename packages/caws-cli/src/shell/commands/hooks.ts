@@ -237,6 +237,14 @@ function decodeExecution(
     throw decodingError('invalid-input', 'The execution command must be a string.');
   if (source.includes('\0') || Buffer.byteLength(source, 'utf8') > MAX_EXECUTION_SOURCE_BYTES)
     throw decodingError('source-budget', 'Command exceeds 64 KiB or contains a NUL byte.');
+  // The trusted launcher identifies the producer. The matching Codex producer
+  // omits final launch parameters; tool labels or added caller fields cannot
+  // qualify that native contract. Literal read-only analysis remains available.
+  if (native && process.env.CAWS_AGENT_SURFACE === 'codex')
+    throw decodingError(
+      'execution-contract',
+      'The Codex native hook projection does not bind final shell, startup and execution cwd. Native admission requires a qualified producer or an owned execution boundary.'
+    );
   if (nativeInput && ['cwd', 'env', 'environment'].some((field) => hasField(nativeInput, field)))
     throw decodingError(
       'unsupported-execution-context',

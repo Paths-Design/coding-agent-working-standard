@@ -48,6 +48,10 @@ try {
   assert.equal(installed.status, 0, installed.stderr);
   const installedPkg = path.join(prefix, 'node_modules/@paths.design/caws-cli');
   const packageJson = JSON.parse(fs.readFileSync(path.join(installedPkg, 'package.json'), 'utf8'));
+  assert.equal(
+    fs.readFileSync(path.join(installedPkg, 'docs/guides/command-analysis.md'), 'utf8'),
+    fs.readFileSync(path.resolve(pkg, '../../docs/guides/command-analysis.md'), 'utf8')
+  );
   assert.equal(packageJson.dependencies.unbash, '6.0.0');
   const parser = JSON.parse(
     fs.readFileSync(path.join(prefix, 'node_modules/unbash/package.json'), 'utf8')
@@ -138,27 +142,43 @@ try {
       },
     })
   );
-  function writeGuard(command, environment = {}) {
+  const guardEnvironment = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith('HOOK_'))
+  );
+  // Synthetic complete context exercises the package boundary. It does not
+  // establish that any native producer supplies these execution fields.
+  function envelope(command, cwd = own) {
+    return {
+      tool_name: 'Bash',
+      cwd,
+      session_id: 'package-fixture',
+      tool_input: { command, shell: '/bin/bash', login: false, workdir: cwd },
+    };
+  }
+  function guardEnv(command, cwd = own, environment = {}) {
+    return {
+      ...guardEnvironment,
+      HOME: home,
+      CAWS_HOME: path.join(home, '.caws'),
+      CAWS_PROJECT_DIR: project,
+      CAWS_BIN: path.join(prefix, 'node_modules/.bin/caws'),
+      CAWS_AGENT_SURFACE: 'claude-code',
+      HOOK_TOOL_NAME: 'Bash',
+      HOOK_COMMAND: command,
+      HOOK_CWD: cwd,
+      HOOK_SESSION_ID: 'package-fixture',
+      HOOK_PERMISSION_MODE: 'bypassPermissions',
+      ...environment,
+    };
+  }
+  function writeGuard(command, environment = {}, input = envelope(command)) {
     return run(
       '/bin/bash',
       [path.join(installedPkg, 'templates/hook-packs/shared/bash-write-guard.sh')],
       {
         cwd: own,
-        input: '',
-        env: {
-          ...process.env,
-          HOME: home,
-          CAWS_HOME: path.join(home, '.caws'),
-          CAWS_PROJECT_DIR: project,
-          CAWS_BIN: path.join(prefix, 'node_modules/.bin/caws'),
-          CAWS_AGENT_SURFACE: 'codex',
-          HOOK_TOOL_NAME: 'Bash',
-          HOOK_COMMAND: command,
-          HOOK_CWD: own,
-          HOOK_SESSION_ID: 'package-fixture',
-          HOOK_PERMISSION_MODE: 'bypassPermissions',
-          ...environment,
-        },
+        input: typeof input === 'string' ? input : JSON.stringify(input),
+        env: guardEnv(command, own, environment),
       }
     );
   }
@@ -168,6 +188,10 @@ try {
   assert.equal(benignInterpreter.status, 0, benignInterpreter.stderr);
   const benignThenRead = writeGuard("node <<'JS'\nconst fn = x => x;\nJS\ngit status --short");
   assert.equal(benignThenRead.status, 0, benignThenRead.stderr);
+  const quotedSearch = writeGuard(
+    `rg -n -- 'writeFileSync("${foreign}/search-data", "x") > { data }' .`
+  );
+  assert.equal(quotedSearch.status, 0, quotedSearch.stderr);
   const finiteForeign = writeGuard(`DEST='${foreign}/never-written'; touch "$DEST"`);
   assert.equal(finiteForeign.status, 2, JSON.stringify(finiteForeign));
   assert.match(finiteForeign.stderr, /worktree 'foreign'/);
@@ -178,6 +202,26 @@ try {
   );
   assert.equal(inertInterpreter.status, 0, inertInterpreter.stderr);
   assert.equal(fs.existsSync(marker), false);
+  const independent = path.join(root, 'independent-project');
+  linkedRepository(independent, []);
+  // Interpreter literals are weak cross-repository observations. The actual
+  // shell operand pair above separately exercises foreign-worktree ownership.
+  const foreignInterpreter = writeGuard(
+    `node -e 'require("node:fs").writeFileSync("${independent}/interpreter-never-written", "bad")'`
+  );
+  assert.equal(foreignInterpreter.status, 2, JSON.stringify(foreignInterpreter));
+  assert.match(foreignInterpreter.stderr, /DIFFERENT repository/);
+  const malformed = writeGuard('printf safe', {}, '{');
+  assert.equal(malformed.status, 2, JSON.stringify(malformed));
+  assert.match(malformed.stderr, /original tool metadata is missing or malformed/);
+  const unavailable = writeGuard('printf safe', { CAWS_BIN: path.join(root, 'absent-caws') });
+  assert.equal(unavailable.status, 2, JSON.stringify(unavailable));
+  assert.match(unavailable.stderr, /mutation analysis is unavailable/);
+  const codexProjection = writeGuard('printf safe', { CAWS_AGENT_SURFACE: 'codex' });
+  assert.equal(codexProjection.status, 2, JSON.stringify(codexProjection));
+  assert.match(codexProjection.stderr, /execution-contract/);
+  assert.equal(fs.existsSync(path.join(independent, 'interpreter-never-written')), false);
+  assert.equal(fs.existsSync(path.join(foreign, 'search-data')), false);
   assert.equal(fs.existsSync(path.join(foreign, 'never-written')), false);
   assert.equal(fs.existsSync(path.join(foreign, 'nested-never-written')), false);
   const ownMetadata = writeGuard('git add -- package-never-written');
@@ -199,6 +243,44 @@ try {
   assert.equal(changedMapping.status, 2, changedMapping.stderr);
   assert.match(changedMapping.stderr, /metadata-coordinate-unresolved/);
   assert.equal(fs.readFileSync(path.join(own, '.git'), 'utf8'), pointer);
+  function lifecycle(command, cwd = own) {
+    return run(
+      '/bin/bash',
+      [path.join(installedPkg, 'templates/hook-packs/shared/quiet-merge.sh')],
+      {
+        cwd: own,
+        input: JSON.stringify(envelope(command, cwd)),
+        env: guardEnv(command, cwd),
+      }
+    );
+  }
+  const lifecycleCommand = 'caws worktree destroy same-name';
+  const rewritten = lifecycle(lifecycleCommand);
+  assert.equal(rewritten.status, 0, rewritten.stderr);
+  const update = JSON.parse(rewritten.stdout).hookSpecificOutput;
+  assert.equal(update.permissionDecision, 'allow');
+  assert.equal(typeof update.updatedInput.command, 'string');
+  assert(update.updatedInput.command.endsWith(' && ' + lifecycleCommand));
+  const fakeBin = path.join(root, 'lifecycle-stand-in');
+  fs.mkdirSync(fakeBin);
+  fs.writeFileSync(
+    path.join(fakeBin, 'caws'),
+    '#!/bin/sh\nprintf "fixture stdout\\n"\nprintf "fixture stderr\\n" >&2\nprintf "fixture cwd: "; pwd -P\nexit 23\n',
+    { mode: 0o700 }
+  );
+  // Only this fixed fixture command executes, against the private stand-in.
+  // Historical or interpreter payloads above are never executed.
+  const executed = run('/bin/bash', ['--noprofile', '--norc', '-c', update.updatedInput.command], {
+    cwd: own,
+    env: { PATH: fakeBin + path.delimiter + process.env.PATH, HOME: home },
+  });
+  assert.equal(executed.status, 23, JSON.stringify(executed));
+  assert.equal(executed.stdout, `fixture stdout\nfixture cwd: ${fs.realpathSync(project)}\n`);
+  assert.equal(executed.stderr, 'fixture stderr\n');
+  const foreignLifecycle = lifecycle(lifecycleCommand, independent);
+  assert.equal(foreignLifecycle.status, 0, foreignLifecycle.stderr);
+  assert.equal(foreignLifecycle.stdout, '');
+  assert.equal(fs.existsSync(marker), false);
   const reboundEnvironment = writeGuard(
     `GIT_DIR='${path.join(project, '.git/worktrees/foreign')}'; bash -c 'git add -- package-never-written'`,
     { GIT_DIR: pointer.slice('gitdir: '.length).trim() }
@@ -230,6 +312,15 @@ try {
       packagedWriteGuardChangedMapping: changedMapping.status,
       packagedWriteGuardProducerMapping: producerMapping.status,
       packagedWriteGuardReboundEnvironment: reboundEnvironment.status,
+      packagedWriteGuardQuotedSearch: quotedSearch.status,
+      packagedWriteGuardForeignInterpreter: foreignInterpreter.status,
+      packagedWriteGuardMalformedEnvelope: malformed.status,
+      packagedWriteGuardUnavailableBackend: unavailable.status,
+      packagedCodexNativeProjection: codexProjection.status,
+      packagedLifecycleStatus: executed.status,
+      packagedForeignLifecycleRewritten: false,
+      syntheticExecutionContext: true,
+      nativeProducerVerified: false,
     })
   );
 } finally {

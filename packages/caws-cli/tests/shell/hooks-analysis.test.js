@@ -21,7 +21,7 @@ describe('hooks analyze public CLI', () => {
       {
         input: typeof input === 'string' ? input : JSON.stringify(input),
         encoding: 'utf8',
-        env: { ...process.env, ...env },
+        env: { ...process.env, CAWS_AGENT_SURFACE: 'claude-code', ...env },
         shell: false,
         timeout: 15000,
       }
@@ -39,7 +39,7 @@ describe('hooks analyze public CLI', () => {
       {
         input: typeof input === 'string' ? input : JSON.stringify(input),
         encoding: 'utf8',
-        env: { ...process.env, ...env },
+        env: { ...process.env, CAWS_AGENT_SURFACE: 'claude-code', ...env },
         shell: false,
         timeout: 15000,
       }
@@ -56,7 +56,7 @@ describe('hooks analyze public CLI', () => {
     return new Promise((resolve, reject) => {
       const args = verb === 'analyze' ? ['--worktree', own] : ['--project', root, '--cwd', own];
       const child = spawn(process.execPath, [cli, 'hooks', verb, '--json', ...args], {
-        env: { ...process.env },
+        env: { ...process.env, CAWS_AGENT_SURFACE: 'claude-code' },
         shell: false,
         timeout: 15000,
       });
@@ -646,5 +646,39 @@ describe('hooks analyze public CLI', () => {
     const result = runMutation({ tool_name: 'Bash', cwd: own + '/.', tool_input: { command } });
     expect(result.execution).toEqual({ command, cwd: fs.realpathSync(own) });
     expect(result.singleLifecycle).toBe('merge');
+  });
+  test.each([
+    'Bash',
+    'exec_command',
+    'functions.exec_command',
+    'shell_command',
+    'functions.shell_command',
+  ])(
+    'Codex native %s cannot qualify its projection with caller fields or CLI flags',
+    (tool_name) => {
+      const command = 'caws worktree destroy same-name';
+      const input = {
+        tool_name,
+        cwd: own,
+        tool_input: { command, shell: '/bin/bash', login: false, workdir: own },
+      };
+      const mutation = runMutation(input, ['--shell', 'bash'], { CAWS_AGENT_SURFACE: 'codex' });
+      expect(mutation.status).toBe(2);
+      expect(mutation.execution).toBeNull();
+      expect(mutation.singleLifecycle).toBeNull();
+      expect(mutation.tokens).toEqual([]);
+      expect(mutation.issues.map((issue) => issue.code)).toEqual(['execution-contract']);
+      const analysis = run(input, ['--shell', 'bash'], { CAWS_AGENT_SURFACE: 'codex' });
+      expect(analysis.status).toBe(2);
+      expect(analysis.decision).toBe('unresolved');
+      expect(analysis.reasons.map((reason) => reason.code)).toEqual(['execution-contract']);
+    }
+  );
+  test('literal diagnostic analysis remains available without native admission', () => {
+    const result = run({ command: "P='file name'; sed -n '1,40p' \"$P\"", cwd: own }, [], {
+      CAWS_AGENT_SURFACE: 'codex',
+    });
+    expect(result.status).toBe(0);
+    expect(result.decision).toBe('allow');
   });
 });
