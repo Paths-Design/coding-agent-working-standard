@@ -545,6 +545,38 @@ describe('hooks analyze public CLI', () => {
     expect(result.execution).toEqual({ command, cwd: null });
     expect(result.singleLifecycle).toBeNull();
   });
+  test('lifecycle rewrite facts preserve the selected canonical project', () => {
+    const nested = path.join(own, 'independent-repository');
+    linkedRepository(nested, []);
+    for (const directory of [root, own, path.join(own, 'subdirectory')]) {
+      fs.mkdirSync(directory, { recursive: true });
+      const command = 'caws worktree destroy same-name';
+      const result = runMutation({ tool_name: 'Bash', cwd: directory, tool_input: { command } });
+      expect(result.issues).toEqual([]);
+      expect({ directory, lifecycle: result.singleLifecycle }).toEqual({
+        directory,
+        lifecycle: 'destroy',
+      });
+      expect(result.execution).toEqual({ command, cwd: fs.realpathSync(directory) });
+    }
+    const separate = path.join(root, 'separate-repository');
+    linkedRepository(separate, []);
+    for (const directory of [nested, separate]) {
+      const command = 'caws worktree destroy same-name';
+      const result = runMutation({ tool_name: 'Bash', cwd: directory, tool_input: { command } });
+      expect(result.issues).toEqual([]);
+      expect(result.execution).toEqual({ command, cwd: fs.realpathSync(directory) });
+      expect(result.singleLifecycle).toBeNull();
+    }
+  });
+  test('failed project discovery cannot supply a lifecycle rewrite fact', () => {
+    const result = runMutation({ command: 'caws worktree merge same-name' }, [], {
+      CAWS_GIT_BINARY: '/nonexistent-caws-discovery-git',
+    });
+    expect(result.status).toBe(0);
+    expect(result.issues).toEqual([]);
+    expect(result.singleLifecycle).toBeNull();
+  });
 
   test('empty native source stays empty while absent source cannot gain a surrogate', () => {
     const result = runMutation({

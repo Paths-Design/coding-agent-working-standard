@@ -43,6 +43,7 @@ import type { Word, WordPart } from '../analysis/parser-types';
 import { WORKTREE_COMMAND_META } from '../command-metadata';
 import { isOk } from '../../kernel';
 import { resolveRepoRoot } from '../../store';
+import { resolveGitBinary } from '../../store/git-binary';
 import { machineHome } from '../../init/machine-adapters';
 import { planHookReconciliation, type ReconciliationPlan } from '../../init/hook-reconciliation';
 import {
@@ -528,6 +529,25 @@ async function singleLiteralLifecycle(command: string): Promise<LifecycleFact> {
   return lifecycleHasName(argv[2], argv.slice(3)) ? argv[2] : null;
 }
 
+/** A rewrite must preserve the project the actual lifecycle CLI would select. */
+function lifecycleProjectMatches(cwd: string, project: string): boolean {
+  try {
+    const resolved = resolveRepoRoot(cwd, {
+      git: (args, options) =>
+        execFileSync(resolveGitBinary(), [...args], {
+          cwd: options.cwd,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 500,
+          maxBuffer: 65536,
+        }).trim(),
+    });
+    return resolved.ok && realpathSync(resolved.value.repoRoot) === realpathSync(project);
+  } catch {
+    return false;
+  }
+}
+
 /** Lexical facts for consumers; these fields never grant write authority. */
 export async function runHooksMutationViewCommand(
   options: HooksMutationViewOptions = {}
@@ -556,8 +576,11 @@ export async function runHooksMutationViewCommand(
       execution: { command: decoded.command, cwd: decoded.cwd },
       singleLifecycle: null,
     };
-    if (decoded.cwd !== null && view.issues.length === 0)
-      view.singleLifecycle = await singleLiteralLifecycle(decoded.command);
+    if (decoded.cwd !== null && view.issues.length === 0) {
+      const lifecycle = await singleLiteralLifecycle(decoded.command);
+      if (lifecycle && lifecycleProjectMatches(decoded.cwd, options.project))
+        view.singleLifecycle = lifecycle;
+    }
   } catch (error) {
     status = 2;
     view = failedMutationView(caughtExecutionIssue(error));

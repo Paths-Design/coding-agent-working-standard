@@ -53,13 +53,17 @@ projection cannot certify the execution contract above. Native adoption requires
 complete producer metadata or a controlled execution boundary; an explicit-Bash
 fixture alone cannot establish that contract for other calls.
 
-`singleLifecycle` is a syntax fact, not permission. It identifies only one
-foreground, literal `caws worktree merge|destroy` invocation with a name and
-closed option arities. Assignments, redirections, expansions, pipelines and
-compound neighbors receive no fact. `quiet-merge.sh` verifies source and
-directory custody before prefixing a shell-quoted canonical directory. Missing
-facts or backend failures leave the command untouched. Quoted lifecycle mentions
-cannot reroot another command after the write guard has checked it.
+`singleLifecycle` is a restricted lifecycle fact, not permission. It identifies
+only one foreground, literal `caws worktree merge|destroy` invocation with a
+name and closed option arities. Assignments, redirections, expansions, pipelines
+and compound neighbors receive no fact. A bounded constant Git query must
+resolve the decoded execution cwd to the same physical canonical project
+selected by the lifecycle CLI. Foreign projects, independent repositories nested
+inside the project, and failed discovery receive no rewrite fact.
+`quiet-merge.sh` verifies source and directory custody before prefixing a
+shell-quoted canonical directory. Missing facts or backend failures leave the
+command untouched. Quoted lifecycle mentions cannot reroot another command after
+the write guard has checked it.
 
 Unknown execution cwd is carried as `null`, including through nested source. The
 project directory may anchor syntax traversal but never becomes an observed
@@ -214,15 +218,18 @@ unresolved; original scalar values are inspected for nested producers without
 reconstructing ordinary argv or changing parent bindings. Nested policy
 violations retain their original source coordinates and denial precedence.
 
-Known wrappers `command` and `env` preserve the argument-role checks. Unknown
-applications, inline interpreters, functions, arithmetic, process substitution,
-parameter operations, background execution and other unsupported syntax are
-unresolved. A parser recovery/error, dependency failure, or exceeded budget is
-also unresolved. Limits are 64 KiB source, 4,096 visits, 16 AST depth, 32 states
-or argument alternatives, 32 loop iterations and eight wrapper levels. The first
-visit or depth exhaustion ends interpretation with one budget reason; an earlier
-denial remains a denial. The source-size limit applies before parsing, but the
-visit limit does not establish a bound on the parser's own work.
+Known wrappers `command` and `env` preserve the argument-role checks. The `env`
+profile models Bash-identifier assignment names; other assignment forms remain
+unresolved rather than becoming fictitious executable names hiding the child.
+Unknown applications, inline interpreters, functions, arithmetic, process
+substitution, parameter operations, background execution and other unsupported
+syntax are unresolved. A parser recovery/error, dependency failure, or exceeded
+budget is also unresolved. Limits are 64 KiB source, 4,096 visits, 16 AST depth,
+32 states or argument alternatives, 32 loop iterations and eight wrapper levels.
+The first visit or depth exhaustion ends interpretation with one budget reason;
+an earlier denial remains a denial. The source-size limit applies before
+parsing, but the visit limit does not establish a bound on the parser's own
+work.
 
 ## Policy and assumptions
 
@@ -281,13 +288,13 @@ data. See the
 
 The assumptions have different evidence:
 
-| Dependency                                                                                      | Status and decisive check                                                                                                                                                                             |
-| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Submitted expansions remain inert during analysis.                                              | Established for the exercised corpus by compiled-consumer, installed-handler and packaged sentinel checks; unsupported syntax stays unresolved.                                                       |
-| Git discovery matches the pin's reciprocal metadata.                                            | Established for real linked-worktree, unmapped, forged, nested-foreign and source-visible mapping-change fixtures; concurrent replacement remains outside the host contract.                          |
-| Argument roles distinguish options from data.                                                   | Established only for the declared closed profiles and paired fixtures. Unknown options are unresolved; `uniq`'s second operand is an output, and ripgrep decompression is outside the reader profile. |
-| Bash startup state, executable identity and repository configuration satisfy the host contract. | Assumed, not established by source analysis. Native adoption must verify or enforce these properties.                                                                                                 |
-| The actual executor receives the checked command and cwd.                                       | Unverified across the full native hook chain; later command transformations require rechecking or binding to the final invocation.                                                                    |
+| Dependency                                                                                      | Status and decisive check                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Submitted expansions remain inert during analysis.                                              | Established for the exercised corpus by compiled-consumer, installed-handler and packaged sentinel checks; unsupported syntax stays unresolved.                                                                                  |
+| Git discovery matches the pin's reciprocal metadata.                                            | Established for real linked-worktree, unmapped, forged, nested-foreign and source-visible mapping-change fixtures; concurrent replacement remains outside the host contract.                                                     |
+| Argument roles distinguish options from data.                                                   | Established only for the declared closed profiles and paired fixtures. Unknown options are unresolved; `uniq`'s second operand is an output, and ripgrep decompression is outside the reader profile.                            |
+| Bash startup state, executable identity and repository configuration satisfy the host contract. | Assumed, not established by source analysis. Native adoption must verify or enforce these properties.                                                                                                                            |
+| The actual executor receives the checked command and cwd.                                       | The matching Codex release source omits actual shell, startup mode and per-call cwd from the hook projection. Complete execution binding is not established by this adapter. Later transformations also require reauthorization. |
 
 Git subcommand options use closed argument-role profiles. An option such as
 `--grep` consumes its data operand; identical bytes in an executable option
@@ -312,11 +319,113 @@ These boundaries determine the main failure modes:
 | Medium   | Expanding utility support with string heuristics accumulates exceptions that become hard to replace.                     | Add typed role profiles with paired benign/hostile fixtures; classification may prioritize work but cannot authorize commands. |
 | Medium   | A runtime upgrade reaches concurrent projects with a stale CLI.                                                          | Isolated package/runtime validation and rollback first; preserve ordered CLI, runtime, native setup.                           |
 
-The strongest objection to native activation is the final execution binding: a
-later interceptor can change the checked invocation. Within the declared payload
-boundary, agreement between the model and the shell remains a host assumption.
-Widening the subset requires independent examples that distinguish a correct
-interpretation from a plausible incorrect one.
+The strongest objection to native activation is the missing final execution
+binding: the producer can omit launch parameters and a later interceptor can
+change the checked invocation. Within the declared payload boundary, agreement
+between the model and the shell remains a host assumption. Widening the subset
+requires independent examples that distinguish a correct interpretation from a
+plausible incorrect one.
+
+## Execution boundary proposal
+
+This design is proposed, not an implemented executor or an activated native
+contract. It places preparation, authorization and launch under one owner. A
+parser or an optional command wrapper cannot supply that ownership by itself.
+The matching Codex release's reduced hook payload is insufficient input.
+
+The prerequisite is a trusted integration at the host's final launch point. That
+integration must associate the call with its authenticated session, provide
+every effective execution parameter, and require the CAWS result for every
+explicitly covered execution entry point. A host integration may replace the
+covered tool or veto its final spawn; either route must demonstrate that another
+covered tool cannot bypass the boundary. The inspected CAWS native runtime
+launches hook engines, not user commands. Its identity resolver accepts payload
+and environment identifiers; those are not authenticated caller proof. No
+existing inspected entry point establishes both properties. An unavailable
+integration leaves native activation unavailable; a voluntarily invoked wrapper
+does not establish complete mediation.
+
+The proposed internal sequence is:
+
+1. **Prepare.** Resolve an absolute executable and its identity, exact argv,
+   physical cwd, an owned environment copy, and owned stdin bytes. Choose either
+   direct argv execution or an explicitly supported Bash mode with controlled
+   startup. Preserve submitted shell source exactly in argv. Apply lifecycle or
+   other permitted rewrites before analysis. Derive project, session, worktree,
+   spec and authority revision from the trusted integration and canonical CAWS
+   state, never from caller assertions. Select a versioned effect profile and
+   bounded deadline, output and cleanup limits. Unsupported or missing context
+   produces unresolved without launching the user program.
+2. **Authorize.** Analyze the prepared source without executing expansions.
+   Evaluate pin constraints separately from binding, ownership and scope. A
+   lexical `allow` is not a read-only classification or write permission. An
+   opaque program with no recognized writes receives no permission merely
+   because its projection is empty; it needs an established effect profile or
+   separately enforced confinement. Produce deny, unresolved, or an internal
+   single-use permit bound to the immutable prepared record and authority
+   revision. Define a versioned, unambiguous execution digest for comparison and
+   audit. A serialized digest or an agent-supplied allow response is not a
+   permit.
+3. **Launch.** Consume the private permit once, check expiry and cancellation,
+   and spawn from that same owned record. Any change to source, executable,
+   argv, cwd, environment, stdin, startup or profile invalidates admission and
+   requires preparation and authorization again. Copy mutable buffers and maps;
+   a shallowly frozen object is insufficient. Refusal, malformed response,
+   timeout, missing context and an already consumed permit produce zero user
+   process launches.
+4. **Finish.** Bound output, terminate and reap according to the declared
+   process-control capability, and retain partial output and a truthful outcome:
+   completed, failed, cancelled or indeterminate. Do not retry an indeterminate
+   execution automatically. A receipt records observations and custody, not
+   governance authority or acceptance. Environment values, stdin and command
+   source are private data, not default diagnostic output.
+
+A claim that committed revocation prevents a later launch needs a shared
+authority fence around final validation and spawn, observed by every relevant
+authority writer. A last-minute reread alone leaves a race. The inspected store
+does not provide this join. Hold such a fence only through spawn, not the entire
+child lifetime: a child lifecycle command may itself need the authority writer.
+Revocation after spawn can request cancellation but cannot undo effects already
+performed. These are separate promises and must have separate tests.
+
+The design also retains executable/path replacement and descendant-escape
+limits. Hashing a binary and then spawning its pathname is not atomic execution
+of those bytes. Physical cwd resolution does not freeze the filesystem. Process
+group termination does not prove containment of escaped descendants. Stronger
+claims require demonstrated OS capabilities; typed admission alone supplies
+none.
+
+The expensive decisions to settle before implementing an executor are:
+
+| Priority | Trigger and cost                                                                                                                                                                    | Required disposition                                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Critical | A host supplies reduced context or retains a covered bypass. A correct CAWS decision then governs a different invocation or none of its launches.                                   | Prove trusted final-launch integration first. Do not build authority on the existing reduced hook projection.              |
+| Critical | A public permit, caller-supplied identity, late rewrite or mutable prepared record transfers admission to another call. Foreign writes or lifecycle operations may be irreversible. | Keep permits private and single-use; establish caller provenance and custody before the first executable slice.            |
+| High     | Revocation races final spawn, or a fence is held while a lifecycle child needs the writer. The result is stale authority or a deadlock.                                             | Define the authority serialization contract before promising revocation semantics; test both orderings and child progress. |
+| High     | Empty mutation facts authorize an opaque program. Its unobserved writes evade scope checks.                                                                                         | Define admitted effect profiles or enforced confinement before admitting that program class.                               |
+| High     | Cancellation or output failure leaves an ambiguous execution and an automatic retry duplicates effects.                                                                             | Implement bounded cleanup and indeterminate outcomes with the first launch slice.                                          |
+| Medium   | A persisted permit schema or broad utility compatibility surface spreads before the owner/host contract is proven.                                                                  | Keep the first permit internal and profiles narrow. Broader protocols and utilities can be deferred.                       |
+
+Functional completion of this boundary requires the following evidence; source
+analysis fixtures cannot substitute for the host integration rows:
+
+| Criterion                             | Decisive proof                                                                                                                                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact execution custody               | An instrumented child observes executable, argv, cwd, environment, stdin and startup matching the admitted record. Mutating each field after admission yields zero launches.                                        |
+| Trusted identity and complete routing | A pinned host routes every declared covered entry point through the boundary. Forged session fields and an alternate tool cannot bypass refusal. Repeat after restart.                                              |
+| Useful benign behavior                | The fixed-range `sed`/validated-reader case with a computed data operand launches once; quoted JavaScript braces remain data. Its execution trace matches the prepared record. Analysis itself creates no sentinel. |
+| Dangerous variants remain blocked     | Paired cases for executable sed, nested producers, foreign Git, foreign writes, conflicting context, unsupported startup and exhausted analysis produce zero user launches.                                         |
+| Authority and rewrite custody         | Foreign, missing, ambiguous, inactive and one-sided bindings refuse. A lifecycle rewrite is authorized only after project-preserving preparation; an old permit cannot launch rewritten source.                     |
+| Revocation ordering                   | Pause just before launch, commit revocation through the real writer, then resume: zero launches under the shared fence. Reverse ordering demonstrates only the explicitly bounded post-spawn cancellation promise.  |
+| Permit lifecycle                      | Replay, expiry, cancellation and cross-invocation reuse each produce zero launches. No caller can manufacture a permit from a serialized decision.                                                                  |
+| Failure and cleanup                   | Deadline, output cap, broken stdin, spawn failure and cancellation preserve bounded partial output, reaping and honest outcomes; ambiguous completion never retries itself.                                         |
+
+Investigate the pinned host's final resolved launch integration and bypass
+inventory first. Implement the smallest proven integration plus an owned
+prepared record and hostile custody tests before widening tool support. Change
+native adoption from a parser-only rollout to an execution-contract rollout;
+keep the pure analyzer useful independently. Jev may classify retained examples
+offline during design, but is not a runtime authorization dependency.
 
 ## Verification and adoption
 

@@ -1023,3 +1023,404 @@ describe('mutation view uses shared traversal without granting scope', () => {
     expect(words('all-builtins-as-data')).toContain(BUILTINS.join(' '));
   });
 });
+
+// These programs are analyzed as source only, including the hostile payloads.
+const HARDENING_PAYLOAD = 'require("node:fs").writeFileSync("{{MARKER}}", "unexpected")';
+const HARDENING_PYTHON_PAYLOAD = 'open("{{MARKER}}", "w").write("unexpected")';
+const HARDENING_CODE = [
+  ['node-short-print', "node -p '1'", 'node', '1', "'1'"],
+  ['node-long-print', "node --print '1'", 'node', '1', "'1'"],
+  ['node-inline-eval', "node --eval='1'", 'node', '1', "--eval='1'"],
+  ['node-empty-eval', "node -e ''", 'node', '', "''"],
+  ['env-leading-terminator', "env -- A=x node -e '1'", 'node', '1', "'1'"],
+  ['env-assignment-equals-data', "env A=x=y node -e '1'", 'node', '1', "'1'"],
+  ['nodejs-identity', "nodejs -e '1'", 'node', '1', "'1'"],
+  ...['python', 'python3', 'python3.12', 'python10.22'].map((program) => [
+    'python-identity-' + program,
+    program + " -c '" + HARDENING_PYTHON_PAYLOAD + "'",
+    'python',
+    HARDENING_PYTHON_PAYLOAD,
+    "'" + HARDENING_PYTHON_PAYLOAD + "'",
+  ]),
+  ...['--no-warnings', '--input-type=module', '--input-type=commonjs'].map((flag) => [
+    'node-neutral-' + flag,
+    'node ' + flag + " -e '1'",
+    'node',
+    '1',
+    "'1'",
+  ]),
+  ...['-u', '-B', '-E', '-I', '-s', '-S', '-O', '-OO', '-q'].map((flag) => [
+    'python-neutral-' + flag,
+    'python3 ' + flag + " -c '1'",
+    'python',
+    '1',
+    "'1'",
+  ]),
+  [
+    'env-assignment-identity',
+    "env A=x node -e '" + HARDENING_PAYLOAD + "'",
+    'node',
+    HARDENING_PAYLOAD,
+    "'" + HARDENING_PAYLOAD + "'",
+  ],
+];
+const HARDENING_REJECT = [
+  ['node-opaque-selection', 'node "$FLAG" -e 1', 'mutation-code-source', '"$FLAG"'],
+  ['node-python-flag', "node -B -e '1'", 'mutation-interpreter-option', '-B'],
+  [
+    'python-node-flag',
+    "python3 --no-warnings -c '1'",
+    'mutation-interpreter-option',
+    '--no-warnings',
+  ],
+  [
+    'shell-node-flag',
+    "bash --no-warnings -c 'printf x'",
+    'mutation-interpreter-option',
+    '--no-warnings',
+  ],
+  ['python-node-eval', "python3 --eval='1'", 'mutation-interpreter-option', "--eval='1'"],
+  ['shell-node-eval', "bash --eval='printf x'", 'mutation-interpreter-option', "--eval='printf x'"],
+  [
+    'node-warning-suffix',
+    "node --no-warnings-extra -e '1'",
+    'mutation-interpreter-option',
+    '--no-warnings-extra',
+  ],
+  [
+    'node-input-prefix',
+    "node --other--input-type=module -e '1'",
+    'mutation-interpreter-option',
+    '--other--input-type=module',
+  ],
+  [
+    'node-input-suffix',
+    "node --input-type=module-extra -e '1'",
+    'mutation-interpreter-option',
+    '--input-type=module-extra',
+  ],
+  [
+    'node-eval-prefix',
+    "node --other--eval='1'",
+    'mutation-interpreter-option',
+    "--other--eval='1'",
+  ],
+  ['env-clear', "env -i node -e '1'", 'mutation-wrapper-option', null],
+  ['exec-name', "exec -a alias node -e '1'", 'mutation-wrapper-option', null],
+  ['env-missing-program', 'env --', 'mutation-executable-unknown', null],
+  ['command-missing-program', 'command --', 'mutation-executable-unknown', null],
+];
+const HARDENING_BODY = 'const selected = 1;\n';
+const HARDENING_STDIN = [
+  ['stdin-double-dash', "node -- <<'JS'\n" + HARDENING_BODY + 'JS\n', HARDENING_BODY],
+  ['stdin-double-dash-minus', "node -- - <<'JS'\n" + HARDENING_BODY + 'JS\n', HARDENING_BODY],
+  ['stdin-minus', "node - <<'JS'\n" + HARDENING_BODY + 'JS\n', HARDENING_BODY],
+  ['stdin-explicit-zero', "node 0<<'JS'\n" + HARDENING_BODY + 'JS\n', HARDENING_BODY],
+  ['stdin-other-input', "node <<'JS' 3<input\n" + HARDENING_BODY + 'JS\n', HARDENING_BODY],
+  [
+    'stdin-other-heredoc',
+    "node 0<<'JS' 3<<'OTHER'\n" + HARDENING_BODY + 'JS\nnotSelected();\nOTHER\n',
+    HARDENING_BODY,
+  ],
+  ['stdin-output-independent', "node <<'JS' > output\n" + HARDENING_BODY + 'JS\n', HARDENING_BODY],
+  ['stdin-unquoted-literal', 'node <<JS\n' + HARDENING_BODY + 'JS\n', HARDENING_BODY],
+  [
+    'stdin-quoted-variable-data',
+    'node <<\'JS\'\nconst selected = "$DATA";\nJS\n',
+    'const selected = "$DATA";\n',
+  ],
+];
+const HARDENING_NO_STDIN = [
+  [
+    'stdin-only-other-fd',
+    "node 0<input 3<<'JS'\n" + HARDENING_BODY + 'JS\n',
+    'mutation-interpreter-source',
+  ],
+  ['stdin-closed', "node <<'JS' 0<&-\n" + HARDENING_BODY + 'JS\n', 'mutation-interpreter-source'],
+  [
+    'stdin-replaced-string',
+    "node <<'JS' <<< 'replacement'\n" + HARDENING_BODY + 'JS\n',
+    'mutation-interpreter-source',
+  ],
+  [
+    'stdin-expanded-variable',
+    'node <<JS\nconst selected = "$DATA";\nJS\n',
+    'mutation-code-expanded',
+  ],
+];
+const hardeningNested = (depth) => {
+  let source = "printf x > '{{FOREIGN}}/deep'";
+  for (let level = 0; level < depth; level++)
+    source = "bash <<'LEVEL" + level + "'\n" + source + '\nLEVEL' + level + '\n';
+  return source;
+};
+
+describe('mutation projection preserves program roles and source custody', () => {
+  let temporary, locations, requests, results;
+  const expand = (value) => value.replace(/\{\{([A-Z]+)\}\}/g, (_, key) => locations[key]);
+  const result = (id) => results.get(id).view;
+  const source = (id) => requests.find((item) => item.id === id).input.command;
+  const issueCodes = (id) => result(id).issues.map((item) => item.code);
+  const ordinary = [
+    ...HARDENING_CODE.map(([id, command]) => [id, command]),
+    ...HARDENING_REJECT.map(([id, command]) => [id, command]),
+    ...HARDENING_STDIN.map(([id, command]) => [id, command]),
+    ...HARDENING_NO_STDIN.map(([id, command]) => [id, command]),
+    ['shell-stdin-mode', "bash -s <<'SH'\nprintf %s selected\nSH\n"],
+    ['node-entry-stops-options', "node entry.js -e 'not code'"],
+    ['node-end-stops-options', "node -- entry.js -e 'not code'"],
+    ['python-prefix-is-data', "mypython3 -c '" + HARDENING_PYTHON_PAYLOAD + "'"],
+    ['python-suffix-is-data', "python3-wrapper -c '" + HARDENING_PYTHON_PAYLOAD + "'"],
+    ['descriptor-multidigit', 'printf x 2>&10'],
+    ['descriptor-prefix-data', "printf x 2>&'1x'"],
+    ['descriptor-suffix-data', "printf x 2>&'x1'"],
+    ['descriptor-unknown', 'printf x 2>&"$FD"'],
+    ['env-child-assignment-data', 'env A=x printf %s 9A=x'],
+    ['here-string-data', "cat <<< 'a > b'"],
+    ['nested-depth-eight', hardeningNested(8)],
+    ['nested-depth-nine', hardeningNested(9)],
+    ['issue-same-source', 'for I in a a; do node -e "$CODE"; done'],
+    ['issue-distinct-source', 'node -e "$CODE"; node -e "$CODE"'],
+    ['explicit-bash', 'printf x', 'bash'],
+    ['unsupported-shell', 'printf x', 'zsh'],
+    ['env-unsupported-name', "env 9A=x node -e '" + HARDENING_PAYLOAD + "'"],
+  ];
+  beforeAll(() => {
+    temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-projection-roles-'));
+    locations = {
+      PROJECT: path.join(temporary, 'project'),
+      FOREIGN: path.join(temporary, 'foreign'),
+      META: path.join(temporary, 'metadata'),
+      MARKER: path.join(temporary, 'must-not-exist'),
+    };
+    for (const directory of [locations.PROJECT, locations.FOREIGN, locations.META])
+      fs.mkdirSync(directory);
+    requests = ordinary.map(([id, command, shell]) => ({
+      id,
+      input: {
+        command: expand(command),
+        cwd: locations.PROJECT,
+        project: locations.PROJECT,
+        ...(shell ? { shell } : {}),
+      },
+    }));
+    const context = {
+      directory: fs.realpathSync.native(locations.META),
+      common: fs.realpathSync.native(locations.META),
+      worktree: fs.realpathSync.native(locations.PROJECT),
+    };
+    requests.push({
+      id: 'metadata-routing-order',
+      metadataResults: [context],
+      input: {
+        command: expand(
+          "GIT_DIR='{{META}}' GIT_WORK_TREE='{{PROJECT}}' git add -- one; GIT_WORK_TREE='{{PROJECT}}' GIT_DIR='{{META}}' git add -- two"
+        ),
+        cwd: locations.PROJECT,
+        project: locations.PROJECT,
+      },
+    });
+    const active = String(
+      globalThis.__stryker__?.activeMutant ?? process.env.__STRYKER_ACTIVE_MUTANT__ ?? ''
+    );
+    const child = spawnSync(
+      process.execPath,
+      [
+        '-e',
+        '(' + RUNNER + ')().catch(error=>{console.error(error);process.exitCode=1;})',
+        path.resolve(__dirname, '../../dist/shell/analysis/mutation-view.js'),
+        active,
+      ],
+      {
+        input: JSON.stringify(requests),
+        shell: false,
+        encoding: 'utf8',
+        timeout: 30000,
+        maxBuffer: 8 * 1024 * 1024,
+      }
+    );
+    if (child.error || child.status !== 0)
+      throw new Error(
+        JSON.stringify({ status: child.status, error: child.error?.message, stderr: child.stderr })
+      );
+    const batch = JSON.parse(child.stdout);
+    expect(batch).toHaveLength(requests.length);
+    for (const row of batch) expect(row.activeMutant).toBe(active);
+    results = new Map(batch.map((row) => [row.id, row]));
+  });
+  afterAll(() => {
+    if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+  });
+  test.each(HARDENING_CODE)(
+    '%s keeps the actual finite executable payload',
+    (id, _command, language, code, original) => {
+      const actual = result(id);
+      expect(actual.issues).toEqual([]);
+      expect(actual.interpreters).toHaveLength(1);
+      const interpreter = actual.interpreters[0];
+      expect(interpreter.language).toBe(language);
+      expect(interpreter.cwd).toBe(fs.realpathSync.native(locations.PROJECT));
+      expect(interpreter.payloads).toHaveLength(1);
+      const payload = interpreter.payloads[0];
+      expect(payload.text).toBe(expand(code));
+      expect(payload.origin).toBe('argument');
+      expect(source(id).slice(payload.start, payload.end)).toBe(expand(original));
+      expect(actual.tokens.filter((token) => token.kind.endsWith('redirect'))).toEqual([]);
+      expect(fs.existsSync(locations.MARKER)).toBe(false);
+    }
+  );
+  test.each(HARDENING_REJECT)(
+    '%s refuses unsupported selection without attributing code',
+    (id, _command, code, original) => {
+      expect(issueCodes(id)).toContain(code);
+      expect(result(id).interpreters).toEqual([]);
+      const issue = result(id).issues.find((item) => item.code === code);
+      expect(source(id).slice(issue.start, issue.end)).toBe(
+        original === null ? source(id) : original
+      );
+    }
+  );
+  test.each(HARDENING_STDIN)('%s respects stdin descriptor ownership', (id, _command, body) => {
+    expect(result(id).issues).toEqual([]);
+    expect(result(id).interpreters).toHaveLength(1);
+    const payloads = result(id).interpreters[0].payloads;
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].text).toBe(body);
+    expect(payloads[0].origin).toBe('heredoc');
+    expect(source(id).slice(payloads[0].start, payloads[0].end)).toBe(body);
+  });
+  test.each(HARDENING_NO_STDIN)(
+    '%s cannot borrow a different descriptor or expanded body',
+    (id, _command, code) => {
+      expect(issueCodes(id)).toContain(code);
+      expect(result(id).interpreters).toHaveLength(1);
+      expect(result(id).interpreters[0].payloads).toEqual([]);
+    }
+  );
+  test('shell stdin mode projects the body while entry-script operands stop option parsing', () => {
+    expect(result('shell-stdin-mode').issues).toEqual([]);
+    expect(
+      result('shell-stdin-mode')
+        .tokens.filter((token) => token.kind === 'word')
+        .map((token) => token.value)
+    ).toEqual(['bash', '-s', 'printf', '%s', 'selected']);
+    for (const id of ['node-entry-stops-options', 'node-end-stops-options']) {
+      expect(result(id).issues).toEqual([]);
+      expect(result(id).interpreters).toHaveLength(1);
+      expect(result(id).interpreters[0].payloads).toEqual([]);
+    }
+    for (const id of ['python-prefix-is-data', 'python-suffix-is-data']) {
+      expect(result(id).issues).toEqual([]);
+      expect(result(id).interpreters).toEqual([]);
+      expect(
+        result(id).tokens.find((token) => token.value === expand(HARDENING_PYTHON_PAYLOAD)).kind
+      ).toBe('word');
+    }
+  });
+  test('descriptor duplication requires a whole numeric descriptor, not a numeric substring', () => {
+    expect(result('descriptor-multidigit').issues).toEqual([]);
+    for (const id of ['descriptor-prefix-data', 'descriptor-suffix-data', 'descriptor-unknown'])
+      expect(issueCodes(id)).toContain('redirect-descriptor');
+    for (const id of [
+      'descriptor-multidigit',
+      'descriptor-prefix-data',
+      'descriptor-suffix-data',
+      'descriptor-unknown',
+    ])
+      expect(result(id).tokens.filter((token) => token.kind.endsWith('redirect'))).toEqual([]);
+    expect(result('here-string-data').issues).toEqual([]);
+    const input = result('here-string-data').tokens.filter(
+      (token) => token.kind === 'input_redirect'
+    );
+    expect(input.map((token) => token.value)).toEqual(['<<<']);
+    expect(result('here-string-data').tokens.filter((token) => token.kind === 'redirect')).toEqual(
+      []
+    );
+    const data = result('here-string-data').tokens.find((token) => token.value === 'a > b');
+    expect(data.kind).toBe('word');
+    expect(source('here-string-data').slice(data.start, data.end)).toBe("'a > b'");
+  });
+  test('nested source depth has a complete lower control and an explicit stopping boundary', () => {
+    expect(result('nested-depth-eight').issues).toEqual([]);
+    const targets = result('nested-depth-eight').tokens.filter(
+      (token) => token.value === locations.FOREIGN + '/deep'
+    );
+    expect(targets).toHaveLength(1);
+    expect(source('nested-depth-eight').slice(targets[0].start, targets[0].end)).toBe(
+      "'" + locations.FOREIGN + "/deep'"
+    );
+    expect(issueCodes('nested-depth-nine')).toEqual(['mutation-view-budget']);
+    expect(
+      result('nested-depth-nine').tokens.filter(
+        (token) => token.value === locations.FOREIGN + '/deep'
+      )
+    ).toEqual([]);
+    const issue = result('nested-depth-nine').issues[0];
+    expect(source('nested-depth-nine').slice(issue.start, issue.end)).toBe(
+      "printf x > '" + locations.FOREIGN + "/deep'\n"
+    );
+  });
+  test('issues are unique per source occurrence and distinct occurrences retain their own custody', () => {
+    expect(issueCodes('issue-same-source')).toEqual(['mutation-code-source']);
+    const repeated = result('issue-same-source').issues[0];
+    expect(source('issue-same-source').slice(repeated.start, repeated.end)).toBe('"$CODE"');
+    expect(issueCodes('issue-distinct-source')).toEqual([
+      'mutation-code-source',
+      'mutation-code-source',
+    ]);
+    const distinct = result('issue-distinct-source').issues;
+    expect(
+      distinct.map((item) => source('issue-distinct-source').slice(item.start, item.end))
+    ).toEqual(['"$CODE"', '"$CODE"']);
+    expect(distinct[0].start).toBeLessThan(distinct[1].start);
+  });
+  test('explicit shell dialect is carried into the actual analyzer', () => {
+    expect(result('explicit-bash').issues).toEqual([]);
+    expect(
+      result('explicit-bash')
+        .tokens.filter((token) => token.kind === 'word')
+        .map((token) => token.value)
+    ).toEqual(['printf', 'x']);
+    expect(issueCodes('unsupported-shell')).toEqual(['shell-dialect']);
+    expect(result('unsupported-shell').tokens).toEqual([]);
+    expect(
+      result('unsupported-shell').issues.map((item) =>
+        source('unsupported-shell').slice(item.start, item.end)
+      )
+    ).toEqual(['printf x']);
+  });
+  test('routing-equivalent Git contexts share one query without losing either source observation', () => {
+    const actual = result('metadata-routing-order');
+    const directory = fs.realpathSync.native(locations.META);
+    const worktree = fs.realpathSync.native(locations.PROJECT);
+    expect(actual.issues).toEqual([]);
+    expect(results.get('metadata-routing-order').queries).toEqual([
+      { cwd: worktree, overrides: { GIT_DIR: directory, GIT_WORK_TREE: worktree } },
+    ]);
+    expect(
+      actual.gitMetadata.map(({ subcommand, directory, common, worktree }) => ({
+        subcommand,
+        directory,
+        common,
+        worktree,
+      }))
+    ).toEqual(Array(2).fill({ subcommand: 'add', directory, common: directory, worktree }));
+    expect(
+      actual.gitMetadata.map((row) => source('metadata-routing-order').slice(row.start, row.end))
+    ).toEqual(source('metadata-routing-order').split('; '));
+  });
+  test('unsupported env names do not hide a known interpreter behind a fictitious application', () => {
+    expect(issueCodes('env-unsupported-name')).toContain('mutation-wrapper-option');
+    expect(result('env-unsupported-name').interpreters).toEqual([]);
+    expect(fs.existsSync(locations.MARKER)).toBe(false);
+  });
+  test('assignment-shaped child data cannot be consumed by the env wrapper', () => {
+    const actual = result('env-child-assignment-data');
+    expect(actual.issues).toEqual([]);
+    expect(actual.interpreters).toEqual([]);
+    const data = actual.tokens.filter((token) => token.value === '9A=x');
+    expect(data).toHaveLength(1);
+    expect(data[0].kind).toBe('word');
+    expect(source('env-child-assignment-data').slice(data[0].start, data[0].end)).toBe('9A=x');
+  });
+});

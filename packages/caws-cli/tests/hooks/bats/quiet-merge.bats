@@ -155,3 +155,19 @@ assert_rewrite_preserves_governed_failure() {
   refute_output --partial 'updatedInput'
   refute_output --partial 'permissionDecision'
 }
+
+@test "quiet-merge: a foreign or nested repository cannot select the session project's same-name lane" {
+  local foreign="$BATS_TEST_TMPDIR/foreign-project"
+  local nested="$CAWS_TEST_REPO/nested-independent-project"
+  local directory envelope
+  for directory in "$foreign" "$nested"; do
+    mkdir -p "$directory"
+    git -C "$directory" init -q
+    envelope="$(hook_envelope 'Bash' '' 'caws worktree destroy same-name' |
+      jq --arg cwd "$directory" '.cwd=$cwd')"
+    run_guard "quiet-merge.sh" "$envelope"
+    assert_success
+    refute_output --partial 'updatedInput'
+    refute_output --partial 'permissionDecision'
+  done
+}

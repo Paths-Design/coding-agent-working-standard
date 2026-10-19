@@ -882,4 +882,14 @@ for (const name of [
   );
 }
 
+add('env-supported-assignment-control', 'env A=x cat -- file');
+add('env-leading-terminator-control', 'env -- A=x cat -- file');
+add('env-child-assignment-data', 'env A=x printf %s 9A=x');
+add(
+  'env-nonidentifier-assignment',
+  'env 9A=x node -e \'require("node:fs").writeFileSync("{{MARKER}}", "unexpected")\'',
+  'unresolved',
+  'wrapper-option'
+);
+
 module.exports = cases;

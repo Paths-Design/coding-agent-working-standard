@@ -490,8 +490,13 @@ export function inspectInvocation(
         childEnv.set(key, [value.slice(equal + 1)]);
       }
     }
-    if (args[offset]?.value?.startsWith('-')) {
-      ctx.reason(node, 'wrapper-option', 'Unmodeled command/env wrapper option.');
+    // env also accepts names outside Bash's identifier grammar. Do not mistake
+    // an unsupported assignment for the child executable and hide that child.
+    if (
+      args[offset]?.value?.startsWith('-') ||
+      (name === 'env' && args[offset]?.value?.includes('='))
+    ) {
+      ctx.reason(node, 'wrapper-option', 'Unmodeled command/env wrapper option or assignment.');
       return state;
     }
     return inspectInvocation(args.slice(offset), state, childEnv, ctx, node, reader, wrappers + 1);

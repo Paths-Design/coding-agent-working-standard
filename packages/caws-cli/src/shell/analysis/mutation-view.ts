@@ -368,8 +368,17 @@ export async function projectMutationView(
             offset++;
           }
         }
-        if (args[offset]?.value?.startsWith('-')) {
-          issue('mutation-wrapper-option', 'Wrapper option effects are not modeled.', span(node));
+        // env's assignment names need not be shell identifiers. An unsupported
+        // binding cannot become a fictitious executable hiding the real child.
+        if (
+          args[offset]?.value?.startsWith('-') ||
+          (name === 'env' && args[offset]?.value?.includes('='))
+        ) {
+          issue(
+            'mutation-wrapper-option',
+            'Wrapper option or assignment effects are not modeled.',
+            span(node)
+          );
           return null;
         }
         args = args.slice(offset);
