@@ -1,0 +1,64 @@
+id: CAWS-SHELL-ANALYSIS-001
+title: 'Prove bounded shell behavior before worktree-isolation decisions'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-19T02:30:42.300Z'
+updated_at: '2026-10-19T02:30:42.300Z'
+created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
+blast_radius:
+  modules:
+    - 'Typed shell parsing, bounded abstract values, utility effects and worktree-isolation analysis; CLI explanation and installed guard consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/analysis/'
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/worktree-pin-guard.sh'
+    - 'packages/caws-cli/tests/hooks/bats/worktree-pin-guard.bats'
+    - 'packages/caws-cli/tests/shell/command-analysis.test.js'
+    - 'packages/caws-cli/tests/shell/hooks-analysis.test.js'
+    - 'packages/caws-cli/tests/fixtures/command-analysis/'
+    - 'packages/caws-cli/scripts/build-cli.js'
+    - 'packages/caws-cli/package.json'
+    - 'package-lock.json'
+    - 'docs/guides/command-analysis.md'
+    - 'docs/guides/hook-packs.md'
+  out: []
+invariants:
+  - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
+  - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
+  - 'Literal data remains data; quotes, branch alternatives, assignment order and finite-loop state are preserved. Existing lifecycle release and foreign work remain preserved.'
+acceptance:
+  - id: A1
+    given: 'a declared supported Bash subset and exact command bytes'
+    when: 'the analyzer inspects assignments, finite loops, quoting and nested read substitutions'
+    then: 'benign independently adjudicated commands are admitted with a deterministic explanation and analysis performs no submitted side effects'
+  - id: A2
+    given: 'shell-visible Git redirects and execution-bearing option/script slots'
+    when: 'quoted, variable, wrapped, mixed-lifecycle and hostile variants are analyzed'
+    then: 'foreign Git targets and dangerous utility execution are denied; unprovable targets, syntax and parser limits return unresolved without permission'
+  - id: A3
+    given: 'the shipped parser, CLI and guard install'
+    when: 'the real compiled CLI and installed worktree-pin guard receive exact hostile and benign payloads'
+    then: 'byte custody is preserved, guard decisions agree with independently derived requirements and release/repoint operations remain reachable'
+  - id: A4
+    given: 'the 207 retained refusal incidents and provenance limits'
+    when: 'their patterns are adjudicated and replayed without executing payloads'
+    then: 'the report separates supported benign, dangerous and unresolved cases; retained private transcripts are not committed and historical native refusals are not misrepresented as CAWS failures'
+  - id: A5
+    given: 'the committed candidate and isolated package/runtime fixture'
+    when: 'focused semantic and negative-control checks, doctor, gates and peer feedback are grounded'
+    then: 'the module and installed consumer satisfy the scoped criteria, packaging carries the parser, rollback is demonstrated and native/default/global-adoption limits are stated'
+observability:
+  - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
+rollback:
+  - 'Revert the candidate through a governed lane; retain the previous immutable runtime generation and verify supported adapter rollback before machine adoption.'
+non_functional:
+  security:
+    - 'Pin the parser dependency and reject malformed, partial, unsupported or over-budget ASTs; never infer permission from an omitted dynamic word.'
+contracts:
+  - name: 'bounded-shell-analysis'
+    type: behavior
