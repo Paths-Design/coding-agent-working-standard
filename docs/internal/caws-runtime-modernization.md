@@ -598,6 +598,25 @@ Additional bounded evidence and unresolved dependencies:
   suites pass 121 checks; strict runtime/store/shell TypeScript, scoped lint and
   all-target strict Clippy exit 0. This closes the demonstrated size gap on this
   host, not complete containment, installed behavior or multi-project parity.
+- E56: A clean `npm run build` followed by
+  `node ../caws-native/target/qualification-tools/qualify-native-containment.js . large-latch`
+  from `packages/caws-cli` exits 0 at committed source
+  `e01a1b00bbc55902bf0744d878f29f173fb86537`.
+  `packages/caws-native/target/qualification/containment-effect-2026-10-19T08-40-58-519Z/manifest.json`
+  names that revision rather than the earlier dirty-source baseline. Candidate
+  caller 196 exits via parent-observed SIGTERM, retains the block and correlated
+  receipt with adapter finish; sibling activity advances 1120→1564 bytes and
+  the forbidden-action marker is absent. Recorded root runtime-module hashes
+  match the inspected build; this is not a recursive dependency-closure hash.
+  Direct committed-candidate doctor and five policy gates exit 0 (0E/3W/4I
+  inherited doctor findings). A separate attempt to save their output with
+  relative Bash tee paths is refused by the active write-target hook; no log
+  file is produced by that command. The owned relative path is admitted by
+  `caws scope show`; direct CLI checks complete without that filesystem write.
+  The scope decision and refusal are distinct observations, not permission to
+  disable the guard. The broader telemetry test type error and all unearned
+  acceptance obligations remain open. This slice is committed, not installed
+  or landed on main.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
