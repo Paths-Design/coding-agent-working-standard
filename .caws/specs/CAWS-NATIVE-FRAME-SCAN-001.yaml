@@ -1,0 +1,35 @@
+id: CAWS-NATIVE-FRAME-SCAN-001
+title: 'Bound native frame delimiter scanning to newly received bytes'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-19T11:29:05.496Z'
+updated_at: '2026-10-19T11:29:05.496Z'
+created_by_session: '01a153d3-44ea-7c00-8e87-a18757db0ed0'
+blast_radius:
+  modules:
+    - 'Native one-shot frame reader'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/runner.rs'
+  out: []
+invariants:
+  - 'Frame byte limits, queued-frame order, cancellation, request deadlines and owned process-group cleanup retain their existing contracts.'
+acceptance:
+  - id: A1
+    given: 'a frame arriving in tiny chunks'
+    when: 'Session frame scanning searches for a delimiter repeatedly'
+    then: 'deterministic examined-byte evidence shows each received byte is examined once before its frame is consumed.'
+  - id: A2
+    given: 'queued complete frames, empty frames, incomplete tails and frame byte-limit boundaries'
+    when: 'the actual frame reader consumes them'
+    then: 'it preserves exact frame bytes and order and rejects empty, incomplete and over-budget inputs.'
+observability:
+  - 'Deterministic test-only examined-byte counts and exact returned frame bytes; no production telemetry environment.'
+rollback:
+  - 'Revert the isolated scanner source commit through an ordinary reviewed Git change.'
+non_functional: {}
+contracts:
+  - name: 'native-frame-reader'
+    type: behavior
