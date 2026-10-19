@@ -61,6 +61,62 @@ function object(file: string): ObjectData {
 function sha(file: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
+function auditProblems(
+  latch: ObjectData,
+  text: string | null,
+  kind: CaseKind,
+  sid: string,
+  command: string,
+  callerPid: number
+): string[] {
+  const problems: string[] = [];
+  if (latch.trap_strikes !== 1) problems.push('strike-count');
+  if (latch.trap_last_strike_command !== command) problems.push('strike-command');
+  if (kind === 'enabled') {
+    if (
+      latch.trap_escalated_pid !== String(callerPid) ||
+      typeof latch.trap_escalated_at !== 'string' ||
+      !latch.trap_escalated_at
+    )
+      problems.push('target-stamp');
+  } else if (Object.hasOwn(latch, 'trap_escalated_pid')) problems.push('unexpected-target-stamp');
+  let rows: unknown[];
+  try {
+    rows = (text ?? '')
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line: string) => JSON.parse(line));
+  } catch {
+    return [...problems, 'audit-json'];
+  }
+  if (rows.length !== 1) return [...problems, 'audit-count'];
+  const row = rows[0];
+  if (row === null || typeof row !== 'object' || Array.isArray(row))
+    return [...problems, 'audit-record'];
+  const record = row as ObjectData;
+  if (record.session_id !== sid || record.command !== command) problems.push('audit-request');
+  const enabled = kind === 'enabled';
+  if (
+    record.verdict !== (enabled ? 'escalated' : 'held') ||
+    record.action !== (enabled ? 'sigterm' : 'no-kill')
+  )
+    problems.push('audit-effect');
+  const reason = enabled
+    ? 'agent process ' + callerPid + ' ('
+    : kind === 'disabled'
+      ? 'kill escalation disabled'
+      : kind === 'wrong-pid'
+        ? 'pid drifted'
+        : kind === 'wrong-start'
+          ? 'start-time mismatch'
+          : kind === 'wrong-comm'
+            ? 'comm mismatch'
+            : 'arm-time agent identity incomplete or malformed';
+  if (typeof record.detail !== 'string' || !record.detail.includes(reason))
+    problems.push('audit-reason');
+  return problems;
+}
 function start(
   executable: string,
   args: string[],
@@ -186,9 +242,48 @@ const manifest: {
     'Disposable caller and sibling, not actual harness ingress or exclusive shared-backend targeting',
     'Only selected stock Codex block-dangerous; not the default complete guard chain',
     'No proposed shell command executes; permitted fixture work is limited to marker files',
+    'After caller termination its watchdog is gone; capture EOF is not proof of descendant cleanup',
     'No resident service, installation, thirteen-session workload or full migration acceptance',
   ],
 };
+
+function qualifyAuditOracle(): void {
+  const positive = manifest.cases.find(
+    (entry) => entry.mode === 'legacy-python' && entry.kind === 'enabled'
+  );
+  assert(positive !== undefined, 'positive signal/audit observation is required');
+  assert(typeof positive.callerPid === 'number');
+  assert(typeof positive.escalation === 'string');
+  const latch = positive.latch as ObjectData;
+  const command = String(latch.trap_last_strike_command);
+  const sid = 'effect-enabled';
+  const check = (state: ObjectData, audit: string): string[] =>
+    auditProblems(state, audit, 'enabled', sid, command, positive.callerPid as number);
+  assert.deepEqual(check(latch, positive.escalation), []);
+  const row: ObjectData = JSON.parse(positive.escalation);
+  const controls: [string, ObjectData, string, string][] = [
+    ['empty-audit', latch, '', 'audit-count'],
+    ['malformed-audit', latch, '{', 'audit-json'],
+    ['foreign-session', latch, JSON.stringify({ ...row, session_id: 'foreign' }), 'audit-request'],
+    ['held-signal-audit', latch, JSON.stringify({ ...row, action: 'no-kill' }), 'audit-effect'],
+    ['foreign-target', { ...latch, trap_escalated_pid: '1' }, positive.escalation, 'target-stamp'],
+    ['missing-strike', { ...latch, trap_strikes: 0 }, positive.escalation, 'strike-count'],
+    [
+      'foreign-strike',
+      { ...latch, trap_last_strike_command: 'foreign' },
+      positive.escalation,
+      'strike-command',
+    ],
+  ];
+  const results = controls.map(([name, state, audit, expected]) => {
+    const problems = check(state, audit);
+    assert(problems.includes(expected), name + ' escaped the audit oracle');
+    return { name, problems };
+  });
+  json(path.join(root, 'audit-oracle-controls.json'), results);
+  manifest.auditOracleControls = results;
+  console.log(JSON.stringify({ auditOracleControls: results }));
+}
 
 async function qualifyWatchdog(binary: string): Promise<void> {
   const directory = path.join(root, 'watchdog-control');
@@ -336,6 +431,7 @@ async function run(): Promise<void> {
       }
     }
   }
+  qualifyAuditOracle();
 }
 
 async function scenario(
@@ -508,6 +604,10 @@ async function scenario(
       (refusal as ObjectData).decision === 'block' &&
       typeof (refusal as ObjectData).reason === 'string' &&
       ((refusal as ObjectData).reason as string).includes('QUARANTINED');
+    const latch = object(latchFile);
+    const audit = fs.existsSync(escalation) ? fs.readFileSync(escalation, 'utf8') : null;
+    const command = 'node -e \'process.stdout.write("fixture")\'';
+    const auditErrors = auditProblems(latch, audit, kind, sid, command, callerPid);
     const outcome = {
       mode,
       kind,
@@ -532,10 +632,11 @@ async function scenario(
       siblingHeartbeatBytesBefore: before,
       siblingHeartbeatBytesAfter: after,
       knownRefusal,
+      auditErrors,
       stdout,
       stderr,
-      latch: object(latchFile),
-      escalation: fs.existsSync(escalation) ? fs.readFileSync(escalation, 'utf8') : null,
+      latch,
+      escalation: audit,
     };
     json(path.join(directory, 'observation.json'), outcome);
     manifest.cases.push(outcome);
@@ -546,6 +647,7 @@ async function scenario(
         callerExit,
         identitySafe: outcome.identitySafe,
         knownRefusal,
+        auditErrors,
         forbiddenActionObserved: outcome.forbiddenActionObserved,
         siblingHeartbeatBytesBefore: before,
         siblingHeartbeatBytesAfter: after,
@@ -557,7 +659,7 @@ async function scenario(
       !outcome.identitySafe ||
       outcome.forbiddenActionObserved ||
       !knownRefusal ||
-      outcome.escalation === null
+      auditErrors.length !== 0
     )
       manifest.failures.push(
         mode + '/' + kind + ': intended containment/refusal behavior not established'

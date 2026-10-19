@@ -4,7 +4,7 @@ authority: working
 status: active
 title: CAWS native runtime migration tracker
 owner: CAWS runtime maintainers
-updated: 2026-10-18
+updated: 2026-10-19
 audience: maintainer
 ---
 
@@ -489,6 +489,45 @@ Additional bounded evidence and unresolved dependencies:
   records owned-hook wait signal 15, caller exit 21 and no admitted-action marker.
   Pipe EOF gates complete output capture; timeout aborts only owned capture
   streams and records incompleteness, never an inferred successful receipt.
+- E48: Committed candidate `cea1ad2e` reproduces the failure through
+  `npm run qualify:native:containment` from `packages/caws-cli`, exit 1 after
+  successful CLI/Cargo builds and strict runner compilation. Artifacts at
+  `packages/caws-native/target/qualification/containment-effect-2026-10-19T06-53-47-395Z/`
+  record 22 completed observations and sole native enabled failure. Caller
+  89105 exits via SIGTERM; stdout is empty, stderr reports original-caller
+  cancellation, escalation is absent and the sibling heartbeat advances
+  147→219 bytes. Legacy caller 62289 exits via SIGTERM with quarantine block
+  and escalation intact. The generated repaired snapshot is
+  `a822893a…7224c2`, selected guard SHA256 `39e99cf8…57ffdc`; it differs from
+  the installed `408c06a7…77baa0` generation. The 46 checks in three focused
+  routing/executor/engine suites and strict runner/source lint pass; doctor
+  exits 0 with inherited 0E/3W/4I and five scope/structural gates pass. These
+  checks do not exercise the demonstrated containment transport failure.
+- E49: The qualification oracle checks one exact per-case audit record's
+  session, command, verdict, action and reason, plus strike count/command and
+  the enabled target stamp or absence of escalation on held paths. An existing
+  or nonempty log alone does not pass. The stricter run at
+  `packages/caws-native/target/qualification/containment-effect-2026-10-19T06-59-17-790Z/`
+  exits 1 for native enabled refusal loss; all 22 audit checks pass in this
+  run. Native caller 63806 exits via SIGTERM with empty stdout, while its
+  escalation completes: audit interruption is timing-sensitive, refusal loss
+  persists. `audit-oracle-controls.json` records seven rejected corruptions of
+  the actual positive observation: empty/malformed log, foreign session,
+  no-kill action, foreign target, missing strike and foreign strike command.
+  Strict runner TypeScript and ESLint exit 0. The run records its source hash
+  to distinguish this oracle from the earlier committed version.
+
+Containment qualification does not establish cleanup after intentional caller
+death. The caller's watchdog dies with it; capture EOF only closes observed
+output writers. If the surviving hook/dispatcher stalls, capture cancellation
+does not terminate it, and a dead caller cannot consume its abort file. No
+current leak was observed, but no post-termination stall control has established
+bounded external ownership and reap. That scenario and an independently owned
+cleanup receipt are required before asserting cleanup for this path. The native
+terminal-effect owner must preserve ordinary cancellation, output/audit custody
+and bounded finalization together. A signal-accepted record alone cannot claim
+termination, and the legacy refusal's unconditional process-end wording is not
+an observation that the target exited.
 
 The executable embedded-Python surface is 15 shell files, 19 inline bodies and
 seven external callsites. A textual `python` hit is not sufficient: seven broader
