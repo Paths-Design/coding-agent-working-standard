@@ -178,6 +178,63 @@ test('native quiet allow and advisory use the actual classifier envelope contrac
   );
 });
 
+test.each([
+  'git init; echo "$(kubectl delete pod demo)"',
+  'git init; echo `kubectl delete pod demo`',
+  'echo "$(kubectl delete pod demo)"; git init',
+])(
+  'selected guard retains capability warning and repeat latch: %s',
+  async (input) => {
+    environment.CAWS_TRAP_KILL = '0';
+    environment.PATH = '/usr/bin:/bin';
+    command(input);
+    const handler = select();
+    const execute = createHandlerExecutor(context());
+    const state = path.join(project, '.codex/hooks/state');
+    const warningFile = path.join(state, 'danger-warn-fixture.json');
+    const latchFile = path.join(state, 'danger-latch-fixture.json');
+    const first = await execute(handler, 0);
+    expect(first.exitCode).toBe(0);
+    expect(Buffer.from(first.stdout).toString()).toBe('');
+    expect(Buffer.from(first.stderr).toString()).toContain('WARN, first capability ask');
+    const warningBytes = fs.readFileSync(warningFile);
+    expect(JSON.parse(warningBytes)).toMatchObject({
+      hook: 'block-dangerous.sh',
+      kind: 'capability-warn',
+      command: input,
+      reason: 'command substitution: destructive operation (K8S_DELETE)',
+    });
+    expect(fs.existsSync(latchFile)).toBe(false);
+
+    const second = await execute(handler, 0);
+    // The selected shell emits a protective decision; the composer owns exit promotion.
+    expect(second.exitCode).toBe(0);
+    const refusal = JSON.parse(Buffer.from(second.stdout).toString());
+    expect(refusal.decision).toBe('block');
+    expect(refusal.reason).toContain('SECOND capability-risk command');
+    expect(refusal.reason).toContain('ARMS the session danger latch');
+    const latch = JSON.parse(fs.readFileSync(latchFile));
+    expect(latch).toMatchObject({
+      hook: 'block-dangerous.sh',
+      decision: 'ask',
+      command: input,
+      reason: 'command substitution: destructive operation (K8S_DELETE)',
+    });
+    expect(latch.latch_generation).toMatch(/^[a-f0-9]{32}$/);
+    expect(fs.readFileSync(warningFile)).toEqual(warningBytes);
+
+    command('echo safe');
+    request.payload.session_id = 'ordinary-sibling';
+    request.inputJson = JSON.stringify(request.payload);
+    const ordinary = await execute(handler, 0);
+    expect(ordinary.exitCode).toBe(0);
+    expect(Buffer.from(ordinary.stdout).toString()).toBe('');
+    expect(fs.existsSync(path.join(state, 'danger-warn-ordinary-sibling.json'))).toBe(false);
+    expect(fs.existsSync(path.join(state, 'danger-latch-ordinary-sibling.json'))).toBe(false);
+  },
+  20000
+);
+
 test('merge-in-progress commit refusal preserves the classifier remedy without impossible pathspec advice', () => {
   command('git commit -m merge');
   const handler = select();

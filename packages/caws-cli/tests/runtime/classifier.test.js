@@ -119,6 +119,79 @@ describe('typed command classifier parsing and provenance', () => {
     expect(result.enforcement).toBe('confirm');
     expect(result.reason).toContain('recursion budget exceeded');
   });
+  test.each([
+    'git init; echo "$(kubectl delete pod demo)"',
+    'echo "$(kubectl delete pod demo)"; git init',
+    'git init; echo `kubectl delete pod demo`',
+  ])('executing substitutions precede ordinary advisory findings: %s', (command) => {
+    expect(classify(command)).toEqual({
+      decision: 'ask',
+      reason: 'command substitution: destructive operation (K8S_DELETE)',
+      source: 'capability',
+      enforcement: 'confirm',
+    });
+  });
+  test.each([
+    "git init; echo '$(kubectl delete pod demo)'",
+    'git init; echo "\\$(kubectl delete pod demo)"',
+  ])('inert substitution text does not displace an ordinary finding: %s', (command) => {
+    expect(classify(command)).toEqual(classify('git init'));
+  });
+  test('substitution denial and first equal findings preserve their source and enforcement', () => {
+    expect(classify('git init; echo "$(rm -rf /)"')).toEqual({
+      decision: 'deny',
+      reason: 'command substitution: recursive delete targets filesystem root',
+      source: 'rm_classifier',
+      enforcement: 'block',
+    });
+    expect(classify('git init; git rebase topic')).toEqual(classify('git init'));
+    expect(classify('kubectl delete pod demo; terraform apply')).toEqual(
+      classify('kubectl delete pod demo')
+    );
+    expect(classify('echo "$(kubectl delete pod demo)" "$(terraform apply)"')).toEqual(
+      classify('echo "$(kubectl delete pod demo)"')
+    );
+  });
+  test.each([
+    'git init; cd /outside; echo "$(git commit -m probe)"',
+    'env -C /outside sh -c \'git init; echo "$(git commit -m probe)"\'',
+    'git init; export GIT_INDEX_FILE=/outside/index; echo "$(git commit -m probe)"',
+  ])('substitution precedence retains the effective checkout proof: %s', (command) => {
+    const git = jest.fn(() => ({ status: 0, stdout: '' }));
+    const ports = {
+      realpath: (value) => value,
+      read: () => null,
+      isFile: () => false,
+      consumeFile: () => false,
+      git,
+    };
+    const result = classify(command, { ports });
+    expect(result).toMatchObject({
+      decision: 'ask',
+      source: 'commit_deletions',
+      enforcement: 'confirm',
+    });
+    expect(result.reason).toContain('the effective git checkout/index cannot be proven');
+    expect(git).not.toHaveBeenCalled();
+  });
+  test('argument substitution runs before its env wrapper changes directory', () => {
+    const git = jest.fn(() => ({ status: 0, stdout: '' }));
+    const ports = {
+      realpath: (value) => value,
+      read: () => null,
+      isFile: () => false,
+      consumeFile: () => false,
+      git,
+    };
+    expect(classify('git init; env -C /outside echo "$(git commit -m probe)"', { ports })).toEqual(
+      classify('git init', { ports })
+    );
+    expect(git).toHaveBeenCalledTimes(1);
+    expect(git).toHaveBeenCalledWith(
+      ['-c', 'core.quotePath=false', 'diff', '--cached', '--diff-filter=D', '--name-only', '-z'],
+      '/project'
+    );
+  });
 });
 
 describe('typed command classifier historical safety controls', () => {

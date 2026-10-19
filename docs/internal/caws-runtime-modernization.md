@@ -60,7 +60,9 @@ and client integration, alongside the remaining R32 process-domain and identity
 contracts. E61 exercises the R07 payload-cwd repair through the isolated native
 consumer with refusal and ordinary-file controls. E62 exposes an R05 guard-strength
 regression: an earlier advisory masks a later confirmation-class command
-substitution. Correct that regression before expanding the replacement runtime.
+substitution. E63 restores substitution precedence with statement-specific proof
+and observes selected-shell warning/latch effects; native-client qualification
+remains the next check before expanding the replacement runtime.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -80,7 +82,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R02 | `runtime/caws-hook.py`: configuration, selection, overrides | TS invocation engine and existing authority adapters | isolated one-shot selection exercised; complete enforcement open | Shared validators and freshness/override fixtures plus E33 selected stock path; full authority and override execution require qualification |
 | R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | one-shot journal/composer/local ACK integrated; resident open | E33 retains actual input/handler/index/native-output artifacts; crash persistence, production message settlement and resident admission remain open |
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | selected production refusal and native Stop fixture exercised | E33 nonlatching refusal; E34 real native budget with fixture context. Complete event/harness/Stop producer behavior remains unqualified |
-| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | blocking enforcement regression, E62; component and bounded native consumer exercised | An earlier advisory masks a later confirmation-class substitution in the typed stock path. E33 staged-deletion checks do not cover this case; full classifier corpus, stateful consumer and harness parity remain open |
+| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | substitution precedence repaired and selected-shell consumer tested, E63; native-client replay pending | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
@@ -804,6 +806,33 @@ Additional bounded evidence and unresolved dependencies:
   timeout cause is unverified; phase timing is required to attribute it. Neither
   a passing rerun nor these classifier observations earn acceptance or cutover.
 
+- E63: The substitution repair receives bounded implementation patches from
+  GPT-6.1 Sol workers; the root inspects and applies them under the original
+  owned lane. Child CLI claims admit their scopes, but their first source writes
+  are refused by the effective worktree hook as foreign. No takeover, identity
+  override or alternate write retry occurs. The parent accepts their obligations;
+  child specs `CAWS-NATIVE-SUBSTITUTION-PRECEDENCE-001`,
+  `CAWS-NATIVE-SUBSTITUTION-QUALIFICATION-001` and
+  `CAWS-NATIVE-FRAME-SCAN-001` close as superseded by the original spec, with
+  events 9134/9135/9138 and worktree destruction 9136/9137/9139. Canonical tracked
+  status is clean after their concurrent audit writes. No child AC pass is claimed.
+  The typed classifier computes each statement's proof once, evaluates executing
+  substitutions first, then applies ordinary findings. This preserves the
+  selected Python precedence without undoing cwd/Git uncertainty checks. Ordinary
+  first-equal findings and Python fallback remain unchanged; inherited masking
+  across ordinary direct/nested-shell segments is not repaired by this slice.
+  Before repair, focused consumer tests fail twice and pass the inverse control
+  (`/tmp/caws-substitution-consumer-red.json`); classifier controls fail five and
+  pass five (`/tmp/caws-substitution-classifier-red.json`). CLI build plus the
+  complete classifier/stock-handler suites then exit 0 with 173 checks, retained
+  in `/tmp/caws-substitution-green.json`. The selected real shell writes the first
+  capability warning, emits a protective block and matching latch on repetition,
+  and preserves a fresh ordinary sibling session. These are executor observations,
+  not native-client or actual-harness withholding. The typed opt-in runner
+  `scripts/qualify-native-substitution.ts` retains private input, commands,
+  channels, state, journals, hashes and hostile oracle controls; its native replay
+  remains pending. Strict runner compilation and scoped ESLint exit 0.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -893,9 +922,10 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-First correct the E62 enforcement regression without losing statement-specific
-working-directory proof. Qualify both segment orders, retained deny controls and
-the actual selected handler's first-warning/repeated-risk latch effects. Then
+First replay E63 through the native client with both segment orders, inert text,
+fresh sessions and the actual selected handler's warning/repeated-risk latch
+artifacts. The repaired selected-shell executor checks do not alone establish the
+native handoff. Then
 continue the dependency order below. Keep the failed backpressure witness;
 instrument startup, ancestor capture, proposal arrival and output delivery before
 attributing its timeout or claiming concurrent performance.

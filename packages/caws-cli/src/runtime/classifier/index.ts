@@ -124,11 +124,13 @@ function classify(
       escalate('deny', reason, 'regex');
   }
   let statementProof = executionProof;
-  for (const segment of segmentCommand(raw)) {
+  // Resolve each statement's execution proof once, before applying findings.
+  // Substitutions execute in the caller context before a wrapper changes cwd.
+  const segments = segmentCommand(raw).map((segment) => {
     const tokens = shellTokens(segment);
     const normalized = tokens === null ? null : normalizeCommandTokens(tokens);
     const commandWord = tokens && normalized ? basename(tokens[normalized.index] ?? '') : '';
-    if (
+    const unmodeledControlFlow =
       /^[(){}]/.test(commandWord) ||
       [
         'if',
@@ -146,19 +148,14 @@ function classify(
         'select',
         'function',
         '!',
-      ].includes(commandWord)
-    ) {
+      ].includes(commandWord);
+    if (unmodeledControlFlow) {
       // Conditional/grouped execution is not modeled as a sequence of plain
       // commands. Neither this branch nor later commands can borrow the
       // original directory or Git observation context.
       statementProof = { directoryKnown: false, gitKnown: false };
-      escalate(
-        'ask',
-        'unmodeled shell control flow — cannot prove execution context',
-        'classifier_error',
-        'confirm'
-      );
     }
+    const substitutionProof = statementProof;
     const segmentProof = {
       directoryKnown:
         statementProof.directoryKnown &&
@@ -171,19 +168,6 @@ function classify(
           normalized === null ||
           !hasUnprovenGitWrapperContext(tokens, normalized.index)),
     };
-    for (const body of extractCommandSubstitutions(segment))
-      if (body.trim())
-        propagate(
-          classify(body, context, ports, adapters, trusted, depth + 1, statementProof),
-          'command substitution: '
-        );
-    if (normalized?.unproven)
-      escalate(
-        'ask',
-        'unmodeled env split-string syntax — cannot prove execution context',
-        'classifier_error',
-        'confirm'
-      );
     if (
       tokens &&
       normalized?.nested === null &&
@@ -204,6 +188,32 @@ function classify(
             .some((token) => /^GIT_[A-Za-z0-9_]*(?:=|$)/.test(token))))
     )
       statementProof = { ...statementProof, gitKnown: false };
+    return { segment, normalized, substitutionProof, segmentProof, unmodeledControlFlow };
+  });
+  // Match the selected baseline's substitution-first finding precedence while
+  // retaining the proof of the statement where each substitution executes.
+  for (const { segment, substitutionProof } of segments)
+    for (const body of extractCommandSubstitutions(segment))
+      if (body.trim())
+        propagate(
+          classify(body, context, ports, adapters, trusted, depth + 1, substitutionProof),
+          'command substitution: '
+        );
+  for (const { segment, normalized, segmentProof, unmodeledControlFlow } of segments) {
+    if (unmodeledControlFlow)
+      escalate(
+        'ask',
+        'unmodeled shell control flow — cannot prove execution context',
+        'classifier_error',
+        'confirm'
+      );
+    if (normalized?.unproven)
+      escalate(
+        'ask',
+        'unmodeled env split-string syntax — cannot prove execution context',
+        'classifier_error',
+        'confirm'
+      );
     if (normalized?.nested !== null && normalized?.nested !== undefined) {
       propagate(
         classify(normalized.nested, context, ports, adapters, trusted, depth + 2, segmentProof)
