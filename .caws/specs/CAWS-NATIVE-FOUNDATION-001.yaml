@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-FOUNDATION-001
 title: 'Land the opt-in Rust and typed one-shot foundation with shared safety repairs'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-one-shot-foundation
 created_at: '2026-10-19T13:21:12.167Z'
-updated_at: '2026-10-19T13:21:12.167Z'
+updated_at: '2026-10-19T13:21:15.479Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
