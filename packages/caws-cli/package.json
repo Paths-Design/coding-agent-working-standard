@@ -41,7 +41,7 @@
     "mutation:run": "npm run mutation:run:store",
     "mutation:run:kernel": "npm run build && node scripts/run-mutation.mjs --surface kernel",
     "mutation:run:store": "npm run build && node scripts/run-mutation.mjs --surface store",
-    "mutation:run:shell": "npm run build && node scripts/run-mutation.mjs --surface shell && node scripts/run-mutation.mjs --surface analysis",
+    "mutation:run:shell": "npm run build && node scripts/run-mutation.mjs --surface shell",
     "mutation:run:analysis": "npm run build && node scripts/run-mutation.mjs --surface analysis",
     "test:mutation": "npm run mutation:run:store",
     "test:axe": "npm run build && jest --testPathPatterns=axe && npm run test:cleanup",

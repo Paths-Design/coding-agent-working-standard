@@ -1,15 +1,11 @@
 {
   "schemaVersion": 1,
-  "sourceRoots": [
-    "src/kernel",
-    "src/store",
-    "src/shell"
-  ],
+  "sourceRoots": ["src/kernel", "src/store", "src/shell"],
   "proofGroups": [
     {
       "id": "mutation",
       "strategy": "mutation",
-      "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell",
+      "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell && npm run mutation:run:analysis",
       "rationale": "Pure safety and authority decisions are held to an explicit per-file mutation floor.",
       "files": [
         "src/kernel/evidence/canonical-json.ts",
@@ -207,10 +203,10 @@
       "coverageAnalysis": "off",
       "buildCommand": "node scripts/build-cli.js",
       "targets": [
-        {"source":"src/shell/analysis/analyze.ts"},
-        {"source":"src/shell/analysis/git-context.ts"},
-        {"source":"src/shell/analysis/policies.ts"},
-        {"source":"src/shell/analysis/words.ts"}
+        { "source": "src/shell/analysis/analyze.ts" },
+        { "source": "src/shell/analysis/git-context.ts" },
+        { "source": "src/shell/analysis/policies.ts" },
+        { "source": "src/shell/analysis/words.ts" }
       ],
       "tests": ["tests/shell/command-analysis.test.js"]
     },
