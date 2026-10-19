@@ -101,8 +101,8 @@ failure. The renderer owner, native descriptor bridge and complete selected Stop
 route are connected. E80 retains the actual admission/deadline failures; E81
 observes the full selected cold/warm path, exact foreign-renderer output and
 owned idle retirement in an isolated repository. Independent inspection exposes
-queued expiry and delayed-surplus framing defects; their repairs require the
-final integrated checks and actual replay. Wider compatibility, legacy writer
+queued expiry and delayed-surplus framing defects; E82 retains their integrated
+checks and committed-candidate replay. Wider compatibility, legacy writer
 exclusion, uncertain-outcome recovery and multi-project workload remain open.
 No machine replacement follows from these bounded results.
 
@@ -1384,7 +1384,62 @@ Additional bounded evidence and unresolved dependencies:
   distribution. Effective executable Git helpers including LFS remain refused;
   the Git worktree/object database remain live data. The final integrated replay
   must exercise the subsequent strict owner EOF check and retained cancellation
-  repairs before presenting the committed candidate.
+  repairs before presenting the committed candidate; E82 retains that replay.
+- E82: Candidate `605d11bf21fb52db35af36d1e2a6af176e118cb8` connects the actual
+  owner route and retains the complete migration obligations. The owner waits
+  for exactly one bridge LF frame plus EOF before decode/journal/dispatch;
+  delayed surplus and missing EOF refuse under the original deadline. Expiry
+  after queued admission retains a queued-only cancellation using an independent
+  bounded record attempt; uncertain publication quarantines that actor rather
+  than dispatching a stale ID or falsely labelling known nonexecution unknown.
+  `final-native-boxed-tests.log` exits 0 with 130 library, 40 binary, 28 executable
+  integration and three ancestor-example checks. The new queue/framing controls
+  use actual journal reopen and sockets; this does not establish live host crash
+  recovery or cancellation during an actual render. The seven typed suites exit
+  0 with 210 checks (`final-typed-tests.log`). Focused vNext typechecking, CLI
+  build and scoped ESLint exit 0 (`final-vnext-typecheck.log`,
+  `final-typed-build.log`, `final-scoped-lint-replay.log`). The first lint/Clippy
+  attempts are retained: missing test-global declaration, collapsible branches
+  and oversized command/offer variants. Explicit heap indirection preserves the
+  wire, and strict Clippy exits 0 without lowering its floor
+  (`final-clippy-boxed.log`). CAWS gates and doctor exit 0
+  (`renderer-gates.log`, `renderer-doctor.log`); doctor retains three unrelated
+  warnings. Git's lint-staged hook emits an ignored-directory warning for the
+  already tracked internal tracker, but commit and standalone checks succeed;
+  the committed checkout is clean.
+  The committed command `npm run qualify:native:render-owner --
+  /Users/darianrosebrook/Desktop/Projects/sterling` exits 0
+  (`committed-owner-scenario.log`). Its source/manifest/arguments/outputs/state
+  live in `packages/caws-native/target/qualification/render-owner-2026-10-19T23-25-40-047Z/`.
+  The executable SHA256 is
+  `c404cd37110a6a27c82082ad0de96125741bc03fece249863a33b44134475088`;
+  the manifest also hashes the observer, custody observer, engine entry, CLI
+  entry and qualifier source. Actual backend55714 has birth1792452345.250838
+  across all three requests: served1/2/3, full parse1, tail0→1→1 and the final
+  cached response. All four original handler coordinates complete with exit0,
+  and each actual registered lease transitions active→stopped. The final
+  witness covers 101 request processes and groups55191/59033/60336 with no live
+  members after return. Sampling can miss transient/escaped descendants.
+  Both final 1764-byte turn files byte-match the independent unchanged renderer:
+  SHA256 `4f6d70e9e450bdc5114bba45946f61c0f2f999c0c2a01a5c3933f97727fb5900`
+  and `c7c854b1714c23733354038222ff779c84f4f5b940f7a86d356c206fc798dcd9`.
+  Actual backend cleanup takes 12ms, reaps the child and observes both EOFs before
+  releasing custody; worker55712 exits0 and host55204 idles out. The private
+  socket/workers are absent and anchored custody is independently acquired/free.
+  These facts support this opt-in isolated profile. Successful entry execution
+  does not qualify the active-goal refusal branch, missing-session/PID/reset
+  safety parity, legacy writer exclusion, source mutation while rendering,
+  unknown outcomes after transport loss, crash recovery, production retention,
+  thirteen sessions/four repositories or installed package selection. The
+  baseline shares the reviewed foreign parser, so identical bytes can preserve
+  an inherited parser defect; semantic timeline assertions cover only the
+  retained two-turn transcript. No installation or parent A1–A8 acceptance is
+  inferred. Log paths above without the scenario prefix refer to
+  `packages/caws-native/target/qualification/renderer-backend-2026-10-19/`.
+  Committed-candidate independent inspection is complete; relied-on source and
+  runtime observations were checked directly. This records review progress, not
+  an acceptance verdict. `committed-offer-tests.log` additionally replays the
+  final test-global binding on candidate605d11bf and exits 0 across 49 checks.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -1488,8 +1543,8 @@ per-observation/substage timing before changing capture policy or budgets.
 1. Qualify R33's integrated hostile paths after the complete selected-source
    cold/warm observation in E81. E70's journal, E74's codec, E75's custody and
    E72's descriptor client reach an actual native owner through the admitted
-   immutable image. Retain final committed-candidate replay and independent
-   review, then exercise concurrent cold startup, cancellation, lost response,
+   immutable image. E82 retains committed-candidate replay and independent
+   inspection. Exercise concurrent cold startup, cancellation, lost response,
    unknown reservations across restart and generation replacement. Issue grants and
    descriptor rights only after validating the original selection, keep original
    authority paths separate from image routing, and revalidate queued grants
@@ -1593,7 +1648,7 @@ close the full acceptance criteria.
 | Component foundations | Opt-in source landed at `6da6548c`; installed hooks use the original runtime | E68 retains integrated checks and component evidence; claims remain scoped to what actually ran |
 | Executable replacement spine | Isolated nonlatching Codex branch exercised; full replacement open | E33 preserves raw selected-guard/index/journal/native-output evidence. Full required chain, identity/containment, overrides and event/harness behavior require their own causal observations |
 | Packaged selection and rollback | Unproven | Clean candidate package selects the replacement in an isolated home/harness; native guarded write is withheld; rollback restores the prior selected generation without losing governed state; actual machine replacement waits for full parity |
-| Resident multi-project operation | Unimplemented | Same engine serves the required native workload with fresh authority, bounded fair capacity, owner-specific ordering, explicit uncertain outcomes and safe upgrades |
+| Resident multi-project operation | Isolated renderer owner observed, E82; complete resident engine and required workload unqualified | Same engine serves the required native workload with fresh authority, bounded fair capacity, owner-specific ordering, explicit uncertain outcomes and safe upgrades |
 | Complete migration | Open | Every first-party Python implementation and consumer has an earned replacement; supported native observations and authoritative A1–A8 evidence exist |
 
 Parity qualification identifies the previous selected CLI/runtime manifest and
