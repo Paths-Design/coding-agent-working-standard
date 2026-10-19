@@ -138,7 +138,7 @@ try {
       },
     })
   );
-  function writeGuard(command) {
+  function writeGuard(command, environment = {}) {
     return run(
       '/bin/bash',
       [path.join(installedPkg, 'templates/hook-packs/shared/bash-write-guard.sh')],
@@ -157,6 +157,7 @@ try {
           HOOK_CWD: own,
           HOOK_SESSION_ID: 'package-fixture',
           HOOK_PERMISSION_MODE: 'bypassPermissions',
+          ...environment,
         },
       }
     );
@@ -198,6 +199,12 @@ try {
   assert.equal(changedMapping.status, 2, changedMapping.stderr);
   assert.match(changedMapping.stderr, /metadata-coordinate-unresolved/);
   assert.equal(fs.readFileSync(path.join(own, '.git'), 'utf8'), pointer);
+  const reboundEnvironment = writeGuard(
+    `GIT_DIR='${path.join(project, '.git/worktrees/foreign')}'; bash -c 'git add -- package-never-written'`,
+    { GIT_DIR: pointer.slice('gitdir: '.length).trim() }
+  );
+  assert.equal(reboundEnvironment.status, 2, reboundEnvironment.stderr);
+  assert.match(reboundEnvironment.stderr, /mutation-shell-environment/);
   const producerMapping = writeGuard(
     `X=$(cp '${foreign}/.git' '${own}/.git') true; git add -- package-never-written`
   );
@@ -222,6 +229,7 @@ try {
       packagedWriteGuardRoutedMetadata: routedMetadata.status,
       packagedWriteGuardChangedMapping: changedMapping.status,
       packagedWriteGuardProducerMapping: producerMapping.status,
+      packagedWriteGuardReboundEnvironment: reboundEnvironment.status,
     })
   );
 } finally {

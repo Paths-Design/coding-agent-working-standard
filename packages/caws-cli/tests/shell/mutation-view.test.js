@@ -10,33 +10,44 @@ const RUNNER = String(async function main() {
   const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
   const output = [];
   for (const request of input) {
-    const queries = [];
-    let next = 0;
-    const dependencies = request.metadataResults
-      ? {
-          gitContext: (input, onFailure) => {
-            queries.push({ cwd: input.cwd, overrides: { ...input.overrides } });
-            if (next >= request.metadataResults.length) throw Error('Unexpected metadata query');
-            const value = request.metadataResults[next++];
-            if (value === 'throw') throw Error('Controlled metadata resolver failure');
-            if (typeof value === 'string') {
-              onFailure(value);
-              return null;
-            }
-            if (value && Object.hasOwn(value, 'failure')) {
-              onFailure(value.failure);
-              return value.context;
-            }
-            return value;
-          },
-        }
-      : {};
-    output.push({
-      id: request.id,
-      activeMutant: process.env.__STRYKER_ACTIVE_MUTANT__ ?? '',
-      view: await projectMutationView(request.input, dependencies),
-      queries,
-    });
+    const previous = new Map(
+      Object.keys(request.environment || {}).map((key) => [key, process.env[key]])
+    );
+    Object.assign(process.env, request.environment || {});
+    try {
+      const queries = [];
+      let next = 0;
+      const dependencies = request.metadataResults
+        ? {
+            gitContext: (input, onFailure) => {
+              queries.push({ cwd: input.cwd, overrides: { ...input.overrides } });
+              if (next >= request.metadataResults.length) throw Error('Unexpected metadata query');
+              const value = request.metadataResults[next++];
+              if (value === 'throw') throw Error('Controlled metadata resolver failure');
+              if (typeof value === 'string') {
+                onFailure(value);
+                return null;
+              }
+              if (value && Object.hasOwn(value, 'failure')) {
+                onFailure(value.failure);
+                return value.context;
+              }
+              return value;
+            },
+          }
+        : {};
+      output.push({
+        id: request.id,
+        activeMutant: process.env.__STRYKER_ACTIVE_MUTANT__ ?? '',
+        view: await projectMutationView(request.input, dependencies),
+        queries,
+      });
+    } finally {
+      for (const [key, value] of previous) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   }
   process.stdout.write(JSON.stringify(output));
 });
@@ -243,6 +254,57 @@ describe('mutation view uses shared traversal without granting scope', () => {
       overrides: {},
     });
     metadataCases = [
+      {
+        id: 'metadata-nested-rebound-export',
+        command: "GIT_DIR='{{FOREIGN}}'; bash -c 'git add -- file'",
+        environment: { GIT_DIR: metadataContext.directory },
+        plan: [metadataContext],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
+      {
+        id: 'metadata-deep-rebound-export',
+        command: "GIT_DIR='{{FOREIGN}}'; bash <<'SH'\nbash -c 'git add -- file'\nSH\n",
+        environment: { GIT_DIR: metadataContext.directory },
+        plan: [metadataContext],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
+      {
+        id: 'metadata-nested-unchanged-export',
+        command: "GIT_DIR='{{META}}'; bash -c 'git add -- file'",
+        environment: { GIT_DIR: locations.META },
+        plan: [metadataContext],
+        queries: [{ ...query, overrides: { GIT_DIR: metadataContext.directory } }],
+        rows: ['add'],
+      },
+      ...[
+        ['pager', "PAGER='printf pager > {{MARKER}}'; bash -c 'git log --oneline'"],
+        [
+          'pager-deep',
+          "PAGER='printf pager > {{MARKER}}'; bash <<'SH'\nbash -c 'git log --oneline'\nSH\n",
+        ],
+      ].map(([id, command]) => ({
+        id: 'metadata-nested-' + id,
+        command,
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'mutation-shell-environment',
+      })),
+      ...[
+        ['pager-disabled', "PAGER=cat; bash -c 'git log --oneline'"],
+        ['pager-data', "DATA='printf pager > {{MARKER}}'; bash -c 'git log --oneline'"],
+        ['pager-no-git', "PAGER='printf pager > {{MARKER}}'; bash -c 'printf safe'"],
+      ].map(([id, command]) => ({
+        id: 'metadata-nested-' + id,
+        command,
+        plan: [],
+        queries: [],
+        rows: [],
+      })),
       {
         id: 'metadata-add',
         command: 'git add -- file',
@@ -504,6 +566,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
       ...metadataCases.map((fixture) => ({
         id: fixture.id,
         metadataResults: fixture.plan,
+        environment: fixture.environment,
         input: {
           command: expand(fixture.command),
           cwd: fixture.cwd === null ? null : locations.PROJECT,
@@ -547,7 +610,10 @@ describe('mutation view uses shared traversal without granting scope', () => {
     for (const fixture of metadataCases) {
       const actual = view(fixture.id);
       const command = requests.find((item) => item.id === fixture.id).input.command;
-      expect(metadataQueries.get(fixture.id)).toEqual(fixture.queries);
+      expect({ id: fixture.id, queries: metadataQueries.get(fixture.id) }).toEqual({
+        id: fixture.id,
+        queries: fixture.queries,
+      });
       expect(actual.gitMetadata.map((row) => row.subcommand)).toEqual(fixture.rows);
       for (const row of actual.gitMetadata) {
         expect(row.directory).toBe(metadataContext.directory);

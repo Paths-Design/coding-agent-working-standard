@@ -106,6 +106,20 @@ test('source-selected Git pager code remains unresolved while ordinary data is a
   expect(guard('DATA=' + quote('printf pager > ' + marker) + ' git log --oneline').status).toBe(0);
   expect(fs.existsSync(marker)).toBe(false);
 });
+test('nested Git cannot borrow launcher coordinates after source rebinds an exported variable', () => {
+  const inherited = { GIT_DIR: path.join(fx.project, '.git') };
+  const rebound = guard(
+    'GIT_DIR=' + quote(path.join(fx.sibling, '.git')) + "; bash -c 'git add -- file'",
+    inherited
+  );
+  expect(rebound.status).toBe(2);
+  expect(rebound.stderr).toContain('mutation-shell-environment');
+  const unchanged = guard(
+    'GIT_DIR=' + quote(inherited.GIT_DIR) + "; bash -c 'git add -- file'",
+    inherited
+  );
+  expect({ status: unchanged.status, stderr: unchanged.stderr }).toEqual({ status: 0, stderr: '' });
+});
 test('an actual Node payload still blocks a foreign literal write', () => {
   refused(
     "node <<'NODE'\nrequire('fs').writeFileSync('" + fx.sibling + "/x.txt', 'x');\nNODE",

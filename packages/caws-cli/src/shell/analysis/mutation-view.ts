@@ -80,7 +80,12 @@ type ScriptJob = {
   cwd: string | null;
   depth: number;
   map: Mapping;
-  parent?: { job: ScriptJob; caller: string; inheritedEffects: boolean };
+  parent?: {
+    job: ScriptJob;
+    caller: string;
+    inheritedEffects: boolean;
+    gitEnvironmentUnresolved: boolean;
+  };
   writeRedirect: boolean;
   unmodeledInvocations: Set<string>;
   nonShellInvocations: Set<string>;
@@ -290,6 +295,23 @@ export async function projectMutationView(
       job,
       caller: JSON.stringify([node.pos, node.end]),
       inheritedEffects: state.filesystemChanged === true,
+      // Export attributes are not modeled. Rebinding an inherited exported
+      // variable changes a child process's environment, so its original
+      // launcher value cannot supply proof for nested Git coordinates.
+      gitEnvironmentUnresolved:
+        job.parent?.gitEnvironmentUnresolved === true ||
+        [...state.bindings].some(([name, values]) => {
+          if (name !== 'PAGER' && !name.startsWith('GIT_')) return false;
+          if (
+            (name === 'PAGER' || name === 'GIT_PAGER') &&
+            values &&
+            values.length > 0 &&
+            values.every((value) => value === '' || value === 'cat')
+          )
+            return false;
+          if (name === 'PAGER') return true;
+          return !values || values.length !== 1 || values[0] !== process.env[name];
+        }),
     });
     const raw = (arg: Argument): string =>
       arg.source ? job.command.slice(arg.source.pos, arg.source.end) : '';
@@ -452,6 +474,12 @@ export async function projectMutationView(
       const { args } = unwrapped;
       const executable = args[0]!.value!,
         name = basename(executable);
+      if (name === 'git' && job.parent?.gitEnvironmentUnresolved)
+        issue(
+          'mutation-shell-environment',
+          'Source-selected Git environment has no proven nested export state.',
+          span(node)
+        );
       if (name !== 'bash') job.nonShellInvocations.add(JSON.stringify([node.pos, node.end]));
       if (UNPROFILED_BUILTINS.has(name)) {
         issue(
@@ -581,7 +609,12 @@ export async function projectMutationView(
       metadataInvocations.add(JSON.stringify([node.pos, node.end]));
       if (exhausted) return;
       const original = span(node);
-      if (request.cwd === null || input === null || inheritedEffects(job)) {
+      if (
+        request.cwd === null ||
+        input === null ||
+        inheritedEffects(job) ||
+        job.parent?.gitEnvironmentUnresolved
+      ) {
         issue(
           'metadata-coordinate-unresolved',
           'Git metadata write coordinates are not proven.',
