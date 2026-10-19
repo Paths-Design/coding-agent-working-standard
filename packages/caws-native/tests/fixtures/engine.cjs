@@ -30,6 +30,12 @@ const response = () => ({
 });
 function propose() {
   const answer = response();
+  if (['proposal-held-native-self', 'proposal-no-containment-block'].includes(mode))
+    answer.result = {
+      exitCode: 2,
+      stdoutBase64: Buffer.from('{"decision":"block","reason":"retained"}\n').toString('base64'),
+      stderrBase64: '',
+    };
   if (mode === 'large-native-result')
     answer.result.stdoutBase64 = Buffer.alloc(1_000_000, 0x78).toString('base64');
   if (mode === 'guard-block')
@@ -93,6 +99,16 @@ function propose() {
   if (mode === 'proposal-token') proposal.token = 'invalid token';
   if (mode === 'proposal-extra') proposal.extra = true;
   if (mode === 'proposal-missing-containment') delete proposal.containment;
+  if (mode === 'proposal-held-native-self')
+    proposal.containment = {
+      schema: 'caws.containment.intent.v1',
+      pid: process.ppid,
+      startEpoch: '1',
+      comm: '/fixture/not-a-target',
+      sessionId: ready.sessionId,
+      latchPath: '/fixture/latch.json',
+      latchGeneration: 'a'.repeat(32),
+    };
   if (mode === 'proposal-malformed-containment') { proposal.containment = {pid:1}; answer.result = {exitCode:2,stdoutBase64:Buffer.from('{\"decision\":\"block\",\"reason\":\"retained\"}\n').toString('base64'),stderrBase64:''}; }
   if (mode === 'late-post-proposal-hang')
     return setTimeout(

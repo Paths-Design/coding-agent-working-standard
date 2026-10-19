@@ -66,8 +66,10 @@ handoff in a private installation. E64's complete native suite passes without
 attributing the earlier backpressure timeout. E66 repairs an ambient containment
 handoff in independently adopted shared guards; E67 exercises its committed
 native effect path. E68 records the opt-in foundation's source landing and
-retained full migration obligation. R33's selected-client/service ownership
-work remains open.
+retained full migration obligation. E69 adds externally owned post-effect
+cleanup qualification and capture diagnostics, and retains a failed replay:
+ancestor capture expires above the intended target and containment is held.
+R32 reliability and R33's selected-client/service ownership remain open.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -998,6 +1000,42 @@ Additional bounded evidence and unresolved dependencies:
   operation, thirteen sessions across four projects, installed/harness parity,
   Python retirement or performance. No machine installation occurs.
 
+- E69: Candidate based on `cbfecec555d4fa980a6a8aff6bd6ade50b958738`
+  adds a disposable caller with an independently surviving native-child owner,
+  an engine/pipe-holder stall after handoff, complete refusal-byte assertions,
+  and bounded typed ancestor-capture diagnostics. Guard eligibility and the
+  existing fail-closed capture policy are unchanged. Evidence lives under
+  `packages/caws-native/target/qualification/cleanup-post-effect-2026-10-19T14-21-50-008Z/`.
+  The initial retained success observes caller 74356 receiving SIGTERM, native
+  74363 reaped with exit 2 and 1,000,033 captured stdout bytes, engine 74452 and
+  holder 74483 absent from the selected process snapshot, and sibling heartbeat
+  1→69. `initial-success/post-effect-stall/native-owner-wait.json` and
+  `post-effect-cleanup-observation.json` retain those observations. The receipt
+  uses filesystem/SystemTime for the cross-process handoff interval; production
+  deadlines remain monotonic. It observes known members, not universal
+  descendant reap, installed execution or the production typed dispatcher.
+  `mutation.json` retains suppression of `OwnedGroup::finish`'s group SIGKILL
+  and exact source restoration. The mutant exits 101 with a runnable engine;
+  failure cleanup subsequently writes an abort marker and cannot earn cleanup
+  credit. An immediate restored replay also exits 101 before signaling, with
+  insufficient diagnostics to attribute that historical failure.
+  After instrumentation, `capture-full-native.log` records serial
+  `cargo test --all-targets -- --test-threads=1` exit 0: 29 library, 26 binary and
+  25 executable checks. `capture-clippy.log` records strict all-target Clippy
+  exit 0. These green checks do not establish reliability: the subsequent
+  retained focused replay in `capture-terminal-retained.log` exits 101. Its
+  first two output-loss modes observe SIGTERM; `caws-native-1984-0/post-effect-stall/`
+  records `CaptureUnavailable`, lookup `DeadlineExpired` at PID 98766/depth 3,
+  recorded PIDs `[5005,4993,1984]`, six attempts and 289286µs elapsed against
+  249999µs budget. `handoff.json` reports output success with containment held;
+  `caller-wait-status.json` records caller 4993 exit 42 with no signal and
+  `forbidden-next-action.marker` records its continuation. This establishes the
+  observed expiry above an already captured target, not the consuming substage
+  or the earlier failure's cause. It does not demonstrate a group-cleanup
+  regression. Per-observation/substage cost and the required capture/target
+  policy need investigation before claiming R32 reliability. No acceptance or
+  installation follows from this slice.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -1018,13 +1056,12 @@ first-party Python retirement, packaged adoption and rollback remain open.
 The machine pointer remains on `408c06a7…77baa0`; no speedup or replacement of
 the active hook pipeline has been demonstrated.
 
-Containment qualification does not establish cleanup after intentional caller
-death. The caller's watchdog dies with it; capture EOF only closes observed
-output writers. If the surviving hook/dispatcher stalls, capture cancellation
-does not terminate it, and a dead caller cannot consume its abort file. No
-current leak was observed, but no post-termination stall control has established
-bounded external ownership and reap. That scenario and an independently owned
-cleanup receipt are required before asserting cleanup for this path. The native
+E69 qualifies known engine/pipe-holder cleanup after intentional caller death
+in a disposable protocol fixture with an independently surviving native-child
+owner. Its retained success and cleanup-suppression failure support that bounded
+claim; they do not establish production-dispatcher cleanup or universal
+descendant reap. A later replay holds containment after ancestor-capture expiry,
+so reliability remains unresolved despite a green complete native run. The native
 terminal-effect owner must preserve ordinary cancellation, output/audit custody
 and bounded finalization together. A signal-accepted record alone cannot claim
 termination, and the legacy refusal's unconditional process-end wording is not
@@ -1094,7 +1131,9 @@ separate. The normal machine bootstrap remains Python, but a future legacy
 adapters installation receives changed shared guard bytes, so source landing is
 not a behavior-inert claim. Continue the dependency order below. Keep the failed
 backpressure witness; instrument startup, ancestor capture, proposal arrival and output delivery before
-attributing its timeout or claiming concurrent performance.
+attributing its timeout or claiming concurrent performance. E69 adds a separate
+reproduced ancestor-capture deadline failure; inspect its typed stage and
+per-observation/substage timing before changing capture policy or budgets.
 
 1. Resolve R33 through explicit service binding and client integration. Define
    the actual selected client's broker seam and request/fallback outcome

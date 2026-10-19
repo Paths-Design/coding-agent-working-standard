@@ -1035,6 +1035,49 @@ fn malformed_effect_preserves_known_refusal_and_never_enters_signal_path() {
     assert_eq!(ack["containment"], serde_json::Value::Null);
 }
 
+#[test]
+fn held_effect_reason_is_observable_without_changing_refusal_or_successful_handoff() {
+    for held in [false, true] {
+        let fixture = Fixture::new();
+        let mode = if held {
+            "proposal-held-native-self"
+        } else {
+            "proposal-no-containment-block"
+        };
+        let output = execute(
+            fixture.command(mode, "pre_tool_use", "3000"),
+            b"{}".to_vec(),
+        );
+        assert_eq!(output.status.code(), Some(2));
+        assert_eq!(
+            output.stdout,
+            b"{\"decision\":\"block\",\"reason\":\"retained\"}\n"
+        );
+        let events = fs::read_to_string(fixture.dir.join("events.jsonl")).unwrap();
+        let acks: Vec<serde_json::Value> = events
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .filter(|row| row["schema"] == "caws.runtime.handoff.v2")
+            .collect();
+        assert_eq!(acks.len(), 1);
+        let ack = &acks[0];
+        assert_eq!(ack["success"], true);
+        if held {
+            assert_eq!(ack["containment"]["status"], "held");
+            assert_eq!(ack["containment"]["reason"], "unsafe-target");
+            assert_eq!(ack["containment"]["errno"], serde_json::Value::Null);
+            assert_eq!(
+                ack["containment"]["pid"],
+                fixture.requests()[0]["caller"]["processId"]
+            );
+            assert_eq!(output.stderr, b"CAWS native post-proposal diagnostic: containment held before output: UnsafeTarget; no signal\n");
+        } else {
+            assert_eq!(ack["containment"], serde_json::Value::Null);
+            assert!(output.stderr.is_empty());
+        }
+    }
+}
+
 /// Cleanup pins the native group with a direct, unreaped anchor child. It never
 /// infers a cleanup signal target from Codex, the test harness, or a stale PID.
 struct TerminalFixtureCleanup {
@@ -1062,6 +1105,8 @@ fn terminal_wait(
 }
 impl Drop for TerminalFixtureCleanup {
     fn drop(&mut self) {
+        // Written after pass/fail observations; cleanup is never proof.
+        let _ = fs::write(self.root.join("abort-stalled-engine"), b"external cleanup");
         let _ = fs::write(self.root.join("stop-sibling"), b"stop");
         if let Some(caller) = self.caller.as_mut()
             && matches!(caller.try_wait(), Ok(None))
@@ -1136,7 +1181,7 @@ fn terminal_output_loss_does_not_veto_earned_containment_or_borrow_another_proce
         "fixture compilation failed; {}",
         fixture.dir.display()
     );
-    for mode in ["close-after-prefix", "full-unread"] {
+    for mode in ["close-after-prefix", "full-unread", "post-effect-stall"] {
         let root = fixture.dir.join(mode);
         fs::create_dir(&root).unwrap();
         fs::create_dir(root.join("budget-home")).unwrap();
@@ -1212,7 +1257,8 @@ fn terminal_output_loss_does_not_veto_earned_containment_or_borrow_another_proce
             serde_json::from_str(&fs::read_to_string(root.join("intent.json")).unwrap()).unwrap();
         assert_eq!(ack["schema"], "caws.runtime.handoff.v2");
         assert_eq!(
-            ack["success"], false,
+            ack["success"],
+            mode == "post-effect-stall",
             "output acceptance is independent of signal acceptance"
         );
         assert_eq!(ack["containment"]["schema"], "caws.containment.receipt.v1");
@@ -1239,9 +1285,11 @@ fn terminal_output_loss_does_not_veto_earned_containment_or_borrow_another_proce
         assert!(!root.join("caller-watchdog-fired.marker").exists());
         if mode == "close-after-prefix" {
             assert_eq!(fs::read(root.join("accepted-prefix.bin")).unwrap(), b"{");
-        } else {
+        } else if mode == "full-unread" {
             assert!(root.join("stdout-held-unread.marker").exists());
             assert!(!root.join("accepted-prefix.bin").exists());
+        } else {
+            assert!(root.join("cleanup-owner-pid.txt").exists());
         }
         let events: Vec<serde_json::Value> = fs::read_to_string(root.join("wire-events.jsonl"))
             .unwrap()
@@ -1291,26 +1339,139 @@ fn terminal_output_loss_does_not_veto_earned_containment_or_borrow_another_proce
         );
         assert!(cleanup.anchor.try_wait().unwrap().is_none());
         fs::write(root.join("sibling-progress.json"), serde_json::to_vec_pretty(&serde_json::json!({"pid":cleanup.sibling.as_ref().unwrap().id(),"before":sibling_before,"after":sibling_after,"survived":true})).unwrap()).unwrap();
-        // No process state is inferred from syscall acceptance: separately
-        // observe fixture/native shutdown before external cleanup acts.
-        assert_not_running(&wait_for_file(&root.join("native-pid.txt")));
-        assert_not_running(&wait_for_file(&root.join("engine-pid.txt")));
-        let native_stderr = fs::read_to_string(root.join("native-stderr.bin")).unwrap();
-        assert!(
-            native_stderr.contains("output delivery failed"),
-            "no delivery failure witness: {native_stderr}"
-        );
-        if mode == "close-after-prefix" {
-            assert!(
-                native_stderr.contains("Broken pipe"),
-                "reader closure was not the observed failure: {native_stderr}"
+        if mode == "post-effect-stall" {
+            let waited: serde_json::Value =
+                serde_json::from_str(&wait_for_file(&root.join("native-owner-wait.json"))).unwrap();
+            assert_eq!(waited["directChildReaped"], true);
+            assert_eq!(waited["code"], 2);
+            assert!(waited["signal"].is_null());
+            assert_eq!(waited["outputCaptureComplete"], true);
+            assert!(waited["stdoutBytes"].as_u64().unwrap() > 0);
+            assert!(waited["postHandoffMs"].as_u64().unwrap() < 2000);
+            assert_eq!(
+                waited["nativePid"].as_u64().unwrap().to_string(),
+                wait_for_file(&root.join("native-pid.txt")).trim()
             );
+            assert_eq!(
+                waited["ownerPid"].as_u64().unwrap().to_string(),
+                wait_for_file(&root.join("cleanup-owner-pid.txt")).trim()
+            );
+            assert_ne!(waited["ownerPid"].as_u64().unwrap(), u64::from(caller_pid));
+            let accepted_bytes = fs::read(root.join("native-stdout.bin")).unwrap();
+            let expected_bytes = format!(
+                "{{\"decision\":\"block\",\"reason\":\"{}\"}}\n",
+                "x".repeat(1_000_000)
+            );
+            assert!(
+                accepted_bytes == expected_bytes.as_bytes(),
+                "native refusal bytes differ from the complete expected result"
+            );
+            assert_eq!(
+                accepted_bytes.len() as u64,
+                waited["stdoutBytes"].as_u64().unwrap()
+            );
+            let accepted: serde_json::Value = serde_json::from_slice(&accepted_bytes).unwrap();
+            assert_eq!(accepted["decision"], "block");
+            let group: serde_json::Value =
+                serde_json::from_str(&wait_for_file(&root.join("stalled-group.json"))).unwrap();
+            assert_eq!(group["enginePid"], group["groupPid"]);
+            let engine = group["enginePid"].as_u64().unwrap().to_string();
+            let holder = group["holderPid"].as_u64().unwrap().to_string();
+            let member_checks_started = Instant::now();
+            assert_not_running(&engine);
+            assert_not_running(&holder);
+            let snapshot = Command::new("/bin/ps")
+                .args([
+                    "-p",
+                    &format!("{engine},{holder}"),
+                    "-o",
+                    "pid=,ppid=,pgid=,stat=",
+                ])
+                .output()
+                .unwrap();
+            let native_stderr = fs::read_to_string(root.join("native-stderr.bin")).unwrap();
+            assert!(
+                native_stderr.contains("engine settlement:"),
+                "{native_stderr}"
+            );
+            assert!(
+                native_stderr.contains("request deadline expired"),
+                "{native_stderr}"
+            );
+            assert!(!native_stderr.contains("cleanup:"), "{native_stderr}");
+            for marker in [
+                "owner-watchdog-fired.marker",
+                "owner-capture-incomplete.marker",
+                "engine-watchdog-fired.marker",
+                "holder-watchdog-fired.marker",
+                "abort-stalled-engine",
+            ] {
+                assert!(
+                    !root.join(marker).exists(),
+                    "cleanup control fired: {marker}; inspect {}",
+                    root.display()
+                );
+            }
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|row| row["stage"] == "post-effect-stall")
+                    .count(),
+                1
+            );
+            assert!(
+                cleanup
+                    .sibling
+                    .as_mut()
+                    .unwrap()
+                    .try_wait()
+                    .unwrap()
+                    .is_none()
+            );
+            assert!(cleanup.anchor.try_wait().unwrap().is_none());
+            let sibling_after_cleanup = fs::metadata(root.join("sibling-heartbeat.bin"))
+                .unwrap()
+                .len();
+            assert!(sibling_after_cleanup > sibling_before);
+            fs::write(
+                root.join("post-effect-cleanup-observation.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "nativeWait": waited, "ownedGroupBeforeEffect": group,
+                    "groupMembersNotRunnable": true, "knownMembersOnly": true,
+                    "memberChecksElapsedMs": member_checks_started.elapsed().as_millis(),
+                    "perMemberObservationBudgetMs": 2000,
+                    "psExitCode": snapshot.status.code(),
+                    "psStdout": String::from_utf8_lossy(&snapshot.stdout),
+                    "psStderr": String::from_utf8_lossy(&snapshot.stderr),
+                    "siblingPid": cleanup.sibling.as_ref().unwrap().id(),
+                    "siblingHeartbeatBefore": sibling_before,
+                    "siblingHeartbeatAfterCleanup": sibling_after_cleanup,
+                    "allDescendantsReaped": false, "productionTypedDispatcherExercised": false,
+                    "directParentCancellationExercised": false
+                }))
+                .unwrap(),
+            )
+            .unwrap();
         } else {
+            assert_not_running(&wait_for_file(&root.join("native-pid.txt")));
+            assert_not_running(&wait_for_file(&root.join("engine-pid.txt")));
+            let native_stderr = fs::read_to_string(root.join("native-stderr.bin")).unwrap();
             assert!(
-                native_stderr.contains("bounded output write")
-                    && native_stderr.contains("deadline"),
-                "unread output did not reach its bounded delivery deadline: {native_stderr}"
+                native_stderr.contains("output delivery failed"),
+                "no delivery failure witness: {native_stderr}"
             );
+            if mode == "close-after-prefix" {
+                assert!(
+                    native_stderr.contains("Broken pipe"),
+                    "reader closure was not the observed failure: {native_stderr}"
+                );
+            } else {
+                assert!(
+                    native_stderr.contains("bounded output write")
+                        && native_stderr.contains("deadline"),
+                    "unread output did not reach its bounded delivery deadline: {native_stderr}"
+                );
+            }
         }
         eprintln!(
             "terminal containment artifact {}: {}",

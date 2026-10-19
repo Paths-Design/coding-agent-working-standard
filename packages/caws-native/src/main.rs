@@ -116,6 +116,17 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             match validated {
                 Ok(target) => Some(target),
                 Err(reason) => {
+                    // A closed caller output can also prevent the ACK from
+                    // reaching the engine. Retain the bounded mechanical
+                    // reason independently; never turn this into signal authority.
+                    post_errors.push(format!(
+                        "containment held before output: {reason:?}; no signal"
+                    ));
+                    if reason == process_effect::HeldReason::CaptureUnavailable
+                        && let Some(captured) = captured.as_ref()
+                    {
+                        post_errors.push(format!("ancestor capture: {}", captured.diagnostic()));
+                    }
                     receipt = Some(process_effect::ContainmentReceipt::held(&intent, reason));
                     None
                 }

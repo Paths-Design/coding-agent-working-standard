@@ -2,11 +2,12 @@
 // selected guard policy, latch authority, installed hooks, or real harness action.
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 const root = process.env.TERMINAL_CASE_ROOT;
 const record = row => fs.appendFileSync(path.join(root, 'wire-events.jsonl'), JSON.stringify(row) + '\n');
 let request, terminal = false, dispatches = 0, input = '';
 const watchdog = setTimeout(() => {
+  fs.writeFileSync(path.join(root, 'engine-watchdog-fired.marker'), 'fixture deadline');
   record({ stage: 'fixture-watchdog-fired' });
   process.exit(78);
 }, 8000);
@@ -33,10 +34,36 @@ function accept(frame) {
     }
     record({ stage: 'dispatch', count: dispatches });
     const pid = Number(process.env.TERMINAL_CALLER_PID);
-    // Reject any configuration that would address the test harness or an
-    // arbitrary ancestor. The disposable caller must be native's actual parent.
-    if (!Number.isSafeInteger(pid) || pid <= 1 || Number(ps('ppid', request.caller.processId).trim()) !== pid)
-      throw new Error('target is not the sacrificial direct caller');
+    // The cleanup case has one surviving owner between caller and native.
+    // Reject any other ancestry before proposing the effect.
+    const owner = process.env.TERMINAL_OUTPUT_MODE === 'post-effect-stall'
+      ? Number(process.env.TERMINAL_OWNER_PID) : pid;
+    if (!Number.isSafeInteger(pid) || pid <= 1
+        || !Number.isSafeInteger(owner) || owner <= 1
+        || Number(ps('ppid', request.caller.processId).trim()) !== owner
+        || (owner !== pid && Number(ps('ppid', owner).trim()) !== pid))
+      throw new Error('target is not the configured sacrificial caller ancestry');
+    if (process.env.TERMINAL_OUTPUT_MODE === 'post-effect-stall') {
+      const holder = spawn(process.execPath, ['-e', `
+        const fs = require('node:fs'), path = require('node:path');
+        const root = process.env.TERMINAL_CASE_ROOT, until = Date.now() + 8000;
+        setInterval(() => {
+          if (fs.existsSync(path.join(root, 'abort-stalled-engine'))) process.exit(79);
+          if (Date.now() >= until) {
+            fs.writeFileSync(path.join(root, 'holder-watchdog-fired.marker'), 'fixture deadline');
+            process.exit(78);
+          }
+        }, 20);
+      `], { stdio: 'inherit' });
+      const group = Number(ps('pgid', process.pid).trim());
+      const holderGroup = Number(ps('pgid', holder.pid).trim());
+      if (group !== process.pid || holderGroup !== group)
+        throw new Error('stall fixtures do not share the native-owned engine group');
+      fs.writeFileSync(path.join(root, 'stalled-group.json'), JSON.stringify({
+        enginePid: process.pid, holderPid: holder.pid, groupPid: group,
+        engineStart: ps('lstart', process.pid), holderStart: ps('lstart', holder.pid),
+      }, null, 2));
+    }
     const comm = ps('comm', pid);
     const epoch = Math.floor(Date.parse(ps('lstart', pid).trim() + ' UTC') / 1000);
     if (!Number.isSafeInteger(epoch) || epoch <= 0) throw new Error('caller start epoch unavailable');
@@ -55,7 +82,17 @@ function accept(frame) {
   if (Object.keys(frame).sort().join(',') !== 'containment,id,runtimeDigest,schema,success,token')
     throw new Error('unexpected handoff keys');
   record({ stage: 'handoff', success: frame.success, containment: frame.containment });
-  fs.writeFileSync(path.join(root, 'handoff.json'), JSON.stringify(frame, null, 2));
+  if (process.env.TERMINAL_OUTPUT_MODE === 'post-effect-stall')
+    record({ stage: 'post-effect-stall' });
+  fs.writeFileSync(path.join(root, 'handoff.pending'), JSON.stringify(frame, null, 2));
+  fs.renameSync(path.join(root, 'handoff.pending'), path.join(root, 'handoff.json'));
+  if (process.env.TERMINAL_OUTPUT_MODE === 'post-effect-stall') {
+    process.stdin.destroy();
+    setInterval(() => {
+      if (fs.existsSync(path.join(root, 'abort-stalled-engine'))) process.exit(79);
+    }, 20);
+    return;
+  }
   clearTimeout(watchdog);
   process.stdin.destroy();
 }

@@ -134,12 +134,38 @@ enum LookupMode {
     Strict,
     Terminal,
 }
-fn checkpoint(deadline: Instant, mode: LookupMode) -> Result<(), String> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CaptureFailureClass {
+    DeadlineExpired,
+    Cancelled,
+    PlatformLookupUnavailable,
+    CommLookupUnavailable,
+    InstanceChangedDuringObservation,
+    UnexpectedPid,
+    EdgeChanged,
+    Cycle,
+    NativeAncestor,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CaptureFailureStage {
+    Walk,
+    Lookup,
+    Recheck,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CaptureFailure {
+    stage: CaptureFailureStage,
+    class: CaptureFailureClass,
+    pid: u32,
+    // Zero-based ancestor depth, not a process authority or signal target.
+    depth: usize,
+}
+fn checkpoint(deadline: Instant, mode: LookupMode) -> Result<(), CaptureFailureClass> {
     if matches!(mode, LookupMode::Strict) {
-        crate::cancellation::check()?;
+        crate::cancellation::check().map_err(|_| CaptureFailureClass::Cancelled)?;
     }
     if Instant::now() >= deadline {
-        return Err("process observation deadline expired".into());
+        return Err(CaptureFailureClass::DeadlineExpired);
     }
     Ok(())
 }
@@ -149,7 +175,7 @@ trait Observer {
         pid: u32,
         deadline: Instant,
         mode: LookupMode,
-    ) -> Result<Observation, String>;
+    ) -> Result<Observation, CaptureFailureClass>;
     fn sigterm(&mut self, pid: u32) -> Result<(), i32>;
 }
 struct NativeObserver;
@@ -159,13 +185,16 @@ impl Observer for NativeObserver {
         pid: u32,
         deadline: Instant,
         mode: LookupMode,
-    ) -> Result<Observation, String> {
+    ) -> Result<Observation, CaptureFailureClass> {
         checkpoint(deadline, mode)?;
-        let (parent, birth) = platform_birth(pid)?;
+        let (parent, birth) =
+            platform_birth(pid).map_err(|_| CaptureFailureClass::PlatformLookupUnavailable)?;
         let comm = legacy_comm(pid, deadline, mode)?;
         checkpoint(deadline, mode)?;
-        if platform_birth(pid)? != (parent, birth.clone()) {
-            return Err("process instance changed during observation".into());
+        if platform_birth(pid).map_err(|_| CaptureFailureClass::PlatformLookupUnavailable)?
+            != (parent, birth.clone())
+        {
+            return Err(CaptureFailureClass::InstanceChangedDuringObservation);
         }
         Ok(Observation {
             pid,
@@ -192,6 +221,10 @@ pub struct CapturedAncestors {
     native_pid: u32,
     observations: Vec<Observation>,
     available: bool,
+    failure: Option<CaptureFailure>,
+    observation_attempts: usize,
+    capture_elapsed: Duration,
+    capture_budget: Duration,
 }
 impl CapturedAncestors {
     pub fn capture(request_deadline: Instant) -> Self {
@@ -207,37 +240,81 @@ impl CapturedAncestors {
     fn capture_with(
         observer: &mut impl Observer,
         native_pid: u32,
-        mut pid: u32,
+        pid: u32,
         deadline: Instant,
     ) -> Self {
+        Self::capture_with_clock(observer, native_pid, pid, deadline, Instant::now)
+    }
+    fn capture_with_clock(
+        observer: &mut impl Observer,
+        native_pid: u32,
+        mut pid: u32,
+        deadline: Instant,
+        mut now: impl FnMut() -> Instant,
+    ) -> Self {
+        let started = now();
         let mut result = Self {
             native_pid,
             observations: Vec::new(),
             available: true,
+            failure: None,
+            observation_attempts: 0,
+            capture_elapsed: Duration::ZERO,
+            capture_budget: deadline.saturating_duration_since(started),
         };
         let mut visited = HashSet::new();
-        for _ in 0..MAX_ANCESTORS {
+        for depth in 0..MAX_ANCESTORS {
             if pid <= 1 {
                 break;
             }
             if pid == native_pid || !visited.insert(pid) {
                 result.available = false;
+                result.failure = Some(CaptureFailure {
+                    stage: CaptureFailureStage::Walk,
+                    class: if pid == native_pid {
+                        CaptureFailureClass::NativeAncestor
+                    } else {
+                        CaptureFailureClass::Cycle
+                    },
+                    pid,
+                    depth,
+                });
                 break;
             }
+            result.observation_attempts += 1;
             let row = match observer.observe(pid, deadline, LookupMode::Strict) {
                 Ok(row) if row.pid == pid => row,
-                _ => {
+                observed => {
                     result.available = false;
+                    result.failure = Some(CaptureFailure {
+                        stage: CaptureFailureStage::Lookup,
+                        class: match observed {
+                            Ok(_) => CaptureFailureClass::UnexpectedPid,
+                            Err(class) => class,
+                        },
+                        pid,
+                        depth,
+                    });
                     break;
                 }
             };
             // Recheck the previous edge so a reparented/reused intermediate
             // process cannot splice a different lineage into this capture.
             if let Some(previous) = result.observations.last() {
+                result.observation_attempts += 1;
                 match observer.observe(previous.pid, deadline, LookupMode::Strict) {
                     Ok(current) if current == *previous => (),
-                    _ => {
+                    observed => {
                         result.available = false;
+                        result.failure = Some(CaptureFailure {
+                            stage: CaptureFailureStage::Recheck,
+                            class: match observed {
+                                Ok(_) => CaptureFailureClass::EdgeChanged,
+                                Err(class) => class,
+                            },
+                            pid: previous.pid,
+                            depth: depth - 1,
+                        });
                         break;
                     }
                 }
@@ -245,7 +322,28 @@ impl CapturedAncestors {
             pid = row.parent;
             result.observations.push(row);
         }
+        result.capture_elapsed = now().saturating_duration_since(started);
         result
+    }
+    /// Bounded historical observations, not a capability or a current identity
+    /// assertion. Raw lookup errors, process names and intent data are omitted.
+    pub fn diagnostic(&self) -> String {
+        let failure = match self.failure {
+            Some(failure) => format!(
+                "stage={:?} class={:?} failedPid={} failedDepth={}",
+                failure.stage, failure.class, failure.pid, failure.depth
+            ),
+            None => "stage=None class=None failedPid=None failedDepth=None".into(),
+        };
+        let recorded_pids: Vec<_> = self.observations.iter().map(|row| row.pid).collect();
+        format!(
+            "available={} {failure} recordedCount={} recordedPids={recorded_pids:?} observationAttempts={} elapsedUs={} budgetUs={}",
+            self.available,
+            recorded_pids.len(),
+            self.observation_attempts,
+            self.capture_elapsed.as_micros(),
+            self.capture_budget.as_micros()
+        )
     }
     pub fn validate(&self, intent: &ContainmentIntent) -> Result<ValidatedTarget, HeldReason> {
         if intent.pid <= 1 || intent.pid == self.native_pid {
@@ -399,7 +497,11 @@ fn platform_birth(_pid: u32) -> Result<(u32, Birth), String> {
 
 /// Match the selected legacy comm representation without a shell, caller PATH,
 /// unbounded output, or a child whose lifetime escapes the lookup deadline.
-fn legacy_comm(pid: u32, deadline: Instant, mode: LookupMode) -> Result<String, String> {
+fn legacy_comm(
+    pid: u32,
+    deadline: Instant,
+    mode: LookupMode,
+) -> Result<String, CaptureFailureClass> {
     use std::{
         io::Read,
         os::fd::AsRawFd,
@@ -441,14 +543,18 @@ fn legacy_comm(pid: u32, deadline: Instant, mode: LookupMode) -> Result<String, 
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("process comm lookup: {e}"))?;
+        .map_err(|_| CaptureFailureClass::CommLookupUnavailable)?;
     let mut child = LookupChild(child);
-    let mut output = child.0.stdout.take().ok_or("missing process comm pipe")?;
+    let mut output = child
+        .0
+        .stdout
+        .take()
+        .ok_or(CaptureFailureClass::CommLookupUnavailable)?;
     let fd = output.as_raw_fd();
     // SAFETY: fd is borrowed from this live owned pipe.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
     if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-        return Err("process comm pipe cannot become nonblocking".into());
+        return Err(CaptureFailureClass::CommLookupUnavailable);
     }
     let mut bytes = Vec::new();
     let mut eof = false;
@@ -461,23 +567,29 @@ fn legacy_comm(pid: u32, deadline: Instant, mode: LookupMode) -> Result<String, 
                 Ok(count) => {
                     bytes.extend_from_slice(&chunk[..count]);
                     if bytes.len() > COMM_LIMIT + 1 {
-                        return Err("process comm exceeds byte limit".into());
+                        return Err(CaptureFailureClass::CommLookupUnavailable);
                     }
                 }
                 Err(e)
                     if e.kind() == io::ErrorKind::WouldBlock
                         || e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(format!("process comm read: {e}")),
+                Err(_) => return Err(CaptureFailureClass::CommLookupUnavailable),
             }
         }
-        if eof && let Some(status) = child.0.try_wait().map_err(|e| e.to_string())? {
+        if eof
+            && let Some(status) = child
+                .0
+                .try_wait()
+                .map_err(|_| CaptureFailureClass::CommLookupUnavailable)?
+        {
             if !status.success() {
-                return Err("process comm unavailable".into());
+                return Err(CaptureFailureClass::CommLookupUnavailable);
             }
-            let text = String::from_utf8(bytes).map_err(|_| "process comm is not UTF-8")?;
+            let text =
+                String::from_utf8(bytes).map_err(|_| CaptureFailureClass::CommLookupUnavailable)?;
             let text = text.trim_end_matches('\n');
             if text.is_empty() || text.len() > COMM_LIMIT || text.contains('\0') {
-                return Err("invalid process comm".into());
+                return Err(CaptureFailureClass::CommLookupUnavailable);
             }
             return Ok(text.into());
         }
@@ -490,7 +602,7 @@ fn legacy_comm(pid: u32, deadline: Instant, mode: LookupMode) -> Result<String, 
         if unsafe { libc::poll(&mut pollfd, 1, 2) } < 0
             && io::Error::last_os_error().kind() != io::ErrorKind::Interrupted
         {
-            return Err("process comm poll failed".into());
+            return Err(CaptureFailureClass::CommLookupUnavailable);
         }
     }
 }
@@ -509,12 +621,12 @@ mod tests {
             pid: u32,
             _deadline: Instant,
             _mode: LookupMode,
-        ) -> Result<Observation, String> {
+        ) -> Result<Observation, CaptureFailureClass> {
             self.rows
                 .iter()
                 .find(|row| row.pid == pid)
                 .cloned()
-                .ok_or("unavailable".into())
+                .ok_or(CaptureFailureClass::PlatformLookupUnavailable)
         }
         fn sigterm(&mut self, pid: u32) -> Result<(), i32> {
             self.signals.push(pid);
@@ -556,6 +668,262 @@ mod tests {
     }
     fn deadline() -> Instant {
         Instant::now() + Duration::from_secs(1)
+    }
+    struct ScriptedObserver {
+        steps: std::collections::VecDeque<(u32, Result<Observation, CaptureFailureClass>)>,
+        signals: Vec<u32>,
+    }
+    impl Observer for ScriptedObserver {
+        fn observe(
+            &mut self,
+            pid: u32,
+            _deadline: Instant,
+            _mode: LookupMode,
+        ) -> Result<Observation, CaptureFailureClass> {
+            let (expected, result) = self.steps.pop_front().expect("unexpected observation");
+            assert_eq!(pid, expected);
+            result
+        }
+        fn sigterm(&mut self, pid: u32) -> Result<(), i32> {
+            self.signals.push(pid);
+            Ok(())
+        }
+    }
+    fn capture_script(
+        steps: Vec<(u32, Result<Observation, CaptureFailureClass>)>,
+    ) -> (CapturedAncestors, ScriptedObserver) {
+        let mut observer = ScriptedObserver {
+            steps: steps.into(),
+            signals: Vec::new(),
+        };
+        let started = Instant::now();
+        let mut ticks = [started, started + Duration::from_micros(37)].into_iter();
+        let captured = CapturedAncestors::capture_with_clock(
+            &mut observer,
+            99,
+            44,
+            started + Duration::from_micros(250_000),
+            || ticks.next().expect("unexpected clock observation"),
+        );
+        assert!(ticks.next().is_none());
+        assert!(observer.steps.is_empty());
+        assert_eq!(captured.capture_elapsed, Duration::from_micros(37));
+        assert_eq!(captured.capture_budget, Duration::from_micros(250_000));
+        (captured, observer)
+    }
+    fn assert_capture_failure(
+        captured: &CapturedAncestors,
+        observer: &ScriptedObserver,
+        expected: CaptureFailure,
+        pids: &[u32],
+        attempts: usize,
+    ) {
+        assert!(!captured.available);
+        assert_eq!(captured.failure, Some(expected));
+        assert_eq!(
+            captured
+                .observations
+                .iter()
+                .map(|row| row.pid)
+                .collect::<Vec<_>>(),
+            pids
+        );
+        assert_eq!(captured.observation_attempts, attempts);
+        // The diagnostic must never convert a captured prefix into authority.
+        assert!(matches!(
+            captured.validate(&intent()),
+            Err(HeldReason::CaptureUnavailable)
+        ));
+        assert!(observer.signals.is_empty());
+    }
+    #[test]
+    fn observation_deadline_has_a_fixed_producer_class() {
+        // A monotonic deadline captured before the check is already expired;
+        // no sleep, cancellation-global mutation or wall-clock threshold.
+        assert_eq!(
+            checkpoint(Instant::now(), LookupMode::Terminal),
+            Err(CaptureFailureClass::DeadlineExpired)
+        );
+    }
+    #[test]
+    fn capture_diagnostics_distinguish_lookup_classes_without_reflecting_process_text() {
+        for class in [
+            CaptureFailureClass::DeadlineExpired,
+            CaptureFailureClass::Cancelled,
+            CaptureFailureClass::PlatformLookupUnavailable,
+            CaptureFailureClass::CommLookupUnavailable,
+            CaptureFailureClass::InstanceChangedDuringObservation,
+        ] {
+            let (captured, observer) = capture_script(vec![(44, Err(class))]);
+            assert_capture_failure(
+                &captured,
+                &observer,
+                CaptureFailure {
+                    stage: CaptureFailureStage::Lookup,
+                    class,
+                    pid: 44,
+                    depth: 0,
+                },
+                &[],
+                1,
+            );
+            let diagnostic = captured.diagnostic();
+            assert!(diagnostic.contains(&format!(
+                "stage=Lookup class={class:?} failedPid=44 failedDepth=0"
+            )));
+            assert!(diagnostic.contains(
+                "recordedCount=0 recordedPids=[] observationAttempts=1 elapsedUs=37 budgetUs=250000"
+            ));
+        }
+        let mut private = row();
+        private.comm = "DO-NOT-REFLECT-COMM".into();
+        private.parent = 55;
+        let (captured, observer) = capture_script(vec![
+            (44, Ok(private)),
+            (55, Err(CaptureFailureClass::PlatformLookupUnavailable)),
+        ]);
+        assert_capture_failure(
+            &captured,
+            &observer,
+            CaptureFailure {
+                stage: CaptureFailureStage::Lookup,
+                class: CaptureFailureClass::PlatformLookupUnavailable,
+                pid: 55,
+                depth: 1,
+            },
+            &[44],
+            2,
+        );
+        assert!(!captured.diagnostic().contains("DO-NOT-REFLECT-COMM"));
+    }
+    #[test]
+    fn capture_diagnostics_separate_bad_rows_recheck_errors_and_changed_edges() {
+        let mut wrong = row();
+        wrong.pid = 45;
+        let (captured, observer) = capture_script(vec![(44, Ok(wrong))]);
+        assert_capture_failure(
+            &captured,
+            &observer,
+            CaptureFailure {
+                stage: CaptureFailureStage::Lookup,
+                class: CaptureFailureClass::UnexpectedPid,
+                pid: 44,
+                depth: 0,
+            },
+            &[],
+            1,
+        );
+        let mut first = row();
+        first.parent = 55;
+        let mut higher = row();
+        higher.pid = 55;
+        let mut changed = first.clone();
+        changed.parent = 66;
+        for (recheck, class) in [
+            (Ok(changed), CaptureFailureClass::EdgeChanged),
+            (
+                Err(CaptureFailureClass::DeadlineExpired),
+                CaptureFailureClass::DeadlineExpired,
+            ),
+        ] {
+            let (captured, observer) = capture_script(vec![
+                (44, Ok(first.clone())),
+                (55, Ok(higher.clone())),
+                (44, recheck),
+            ]);
+            assert_capture_failure(
+                &captured,
+                &observer,
+                CaptureFailure {
+                    stage: CaptureFailureStage::Recheck,
+                    class,
+                    pid: 44,
+                    depth: 0,
+                },
+                &[44],
+                3,
+            );
+        }
+    }
+    #[test]
+    fn capture_diagnostics_preserve_cycle_and_higher_ancestor_fail_closed_policy() {
+        let mut first = row();
+        first.parent = 44;
+        let (captured, observer) = capture_script(vec![(44, Ok(first.clone()))]);
+        assert_capture_failure(
+            &captured,
+            &observer,
+            CaptureFailure {
+                stage: CaptureFailureStage::Walk,
+                class: CaptureFailureClass::Cycle,
+                pid: 44,
+                depth: 1,
+            },
+            &[44],
+            1,
+        );
+        first.parent = 99;
+        let (captured, observer) = capture_script(vec![(44, Ok(first.clone()))]);
+        assert_capture_failure(
+            &captured,
+            &observer,
+            CaptureFailure {
+                stage: CaptureFailureStage::Walk,
+                class: CaptureFailureClass::NativeAncestor,
+                pid: 99,
+                depth: 1,
+            },
+            &[44],
+            1,
+        );
+        first.parent = 55;
+        let mut higher = row();
+        higher.pid = 55;
+        higher.parent = 66;
+        let (captured, observer) = capture_script(vec![
+            (44, Ok(first.clone())),
+            (55, Ok(higher)),
+            (44, Ok(first)),
+            (66, Err(CaptureFailureClass::DeadlineExpired)),
+        ]);
+        assert_capture_failure(
+            &captured,
+            &observer,
+            CaptureFailure {
+                stage: CaptureFailureStage::Lookup,
+                class: CaptureFailureClass::DeadlineExpired,
+                pid: 66,
+                depth: 2,
+            },
+            &[44, 55],
+            4,
+        );
+    }
+    #[test]
+    fn capture_diagnostics_remain_bounded_and_do_not_change_depth_limit_behavior() {
+        let mut steps = Vec::new();
+        let mut previous = None;
+        for index in 0..MAX_ANCESTORS {
+            let mut current = row();
+            current.pid = 44 + index as u32;
+            current.parent = current.pid + 1;
+            steps.push((current.pid, Ok(current.clone())));
+            if let Some(prior) = previous {
+                steps.push((current.pid - 1, Ok(prior)));
+            }
+            previous = Some(current);
+        }
+        let (captured, observer) = capture_script(steps);
+        assert!(captured.available);
+        assert_eq!(captured.failure, None);
+        assert_eq!(captured.observations.len(), MAX_ANCESTORS);
+        assert_eq!(captured.observation_attempts, MAX_ANCESTORS * 2 - 1);
+        assert!(captured.validate(&intent()).is_ok());
+        assert!(observer.signals.is_empty());
+        let diagnostic = captured.diagnostic();
+        assert!(diagnostic.contains("stage=None class=None"));
+        assert!(diagnostic.contains("recordedCount=16"));
+        assert!(!diagnostic.contains("/fixture/agent"));
     }
     #[test]
     fn identity_checks_and_consumed_attempt_never_signal_foreign_or_reused_instances() {
