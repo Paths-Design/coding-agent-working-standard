@@ -24,6 +24,13 @@ export const RENDER_ARGUMENT_NAMES = Object.freeze([
   'hookOutcomeLog',
 ] as const);
 
+/**
+ * JSON carries lossless UTF-8 argv data, including CR/LF/US; POSIX argv cannot
+ * carry NUL. Backend wire suitability is the exclusive owner's responsibility:
+ * legacy LF/US requests need a serialized owned direct-render backend or an
+ * explicit unavailable outcome. CR alone is not a legacy wire delimiter.
+ * Unsupported backend data never authorizes caller-side inline fallback.
+ */
 export type RendererArguments = readonly [
   logDir: string,
   cwd: string,
@@ -245,8 +252,8 @@ function argumentsOf(value: unknown): RendererArguments {
     fail('Renderer arguments require exactly twelve fields');
   const fields: string[] = [];
   for (const field of value) {
-    if (typeof field !== 'string' || !lossless(field) || /[\0\x1f\r\n]/.test(field))
-      fail('Renderer fields require lossless single-line UTF-8');
+    if (typeof field !== 'string' || !lossless(field) || field.includes('\0'))
+      fail('Renderer fields require lossless UTF-8 without NUL');
     fields.push(field);
   }
   if (

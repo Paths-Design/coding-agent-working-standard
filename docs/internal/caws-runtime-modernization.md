@@ -78,6 +78,10 @@ after formatter/process comparisons, and observes terminal containment and
 strict cleanup checks in private protocol fixtures. E69's historical expiry
 remains unattributed; complete process ownership and containment parity remain
 open.
+E72 exercises a descriptor-bound renderer client through an actual sourced
+shell and compiled Node with a fixture owner. The client cannot activate itself:
+native grant issuance, source/image admission and the real service owner remain
+the next R33 integration boundary.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -125,7 +129,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced compatibility gap, E57; unreplaced | Legacy cold start survives and serves the next request; native calls return 0 and retain expected user-turn strings while both daemon attempts disappear and the second render falls back inline. Explicit service binding/client integration, source retirement, startup races and cancellation outcomes remain open |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced gap, E57; descriptor-bound client exercised with fixture owner, E72 | Actual native service owner, selected grant/image/client admission, writer custody, source retirement, startup races and cancellation remain open. Client tests do not establish daemon survival/reuse or repair the cold-start regression |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
@@ -1115,6 +1119,51 @@ Additional bounded evidence and unresolved dependencies:
   deadline interruption of a stalled kernel, a performance distribution or
   installed behavior. R32 remains open; no full acceptance or installation is
   inferred.
+
+- E72: A named renderer client reads a positioned grant from FD4, sends one
+  canonical correlated request over per-offer duplex FD3 and publishes an FD5
+  receipt. Both transport directions require a single frame and write-half EOF.
+  Original source paths/hashes remain separate from execution-image routing.
+  The shell library uses pinned quoted Node/entry literals; a single replacement
+  pass preserves marker-like text inside those literals. Any helper failure
+  exits the whole selected shell with 75 instead of returning to Sterling's
+  inline fallback. Neither local nonexecution nor an owner rejection grants
+  caller-side fallback. After a write attempt, transport loss is a local
+  unknown observation, not fabricated durable admission.
+  Source review repairs an overrestriction inherited from the proposed daemon
+  wire contract: inspected Sterling parse-input, metadata, quoted fallback argv
+  and renderer model consumers preserve CR/LF/US. CR is not a legacy delimiter;
+  LF/US need an exclusive owner-selected direct backend or explicit unavailable
+  outcome. JSON request fields preserve these values; NUL remains unrepresentable
+  in actual POSIX argv. The owner must not equate daemon wire suitability with
+  the selected handler's accepted input. Branch-control realizability and every
+  installed parser/harness are not established by this source inspection.
+  Under `target/qualification/service-primitives-2026-10-19/`,
+  `control-build.log`, `control-types.log`, `control-eslint.log` and
+  `control-tests.log` record build/strict runtime typing/lint and 164 protocol/
+  client checks, exit 0. The earlier final pipeline stops at lint before tests:
+  a cleanup throw in `finally` could override the primary result. The repair
+  propagates primary/cleanup failures after teardown; the NUL spawn-failure
+  control retains that primary error and closed channels.
+  Thirteen retained sequential fixture attempts include twelve actual
+  shell/compiled-Node children and one rejected NUL spawn. They retain grants,
+  actual request/receipt bytes and `status.json`. `client-1Rw7e7/` observes 1,192
+  request bytes, no reply, local may-have-been-delivered/unknown, shell 75 and
+  empty stdout. `client-RaMYSD/` receives the fixture response but cannot write
+  its receipt and exits 75 without inline output. `client-VkU33t/`,
+  `client-2a3Px5/` and `client-6PyIRh/` retain exact CR/LF/US model values
+  through Bash argv, compiled Node and actual FD3 bytes; JSON framing contains
+  escaped data and one terminal LF. Independent artifact reads verify mode
+  0700/0600, decoded original values, cleanup and the absence of fabricated
+  admission on timeout. Every retained status explicitly declares fixture
+  ownership and no actual daemon dispatch.
+  The native boundary must issue fresh grants, pin the complete effective
+  source closure/image, supply correct descriptor rights and a monotonic hard
+  deadline, scrub undeclared interpreter preloads and close capabilities in
+  unrelated handlers. This component does not provide those operations, start
+  an owner, claim authority from hashes/leases, dispatch an actual renderer or
+  establish R33, installed selection or thirteen-session operation. No services
+  policy knob is activated by these source files.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint

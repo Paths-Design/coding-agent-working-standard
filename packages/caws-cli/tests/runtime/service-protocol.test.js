@@ -117,6 +117,40 @@ test('encodes the independently specified request bytes and all twelve argument 
   }
 });
 
+test.each(
+  [
+    ['CR', '\r'],
+    ['LF', '\n'],
+    ['US', '\x1f'],
+  ].flatMap(([name, control]) => Array.from({ length: 12 }, (_, index) => [name, index, control]))
+)('preserves %s data in renderer slot %i with canonical escaped bytes', (name, index, control) => {
+  const value = input();
+  value.arguments[index] = 'before' + control + 'after';
+  const expected = expectedRequest(value);
+  const request = createRenderRequest(value);
+  const encoded = encodeRenderRequest(request);
+  expect(request).toEqual(expected);
+  expect(request.argumentDigest).toBe(
+    sha(JSON.stringify(['caws-session-render-argv-v1', value.arguments]))
+  );
+  expect(encoded).toEqual(Buffer.from(JSON.stringify(expected) + '\n', 'utf8'));
+  expect(encoded[encoded.length - 1]).toBe(10);
+  for (const byte of [10, 13, 31]) expect(encoded.subarray(0, -1).includes(byte)).toBe(false);
+  const decoded = decodeRenderRequest(encoded);
+  expect(decoded).toEqual(expected);
+  expect(decoded.arguments[index]).toBe(value.arguments[index]);
+});
+
+test('argument ceiling counts escaped JSON bytes for control data', () => {
+  const args = input().arguments;
+  args[4] = '\x1f'.repeat(Math.ceil(MAX_RENDER_ARGUMENT_BYTES / 6));
+  expect(Buffer.byteLength(args[4], 'utf8')).toBeLessThan(MAX_RENDER_ARGUMENT_BYTES);
+  expect(
+    Buffer.byteLength(JSON.stringify(['caws-session-render-argv-v1', args]), 'utf8')
+  ).toBeGreaterThan(MAX_RENDER_ARGUMENT_BYTES);
+  expect(() => renderArgumentDigest(args)).toThrow('65536');
+});
+
 test('copies and deeply freezes transport data rather than retaining caller mutations', () => {
   const value = input();
   const request = createRenderRequest(value);
@@ -175,17 +209,14 @@ test('rejects malformed UTF-8 and raw or escaped unpaired surrogates', () => {
   expect(() => decodeRenderRequest('\ud800')).toThrow('UTF-8');
   const request = expectedRequest();
   request.arguments[0] = '\ud800';
-  expect(() => decodeRenderRequest(wire(request))).toThrow('single-line UTF-8');
+  expect(() => decodeRenderRequest(wire(request))).toThrow('lossless UTF-8 without NUL');
 });
 
-test.each(['\0', '\x1f', '\r', '\n', '\ud800', '\udfff'])(
-  'rejects unsupported renderer field %j',
-  (bad) => {
-    const args = input().arguments;
-    args[9] = bad;
-    expect(() => renderArgumentDigest(args)).toThrow('single-line UTF-8');
-  }
-);
+test.each(['\0', '\ud800', '\udfff'])('rejects unsupported renderer field %j', (bad) => {
+  const args = input().arguments;
+  args[9] = bad;
+  expect(() => renderArgumentDigest(args)).toThrow('lossless UTF-8 without NUL');
+});
 
 test('rejects wrong arity, sparse arrays, extra array properties, and nonstrings', () => {
   for (const args of [Array(11).fill(''), Array(13).fill(''), new Array(12)]) {
@@ -196,7 +227,7 @@ test('rejects wrong arity, sparse arrays, extra array properties, and nonstrings
   expect(() => renderArgumentDigest(extra)).toThrow('twelve');
   const nonstring = Array(12).fill('');
   nonstring[5] = null;
-  expect(() => renderArgumentDigest(nonstring)).toThrow('single-line UTF-8');
+  expect(() => renderArgumentDigest(nonstring)).toThrow('lossless UTF-8 without NUL');
 });
 
 test('bounds the independently encoded argument payload in UTF-8 bytes exactly', () => {
