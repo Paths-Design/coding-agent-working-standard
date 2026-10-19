@@ -64,8 +64,9 @@ substitution. E63 restores substitution precedence with statement-specific proof
 E65 observes its typed execution, selected-shell warning/latch effects and native
 handoff in a private installation. E64's complete native suite passes without
 attributing the earlier backpressure timeout. E66 repairs an ambient containment
-handoff in independently adopted shared guards; its actual native effect replay
-precedes source landing and R33's selected-client/service ownership work.
+handoff in independently adopted shared guards; E67 exercises its committed
+native effect path. Source landing and R33's selected-client/service ownership
+work remain obligations.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -924,11 +925,45 @@ Additional bounded evidence and unresolved dependencies:
   CLI build, strict runtime TypeScript and scoped ESLint exit 0. The complete
   focused run exits 0 for seven Bats controls and 82 checks in four runtime Jest
   suites; `bats-complete.log`, `final/` receipts and `runtime-jest.json` in the
-  green directory retain those results. Clean committed native effect replay
-  remains pending; producer
+  green directory retain those results. E67 supplies clean committed native
+  effect replay; producer
   receipts alone do not establish the native terminal owner or all legacy
   dispatcher selection. R32 remains open for its broader identity/process-domain
   and reset/rearm obligations.
+
+- E67: On clean `bd31d19db2838f5db242da76186dfb9a51ecfeae`, package command
+  `npm run qualify:native:containment` exits 0. Its exact build, strict runner
+  compile and all 26 legacy/native observations are retained at
+  `packages/caws-native/target/qualification/containment-fd-green-2026-10-19T12-42-11-811Z/native-effect-replay.log`.
+  The runner's self-identified artifact directory is
+  `packages/caws-native/target/qualification/containment-effect-2026-10-19T12-56-31-101Z/`.
+  Its manifest pins that revision, selected guard SHA
+  `06a7b16227f9c82bd99067e1c295eb9fde7895d6e2fed1f74ede85aa439b5c4c`
+  and runtime digest `9a07585a776c8d8f5f4ae195737fadf2a137b1e5229859fb2327b01a1e3e9b26`.
+  Enabled, large-latch and escaped-latch cases in both modes terminate the
+  dedicated caller via SIGTERM; disabled and ten identity/availability controls
+  retain their specified refusal/held outcomes. Every case records no forbidden
+  action, advancing sibling heartbeats and no audit errors. Nine corruptions of
+  audit/strike/target observations are rejected. In `candidate-native/enabled`,
+  `caller-wait-status.json` independently reports SIGTERM for observed PID 88251;
+  `probe/stdout.bin` contains `decision: block`. The raw invocation journal pins
+  the selected guard SHA, completes the handler, proposes dispatch exit 2,
+  retains `containment_settled` with `native_output_accepted: true` and a matching
+  `signal-accepted` receipt for PID 88251/generation
+  `a9c29ff4ac327511a1cd6dca48716023`, then records stdout handoff and adapter finish
+  with exit 2. Native settlement truthfully says `process_exit_observed: false`;
+  external caller wait supplies the separate termination observation. The latch
+  remains unchanged, no legacy escalation stamp is written, the forbidden
+  marker is absent, sibling heartbeat bytes advance 264→472, and the sibling's
+  own wait status is 0. These artifacts establish this selected disposable
+  caller's native receipt/refusal/effect chain, not merely an intent or stamp.
+  Parent descriptor cleanup is supported by source inspection; no injected
+  close/spawn-failure descriptor census is performed. Fixture callers are
+  exclusive test-owned processes; actual harness ingress, exclusive logical
+  session ownership on a shared backend, reset/rearm races and external cleanup
+  after caller death remain unverified. Both modes use the generated template
+  snapshot, not the installed release. No resident service, thirteen-session
+  workload, installation, Python retirement or full R32 acceptance follows.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -1019,10 +1054,14 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-E65 supplies the bounded substitution replay through the native client; full
-acceptance remains open. Finish E66's committed native effect replay and inspect
-its actual signal/refusal/state/finalization artifacts before source landing.
-Then continue the dependency order below. Keep the failed backpressure witness;
+E65 and E67 supply the bounded substitution and containment replays through the
+native client; full acceptance remains open. Land the additive opt-in one-shot
+foundation and its identified shared safety/validation repairs through a coherent
+component spec while retaining the original lane, evidence and all A1–A8
+obligations. Native installation is separate. The normal machine bootstrap
+remains Python, but a future legacy adapters installation receives changed
+shared guard bytes, so source landing is not a behavior-inert claim. Then
+continue the dependency order below. Keep the failed backpressure witness;
 instrument startup, ancestor capture, proposal arrival and output delivery before
 attributing its timeout or claiming concurrent performance.
 
@@ -1030,7 +1069,12 @@ attributing its timeout or claiming concurrent performance.
    the actual selected client's broker seam and request/fallback outcome
    contract before implementing a startup-only relay or host. A lost response
    after dispatch stays unknown; only known nonexecution permits immediate
-   inline fallback. E60 grounds this dependency in the directly sourced client
+   inline fallback, which also requires an exclusive owner-held fence. Queue
+   rejection while an existing writer remains active cannot authorize an
+   unfenced inline render. Prefer owner-managed fallback under the same request
+   ID and serialization key. A daemon error response also does not attest
+   nonexecution: the exception handler covers rendering and response delivery.
+   E60 grounds this dependency in the directly sourced client
    and write-before-response daemon. E57 is
    the failing cold-start/reuse regression; preserve its native failure until
    the owning implementation changes. `SystemSurfacePolicy` has no service
