@@ -679,6 +679,25 @@ Additional bounded evidence and unresolved dependencies:
   survival also needs a removed-ordinary-request-child control before it can
   justify an ownership change; a blanket cleanup exemption could pass reuse
   while leaking request descendants.
+- E58: The same service qualification command exits 1 from clean committed
+  revision `310371d0a091f5bb74f43cad765fcb8447d180fb`, retaining the same four
+  native service-reuse failures at
+  `packages/caws-native/target/qualification/service-lifetime-2026-10-19T09-45-47-273Z/`.
+  All four hook calls exit 0 and retain the expected two then three user strings.
+  Legacy daemon 48005/start `1792403153.669989` survives both requests; served
+  advances 0→1 and the second inline-renderer execution list is empty. Native
+  witnesses 77406/group 74268 and 82553/group 79646 are absent after completion;
+  neither has a live lease, and each request executes an inline renderer.
+  Final cleanup observes all witnessed instances absent and both private leases
+  absent. No daemon wait status supplies its terminating signal.
+  Readback compares `build-identities.json` with SHA256 of the committed probe,
+  Rust observer source, emitted runner, native binary, observer binary and typed
+  engine entry; all six match. This closes the final formatted-probe identity
+  gap for this replay, not dependency closure or broader runtime acceptance.
+  The probe's semantic-rendering nonclaim is present in its retained manifest.
+  Service ownership, surviving-service/removed-request-child behavior, startup
+  races, cancellation, source retirement, native workload and installation remain
+  open; this is a reproduced defect, not its repair.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
