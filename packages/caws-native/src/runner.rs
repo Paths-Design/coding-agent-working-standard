@@ -162,6 +162,9 @@ pub struct Session {
     stdout: ChildStdout,
     stderr: ChildStderr,
     buffered: Vec<u8>,
+    scan_from: usize,
+    #[cfg(test)]
+    examined_bytes: usize,
     diagnostics: Vec<u8>,
     stdout_bytes: usize,
     out_done: bool,
@@ -208,6 +211,9 @@ impl Session {
             stdout,
             stderr,
             buffered: Vec::new(),
+            scan_from: 0,
+            #[cfg(test)]
+            examined_bytes: 0,
             diagnostics: Vec::new(),
             stdout_bytes: 0,
             out_done: false,
@@ -303,18 +309,39 @@ impl Session {
         self.terminal_containment = true;
     }
 
+    fn buffered_frame(&mut self) -> Result<Option<Vec<u8>>, String> {
+        // The retained prefix has already been checked and contains no newline.
+        // Consuming a frame changes offsets, so the next frame starts at zero.
+        let end = self.buffered[self.scan_from..]
+            .iter()
+            .position(|byte| {
+                #[cfg(test)]
+                {
+                    self.examined_bytes += 1;
+                }
+                *byte == b'\n'
+            })
+            .map(|offset| self.scan_from + offset);
+        if let Some(end) = end {
+            let bytes: Vec<u8> = self.buffered.drain(..=end).collect();
+            self.scan_from = 0;
+            if end == 0 {
+                return Err("empty engine frame".into());
+            }
+            return Ok(Some(bytes[..end].to_vec()));
+        }
+        self.scan_from = self.buffered.len();
+        Ok(None)
+    }
+
     pub fn frame(&mut self, deadline: Instant) -> Result<Vec<u8>, String> {
         if self.terminal_containment {
             return Err("no engine frames admitted after terminal containment".into());
         }
         loop {
             crate::cancellation::check()?;
-            if let Some(end) = self.buffered.iter().position(|b| *b == b'\n') {
-                let bytes: Vec<u8> = self.buffered.drain(..=end).collect();
-                if end == 0 {
-                    return Err("empty engine frame".into());
-                }
-                return Ok(bytes[..end].to_vec());
+            if let Some(bytes) = self.buffered_frame()? {
+                return Ok(bytes);
             }
             if self.out_done {
                 return Err("engine stream closed before a complete frame".into());
@@ -473,4 +500,137 @@ pub fn write_diagnostic(stderr: &[u8]) {
     // Cancellation diagnostics are best effort with their own 100ms ceiling;
     // they must not recurse through the cancellation that caused the failure.
     let _ = write_output(&[], stderr, Duration::from_millis(100), false);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn deadline() -> Instant {
+        Instant::now() + Duration::from_secs(10)
+    }
+
+    fn session(engine: &str) -> Session {
+        let config = Config {
+            node: PathBuf::from("/bin/cat"),
+            engine: PathBuf::from(engine),
+            surface: "codex".into(),
+            event: "pre_tool_use".into(),
+            configuration: "system".into(),
+            digest: "a".repeat(64),
+            timeout: Duration::from_secs(10),
+        };
+        Session::start(&config, deadline()).unwrap()
+    }
+
+    #[test]
+    fn fragmented_frame_examines_each_received_byte_once() {
+        let mut session = session("/dev/stdin");
+        let mut expected = Vec::new();
+        for byte in b"opaque fragmented frame" {
+            session.buffered.push(*byte);
+            expected.push(*byte);
+            assert!(session.buffered_frame().unwrap().is_none());
+            assert_eq!(session.examined_bytes, expected.len());
+            assert!(session.buffered_frame().unwrap().is_none());
+            assert_eq!(session.examined_bytes, expected.len());
+        }
+        session.buffered.push(b'\n');
+        assert_eq!(session.frame(deadline()).unwrap(), expected);
+        assert_eq!(session.examined_bytes, expected.len() + 1);
+        assert!(session.buffered.is_empty());
+        println!(
+            "scan evidence: received={}, examined={}",
+            expected.len() + 1,
+            session.examined_bytes
+        );
+    }
+
+    #[test]
+    fn queued_frames_and_fragmented_tail_preserve_order_and_scan_work() {
+        let mut session = session("/dev/stdin");
+        session.buffered.extend_from_slice(b"one\ntwo\ntai");
+        assert_eq!(session.frame(deadline()).unwrap(), b"one");
+        assert_eq!(session.frame(deadline()).unwrap(), b"two");
+        assert!(session.buffered_frame().unwrap().is_none());
+        assert_eq!(session.examined_bytes, 11);
+        session.buffered.extend_from_slice(b"l\nnext\n");
+        assert_eq!(session.frame(deadline()).unwrap(), b"tail");
+        assert_eq!(session.frame(deadline()).unwrap(), b"next");
+        assert_eq!(session.examined_bytes, 18);
+        assert!(session.buffered.is_empty());
+    }
+
+    #[test]
+    fn real_pipe_frames_preserve_opaque_bytes_and_queued_tail() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        session.send(b"first\n{\n\xff\0tail", expires).unwrap();
+        assert_eq!(session.frame(expires).unwrap(), b"first");
+        assert_eq!(session.frame(expires).unwrap(), b"{");
+        session.send(b"-end\n", expires).unwrap();
+        assert_eq!(session.frame(expires).unwrap(), b"\xff\0tail-end");
+        assert_eq!(session.examined_bytes, b"first\n{\n\xff\0tail-end\n".len());
+    }
+
+    #[test]
+    fn empty_frame_does_not_hide_the_following_frame() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        session.send(b"\nfollowing\n", expires).unwrap();
+        assert_eq!(session.frame(expires).unwrap_err(), "empty engine frame");
+        assert_eq!(session.frame(expires).unwrap(), b"following");
+        assert_eq!(session.examined_bytes, b"\nfollowing\n".len());
+    }
+
+    #[test]
+    fn incomplete_tail_at_eof_is_not_a_frame() {
+        let mut session = session("/dev/null");
+        session.buffered.extend_from_slice(b"unfinished");
+        assert_eq!(
+            session.frame(deadline()).unwrap_err(),
+            "engine stream closed before a complete frame"
+        );
+        assert_eq!(session.buffered, b"unfinished");
+        assert_eq!(session.examined_bytes, b"unfinished".len());
+    }
+
+    #[test]
+    fn real_pipe_accepts_the_existing_frame_byte_boundary() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        let mut wire = vec![b'x'; MAX_FRAME - 1];
+        wire.push(b'\n');
+        session.send(&wire, expires).unwrap();
+        let frame = session.frame(expires).unwrap();
+        assert_eq!(frame, wire[..wire.len() - 1]);
+        assert_eq!(session.examined_bytes, MAX_FRAME);
+    }
+
+    #[test]
+    fn real_pipe_rejects_bytes_past_the_existing_frame_budget() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        let wire = vec![b'x'; MAX_FRAME + 1];
+        let outcome = session
+            .send(&wire, expires)
+            .and_then(|()| session.frame(expires).map(|_| ()));
+        assert_eq!(
+            outcome.unwrap_err(),
+            format!("pipe exceeded {MAX_FRAME} byte budget")
+        );
+    }
+
+    #[test]
+    fn waiting_for_a_frame_retains_the_request_deadline() {
+        let mut session = session("/dev/stdin");
+        assert_eq!(
+            session
+                .frame(Instant::now() - Duration::from_millis(1))
+                .unwrap_err(),
+            "request deadline expired"
+        );
+        assert_eq!(session.examined_bytes, 0);
+    }
 }

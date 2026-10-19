@@ -100,7 +100,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R20 | Python developer/harvest/qualification scripts | Typed TS tooling | inventoried; unreplaced | Nine tracked script/experiment paths listed below; output/consumer equivalence remains unproven |
 | R21 | Python-owned regression tests | TS/native behavioral tests | unreplaced | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes |
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
-| R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport and cancellation component tested | Signal/parent/output cancellation and bounded cleanup/delivery checked; actual typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
+| R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation and incremental delimiter scanning component tested, E64 | Signal/parent/output cancellation and bounded cleanup/delivery checked; actual typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
 | R25 | Demand-start, warm residency and idle exit | Rust startup + TS resident host | unreplaced | Machine-wide bounded capacity, fair project/session admission, owner-specific serialization, single starter, no heartbeat authority, no active-request eviction, drain/version tests |
 | R26 | Persistent request outcomes / deferred queue | TS journal/spool and bounded scheduler | unreplaced | Crash/reconnect/unknown outcomes, no blind mutation replay, isolation and bounded disk/queue |
@@ -832,6 +832,19 @@ Additional bounded evidence and unresolved dependencies:
   `scripts/qualify-native-substitution.ts` retains private input, commands,
   channels, state, journals, hashes and hostile oracle controls; its native replay
   remains pending. Strict runner compilation and scoped ESLint exit 0.
+
+- E64: The native frame reader retains a delimiter-search cursor instead of
+  searching its previously checked prefix again. Instrumenting the original
+  scan and polling twice without new input fails the new complexity assertion:
+  two byte comparisons versus one expected, Cargo exit 101. The cursor repair
+  passes eight focused runner tests, exit 0, including real pipe framing,
+  opaque bytes, queued-frame tails, empty/unfinished frames, the existing byte
+  boundary and deadline refusal. Its concrete output is
+  `scan evidence: received=24, examined=24`. Strict all-target Clippy exits 0.
+  This measures delimiter comparisons, not complete parsing/copy cost or a
+  latency improvement. The E62 pre-proposal timeout's cause remains unverified;
+  neither this repair nor a passing rerun attributes it. Full native executable
+  checks and the selected-client substitution replay remain integration work.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
