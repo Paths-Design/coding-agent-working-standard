@@ -1,0 +1,407 @@
+use crate::cli::Config;
+use crate::process_effect::{ContainmentIntent, ContainmentReceipt};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
+use std::collections::BTreeMap;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Caller {
+    cwd: String,
+    environment: BTreeMap<String, String>,
+    process_id: u32,
+}
+
+impl Caller {
+    fn capture() -> Result<Self, String> {
+        let cwd = std::env::current_dir()
+            .map_err(|_| "caller cwd is unavailable")?
+            .into_os_string()
+            .into_string()
+            .map_err(|_| "caller cwd is not valid UTF-8")?;
+        let mut environment = BTreeMap::new();
+        for (name, value) in std::env::vars_os() {
+            let name = name
+                .into_string()
+                .map_err(|_| "caller environment name is not valid UTF-8")?;
+            let value = value
+                .into_string()
+                .map_err(|_| "caller environment value is not valid UTF-8")?;
+            if name.is_empty() || name.contains('=') {
+                return Err("caller environment name is invalid".into());
+            }
+            environment.insert(name, value);
+        }
+        Ok(Self {
+            cwd,
+            environment,
+            process_id: std::process::id(),
+        })
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Request {
+    schema: &'static str,
+    pub id: String,
+    pub runtime_digest: String,
+    surface: String,
+    event: String,
+    configuration: String,
+    caller: Caller,
+    deadline_epoch_ms: u64,
+    payload: Box<RawValue>,
+    input_json: String,
+}
+
+impl Request {
+    pub fn new(
+        config: &Config,
+        payload: Box<RawValue>,
+        input_json: String,
+        expires: Instant,
+    ) -> Result<Self, String> {
+        let since_epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "clock before epoch")?;
+        let remaining = expires
+            .checked_duration_since(Instant::now())
+            .ok_or("request deadline expired")?;
+        let deadline = since_epoch.as_millis() + remaining.as_millis();
+        if deadline > 9_007_199_254_740_991 {
+            return Err("deadline exceeds JavaScript safe integer".into());
+        }
+        Ok(Self {
+            schema: "caws.runtime.request.v1",
+            id: format!("{}-{}", std::process::id(), since_epoch.as_nanos()),
+            runtime_digest: config.digest.clone(),
+            surface: config.surface.clone(),
+            event: config.event.clone(),
+            configuration: config.configuration.clone(),
+            caller: Caller::capture()?,
+            deadline_epoch_ms: deadline as u64,
+            payload,
+            input_json,
+        })
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Response {
+    schema: String,
+    id: String,
+    runtime_digest: String,
+    result: EncodedNativeResult,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EncodedNativeResult {
+    exit_code: u8,
+    stdout_base64: String,
+    stderr_base64: String,
+}
+
+pub struct NativeResult {
+    pub exit_code: u8,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+
+fn decode_native_bytes(encoded: &str) -> Result<Vec<u8>, String> {
+    let bytes = STANDARD
+        .decode(encoded)
+        .map_err(|e| format!("invalid native byte encoding: {e}"))?;
+    if STANDARD.encode(&bytes) != encoded {
+        return Err("noncanonical native byte encoding".into());
+    }
+    Ok(bytes)
+}
+
+fn response_result(response: Response, request: &Request) -> Result<NativeResult, String> {
+    if response.schema != "caws.runtime.response.v1"
+        || response.id != request.id
+        || response.runtime_digest != request.runtime_digest
+    {
+        return Err("engine response identity mismatch".into());
+    }
+    Ok(NativeResult {
+        exit_code: response.result.exit_code,
+        stdout: decode_native_bytes(&response.result.stdout_base64)?,
+        stderr: decode_native_bytes(&response.result.stderr_base64)?,
+    })
+}
+
+pub struct Ready {
+    pub active: bool,
+    pub budget_home: std::path::PathBuf,
+    pub project_digest: Option<String>,
+    pub session_id: Option<String>,
+}
+
+pub enum EngineFrame {
+    Ready(Ready),
+    Proposal {
+        token: String,
+        result: NativeResult,
+        containment: ContainmentProposal,
+    },
+    Failure(String),
+}
+
+/// Decode optional effects independently: malformed intent never erases an
+/// otherwise known protective native result, and can never request a signal.
+pub enum ContainmentProposal {
+    None,
+    Intent(ContainmentIntent),
+    Invalid(String),
+}
+fn containment_proposal(raw: &RawValue) -> ContainmentProposal {
+    if raw.get() == "null" {
+        return ContainmentProposal::None;
+    }
+    match serde_json::from_str::<ContainmentIntent>(raw.get()) {
+        Ok(intent) => match intent.validate() {
+            Ok(()) => ContainmentProposal::Intent(intent),
+            Err(error) => ContainmentProposal::Invalid(error),
+        },
+        Err(_) => ContainmentProposal::Invalid("malformed containment intent".into()),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields)]
+enum WireFrame {
+    #[serde(rename = "caws.runtime.ready.v1")]
+    Ready {
+        id: String,
+        #[serde(rename = "runtimeDigest")]
+        runtime_digest: String,
+        active: bool,
+        #[serde(rename = "budgetHome")]
+        budget_home: String,
+        #[serde(rename = "projectDigest", deserialize_with = "required_nullable")]
+        project_digest: Option<String>,
+        #[serde(rename = "sessionId", deserialize_with = "required_nullable")]
+        session_id: Option<String>,
+    },
+    #[serde(rename = "caws.runtime.failure.v1")]
+    Failure {
+        id: String,
+        #[serde(rename = "runtimeDigest")]
+        runtime_digest: String,
+        message: String,
+    },
+}
+
+// Internally tagged enums buffer their content before decoding variants and
+// cannot retain RawValue. Decode this frame directly from the original bytes
+// so numeric spelling, duplicates and the independent effect subtree survive.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProposalWire {
+    schema: String,
+    id: String,
+    runtime_digest: String,
+    token: String,
+    response: Response,
+    containment: Box<RawValue>,
+}
+
+fn required_nullable<'de, D: serde::Deserializer<'de>>(
+    value: D,
+) -> Result<Option<String>, D::Error> {
+    Option::<String>::deserialize(value)
+}
+
+fn identity(id: &str, digest: &str, request: &Request) -> Result<(), String> {
+    if id != request.id || digest != request.runtime_digest {
+        return Err("engine frame identity mismatch".into());
+    }
+    Ok(())
+}
+
+pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, String> {
+    #[derive(Deserialize)]
+    struct Discriminator {
+        schema: String,
+    }
+    let header: Discriminator =
+        serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    if header.schema == "caws.runtime.proposal.v2" {
+        let proposal: ProposalWire =
+            serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+        identity(&proposal.id, &proposal.runtime_digest, request)?;
+        if proposal.schema != header.schema
+            || proposal.token.is_empty()
+            || proposal.token.len() > 128
+            || !proposal
+                .token
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
+        {
+            return Err("invalid proposal token".into());
+        }
+        return Ok(EngineFrame::Proposal {
+            token: proposal.token,
+            result: response_result(proposal.response, request)?,
+            containment: containment_proposal(&proposal.containment),
+        });
+    }
+    let frame: WireFrame =
+        serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    match frame {
+        WireFrame::Ready {
+            id,
+            runtime_digest,
+            active,
+            budget_home,
+            project_digest,
+            session_id,
+        } => {
+            identity(&id, &runtime_digest, request)?;
+            let home = std::path::PathBuf::from(&budget_home);
+            if !home.is_absolute() || budget_home.contains('\0') || budget_home.len() > 4096 {
+                return Err("invalid ready budget home".into());
+            }
+            if active != project_digest.is_some()
+                || project_digest
+                    .as_ref()
+                    .is_some_and(|d| !crate::cli::valid_digest(d))
+            {
+                return Err("invalid ready project identity".into());
+            }
+            if session_id
+                .as_ref()
+                .is_some_and(|s| s.len() > 128 || s.contains('\0'))
+            {
+                return Err("invalid ready session identity".into());
+            }
+            Ok(EngineFrame::Ready(Ready {
+                active,
+                budget_home: home,
+                project_digest,
+                session_id,
+            }))
+        }
+        WireFrame::Failure {
+            id,
+            runtime_digest,
+            message,
+        } => {
+            identity(&id, &runtime_digest, request)?;
+            if message.is_empty() || message.len() > 4096 || message.contains('\0') {
+                return Err("invalid engine failure diagnostic".into());
+            }
+            Ok(EngineFrame::Failure(message))
+        }
+    }
+}
+
+pub fn dispatch(request: &Request) -> Vec<u8> {
+    let mut bytes = serde_json::to_vec(&serde_json::json!({
+        "schema":"caws.runtime.dispatch.v1","id":request.id,"runtimeDigest":request.runtime_digest
+    }))
+    .expect("serializing string-only dispatch frame");
+    bytes.push(b'\n');
+    bytes
+}
+
+pub fn handoff(
+    request: &Request,
+    token: &str,
+    success: bool,
+    containment: Option<&ContainmentReceipt>,
+) -> Result<Vec<u8>, String> {
+    let mut bytes = serde_json::to_vec(&serde_json::json!({
+        "schema":"caws.runtime.handoff.v2","id":request.id,"runtimeDigest":request.runtime_digest,
+        "token":token,"success":success,"containment":containment
+    }))
+    .expect("serializing bounded containment handoff frame");
+    // The peer control decoder admits exactly this bounded control envelope.
+    if bytes.len() > 64 * 1024 {
+        return Err("containment handoff exceeds control envelope".into());
+    }
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_binary_channels_preserve_every_byte() {
+        let bytes: Vec<u8> = (0..=255).collect();
+        assert_eq!(
+            decode_native_bytes(&STANDARD.encode(&bytes)).unwrap(),
+            bytes
+        );
+        assert_eq!(decode_native_bytes("/wBh").unwrap(), [0xff, 0x00, 0x61]);
+        assert!(decode_native_bytes("").unwrap().is_empty());
+        let large = vec![0xff; 1_048_576];
+        assert_eq!(
+            decode_native_bytes(&STANDARD.encode(&large)).unwrap(),
+            large
+        );
+    }
+
+    #[test]
+    fn malformed_and_noncanonical_binary_channels_are_rejected() {
+        for value in [
+            "Zg", "Zg=", "Zg===", "Zh==", "Zm9=", "Z g==", "Zg==\n", "-w==", "雪", "=AAA", "AA=A",
+        ] {
+            assert!(decode_native_bytes(value).is_err(), "{value:?}");
+        }
+    }
+    fn fixture_request() -> Request {
+        Request {
+            schema: "caws.runtime.request.v1",
+            id: "request".into(),
+            runtime_digest: "a".repeat(64),
+            surface: "codex".into(),
+            event: "pre_tool_use".into(),
+            configuration: "system".into(),
+            caller: Caller {
+                cwd: "/fixture".into(),
+                environment: BTreeMap::new(),
+                process_id: 99,
+            },
+            deadline_epoch_ms: 1,
+            payload: RawValue::from_string("{}".into()).unwrap(),
+            input_json: "{}".into(),
+        }
+    }
+    #[test]
+    fn v2_requires_containment_and_malformed_intent_keeps_known_native_result() {
+        let request = fixture_request();
+        let mut frame = serde_json::json!({"schema":"caws.runtime.proposal.v2","id":request.id,"runtimeDigest":request.runtime_digest,"token":"proposal","response":{"schema":"caws.runtime.response.v1","id":request.id,"runtimeDigest":request.runtime_digest,"result":{"exitCode":2,"stdoutBase64":STANDARD.encode(b"known refusal"),"stderrBase64":""}},"containment":null});
+        let decode = |frame: &serde_json::Value| {
+            validate_frame(&serde_json::to_vec(frame).unwrap(), &request)
+        };
+        assert!(matches!(
+            decode(&frame).unwrap(),
+            EngineFrame::Proposal {
+                containment: ContainmentProposal::None,
+                ..
+            }
+        ));
+        frame.as_object_mut().unwrap().remove("containment");
+        assert!(decode(&frame).is_err());
+        frame["containment"] = serde_json::json!({"pid":1});
+        match decode(&frame).unwrap() {
+            EngineFrame::Proposal {
+                result,
+                containment: ContainmentProposal::Invalid(_),
+                ..
+            } => assert_eq!(result.stdout, b"known refusal"),
+            _ => panic!("known result was discarded or malformed intent admitted"),
+        }
+        frame["schema"] = serde_json::json!("caws.runtime.proposal.v1");
+        assert!(decode(&frame).is_err());
+    }
+}

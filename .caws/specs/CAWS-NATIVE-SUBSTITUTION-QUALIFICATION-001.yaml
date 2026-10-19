@@ -1,0 +1,38 @@
+id: CAWS-NATIVE-SUBSTITUTION-QUALIFICATION-001
+title: 'Qualify native command substitution warning and latch consumer behavior'
+mode: chore
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'Root accepted the unchanged qualification-runner execution and acceptance obligation under CAWS-NATIVE-RUNTIME-001 after the first tracked write was refused by native hook/CLI session identity disagreement. No source files or acceptance evidence were written in this child lane. Worker supplies a reviewable patch in agent context; root owns inspection, application, baseline and repaired runtime qualification, evidence and integration.'
+created_at: '2026-10-19T11:29:47.506Z'
+updated_at: '2026-10-19T11:37:16.956Z'
+created_by_session: '01a153d3-aa1c-7cc3-9396-42b64a0f1efb'
+blast_radius:
+  modules:
+    - 'Private native hook command-substitution qualification runner'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/qualify-native-substitution.ts'
+  out: []
+invariants:
+  - 'Command text remains input data and no supplied shell command is executed; all runtime state and artifacts remain private.'
+  - 'Warning, repeat latch, session isolation, and native finalization are asserted from actual selected stock guard output and retained state.'
+acceptance:
+  - id: A1
+    given: 'an explicitly selected built native client and typed runtime in a private immutable installation'
+    when: 'the command-substitution regression and isolated controls run'
+    then: 'retained input, argv, status, output, state, journals and hashes make warning-to-latch failures observable without executing the command text.'
+  - id: A2
+    given: 'the unrepaired assigned baseline'
+    when: 'the runner exercises the regression twice and control cases'
+    then: 'it exits nonzero with concrete regression mismatches and preserves the private fixture for integration rerun.'
+observability:
+  - 'Per-invocation raw input/stdout/stderr, exact executable argv and exit/signal, private state snapshots, native journal and immutable source/build hashes.'
+rollback:
+  - 'Remove the opt-in runner through the owned source lane; qualification never installs a shared runtime.'
+non_functional:
+  security:
+    - 'Bounded native subprocess lifetime and output; killing disabled and no caller-supplied shell execution.'
+contracts: []

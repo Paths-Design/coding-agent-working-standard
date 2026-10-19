@@ -47,6 +47,7 @@
     "src/store/**/*.ts",
     "src/shell/**/*.ts",
     "src/kernel/**/*.ts",
-    "src/init/**/*.ts"
+    "src/init/**/*.ts",
+    "src/runtime/**/*.ts"
   ]
 }

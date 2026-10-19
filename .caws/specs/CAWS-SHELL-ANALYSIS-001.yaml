@@ -1,9 +1,10 @@
 id: CAWS-SHELL-ANALYSIS-001
 title: 'Prove bounded shell behavior before worktree-isolation decisions'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: shell-analysis
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-19T02:30:42.300Z'
+updated_at: '2026-10-19T14:26:07.682Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -26,6 +27,26 @@ scope:
     - 'package-lock.json'
     - 'docs/guides/command-analysis.md'
     - 'docs/guides/hook-packs.md'
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/stryker.analysis.conf.js
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - .github/workflows/mutation.yml
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-analysis.sh
+    - packages/caws-cli/tests/shell/mutation-view.test.js
+    - packages/caws-cli/tests/hooks/bash-write-guard-analysis.test.js
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/hooks/bats/helpers.bash
+    - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
+    - packages/caws-cli/tests/hooks/scope-priority-over-allowlist.test.js
+    - packages/caws-cli/tests/hooks/guard-allowlist-sync.test.js
+    - packages/caws-cli/docs/command-reference.md
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/hooks/bats/bash-write-guard.bats
+    - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - packages/caws-cli/templates/hook-packs/shared/quiet-merge.sh
+    - packages/caws-cli/tests/hooks/bats/quiet-merge.bats
   out: []
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
@@ -52,6 +73,33 @@ acceptance:
     given: 'the committed candidate and isolated package/runtime fixture'
     when: 'focused semantic and negative-control checks, doctor, gates and peer feedback are grounded'
     then: 'the module and installed consumer satisfy the scoped criteria, packaging carries the parser, rollback is demonstrated and native/default/global-adoption limits are stated'
+  - id: A6
+    given: >-
+      The active bash-write guard receives exact shell source containing interpreter
+      data, finite shell variables, genuine shell or interpreter writes, or an
+      unavailable analysis backend
+    when: >-
+      The installed packaged guard projects bounded shell facts and applies its
+      existing utility roles and ownership decisions
+    then: >-
+      A benign quoted Node heredoc and quoted search data produce no fabricated
+      shell targets; real foreign writes and nested shell writes remain refused,
+      finite targets reach the ownership oracle, and unsupported or malformed
+      analysis cannot become an empty allow
+  - id: A7
+    given: >-
+      Native execution envelopes may supply command aliases, shell and startup
+      choices, or a working directory, and the stock lifecycle hook can emit
+      updatedInput after guards
+    when: >-
+      The mandatory guard decodes the original transported envelope and a lifecycle
+      command is considered for directory rerooting
+    then: >-
+      Supplied source, shell and startup conflicts remain unresolved; the decoded
+      execution directory reaches downstream ownership checks; only a proven
+      standalone literal merge or destroy invocation is rerooted, quoted mentions
+      and compound neighbors are untouched, and rewritten lifecycle failures retain
+      their status and diagnostics
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
@@ -62,3 +110,11 @@ non_functional:
 contracts:
   - name: 'bounded-shell-analysis'
     type: behavior
+evidence:
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Counterfactual replay at 52089e3cb549960029fbd2d595acda68706d06f5: indexed207 = allow68/unresolved139; 2 extra = allow1/unresolved1. Stored payloads never executed. Nine independently adjudicated representatives: two supported safe admits, one safe-but-cwd-dependent unresolved, other unsupported/dangerous-for-read-exemption cases held. Historical cwd known27; environment, ownership and native execution unverified. Private transcripts/artifacts remain uncommitted in /tmp/caws-shell-*. --verify here checks cited commit existence, not replay semantics; executed replay output was inspected."
+    recorded_at: "2026-10-19T13:49:47.232Z"
+    command: node tests/fixtures/command-analysis/replay.cjs /tmp/caws-shell-historical-replay.json /tmp/caws-sed-warning-count.json /tmp/caws-shell-historical-adjudications.json /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/shell-analysis /tmp/caws-shell-replay-result.json
+    exit_code: 0
+    commit_sha: "52089e3cb549960029fbd2d595acda68706d06f5"
