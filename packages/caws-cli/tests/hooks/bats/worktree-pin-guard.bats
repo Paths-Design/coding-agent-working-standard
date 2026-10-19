@@ -347,3 +347,10 @@ SCRIPT
   assert_failure 2
   assert_output --partial 'redirect-variable'
 }
+
+@test "pin-guard: unsupported declaration still inspects its nested Git target" {
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" "export A+=\"\$(git -C '$CAWS_TEST_REPO' status)\""
+  assert_failure 2
+  assert_output --partial 'foreign-git-target'
+  assert_output --partial 'typed command analysis denied'
+}

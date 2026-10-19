@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Bounded command analysis
 owner: CAWS maintainers
-updated: 2026-10-18
+updated: 2026-10-19
 audience: consumer
 ---
 
@@ -86,6 +86,11 @@ admitted after `--`; opaque scripts and Git targets are unresolved. Nested
 command substitutions are recursively inspected as read producers and their
 output stays opaque. No substitution runs during analysis. `bash -x` would
 execute expansions before tracing them and cannot serve as this preflight.
+
+Declaration commands have no admitted profile. Their assignment arguments stay
+unresolved; original scalar values are inspected for nested producers without
+reconstructing ordinary argv or changing parent bindings. Nested policy
+violations retain their original source coordinates and denial precedence.
 
 Known wrappers `command` and `env` preserve the argument-role checks. Unknown
 applications, inline interpreters, functions, arithmetic, process substitution,

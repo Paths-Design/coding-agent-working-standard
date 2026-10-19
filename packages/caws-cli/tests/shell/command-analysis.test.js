@@ -211,12 +211,22 @@ describe('bounded shell analysis contract', () => {
     const actual = results.get(fixture.id);
     const request = requests.find((item) => item.id === fixture.id);
     expect(actual.activeMutant).toBe(activeMutant);
-    expect(actual.first.decision).toBe(fixture.decision);
+    if (actual.first.decision !== fixture.decision)
+      throw new Error(
+        JSON.stringify({
+          fixture: fixture.id,
+          expectedDecision: fixture.decision,
+          actualDecision: actual.first.decision,
+          reasonCodes: [...new Set(actual.first.reasons.map((item) => item.code))],
+        })
+      );
     expect(actual.first.reasons.map((item) => item.code)).not.toContain('analysis-failure');
     if (fixture.decision !== 'allow') expect(actual.first.reasons.length).toBeGreaterThan(0);
     expect(actual.repeated).toEqual(actual.first);
     if (fixture.reason)
       expect(actual.first.reasons.map((item) => item.code)).toContain(fixture.reason);
+    for (const code of fixture.absentReasons || [])
+      expect(actual.first.reasons.map((item) => item.code)).not.toContain(code);
     if (fixture.reasonIncludes)
       expect(
         actual.first.reasons
@@ -273,6 +283,18 @@ describe('bounded shell analysis contract', () => {
           .filter((item) => item.kind === 'command')
           .map((item) => request.input.command.slice(item.start, item.end))
       ).toContain(expand(command));
+    }
+    if (fixture.assignmentKnowledge) {
+      const assignments = actual.first.trace.filter((item) => item.kind === 'assignment');
+      expect(assignments.map((item) => request.input.command.slice(item.start, item.end))).toEqual(
+        fixture.assignmentKnowledge.map((item) => item.source)
+      );
+      for (const [index, expected] of fixture.assignmentKnowledge.entries()) {
+        const tokens = assignments[index].detail.split(/\W+/);
+        expect(tokens).toContain(expected.binding);
+        expect(tokens).toContain(expected.knowledge);
+        if (expected.count !== undefined) expect(tokens).toContain(String(expected.count));
+      }
     }
   });
   test('fixture identities are unique across the public and role corpora', () => {

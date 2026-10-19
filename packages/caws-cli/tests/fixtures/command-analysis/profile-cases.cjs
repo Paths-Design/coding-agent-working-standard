@@ -622,4 +622,90 @@ for (const [id, command] of [
 ])
   add('tilde-data-' + id, command);
 
+for (const declaration of ['local', 'alias', 'export', 'declare', 'typeset', 'readonly']) {
+  cases.push({
+    id: 'declaration-' + declaration + '-scalar',
+    command: declaration + ' A=$MISSING',
+    decision: 'unresolved',
+    reason: 'command-assignment',
+    reasonSource: 'A=$MISSING',
+    absentReasons: ['unknown-splitting'],
+  });
+  cases.push({
+    id: 'declaration-' + declaration + '-producer',
+    command: declaration + ' A="$(git -C \'{{FOREIGN}}\' status)"',
+    decision: 'deny',
+    reason: 'foreign-git-target',
+    reasonSource: "git -C '{{FOREIGN}}' status",
+  });
+}
+for (const [id, command] of [
+  ['array', 'export A=(one two)'],
+  ['append', 'export A+=data'],
+  ['indexed', 'export A[0]=data'],
+])
+  add('declaration-' + id, command, 'unresolved', 'command-assignment');
+cases.push({
+  id: 'declaration-tilde-original-value-span',
+  command: 'export A=~',
+  decision: 'unresolved',
+  reason: 'tilde-expansion',
+  reasonSource: '~',
+});
+add(
+  'declaration-append-producer',
+  'export A+="$(git -C \'{{FOREIGN}}\' status)"',
+  'deny',
+  'foreign-git-target'
+);
+add(
+  'declaration-wrapper-producer',
+  'command export A="$(git -C \'{{FOREIGN}}\' status)"',
+  'deny',
+  'foreign-git-target'
+);
+for (const mode of ['-E', '-r', '--quiet', '--silent', '--regexp-extended', '--posix'])
+  add('sed-mode-' + mode, 'sed ' + mode + " '1,3p;2d;=;4q' file");
+add('sed-repeated-expressions', "sed -n --expression '1p' --expression '2d' file");
+add(
+  'sed-later-expression-executes',
+  "sed -n -e '1p' -e 'e printf x' file",
+  'deny',
+  'sed-execution'
+);
+for (const [id, command] of [
+  ['input', "cat < '{{OWN}}/.git'; git status"],
+  ['input-close', 'cat 0<&-; git status'],
+  ['output-duplicate', 'printf x 2>&1; git status'],
+])
+  add('redirection-preserves-git-' + id, command);
+for (const [id, command] of [
+  ['append', 'printf x >> note; git status'],
+  ['read-write', 'cat <> note; git status'],
+])
+  add('redirection-invalidates-git-' + id, command, 'unresolved', 'git-context-changed');
+add('producer-input-redirection', 'cat -- "$(cat < file)"');
+add(
+  'producer-output-devnull',
+  'cat -- "$(printf x >/dev/null)"',
+  'unresolved',
+  'substitution-effects'
+);
+for (const name of ['d', '_D', 'A1', 'd_1'])
+  add(
+    'tilde-portable-name-' + name,
+    'D=printf; HOME=%n; printf ' + name + '=~ D; "$D" status',
+    'unresolved',
+    'tilde-expansion'
+  );
+cases.push({
+  id: 'assignment-explanation-classification',
+  command: 'A=alpha; A="$MISSING"; cat -- "$A"',
+  decision: 'allow',
+  assignmentKnowledge: [
+    { source: 'A=alpha', binding: 'A', knowledge: 'finite', count: 1 },
+    { source: 'A="$MISSING"', binding: 'A', knowledge: 'opaque' },
+  ],
+});
+
 module.exports = cases;

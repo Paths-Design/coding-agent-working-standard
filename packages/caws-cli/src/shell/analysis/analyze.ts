@@ -309,40 +309,15 @@ export async function analyzeCommand(
     for (const suffix of node.suffix) {
       if (suffix.type === 'Word') words.push(suffix);
       else if (suffix.type === 'Assignment') {
-        if (suffix.value.type !== 'Word' || suffix.append || suffix.index) {
-          reason(
-            suffix,
-            'command-assignment',
-            'Array and indexed argument assignments are unsupported.'
-          );
-        } else {
-          const value = suffix.value;
-          words.push({
-            type: 'Word',
-            text: suffix.text,
-            value: `${suffix.name}=${value.value}`,
-            pos: suffix.pos,
-            end: suffix.end,
-            parts: [
-              {
-                type: 'Literal',
-                text: `${suffix.name}=`,
-                value: `${suffix.name}=`,
-                pos: suffix.pos,
-                end: value.pos,
-              },
-              ...(value.parts ?? [
-                {
-                  type: 'Literal' as const,
-                  text: value.text,
-                  value: value.value,
-                  pos: value.pos,
-                  end: value.end,
-                },
-              ]),
-            ],
-          });
-        }
+        // The pinned parser reserves these arguments for declaration commands,
+        // none of which has an admitted profile. Inspect the original RHS for
+        // nested producers without inventing argv or changing parent bindings.
+        reason(
+          suffix,
+          'command-assignment',
+          'Declaration assignment arguments have no admitted program profile.'
+        );
+        if (suffix.value.type === 'Word') word(suffix.value, state, depth + 1, true);
       }
     }
     for (const part of words) {
