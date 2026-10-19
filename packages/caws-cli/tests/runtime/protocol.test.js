@@ -33,6 +33,36 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('rejects fractional or exponent control tokens even when JavaScript rounds to a valid integer', () => {
+    for (const token of ['123.00000000000000001', '2147483647.00000001', '1.23e2', '123.0', '-0']) {
+      const frame = JSON.stringify(request()).replace('"processId":123', '"processId":' + token);
+      expect(() => decodeRuntimeRequest(frame, now)).toThrow(/caller snapshot/);
+    }
+    for (const token of ['1001000.00000000001', '1.001e6', '1001000.0']) {
+      const frame = JSON.stringify(request()).replace(
+        '"deadlineEpochMs":1001000',
+        '"deadlineEpochMs":' + token
+      );
+      expect(() => decodeRuntimeRequest(frame, now)).toThrow(/deadline/);
+    }
+  });
+
+  test('accepts exact canonical control bounds without changing opaque payload numbers', () => {
+    const result = decode({
+      caller: { processId: 2147483647, cwd: '/project', environment: {} },
+      deadlineEpochMs: now + MAX_REQUEST_DURATION_MS,
+    });
+    expect(result.caller.processId).toBe(2147483647);
+    expect(result.deadlineEpochMs).toBe(now + MAX_REQUEST_DURATION_MS);
+    expect(
+      decode({ caller: { processId: 1, cwd: '/project', environment: {} } }).caller.processId
+    ).toBe(1);
+    const nearLimit = JSON.stringify(request({ deadlineEpochMs: Number.MAX_SAFE_INTEGER }));
+    expect(decodeRuntimeRequest(nearLimit, Number.MAX_SAFE_INTEGER - 1).deadlineEpochMs).toBe(
+      Number.MAX_SAFE_INTEGER
+    );
+  });
+
   test('rejects numeric payload differences hidden by JavaScript rounding', () => {
     for (const [original, changed] of [
       ['9007199254740993', '9007199254740992'],

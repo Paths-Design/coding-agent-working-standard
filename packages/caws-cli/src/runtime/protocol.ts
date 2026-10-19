@@ -4,7 +4,12 @@ import type { AgentSurface } from '../init/hook-packs/types';
 import { MACHINE_EVENTS } from '../init/native-hook-identification';
 import type { HookEvent, NativeResult, NativeTextResult } from './types';
 import { invocationCaller, type InvocationCaller } from './context';
-import { objectMemberSource, parseJsonSource, sameJsonSource } from './json-custody';
+import {
+  objectMemberSource,
+  parseJsonSource,
+  sameJsonSource,
+  type JsonSource,
+} from './json-custody';
 
 export const REQUEST_SCHEMA = 'caws.runtime.request.v1';
 export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
@@ -102,6 +107,20 @@ function digest(value: unknown): value is string {
   return typeof value === 'string' && value.length === 64 && /^[a-f0-9]{64}$/.test(value);
 }
 
+function protocolSource(text: string, maxDepth: number, maxNodes: number): JsonSource {
+  try {
+    return parseJsonSource(text, maxDepth, maxNodes);
+  } catch (error) {
+    throw new RuntimeProtocolError(error instanceof Error ? error.message : 'Invalid JSON source');
+  }
+}
+
+/** Validate wire spelling before the decoded-number checks enforce each field's bounds. */
+function canonicalInteger(source: JsonSource | undefined): boolean {
+  if (!source) return false;
+  return /^(0|[1-9][0-9]*)$/.test(source.text.slice(source.root.start, source.root.end));
+}
+
 export function decodeRuntimeRequest(
   frame: Uint8Array | string,
   nowEpochMs: number = Date.now()
@@ -128,6 +147,12 @@ export function decodeRuntimeRequest(
   if (!identifier(value.id) || !digest(value.runtimeDigest)) {
     throw new RuntimeProtocolError('Invalid runtime request identity');
   }
+  const wireText = new TextDecoder('utf-8', { fatal: true }).decode(
+    typeof frame === 'string' ? Buffer.from(frame, 'utf8') : frame
+  );
+  const wireSource = protocolSource(wireText, MAX_JSON_DEPTH + 2, MAX_JSON_NODES * 2);
+  const callerSource = objectMemberSource(wireSource, 'caller');
+  const processSource = callerSource ? objectMemberSource(callerSource, 'processId') : undefined;
   if (
     typeof value.surface !== 'string' ||
     !RUNTIME_SURFACES.includes(value.surface as AgentSurface)
@@ -142,6 +167,7 @@ export function decodeRuntimeRequest(
   if (
     !record(value.caller) ||
     !exactKeys(value.caller, ['cwd', 'environment', 'processId']) ||
+    !canonicalInteger(processSource) ||
     !Number.isSafeInteger(value.caller.processId) ||
     (value.caller.processId as number) <= 0 ||
     (value.caller.processId as number) > 2_147_483_647 ||
@@ -158,8 +184,10 @@ export function decodeRuntimeRequest(
   }
   if (
     !Number.isSafeInteger(nowEpochMs) ||
+    !canonicalInteger(objectMemberSource(wireSource, 'deadlineEpochMs')) ||
     typeof value.deadlineEpochMs !== 'number' ||
     !Number.isSafeInteger(value.deadlineEpochMs) ||
+    value.deadlineEpochMs <= 0 ||
     value.deadlineEpochMs <= nowEpochMs ||
     value.deadlineEpochMs - nowEpochMs > MAX_REQUEST_DURATION_MS
   ) {
@@ -178,14 +206,8 @@ export function decodeRuntimeRequest(
   if (!record(payload) || !record(value.payload)) {
     throw new RuntimeProtocolError('Hook payload does not match original native input');
   }
-  const source = parseJsonSource(value.inputJson || '{}', MAX_JSON_DEPTH, MAX_JSON_NODES);
-  const wireText = new TextDecoder('utf-8', { fatal: true }).decode(
-    typeof frame === 'string' ? Buffer.from(frame, 'utf8') : frame
-  );
-  const wire = objectMemberSource(
-    parseJsonSource(wireText, MAX_JSON_DEPTH + 2, MAX_JSON_NODES * 2),
-    'payload'
-  );
+  const source = protocolSource(value.inputJson || '{}', MAX_JSON_DEPTH, MAX_JSON_NODES);
+  const wire = objectMemberSource(wireSource, 'payload');
   if (!wire || !sameJsonSource(source, wire))
     throw new RuntimeProtocolError('Hook payload does not match original native input');
   return Object.freeze({

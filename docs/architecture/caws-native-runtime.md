@@ -109,6 +109,12 @@ projections. Hook stdin and nested JSON environment projections use source
 spans; CAWS replaces its owned event metadata explicitly. An original-input hash
 alone does not establish the value delivered to a consumer.
 
+Native-generated process IDs and deadlines have a separate wire contract:
+canonical unsigned integer tokens, followed by field-specific numeric bounds.
+Checking only a JavaScript integer projection can accept a fractional token
+whose tail rounded away. This representation check does not authenticate the
+caller or establish that its process is a safe agent-termination target.
+
 The decoded JavaScript payload is a convenience projection for audited fields,
 not a lossless representation of extension values. Python decimal/exponent
 serialization, nonstandard numeric values, sanitization and transport-threshold

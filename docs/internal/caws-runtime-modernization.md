@@ -80,6 +80,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking compatibility gap; unreplaced | Cold renderer start must survive request cleanup and serve the next request; source-change retirement and concurrent startup must not duplicate or kill the service. Existing warm-daemon evidence does not cover first-start group ownership |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
+| R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
 
 ## Machine-wide workload and representation boundary
 
@@ -329,7 +330,7 @@ Additional bounded evidence and unresolved dependencies:
   final-candidate evidence.
 - E37: The corrected extension scenario is retained under
   `packages/caws-native/target/qualification/numeric-custody-extension-parity-2026-10-19T05-06-21-524Z/`.
-  `node <scenario>/run.cjs` exits 0. For plain and inherited-startup contexts,
+  `node <scenario>/run.cjs` exits 0. For plain and supplied-`BASH_ENV` contexts,
   Python and the actual Rust → typed engine → selected dispatcher → extension
   path each allow 9007199254740992 and refuse the two odd large revisions with
   exit 2 and matching exact reasons. The 12 cases retain consumed stdin, nested
@@ -339,6 +340,7 @@ Additional bounded evidence and unresolved dependencies:
   This is an isolated custom guard with termination explicitly disabled; it
   proves neither real harness withholding nor containment, Python retirement,
   all extension contracts or complete guard parity.
+  E37 does not observe the startup marker; E41 adds that observation.
 - E38: The stock-route control is retained under
   `packages/caws-native/target/qualification/stock-route-2026-10-19T05-08-12-811Z/`.
   Its actual native/typed-engine scenario exits 0, with stock selected-handler
@@ -365,6 +367,40 @@ Additional bounded evidence and unresolved dependencies:
   whose slice clamps to the same text after grammar validation; this does not
   adjudicate every survivor in the full report. Passing tests and these
   bounded observations confer no A2–A8 acceptance.
+- E40: A direct decoder counterexample exits 1 when wire process ID
+  `123.00000000000000001` is accepted as 123. Source-span validation rejects
+  that spelling before decoded numeric bounds; the same check then exits 0
+  with `RuntimeProtocolError: Invalid native caller snapshot`. Raw fractional,
+  exponent and negative-zero controls and exact boundary positives are in
+  `tests/runtime/protocol.test.js`. The current Rust producer emits canonical
+  integer controls, so this is a decoder-contract repair before independent
+  IPC admission, not an observed native targeting bypass or caller
+  authentication proof.
+- E41: Startup-marker and extension artifacts are retained under
+  `packages/caws-native/target/qualification/native-wire-controls-2026-10-19T05-22-52-884Z/`
+  and the final representation-only helper revision under
+  `native-wire-controls-2026-10-19T05-38-00Z/`. Both scenario commands exit 0.
+  Each has 12 actual baseline/candidate calls with exact integer and context
+  observations, even-value allow and odd-value refusal controls. The consumer
+  writes `startup-observation.json`: null in plain cases and `selected` when
+  the supplied startup executes. `readback.cjs` recomputes every case's
+  journal input hash and runtime digest and compares all six pairs of raw
+  stdout/stderr bytes. Both readbacks exit 0; committed-build identity must
+  be checked separately. All cases
+  explicitly disable termination and do not execute proposed tools.
+- E42: The initial control-helper mutation probe is retained at
+  `reports/mutation-runtime-controls/mutation-report.json`: 23 killed and six
+  survived of 29, score 79.31%, exit 1 against the unchanged 80% floor.
+  Redundant decoded-value bounds were removed from the raw spelling helper;
+  field bounds remain in the decoder. The separate selected helper range at
+  `reports/mutation-runtime-controls-canonical/mutation-report.json` records
+  nine killed, one survived and one uncovered of 11, score 81.82%, exit 0.
+  Missing source is rejected by preceding envelope/caller-key validation,
+  explaining the helper's unreachable missing-source branch; the surviving
+  mutation removes that redundant branch. This is not a full-file protocol
+  mutation score. Two focused suites pass 99 checks, and strict test TypeScript
+  and ESLint checks exit 0. These checks exercise control representation,
+  bounds and payload custody, not process ownership or termination.
 
 The executable embedded-Python surface is 15 shell files, 19 inline bodies and
 seven external callsites. A textual `python` hit is not sufficient: seven broader
