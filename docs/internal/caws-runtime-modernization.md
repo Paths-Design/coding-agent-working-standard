@@ -10,8 +10,18 @@ audience: maintainer
 
 # CAWS native runtime migration tracker
 
-This tracker carries the user's authorized replacement of Python implementations
-with native Rust and typed TypeScript/Node across CAWS. It tracks feature progress
+Replace CAWS's first-party Python, including embedded programs, developer tools
+and tests, with Rust and typed TypeScript/Node. Preserve guard strength, project
+and session authority, selected overrides, input/output semantics, lifecycle and
+audit custody. Deliver a durable demand-start runtime with bounded, fair capacity
+for at least thirteen concurrent sessions across four repositories, serialization
+by owning state, and heartbeat-driven retention without heartbeat authority.
+Review and land coherent governed slices with concrete runtime evidence; retain
+the complete acceptance obligation through every slice. Complete documentation
+updates after source landing. Replace this machine's runtime only after full
+parity, then verify selected execution and rollback.
+
+This tracker records the goal's feature progress
 separately from the [architecture contract](../architecture/caws-native-runtime.md)
 and canonical acceptance in `CAWS-NATIVE-RUNTIME-001`. Update the relevant row and
 evidence in every logical replacement commit. Do not infer migration from a new
@@ -48,8 +58,10 @@ whole-runtime acceptance. E57 reproduces R33's cold-start service failure throug
 the actual native/typed path. The next boundary is explicit service ownership
 and client integration, alongside the remaining R32 process-domain and identity
 contracts. E61 exercises the R07 payload-cwd repair through the isolated native
-consumer with refusal and ordinary-file controls. No machine replacement follows
-from these bounded results.
+consumer with refusal and ordinary-file controls. E62 exposes an R05 guard-strength
+regression: an earlier advisory masks a later confirmation-class command
+substitution. Correct that regression before expanding the replacement runtime.
+No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 **packaged**, **installed**, **native-observed**, **retired**. Record exactly the
@@ -68,7 +80,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R02 | `runtime/caws-hook.py`: configuration, selection, overrides | TS invocation engine and existing authority adapters | isolated one-shot selection exercised; complete enforcement open | Shared validators and freshness/override fixtures plus E33 selected stock path; full authority and override execution require qualification |
 | R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | one-shot journal/composer/local ACK integrated; resident open | E33 retains actual input/handler/index/native-output artifacts; crash persistence, production message settlement and resident admission remain open |
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | selected production refusal and native Stop fixture exercised | E33 nonlatching refusal; E34 real native budget with fixture context. Complete event/harness/Stop producer behavior remains unqualified |
-| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component and bounded native consumer exercised | E33 bare staged-deletion refusal and explicit-path/unstaged-deletion controls; full classifier corpus, stateful consumer and harness parity remain open |
+| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | blocking enforcement regression, E62; component and bounded native consumer exercised | An earlier advisory masks a later confirmation-class substitution in the typed stock path. E33 staged-deletion checks do not cover this case; full classifier corpus, stateful consumer and harness parity remain open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
@@ -763,6 +775,34 @@ Additional bounded evidence and unresolved dependencies:
   guard); no copied runner is produced. Its original `/tmp` file remains with
   recorded SHA256 `76207214…78d4b`, a retention gap to resolve before scratch
   cleanup. No installed runtime, whole-runtime parity or acceptance is earned.
+- E62: At source revision `f9426272`, run
+  `node packages/caws-native/target/qualification/code-review-f942-substitution/probe.cjs`
+  from the lane root, exit 0. The retained `probe.cjs` and `probe.json` compare
+  the immutable selected Python classifier with the built TypeScript classifier
+  and direct stock consumer. Input `git init; echo "$(kubectl delete pod demo)"`
+  yields baseline `ask/capability/confirm`, candidate
+  `ask/legacy_family/advisory`, and two stock-consumer calls with exit 0, empty
+  stdout and a nonblocking git-init advisory. Reversing the segments preserves
+  confirm and returns selected-shell fallback; the root-delete substitution
+  control preserves deny/block and selected-shell fallback. The proposed shell
+  commands are classifier input only. Source at `classifier/index.ts:174-179`
+  processes substitutions after earlier segments; its equal-decision tie at
+  `:98` discards their stronger enforcement. The baseline handler's capability
+  branch writes a first warning and arms/refuses after an existing warning;
+  these actual shell state transitions and native harness withholding were not
+  executed by this probe. The initial inline probe was refused as opaque; the
+  installed guard explicitly directed the inspectable script-file form used here.
+  Fresh build plus sixteen runtime Jest suites exit 0, 603 checks, with raw
+  results at `/tmp/caws-code-review-f942-runtime.json`; they miss this regression.
+  Serial Cargo exits 101: 29 library, 13 binary and 23 executable checks pass;
+  the backpressure case fails before proposal acceptance. Its retained
+  `/var/folders/2y/lzlll42d12g1gz6l_chkd9500000gn/T/caws-native-39169-127/`
+  contains only a 192-byte infrastructure-block stdout, deadline stderr and a
+  dispatch event. The exact focused rerun exits 0 and retains 65,536 `x` stdout
+  bytes plus handoff `success:false` under
+  `/tmp/caws-code-review-f942-backpressure/caws-native-22901-2/`. The original
+  timeout cause is unverified; phase timing is required to attribute it. Neither
+  a passing rerun nor these classifier observations earn acceptance or cutover.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -852,6 +892,13 @@ Only `caws specs evidence` records authoritative verdicts. This ledger explains
 progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
+
+First correct the E62 enforcement regression without losing statement-specific
+working-directory proof. Qualify both segment orders, retained deny controls and
+the actual selected handler's first-warning/repeated-risk latch effects. Then
+continue the dependency order below. Keep the failed backpressure witness;
+instrument startup, ancestor capture, proposal arrival and output delivery before
+attributing its timeout or claiming concurrent performance.
 
 1. Resolve R33 through explicit service binding and client integration. Define
    the actual selected client's broker seam and request/fallback outcome
