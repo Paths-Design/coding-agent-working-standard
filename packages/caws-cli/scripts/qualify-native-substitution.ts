@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { spawn, spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 type Data = Record<string, unknown>;
 type Status = { code: number | null; signal: NodeJS.Signals | null; error: string | null };
@@ -254,6 +255,75 @@ const literal = "git init; echo '$(kubectl delete pod demo)'";
 const capabilityReason = 'command substitution: destructive operation (K8S_DELETE)';
 const advisoryReason =
   'git init requires human approval; do not retry by wrapping, reordering, aliasing, or indirect invocation';
+function coverageProblems(calls: Record<string, number>, classifierRequired: boolean): string[] {
+  const result: string[] = [];
+  if (!(calls.tryExecuteStockHandler! > 0)) result.push('stock-executor-not-observed');
+  if (classifierRequired && !(calls.classifyCommand! > 0))
+    result.push('typed-classifier-not-observed');
+  return result;
+}
+function coverage(directory: string): { calls: Record<string, number>; witnesses: Data[] } {
+  const targets = [
+    ['runtime/classifier/index.js', 'classifyCommand'],
+    ['runtime/stock-handlers.js', 'tryExecuteStockHandler'],
+  ] as const;
+  const calls: Record<string, number> = { classifyCommand: 0, tryExecuteStockHandler: 0 };
+  const witnesses: Data[] = [];
+  const files = fs.readdirSync(directory).filter((file) => file.endsWith('.json'));
+  assert(files.length > 0 && files.length <= 16, 'bounded coverage files required');
+  for (const name of files) {
+    const file = path.join(directory, name);
+    const stat = fs.lstatSync(file);
+    assert(stat.isFile() && stat.size <= 32 * 1024 * 1024, 'bounded regular coverage required');
+    const data = read(file);
+    assert(Array.isArray(data.result));
+    for (const [relative, functionName] of targets) {
+      const module = path.join(cli, 'dist', relative);
+      const url = pathToFileURL(module).href;
+      const text = fs.readFileSync(module, 'utf8');
+      for (const script of data.result) {
+        if (!object(script) || script.url !== url) continue;
+        assert(Array.isArray(script.functions));
+        const functions = script.functions.filter(
+          (entry) => object(entry) && entry.functionName === functionName
+        );
+        assert.equal(functions.length, 1, 'exact compiled function witness required');
+        const fn: unknown = functions[0];
+        assert(object(fn) && Array.isArray(fn.ranges));
+        const range: unknown = fn.ranges[0];
+        assert(
+          object(range) &&
+            typeof range.count === 'number' &&
+            Number.isSafeInteger(range.count) &&
+            range.count >= 0
+        );
+        assert(typeof range.startOffset === 'number' && Number.isSafeInteger(range.startOffset));
+        assert(typeof range.endOffset === 'number' && Number.isSafeInteger(range.endOffset));
+        assert(
+          range.startOffset >= 0 &&
+            range.endOffset <= text.length &&
+            range.endOffset > range.startOffset
+        );
+        assert(
+          text
+            .slice(range.startOffset, range.endOffset)
+            .startsWith('function ' + functionName + '('),
+          'coverage offset does not name the compiled function'
+        );
+        calls[functionName] = (calls[functionName] ?? 0) + range.count;
+        witnesses.push({
+          file,
+          coverageSha256: fileSha(file),
+          url,
+          moduleSha256: fileSha(module),
+          functionName,
+          ...range,
+        });
+      }
+    }
+  }
+  return { calls, witnesses };
+}
 function problems(observation: Observation): string[] {
   const result: string[] = [];
   const { expected, warn, latch, command, status, stdout, stderr, journal } = observation;
@@ -550,6 +620,8 @@ async function run(): Promise<void> {
         tool_input: { command },
       }) + '\n'
     );
+    const coverageDirectory = path.join(directory, 'v8-coverage');
+    fs.mkdirSync(coverageDirectory, { recursive: true, mode: 0o700 });
     const result = await invoke(
       native,
       [
@@ -571,7 +643,12 @@ async function run(): Promise<void> {
       ],
       input,
       directory,
-      { ...environment, CODEX_THREAD_ID: sid, CAWS_SESSION_ID: sid }
+      {
+        ...environment,
+        CODEX_THREAD_ID: sid,
+        CAWS_SESSION_ID: sid,
+        NODE_V8_COVERAGE: coverageDirectory,
+      }
     );
     const added = fs.existsSync(journals)
       ? fs.readdirSync(journals).filter((file) => !previous.has(file))
@@ -607,6 +684,12 @@ async function run(): Promise<void> {
       problems: [],
     };
     observation.problems.push(...problems(observation));
+    const trace = coverage(coverageDirectory);
+    const classifierRequired = !Object.keys(stateBefore).some((file) =>
+      file.startsWith('danger-latch-')
+    );
+    json(path.join(directory, 'typed-execution.json'), { ...trace, classifierRequired });
+    observation.problems.push(...coverageProblems(trace.calls, classifierRequired));
     if (
       added.length !== 1 ||
       journal.some(
@@ -679,6 +762,20 @@ async function run(): Promise<void> {
       return { name: control.name, rejected };
     })
   );
+  assert(
+    coverageProblems({ tryExecuteStockHandler: 1, classifyCommand: 0 }, true).includes(
+      'typed-classifier-not-observed'
+    )
+  );
+  assert(
+    coverageProblems({ tryExecuteStockHandler: 0, classifyCommand: 1 }, true).includes(
+      'stock-executor-not-observed'
+    )
+  );
+  json(path.join(root, 'coverage-oracle-controls.json'), {
+    missingClassifier: coverageProblems({ tryExecuteStockHandler: 1, classifyCommand: 0 }, true),
+    missingExecutor: coverageProblems({ tryExecuteStockHandler: 0, classifyCommand: 1 }, true),
+  });
   assert.deepEqual(hashes(runtime), beforeRuntime);
   assert.deepEqual(hashes(path.join(cli, 'src')), beforeSource);
   assert.deepEqual(hashes(path.join(cli, 'dist')), beforeBuild);
