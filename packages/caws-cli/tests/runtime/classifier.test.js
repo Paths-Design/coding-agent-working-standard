@@ -61,6 +61,14 @@ describe('typed command classifier parsing and provenance', () => {
     [['env', '-S', 'git status'], { index: 1, nested: 'git status' }],
     [['env', '--split-string=git', 'status'], { index: 1, nested: 'git status' }],
     [['nohup', '/bin/bash', '-lc', 'git status'], { index: 1, nested: 'git status' }],
+    [
+      ['/usr/bin/env', '-u', 'FOO', 'nice', '-n', '10', '/bin/rm', '-rf', '/'],
+      { index: 6, nested: null },
+    ],
+    [['nice', '--adjustment=10', 'rm', '-rf', '/'], { index: 2, nested: null }],
+    [['nice', '-n10', 'rm', '-rf', '/'], { index: 2, nested: null }],
+    [['command', '-p', '--', '/bin/rm', '-rf', '/'], { index: 3, nested: null }],
+    [['env', '-C/other', 'rm', '-rf', '/'], { index: 2, nested: null }],
   ])('peels wrappers without discarding option operands %#', (tokens, expected) => {
     expect(normalizeCommandTokens(tokens)).toEqual(expected);
   });
@@ -204,6 +212,72 @@ describe('typed command classifier historical safety controls', () => {
       expect(classify(`echo '${executable} . -delete'`).decision).toBe('allow');
     }
   );
+  test.each([
+    '/usr/bin/env',
+    'env -u FOO',
+    'env --unset=FOO',
+    'env -uFOO',
+    'env -i',
+    'nice -n 10',
+    '/usr/bin/nice --adjustment=10',
+    'nice -n10',
+    'nice -10',
+    'time -o timings',
+    'command -p --',
+    'nohup --',
+    'env -u FOO nice -n 10',
+  ])('filesystem effects use the actual wrapped executable and operands: %s', (wrapper) => {
+    expect(classify(`${wrapper} rm -rf /`)).toEqual({
+      decision: 'deny',
+      reason: 'recursive delete targets filesystem root',
+      source: 'rm_classifier',
+      enforcement: 'block',
+    });
+    expect(classify(`${wrapper} rm -rf /project`).decision).toBe('deny');
+    expect(classify(`${wrapper} rm -rf /project/node_modules`).decision).toBe('allow');
+    expect(classify(`${wrapper} rm -rf /tmp/caws-wrapper-fixture`).decision).toBe('allow');
+    expect(classify(`${wrapper} find . -delete`)).toEqual({
+      decision: 'ask',
+      reason: 'find with mutating action flag (-delete/-exec/-execdir/-fprint/-ok)',
+      source: 'find_delete',
+      enforcement: 'advisory',
+    });
+    expect(classify(`${wrapper} find . -name x`).decision).toBe('allow');
+    expect(classify(`echo '${wrapper} rm -rf /'`).decision).toBe('allow');
+  });
+  test.each([
+    'env --help rm -rf /',
+    'nice --help rm -rf /',
+    'time --help rm -rf /',
+    'command -v rm -rf /',
+    'env -u rm echo -rf /',
+    'nice -n 10 echo "rm -rf /"',
+    'env -u -delete find . -name x',
+  ])(
+    'wrapper options and inert operands do not manufacture filesystem execution: %s',
+    (command) => {
+      expect(classify(command).decision).toBe('allow');
+    }
+  );
+  test.each(['env -C /outside', 'env --chdir=/outside', 'env -C/outside'])(
+    'unmodeled directory routing grants no relative scratch deletion exemption: %s',
+    (wrapper) => {
+      expect(classify(`${wrapper} rm -rf ./node_modules`)).toMatchObject({
+        decision: 'ask',
+        source: 'rm_classifier',
+        reason: 'recursive delete with unproven wrapper working directory',
+      });
+      expect(classify(`${wrapper} rm -rf /project/node_modules`).decision).toBe('allow');
+      expect(classify(`${wrapper} rm -rf /`).decision).toBe('deny');
+      expect(classify(`${wrapper} sh -c 'rm -rf ./node_modules'`).decision).toBe('ask');
+      expect(classify(`${wrapper} env -S 'rm -rf ./node_modules'`).decision).toBe('ask');
+    }
+  );
+  test('directory-changing statements invalidate later scratch proofs, including executing substitutions', () => {
+    expect(classify('sh -c "rm -rf ./node_modules"').decision).toBe('allow');
+    expect(classify('cd /outside && rm -rf ./node_modules').decision).toBe('ask');
+    expect(classify('cd /outside; echo $(rm -rf ./node_modules)').decision).toBe('ask');
+  });
 });
 
 describe('typed command capability facts and sidecar boundary', () => {
@@ -291,8 +365,18 @@ describe('typed classifier real Git and filesystem observations', () => {
   let environment;
   const git = (...args) =>
     execFileSync('git', args, { cwd: root, encoding: 'utf8', env: environment }).trim();
+  // Fixture author/committer settings create commits; they are not observations
+  // of a native invocation's Git routing environment.
+  const classificationEnvironment = () =>
+    Object.fromEntries(Object.entries(environment).filter(([name]) => !name.startsWith('GIT_')));
   const run = (command, extra = {}) =>
-    classifyCommand(command, { repoRoot: root, cwd: root, home, environment, ...extra });
+    classifyCommand(command, {
+      repoRoot: root,
+      cwd: root,
+      home,
+      environment: classificationEnvironment(),
+      ...extra,
+    });
   beforeEach(() => {
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-classifier-')));
     home = path.join(root, 'home');
@@ -333,6 +417,80 @@ describe('typed classifier real Git and filesystem observations', () => {
       'commit_deletions'
     );
   });
+  test('joined and repeated Git-C inspect the effective index rather than a clean original checkout', () => {
+    const other = path.join(root, 'other-index');
+    fs.mkdirSync(other);
+    git('-C', other, 'init', '-q');
+    fs.writeFileSync(path.join(other, 'foreign-tracked.txt'), 'foreign');
+    git('-C', other, 'add', '--', 'foreign-tracked.txt');
+    git('-C', other, 'commit', '-qm', 'foreign baseline');
+    git('-C', other, 'rm', '--', 'foreign-tracked.txt');
+    expect(run('git commit -m message').decision).toBe('allow');
+    for (const command of [
+      `git -C ${JSON.stringify(other)} commit -m message`,
+      `git -C${JSON.stringify(other)} commit -m message`,
+      `git -C ${JSON.stringify(root)} -Cother-index commit -m message`,
+      `/usr/bin/env -u FOO nice -n 10 git -C${JSON.stringify(other)} commit -m message`,
+    ]) {
+      const actual = run(command);
+      expect(actual).toMatchObject({
+        decision: 'ask',
+        source: 'commit_deletions',
+        enforcement: 'confirm',
+      });
+      expect(actual.reason).toContain('1 deletion(s) of tracked files (foreign-tracked.txt)');
+    }
+    expect(run(`git -C${JSON.stringify(other)} commit --dry-run`).decision).toBe('allow');
+    expect(
+      run(`git -C${JSON.stringify(other)} commit -m message -- foreign-tracked.txt`).decision
+    ).toBe('allow');
+    git('-C', other, 'restore', '--staged', '--', 'foreign-tracked.txt');
+    expect(run(`git -C${JSON.stringify(other)} commit -m message`).decision).toBe('allow');
+    expect(run(`git -C${JSON.stringify(other)} commit -am message`).source).toBe(
+      'commit_deletions'
+    );
+    fs.mkdirSync(path.join(other, 'child'));
+    fs.symlinkSync(path.join(other, 'child'), path.join(root, 'jump'));
+    expect(run('git -C jump/.. commit -am message').source).toBe('commit_deletions');
+  });
+  test('unprovable commit routing cannot borrow a clean index; explicit paths and dry-run remain controls', () => {
+    const { createClassifierPorts } = require('../../dist/runtime/classifier');
+    const original = createClassifierPorts(classificationEnvironment());
+    const observe = jest.fn(original.git);
+    const ports = { ...original, git: observe };
+    for (const command of [
+      'env -C /other git commit -m message',
+      'env --chdir=/other git commit -m message',
+      'env -C/other git commit -m message',
+      'cd /other && git commit -m message',
+      "env -C /other sh -c 'git commit -m message'",
+      "env -C /other env -S 'git commit -m message'",
+      'git --git-dir=/other commit -m message',
+      'git --work-tree=/other commit -m message',
+      'git -c core.worktree=/other commit -m message',
+      'git -ccore.worktree=/other commit -m message',
+      'git --config-env=core.worktree=OTHER commit -m message',
+      'git --unknown-routing=value commit -m message',
+      'GIT_INDEX_FILE=/other git commit -m message',
+      'export GIT_INDEX_FILE=/other; git commit -m message',
+    ]) {
+      const actual = run(command, { ports });
+      expect(actual).toMatchObject({
+        decision: 'ask',
+        source: 'commit_deletions',
+        enforcement: 'confirm',
+      });
+      expect(actual.reason).toContain('effective git checkout/index cannot be proven');
+    }
+    expect(observe).not.toHaveBeenCalled();
+    expect(run('env -C /other git commit --dry-run', { ports }).decision).toBe('allow');
+    expect(run('env -C /other git commit -m message -- tracked.txt', { ports }).decision).toBe(
+      'allow'
+    );
+    expect(observe).not.toHaveBeenCalled();
+    expect(run('git commit -m message', { ports }).decision).toBe('allow');
+    expect(observe).toHaveBeenCalledWith(expect.arrayContaining(['diff', '--cached']), root);
+  });
   test('unreadable merge metadata grants no deletion exemption', () => {
     git('rm', '--', 'tracked.txt');
     const { createClassifierPorts } = require('../../dist/runtime/classifier');
@@ -356,11 +514,117 @@ describe('typed classifier real Git and filesystem observations', () => {
     git('commit', '-qm', 'spec change');
     const spec = git('rev-parse', 'HEAD');
     expect(run(`git cherry-pick ${spec}`).decision).toBe('allow');
+    expect(run('git cherry-pick HEAD').decision).toBe('allow');
+    expect(run('git -C . --no-pager cherry-pick HEAD').decision).toBe('allow');
+    expect(run('git -C. cherry-pick HEAD').decision).toBe('allow');
+    expect(run('/usr/bin/env -u FOO nice -n 10 git cherry-pick HEAD').decision).toBe('allow');
+    expect(run("sh -c 'git cherry-pick HEAD'").decision).toBe('allow');
+    for (const command of [
+      'git -c color.ui=false cherry-pick HEAD',
+      'git -ccore.worktree=/other cherry-pick HEAD',
+      'git --git-dir=.git cherry-pick HEAD',
+      'git --work-tree=. cherry-pick HEAD',
+      'git --namespace=other cherry-pick HEAD',
+      'git --bare cherry-pick HEAD',
+      'git --no-replace-objects cherry-pick HEAD',
+      'git --config-env=core.worktree=OTHER cherry-pick HEAD',
+      'git --unknown-routing=value cherry-pick HEAD',
+      'GIT_DIR=.git git cherry-pick HEAD',
+      'GIT_DIR=/other; git cherry-pick HEAD',
+      'export GIT_DIR=/other; git cherry-pick HEAD',
+      'unset GIT_DIR; git cherry-pick HEAD',
+      'env -u GIT_DIR git cherry-pick HEAD',
+      'env -i git cherry-pick HEAD',
+      'env -C /other git cherry-pick HEAD',
+      "env -C /other sh -c 'git cherry-pick HEAD'",
+      "env -C /other env -S 'git cherry-pick HEAD'",
+      'cd /other && git cherry-pick HEAD',
+      'cd /other; echo $(git cherry-pick HEAD)',
+    ])
+      expect(run(command).decision).toBe('ask');
     fs.writeFileSync(path.join(root, 'source.txt'), 'source');
     git('add', '--', 'source.txt');
     git('commit', '-qm', 'source change');
     expect(run(`git cherry-pick ${git('rev-parse', 'HEAD')}`).decision).toBe('ask');
     expect(run('git cherry-pick missing-revision').decision).toBe('ask');
+  });
+  test('nonempty inherited Git variables cannot grant an exemption through an unmodeled observation environment', () => {
+    fs.mkdirSync(path.join(root, '.caws/specs'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.caws/specs/A.yaml'), 'id: A\n');
+    git('add', '--', '.caws/specs/A.yaml');
+    git('commit', '-qm', 'spec-only HEAD');
+    const { createClassifierPorts } = require('../../dist/runtime/classifier');
+    const original = createClassifierPorts(classificationEnvironment());
+    const observe = jest.fn(original.git);
+    const ports = { ...original, git: observe };
+    for (const name of [
+      'GIT_DIR',
+      'GIT_CONFIG_GLOBAL',
+      'GIT_REPLACE_REF_BASE',
+      'GIT_FUTURE_ROUTING',
+      'GIT_AUTHOR_NAME',
+    ]) {
+      const environment = { ...classificationEnvironment(), [name]: 'unmodeled-value' };
+      expect(run('git cherry-pick HEAD', { environment, ports }).decision).toBe('ask');
+      expect(run('git commit -m message', { environment, ports })).toMatchObject({
+        decision: 'ask',
+        source: 'commit_deletions',
+        enforcement: 'confirm',
+      });
+    }
+    expect(observe).not.toHaveBeenCalled();
+    expect(run('git cherry-pick HEAD', { ports }).decision).toBe('allow');
+    expect(
+      run('git cherry-pick HEAD', {
+        environment: { ...classificationEnvironment(), GIT_FUTURE_ROUTING: '' },
+        ports,
+      }).decision
+    ).toBe('allow');
+  });
+  test('foreign Git routing cannot borrow a spec-only canonical HEAD or another repository exemption', () => {
+    fs.mkdirSync(path.join(root, '.caws/specs'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.caws/specs/A.yaml'), 'id: A\n');
+    git('add', '--', '.caws/specs/A.yaml');
+    git('commit', '-qm', 'canonical specs-only HEAD');
+    const other = path.join(root, 'foreign');
+    fs.mkdirSync(other);
+    git('-C', other, 'init', '-q');
+    fs.writeFileSync(path.join(other, 'foreign-source.txt'), 'source');
+    git('-C', other, 'add', '--', 'foreign-source.txt');
+    git('-C', other, 'commit', '-qm', 'foreign source HEAD');
+    expect(run(`git -C ${JSON.stringify(other)} cherry-pick HEAD`).decision).toBe('ask');
+    expect(run('git cherry-pick HEAD', { cwd: other }).decision).toBe('ask');
+    fs.mkdirSync(path.join(other, '.caws/specs'), { recursive: true });
+    fs.writeFileSync(path.join(other, '.caws/specs/B.yaml'), 'id: B\n');
+    git('-C', other, 'add', '--', '.caws/specs/B.yaml');
+    git('-C', other, 'commit', '-qm', 'foreign specs-only HEAD');
+    expect(run(`git -C ${JSON.stringify(other)} cherry-pick HEAD`).decision).toBe('ask');
+    expect(run('git cherry-pick HEAD').decision).toBe('allow');
+  });
+  test('linked checkout proof uses its own HEAD while preserving canonical shared custody', () => {
+    const linked = path.join(root, 'linked-checkout');
+    git('worktree', 'add', '-q', '-b', 'linked-fixture', linked);
+    fs.mkdirSync(path.join(linked, '.caws/specs'), { recursive: true });
+    fs.writeFileSync(path.join(linked, '.caws/specs/A.yaml'), 'id: A\n');
+    git('-C', linked, 'add', '--', '.caws/specs/A.yaml');
+    git('-C', linked, 'commit', '-qm', 'linked specs-only HEAD');
+    // Canonical HEAD remains a source commit; the linked HEAD alone earns the exemption.
+    expect(run('git cherry-pick HEAD').decision).toBe('ask');
+    expect(run('git cherry-pick HEAD', { cwd: linked }).decision).toBe('allow');
+    expect(run(`git -C ${JSON.stringify(linked)} cherry-pick HEAD`).decision).toBe('allow');
+    expect(run(`git -C ${JSON.stringify(root)} -C linked-checkout cherry-pick HEAD`).decision).toBe(
+      'allow'
+    );
+    fs.writeFileSync(path.join(linked, 'linked-source.txt'), 'source');
+    git('-C', linked, 'add', '--', 'linked-source.txt');
+    git('-C', linked, 'commit', '-qm', 'linked source HEAD');
+    fs.mkdirSync(path.join(root, '.caws/specs'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.caws/specs/C.yaml'), 'id: C\n');
+    git('add', '--', '.caws/specs/C.yaml');
+    git('commit', '-qm', 'canonical specs-only HEAD');
+    expect(run('git cherry-pick HEAD').decision).toBe('allow');
+    expect(run('git cherry-pick HEAD', { cwd: linked }).decision).toBe('ask');
+    expect(run(`git -C ${JSON.stringify(linked)} cherry-pick HEAD`).decision).toBe('ask');
   });
   test('trusted initialization grant is consumed once rather than attached to worktree location', () => {
     const nonce = 'test-nonce-123';

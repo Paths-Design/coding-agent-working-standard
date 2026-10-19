@@ -1,7 +1,12 @@
 import { join, resolve, isAbsolute } from 'node:path';
 import * as data from './data';
 import { shellTokens } from './lexer';
-import { detectGitSubcommand, hasGitInitAliasConfig, locateGitSubcommand } from './wrappers';
+import {
+  detectGitSubcommand,
+  hasGitInitAliasConfig,
+  locateGitSubcommand,
+  hasUnprovenGitWrapperContext,
+} from './wrappers';
 import type { ClassifierContext, ClassifierPorts, Finding } from './types';
 
 function trustedToken(context: ClassifierContext): string | null {
@@ -21,6 +26,48 @@ export function hasTrustedGitInitContext(
   const token = trustedToken(context);
   return token !== null && ports.isFile(token);
 }
+
+/** Resolve only routing the observation port can faithfully reproduce. */
+function effectiveGitCwd(
+  tokens: readonly string[],
+  location: { start: number; subIndex: number },
+  context: ClassifierContext,
+  ports: ClassifierPorts,
+  proofContextKnown = true
+): string | null {
+  if (!proofContextKnown || !context.cwd || hasUnprovenGitWrapperContext(tokens, location.start))
+    return null;
+  // No list of currently known routing names can prove a future GIT_* variable inert.
+  if (
+    Object.entries(context.environment ?? {}).some(
+      ([name, value]) => name.startsWith('GIT_') && Boolean(value)
+    )
+  )
+    return null;
+  let cwd = context.cwd;
+  for (let index = location.start + 1; index < location.subIndex; index++) {
+    const token = tokens[index] ?? '';
+    if (token === '-C' || (token.startsWith('-C') && token.length > 2)) {
+      const directory = token === '-C' ? tokens[++index] : token.slice(2);
+      if (directory === undefined || /[$`*?~]/.test(directory)) return null;
+      if (directory) {
+        try {
+          // Keep path components intact until physical resolution: link/.. may
+          // leave the lexical parent when link names a directory elsewhere.
+          cwd = ports.realpath(isAbsolute(directory) ? directory : `${cwd}/${directory}`);
+        } catch {
+          return null;
+        }
+      }
+    } else if (
+      ['--bare', '--no-replace-objects'].includes(token) ||
+      (token !== '--' && !(data.GIT_GLOBAL_OPTIONS_NO_VALUE as readonly string[]).includes(token))
+    )
+      return null;
+  }
+  return cwd;
+}
+
 export function cherryPickTouchesOnlySpecs(
   segment: string,
   context: ClassifierContext,
@@ -28,13 +75,42 @@ export function cherryPickTouchesOnlySpecs(
 ): boolean {
   const tokens = shellTokens(segment);
   if (!tokens) return false;
-  const index = tokens.indexOf('cherry-pick');
-  if (index < 0) return false;
-  const commits = tokens.slice(index + 1);
+  const location = locateGitSubcommand(tokens);
+  if (!location || tokens[location.subIndex] !== 'cherry-pick') return false;
+  const commits = tokens.slice(location.subIndex + 1);
   if (!commits.length || commits.some((token) => token.startsWith('-') || token.includes('..')))
     return false;
+  const cwd = effectiveGitCwd(tokens, location, context, ports);
+  if (cwd === null) return false;
+  const query = (args: readonly string[], directory: string) => {
+    try {
+      return ports.git(args, directory);
+    } catch {
+      return { status: -1, stdout: '' };
+    }
+  };
+  // Linked checkouts share authority, but each has its own HEAD. Compare common
+  // directories for custody, then inspect revisions in the effective checkout.
+  const common = query(['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd);
+  const canonicalCommon =
+    cwd === context.repoRoot
+      ? common
+      : query(['rev-parse', '--path-format=absolute', '--git-common-dir'], context.repoRoot);
+  if (
+    common.status !== 0 ||
+    canonicalCommon.status !== 0 ||
+    !common.stdout.trim() ||
+    !canonicalCommon.stdout.trim()
+  )
+    return false;
+  try {
+    if (ports.realpath(common.stdout.trim()) !== ports.realpath(canonicalCommon.stdout.trim()))
+      return false;
+  } catch {
+    return false;
+  }
   return commits.every((commit) => {
-    const result = ports.git(['show', '--name-only', '--format=', commit], context.repoRoot);
+    const result = query(['show', '--name-only', '--format=', commit], cwd);
     const files = result.stdout
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -50,7 +126,8 @@ export function classifyGitSemantics(
   segment: string,
   context: ClassifierContext,
   ports: ClassifierPorts,
-  trusted: boolean
+  trusted: boolean,
+  proofContextKnown = true
 ): Finding | null {
   const alias = hasGitInitAliasConfig(segment);
   const subcommand = alias ? null : detectGitSubcommand(segment);
@@ -66,7 +143,7 @@ export function classifyGitSemantics(
   }
   if (subcommand === 'rebase') return ['ask', 'git rebase rewrites branch history'];
   if (subcommand === 'cherry-pick')
-    return cherryPickTouchesOnlySpecs(segment, context, ports)
+    return proofContextKnown && cherryPickTouchesOnlySpecs(segment, context, ports)
       ? ['allow', '']
       : ['ask', 'git cherry-pick replays commits across branches'];
   return null;
@@ -130,7 +207,8 @@ const MERGE_REMEDIATION =
 export function classifyCommitDeletions(
   segment: string,
   context: ClassifierContext,
-  ports: ClassifierPorts
+  ports: ClassifierPorts,
+  proofContextKnown = true
 ): Finding | null {
   const tokens = shellTokens(segment);
   if (!tokens) return null;
@@ -151,27 +229,8 @@ export function classifyCommitDeletions(
     `bare git commit (no pathspec) commits the ENTIRE index, and the staged state could not be verified (${detail}) — not auto-admitting; ${REMEDIATION}`,
   ];
   if (!context.cwd) return fail('no working directory available');
-  if (
-    tokens
-      .slice(0, location.start)
-      .some((token) =>
-        data._GIT_ENV_REDIRECT_PREFIXES.some((prefix) => token.startsWith(prefix))
-      ) ||
-    tokens
-      .slice(location.start + 1, location.subIndex)
-      .some(
-        (token) =>
-          ['--git-dir', '--work-tree'].includes(token) ||
-          token.startsWith('--git-dir=') ||
-          token.startsWith('--work-tree=')
-      )
-  )
-    return fail('the invocation redirects the git dir/work-tree/index');
-  let cwd = context.cwd;
-  for (let index = location.start + 1; index < location.subIndex; index++) {
-    if (tokens[index] === '-C' && index + 1 < location.subIndex)
-      cwd = resolve(cwd, tokens[++index] ?? '');
-  }
+  const cwd = effectiveGitCwd(tokens, location, context, ports, proofContextKnown);
+  if (cwd === null) return fail('the effective git checkout/index cannot be proven');
   const all = commitStagesAll(args);
   const result = ports.git(
     [

@@ -46,7 +46,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R02 | `runtime/caws-hook.py`: configuration, selection, overrides | TS invocation engine and existing authority adapters | selection and project-context components tested; not integrated | Shared authority validators, FS freshness/tamper/override and real Git-worktree fixtures; enforcement host remains open |
 | R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | ordered composition component tested; host/journal unintegrated | Ordered execution, refusal precedence, failed-journal preservation and actual output membership checked; execution/handoff persistence remain open |
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | component tested; not integrated | Explicit context and injected Stop budget; consumer migration and transport-Stop recovery remain open |
-| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component tested; not integrated | Ordered escalation, real Git/FS effects, hostile fixtures, strict sidecar reads and inherited executable-spelling repair checked; full corpus/native-consumer proof remains open |
+| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component tested; not integrated | Wrapped deletion, effective-checkout Git proofs, wrong-index and linked-HEAD controls checked with real Git/FS fixtures; full corpus/native-consumer proof remains open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
 | R07 | `shared/lib/hook-utilities.py`: ripgrep/staging/lockfile utilities | Typed TS guard utilities + bounded Git port | unreplaced | Unknown/dynamic cwd, forced ignored staging, option values, pathspec safety and lockfile fixtures |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
@@ -174,6 +174,14 @@ Additional component evidence:
   byte values exactly, rejected malformed/pad-bit/legacy text replies, and
   retained cancellation/backpressure bounds. This is native fixture transport,
   not an actual typed enforcement engine, native harness or installed runtime.
+- E23: Following wrapper and effective-Git-context repairs, targeted ESLint and
+  the strict CLI build passed. Eleven combined runtime/shared-owner suites passed
+  556 checks. Real Git fixtures invert canonical versus linked-checkout HEADs and
+  stage a deletion in a foreign index; joined/repeated `-C` observes the actual
+  checkout, while unmodeled directory/config/environment routing grants no
+  exemption. Wrapped recursive deletion, inert command arguments, read-only find
+  and allowed scratch-child controls distinguish the intended behavior. These
+  are classifier decisions; no destructive classified operation was executed.
 
 ## Embedded and developer implementation coverage
 

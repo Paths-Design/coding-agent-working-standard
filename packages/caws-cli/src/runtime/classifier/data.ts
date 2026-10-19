@@ -82,6 +82,7 @@ export const CONFIRM_SEGMENT_PATTERNS = [
 ] as const;
 export const GIT_GLOBAL_OPTIONS_WITH_VALUE = [
   '--exec-path',
+  '--config-env',
   '--git-dir',
   '--namespace',
   '--work-tree',

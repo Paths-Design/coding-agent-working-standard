@@ -1,25 +1,16 @@
 import { basename, relative } from 'node:path';
 import * as data from './data';
 import { shellTokens } from './lexer';
-import { extractCommandWord } from './wrappers';
+import { normalizeCommandTokens } from './wrappers';
 import type { ClassifierContext, ClassifierPorts, Finding } from './types';
 
 export function recursiveRmTargets(segment: string): { recursive: boolean; targets: string[] } {
   const tokens = shellTokens(segment);
   if (!tokens)
     return { recursive: /\brm\b/.test(segment) && /-[a-zA-Z]*r/.test(segment), targets: [] };
-  let start = -1;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index] ?? '';
-    if (
-      ['env', 'time', 'nice', 'nohup', 'command', 'builtin'].includes(token) ||
-      (token.includes('=') && !token.startsWith('-'))
-    )
-      continue;
-    if (basename(token) === 'rm') start = index;
-    break;
-  }
-  if (start < 0) return { recursive: false, targets: [] };
+  const { index: start, nested } = normalizeCommandTokens(tokens);
+  if (nested !== null || basename(tokens[start] ?? '') !== 'rm')
+    return { recursive: false, targets: [] };
   const targets: string[] = [];
   let recursive = false;
   const standalone = ['2>&1', '>&2', '1>&2', '&>', '&>>'];
@@ -105,12 +96,16 @@ export function classifyRmTarget(
 
 export function classifyFindDelete(segment: string): Finding | null {
   const tokens = shellTokens(segment);
-  if (!tokens || basename(extractCommandWord(segment)) !== 'find') return null;
-  return tokens.some((token) =>
-    ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprint', '-fprint0', '-fprintf'].includes(
-      token
+  if (!tokens) return null;
+  const { index, nested } = normalizeCommandTokens(tokens);
+  if (nested !== null || basename(tokens[index] ?? '') !== 'find') return null;
+  return tokens
+    .slice(index + 1)
+    .some((token) =>
+      ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprint', '-fprint0', '-fprintf'].includes(
+        token
+      )
     )
-  )
     ? ['ask', 'find with mutating action flag (-delete/-exec/-execdir/-fprint/-ok)']
     : null;
 }

@@ -110,7 +110,15 @@ agent heartbeat exists. A draining generation does not admit new work.
 
 Runtime generation and protocol identity are pinned per request. Upgrades drain
 old generations without mixing their loaded modules with new bytes. Idle exit
-and crash preserve the recoverable journal/spool, not a live process.
+and crash preserve the recoverable journal/spool, not a live process. Admission
+has one owner per machine runtime home, independent of generation. Compatible
+worker generations share that owner's capacity and fairness limits; starting a
+generation cannot create another allowance. Replacing an incompatible host
+requires an exclusive handover after its admitted executors have settled.
+Requests waiting for that handover remain deadline-bounded and distinguish a
+known not-admitted outcome from an uncertain execution. Generation overlap and
+host replacement must be tested against observed worker counts, not each host's
+own counters. This is a resident-host requirement, not implemented behavior.
 Per-request cancellation prevents request-owned children from mutating state
 after completion. Disconnected or crashed requests have an explicit uncertain
 terminal outcome; reconnection does not manufacture exactly-once execution.

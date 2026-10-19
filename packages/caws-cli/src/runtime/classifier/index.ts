@@ -16,7 +16,12 @@ import {
 } from './lexer';
 import { matchesPattern, ownerIdentityPattern, isPipeIntoLocalScript } from './patterns';
 import { createClassifierPorts } from './ports';
-import { normalizeCommandTokens } from './wrappers';
+import {
+  normalizeCommandTokens,
+  wrapperChangesDirectory,
+  hasUnprovenGitWrapperContext,
+} from './wrappers';
+import { isAbsolute, basename } from 'node:path';
 import type {
   Classification,
   ClassifierContext,
@@ -67,7 +72,8 @@ function classify(
   ports: ClassifierPorts,
   adapters: AdapterState,
   trusted: boolean,
-  depth: number
+  depth: number,
+  executionProof = { directoryKnown: true, gitKnown: true }
 ): Classification {
   if (depth > data.MAX_RECURSION_DEPTH)
     return {
@@ -117,20 +123,55 @@ function classify(
     )
       escalate('deny', reason, 'regex');
   }
-  for (const body of extractCommandSubstitutions(raw))
-    if (body.trim())
-      propagate(
-        classify(body, context, ports, adapters, trusted, depth + 1),
-        'command substitution: '
-      );
+  let statementProof = executionProof;
   for (const segment of segmentCommand(raw)) {
     const tokens = shellTokens(segment);
     const normalized = tokens === null ? null : normalizeCommandTokens(tokens);
+    const segmentProof = {
+      directoryKnown:
+        statementProof.directoryKnown &&
+        (tokens === null ||
+          normalized === null ||
+          !wrapperChangesDirectory(tokens, normalized.index)),
+      gitKnown:
+        statementProof.gitKnown &&
+        (tokens === null ||
+          normalized === null ||
+          !hasUnprovenGitWrapperContext(tokens, normalized.index)),
+    };
+    for (const body of extractCommandSubstitutions(segment))
+      if (body.trim())
+        propagate(
+          classify(body, context, ports, adapters, trusted, depth + 1, statementProof),
+          'command substitution: '
+        );
+    if (
+      tokens &&
+      normalized?.nested === null &&
+      ['cd', 'pushd', 'popd'].includes(basename(tokens[normalized.index] ?? ''))
+    ) {
+      // Do not execute or guess shell routing. Later statements cannot borrow
+      // the original checkout's HEAD or scratch-directory exemptions.
+      statementProof = { directoryKnown: false, gitKnown: false };
+    }
+    if (
+      tokens &&
+      normalized?.nested === null &&
+      ((normalized.index === tokens.length &&
+        tokens.some((token) => /^GIT_[A-Za-z0-9_]*=/.test(token))) ||
+        (['export', 'unset'].includes(basename(tokens[normalized.index] ?? '')) &&
+          tokens
+            .slice(normalized.index + 1)
+            .some((token) => /^GIT_[A-Za-z0-9_]*(?:=|$)/.test(token))))
+    )
+      statementProof = { ...statementProof, gitKnown: false };
     if (normalized?.nested !== null && normalized?.nested !== undefined) {
-      propagate(classify(normalized.nested, context, ports, adapters, trusted, depth + 2));
+      propagate(
+        classify(normalized.nested, context, ports, adapters, trusted, depth + 2, segmentProof)
+      );
       continue;
     }
-    const git = classifyGitSemantics(segment, context, ports, trusted);
+    const git = classifyGitSemantics(segment, context, ports, trusted, segmentProof.gitKnown);
     const gitAllowed = git?.[0] === 'allow';
     if (git) escalate(git[0], git[1], 'legacy_family');
     const executable = stripQuotedRegions(segment);
@@ -153,12 +194,18 @@ function classify(
         escalate('ask', 'recursive delete with unparseable targets', 'rm_classifier');
       for (const target of rm.targets) {
         const finding = classifyRmTarget(target, context, ports);
-        escalate(finding[0], finding[1], 'rm_classifier');
+        if (!segmentProof.directoryKnown && !isAbsolute(target) && finding[0] === 'allow') {
+          escalate(
+            'ask',
+            'recursive delete with unproven wrapper working directory',
+            'rm_classifier'
+          );
+        } else escalate(finding[0], finding[1], 'rm_classifier');
       }
     }
     const find = classifyFindDelete(segment);
     if (find) escalate(find[0], find[1], 'find_delete');
-    const deletions = classifyCommitDeletions(segment, context, ports);
+    const deletions = classifyCommitDeletions(segment, context, ports, segmentProof.gitKnown);
     if (deletions) escalate(deletions[0], deletions[1], 'commit_deletions', 'confirm');
     if (!isAllowListed(segment) && !gitAllowed) {
       const fact = buildCommandFact(segment, adapters);
@@ -182,7 +229,15 @@ function classify(
           );
         else if (fact.opacity === 'literal' && fact.payload) {
           // Opaque-exec recursion's source belongs to the outer capability finding.
-          const inner = classify(fact.payload, context, ports, adapters, false, depth + 2);
+          const inner = classify(
+            fact.payload,
+            context,
+            ports,
+            adapters,
+            false,
+            depth + 2,
+            segmentProof
+          );
           if (inner.decision !== 'allow')
             escalate(
               inner.decision,

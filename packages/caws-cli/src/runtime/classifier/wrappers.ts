@@ -25,7 +25,7 @@ export function normalizeCommandTokens(tokens: readonly string[]): {
         }
         if (
           isAssignmentToken(option) ||
-          ['-i', '-0', '--ignore-environment', '--null'].includes(option)
+          ['-', '-i', '-0', '--ignore-environment', '--null'].includes(option)
         ) {
           index++;
           continue;
@@ -42,18 +42,39 @@ export function normalizeCommandTokens(tokens: readonly string[]): {
           index++;
           continue;
         }
+        if (/^-[uC].+/.test(option)) {
+          index++;
+          continue;
+        }
         break;
       }
       continue;
     }
     if (base === 'time') {
       index++;
-      while ((tokens[index] ?? '').startsWith('-'))
-        index += ['-f', '-o'].includes(tokens[index] ?? '') ? 2 : 1;
+      while ((tokens[index] ?? '').startsWith('-')) {
+        const option = tokens[index] ?? '';
+        if (['--help', '--version'].includes(option)) return { index, nested: null };
+        if (option === '--') {
+          index++;
+          break;
+        }
+        index += ['-f', '-o', '--format', '--output'].includes(option) ? 2 : 1;
+      }
+      continue;
+    }
+    if (base === 'nice') {
+      index++;
+      const option = tokens[index] ?? '';
+      if (['-n', '--adjustment'].includes(option)) index += 2;
+      else if (/^(?:-[0-9]+|-n[+-]?[0-9]+|--adjustment=[+-]?[0-9]+)$/.test(option)) index++;
+      if (tokens[index] === '--') index++;
       continue;
     }
     if ((data.COMMAND_WRAPPERS as readonly string[]).includes(base)) {
       index++;
+      if (base === 'command' && tokens[index] === '-p') index++;
+      if (tokens[index] === '--') index++;
       continue;
     }
     if ((data.SHELL_C_WRAPPERS as readonly string[]).includes(base)) {
@@ -86,6 +107,10 @@ export function locateGitSubcommand(
       index += 2;
       continue;
     }
+    if ((token.startsWith('-C') || token.startsWith('-c')) && token.length > 2) {
+      index++;
+      continue;
+    }
     if (
       data.GIT_GLOBAL_OPTIONS_WITH_VALUE.some(
         (option) => option.startsWith('--') && token.startsWith(`${option}=`)
@@ -110,6 +135,34 @@ export function locateGitSubcommand(
   return index < tokens.length && !(tokens[index] ?? '').startsWith('-')
     ? { start, subIndex: index }
     : null;
+}
+
+/** Directory-changing wrappers are recognized but not executed by classification. */
+export function wrapperChangesDirectory(tokens: readonly string[], commandIndex: number): boolean {
+  return tokens
+    .slice(0, commandIndex)
+    .some(
+      (token) =>
+        token === '-C' || token === '--chdir' || token.startsWith('--chdir=') || /^-C.+/.test(token)
+    );
+}
+
+/** A proof query must not silently ignore environment/configuration supplied by a wrapper. */
+export function hasUnprovenGitWrapperContext(
+  tokens: readonly string[],
+  commandIndex: number
+): boolean {
+  return (
+    wrapperChangesDirectory(tokens, commandIndex) ||
+    tokens
+      .slice(0, commandIndex)
+      .some(
+        (token) =>
+          /^GIT_[A-Za-z0-9_]*(?:=|$)/.test(token) ||
+          /^--unset=GIT_/.test(token) ||
+          ['-i', '--ignore-environment', '-'].includes(token)
+      )
+  );
 }
 
 export function detectGitSubcommand(segment: string): string | null {
