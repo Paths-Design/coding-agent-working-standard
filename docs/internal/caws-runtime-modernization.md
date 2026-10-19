@@ -82,6 +82,9 @@ E72 exercises a descriptor-bound renderer client through an actual sourced
 shell and compiled Node with a fixture owner. The client cannot activate itself:
 native grant issuance, source/image admission and the real service owner remain
 the next R33 integration boundary.
+E73 retains one own-ancestor comparison under the native capture budget. It
+qualifies that sampled context; it does not establish protected-target access,
+logical-session ownership or a latency distribution.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -1165,6 +1168,29 @@ Additional bounded evidence and unresolved dependencies:
   establish R33, installed selection or thirteen-session operation. No services
   policy knob is activated by these source files.
 
+- E73: `examples/process-comm-ancestor-compare.rs` reads only its own parent
+  chain with the production lookup/edge-recheck ordering and 16-depth/
+  31-observation limits. It has no arbitrary PID selector and never signals
+  ancestors. A separate phase compares the captured set against `/bin/ps`,
+  retaining four fresh parent/microsecond-birth snapshots, raw comm bytes,
+  typed results and monotonic phase/stage timing. Private artifact IO follows
+  both timed phases. The mirror does not invoke private NativeObserver or its
+  complete signal/output cancellation behavior.
+  `target/qualification/service-primitives-2026-10-19/ancestor-clippy.log`
+  retains an initial unused-unit error; after removal,
+  `ancestor-repaired-clippy.log`, `ancestor-tests.log` (three qualifier unit
+  cases), `ancestor-build.log` and `ancestor-compare.log` all exit 0.
+  `target/qualification/native-comm-ancestors-2026-10-19T18-27-41.189Z/receipt.json`
+  records native capture 19,592µs under 250,000µs and a separate legacy
+  comparison phase of 14,297µs under its qualification-only 3,000,000µs budget.
+  All three observations (two distinct ancestor PIDs plus one recheck) reach
+  PID1's boundary with matching bytes and stable identity snapshots. Each owned
+  comparison helper is reaped with code 0/no signal and no forced cleanup.
+  These differently scoped phase times are one sample, not evidence of speedup
+  or a cold/warm distribution. They do not establish complete production
+  cancellation, protected/different-credential targets, physical kernel
+  deadlines, containment effects or exclusive logical-session process ownership.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -1264,7 +1290,16 @@ attributing its timeout or claiming concurrent performance. E69 adds a separate
 reproduced ancestor-capture deadline failure; inspect its typed stage and
 per-observation/substage timing before changing capture policy or budgets.
 
-1. Resolve R33 through explicit service binding and client integration. Define
+1. Resolve R33 through explicit service binding and client integration. E70's
+   journal and E72's descriptor client are available source components; the next
+   implementation must connect actual selected-source admission to a native-owned
+   service and the immutable effective closure. Issue per-offer grants and
+   descriptor rights only after validating the original selection, keep original
+   authority paths separate from image routing, and revalidate queued grants
+   before dispatch. Qualify exclusive writer custody against legacy clients,
+   complete input snapshot/retention semantics and owned fallback for LF/US data.
+   The E57 cold-start/reuse regression remains the decisive consumer scenario.
+   Define
    the actual selected client's broker seam and request/fallback outcome
    contract before implementing a startup-only relay or host. A lost response
    after dispatch stays unknown; only known nonexecution permits immediate
