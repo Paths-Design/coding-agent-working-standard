@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-SUBSTITUTION-PRECEDENCE-001
 title: 'Preserve command-substitution enforcement precedence'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-substitution-precedence
 created_at: '2026-10-19T11:28:58.875Z'
-updated_at: '2026-10-19T11:28:58.875Z'
+updated_at: '2026-10-19T11:29:38.982Z'
 created_by_session: '01a153d4-2936-7bd0-9460-6a001aa5e0bf'
 blast_radius:
   modules:
