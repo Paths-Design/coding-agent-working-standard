@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-FOUNDATION-001
 title: 'Land the opt-in Rust and typed one-shot foundation with shared safety repairs'
 mode: feature
-lifecycle_state: active
-worktree: native-one-shot-foundation
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded source foundation accepted at aafa1920 with fresh integrated build, typing, shared consumers, runtime Jest, serial Rust checks and current-guard substitution replay; retained E66/E67 actual signal/identity/refusal artifacts. A1-A3 records and events read back. Original CAWS-NATIVE-RUNTIME-001, lane and artifacts retain all eight full migration obligations. No machine install, resident concurrency, R32/R33 closure or full parity is asserted.'
 created_at: '2026-10-19T13:21:12.167Z'
-updated_at: '2026-10-19T13:21:15.479Z'
+updated_at: '2026-10-19T13:48:11.718Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
