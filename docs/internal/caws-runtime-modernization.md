@@ -46,10 +46,10 @@ bounded assignments transfer execution only, not acceptance ownership.
 | ID | Feature / authoritative source | Destination | State | Dependency / acceptance evidence |
 | --- | --- | --- | --- | --- |
 | R01 | `runtime/bootstrap.py`: immutable generation bootstrap | Rust client + TS generation resolver | unreplaced | Identity tamper, upgrade, absent runtime, native error tests; package targets unproven |
-| R02 | `runtime/caws-hook.py`: configuration, selection, overrides | TS invocation engine and existing authority adapters | selection and project-context components tested; not integrated | Shared authority validators, FS freshness/tamper/override and real Git-worktree fixtures; enforcement host remains open |
-| R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | ordered composition component tested; host/journal unintegrated | Ordered execution, refusal precedence, failed-journal preservation and actual output membership checked; execution/handoff persistence remain open |
-| R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | component tested; not integrated | Explicit context and injected Stop budget; consumer migration and transport-Stop recovery remain open |
-| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component tested; not integrated | Wrapped deletion, effective-checkout Git proofs, wrong-index and linked-HEAD controls checked with real Git/FS fixtures; full corpus/native-consumer proof remains open |
+| R02 | `runtime/caws-hook.py`: configuration, selection, overrides | TS invocation engine and existing authority adapters | isolated one-shot selection exercised; complete enforcement open | Shared validators and freshness/override fixtures plus E33 selected stock path; full authority and override execution require qualification |
+| R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | one-shot journal/composer/local ACK integrated; resident open | E33 retains actual input/handler/index/native-output artifacts; crash persistence, production message settlement and resident admission remain open |
+| R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | selected production refusal and native Stop fixture exercised | E33 nonlatching refusal; E34 real native budget with fixture context. Complete event/harness/Stop producer behavior remains unqualified |
+| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component and bounded native consumer exercised | E33 bare staged-deletion refusal and explicit-path/unstaged-deletion controls; full classifier corpus, stateful consumer and harness parity remain open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component tested; consumer unreplaced | Actual shell consumer is `shared/hook-utilities.sh`; real Git index and heredoc/routing controls exercised; lockfile restore belongs to the classifier, not this utility |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
@@ -68,14 +68,16 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R21 | Python-owned regression tests | TS/native behavioral tests | unreplaced | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes |
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport and cancellation component tested | Signal/parent/output cancellation and bounded cleanup/delivery checked; actual typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
-| R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | implementing protocol and selection; engine not integrated | Request schema retains exact native input alongside parsed payload; no stock enforcement host exists yet |
+| R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
 | R25 | Demand-start, warm residency and idle exit | Rust startup + TS resident host | unreplaced | Machine-wide bounded capacity, fair project/session admission, owner-specific serialization, single starter, no heartbeat authority, no active-request eviction, drain/version tests |
 | R26 | Persistent request outcomes / deferred queue | TS journal/spool and bounded scheduler | unreplaced | Crash/reconnect/unknown outcomes, no blind mutation replay, isolation and bounded disk/queue |
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
 | R28 | Performance and load qualification | Replayable TS/native workload | unreplaced | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
-| R30 | Stop infrastructure budget persistence | Rust project/session budget library | component tested; native integration open | Project/session isolation, anchored no-follow transactions, bounded locks/read/write, hostile filesystem and Darwin-specific mutation adjudication; no host/wire consumption yet |
+| R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
+| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking dependency investigation; unreplaced | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution; use owned disposable targets and a surviving sibling control. Root/review-subagent shared PID is observed; other user-chat sharing and effective deployed kill policy require verification |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking compatibility gap; unreplaced | Cold renderer start must survive request cleanup and serve the next request; source-change retirement and concurrent startup must not duplicate or kill the service. Existing warm-daemon evidence does not cover first-start group ownership |
 
 ## Machine-wide workload and representation boundary
 
@@ -219,6 +221,91 @@ Additional component evidence:
 
 ## Embedded and developer implementation coverage
 
+Additional bounded evidence and unresolved dependencies:
+
+- E27: The Stop-budget session key previously aliased `CaseA` and `casea` on
+  case-insensitive filesystems. The exact-byte key uses lowercase unpadded
+  base32, at most 209 bytes for the admitted 128-byte ID. The mixed-case test
+  failed on the old key, then all 29 library cases passed (exit 0). Targeted
+  `cargo mutants --file src/stop_budget.rs --re session_directory --cargo-arg=--lib
+  --output target/stop-budget-mutation-session-key` exited 2: 21 tested, 20
+  caught, one missed. The missed OR→XOR mutation combines disjoint bit ranges
+  and is equivalent; the raw result remains retained under that target path.
+  This does not establish native-wire use, process-crash or power-loss recovery.
+- E28: Strict CLI build exited 0. Rust formatting and
+  `cargo clippy --all-targets -- -D warnings` exited 0 (2.77 s). Four runtime
+  suites (`engine-core`, `handler-executor`, `stock-handlers`, `protocol`)
+  passed 137 checks in 51.324 s, exit 0, after the rebuilt source. They exercise
+  completed-exit-2 capture after malformed receipts, replacement-decoded denial
+  custody, cancelled frame reads, journal collision refusal, mixed-case journal
+  protection, argument-bearing dedup and canonical-latch fallback admission.
+  Their temporary fixture artifacts were removed by teardown. They do not
+  establish actual Native→typed-engine execution, installed behavior, full
+  stateful latch/PID termination, or resident concurrency. In particular these
+  tests can pass while the containment dependency is wrong.
+- E29: Source investigation found the PID-correlation producer serializes
+  `started_at` as a string while the new strict ownership reader requires a
+  number. Separately, root `01a15107…` and its review subagent `01a15174…` were
+  observed under Codex PID 66070, start 2026-10-18T20:38:27Z. No cache overwrite
+  incident was observed; this is not evidence that the other twelve user chats
+  share that PID. The new hook identity prototype excludes PID-cache recovery,
+  but this change is not parity-qualified. The user's containment correction
+  makes R32 a blocking obligation: cache attribution and agent PID termination
+  must be traced separately, including their identity dependencies, before
+  accepting the change. Existing CLI identity recovery is not modified.
+- E30: Sterling's renderer client starts the daemon in the request's process
+  group without detachment. Native owned-group cleanup would kill a newly
+  started service. This is a source-established compatibility gap in the
+  prototype, not an observed active-runtime regression. No machine replacement
+  or resident admission follows from the current component results.
+- E31: The first combined native run exited 101: 29 library cases and five
+  binary units passed; 17 executable groups passed and two failed. The late
+  1 MB proposal did not reach the expected native-delivery failure path; stderr
+  instead reported an execution deadline. The 250 ms timeout fixture also
+  assumed dispatch before observing its grant. Its old failure artifacts were
+  removed by teardown, so cold-start delay remains an inference. Corrected
+  scenarios distinguish an observed grant from startup, early large output
+  from a small late proposal, and exact partial bytes from infrastructure JSON.
+  The subsequent executable run passed 20 groups in 22.98 s, exit 0; strict
+  Clippy exited 0. Failed fixtures are retained, and explicit artifact-root
+  selection retains successful fixtures. These are transport-fixture checks,
+  not production containment or native-harness acceptance.
+- E32: The selected installed snapshot remains `408c06a7…77baa0`. Read-only
+  selection inspection found stock CAWS `block-dangerous.sh` (`eef8c81c…`) and
+  Sterling's project override (`454dd1fc…`), with the selected Codex emitter.
+  The stock latch stores a fresh PID/start/comm tuple independently of the
+  session-correlation cache, and the first subsequent prohibited attempt can
+  reach SIGTERM. Fixed read-only/reset exceptions and earlier-handler/reprieve
+  selection matter. Current source logs a successful signal as termination
+  without waiting for exit; missing stamped identity fields also do not all
+  force no-signal. No live backend was signaled and actual PreToolUse target
+  ancestry has not been observed. R32 remains blocking. Qualification needs
+  request-ingress target observations, complete identity/reuse controls,
+  actual disposable-target exit and surviving-sibling evidence; a signal stamp
+  alone is insufficient.
+- E33: `node packages/caws-native/target/qualification/engine-wire-2026-10-19T04-02-55-400Z/run.cjs`
+  (invoked from the native crate via its absolute path) exited 0. An isolated
+  machine home installed the production template snapshot, then production
+  selection admitted only stock `block-dangerous.sh`. The compiled Rust client
+  invoked the actual built engine. Native exits were 2 for a bare commit with
+  a staged tracked deletion, 0 for the explicit-path control, and 0 for the
+  same bare command after removing the staged deletion. Raw stdout/stderr,
+  status, input, index bytes, selected-source identity and invocation journals
+  are retained in that probe directory. Each index remained byte-identical
+  during its invocation; journals include matching input SHA256, handler
+  completion, local native handoff and adapter finish. No PATH `python3` trap
+  fired. Termination was explicitly disabled in this isolated fixture, so it
+  earns no containment, full-chain, harness-withholding or installation claim.
+- E34: Native Stop-wire scenario artifacts are retained under
+  `packages/caws-native/target/qualification/stop-wire-2026-10-19T03-55-40-878Z/`.
+  Its manifest records actual native exits 2/2/2/2/0/2/0/2 and counter snapshots
+  1/2/3/3/0/1/0/1. The valid refusal leaves count 3 intact, the fourth
+  infrastructure failure releases explicitly, and a successful nonblocking
+  Stop resets the counter. Exact output and per-call status files are printed
+  by the runner and retained. Its engine is a protocol fixture; it cannot
+  establish production selection/context, containment, harness action,
+  resident operation or crash/power-loss durability.
+
 The executable embedded-Python surface is 15 shell files, 19 inline bodies and
 seven external callsites. A textual `python` hit is not sufficient: seven broader
 search matches contain only comments or interpreter-recognition data.
@@ -276,20 +363,26 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-1. Finish validation and committed-candidate review for bounded work in flight:
+1. Resolve the R32 containment dependency and qualify its actual effect before
+   accepting identity-policy changes or claiming safety parity. Trace effective
+   installed handlers/libraries and defaults, distinguish logical identity from
+   target process instance, and retain isolated termination/refusal/state and
+   surviving-sibling artifacts. Settle R33 service ownership before resident
+   implementation; a background daemon cannot remain request-owned.
+2. Finish validation and committed-candidate review for bounded work in flight:
    caller wire context, scoped Stop persistence, classifier repairs and guard
    utilities. Do not expand horizontal porting before the executable spine.
-2. Integrate native client → actual typed one-shot engine → selected production
+3. Integrate native client → actual typed one-shot engine → selected production
    guards → native result. Verify current authority, refusal channels, selected
    overrides, journal custody and Stop/handoff behavior through that path.
-3. Qualify isolated packaged adoption and rollback. Install on this machine only
+4. Qualify isolated packaged adoption and rollback. Install on this machine only
    after full parity with the previous selected version; verify selected native
    behavior after replacement. Identify which legacy consumers each slice retains; a
    partial landing does not earn A4 or full migration acceptance.
-4. Reuse the verified engine in the resident host. Exercise thirteen real native
+5. Reuse the verified engine in the resident host. Exercise thirteen real native
    clients across four repositories, including warm policy changes, repeated IDs,
    slow/reentrant extensions, overload, generation overlap and host replacement.
-5. Replace remaining implementations together with their consumers, qualify
+6. Replace remaining implementations together with their consumers, qualify
    supported harnesses and no-Python packaging, and record earned acceptance.
 
 ## Landing obligations
@@ -302,7 +395,7 @@ The reference itself grants no implementation or acceptance authority.
 | Milestone | Observed state | Proof required to advance |
 | --- | --- | --- |
 | Component foundations | Tested components; installed hooks use the original runtime | Committed source and checks remain scoped to what actually ran |
-| Executable replacement spine | Unintegrated | Compiled client runs the actual typed engine and selected production guard chain; positive and refusal controls reach native output with correct context and custody |
+| Executable replacement spine | Isolated nonlatching Codex branch exercised; full replacement open | E33 preserves raw selected-guard/index/journal/native-output evidence. Full required chain, identity/containment, overrides and event/harness behavior require their own causal observations |
 | Packaged selection and rollback | Unproven | Clean candidate package selects the replacement in an isolated home/harness; native guarded write is withheld; rollback restores the prior selected generation without losing governed state; actual machine replacement waits for full parity |
 | Resident multi-project operation | Unimplemented | Same engine serves the required native workload with fresh authority, bounded fair capacity, owner-specific ordering, explicit uncertain outcomes and safe upgrades |
 | Complete migration | Open | Every first-party Python implementation and consumer has an earned replacement; supported native observations and authoritative A1–A8 evidence exist |

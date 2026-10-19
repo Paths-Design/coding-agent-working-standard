@@ -20,7 +20,11 @@ const request = (changes = {}) => ({
   surface: 'codex',
   event: 'pre_tool_use',
   configuration: 'system',
-  caller: { cwd: '/project', environment: { PATH: '/usr/bin', MARKER: 'request-1' } },
+  caller: {
+    processId: 123,
+    cwd: '/project',
+    environment: { PATH: '/usr/bin', MARKER: 'request-1' },
+  },
   deadlineEpochMs: now + 1_000,
   inputJson: '{ "tool_input": {"command":"pwd"} }\n',
   payload: { tool_input: { command: 'pwd' } },
@@ -76,15 +80,18 @@ describe('native runtime protocol', () => {
     { configuration: 'legacy' },
     { configuration: true },
     { caller: undefined },
-    { caller: { cwd: 'relative', environment: {} } },
-    { caller: { cwd: '/valid\0bad', environment: {} } },
-    { caller: { cwd: '/valid', environment: [] } },
-    { caller: { cwd: '/valid', environment: { X: false } } },
-    { caller: { cwd: '/valid', environment: { X: null } } },
-    { caller: { cwd: '/valid', environment: { 'A=B': 'value' } } },
-    { caller: { cwd: '/valid', environment: { X: 'bad\0value' } } },
-    { caller: { cwd: '/valid', environment: {}, authority: 'other' } },
-    { caller: { cwd: '/valid', environment: { X: String.fromCharCode(0xd800) } } },
+    { caller: { processId: 123, cwd: 'relative', environment: {} } },
+    { caller: { processId: 123, cwd: '/valid\0bad', environment: {} } },
+    { caller: { processId: 123, cwd: '/valid', environment: [] } },
+    { caller: { processId: 123, cwd: '/valid', environment: { X: false } } },
+    { caller: { processId: 123, cwd: '/valid', environment: { X: null } } },
+    { caller: { processId: 123, cwd: '/valid', environment: { 'A=B': 'value' } } },
+    { caller: { processId: 123, cwd: '/valid', environment: { X: 'bad\0value' } } },
+    { caller: { processId: 123, cwd: '/valid', environment: {}, authority: 'other' } },
+    { caller: { processId: 123, cwd: '/valid', environment: { X: String.fromCharCode(0xd800) } } },
+    ...[undefined, null, '123', 0, -1, 1.2, 2147483648].map((processId) => ({
+      caller: { processId, cwd: '/valid', environment: {} },
+    })),
     { deadlineEpochMs: now },
     { deadlineEpochMs: now - 1 },
     { deadlineEpochMs: now + MAX_REQUEST_DURATION_MS + 1 },
@@ -117,16 +124,26 @@ describe('native runtime protocol', () => {
     const ambient = process.env.MARKER;
     const first = decode({
       configuration: 'project',
-      caller: { cwd: '/one', environment: { MARKER: 'one', GIT_DIR: '/foreign-one' } },
+      caller: {
+        processId: 123,
+        cwd: '/one',
+        environment: { MARKER: 'one', GIT_DIR: '/foreign-one' },
+      },
     });
     const second = decode({
-      caller: { cwd: '/two', environment: { MARKER: 'two', GIT_DIR: '/foreign-two' } },
+      caller: {
+        processId: 456,
+        cwd: '/two',
+        environment: { MARKER: 'two', GIT_DIR: '/foreign-two' },
+      },
     });
     expect(first.caller).toEqual({
+      processId: 123,
       cwd: '/one',
       environment: { MARKER: 'one', GIT_DIR: '/foreign-one' },
     });
     expect(second.caller).toEqual({
+      processId: 456,
       cwd: '/two',
       environment: { MARKER: 'two', GIT_DIR: '/foreign-two' },
     });

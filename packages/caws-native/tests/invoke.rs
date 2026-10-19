@@ -16,11 +16,14 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "caws-native-{}-{}",
-            std::process::id(),
-            SERIAL.fetch_add(1, Ordering::Relaxed)
-        ));
+        let dir = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join(format!(
+                "caws-native-{}-{}",
+                std::process::id(),
+                SERIAL.fetch_add(1, Ordering::Relaxed)
+            ));
         fs::create_dir(&dir).unwrap();
         // Caller snapshots include environment values; test receipts remain private.
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
@@ -29,6 +32,8 @@ impl Fixture {
             .output()
             .expect("Node is required for native behavioral tests");
         assert!(resolved.status.success());
+        fs::create_dir(dir.join("budget-home")).unwrap();
+        fs::set_permissions(dir.join("budget-home"), fs::Permissions::from_mode(0o700)).unwrap();
         Self {
             dir,
             node: String::from_utf8(resolved.stdout).unwrap().trim().into(),
@@ -64,6 +69,8 @@ impl Fixture {
                 configuration,
             ])
             .env("CAWS_NATIVE_TEST_MODE", mode)
+            .env("CAWS_NATIVE_TEST_BUDGET_HOME", self.dir.join("budget-home"))
+            .env("CAWS_NATIVE_TEST_EVENTS", self.dir.join("events.jsonl"))
             .env("CAWS_NATIVE_TEST_RECEIPT", self.dir.join("requests.jsonl"))
             .env("CAWS_NATIVE_TEST_CHILD", self.dir.join("child"))
             .env("CAWS_NATIVE_TEST_ENGINE_PID", self.dir.join("engine"))
@@ -81,11 +88,41 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        if std::thread::panicking() || std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT").is_some()
+        {
+            eprintln!("native scenario artifacts retained: {}", self.dir.display());
+            return;
+        }
         let _ = fs::remove_dir_all(&self.dir);
     }
 }
 
 fn execute(mut command: Command, input: Vec<u8>) -> Output {
+    let evidence = command
+        .get_envs()
+        .find(|(key, _)| *key == "CAWS_NATIVE_TEST_RECEIPT")
+        .and_then(|(_, value)| value.map(PathBuf::from))
+        .and_then(|file| {
+            file.parent().map(|parent| {
+                parent.join(format!("call-{}", SERIAL.fetch_add(1, Ordering::Relaxed)))
+            })
+        });
+    if let Some(directory) = &evidence {
+        fs::create_dir(directory).unwrap();
+        fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::write(directory.join("input.bin"), &input).unwrap();
+        fs::write(
+            directory.join("command.json"),
+            serde_json::to_vec(
+                &command
+                    .get_args()
+                    .map(|arg| arg.to_string_lossy().into_owned())
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    }
     let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -120,11 +157,17 @@ fn execute(mut command: Command, input: Vec<u8>) -> Output {
         thread::sleep(Duration::from_millis(5));
     };
     writer.join().unwrap();
-    Output {
+    let output = Output {
         status,
         stdout: out.join().unwrap(),
         stderr: err.join().unwrap(),
+    };
+    if let Some(directory) = evidence {
+        fs::write(directory.join("stdout.bin"), &output.stdout).unwrap();
+        fs::write(directory.join("stderr.bin"), &output.stderr).unwrap();
+        fs::write(directory.join("status.json"), serde_json::to_vec(&serde_json::json!({"exit_code":output.status.code(),"elapsed_ms":started.elapsed().as_millis()})).unwrap()).unwrap();
     }
+    output
 }
 fn failure(output: &Output, code: i32, stage: &str) {
     assert_eq!(output.status.code(), Some(code));
@@ -158,6 +201,14 @@ fn exact_native_result_and_original_payload_are_delivered_without_path_interpret
     assert_eq!(request["event"], "pre_tool_use");
     assert_eq!(request["configuration"], "system");
     assert_eq!(request["caller"]["environment"]["PATH"], "");
+    assert_eq!(
+        request["caller"]["processId"].as_u64().unwrap().to_string(),
+        request["id"].as_str().unwrap().split('-').next().unwrap()
+    );
+    assert_ne!(
+        request["caller"]["processId"].as_u64().unwrap(),
+        std::process::id() as u64
+    );
     assert!(std::path::Path::new(request["caller"]["cwd"].as_str().unwrap()).is_absolute());
     assert_eq!(
         request["inputJson"],
@@ -173,6 +224,26 @@ fn exact_native_result_and_original_payload_are_delivered_without_path_interpret
 }
 
 #[test]
+fn empty_stdin_uses_empty_object_without_replacing_original_custody_bytes() {
+    let f = Fixture::new();
+    for input in [Vec::new(), b"{}".to_vec()] {
+        let out = execute(f.command("exact", "pre_tool_use", "1500"), input);
+        assert_eq!(out.status.code(), Some(7));
+        assert_eq!(out.stdout, "native\n雪\0exact".as_bytes());
+        assert_eq!(out.stderr, b"diagnostic\nexact\n");
+    }
+    let requests = f.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0]["payload"], serde_json::json!({}));
+    assert_eq!(requests[1]["payload"], requests[0]["payload"]);
+    assert_eq!(requests[0]["inputJson"], "");
+    assert_eq!(requests[1]["inputJson"], "{}");
+    let invalid = execute(f.command("exact", "pre_tool_use", "1500"), b" \n".to_vec());
+    failure(&invalid, 2, "configuration");
+    assert_eq!(f.requests().len(), 2);
+}
+
+#[test]
 fn hostile_response_and_uncertain_process_failure_refuse_without_retry() {
     for mode in [
         "id",
@@ -181,12 +252,18 @@ fn hostile_response_and_uncertain_process_failure_refuse_without_retry() {
         "exit-code",
         "extra-field",
         "malformed",
-        "nonzero",
         "oversize",
         "stderr-oversize",
         "bad-base64",
         "pad-bits",
         "old-text-shape",
+        "outer-id",
+        "outer-digest",
+        "proposal-token",
+        "proposal-extra",
+        "ready-twice",
+        "failure",
+        "crash",
     ] {
         let fixture = Fixture::new();
         let output = execute(
@@ -327,11 +404,50 @@ fn timeout_covers_silent_engine_closed_output_and_blocked_input_write() {
     ] {
         let fixture = Fixture::new();
         let started = Instant::now();
-        let output = execute(fixture.command(mode, "post_tool_use", "250"), payload);
+        // An active-phase timeout needs time to observe the Ready/grant exchange;
+        // creation of a cold Node process is not evidence of dispatch.
+        let output = execute(
+            fixture.command(
+                mode,
+                "post_tool_use",
+                if mode == "no-read" { "250" } else { "1000" },
+            ),
+            payload,
+        );
         assert!(started.elapsed() < Duration::from_secs(3), "{mode}");
-        failure(&output, 2, "execution");
-        assert!(output.stdout.is_empty());
-        assert!(String::from_utf8_lossy(&output.stderr).contains("deadline expired"));
+        let before_grant = mode == "no-read";
+        assert_eq!(
+            fixture.dir.join("events.jsonl").exists(),
+            !before_grant,
+            "{mode}: no phase witness; stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        failure(
+            &output,
+            if before_grant { 0 } else { 2 },
+            if before_grant {
+                "configuration"
+            } else {
+                "execution"
+            },
+        );
+        if before_grant {
+            assert!(output.stdout.is_empty());
+        } else {
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()["decision"],
+                "block"
+            );
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(if mode == "closed-pipes" {
+                "stream closed"
+            } else {
+                "deadline expired"
+            }),
+            "{stderr}"
+        );
     }
 }
 
@@ -347,9 +463,11 @@ fn engine_exit_with_grandchild_held_pipes_is_bounded_and_owned_child_is_killed()
         fixture.command("pipe-holder", "pre_tool_use", "2000"),
         b"{}".to_vec(),
     );
-    failure(&output, 2, "execution");
+    assert_eq!(output.status.code(), Some(7));
+    assert_eq!(output.stdout, "native\n雪\0exact".as_bytes());
+    assert_eq!(output.stderr, b"diagnostic\nexact\n");
     assert!(
-        started.elapsed() < Duration::from_millis(3500),
+        started.elapsed() < Duration::from_millis(1500),
         "held pipes exceeded request and cleanup allowance"
     );
     assert!(
@@ -569,7 +687,7 @@ fn assert_not_running(pid: &str) {
 #[test]
 fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_processes() {
     for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
-        for mode in ["input", "timeout", "pipe-holder"] {
+        for mode in ["input", "timeout", "pipe-holder-wait"] {
             let fixture = Fixture::new();
             let mut unrelated = Command::new(&fixture.node)
                 .args(["-e", "setInterval(() => {},1000)"])
@@ -596,7 +714,7 @@ fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_p
             } else {
                 drop(input);
                 engine_pid = Some(wait_for_file(&fixture.dir.join("engine")));
-                if mode == "pipe-holder" {
+                if mode == "pipe-holder-wait" {
                     descendant_pid = Some(wait_for_file(&fixture.dir.join("child")));
                 }
             }
@@ -693,9 +811,24 @@ fn closed_caller_output_channel_cancels_engine_before_request_deadline() {
 
 #[test]
 fn output_backpressure_is_bounded_and_never_claims_consumer_receipt() {
+    let control = Fixture::new();
+    let drained = execute(
+        control.command("large-native-result", "pre_tool_use", "2000"),
+        b"{}".to_vec(),
+    );
+    assert_eq!(drained.status.code(), Some(7));
+    assert_eq!(drained.stdout, vec![b'x'; 1_000_000]);
+    assert_eq!(drained.stderr, b"diagnostic\nexact\n");
+    let acknowledged = fs::read_to_string(control.dir.join("events.jsonl")).unwrap();
+    assert!(
+        acknowledged
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .any(|row| row["schema"] == "caws.runtime.handoff.v1" && row["success"] == true)
+    );
     let fixture = Fixture::new();
     let mut child = fixture
-        .command("late-large-native-result", "pre_tool_use", "1000")
+        .command("large-native-result", "pre_tool_use", "2000")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -705,16 +838,32 @@ fn output_backpressure_is_bounded_and_never_claims_consumer_receipt() {
     let started = Instant::now();
     // Do not read stdout until the native writer has terminated.
     let output = captured(&mut child);
+    fs::write(fixture.dir.join("stdout.bin"), &output.stdout).unwrap();
+    fs::write(fixture.dir.join("stderr.bin"), &output.stderr).unwrap();
     assert!(
-        started.elapsed() >= Duration::from_millis(1000),
-        "fixture did not exercise late engine completion plus blocked native delivery"
-    );
-    assert!(
-        started.elapsed() < Duration::from_millis(2100),
-        "configured1000ms + cleanup500ms + delivery500ms + diagnostic100ms ceiling exceeded"
+        started.elapsed() < Duration::from_millis(3700),
+        "configured2000ms + delivery500ms + shared postproposal500ms + cleanup500ms + diagnostic100ms + scheduling allowance ceiling exceeded"
     );
     assert_eq!(output.status.code(), Some(2));
-    assert!(output.stdout.len() < 1_000_000);
+    assert!(
+        !output.stdout.is_empty() && output.stdout.len() < 1_000_000,
+        "must observe actual native delivery, not a pre-proposal infrastructure fallback"
+    );
+    assert!(output.stdout.iter().all(|byte| *byte == b'x'));
+    let events: Vec<serde_json::Value> = fs::read_to_string(fixture.dir.join("events.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let handoff = events
+        .iter()
+        .find(|row| row["schema"] == "caws.runtime.handoff.v1")
+        .expect("partial local delivery must produce a handoff outcome");
+    assert_eq!(handoff["id"], fixture.requests()[0]["id"]);
+    assert_eq!(handoff["runtimeDigest"], "a".repeat(64));
+    assert_eq!(handoff["token"], "fixture-proposal");
+    assert_eq!(handoff["success"], false);
+    assert!(!events.iter().any(|row| row["settled"] == true));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("bounded output write: request deadline expired"),
@@ -725,6 +874,38 @@ fn output_backpressure_is_bounded_and_never_claims_consumer_receipt() {
         "{stderr}"
     );
     assert_not_running(&wait_for_file(&fixture.dir.join("engine")));
+}
+
+#[test]
+fn known_proposals_survive_late_engine_exit_or_settlement_past_request_deadline() {
+    for mode in ["nonzero", "late-post-proposal-hang"] {
+        let fixture = Fixture::new();
+        let output = execute(
+            fixture.command(mode, "pre_tool_use", "1000"),
+            b"{}".to_vec(),
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(7),
+            "{mode}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, "native\n雪\0exact".as_bytes());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.starts_with("diagnostic\nexact\n"),
+            "{mode}: {stderr}"
+        );
+        assert!(
+            stderr.contains("post-proposal diagnostic"),
+            "{mode}: {stderr}"
+        );
+        assert!(
+            !stderr.contains("Checks did not complete"),
+            "{mode}: {stderr}"
+        );
+        assert_eq!(fixture.requests().len(), 1);
+    }
 }
 
 #[test]

@@ -33,7 +33,7 @@ export interface RuntimeRequest {
   readonly event: HookEvent;
   readonly configuration: 'system' | 'project';
   /** Ephemeral native caller snapshot: never include in durable request journals. */
-  readonly caller: InvocationCaller;
+  readonly caller: InvocationCaller & { readonly processId: number };
   readonly deadlineEpochMs: number;
   /** Exact native stdin text: hashing a reserialization would lose custody. */
   readonly inputJson: string;
@@ -167,7 +167,10 @@ export function decodeRuntimeRequest(
     throw new RuntimeProtocolError('Unsupported runtime entry configuration');
   if (
     !record(value.caller) ||
-    !exactKeys(value.caller, ['cwd', 'environment']) ||
+    !exactKeys(value.caller, ['cwd', 'environment', 'processId']) ||
+    !Number.isSafeInteger(value.caller.processId) ||
+    (value.caller.processId as number) <= 0 ||
+    (value.caller.processId as number) > 2_147_483_647 ||
     typeof value.caller.cwd !== 'string' ||
     !record(value.caller.environment) ||
     Object.values(value.caller.environment).some((entry) => typeof entry !== 'string')
@@ -197,7 +200,7 @@ export function decodeRuntimeRequest(
   if (Buffer.from(value.inputJson, 'utf8').toString('utf8') !== value.inputJson) {
     throw new RuntimeProtocolError('Original hook input must represent valid UTF-8 bytes');
   }
-  const payload = decode(value.inputJson, MAX_INPUT_BYTES);
+  const payload = value.inputJson === '' ? {} : decode(value.inputJson, MAX_INPUT_BYTES);
   if (!record(payload) || !record(value.payload) || !sameJson(payload, value.payload)) {
     throw new RuntimeProtocolError('Hook payload does not match original native input');
   }
@@ -208,7 +211,7 @@ export function decodeRuntimeRequest(
     surface: value.surface as AgentSurface,
     event: value.event as HookEvent,
     configuration: value.configuration as 'system' | 'project',
-    caller,
+    caller: Object.freeze({ ...caller, processId: value.caller.processId as number }),
     deadlineEpochMs: value.deadlineEpochMs,
     inputJson: value.inputJson,
     payload: freezeJson(payload),

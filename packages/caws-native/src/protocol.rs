@@ -6,9 +6,11 @@ use std::collections::BTreeMap;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Caller {
     cwd: String,
     environment: BTreeMap<String, String>,
+    process_id: u32,
 }
 
 impl Caller {
@@ -31,7 +33,11 @@ impl Caller {
             }
             environment.insert(name, value);
         }
-        Ok(Self { cwd, environment })
+        Ok(Self {
+            cwd,
+            environment,
+            process_id: std::process::id(),
+        })
     }
 }
 
@@ -115,9 +121,7 @@ fn decode_native_bytes(encoded: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-pub fn validate_response(bytes: &[u8], request: &Request) -> Result<NativeResult, String> {
-    let response: Response =
-        serde_json::from_slice(bytes).map_err(|e| format!("invalid engine response: {e}"))?;
+fn response_result(response: Response, request: &Request) -> Result<NativeResult, String> {
     if response.schema != "caws.runtime.response.v1"
         || response.id != request.id
         || response.runtime_digest != request.runtime_digest
@@ -129,6 +133,155 @@ pub fn validate_response(bytes: &[u8], request: &Request) -> Result<NativeResult
         stdout: decode_native_bytes(&response.result.stdout_base64)?,
         stderr: decode_native_bytes(&response.result.stderr_base64)?,
     })
+}
+
+pub struct Ready {
+    pub active: bool,
+    pub budget_home: std::path::PathBuf,
+    pub project_digest: Option<String>,
+    pub session_id: Option<String>,
+}
+
+pub enum EngineFrame {
+    Ready(Ready),
+    Proposal { token: String, result: NativeResult },
+    Failure(String),
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields)]
+enum WireFrame {
+    #[serde(rename = "caws.runtime.ready.v1")]
+    Ready {
+        id: String,
+        #[serde(rename = "runtimeDigest")]
+        runtime_digest: String,
+        active: bool,
+        #[serde(rename = "budgetHome")]
+        budget_home: String,
+        #[serde(rename = "projectDigest", deserialize_with = "required_nullable")]
+        project_digest: Option<String>,
+        #[serde(rename = "sessionId", deserialize_with = "required_nullable")]
+        session_id: Option<String>,
+    },
+    #[serde(rename = "caws.runtime.proposal.v1")]
+    Proposal {
+        id: String,
+        #[serde(rename = "runtimeDigest")]
+        runtime_digest: String,
+        token: String,
+        response: Response,
+    },
+    #[serde(rename = "caws.runtime.failure.v1")]
+    Failure {
+        id: String,
+        #[serde(rename = "runtimeDigest")]
+        runtime_digest: String,
+        message: String,
+    },
+}
+
+fn required_nullable<'de, D: serde::Deserializer<'de>>(
+    value: D,
+) -> Result<Option<String>, D::Error> {
+    Option::<String>::deserialize(value)
+}
+
+fn identity(id: &str, digest: &str, request: &Request) -> Result<(), String> {
+    if id != request.id || digest != request.runtime_digest {
+        return Err("engine frame identity mismatch".into());
+    }
+    Ok(())
+}
+
+pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, String> {
+    let frame: WireFrame =
+        serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    match frame {
+        WireFrame::Ready {
+            id,
+            runtime_digest,
+            active,
+            budget_home,
+            project_digest,
+            session_id,
+        } => {
+            identity(&id, &runtime_digest, request)?;
+            let home = std::path::PathBuf::from(&budget_home);
+            if !home.is_absolute() || budget_home.contains('\0') || budget_home.len() > 4096 {
+                return Err("invalid ready budget home".into());
+            }
+            if active != project_digest.is_some()
+                || project_digest
+                    .as_ref()
+                    .is_some_and(|d| !crate::cli::valid_digest(d))
+            {
+                return Err("invalid ready project identity".into());
+            }
+            if session_id
+                .as_ref()
+                .is_some_and(|s| s.len() > 128 || s.contains('\0'))
+            {
+                return Err("invalid ready session identity".into());
+            }
+            Ok(EngineFrame::Ready(Ready {
+                active,
+                budget_home: home,
+                project_digest,
+                session_id,
+            }))
+        }
+        WireFrame::Proposal {
+            id,
+            runtime_digest,
+            token,
+            response,
+        } => {
+            identity(&id, &runtime_digest, request)?;
+            if token.is_empty()
+                || token.len() > 128
+                || !token
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
+            {
+                return Err("invalid proposal token".into());
+            }
+            Ok(EngineFrame::Proposal {
+                token,
+                result: response_result(response, request)?,
+            })
+        }
+        WireFrame::Failure {
+            id,
+            runtime_digest,
+            message,
+        } => {
+            identity(&id, &runtime_digest, request)?;
+            if message.is_empty() || message.len() > 4096 || message.contains('\0') {
+                return Err("invalid engine failure diagnostic".into());
+            }
+            Ok(EngineFrame::Failure(message))
+        }
+    }
+}
+
+pub fn dispatch(request: &Request) -> Vec<u8> {
+    let mut bytes = serde_json::to_vec(&serde_json::json!({
+        "schema":"caws.runtime.dispatch.v1","id":request.id,"runtimeDigest":request.runtime_digest
+    }))
+    .expect("serializing string-only dispatch frame");
+    bytes.push(b'\n');
+    bytes
+}
+
+pub fn handoff(request: &Request, token: &str, success: bool) -> Vec<u8> {
+    let mut bytes = serde_json::to_vec(&serde_json::json!({
+        "schema":"caws.runtime.handoff.v1","id":request.id,"runtimeDigest":request.runtime_digest,
+        "token":token,"success":success
+    }))
+    .expect("serializing string-only handoff frame");
+    bytes.push(b'\n');
+    bytes
 }
 
 #[cfg(test)]

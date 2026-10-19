@@ -104,6 +104,11 @@ function priority(value: unknown): number {
       : top;
   return decision === 'block' || decision === 'deny' ? 3 : decision === 'ask' ? 2 : 1;
 }
+
+/** Shared interpretation for completed and interrupted byte captures. */
+export function isProtectiveCapture(stdout: Uint8Array): boolean {
+  return priority(parse(stdout)) === 3;
+}
 function numberOption(value: number | undefined, fallback: number): number {
   return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : fallback;
 }

@@ -109,6 +109,24 @@ reentrant daemon defect has not been demonstrated in the current one-shot code.
 
 ## Resident lifecycle
 
+Process containment is a preserved safety obligation. Logical request identity,
+cached session correlation, request-child ownership, agent termination targets,
+and persistent-service ownership are separate contracts. Excluding an unsafe
+identity-cache override does not discharge the danger latch's PID tracking and
+termination behavior. The containment port must trace latch activation through
+the next prohibited tool attempt, validate the actual caller's process instance,
+signal the intended target, and observe the outcome. Resident-worker ancestry
+cannot substitute for caller ancestry. A signal syscall succeeding is not an
+observation that the agent exited.
+
+A backend PID is not assumed to identify one logical session: the root and its
+review subagent were observed under the same Codex process instance. Sharing by
+the other active user chats has not been established. Before cutover, determine
+the effective deployed target and its containment domain; do not claim isolated
+session termination from a process-name or start-time match alone. Tests use
+disposable owned processes and an independently observed surviving control,
+never a live developer backend.
+
 `absent -> starting -> ready -> draining -> stopped` has one startup owner and
 versioned handshakes. Competing starters wait within the request deadline. Ready
 services wait on IPC instead of polling. Agent activity keeps a service warm;
@@ -144,6 +162,19 @@ latency.
 
 ## Ranked failure modes and decision timing
 
+Request cleanup must not kill intentionally persistent extension services.
+Sterling's renderer client starts its daemon as a background Python child
+without creating a new session or process group. The one-shot native supervisor
+therefore cannot treat that first-start daemon as an ordinary disposable request
+child and claim compatibility. Persistent services need explicit service-owned
+lifetime and startup coordination, separately from request groups and agent
+containment. Arbitrary descendants receive no blanket escape from cleanup.
+Qualification starts with no renderer daemon, observes the first invocation
+return, verifies the service remains alive and serves a second request, then
+checks source-change retirement, cancellation and simultaneous startup. Warm
+reuse alone cannot establish this boundary. This integration remains
+unqualified.
+
 | Severity | Trigger and failure                                                                                  | Cost                                                               | Resolve timing                                                                                           |
 | -------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | Critical | Stale cached claim/policy or Rust/TS authority disagreement permits a governed action                | Unauthorized mutation; later logs cannot undo it                   | Before any enforcement cutover; shared authority and freshness tests precede resident mode               |
@@ -165,6 +196,23 @@ are the expensive-to-reverse choices. A one-shot engine and explicit extension
 boundary keep implementation order reversible.
 
 ## Functional acceptance and proof
+
+Each parity claim names a preserved behavior and its dependency chain, not only
+a file, command, schema, or language replacement. In particular, danger-latch
+containment requires retained latch/warning records, resolved session and
+process-instance observations, signal attempts and observed target exit, native
+refusal bytes, and a surviving unrelated-process control. Prove that the blocked
+tool did not execute. Include wrong-session, reused-PID, unavailable-target,
+read-only/reset exceptions, file tools and resident-caller cases according to
+the governing contract. These checks are blocking dependencies of replacement;
+passing classifier, protocol or identity tests does not establish them.
+
+Scenario evidence retains exact commands, revision/build/source identities, raw
+output bytes, exit status, relevant state before/after, and observed consumer
+results. Print concrete selected artifacts after execution. Identify how the
+tests could pass while the intended behavior is absent, what was not verified,
+and which additional observation would settle each material gap. Missing
+artifacts leave the claim open rather than being replaced by a passing tally.
 
 | Criterion                     | Required observation and falsifier                                                                                                                                                                                                                             |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
