@@ -694,5 +694,7 @@ export function inspectInvocation(
     return state;
   }
   ctx.reason(node, 'utility-unsupported', `No admitted argument-role profile for ${name}.`);
-  return state;
+  // A consumer may recognize this application's write operands separately.
+  // Its unmodeled effects must still invalidate later filesystem observations.
+  return { ...state, filesystemChanged: true };
 }

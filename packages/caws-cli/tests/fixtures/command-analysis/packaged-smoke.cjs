@@ -182,6 +182,20 @@ try {
   const foreignMetadata = writeGuard(`git -C '${foreign}' add -- package-never-written`);
   assert.equal(foreignMetadata.status, 2, foreignMetadata.stderr);
   assert.match(foreignMetadata.stderr, /Git metadata for worktree 'foreign'/);
+  const directoryQuery = run('git', ['-C', foreign, 'rev-parse', '--absolute-git-dir']);
+  assert.equal(directoryQuery.status, 0, directoryQuery.stderr);
+  const routedMetadata = writeGuard(
+    `git --git-dir='${directoryQuery.stdout.trim()}' --work-tree='${project}' add -- package-never-written`
+  );
+  assert.equal(routedMetadata.status, 2, routedMetadata.stderr);
+  assert.match(routedMetadata.stderr, /Git metadata for worktree 'foreign'/);
+  const pointer = fs.readFileSync(path.join(own, '.git'), 'utf8');
+  const changedMapping = writeGuard(
+    `cp '${foreign}/.git' '${own}/.git'; git add -- package-never-written`
+  );
+  assert.equal(changedMapping.status, 2, changedMapping.stderr);
+  assert.match(changedMapping.stderr, /metadata-coordinate-unresolved/);
+  assert.equal(fs.readFileSync(path.join(own, '.git'), 'utf8'), pointer);
   console.log(
     JSON.stringify({
       tarballSha256,
@@ -196,6 +210,8 @@ try {
       packagedWriteGuardNestedForeign: nestedForeign.status,
       packagedWriteGuardOwnMetadata: ownMetadata.status,
       packagedWriteGuardForeignMetadata: foreignMetadata.status,
+      packagedWriteGuardRoutedMetadata: routedMetadata.status,
+      packagedWriteGuardChangedMapping: changedMapping.status,
     })
   );
 } finally {

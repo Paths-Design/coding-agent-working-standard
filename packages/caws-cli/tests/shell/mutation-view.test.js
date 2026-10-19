@@ -200,6 +200,77 @@ describe('mutation view uses shared traversal without granting scope', () => {
         rows: ['commit'],
       },
       { id: 'metadata-read-only', command: 'git status', plan: [], queries: [], rows: [] },
+      ...[
+        ['metadata-after-copy', "cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'; git add -- file"],
+        ['metadata-after-opaque-app', 'application-without-a-profile data; git add -- file'],
+        ['metadata-after-opaque-argv-app', 'application-without-a-profile "$ARG"; git add -- file'],
+        [
+          'metadata-after-subshell-copy',
+          "(cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'); git add -- file",
+        ],
+        ['metadata-nested-copy', "bash -c 'cp {{FOREIGN}}/.git {{PROJECT}}/.git; git add -- file'"],
+        [
+          'metadata-inherited-copy',
+          "cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'; bash -c 'git add -- file'",
+        ],
+        [
+          'metadata-after-effect-pipeline',
+          "cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git' | cat; git add -- file",
+        ],
+        [
+          'metadata-nested-pipeline-left',
+          "cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git' | bash -c 'git add -- file'",
+        ],
+        [
+          'metadata-nested-pipeline-right',
+          "bash -c 'git add -- file' | cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'",
+        ],
+        ['metadata-parent-redirect', "printf x > mapping; bash -c 'git add -- file'"],
+        ['metadata-later-parent-redirect', "bash -c 'git add -- file'; printf x > mapping"],
+        ['metadata-sibling-shell', "bash -c 'git add -- file'; bash -c 'printf x'"],
+        [
+          'metadata-mixed-callee',
+          'for RUNNER in bash application-without-a-profile; do "$RUNNER" -c \'git add -- file\'; done',
+        ],
+      ].map(([id, command]) => ({
+        id,
+        command,
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      })),
+      ...[
+        ['metadata-after-prose', "printf '%s' 'cp foreign/.git owned/.git'; git add -- file"],
+        ['metadata-after-reader', 'cat /dev/null; git add -- file'],
+        ['metadata-after-read-pipeline', 'printf x | cat; git add -- file'],
+        ['metadata-sole-nested-shell', "bash -c 'git add -- file'"],
+        ['metadata-nested-reader', "cat /dev/null; bash -c 'git add -- file'"],
+        ['metadata-deep-nested-shell', "bash <<'SH'\nbash -c 'git add -- file'\nSH\n"],
+      ].map(([id, command]) => ({
+        id,
+        command,
+        plan: [metadataContext],
+        queries: [query],
+        rows: ['add'],
+      })),
+      ...[
+        [
+          'metadata-direct-pipeline-left',
+          "cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git' | git add -- file",
+        ],
+        [
+          'metadata-direct-pipeline-right',
+          "git add -- file | cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'",
+        ],
+      ].map(([id, command]) => ({
+        id,
+        command,
+        plan: [metadataContext],
+        queries: [query],
+        rows: ['add'],
+        code: 'git-context-changed',
+      })),
       {
         id: 'metadata-opaque-argv',
         command: 'git add "$FILE"',
@@ -251,7 +322,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
       },
       {
         id: 'metadata-cache-shared-jobs',
-        command: "git add -- one; bash -c 'git commit -m two'; git add -- three",
+        command: "git add -- one; git add -- three; bash -c 'git commit -m two'",
         plan: [metadataContext],
         queries: [query],
         rows: ['add', 'add', 'commit'],

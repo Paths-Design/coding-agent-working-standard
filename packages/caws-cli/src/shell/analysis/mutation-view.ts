@@ -75,7 +75,16 @@ type RedirectObservation = {
   reader: boolean;
 };
 type Mapping = (location: Location) => Location;
-type ScriptJob = { command: string; cwd: string | null; depth: number; map: Mapping };
+type ScriptJob = {
+  command: string;
+  cwd: string | null;
+  depth: number;
+  map: Mapping;
+  parent?: { job: ScriptJob; caller: string; inheritedEffects: boolean };
+  writeRedirect: boolean;
+  unmodeledInvocations: Set<string>;
+  nonShellInvocations: Set<string>;
+};
 type HereDoc = Extract<Redirection, { type: 'HereDoc' }>;
 const MAX_TOKENS = 4096,
   MAX_DEPTH = 8,
@@ -233,7 +242,13 @@ export async function projectMutationView(
       end: location.end,
     });
   }
-  function queue(command: string, cwd: string | null, depth: number, map: Mapping): void {
+  function queue(
+    command: string,
+    cwd: string | null,
+    depth: number,
+    map: Mapping,
+    parent?: ScriptJob['parent']
+  ): void {
     if (exhausted) return;
     const location = map({ pos: 0, end: command.length });
     sourceBytes += Buffer.byteLength(command, 'utf8');
@@ -241,13 +256,40 @@ export async function projectMutationView(
       exhaust(location);
       return;
     }
-    jobs.push({ command, cwd: request.cwd === null ? null : cwd, depth, map });
+    jobs.push({
+      command,
+      cwd: request.cwd === null ? null : cwd,
+      depth,
+      map,
+      ...(parent ? { parent } : {}),
+      writeRedirect: false,
+      unmodeledInvocations: new Set(),
+      nonShellInvocations: new Set(),
+    });
+  }
+  function inheritedEffects(job: ScriptJob): boolean {
+    for (let link = job.parent; link; link = link.job.parent) {
+      if (
+        link.inheritedEffects ||
+        link.job.writeRedirect ||
+        [...link.job.unmodeledInvocations].some(
+          (caller) => caller !== link.caller || link.job.nonShellInvocations.has(caller)
+        )
+      )
+        return true;
+    }
+    return false;
   }
   queue(request.command, request.cwd, 0, (location) => location);
   for (let cursor = 0; cursor < jobs.length && !exhausted; cursor++) {
     const job = jobs[cursor]!;
     const finiteCallees = new Set<string>();
     const span = (location: Location): Location => job.map(location);
+    const parent = (node: Location, state: State): NonNullable<ScriptJob['parent']> => ({
+      job,
+      caller: JSON.stringify([node.pos, node.end]),
+      inheritedEffects: state.filesystemChanged === true,
+    });
     const raw = (arg: Argument): string =>
       arg.source ? job.command.slice(arg.source.pos, arg.source.end) : '';
     const argSpan = (arg: Argument, fallback: Location): Location => span(arg.source ?? fallback);
@@ -409,6 +451,7 @@ export async function projectMutationView(
       const { args } = unwrapped;
       const executable = args[0]!.value!,
         name = basename(executable);
+      if (name !== 'bash') job.nonShellInvocations.add(JSON.stringify([node.pos, node.end]));
       if (UNPROFILED_BUILTINS.has(name)) {
         issue(
           'mutation-shell-builtin',
@@ -449,7 +492,8 @@ export async function projectMutationView(
       const payloads: InterpreterPayload[] = [];
       if (selected.argument && selected.code !== undefined) {
         const original = argSpan(selected.argument, node);
-        if (shell) queue(selected.code, state.cwd, job.depth + 1, () => original);
+        if (shell)
+          queue(selected.code, state.cwd, job.depth + 1, () => original, parent(node, state));
         else if (text(selected.code, original))
           payloads.push({
             text: selected.code,
@@ -472,8 +516,13 @@ export async function projectMutationView(
           if (body !== null) {
             const original = span(last.body);
             if (shell)
-              queue(body, state.cwd, job.depth + 1, (location) =>
-                span({ pos: last.body.pos + location.pos, end: last.body.pos + location.end })
+              queue(
+                body,
+                state.cwd,
+                job.depth + 1,
+                (location) =>
+                  span({ pos: last.body.pos + location.pos, end: last.body.pos + location.end }),
+                parent(node, state)
               );
             else if (text(body, original))
               payloads.push({
@@ -519,6 +568,7 @@ export async function projectMutationView(
       }
       const kind =
         node.type === 'HereString' || node.operator === '<' ? 'input_redirect' : 'redirect';
+      if (kind === 'redirect') job.writeRedirect = true;
       for (const fields of targets) {
         token(node.operator, kind, false, span(node), state.cwd);
         for (const arg of fields)
@@ -529,7 +579,7 @@ export async function projectMutationView(
     const observeGitMetadata = ({ node, subcommand, input }: GitMetadataObservation): void => {
       if (exhausted) return;
       const original = span(node);
-      if (request.cwd === null || input === null) {
+      if (request.cwd === null || input === null || inheritedEffects(job)) {
         issue(
           'metadata-coordinate-unresolved',
           'Git metadata write coordinates are not proven.',
@@ -625,6 +675,8 @@ export async function projectMutationView(
       }
     );
     for (const reason of analysis.reasons) {
+      if (reason.code === 'utility-unsupported')
+        job.unmodeledInvocations.add(JSON.stringify([reason.start, reason.end]));
       if (POLICY_ONLY.has(reason.code)) continue;
       if (
         reason.code === 'utility-unsupported' &&

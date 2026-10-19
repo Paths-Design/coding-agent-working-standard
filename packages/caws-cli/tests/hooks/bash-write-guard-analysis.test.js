@@ -340,6 +340,76 @@ test('Git metadata registry identity uses physical paths through an alias', () =
   fs.writeFileSync(path.join(fx.project, '.caws/worktrees.json'), JSON.stringify(registry));
   expect(guard('git -C ' + quote(own) + ' add -- file').status).toBe(0);
 });
+test('an independent --work-tree cannot lend identity to foreign Git metadata', () => {
+  const { own } = metadataWorktrees();
+  const foreignDirectory = git(['-C', fx.foreign, 'rev-parse', '--absolute-git-dir']);
+  const ownDirectory = git(['-C', own, 'rev-parse', '--absolute-git-dir']);
+  for (const target of [fx.project, own]) {
+    refused(
+      'git --git-dir=' + quote(foreignDirectory) + ' --work-tree=' + quote(target) + ' add -- file',
+      "Git metadata for worktree 'foreign'"
+    );
+  }
+  // Distinct metadata with the same reported worktree cannot share an owner-cache entry.
+  refused(
+    'git add -- file; git --git-dir=' +
+      quote(foreignDirectory) +
+      ' --work-tree=' +
+      quote(fx.project) +
+      ' add -- file',
+    "Git metadata for worktree 'foreign'"
+  );
+  const mismatch = guard(
+    'git --git-dir=' + quote(ownDirectory) + ' --work-tree=' + quote(fx.project) + ' add -- file'
+  );
+  expect(mismatch.status).toBe(2);
+  expect(mismatch.stderr).toContain('git-metadata-worktree-mismatch');
+  expect(
+    guard('git --git-dir=' + quote(ownDirectory) + ' --work-tree=' + quote(own) + ' add -- file')
+      .status
+  ).toBe(0);
+});
+test('a named mapping mutation invalidates subsequent Git metadata discovery', () => {
+  const { own } = metadataWorktrees();
+  const pointer = fs.readFileSync(path.join(own, '.git'), 'utf8');
+  const result = guard(
+    'cp ' +
+      quote(path.join(fx.foreign, '.git')) +
+      ' ' +
+      quote(path.join(own, '.git')) +
+      '; git -C ' +
+      quote(own) +
+      ' add -- file'
+  );
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('metadata-coordinate-unresolved');
+  expect(fs.readFileSync(path.join(own, '.git'), 'utf8')).toBe(pointer);
+});
+test.each(['gitdir', 'commondir', 'forward', 'hardlink', 'symlink'])(
+  'nonreciprocal or nonordinary metadata pointers hold: %s',
+  (kind) => {
+    const { own } = metadataWorktrees();
+    const directory = git(['-C', own, 'rev-parse', '--absolute-git-dir']);
+    if (kind === 'gitdir')
+      fs.writeFileSync(path.join(directory, 'gitdir'), path.join(fx.foreign, '.git') + '\n');
+    if (kind === 'commondir')
+      fs.writeFileSync(path.join(directory, 'commondir'), fx.sibling + '/.git\n');
+    if (kind === 'forward')
+      fs.writeFileSync(path.join(own, '.git'), 'gitdir: ' + path.join(fx.project, '.git') + '\n');
+    if (kind === 'hardlink')
+      fs.linkSync(path.join(directory, 'gitdir'), path.join(fx.root, 'extra-link'));
+    if (kind === 'symlink') {
+      const stored = path.join(fx.root, 'stored-pointer');
+      fs.renameSync(path.join(directory, 'gitdir'), stored);
+      fs.symlinkSync(stored, path.join(directory, 'gitdir'));
+    }
+    const result = guard('git -C ' + quote(own) + ' add -- file');
+    expect(result.status).toBe(2);
+    if (kind === 'commondir') expect(result.stderr).toContain('DIFFERENT repository');
+    else if (kind === 'forward') expect(result.stderr).toContain('git-metadata-worktree-mismatch');
+    else expect(result.stderr).toMatch(/git-metadata-mapping|metadata-discovery-failure/);
+  }
+);
 test.each(['directory', 'common'])(
   'external unmarked Git metadata %s needs an explicit ownership answer',
   (field) => {

@@ -422,11 +422,13 @@ done < <(extract_targets "$COMMAND"; scan_interpreter_targets "$COMMAND")
 # Git add/commit write Git metadata rather than a payload FILE. Validate both
 # metadata roots at the repository boundary, then query the actual worktree's
 # owner through a distinct, capability-namespaced oracle operation.
-_GM_INDEX=0; _GM_SEEN_WORKTREES=()
+_GM_INDEX=0; _GM_SEEN_CONTEXTS=()
 while [[ $_GM_INDEX -lt ${#CAWS_AST_GIT_WORKTREE[@]} ]]; do
   _GM_WORKTREE="${CAWS_AST_GIT_WORKTREE[$_GM_INDEX]}"
+  _GM_DIRECTORY="${CAWS_AST_GIT_DIRECTORY[$_GM_INDEX]}"
+  _GM_COMMON="${CAWS_AST_GIT_COMMON[$_GM_INDEX]}"
   _GM_FOREIGN=''
-  for _GM_PATH in "${CAWS_AST_GIT_DIRECTORY[$_GM_INDEX]}" "${CAWS_AST_GIT_COMMON[$_GM_INDEX]}"; do
+  for _GM_PATH in "$_GM_DIRECTORY" "$_GM_COMMON"; do
     if ! _GM_PHYSICAL="$(_realpath "$_GM_PATH")" || [[ "$_GM_PHYSICAL" != /* ]]; then
       escalate ask metadata-path-unresolved ask_git_metadata
       continue
@@ -448,15 +450,17 @@ while [[ $_GM_INDEX -lt ${#CAWS_AST_GIT_WORKTREE[@]} ]]; do
     continue
   fi
   _GM_SEEN=0
-  for _GM_PRIOR in ${_GM_SEEN_WORKTREES[@]+"${_GM_SEEN_WORKTREES[@]}"}; do
-    [[ "$_GM_PRIOR" != "$_GM_WORKTREE" ]] || _GM_SEEN=1
+  _GM_KEY="${#_GM_DIRECTORY}:$_GM_DIRECTORY${#_GM_COMMON}:$_GM_COMMON${#_GM_WORKTREE}:$_GM_WORKTREE"
+  for _GM_PRIOR in ${_GM_SEEN_CONTEXTS[@]+"${_GM_SEEN_CONTEXTS[@]}"}; do
+    [[ "$_GM_PRIOR" != "$_GM_KEY" ]] || _GM_SEEN=1
   done
   [[ $_GM_SEEN == 0 ]] || continue
-  _GM_SEEN_WORKTREES+=( "$_GM_WORKTREE" )
+  _GM_SEEN_CONTEXTS+=( "$_GM_KEY" )
   _GM_STATUS=0
   _GM_OUT="$(CAWS_ORACLE_OPERATION=git-metadata CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_CURRENT_BRANCH='' CAWS_ORACLE_REL_PATH='' \
-    CAWS_ORACLE_GIT_WORKTREE="$_GM_WORKTREE" CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
+    CAWS_ORACLE_GIT_WORKTREE="$_GM_WORKTREE" CAWS_ORACLE_GIT_DIRECTORY="$_GM_DIRECTORY" \
+    CAWS_ORACLE_GIT_COMMON="$_GM_COMMON" CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
     node "$CAWS_CLAIM_ORACLE" 2>&1)" || _GM_STATUS=$?
   _GM_FIRST="${_GM_OUT%%$'\n'*}"
   if [[ "$_GM_FIRST" != git_metadata:* || "$_GM_FIRST" == *$'\r'* || "$_GM_FIRST" == *$'\t'* ]]; then

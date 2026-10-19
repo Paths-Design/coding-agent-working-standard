@@ -42,14 +42,22 @@ common directory and working tree in a distinct metadata channel. A constant
 read-only Git query resolves these coordinates; the submitted operation is never
 executed. Discovery caches at most eight contexts per projection, including
 failures, with a 500 ms deadline and 64 KiB output limit per query and no retry.
+Unprofiled application effects invalidate later filesystem observations. Nested
+shell jobs also inherit parent effects; another unmodeled invocation or output
+redirection anywhere in the enclosing source conservatively invalidates nested
+metadata coordinates, including concurrent pipeline siblings. A sole inspected
+literal Bash invocation is exempt from its own enclosing invocation's opacity;
+mixed finite callees at that source position cannot borrow the exemption.
 Unproven cwd, prior filesystem effects, redirected index files and failed or
 bare-repository discovery remain unresolved. Both metadata directories receive
 the foreign-repository check. External metadata layouts without an established
 project boundary remain unresolved. The oracle separately matches the physical
-working tree to a unique registry entry and its stamped owner. Canonical
-metadata is admitted; unknown identity, missing ownership and duplicate matches
-cannot grant admission for a linked working tree. A namespaced response prevents
-an older file-only oracle from silently accepting a metadata operation.
+working tree, derived from reciprocal metadata pointers, to a unique registry
+entry and its stamped owner. An independently overridden `--work-tree` cannot
+lend its identity to another worktree's metadata. Canonical metadata is
+admitted; unknown identity, missing ownership and duplicate matches cannot grant
+admission for a linked working tree. A namespaced response prevents an older
+file-only oracle from silently accepting a metadata operation.
 
 The interpreter check retains a limited write-verb/path co-occurrence heuristic
 over actual payloads and bounded entry-script reads. It is weaker evidence than

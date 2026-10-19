@@ -290,17 +290,54 @@ function metadataPhysicalDirectory(value) {
   return physical;
 }
 
-// Metadata writes have no payload FILE operand. Resolve ownership through the
-// actual Git working tree, independently of scope globs and optional YAML.
+function metadataPointer(file) {
+  var stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.nlink !== 1 || stat.size > 16384) throw new Error('invalid-pointer');
+  var value = fs.readFileSync(file, 'utf8').replace(/\n$/, '');
+  if (!value || /[\r\n\t\x00]/.test(value)) throw new Error('invalid-pointer-value');
+  return value;
+}
+
+function metadataWorktree(project, directory, common) {
+  var canonical = metadataPhysicalDirectory(path.join(project, '.git'));
+  if (common !== canonical) throw new Error('foreign-common-directory');
+  if (directory === canonical) return project;
+  var registry = metadataPhysicalDirectory(path.join(canonical, 'worktrees'));
+  if (path.dirname(directory) !== registry) throw new Error('unrecognized-metadata-directory');
+  var backlink = metadataPointer(path.join(directory, 'gitdir'));
+  var location = path.isAbsolute(backlink) ? backlink : path.join(directory, backlink);
+  if (path.basename(location) !== '.git') throw new Error('invalid-backlink');
+  var worktree = metadataPhysicalDirectory(path.dirname(location));
+  var forward = metadataPointer(path.join(worktree, '.git'));
+  if (forward.slice(0, 8) !== 'gitdir: ') throw new Error('invalid-forward-pointer');
+  var destination = forward.slice(8);
+  if (metadataPhysicalDirectory(path.isAbsolute(destination) ? destination : path.join(worktree, destination)) !== directory) {
+    throw new Error('nonreciprocal-metadata');
+  }
+  var commonPointer = metadataPointer(path.join(directory, 'commondir'));
+  if (metadataPhysicalDirectory(path.isAbsolute(commonPointer) ? commonPointer : path.join(directory, commonPointer)) !== common) {
+    throw new Error('nonreciprocal-common');
+  }
+  return worktree;
+}
+
+// Git --work-tree changes the reported working tree independently of --git-dir.
+// Ownership follows reciprocal metadata, never that independently routed value.
 function decideGitMetadata() {
-  var project, worktree;
+  var project, reportedWorktree, worktree, directory, common;
   try {
     project = metadataPhysicalDirectory(process.env.CAWS_ORACLE_PROJECT_DIR);
-    worktree = metadataPhysicalDirectory(process.env.CAWS_ORACLE_GIT_WORKTREE);
+    reportedWorktree = metadataPhysicalDirectory(process.env.CAWS_ORACLE_GIT_WORKTREE);
+    directory = metadataPhysicalDirectory(process.env.CAWS_ORACLE_GIT_DIRECTORY);
+    common = metadataPhysicalDirectory(process.env.CAWS_ORACLE_GIT_COMMON);
+    worktree = metadataWorktree(project, directory, common);
   } catch (_) {
-    emit('error_fail_closed', 'git-metadata-coordinate');
+    emit('error_fail_closed', 'git-metadata-mapping');
   }
-  if (worktree === project) emit('pass', 'git-canonical-metadata');
+  if (worktree === project) {
+    if (reportedWorktree !== worktree) emit('ask_uncertain', 'git-metadata-worktree-mismatch');
+    emit('pass', 'git-canonical-metadata');
+  }
   var registry;
   try {
     registry = JSON.parse(fs.readFileSync(path.join(project, '.caws', 'worktrees.json'), 'utf8'));
@@ -334,7 +371,10 @@ function decideGitMetadata() {
   if (typeof name !== 'string' || !name || /[:\r\n\t]/.test(name)) emit('ask_uncertain', 'git-metadata-name');
   if (typeof owner !== 'string' || !owner || owner === 'unknown' || /[\r\n\t]/.test(owner)) emit('ask_uncertain', 'git-metadata-owner');
   if (typeof session !== 'string' || !session || session === 'unknown' || /[\r\n\t]/.test(session)) emit('ask_uncertain', 'git-metadata-session');
-  if (owner === session) emit('pass', 'owner-self:' + name);
+  if (owner === session) {
+    if (reportedWorktree !== worktree) emit('ask_uncertain', 'git-metadata-worktree-mismatch');
+    emit('pass', 'owner-self:' + name);
+  }
   emit('block_foreign_worktree', name + ':' + owner);
 }
 
