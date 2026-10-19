@@ -62,3 +62,9 @@ contracts:
     type: schema
   - name: 'bounded-one-shot-consumer-behavior'
     type: contract-test
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root inspected ignored foundation-integration-2026-10-19T13-32-19-882Z/manifest.json and raw logs at retained native-runtime-modernization/packages/caws-native/target/qualification/: clean aafa1920 build and strict runtime typing exit 0; shared consumers 175/175, normal adapter selected 2/2 (20 unselected), runtime Jest 616/616 in 16 suites; Rust format, strict all-target Clippy and serial Cargo 29 library plus 21 binary plus 24 integration tests exit 0. CLI rederives commit reachability only; raw ignored artifacts are verifier-inspected, not mechanically rederived. Component coverage does not establish full-package or performance proof."
+    recorded_at: "2026-10-19T13:44:39.860Z"
+    commit_sha: aafa1920378c20273ed8061251a67a7f049cab5e
