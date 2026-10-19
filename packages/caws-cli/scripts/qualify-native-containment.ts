@@ -79,7 +79,11 @@ function auditProblems(
       !latch.trap_escalated_at
     )
       problems.push('target-stamp');
-  } else if (Object.hasOwn(latch, 'trap_escalated_pid')) problems.push('unexpected-target-stamp');
+  } else if (
+    Object.hasOwn(latch, 'trap_escalated_pid') ||
+    Object.hasOwn(latch, 'trap_escalated_at')
+  )
+    problems.push('unexpected-target-stamp');
   let rows: unknown[];
   try {
     rows = (text ?? '')
@@ -280,6 +284,27 @@ function qualifyAuditOracle(): void {
     assert(problems.includes(expected), name + ' escaped the audit oracle');
     return { name, problems };
   });
+  const held = manifest.cases.find(
+    (entry) => entry.mode === 'legacy-python' && entry.kind === 'missing-stamp'
+  );
+  assert(held !== undefined && typeof held.callerPid === 'number');
+  assert(typeof held.escalation === 'string');
+  const heldLatch = held.latch as ObjectData;
+  const checkHeld = (state: ObjectData): string[] =>
+    auditProblems(
+      state,
+      held.escalation as string,
+      'missing-stamp',
+      'effect-missing-stamp',
+      command,
+      held.callerPid as number
+    );
+  assert.deepEqual(checkHeld(heldLatch), []);
+  for (const field of ['trap_escalated_pid', 'trap_escalated_at']) {
+    const problems = checkHeld({ ...heldLatch, [field]: 'unexpected' });
+    assert(problems.includes('unexpected-target-stamp'), field + ' escaped held-state validation');
+    results.push({ name: 'held-' + field, problems });
+  }
   json(path.join(root, 'audit-oracle-controls.json'), results);
   manifest.auditOracleControls = results;
   console.log(JSON.stringify({ auditOracleControls: results }));

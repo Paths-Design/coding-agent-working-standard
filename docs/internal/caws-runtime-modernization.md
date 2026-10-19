@@ -516,6 +516,16 @@ Additional bounded evidence and unresolved dependencies:
   no-kill action, foreign target, missing strike and foreign strike command.
   Strict runner TypeScript and ESLint exit 0. The run records its source hash
   to distinguish this oracle from the earlier committed version.
+- E50: Held-path validation rejects either escalation PID or timestamp, including
+  a timestamp-only stamp. The nine-control run at
+  `packages/caws-native/target/qualification/containment-effect-2026-10-19T07-06-21-222Z/`
+  exits 1 solely for native enabled refusal loss after strict runner compilation
+  and ESLint pass. All 22 audit observations pass; the original seven corruptions
+  and separate held PID-only/timestamp-only corruptions are rejected. Native
+  caller 10303 exits via SIGTERM, quarantine stdout is empty, the forbidden
+  action marker is absent and sibling heartbeat advances 210→316 bytes. This
+  strengthens the evidence oracle; it does not fix the native effect/transport
+  ownership conflict or establish cleanup after caller death.
 
 Containment qualification does not establish cleanup after intentional caller
 death. The caller's watchdog dies with it; capture EOF only closes observed
