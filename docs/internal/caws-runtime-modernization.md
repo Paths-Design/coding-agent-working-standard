@@ -941,7 +941,7 @@ Additional bounded evidence and unresolved dependencies:
   `06a7b16227f9c82bd99067e1c295eb9fde7895d6e2fed1f74ede85aa439b5c4c`
   and runtime digest `9a07585a776c8d8f5f4ae195737fadf2a137b1e5229859fb2327b01a1e3e9b26`.
   Enabled, large-latch and escaped-latch cases in both modes terminate the
-  dedicated caller via SIGTERM; disabled and ten identity/availability controls
+  dedicated caller via SIGTERM; the ten disabled/identity controls
   retain their specified refusal/held outcomes. Every case records no forbidden
   action, advancing sibling heartbeats and no audit errors. Nine corruptions of
   audit/strike/target observations are rejected. In `candidate-native/enabled`,
