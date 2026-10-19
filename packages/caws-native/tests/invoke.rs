@@ -922,12 +922,148 @@ fn assert_not_running(pid: &str) {
         query_ps(&[pid])
     });
 }
+// Instrument the existing strict observer; retention never supplies a new
+// interpretation of absence, status, or cleanup. Flush each query before the
+// original assertion can fail (and before fixture Drop can change process state).
+fn assert_not_running_retained_with(
+    pid: u32,
+    deadline: Instant,
+    receipt: &std::path::Path,
+    mut query: impl FnMut(u32) -> std::io::Result<Output>,
+) -> PsObservation {
+    use std::os::unix::{fs::OpenOptionsExt, process::ExitStatusExt};
+    const MAX_RECEIPT_BYTES: usize = 262_144;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(receipt)
+        .expect("could not create private process observations; cleanup unproved");
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .expect("could not make process observations private; cleanup unproved");
+    let mut retained = 0usize;
+    assert_not_running_with(pid, deadline, |pid| {
+        let queried = query(pid);
+        let parsed = queried
+            .as_ref()
+            .ok()
+            .map(|output| single_ps_observation(pid, output));
+        let output = queried.as_ref().ok();
+        let mut row = serde_json::to_vec(&serde_json::json!({
+            "schema": "caws.native.test.ps-observation.v1",
+            "pid": pid,
+            "query": ["/bin/ps", "-p", &pid.to_string(), "-o", "pid=,ppid=,pgid=,stat="],
+            "exitCode": output.and_then(|output| output.status.code()),
+            "signal": output.and_then(|output| output.status.signal()),
+            "stdoutBytes": output.map(|output| &output.stdout),
+            "stderrBytes": output.map(|output| &output.stderr),
+            "queryError": queried.as_ref().err().map(|error| error.to_string()),
+            "parsedObservation": parsed.as_ref().and_then(|parsed| parsed.as_ref().ok()),
+            "parseError": parsed.as_ref().and_then(|parsed| parsed.as_ref().err()),
+        }))
+        .expect("could not encode process observations; cleanup unproved");
+        row.push(b'\n');
+        retained = retained
+            .checked_add(row.len())
+            .filter(|bytes| *bytes <= MAX_RECEIPT_BYTES)
+            .expect("process observation retention bound exceeded; cleanup unproved");
+        file.write_all(&row)
+            .expect("could not retain process observations; cleanup unproved");
+        file.flush()
+            .expect("could not flush process observations; cleanup unproved");
+        file.sync_data()
+            .expect("could not sync process observations; cleanup unproved");
+        queried
+    })
+}
+fn assert_not_running_retained(pid: &str, receipt: &std::path::Path) {
+    let pid = pid.trim().parse::<u32>().expect("invalid owned PID");
+    assert_not_running_retained_with(
+        pid,
+        Instant::now() + Duration::from_secs(2),
+        receipt,
+        |pid| query_ps(&[pid]),
+    );
+}
 fn ps_test_output(raw_status: i32, stdout: &[u8], stderr: &[u8]) -> Output {
     use std::os::unix::process::ExitStatusExt;
     Output {
         status: std::process::ExitStatus::from_raw(raw_status),
         stdout: stdout.to_vec(),
         stderr: stderr.to_vec(),
+    }
+}
+#[test]
+fn retained_process_observations_preserve_raw_failures_before_asserting() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    let fixture = Fixture::new();
+    let pid = 44;
+    let cases = [
+        (
+            "unknown-status",
+            Ok(ps_test_output(0, b"44 1 44 ?E\n", b"")),
+        ),
+        (
+            "query-exit-failure",
+            Ok(ps_test_output(2 << 8, &[0xff, b'\n'], b"ps failed\n")),
+        ),
+        (
+            "query-execution-failure",
+            Err(std::io::Error::other("injected ps execution failure")),
+        ),
+    ];
+    for (name, result) in cases {
+        let receipt = fixture.dir.join(format!("{name}.jsonl"));
+        let (exit_code, signal, stdout, stderr, query_error, parse_error) = match &result {
+            Ok(output) => (
+                output.status.code(),
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    output.status.signal()
+                },
+                Some(output.stdout.clone()),
+                Some(output.stderr.clone()),
+                None,
+                Some(single_ps_observation(pid, output).unwrap_err()),
+            ),
+            Err(error) => (None, None, None, None, Some(error.to_string()), None),
+        };
+        let mut result = Some(result);
+        let failed = catch_unwind(AssertUnwindSafe(|| {
+            assert_not_running_retained_with(pid, Instant::now(), &receipt, |_| {
+                result.take().unwrap()
+            });
+        }));
+        assert!(
+            failed.is_err(),
+            "unavailable process observation was accepted: {name}"
+        );
+        assert!(result.is_none(), "query was not attempted: {name}");
+        let raw = fs::read(&receipt).unwrap();
+        assert!(raw.ends_with(b"\n"));
+        assert_eq!(raw.iter().filter(|byte| **byte == b'\n').count(), 1);
+        let row: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(
+            row,
+            serde_json::json!({
+                "schema": "caws.native.test.ps-observation.v1",
+                "pid": pid,
+                "query": ["/bin/ps", "-p", "44", "-o", "pid=,ppid=,pgid=,stat="],
+                "exitCode": exit_code,
+                "signal": signal,
+                "stdoutBytes": stdout,
+                "stderrBytes": stderr,
+                "queryError": query_error,
+                "parsedObservation": null,
+                "parseError": parse_error,
+            }),
+            "raw failure receipt differs: {name}"
+        );
+        assert_eq!(
+            fs::metadata(&receipt).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 }
 #[test]
@@ -1793,8 +1929,14 @@ fn terminal_output_loss_does_not_veto_earned_containment_or_borrow_another_proce
             )
             .unwrap();
         } else {
-            assert_not_running(&wait_for_file(&root.join("native-pid.txt")));
-            assert_not_running(&wait_for_file(&root.join("engine-pid.txt")));
+            assert_not_running_retained(
+                &wait_for_file(&root.join("native-pid.txt")),
+                &root.join("native-ps-observations.jsonl"),
+            );
+            assert_not_running_retained(
+                &wait_for_file(&root.join("engine-pid.txt")),
+                &root.join("engine-ps-observations.jsonl"),
+            );
             let native_stderr = fs::read_to_string(root.join("native-stderr.bin")).unwrap();
             assert!(
                 native_stderr.contains("output delivery failed"),

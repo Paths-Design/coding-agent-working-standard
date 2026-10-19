@@ -91,6 +91,9 @@ repair exercised across processes. Neither component admits an actual service.
 The subsequent complete Cargo run passes library/binary checks but fails a
 terminal cleanup observation on an unretained process-status token; preserve
 that failure and collect raw observations before changing its oracle (E76).
+E77 adds raw-query retention without changing the strict oracle, then observes
+a successful targeted replay and complete Cargo run. The earlier missing token
+and the cause of that observation failure remain unknown.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -1251,6 +1254,25 @@ Additional bounded evidence and unresolved dependencies:
   retain exit status and exact stdout/stderr before assertion; do not loosen the
   parser or attribute the failure without that evidence. Prior green containment
   artifacts and the historical E69 failure remain separate observations.
+- E77: The terminal fixture's per-PID native/engine observations are retained
+  as private bounded JSONL before the existing assertion can fail. Each row
+  includes exact stdout/stderr byte arrays, exit code/signal, query errors and
+  the strict parsed result/error. The injected unavailable-status, invalid-byte
+  and query-execution controls fail their assertions only after writing the
+  expected receipt (`ps-retention-tests.log`, one selected check, exit 0).
+  Parser grammar, the two-second observation budget and absence classification
+  are unchanged. `terminal-ps-retained-replay.log` exits 0 across all three
+  output-loss modes. In `caws-native-54305-0/close-after-prefix/`, the native and
+  engine JSONL rows independently record exit1 with exact-empty stdout/stderr
+  for PIDs54387/54421. The stalled-settlement receipt records caller PID54884
+  terminated by signal15 after 175ms; native PID54886 is directly reaped with
+  code2, complete 1,000,033-byte output, and known engine/holder PIDs54892/54897
+  are absent. Sibling heartbeat advances 1→35. Its explicit nonclaims include
+  all-descendant reaping and actual typed-dispatcher execution. Strict Clippy
+  exits 0 (`ps-retention-clippy.log`); the complete subsequent Cargo run exits 0
+  with 77 library, 34 binary, 28 integration and three ancestor-example checks
+  (`ps-retention-all-tests.log`). This replay does not identify E76's lost raw
+  token or attribute its failure; future unknown formats remain unavailable.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -1352,7 +1374,8 @@ reproduced ancestor-capture deadline failure; inspect its typed stage and
 per-observation/substage timing before changing capture policy or budgets.
 
 1. Resolve R33 through explicit service binding and client integration. E70's
-   journal and E72's descriptor client are available source components; the next
+   journal, E74's native codec, E75's custody and E72's descriptor client are
+   available source components; the next
    implementation must connect actual selected-source admission to a native-owned
    service and the immutable effective closure. Issue per-offer grants and
    descriptor rights only after validating the original selection, keep original
@@ -1386,6 +1409,19 @@ per-observation/substage timing before changing capture policy or budgets.
    only owned private service retirement during qualification; if cleanup stays
    live or ambiguous at its bounded deadline, retain the sandbox and stop
    further scenarios. No arbitrary descendant receives a cleanup exemption.
+   `executeCompatibilityDispatch` and the actual `run-handlers.sh` execution
+   route must receive a native-admitted image/offer; a standalone source plan or
+   startup relay cannot activate it. Keep original-path provenance when routing
+   execution to an image. `caws_source_lib` probes live project/user/surface/shared
+   tiers, `handler-env.sh` sources prior Bash startup, the parser directly sources
+   `session-cache.sh`, and `CAWS_GUARD_CONFIG_PY` can select another program.
+   Capture or explicitly reject these inputs and use a closed resolved library
+   table. Any interim Python compatibility profile must name its pinned isolated
+   interpreter/stdlib/system-toolchain trust boundary; it does not earn Python
+   retirement. Tool wrappers must avoid Bash startup recursion. The native owner
+   must select one stable custody home across generations and never turn an
+   acquire failure into fresh initialization. No unused active declaration or
+   unadmitted standalone-plan implementation substitutes for this integration.
 2. Investigate the remaining R32 identity/process-domain dependencies.
    E52/E53/E55/E56 observe the selected
    caller/refusal/effect/finalization chain and hostile output failure, but do
