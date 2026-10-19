@@ -32,6 +32,7 @@ invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
   - 'Preserve independently supported consumer contracts and project overrides; migration evidence distinguishes implementation, installation and native execution.'
+  - 'Machine-wide shared capacity must isolate canonical project and session state; no single repository may monopolize required enforcement.'
 acceptance:
   - id: A1
     given: 'the inspected CAWS baseline and original user scope'
@@ -61,6 +62,19 @@ acceptance:
     given: 'built packages and prior installed generations'
     when: 'installation, upgrade and rollback are exercised'
     then: 'runtime and protocol identity, trust/adoption, immutable generation recovery and consumer documentation are verified before replacing the shared machine runtime.'
+  - id: A8
+    given: >-
+      at least thirteen simultaneous CAWS sessions across at least four
+      repositories, including mixed harnesses and repeated session IDs in different
+      repositories
+    when: >-
+      concurrent guard and rendering bursts, slow extensions, overload, heartbeat
+      expiry and generation upgrades are exercised
+    then: >-
+      per-project and per-session measurements demonstrate bounded fair admission,
+      isolated state, ordered owner-specific mutations, independent required
+      enforcement capacity, no eviction of in-flight work and no unsafe replay or
+      interruption of another generation.
 observability:
   - 'Per-request runtime identity, stage timings, terminal outcome, interrupted state and separate transport delivery observation.'
 rollback:
