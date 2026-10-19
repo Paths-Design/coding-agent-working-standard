@@ -90,7 +90,8 @@ impl std::error::Error for Unavailable {
 }
 
 /// An explicitly supplied canonical-project SHA256 and a validated session key.
-/// Valid sessions use `sid-<SID>`; missing or unsafe session keys use the
+/// Valid sessions use a lowercase base32 encoding of their exact bytes;
+/// missing or unsafe session keys use the
 /// reserved `unkeyed` directory inside that project only.
 /// The project digest namespaces operational state; it does not confer authority.
 #[derive(Debug, Clone)]
@@ -126,13 +127,36 @@ impl BudgetIdentity {
                         .bytes()
                         .all(|c| c.is_ascii_alphanumeric() || b"_.@:-".contains(&c))
             })
-            .map(|sid| format!("sid-{sid}"))
+            .map(session_directory)
             .unwrap_or_else(|| "unkeyed".into());
         Ok(Self {
             project_digest: digest.into(),
             session,
         })
     }
+}
+
+// Lowercase filename alphabet is injective under ordinary filesystem case
+// folding. At 128 source bytes the key is 209 bytes, below NAME_MAX=255.
+fn session_directory(sid: &str) -> String {
+    const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
+    let mut result = String::from("sid-");
+    let mut pending = 0_u16;
+    let mut bits = 0;
+    for byte in sid.bytes() {
+        pending = (pending << 8) | u16::from(byte);
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            result.push(char::from(ALPHABET[usize::from((pending >> bits) & 31)]));
+        }
+    }
+    if bits > 0 {
+        result.push(char::from(
+            ALPHABET[usize::from((pending << (5 - bits)) & 31)],
+        ));
+    }
+    result
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -682,7 +706,11 @@ mod tests {
                 .join("state/projects")
                 .join(PROJECT)
                 .join("sessions")
-                .join(format!("sid-{session}"))
+                .join(
+                    BudgetIdentity::resolve(Some(session), Some(PROJECT))
+                        .unwrap()
+                        .session,
+                )
         }
         fn counter(&self, session: &str) -> std::path::PathBuf {
             self.directory(session).join("stop-undeliverable.json")
@@ -710,6 +738,60 @@ mod tests {
             Err(error) => assert_eq!(error.kind, expected, "{error}"),
             Ok(_) => panic!("expected unavailable {expected:?}"),
         }
+    }
+
+    #[test]
+    fn session_directory_encoding_preserves_bytes_and_filename_bounds() {
+        for (source, expected) in [
+            ("f", "my"),
+            ("fo", "mzxq"),
+            ("foo", "mzxw6"),
+            ("foob", "mzxw6yq"),
+            ("fooba", "mzxw6ytb"),
+            ("foobar", "mzxw6ytboi"),
+            ("CaseA", "inqxgzkb"),
+            ("casea", "mnqxgzlb"),
+        ] {
+            assert_eq!(session_directory(source), format!("sid-{expected}"));
+        }
+        let longest = "x".repeat(128);
+        let key = session_directory(&longest);
+        assert_eq!(key.len(), 209);
+        assert!(
+            key.bytes()
+                .all(|byte| byte.is_ascii_lowercase() || b"-234567".contains(&byte))
+        );
+        let fixture = Fixture::new();
+        assert_eq!(
+            fixture.budget(&longest).charge(soon()).unwrap(),
+            Charge::Refuse
+        );
+        assert_eq!(fixture.count(&longest), 1);
+    }
+
+    #[test]
+    fn mixed_case_session_ids_do_not_share_or_reset_counters() {
+        let upper = BudgetIdentity::resolve(Some("CaseA"), Some(PROJECT)).unwrap();
+        let lower = BudgetIdentity::resolve(Some("casea"), Some(PROJECT)).unwrap();
+        assert_ne!(
+            upper.session.to_ascii_lowercase(),
+            lower.session.to_ascii_lowercase(),
+            "session directory keys must remain distinct on case-insensitive filesystems"
+        );
+        let fixture = Fixture::new();
+        let a = fixture.budget("CaseA");
+        let b = fixture.budget("casea");
+        assert_eq!(a.charge(soon()).unwrap(), Charge::Refuse);
+        assert_eq!(a.charge(soon()).unwrap(), Charge::Refuse);
+        assert_eq!(b.charge(soon()).unwrap(), Charge::Refuse);
+        assert_eq!(fixture.count("CaseA"), 2);
+        assert_eq!(fixture.count("casea"), 1);
+        b.reset(soon()).unwrap();
+        assert_eq!(fixture.count("CaseA"), 2);
+        assert_eq!(fixture.count("casea"), 0);
+        let a_stat = fs::metadata(fixture.directory("CaseA")).unwrap();
+        let b_stat = fs::metadata(fixture.directory("casea")).unwrap();
+        assert_ne!((a_stat.dev(), a_stat.ino()), (b_stat.dev(), b_stat.ino()));
     }
 
     #[test]
@@ -766,7 +848,7 @@ mod tests {
             UnavailableKind::Identity,
         );
         let identity = BudgetIdentity::resolve(Some("safe-_.@colon:1"), Some(PROJECT)).unwrap();
-        assert_eq!(identity.session, "sid-safe-_.@colon:1");
+        assert_eq!(identity.session, "sid-onqwmzjnl4xeay3pnrxw4orr");
         assert_eq!(identity.project_digest, PROJECT);
         let fixture = Fixture::new();
         for sid in [None, Some("../unsafe"), Some(&"x".repeat(129))] {
@@ -843,7 +925,7 @@ mod tests {
                 .home
                 .join("state/projects")
                 .join(digest)
-                .join("sessions/sid-same-session/stop-undeliverable.json");
+                .join("sessions/sid-onqw2zjnonsxg43jn5xa/stop-undeliverable.json");
             let counter: Counter = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
             assert_eq!(counter.consecutive_undeliverable, 0);
         }
@@ -855,7 +937,7 @@ mod tests {
                     .home
                     .join("state/projects")
                     .join(&projects[1])
-                    .join("sessions/sid-same-session/stop-undeliverable.json"),
+                    .join("sessions/sid-onqw2zjnonsxg43jn5xa/stop-undeliverable.json"),
             )
             .unwrap(),
         )
@@ -1240,7 +1322,7 @@ mod tests {
             BudgetIdentity::resolve(Some(&"x".repeat(128)), Some(PROJECT))
                 .unwrap()
                 .session,
-            format!("sid-{}", "x".repeat(128))
+            session_directory(&"x".repeat(128))
         );
         assert_eq!(
             BudgetIdentity::resolve(Some(&"x".repeat(129)), Some(PROJECT))
