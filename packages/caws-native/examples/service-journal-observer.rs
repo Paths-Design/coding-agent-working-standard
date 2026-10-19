@@ -1,12 +1,13 @@
-//! Component qualifier for prevalidated TypeScript render-request fixture bytes.
-//! Correlation fields are copied, not independently protocol/authority verified.
+//! Component qualifier for TypeScript render-request fixture bytes. The native
+//! codec independently verifies the exact protocol, derived IDs and argument hash;
+//! source authority, image admission and service ownership are not verified.
 //! No renderer, daemon, protocol fallback, or production service owner is invoked.
 
 use caws_native::service_journal::{
-    AcceptedOutcome, Admission, Dispatch, ErrorKind, Identity, Journal, MAX_VERIFIED_REQUEST_BYTES,
-    Operation, ReturnedResult,
+    AcceptedOutcome, Admission, Custody, Dispatch, ErrorKind, Identity, Journal,
+    MAX_VERIFIED_REQUEST_BYTES, Operation, ReturnedResult,
 };
-use serde::Deserialize;
+use caws_native::service_protocol::decode_render_request;
 use serde_json::{Value, json};
 use std::{
     env,
@@ -21,20 +22,6 @@ use std::{
 
 type ProbeResult<T> = Result<T, Box<dyn Error>>;
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProducerFixtureFields {
-    request_id: String,
-    argument_digest: String,
-    project_service_key: String,
-    source_generation: String,
-    execution_image: ProducerFixtureImage,
-}
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProducerFixtureImage {
-    image_digest: String,
-}
 struct Fixture {
     identity: Identity,
     bytes: Vec<u8>,
@@ -72,8 +59,7 @@ fn read_fixture(path: &Path) -> ProbeResult<Fixture> {
         bytes.len() <= MAX_VERIFIED_REQUEST_BYTES,
         "request fixture grew beyond the byte bound",
     )?;
-    // Extra protocol fields are intentionally not interpreted by this fixture.
-    let fields: ProducerFixtureFields = serde_json::from_slice(&bytes)?;
+    let fields = decode_render_request(&bytes)?;
     Ok(Fixture {
         identity: Identity {
             request_id: fields.request_id,
@@ -103,7 +89,8 @@ fn emit(stage: &'static str, mut fields: Value) -> ProbeResult<()> {
     frame.insert("componentOnly".into(), json!(true));
     frame.insert("daemonDispatched".into(), json!(false));
     frame.insert("prevalidatedProducerFixture".into(), json!(true));
-    frame.insert("independentProtocolValidation".into(), json!(false));
+    frame.insert("independentProtocolValidation".into(), json!(true));
+    frame.insert("authorityVerified".into(), json!(false));
     let mut output = std::io::stdout().lock();
     serde_json::to_writer(&mut output, &fields)?;
     output.write_all(b"\n")?;
@@ -309,7 +296,7 @@ fn run() -> ProbeResult<()> {
     }
     require(
         args.len() == 4,
-        "usage: <seed-abort|recover|returned-child> <private-existing-journal-root> <request1.json> <request2.json>",
+        "usage: <seed-abort|recover|returned-child> <dedicated-private-custody-home> <request1.json> <request2.json>",
     )?;
     let mode = args[0].to_str().ok_or("mode must be UTF-8")?;
     require(
@@ -326,12 +313,14 @@ fn run() -> ProbeResult<()> {
         first.identity.request_id != second.identity.request_id,
         "fixtures must have different request IDs",
     )?;
-    let mut journal = Journal::open(
-        Path::new(&args[1]),
-        &first.identity.project_service_key,
-        2,
-        expires(),
-    )?;
+    // This explicit qualifier mode requires pristine first-install state;
+    // ordinary recovery never initializes custody on an acquire error.
+    let owner = if mode == "recover" {
+        Custody::acquire(Path::new(&args[1]), expires())?
+    } else {
+        Custody::initialize(Path::new(&args[1]), expires())?
+    };
+    let mut journal = Journal::open(owner, &first.identity.project_service_key, 2, expires())?;
     match mode {
         "seed-abort" => seed_abort(&mut journal, &first, &second),
         "recover" => recover(&mut journal, &first, &second),

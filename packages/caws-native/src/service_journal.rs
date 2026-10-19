@@ -2,6 +2,16 @@
 //! project authority nor process ownership. Its caller must independently verify
 //! requests and may write to a daemon only with a returned private Dispatch.
 //!
+//! Production opens require a generation-independent Custody acquired from a
+//! dedicated stable machine home outside the operational root. The custody
+//! registry pins the operational root inode and owner-lock inode. Normal acquire
+//! never initializes or repairs missing state. Journal and Dispatch both retain
+//! the same lifetime machine-owner lock. A substituted/missing operational root
+//! is refused even after all old handles have gone away. The stable machine home
+//! itself and cooperative preservation of journal subdirectories/records are
+//! explicit trust preconditions: this is not arbitrary record-deletion detection,
+//! a malicious same-UID defense, or a root migration/handover implementation.
+//!
 //! One lifetime flock spans generations of the same project/service key. Each
 //! operation is an independently checksummed, atomically replaced private file.
 //! File sync precedes rename; directory sync precedes a successful response or
@@ -40,9 +50,13 @@ use std::{
         unix::{ffi::OsStrExt, fs::MetadataExt},
     },
     path::{Component, Path},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
+
+mod custody;
+pub use custody::Custody;
 
 pub const MAX_RETAINED_RECORDS: u16 = 256;
 pub const MAX_VERIFIED_REQUEST_BYTES: usize = 131_072;
@@ -355,6 +369,7 @@ pub enum Admission {
 #[derive(Debug)]
 pub struct Dispatch {
     operation: Operation,
+    custody: Arc<Custody>,
 }
 impl Dispatch {
     pub fn operation(&self) -> &Operation {
@@ -402,6 +417,7 @@ struct Entry {
 }
 #[derive(Debug)]
 pub struct Journal {
+    custody: Arc<Custody>,
     root: OwnedFd,
     services: OwnedFd,
     directory: OwnedFd,
@@ -747,7 +763,7 @@ impl Drop for Temporary {
 
 impl Journal {
     pub fn open(
-        root: &Path,
+        custody: Arc<Custody>,
         project_service_key: &str,
         max_retained_records: u16,
         expires: Instant,
@@ -761,7 +777,7 @@ impl Journal {
                 "invalid key or explicit retention bound",
             ));
         }
-        let root = private_root(root, expires)?;
+        let root = custody.duplicate_root(expires)?;
         let services = directory_at(root.as_raw_fd(), c"services", true, expires)?;
         private_directory(services.as_raw_fd())?;
         let key_name = CString::new(project_service_key).expect("validated ASCII key");
@@ -825,6 +841,7 @@ impl Journal {
             sync_fd(directory.as_raw_fd(), expires)?;
         }
         let mut journal = Self {
+            custody,
             root,
             services,
             directory,
@@ -944,7 +961,7 @@ impl Journal {
         Ok(journal)
     }
     fn anchor(&self, expires: Instant) -> Result<()> {
-        check_deadline(expires)?;
+        self.custody.check(expires)?;
         for fd in [
             self.root.as_raw_fd(),
             self.services.as_raw_fd(),
@@ -1447,10 +1464,19 @@ impl Journal {
         }
         operation.outcome = AcceptedOutcome::running();
         self.replace(index, operation.clone(), expires)?;
-        Ok(Some(Dispatch { operation }))
+        Ok(Some(Dispatch {
+            operation,
+            custody: Arc::clone(&self.custody),
+        }))
     }
     fn transition_index(&self, dispatch: &Dispatch, expires: Instant) -> Result<usize> {
         self.current(expires)?;
+        if !Arc::ptr_eq(&self.custody, &dispatch.custody) {
+            return Err(JournalError::new(
+                ErrorKind::Invalid,
+                "dispatch belongs to another custody owner",
+            ));
+        }
         self.entries
             .iter()
             .position(|entry| {

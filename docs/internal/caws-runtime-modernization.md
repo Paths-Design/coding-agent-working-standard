@@ -85,6 +85,12 @@ the next R33 integration boundary.
 E73 retains one own-ancestor comparison under the native capture budget. It
 qualifies that sampled context; it does not establish protected-target access,
 logical-session ownership or a latency distribution.
+E74 adds native decoding of the typed service wire and exact-request correlation.
+E75 retains a reproduced whole-root substitution counterexample and a custody
+repair exercised across processes. Neither component admits an actual service.
+The subsequent complete Cargo run passes library/binary checks but fails a
+terminal cleanup observation on an unretained process-status token; preserve
+that failure and collect raw observations before changing its oracle (E76).
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -132,7 +138,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced gap, E57; descriptor-bound client exercised with fixture owner, E72 | Actual native service owner, selected grant/image/client admission, writer custody, source retirement, startup races and cancellation remain open. Client tests do not establish daemon survival/reuse or repair the cold-start regression |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced gap, E57; fixture client E72, native codec E74 and root custody E75 exercised separately | Actual native service owner, selected grant/image/client admission, writer custody, source retirement, startup races and cancellation remain open. Component checks do not establish daemon survival/reuse or repair the cold-start regression |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
@@ -1190,6 +1196,61 @@ Additional bounded evidence and unresolved dependencies:
   or a cold/warm distribution. They do not establish complete production
   cancellation, protected/different-credential targets, physical kernel
   deadlines, containment effects or exclusive logical-session process ownership.
+
+- E74: `service_protocol.rs` independently decodes the existing typed service
+  request/grant/bridge/outcome/receipt wire, checks canonical UTF-8 JSON and
+  recomputes request, project and argument identities. The externally produced
+  fixture corpus has 64 accepted and 65 rejected cases; Rust's four focused
+  checks exit 0 (`service_protocol::tests`). CR/LF/US and non-ASCII values remain
+  data. Public hashes do not replace a retained issued grant and full expected
+  request: changing the exact-request comparison to unconditional success makes
+  the hostile check exit 101 (`service-primitives-2026-10-19/wire-equality-mutant.log`);
+  the restored four-check run exits 0 (`wire-restored-tests.log`). The updated
+  journal observer uses native decoding instead of copying fixture identities.
+  Its separate-process runner exits 0 and retains
+  `service-primitives-2026-10-19/cross-process-BINda3/observation.json`:
+  seed exits 73 with running/queued records; recovery exits 0 with unknown/queued
+  and both generations fenced; a directly reaped child PID75371 exits 7 and its
+  exact result is stored. Checksums, original request bytes and TypeScript
+  outcome correlation are inspected independently. No native bridge listener,
+  grant issuer, authority revalidation or real renderer is exercised.
+- E75: Before repair, `cargo run --example service-journal-root-replacement --
+  <artifact-root>` exits 1. Both `journal-root-replacement-red-2026-10-19/`
+  observation files show a replacement operational root accepting and dispatching
+  work while its unchanged prior running/unknown record is invisible. The
+  historical probe patch is retained beside those observations. The public
+  journal API requires an `Arc<Custody>` acquired from a dedicated stable private
+  home outside the operational tree. An immutable bounded registry pins root
+  and machine-lock device/inode; normal acquisition creates nothing. Explicit
+  first initialization refuses nonempty/partial state. Journals and issued
+  permits retain the lifetime machine-owner lock, shared across project keys.
+  The 36 journal checks exit 0 (`custody-tests-initial.log`); strict all-target
+  Clippy and example builds exit 0 (`custody-wire-clippy.log`,
+  `custody-wire-examples-build.log`). The repaired standalone qualifier exits 0:
+  `journal-root-custody-2026-10-19/outstanding/observation.json` records a separate
+  process PID66219 observing Busy while only the permit retains custody, then
+  PID66227 observing UnsafePath after root replacement and permit drop.
+  `restart/observation.json` records PID66228 observing UnsafePath for a replaced
+  recovered-unknown root after all owners drop. All three observers exit 0,
+  without signal, and are directly reaped; neither replacement accepts or
+  dispatches, and original record bytes remain unchanged. Stable custody-home
+  identity and cooperative preservation of journal subdirectories/records are
+  explicit prerequisites. Arbitrary record/subtree deletion, replacement of the
+  entire custody home, production handover, retention policy and resident-owner
+  integration are not established. The future owner must select one canonical,
+  generation-independent custody home and must not initialize on acquire errors.
+- E76: `cargo test --all-targets -- --nocapture --test-threads=1` exits 101
+  (`service-primitives-2026-10-19/custody-wire-all-tests.log`): 77 library and 34
+  binary checks pass; 26 integration checks pass and the terminal-output scenario
+  fails at the strict process-state parser. Retained
+  `caws-native-45077-133/close-after-prefix/caller-wait-status.json` records caller
+  PID46036 actually terminated by signal15 after 424ms, with a separate Broken
+  pipe diagnostic. The rejected process-status token/raw query was not retained;
+  cleanup for that attempt is unproven. Source review alone establishes no
+  missing documented status flag. Instrument the native/engine query paths to
+  retain exit status and exact stdout/stderr before assertion; do not loosen the
+  parser or attribute the failure without that evidence. Prior green containment
+  artifacts and the historical E69 failure remain separate observations.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint

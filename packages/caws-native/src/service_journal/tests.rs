@@ -74,6 +74,7 @@ fn soon() -> Instant {
 struct Fixture {
     base: PathBuf,
     root: PathBuf,
+    custody: Arc<Custody>,
 }
 impl Fixture {
     fn new() -> Self {
@@ -99,13 +100,19 @@ impl Fixture {
             .unwrap(),
         )
         .unwrap();
-        let root = base.join("private");
-        fs::create_dir(&root).unwrap();
-        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-        Self { base, root }
+        let home = base.join("private-custody");
+        fs::create_dir(&home).unwrap();
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+        let custody = Custody::initialize(&home, soon()).unwrap();
+        let root = home.join("operations");
+        Self {
+            base,
+            root,
+            custody,
+        }
     }
     fn open(&self, capacity: u16) -> Journal {
-        Journal::open(&self.root, &"c".repeat(64), capacity, soon()).unwrap()
+        Journal::open(Arc::clone(&self.custody), &"c".repeat(64), capacity, soon()).unwrap()
     }
     fn dir(&self) -> PathBuf {
         self.root.join("services").join("c".repeat(64))
@@ -221,7 +228,7 @@ fn initialization_sync_failure_reopens_visible_directories_and_resyncs_all_ances
         let fixture = Fixture::new();
         let probe = DirectSyncProbe::start(Some(failed_call), None);
         error(
-            Journal::open(&fixture.root, &"c".repeat(64), 2, soon()),
+            Journal::open(Arc::clone(&fixture.custody), &"c".repeat(64), 2, soon()),
             ErrorKind::Io,
         );
         assert_eq!(probe.calls().len(), failed_call);
@@ -237,7 +244,7 @@ fn initialization_deadline_after_real_directory_sync_is_reanchored_on_retry() {
     let probe = DirectSyncProbe::start(None, Some(1));
     error(
         Journal::open(
-            &fixture.root,
+            Arc::clone(&fixture.custody),
             &"c".repeat(64),
             2,
             Instant::now() + Duration::from_millis(100),
@@ -409,7 +416,7 @@ fn lifetime_lock_and_exact_queued_order_cross_source_generations() {
     journal.admit(next, b"{}", soon()).unwrap();
     error(
         Journal::open(
-            &fixture.root,
+            Arc::clone(&fixture.custody),
             &"c".repeat(64),
             3,
             Instant::now() + Duration::from_millis(20),
@@ -684,7 +691,7 @@ fn short_malformed_oversized_and_changed_checksums_fail_closed() {
         };
         fs::write(fixture.record(1), &bytes).unwrap();
         error(
-            Journal::open(&fixture.root, &"c".repeat(64), 1, soon()),
+            Journal::open(Arc::clone(&fixture.custody), &"c".repeat(64), 1, soon()),
             ErrorKind::Corrupt,
         );
         assert_eq!(fs::read(fixture.record(1)).unwrap(), bytes);
@@ -734,7 +741,7 @@ fn symlink_shared_mode_hardlink_and_foreign_owner_shape_are_rejected() {
             _ => fs::set_permissions(&fixture.root, fs::Permissions::from_mode(0o750)).unwrap(),
         }
         error(
-            Journal::open(&fixture.root, &"c".repeat(64), 1, soon()),
+            Journal::open(Arc::clone(&fixture.custody), &"c".repeat(64), 1, soon()),
             ErrorKind::UnsafePath,
         );
     }
@@ -756,13 +763,15 @@ fn symlink_root_and_invalid_capacity_never_create_a_journal() {
     let fixture = Fixture::new();
     let alias = fixture.base.join("alias");
     symlink(&fixture.root, &alias).unwrap();
-    error(
-        Journal::open(&alias, &"c".repeat(64), 1, soon()),
-        ErrorKind::UnsafePath,
-    );
+    error(private_root(&alias, soon()), ErrorKind::UnsafePath);
     for capacity in [0, MAX_RETAINED_RECORDS + 1] {
         error(
-            Journal::open(&fixture.root, &"c".repeat(64), capacity, soon()),
+            Journal::open(
+                Arc::clone(&fixture.custody),
+                &"c".repeat(64),
+                capacity,
+                soon(),
+            ),
             ErrorKind::Invalid,
         );
     }
@@ -784,7 +793,7 @@ fn replaced_lock_changed_capacity_deadline_and_live_tampering_do_not_authorize_d
     );
     drop(journal);
     error(
-        Journal::open(&fixture.root, &"c".repeat(64), 1, soon()),
+        Journal::open(Arc::clone(&fixture.custody), &"c".repeat(64), 1, soon()),
         ErrorKind::Corrupt,
     );
     let fixture = Fixture::new();
@@ -1178,7 +1187,7 @@ fn idempotent_cancellation_refuses_changed_persisted_bytes_without_repairing_the
     assert_eq!(cancellation_disk_snapshot(&fixture), before);
     drop(journal);
     error(
-        Journal::open(&fixture.root, &"c".repeat(64), 1, soon()),
+        Journal::open(Arc::clone(&fixture.custody), &"c".repeat(64), 1, soon()),
         ErrorKind::Corrupt,
     );
     assert_eq!(
@@ -1276,4 +1285,367 @@ fn failed_cancellation_sync_never_acknowledges_and_poisoned_handle_cannot_dispat
                 .is_none()
         );
     }
+}
+
+fn dedicated_custody_home(fixture: &Fixture) -> PathBuf {
+    let home = fixture.base.join("dedicated-machine-home");
+    fs::create_dir(&home).unwrap();
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+    home
+}
+fn custody_busy(home: &Path) {
+    error(
+        Custody::acquire(home, Instant::now() + Duration::from_millis(20)),
+        ErrorKind::Busy,
+    );
+}
+#[test]
+fn custody_root_replacement_refuses_old_operations_and_new_admission_after_owner_restart() {
+    let fixture = Fixture::new();
+    let home = dedicated_custody_home(&fixture);
+    let custody = Custody::initialize(&home, soon()).unwrap();
+    let mut journal = Journal::open(Arc::clone(&custody), &"c".repeat(64), 2, soon()).unwrap();
+    admitted(&mut journal, 1);
+    let permit = begin(&mut journal);
+    let retired = fixture.base.join("retired-operations");
+    let record = format!("{:064x}.json", 1);
+    let before = fs::read(
+        home.join("operations/services")
+            .join("c".repeat(64))
+            .join(&record),
+    )
+    .unwrap();
+    fs::rename(home.join("operations"), &retired).unwrap();
+    fs::create_dir(home.join("operations")).unwrap();
+    fs::set_permissions(home.join("operations"), fs::Permissions::from_mode(0o700)).unwrap();
+    error(
+        journal.admit(identity(2), b"{}", soon()),
+        ErrorKind::UnsafePath,
+    );
+    error(
+        Journal::open(Arc::clone(&custody), &"e".repeat(64), 2, soon()),
+        ErrorKind::UnsafePath,
+    );
+    custody_busy(&home);
+    drop(journal);
+    drop(custody);
+    // An already issued permit cannot be revoked by a pathname check. It must
+    // instead retain exclusive owner custody after the Journal is dropped.
+    assert_eq!(permit.operation().identity(), &identity(1));
+    custody_busy(&home);
+    drop(permit);
+    error(Custody::acquire(&home, soon()), ErrorKind::UnsafePath);
+    assert!(Custody::initialize(&home, soon()).is_err());
+    assert_eq!(
+        fs::read(retired.join("services").join("c".repeat(64)).join(record)).unwrap(),
+        before
+    );
+    assert!(!home.join("operations/services").exists());
+}
+#[test]
+fn dispatch_retains_machine_lock_after_journal_drop_then_restart_recovers_unknown() {
+    let fixture = Fixture::new();
+    let home = dedicated_custody_home(&fixture);
+    let custody = Custody::initialize(&home, soon()).unwrap();
+    let mut journal = Journal::open(Arc::clone(&custody), &"c".repeat(64), 2, soon()).unwrap();
+    admitted(&mut journal, 1);
+    let permit = begin(&mut journal);
+    drop(journal);
+    drop(custody);
+    custody_busy(&home);
+    drop(permit);
+    let recovered_custody = Custody::acquire(&home, soon()).unwrap();
+    let mut recovered =
+        Journal::open(Arc::clone(&recovered_custody), &"c".repeat(64), 2, soon()).unwrap();
+    assert!(matches!(
+        recovered
+            .lookup(&identity(1).request_id, soon())
+            .unwrap()
+            .unwrap()
+            .outcome(),
+        AcceptedOutcome::Unknown { .. }
+    ));
+    let mut next = identity(2);
+    next.source_generation = "e".repeat(64);
+    assert!(matches!(
+        recovered.admit(next, b"{}", soon()).unwrap(),
+        Admission::Accepted {
+            duplicate: false,
+            ..
+        }
+    ));
+    error(
+        recovered.begin_next(&"e".repeat(64), &"b".repeat(64), soon()),
+        ErrorKind::Fenced,
+    );
+    custody_busy(&home);
+}
+#[test]
+fn one_custody_supports_multiple_project_keys_without_mixing_their_fences() {
+    let fixture = Fixture::new();
+    let home = dedicated_custody_home(&fixture);
+    let custody = Custody::initialize(&home, soon()).unwrap();
+    let mut first = Journal::open(Arc::clone(&custody), &"c".repeat(64), 2, soon()).unwrap();
+    admitted(&mut first, 1);
+    let first_permit = begin(&mut first);
+    error(
+        first.begin_next(&"a".repeat(64), &"b".repeat(64), soon()),
+        ErrorKind::Fenced,
+    );
+    let mut second_identity = identity(2);
+    second_identity.project_service_key = "f".repeat(64);
+    second_identity.source_generation = "e".repeat(64);
+    let mut second = Journal::open(
+        Arc::clone(&custody),
+        &second_identity.project_service_key,
+        2,
+        soon(),
+    )
+    .unwrap();
+    assert!(matches!(
+        second
+            .admit(second_identity.clone(), b"{}", soon())
+            .unwrap(),
+        Admission::Accepted {
+            duplicate: false,
+            ..
+        }
+    ));
+    let second_permit = second
+        .begin_next(
+            &second_identity.source_generation,
+            &second_identity.execution_image_digest,
+            soon(),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(second_permit.operation().identity(), &second_identity);
+    assert_eq!(first_permit.operation().identity(), &identity(1));
+    custody_busy(&home);
+}
+#[test]
+fn custody_acquire_never_bootstraps_missing_root_registry_or_lock() {
+    for missing in ["operations", ".service-root.json", ".service-owner.lock"] {
+        let fixture = Fixture::new();
+        let home = dedicated_custody_home(&fixture);
+        let custody = Custody::initialize(&home, soon()).unwrap();
+        drop(custody);
+        let retired = fixture.base.join("retained-missing-anchor");
+        fs::rename(home.join(missing), &retired).unwrap();
+        assert!(
+            Custody::acquire(&home, soon()).is_err(),
+            "recreated missing {missing}"
+        );
+        assert!(!home.join(missing).exists());
+        assert!(Custody::initialize(&home, soon()).is_err());
+        assert!(retired.exists());
+    }
+}
+#[test]
+fn custody_rejects_replaced_owner_lock_and_symlink_or_shared_anchors() {
+    for mutation in 0..6 {
+        let fixture = Fixture::new();
+        let home = dedicated_custody_home(&fixture);
+        let custody = Custody::initialize(&home, soon()).unwrap();
+        drop(custody);
+        match mutation {
+            0 => {
+                fs::rename(
+                    home.join(".service-owner.lock"),
+                    fixture.base.join("retired-owner-lock"),
+                )
+                .unwrap();
+                fs::write(home.join(".service-owner.lock"), b"").unwrap();
+                fs::set_permissions(
+                    home.join(".service-owner.lock"),
+                    fs::Permissions::from_mode(0o600),
+                )
+                .unwrap();
+            }
+            1 => {
+                fs::rename(home.join("operations"), fixture.base.join("retired-root")).unwrap();
+                symlink(fixture.base.join("retired-root"), home.join("operations")).unwrap();
+            }
+            2 => fs::set_permissions(home.join("operations"), fs::Permissions::from_mode(0o750))
+                .unwrap(),
+            3 => fs::set_permissions(
+                home.join(".service-root.json"),
+                fs::Permissions::from_mode(0o644),
+            )
+            .unwrap(),
+            4 => {
+                fs::rename(
+                    home.join(".service-root.json"),
+                    fixture.base.join("retired-registry"),
+                )
+                .unwrap();
+                symlink(
+                    fixture.base.join("retired-registry"),
+                    home.join(".service-root.json"),
+                )
+                .unwrap();
+            }
+            _ => {
+                fs::rename(
+                    home.join(".service-owner.lock"),
+                    fixture.base.join("retired-owner-lock"),
+                )
+                .unwrap();
+                symlink(
+                    fixture.base.join("retired-owner-lock"),
+                    home.join(".service-owner.lock"),
+                )
+                .unwrap();
+            }
+        }
+        assert!(
+            Custody::acquire(&home, soon()).is_err(),
+            "accepted mutation {mutation}"
+        );
+        assert!(Custody::initialize(&home, soon()).is_err());
+    }
+}
+#[test]
+fn custody_first_install_refuses_nonempty_unregistered_and_ambiguous_partial_homes() {
+    for existing in [
+        "operations",
+        ".service-owner.lock",
+        ".service-root.json",
+        ".service-root.tmp",
+    ] {
+        let fixture = Fixture::new();
+        let home = dedicated_custody_home(&fixture);
+        if existing == "operations" {
+            fs::create_dir(home.join(existing)).unwrap();
+            fs::set_permissions(home.join(existing), fs::Permissions::from_mode(0o700)).unwrap();
+            fs::write(
+                home.join(existing).join("retained-history"),
+                b"do not clear",
+            )
+            .unwrap();
+        } else {
+            fs::write(home.join(existing), b"retained").unwrap();
+            fs::set_permissions(home.join(existing), fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let names_before: BTreeSet<_> = fs::read_dir(&home)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert!(Custody::acquire(&home, soon()).is_err());
+        assert!(Custody::initialize(&home, soon()).is_err());
+        let names_after: BTreeSet<_> = fs::read_dir(&home)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names_after, names_before);
+        if existing == "operations" {
+            assert_eq!(
+                fs::read(home.join(existing).join("retained-history")).unwrap(),
+                b"do not clear"
+            );
+        } else {
+            assert_eq!(fs::read(home.join(existing)).unwrap(), b"retained");
+        }
+    }
+    let fixture = Fixture::new();
+    let home = dedicated_custody_home(&fixture);
+    assert!(Custody::acquire(&home, soon()).is_err());
+    assert_eq!(fs::read_dir(&home).unwrap().count(), 0);
+}
+#[test]
+fn custody_registry_is_closed_bounded_and_never_repaired_from_operational_bytes() {
+    for bytes in [b"{".to_vec(), vec![b'x'; 1025], br#"{"schema":"caws.service.custody.v1","rootDevice":0,"rootInode":1,"lockDevice":0,"lockInode":1,"extra":true}"#.to_vec()] {
+        let fixture = Fixture::new();
+        let home = dedicated_custody_home(&fixture);
+        drop(Custody::initialize(&home, soon()).unwrap());
+        fs::write(home.join(".service-root.json"), &bytes).unwrap();
+        error(Custody::acquire(&home, soon()), ErrorKind::Corrupt);
+        assert_eq!(fs::read(home.join(".service-root.json")).unwrap(), bytes);
+    }
+}
+#[test]
+fn custody_initialization_sync_failures_do_not_silently_create_a_fresh_domain() {
+    // Model reported sync failure after each real fsync, not power loss.
+    // Only the final publication has all names/inodes/data already complete;
+    // acquire may resync those exact anchors. Earlier partial states refuse.
+    for failed_call in 1..=6 {
+        let fixture = Fixture::new();
+        let home = dedicated_custody_home(&fixture);
+        let probe = DirectSyncProbe::start(Some(failed_call), None);
+        error(Custody::initialize(&home, soon()), ErrorKind::Io);
+        assert_eq!(probe.calls().len(), failed_call);
+        drop(probe);
+        assert!(Custody::initialize(&home, soon()).is_err());
+        if failed_call == 6 {
+            let probe = DirectSyncProbe::start(None, None);
+            let acquired = Custody::acquire(&home, soon()).unwrap();
+            assert_eq!(probe.calls().len(), 4);
+            assert!(!home.join("operations/services").exists());
+            drop(acquired);
+        } else {
+            assert!(Custody::acquire(&home, soon()).is_err());
+        }
+    }
+}
+
+#[test]
+fn recovered_unknown_root_replacement_is_refused_after_every_owner_has_dropped() {
+    let fixture = Fixture::new();
+    let home = dedicated_custody_home(&fixture);
+    let custody = Custody::initialize(&home, soon()).unwrap();
+    let mut journal = Journal::open(Arc::clone(&custody), &"c".repeat(64), 2, soon()).unwrap();
+    admitted(&mut journal, 1);
+    let permit = begin(&mut journal);
+    drop(permit);
+    drop(journal);
+    let recovered = Journal::open(Arc::clone(&custody), &"c".repeat(64), 2, soon()).unwrap();
+    assert!(matches!(
+        recovered
+            .lookup(&identity(1).request_id, soon())
+            .unwrap()
+            .unwrap()
+            .outcome(),
+        AcceptedOutcome::Unknown { .. }
+    ));
+    drop(recovered);
+    drop(custody);
+    let record = format!("{:064x}.json", 1);
+    let before = fs::read(
+        home.join("operations/services")
+            .join("c".repeat(64))
+            .join(&record),
+    )
+    .unwrap();
+    let retired = fixture.base.join("retired-unknown-root");
+    fs::rename(home.join("operations"), &retired).unwrap();
+    fs::create_dir(home.join("operations")).unwrap();
+    fs::set_permissions(home.join("operations"), fs::Permissions::from_mode(0o700)).unwrap();
+    error(Custody::acquire(&home, soon()), ErrorKind::UnsafePath);
+    assert!(Custody::initialize(&home, soon()).is_err());
+    assert_eq!(
+        fs::read(retired.join("services").join("c".repeat(64)).join(record)).unwrap(),
+        before
+    );
+    assert!(!home.join("operations/services").exists());
+}
+#[test]
+fn custody_deadlines_do_not_bootstrap_or_acknowledge_partial_initialization() {
+    let fixture = Fixture::new();
+    let home = dedicated_custody_home(&fixture);
+    error(
+        Custody::initialize(&home, Instant::now()),
+        ErrorKind::Deadline,
+    );
+    error(Custody::acquire(&home, Instant::now()), ErrorKind::Deadline);
+    assert_eq!(fs::read_dir(&home).unwrap().count(), 0);
+    let probe = DirectSyncProbe::start(None, Some(1));
+    error(
+        Custody::initialize(&home, Instant::now() + Duration::from_millis(100)),
+        ErrorKind::Deadline,
+    );
+    assert_eq!(probe.calls().len(), 1);
+    drop(probe);
+    assert!(Custody::acquire(&home, soon()).is_err());
+    assert!(Custody::initialize(&home, soon()).is_err());
+    assert!(!home.join("operations").exists());
 }
