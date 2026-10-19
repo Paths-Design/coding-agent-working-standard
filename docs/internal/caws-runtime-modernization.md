@@ -32,6 +32,23 @@ module, passing unit tests, or the existence of this document.
   previous selected version is established. Isolated package/harness qualification
   precedes that cutover; after cutover, verify actual selected execution here.
 
+## Re-entry and next-work reconciliation
+
+Before starting work after compaction, handoff or user direction, reconcile the
+conversation's original objective and later corrections against this tracker's
+feature, evidence, acceptance and ordered-work ledgers. Verify the current
+revision, dirty state and CAWS ownership; summaries and tracker entries are
+context, not proof of current behavior. Preserve outstanding obligations unless
+the user supersedes them. Distinguish committed, reviewed, landed, accepted and
+installed work, and correct stale next steps before choosing another task.
+
+The terminal bridge at `e01a1b00` has completed committed-candidate review; E56
+retains its clean committed replay. Neither observation closes R32 or earns
+whole-runtime acceptance. The next executable investigation is R33's cold-start
+service lifetime, followed by the remaining R32 process-domain and identity
+contracts. No resident implementation or machine replacement follows from the
+bounded containment result.
+
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 **packaged**, **installed**, **native-observed**, **retired**. Record exactly the
 established boundary. Existing Python consumers remain obligations until removed
@@ -76,7 +93,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
-| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; terminal bridge exercises selected explicit-session Codex Bash path and larger/escaped latch state, E51–E55; complete containment parity open | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races and unqualified compatibility paths remain obligations; no installed replacement |
+| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; terminal bridge exercises selected explicit-session Codex Bash path and larger/escaped latch state, E51–E56; complete containment parity open | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races and unqualified compatibility paths remain obligations; no installed replacement |
 | R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking compatibility gap; unreplaced | Cold renderer start must survive request cleanup and serve the next request; source-change retirement and concurrent startup must not duplicate or kill the service. Existing warm-daemon evidence does not cover first-start group ownership |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
@@ -632,7 +649,7 @@ Reorientation against all available session turn records retains the original
 whole-application scope, the thirteen-session/four-repository requirement and
 the user's containment and Sterling-inversions corrections. Image-only/null
 turn fragments did not cancel those obligations; A8 and R28/R31 carry them.
-Reorientation observed eighteen lane commits beyond main, not landed delivery. Demand-start
+Reachable lane commits establish committed work, not delivery on main. Demand-start
 residency, native workload/performance qualification, renderer migration,
 first-party Python retirement, packaged adoption and rollback remain open.
 The machine pointer remains on `408c06a7…77baa0`; no speedup or replacement of
@@ -707,8 +724,18 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-1. Complete committed-candidate review of the terminal bridge and investigate
-   the remaining R32 identity/process-domain dependencies. E52/E53/E55 observe the selected
+1. Investigate R33 through isolated copies of Sterling's actual selected renderer
+   override, client, daemon and renderer dependencies. Start with no daemon;
+   invoke the actual native/typed path, observe request cleanup, and issue a
+   second request. Retain render outputs, selection/build identities, precise
+   daemon birth/process-group observations and readiness/request evidence that
+   distinguishes reuse from replacement. Compare the legacy path. Observe only
+   the private service's configured idle retirement; if cleanup remains live or
+   ambiguous at the bounded deadline, retain the sandbox and stop further
+   scenarios. Do not signal an unowned process or detach arbitrary handler
+   descendants. Resolve service ownership before resident implementation.
+2. Investigate the remaining R32 identity/process-domain dependencies.
+   E52/E53/E55/E56 observe the selected
    caller/refusal/effect/finalization chain and hostile output failure, but do
    not discharge missing-session identity, exclusive process ownership,
    reset/rearm coordination or compatibility-path containment. Retain ordinary
@@ -718,11 +745,11 @@ progress and does not replace that transaction or its event readback.
    Trace effective
    installed handlers/libraries and defaults, distinguish logical identity from
    target process instance, and retain isolated termination/refusal/state and
-   surviving-sibling artifacts. Settle R33 service ownership before resident
-   implementation; a background daemon cannot remain request-owned.
-2. Finish validation and committed-candidate review for bounded work in flight:
-   caller wire context, scoped Stop persistence, classifier repairs and guard
-   utilities. Do not expand horizontal porting before the executable spine.
+   surviving-sibling artifacts. Process-instance verification does not establish
+   exclusive logical-session ownership; generation correlation does not revoke
+   an in-flight effect after reset/rearm. Qualify signal-resistant targets and
+   external cleanup after intentional caller death. Do not remove PID-linked
+   containment or expand horizontal porting before these contracts are settled.
 3. Integrate native client → actual typed one-shot engine → selected production
    guards → native result. Verify current authority, refusal channels, selected
    overrides, journal custody and Stop/handoff behavior through that path.
