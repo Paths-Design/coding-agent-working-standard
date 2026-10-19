@@ -45,150 +45,113 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/parse-input.sh
-# Fail SOFT but LOUD: this is an opt-in isolation guard, not a load-bearing
-# enforcement core. A missing parse-input.sh (or a malformed payload) must
-# never turn a broken env into a hard block of every Bash call.
-if ! { [[ -f "$SCRIPT_DIR/lib/parse-input.sh" ]] && source "$SCRIPT_DIR/lib/parse-input.sh"; }; then
-  echo "[worktree-pin-guard] CAWS hook infrastructure incomplete: lib/parse-input.sh is missing or did not load — worktree-pin isolation is skipped for this call. Restore the shared hook libs with: caws init --adopt" >&2
-  exit 0
-fi
-# shellcheck source=lib/agent-surface.sh
-[[ -f "$SCRIPT_DIR/lib/agent-surface.sh" ]] && source "$SCRIPT_DIR/lib/agent-surface.sh"
-parse_hook_input || exit 0
-
-TOOL_NAME="$HOOK_TOOL_NAME"
-COMMAND="$HOOK_COMMAND"
-
-# Self-filter: Bash only.
-if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
-  exit 0
-fi
-
-# --- pin derivation ---------------------------------------------------------
-# The vendor wiring injects CAWS_PROJECT_DIR as the SESSION project root (the
-# worktree for a session started there). A path containing the
-# /.caws/worktrees/<name> segment means the session is pinned to <name>.
-# No git resolution is needed: the pin is a pure path-segment fact, and it
-# must stay derivable even after the directory is gone (the release check
-# below depends on that).
+# Pin identity comes from the harness environment, never from command bytes.
 SESSION_ROOT="${CAWS_PROJECT_DIR:-}"
-if [[ -z "$SESSION_ROOT" || "$SESSION_ROOT" == "." ]]; then
-  exit 0
-fi
-
 case "$SESSION_ROOT" in
   *"/.caws/worktrees/"*) ;;
-  *) exit 0 ;;   # not inside a worktree -> not pinned
+  *) exit 0 ;;
 esac
-
 CANONICAL="${SESSION_ROOT%%/.caws/worktrees/*}"
 PIN_NAME="${SESSION_ROOT#*/.caws/worktrees/}"
 PIN_NAME="${PIN_NAME%%/*}"
 PIN_DIR="$CANONICAL/.caws/worktrees/$PIN_NAME"
+[[ -n "$PIN_NAME" && -n "$CANONICAL" ]] || exit 0
 
-if [[ -z "$PIN_NAME" || -z "$CANONICAL" ]]; then
-  exit 0
-fi
-
-# --- release affordance (the bricked-session fix) ---------------------------
-# The pinned directory no longer exists: the isolation boundary is gone. Keep
-# refusing and the session can never satisfy the guard again — the exact
-# defect. Release loudly instead, once per call.
-if [[ ! -d "$PIN_DIR" ]]; then
+emit_release() {
   echo "[worktree-pin-guard] worktree '$PIN_NAME' no longer exists: RELEASING this session's isolation pin." >&2
   echo "  Pinned to $PIN_DIR, which was merged or destroyed, so the isolation boundary is gone." >&2
   echo "  Continue from wherever the harness lands. To re-point, create a fresh lane:" >&2
   echo "    caws worktree create <name> --spec <id>   (then start the next slice's session inside it)" >&2
   exit 0
-fi
+}
 
 emit_block() {
   local why="$1"
   echo "[worktree-pin-guard] BLOCKED: $why" >&2
   echo "  This session is isolated in the worktree $PIN_DIR." >&2
-  echo "  A worktree-isolated session's commands must run inside its worktree." >&2
   echo "  Re-run the command from $PIN_DIR." >&2
   echo "  Sanctioned exits: caws worktree merge|destroy <name> (end the isolation); caws worktree create|ensure (start a fresh lane)." >&2
   echo "  Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this." >&2
   exit 2
 }
 
-# classify <abs-dir>: own | shared-checkout | other-worktree | outside-repo
-classify_dir() {
-  local d="$1"
-  local rel
-  if [[ "$d" == "$CANONICAL" || "$d" == "$CANONICAL"/* ]]; then
-    rel="${d#"$CANONICAL"/}"
-    if [[ "$rel" == ".caws/worktrees/"* ]]; then
-      local other="${rel#.caws/worktrees/}"
-      other="${other%%/*}"
-      if [[ "$other" == "$PIN_NAME" ]]; then
-        printf 'own\n'
-      else
-        printf 'other-worktree\n'
-      fi
-    else
-      printf 'shared-checkout\n'
-    fi
+[[ -d "$PIN_DIR" ]] || emit_release
+# Parsed dispatcher fields are not a substitute for the original typed payload.
+# Preserve stdin even when a dispatcher has already exported parsed markers.
+if [[ -z "${HOOK_INPUT_JSON:-}" && -z "${HOOK_PAYLOAD_FILE:-}" ]]; then
+  HOOK_INPUT_JSON="$(cat)"
+  export -n HOOK_INPUT_JSON 2>/dev/null || true
+fi
+if [[ -n "${HOOK_PAYLOAD_FILE:-}" && ! -f "$HOOK_PAYLOAD_FILE" ]]; then
+  emit_block "UNRESOLVED: the original payload transport file is unavailable."
+fi
+
+original_payload() {
+  if [[ -n "${HOOK_PAYLOAD_FILE:-}" && -f "$HOOK_PAYLOAD_FILE" ]]; then
+    cat "$HOOK_PAYLOAD_FILE"
   else
-    printf 'outside-repo\n'
+    printf '%s' "${HOOK_INPUT_JSON:-}"
   fi
 }
 
-abspath_of() {
-  local p="$1"
-  case "$p" in
-    /*) printf '%s\n' "$p" ;;
-    *)  printf '%s/%s\n' "${HOOK_CWD:-$PIN_DIR}" "$p" ;;
-  esac
-}
+# Scalar extraction stringifies malformed JSON values. Validate their type on
+# the original payload before allowing a non-shell exemption.
+[[ -d "$PIN_DIR" ]] || emit_release
+ORIGINAL_TOOL="$(original_payload | node -e '
+const fs = require("node:fs");
+try {
+  const payload = JSON.parse(fs.readFileSync(0, "utf8"));
+  if (!payload || typeof payload.tool_name !== "string" || !payload.tool_name) process.exit(1);
+  process.stdout.write(payload.tool_name);
+} catch { process.exit(1); }
+' 2>/dev/null)" || emit_block "UNRESOLVED: the original tool metadata is missing or malformed."
 
-# --- cwd containment --------------------------------------------------------
-CWD="${HOOK_CWD:-$SESSION_ROOT}"
+# Known non-Bash tools do not participate in this guard. Missing/malformed
+# tool metadata under a live pin cannot establish that the call is exempt.
+case "$ORIGINAL_TOOL" in
+  Bash|exec_command|functions.exec_command|shell_command|functions.shell_command) ;;
+  "") emit_block "UNRESOLVED: the hook tool is missing or malformed." ;;
+  *) exit 0 ;;
+esac
+[[ -d "$PIN_DIR" ]] || emit_release
 
-if [[ "$CWD" != "$PIN_DIR" && "$CWD" != "$PIN_DIR"/* ]]; then
-  # Effective working directory resolves outside the pinned worktree. The
-  # sanctioned lifecycle verbs stay reachable; everything else is refused.
-  if echo "$COMMAND" | grep -qE 'caws[[:space:]]+worktree[[:space:]]+(merge|destroy|create|ensure)\b'; then
-    exit 0
-  fi
-  emit_block "this command's working directory resolves outside the pinned worktree ($CWD)."
+CAWS_BIN="${CAWS_BIN:-caws}"
+command -v "$CAWS_BIN" >/dev/null 2>&1 || emit_block "UNRESOLVED: the command analyzer CLI is unavailable. Put caws on PATH or set CAWS_BIN."
+
+# Neither the submitted command nor a reconstructed envelope enters shell code.
+# --worktree is trusted argv; the CLI validates cwd from the original payload.
+ANALYSIS_STATUS=0
+ANALYSIS="$(original_payload | "$CAWS_BIN" hooks analyze --json --worktree "$PIN_DIR" 2>/dev/null)" || ANALYSIS_STATUS=$?
+
+# Validate the entire result contract and its exit-code agreement before allow.
+# A malformed/old CLI response is uncertainty, never an exemption.
+if ! VALIDATED="$(printf '%s' "$ANALYSIS" | node -e '
+const fs = require("node:fs");
+try {
+  const result = JSON.parse(fs.readFileSync(0, "utf8"));
+  const codes = {allow:0, deny:1, unresolved:2};
+  if (result.schema !== "caws.hooks_analyze.v1" || !Object.hasOwn(codes,result.decision) || Number(process.argv[1]) !== codes[result.decision]) throw Error();
+  for (const [key, fields] of [["reasons",["code","message"]],["trace",["kind","detail"]]]) {
+    if (!Array.isArray(result[key])) throw Error();
+    for (const item of result[key]) {
+      if (!item || fields.some(field => typeof item[field] !== "string") || !Number.isInteger(item.start) || !Number.isInteger(item.end) || item.start < 0 || item.end < item.start) throw Error();
+    }
+  }
+  if (result.decision !== "allow" && result.reasons.length === 0) throw Error();
+  process.stdout.write(result.decision);
+  for (const item of result.reasons) process.stdout.write("\n  " + item.code + " [" + item.start + ":" + item.end + "]: " + JSON.stringify(item.message));
+} catch { process.exit(1); }
+' "$ANALYSIS_STATUS" 2>/dev/null)"; then
+  emit_block "UNRESOLVED: the command analyzer did not return a valid decision."
 fi
 
-# --- git-redirect containment (cwd inside the pin) --------------------------
-# `git -C <dir>` anywhere in the command, and a leading `cd <dir>` followed by
-# a git invocation, must not redirect git to the canonical checkout or to
-# another worktree. Scratch dirs outside the repository are permitted.
-_has_git_token() {
-  echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git([[:space:]]|$)'
-}
-
-if _has_git_token; then
-  # First `git` token onward: extract every `-C <dir>` / `-C<dir>` argument.
-  _after_git="$(echo "$COMMAND" | grep -oE '(^|[[:space:];&|])git([[:space:]]|$).*' | head -1 | sed -E 's/^[[:space:];&|]*git[[:space:]]*//' || true)"
-  if [[ -n "$_after_git" ]]; then
-    while IFS= read -r cdir; do
-      [[ -z "$cdir" ]] && continue
-      case "$(classify_dir "$(abspath_of "$cdir")")" in
-        shared-checkout|other-worktree)
-          emit_block "git -C redirects this git operation to '$cdir', outside the pinned worktree." ;;
-      esac
-    done < <(echo "$_after_git" | grep -oE -- '-C[[:space:]]*[^[:space:]]+' | sed -E 's/^-C[[:space:]]*//' || true)
-  fi
-
-  # Leading `cd <dir>` chains: block when the FIRST cd target lands in the
-  # canonical checkout or another worktree and a git token follows.
-  if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])cd[[:space:]]+[^[:space:];&|]+'; then
-    _first_cd="$(echo "$COMMAND" | grep -oE '(^|[[:space:];&|])cd[[:space:]]+[^[:space:];&|]+' | head -1 | sed -E 's/^[[:space:];&|]*cd[[:space:]]+//' || true)"
-    if [[ -n "$_first_cd" ]]; then
-      case "$(classify_dir "$(abspath_of "$_first_cd")")" in
-        shared-checkout|other-worktree)
-          emit_block "cd '$_first_cd' moves the git operation outside the pinned worktree." ;;
-      esac
-    fi
-  fi
-fi
-
-exit 0
+DECISION="${VALIDATED%%$'\n'*}"
+DETAILS=""
+[[ "$VALIDATED" == *$'\n'* ]] && DETAILS="${VALIDATED#*$'\n'}"
+case "$DECISION" in
+  allow) exit 0 ;;
+  deny) emit_block "typed command analysis denied an operation outside the pinned worktree or an execution-bearing argument.
+$DETAILS" ;;
+  *) emit_block "UNRESOLVED: typed command analysis could not prove this command satisfies the worktree boundary.
+$DETAILS" ;;
+esac

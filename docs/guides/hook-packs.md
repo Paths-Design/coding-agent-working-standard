@@ -10,6 +10,12 @@ audience: consumer
 
 # Hook packs: the edit-time advisory quality plane
 
+The optional worktree pin guard uses
+[bounded command analysis](command-analysis.md) to inspect assignments, finite
+loops, argument roles and Git routing without executing submitted source. Its
+structured CLI distinguishes policy violations from unresolved syntax or values;
+it remains opt-in in the shared dispatcher.
+
 CAWS distributes guards, dispatchers and session renderers through a user-level
 runtime in `~/.caws`. Configure the native harness once and migrate existing
 project registrations once; subsequent runtime updates serve every adopted

@@ -18,6 +18,7 @@ import type { Command } from 'commander';
 // hidden option via `new Option(flag, desc).hideHelp()` — Commander's
 // `.option(...)` convenience method has no hide-from-help variant.
 import { Option } from 'commander';
+import { runHooksAnalyzeCommand, type HooksAnalyzeOptions } from './commands/hooks';
 
 import {
   INIT_COMMAND_META,
@@ -617,6 +618,12 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   const hooksCmd = program.command('hooks');
   applyGroupMeta(hooksCmd, HOOKS_COMMAND_META);
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'analyze')).action(
+    async (opts: HooksAnalyzeOptions) => {
+      exit(await runHooksAnalyzeCommand(opts));
+    }
+  );
 
   defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'list')).action(
     (opts: { event?: string; surface?: string; json?: boolean; data?: boolean }) => {

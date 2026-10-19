@@ -1,0 +1,418 @@
+import type {
+  Assignment,
+  Command,
+  ParsedScript,
+  PipelineNode,
+  AndOr,
+  Redirection,
+  Statement,
+  Word,
+} from './parser-types';
+import { loadParser } from './load-parser';
+import { inside, inspectInvocation, resolveDirectory, sensitiveBinding } from './policies';
+import { expandWord } from './words';
+import type {
+  AnalysisContext,
+  AnalysisRequest,
+  AnalysisResult,
+  Argument,
+  Location,
+  State,
+  Value,
+} from './types';
+export type { AnalysisRequest, AnalysisResult } from './types';
+
+const MAX_BYTES = 65536;
+const MAX_STATES = 32;
+const MAX_DEPTH = 16;
+const MAX_VISITS = 4096;
+const clone = (state: State): State => ({ cwd: state.cwd, bindings: new Map(state.bindings) });
+
+/** A bounded abstract interpreter. It inspects source; it never executes it. */
+export async function analyzeCommand(request: AnalysisRequest): Promise<AnalysisResult> {
+  const result: AnalysisResult = { decision: 'allow', reasons: [], trace: [] };
+  const whole = { pos: 0, end: request.command.length };
+  const reason: AnalysisContext['reason'] = (node, code, message, deny = false) => {
+    if (deny) result.decision = 'deny';
+    else if (result.decision === 'allow') result.decision = 'unresolved';
+    const start = Math.max(0, Math.min(request.command.length, node.pos));
+    const end = Math.max(start, Math.min(request.command.length, node.end));
+    if (
+      !result.reasons.some(
+        (item) =>
+          item.code === code && item.start === start && item.end === end && item.message === message
+      )
+    ) {
+      result.reasons.push({ code, message, start, end });
+    }
+  };
+  if ((request.shell ?? 'bash') !== 'bash')
+    reason(whole, 'shell-dialect', 'Only the declared Bash subset is supported.');
+  if (Buffer.byteLength(request.command, 'utf8') > MAX_BYTES || request.command.includes('\0')) {
+    reason(whole, 'source-budget', 'Command exceeds 64 KiB or contains a NUL byte.');
+    return result;
+  }
+  const worktree = resolveDirectory(request.worktree, '/');
+  const marker = request.worktree.indexOf('/.caws/worktrees/');
+  const canonical = marker < 0 ? null : resolveDirectory(request.worktree.slice(0, marker), '/');
+  const cwd = resolveDirectory(request.cwd, '/');
+  if (!worktree || !canonical || !cwd) {
+    reason(
+      whole,
+      'context-unresolved',
+      'Existing cwd, worktree, and canonical repository paths are required.'
+    );
+    return result;
+  }
+  if (result.decision !== 'allow') return result;
+  const ctx: AnalysisContext = {
+    result,
+    worktree,
+    canonical,
+    outside: !inside(cwd, worktree),
+    visits: 0,
+    reason,
+    trace: (node, kind, detail) =>
+      result.trace.push({ kind, detail, start: node.pos, end: node.end }),
+  };
+  const initial: State = { cwd, bindings: new Map() };
+  // Shell startup/aliases/functions and executable identity are a declared host
+  // contract, not a fact the source parser can establish. Refuse known inherited
+  // overrides rather than pretending they cannot affect profiled programs.
+  for (const [name, value] of Object.entries(process.env)) {
+    if (
+      name.startsWith('BASH_FUNC_') &&
+      !/^(?:command|env|git|caws|cd|sed|printf|echo|pwd|true|false|:|test|\[|read|rg|grep|cat|head|tail|wc|ls|cut|tr|sort|uniq)%%$/.test(
+        name.slice(10)
+      )
+    )
+      continue;
+    if (
+      value !== undefined &&
+      (/^(?:GIT_|BASH_FUNC_)/.test(name) ||
+        ['BASH_ENV', 'ENV', 'RIPGREP_CONFIG_PATH', 'GLOBIGNORE', 'CDPATH'].includes(name))
+    ) {
+      initial.bindings.set(name, [value]);
+      if (!name.startsWith('GIT_'))
+        reason(whole, 'inherited-environment', `Unmodeled inherited environment ${name}.`);
+    }
+    if (name === 'BASHOPTS' && value?.split(':').includes('lastpipe'))
+      reason(
+        whole,
+        'inherited-environment',
+        'Bash lastpipe conflicts with the declared pipeline-state model.'
+      );
+  }
+
+  function budget(node: Location, depth: number): boolean {
+    if (++ctx.visits > MAX_VISITS || depth > MAX_DEPTH) {
+      reason(node, 'analysis-budget', 'AST visit/depth budget exceeded.');
+      return false;
+    }
+    return true;
+  }
+  function bounded(states: State[], node: Location): State[] {
+    const unique = new Map<string, State>();
+    for (const state of states) {
+      const key = JSON.stringify([
+        state.cwd,
+        [...state.bindings].sort(([a], [b]) => a.localeCompare(b)),
+      ]);
+      unique.set(key, state);
+      if (unique.size > MAX_STATES) {
+        reason(node, 'state-budget', 'Control-flow alternatives exceed 32 states.');
+        return [];
+      }
+    }
+    return [...unique.values()];
+  }
+  function script(tree: ParsedScript, states: State[], reader: boolean, depth: number): State[] {
+    if (tree.errors?.length) {
+      reason(tree, 'parse-error', 'Parser recovery is not an admission proof.');
+      return states;
+    }
+    return list(tree.commands, states, reader, depth);
+  }
+  function substitution(tree: ParsedScript, state: State, depth: number): void {
+    script(tree, [clone(state)], true, depth);
+    ctx.trace(
+      tree,
+      'substitution',
+      'Producer inspected without execution; output remains opaque data.'
+    );
+  }
+  function word(node: Word, state: State, depth: number, assignment = false): Argument[][] {
+    if (!budget(node, depth)) return [[{ value: null }]];
+    return expandWord(node, state, ctx, substitution, depth, assignment);
+  }
+  function assign(node: Assignment, state: State, depth: number): State {
+    const next = clone(state);
+    if (sensitiveBinding(node.name) || node.name.startsWith('BASH'))
+      reason(node, 'environment-change', `Unmodeled shell environment change ${node.name}.`);
+    if (node.append || node.index || node.value.type !== 'Word') {
+      reason(
+        node,
+        'assignment-syntax',
+        'Array, append, and indexed assignments are outside the admitted subset.'
+      );
+      next.bindings.set(node.name, null);
+      return next;
+    }
+    const expanded = word(node.value, state, depth, true);
+    const values: string[] = [];
+    let unknown = false;
+    for (const variant of expanded) {
+      if (variant.length !== 1 || variant[0]!.value === null) unknown = true;
+      else values.push(variant[0]!.value!);
+    }
+    next.bindings.set(node.name, unknown ? null : [...new Set(values)]);
+    ctx.trace(
+      node,
+      'assignment',
+      `Tracked ${node.name} in source order (${unknown ? 'opaque' : `${values.length} finite value(s)`}).`
+    );
+    return next;
+  }
+  function redirect(node: Redirection, state: State, reader: boolean, depth: number): void {
+    if (node.type === 'HereDoc') {
+      if (!node.delimiter) reason(node, 'heredoc-delimiter', 'Here-document delimiter is missing.');
+      if (!node.delimiter?.quoted && node.body.parts?.length) {
+        word(
+          {
+            type: 'Word',
+            text: node.body.text,
+            value: node.body.text,
+            pos: node.body.pos,
+            end: node.body.end,
+            parts: node.body.parts,
+          },
+          state,
+          depth,
+          true
+        );
+      }
+      return;
+    }
+    if (node.type === 'HereString') {
+      if (node.target) word(node.target, state, depth, true);
+      return;
+    }
+    if (!node.target) {
+      reason(node, 'redirect-target', 'Redirection has no proven target.');
+      return;
+    }
+    const values = word(node.target, state, depth, true);
+    if (['>&', '<&'].includes(node.operator)) {
+      if (values.some((args) => args.length !== 1 || !/^(?:[0-9]+|-)$/.test(args[0]?.value ?? '')))
+        reason(node, 'redirect-descriptor', 'Only literal descriptor duplication is modeled.');
+      return;
+    }
+    if (reader && node.operator !== '<')
+      reason(
+        node,
+        'substitution-effects',
+        'Read substitutions cannot contain output redirections.'
+      );
+    for (const args of values) {
+      const value = args.length === 1 ? args[0]?.value : null;
+      if (value === null || value === undefined)
+        reason(node, 'redirect-target', 'Redirection requires a known single target.');
+    }
+  }
+  function command(node: Command, state: State, reader: boolean, depth: number): State[] {
+    ctx.trace(
+      node,
+      'command',
+      'Inspect executable, argument roles, prefix environment, and redirections.'
+    );
+    // argv is expanded using the old shell state, before prefix assignments.
+    let vectors: Argument[][] = [[]];
+    const words: Word[] = node.name ? [node.name] : [];
+    for (const suffix of node.suffix) {
+      if (suffix.type === 'Word') words.push(suffix);
+      else if (suffix.type === 'Assignment') {
+        if (suffix.value.type !== 'Word' || suffix.append || suffix.index) {
+          reason(
+            suffix,
+            'command-assignment',
+            'Array and indexed argument assignments are unsupported.'
+          );
+        } else {
+          const value = suffix.value;
+          words.push({
+            type: 'Word',
+            text: suffix.text,
+            value: `${suffix.name}=${value.value}`,
+            pos: suffix.pos,
+            end: suffix.end,
+            parts: [
+              {
+                type: 'Literal',
+                text: `${suffix.name}=`,
+                value: `${suffix.name}=`,
+                pos: suffix.pos,
+                end: value.pos,
+              },
+              ...(value.parts ?? [
+                {
+                  type: 'Literal' as const,
+                  text: value.text,
+                  value: value.value,
+                  pos: value.pos,
+                  end: value.end,
+                },
+              ]),
+            ],
+          });
+        }
+      }
+    }
+    for (const part of words) {
+      const variants = word(part, state, depth + 1);
+      if (vectors.length * variants.length > MAX_STATES) {
+        reason(node, 'argument-budget', 'Argument alternatives exceed 32 vectors.');
+        return [state];
+      }
+      vectors = vectors.flatMap((left) => variants.map((right) => [...left, ...right]));
+    }
+    let assigned = clone(state);
+    for (const prefix of node.prefix) {
+      if (prefix.type === 'Assignment') assigned = assign(prefix, assigned, depth + 1);
+      else redirect(prefix, state, reader, depth + 1);
+    }
+    for (const suffix of node.suffix)
+      if (suffix.type !== 'Word' && suffix.type !== 'Assignment')
+        redirect(suffix, state, reader, depth + 1);
+    if (!node.name) return [assigned];
+    const env = new Map<string, Value>();
+    for (const [name, value] of assigned.bindings)
+      if (name.startsWith('GIT_')) env.set(name, value);
+    const out = vectors.flatMap((argv) => {
+      const before = clone(state);
+      const next = inspectInvocation(argv, before, env, ctx, node, reader);
+      // A directory change can fail. Keeping both states also avoids treating
+      // a failed cd as a successful repair of a preceding foreign directory.
+      return next.cwd !== before.cwd ? [before, next] : [next];
+    });
+    return bounded(out, node);
+  }
+  function walk(node: PipelineNode | AndOr, state: State, reader: boolean, depth: number): State[] {
+    if (!budget(node, depth)) return [state];
+    switch (node.type) {
+      case 'Command':
+        return command(node, state, reader, depth);
+      case 'AndOr': {
+        let states = walk(node.commands[0]!, state, reader, depth + 1);
+        for (const next of node.commands.slice(1))
+          states = bounded(
+            [...states, ...states.flatMap((item) => walk(next, clone(item), reader, depth + 1))],
+            node
+          );
+        return states;
+      }
+      case 'Pipeline':
+        if (node.prefixes.length)
+          reason(node, 'pipeline-prefix', 'Pipeline prefixes are outside the admitted subset.');
+        if (node.commands.length === 1) return walk(node.commands[0]!, state, reader, depth + 1);
+        for (const next of node.commands) walk(next, clone(state), reader, depth + 1);
+        // Declared host contract: Bash lastpipe is disabled.
+        return [state];
+      case 'Subshell':
+        list(node.body.commands, [clone(state)], reader, depth + 1);
+        return [state];
+      case 'BraceGroup':
+        return list(node.body.commands, [state], reader, depth + 1);
+      case 'If': {
+        let remaining = list(node.clause.commands, [clone(state)], reader, depth + 1);
+        const branches = list(node.then.commands, remaining.map(clone), reader, depth + 1);
+        for (const branch of node.elif) {
+          remaining = list(branch.clause.commands, remaining, reader, depth + 1);
+          branches.push(...list(branch.then.commands, remaining.map(clone), reader, depth + 1));
+        }
+        branches.push(
+          ...(node.else ? list(node.else.commands, remaining, reader, depth + 1) : remaining)
+        );
+        return bounded(branches, node);
+      }
+      case 'For': {
+        if (
+          !node.wordlist ||
+          !/^[A-Za-z_][A-Za-z_0-9]*$/.test(node.name.value) ||
+          sensitiveBinding(node.name.value)
+        ) {
+          reason(
+            node,
+            'loop-input',
+            'For loops require an explicit finite list and ordinary binding.'
+          );
+          return [state];
+        }
+        let sequences: Argument[][] = [[]];
+        for (const item of node.wordlist) {
+          const variants = word(item, state, depth + 1);
+          if (sequences.length * variants.length > MAX_STATES) {
+            reason(node, 'loop-budget', 'Loop alternatives exceed 32.');
+            return [state];
+          }
+          sequences = sequences.flatMap((left) => variants.map((right) => [...left, ...right]));
+        }
+        const outputs: State[] = [];
+        for (const sequence of sequences) {
+          if (sequence.length > 32 || sequence.some((item) => item.value === null)) {
+            reason(node, 'loop-budget', 'Loop requires at most 32 known iterations.');
+            continue;
+          }
+          let states = [clone(state)];
+          for (const item of sequence) {
+            states = states.map((previous) => {
+              const next = clone(previous);
+              next.bindings.set(node.name.value, [item.value!]);
+              return next;
+            });
+            states = list(node.body.commands, states, reader, depth + 1);
+          }
+          outputs.push(...states);
+        }
+        return bounded(outputs, node);
+      }
+      case 'Redirected':
+        for (const redirection of node.redirects) redirect(redirection, state, reader, depth + 1);
+        return walk(node.command, state, reader, depth + 1);
+      default:
+        reason(node, 'statement-syntax', `Unsupported statement: ${node.type}.`);
+        return [state];
+    }
+  }
+  function list(
+    nodes: readonly Statement[],
+    input: State[],
+    reader: boolean,
+    depth: number
+  ): State[] {
+    let states = input;
+    for (const node of nodes) {
+      if (!budget(node, depth)) return states;
+      if (node.background)
+        reason(node, 'background', 'Background state and execution ordering are not modeled.');
+      states = bounded(
+        states.flatMap((state) => walk(node.command, state, reader, depth + 1)),
+        node
+      );
+      if (!states.length) break;
+    }
+    return states;
+  }
+  try {
+    const { parse } = await loadParser();
+    script(parse(request.command), [initial], false, 0);
+  } catch {
+    reason(
+      whole,
+      'analysis-failure',
+      'Parser or analyzer failed; no admission proof is available.'
+    );
+  }
+  if (!request.command.trim())
+    reason(whole, 'empty-command', 'No executable command was supplied.');
+  return result;
+}

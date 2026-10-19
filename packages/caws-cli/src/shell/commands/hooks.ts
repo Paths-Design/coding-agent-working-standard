@@ -29,6 +29,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 
+import { analyzeCommand } from '../analysis/analyze';
 import { isOk } from '../../kernel';
 import { resolveRepoRoot } from '../../store';
 import { machineHome } from '../../init/machine-adapters';
@@ -96,6 +97,149 @@ function repoContext(cwd: string): RepoContext | { error: string } {
 }
 
 const isError = (v: RepoContext | { error: string }): v is { error: string } => 'error' in v;
+
+// ─── hooks analyze ─────────────────────────────────────────────────────────
+
+export interface HooksAnalyzeOptions {
+  readonly command?: string;
+  readonly cwd?: string;
+  /** A caller-supplied trusted pin overrides any payload worktree field. */
+  readonly worktree?: string;
+  readonly shell?: string;
+  readonly json?: boolean;
+}
+
+type CommandAnalysis = Awaited<ReturnType<typeof analyzeCommand>>;
+
+function unresolvedAnalysis(code: string, message: string): CommandAnalysis {
+  return {
+    decision: 'unresolved',
+    reasons: [{ code, message, start: 0, end: 0 }],
+    trace: [],
+  };
+}
+
+function analysisInput(
+  options: HooksAnalyzeOptions
+): { command: string; cwd: string; worktree: string; shell?: string } | CommandAnalysis {
+  let input: Record<string, unknown> = {};
+  if (options.command === undefined) {
+    try {
+      const value: unknown = JSON.parse(process.stdin.isTTY ? '' : readFileSync(0, 'utf8'));
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        return unresolvedAnalysis('invalid-input', 'Expected a JSON request object.');
+      }
+      input = value as Record<string, unknown>;
+    } catch {
+      return unresolvedAnalysis('invalid-input', 'Could not read a valid JSON request object.');
+    }
+  }
+  const native = input.tool_input;
+  if (
+    native !== undefined &&
+    (native === null || typeof native !== 'object' || Array.isArray(native))
+  ) {
+    return unresolvedAnalysis('invalid-input', 'tool_input must be an object.');
+  }
+  const nativeInput = native as Record<string, unknown> | undefined;
+  const originalTool = input.tool_name;
+  const nativeShellTool = [
+    'exec_command',
+    'functions.exec_command',
+    'shell_command',
+    'functions.shell_command',
+  ].includes(typeof originalTool === 'string' ? originalTool : '');
+  if (
+    nativeShellTool &&
+    nativeInput?.cmd !== undefined &&
+    nativeInput.command !== undefined &&
+    nativeInput.cmd !== nativeInput.command
+  ) {
+    return unresolvedAnalysis(
+      'conflicting-command-fields',
+      'Native command fields disagree; exact execution source is unproved.'
+    );
+  }
+  const command =
+    options.command ??
+    (native === undefined
+      ? input.command
+      : (nativeInput?.command ?? (nativeShellTool ? nativeInput?.cmd : undefined)));
+  if (
+    originalTool !== undefined &&
+    options.cwd === undefined &&
+    (typeof input.cwd !== 'string' || !input.cwd)
+  )
+    return unresolvedAnalysis(
+      'invalid-cwd',
+      'Native execution cwd must be a nonempty string; the analyzer cwd is not execution evidence.'
+    );
+  const baseCwd = options.cwd ?? input.cwd ?? process.cwd();
+  const workdir = nativeShellTool ? nativeInput?.workdir : undefined;
+  if (workdir !== undefined && (typeof workdir !== 'string' || !workdir))
+    return unresolvedAnalysis('invalid-workdir', 'Native workdir must be a nonempty string.');
+  const cwd =
+    typeof workdir === 'string' && typeof baseCwd === 'string'
+      ? nodePath.isAbsolute(workdir)
+        ? workdir
+        : `${baseCwd}/${workdir}`
+      : baseCwd;
+  const worktree = options.worktree ?? input.worktree;
+  const declaredShell =
+    options.shell ??
+    nativeInput?.shell ??
+    input.shell ??
+    (originalTool !== undefined && originalTool !== 'Bash' ? 'unknown' : undefined);
+  const shell =
+    declaredShell === '/bin/bash' || declaredShell === '/usr/bin/bash' ? 'bash' : declaredShell;
+  if (nativeShellTool && shell === 'bash' && nativeInput?.login !== false)
+    return unresolvedAnalysis(
+      'shell-startup',
+      'Native Bash needs login:false; shell startup effects are not proved.'
+    );
+  if (
+    typeof command !== 'string' ||
+    typeof cwd !== 'string' ||
+    cwd.length === 0 ||
+    typeof worktree !== 'string' ||
+    worktree.length === 0 ||
+    (shell !== undefined && typeof shell !== 'string')
+  ) {
+    return unresolvedAnalysis(
+      'invalid-input',
+      'command, cwd and worktree must be strings; cwd and worktree must be nonempty.'
+    );
+  }
+  return { command, cwd, worktree, ...(shell === undefined ? {} : { shell }) };
+}
+
+/** Read-only: submitted bytes are analyzed, never evaluated or logged. */
+export async function runHooksAnalyzeCommand(options: HooksAnalyzeOptions = {}): Promise<number> {
+  const input = analysisInput(options);
+  let result: CommandAnalysis;
+  try {
+    result = 'decision' in input ? input : await analyzeCommand(input);
+  } catch {
+    // Exception text can contain submitted command bytes; do not expose it.
+    result = unresolvedAnalysis('analysis-unavailable', 'Command analysis could not complete.');
+  }
+  if (options.json === true) {
+    process.stdout.write(
+      `${JSON.stringify({
+        schema: 'caws.hooks_analyze.v1',
+        decision: result.decision,
+        reasons: result.reasons,
+        trace: result.trace,
+      })}\n`
+    );
+  } else {
+    process.stdout.write(`caws hooks analyze: ${result.decision}\n`);
+    for (const reason of result.reasons) {
+      process.stdout.write(`  ${reason.code} [${reason.start}:${reason.end}]: ${reason.message}\n`);
+    }
+  }
+  return result.decision === 'allow' ? 0 : result.decision === 'deny' ? 1 : 2;
+}
 
 // ─── hooks list ────────────────────────────────────────────────────────────
 
