@@ -12,6 +12,7 @@ use std::{
 const MAX_ANCESTORS: usize = 16;
 const CAPTURE_BUDGET: Duration = Duration::from_millis(250);
 const COMM_LIMIT: usize = 4096;
+const MAX_OBSERVATION_ATTEMPTS: usize = MAX_ANCESTORS * 2 - 1;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -169,6 +170,109 @@ fn checkpoint(deadline: Instant, mode: LookupMode) -> Result<(), CaptureFailureC
     }
     Ok(())
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProducerStage {
+    EntryCheckpoint,
+    PlatformBirth,
+    CommLookup,
+    AfterCommCheckpoint,
+    FinalInstanceRecheck,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CommCheckpoint {
+    Entry,
+    #[cfg(not(target_os = "macos"))]
+    WaitLoop,
+    #[cfg(target_os = "macos")]
+    AfterNativeRead,
+}
+#[derive(Default)]
+struct CommTiming {
+    failed_checkpoint: Option<CommCheckpoint>,
+    cleanup_elapsed: Option<Duration>,
+}
+#[derive(Default)]
+struct ProducerTiming {
+    // Fixed order follows ProducerStage. None means the phase was not entered.
+    elapsed: [Option<Duration>; 5],
+    failed_stage: Option<ProducerStage>,
+    comm: CommTiming,
+}
+impl ProducerTiming {
+    fn measure<T>(
+        &mut self,
+        stage: ProducerStage,
+        operation: impl FnOnce() -> Result<T, CaptureFailureClass>,
+    ) -> Result<T, CaptureFailureClass> {
+        self.measure_with_clock(stage, Instant::now, operation)
+    }
+    fn measure_with_clock<T>(
+        &mut self,
+        stage: ProducerStage,
+        mut now: impl FnMut() -> Instant,
+        operation: impl FnOnce() -> Result<T, CaptureFailureClass>,
+    ) -> Result<T, CaptureFailureClass> {
+        let started = now();
+        let result = operation();
+        self.elapsed[stage as usize] = Some(now().saturating_duration_since(started));
+        if result.is_err() {
+            self.failed_stage = Some(stage);
+        }
+        result
+    }
+    fn diagnostic(&self) -> String {
+        // CommCleanupUs is included in CommLookup, not additional elapsed time.
+        format!(
+            "phasesUs(entry,birth,comm,afterComm,final)={:?} failedStage={:?} failedCommCheckpoint={:?} commCleanupUs={:?}",
+            self.elapsed
+                .map(|value| value.map(|elapsed| elapsed.as_micros())),
+            self.failed_stage,
+            self.comm.failed_checkpoint,
+            self.comm.cleanup_elapsed.map(|elapsed| elapsed.as_micros())
+        )
+    }
+}
+struct ObservationTiming {
+    attempt: usize,
+    stage: CaptureFailureStage,
+    pid: u32,
+    depth: usize,
+    start_offset: Duration,
+    remaining_at_start: Duration,
+    elapsed: Duration,
+    observer_failure: Option<CaptureFailureClass>,
+    producer: Option<ProducerTiming>,
+}
+impl ObservationTiming {
+    fn diagnostic(&self) -> String {
+        format!(
+            "(attempt={} stage={:?} pid={} depth={} offsetUs={} remainingUs={} elapsedUs={} observerFailure={:?} producer={})",
+            self.attempt,
+            self.stage,
+            self.pid,
+            self.depth,
+            self.start_offset.as_micros(),
+            self.remaining_at_start.as_micros(),
+            self.elapsed.as_micros(),
+            self.observer_failure,
+            self.producer
+                .as_ref()
+                .map_or_else(|| "None".into(), ProducerTiming::diagnostic)
+        )
+    }
+}
+fn comm_checkpoint(
+    deadline: Instant,
+    mode: LookupMode,
+    failed_site: &mut Option<CommCheckpoint>,
+    site: CommCheckpoint,
+) -> Result<(), CaptureFailureClass> {
+    let result = checkpoint(deadline, mode);
+    if result.is_err() {
+        *failed_site = Some(site);
+    }
+    result
+}
 trait Observer {
     fn observe(
         &mut self,
@@ -177,8 +281,14 @@ trait Observer {
         mode: LookupMode,
     ) -> Result<Observation, CaptureFailureClass>;
     fn sigterm(&mut self, pid: u32) -> Result<(), i32>;
+    fn take_timing(&mut self) -> Option<ProducerTiming> {
+        None
+    }
 }
-struct NativeObserver;
+#[derive(Default)]
+struct NativeObserver {
+    last_timing: Option<ProducerTiming>,
+}
 impl Observer for NativeObserver {
     fn observe(
         &mut self,
@@ -186,22 +296,44 @@ impl Observer for NativeObserver {
         deadline: Instant,
         mode: LookupMode,
     ) -> Result<Observation, CaptureFailureClass> {
-        checkpoint(deadline, mode)?;
-        let (parent, birth) =
-            platform_birth(pid).map_err(|_| CaptureFailureClass::PlatformLookupUnavailable)?;
-        let comm = legacy_comm(pid, deadline, mode)?;
-        checkpoint(deadline, mode)?;
-        if platform_birth(pid).map_err(|_| CaptureFailureClass::PlatformLookupUnavailable)?
-            != (parent, birth.clone())
-        {
-            return Err(CaptureFailureClass::InstanceChangedDuringObservation);
-        }
-        Ok(Observation {
-            pid,
-            parent,
-            birth,
-            comm,
-        })
+        let mut timing = ProducerTiming::default();
+        let result = (|| {
+            timing.measure(ProducerStage::EntryCheckpoint, || {
+                checkpoint(deadline, mode)
+            })?;
+            let (parent, birth) = timing.measure(ProducerStage::PlatformBirth, || {
+                platform_birth(pid).map_err(|_| CaptureFailureClass::PlatformLookupUnavailable)
+            })?;
+            let mut comm_timing = CommTiming::default();
+            let comm = timing.measure(ProducerStage::CommLookup, || {
+                legacy_comm(pid, deadline, mode, &mut comm_timing)
+            });
+            timing.comm = comm_timing;
+            let comm = comm?;
+            timing.measure(ProducerStage::AfterCommCheckpoint, || {
+                checkpoint(deadline, mode)
+            })?;
+            timing.measure(ProducerStage::FinalInstanceRecheck, || {
+                if platform_birth(pid)
+                    .map_err(|_| CaptureFailureClass::PlatformLookupUnavailable)?
+                    != (parent, birth.clone())
+                {
+                    return Err(CaptureFailureClass::InstanceChangedDuringObservation);
+                }
+                Ok(())
+            })?;
+            Ok(Observation {
+                pid,
+                parent,
+                birth,
+                comm,
+            })
+        })();
+        self.last_timing = Some(timing);
+        result
+    }
+    fn take_timing(&mut self) -> Option<ProducerTiming> {
+        self.last_timing.take()
     }
     fn sigterm(&mut self, pid: u32) -> Result<(), i32> {
         // SAFETY: only a consumed ValidatedTarget can reach this private adapter;
@@ -223,6 +355,7 @@ pub struct CapturedAncestors {
     available: bool,
     failure: Option<CaptureFailure>,
     observation_attempts: usize,
+    observation_timings: Vec<ObservationTiming>,
     capture_elapsed: Duration,
     capture_budget: Duration,
 }
@@ -235,7 +368,7 @@ impl CapturedAncestors {
         let native_pid = std::process::id();
         // SAFETY: getppid has no pointer arguments.
         let parent = unsafe { libc::getppid() } as u32;
-        Self::capture_with(&mut NativeObserver, native_pid, parent, deadline)
+        Self::capture_with(&mut NativeObserver::default(), native_pid, parent, deadline)
     }
     fn capture_with(
         observer: &mut impl Observer,
@@ -259,6 +392,7 @@ impl CapturedAncestors {
             available: true,
             failure: None,
             observation_attempts: 0,
+            observation_timings: Vec::new(),
             capture_elapsed: Duration::ZERO,
             capture_budget: deadline.saturating_duration_since(started),
         };
@@ -282,7 +416,13 @@ impl CapturedAncestors {
                 break;
             }
             result.observation_attempts += 1;
-            let row = match observer.observe(pid, deadline, LookupMode::Strict) {
+            let row = match result.observe_recorded_with_clock(
+                observer,
+                (pid, depth, CaptureFailureStage::Lookup),
+                deadline,
+                started,
+                &mut now,
+            ) {
                 Ok(row) if row.pid == pid => row,
                 observed => {
                     result.available = false;
@@ -300,10 +440,16 @@ impl CapturedAncestors {
             };
             // Recheck the previous edge so a reparented/reused intermediate
             // process cannot splice a different lineage into this capture.
-            if let Some(previous) = result.observations.last() {
+            if let Some(previous_pid) = result.observations.last().map(|previous| previous.pid) {
                 result.observation_attempts += 1;
-                match observer.observe(previous.pid, deadline, LookupMode::Strict) {
-                    Ok(current) if current == *previous => (),
+                match result.observe_recorded_with_clock(
+                    observer,
+                    (previous_pid, depth - 1, CaptureFailureStage::Recheck),
+                    deadline,
+                    started,
+                    &mut now,
+                ) {
+                    Ok(current) if Some(&current) == result.observations.last() => (),
                     observed => {
                         result.available = false;
                         result.failure = Some(CaptureFailure {
@@ -312,7 +458,7 @@ impl CapturedAncestors {
                                 Ok(_) => CaptureFailureClass::EdgeChanged,
                                 Err(class) => class,
                             },
-                            pid: previous.pid,
+                            pid: previous_pid,
                             depth: depth - 1,
                         });
                         break;
@@ -323,6 +469,34 @@ impl CapturedAncestors {
             result.observations.push(row);
         }
         result.capture_elapsed = now().saturating_duration_since(started);
+        result
+    }
+    fn observe_recorded_with_clock(
+        &mut self,
+        observer: &mut impl Observer,
+        site: (u32, usize, CaptureFailureStage),
+        deadline: Instant,
+        capture_started: Instant,
+        mut now: impl FnMut() -> Instant,
+    ) -> Result<Observation, CaptureFailureClass> {
+        let (pid, depth, stage) = site;
+        let started = now();
+        let result = observer.observe(pid, deadline, LookupMode::Strict);
+        let elapsed = now().saturating_duration_since(started);
+        let producer = observer.take_timing();
+        if self.observation_timings.len() < MAX_OBSERVATION_ATTEMPTS {
+            self.observation_timings.push(ObservationTiming {
+                attempt: self.observation_attempts,
+                stage,
+                pid,
+                depth,
+                start_offset: started.saturating_duration_since(capture_started),
+                remaining_at_start: deadline.saturating_duration_since(started),
+                elapsed,
+                observer_failure: result.as_ref().err().copied(),
+                producer,
+            });
+        }
         result
     }
     /// Bounded historical observations, not a capability or a current identity
@@ -336,13 +510,19 @@ impl CapturedAncestors {
             None => "stage=None class=None failedPid=None failedDepth=None".into(),
         };
         let recorded_pids: Vec<_> = self.observations.iter().map(|row| row.pid).collect();
+        let attempt_timings: Vec<_> = self
+            .observation_timings
+            .iter()
+            .map(ObservationTiming::diagnostic)
+            .collect();
         format!(
-            "available={} {failure} recordedCount={} recordedPids={recorded_pids:?} observationAttempts={} elapsedUs={} budgetUs={}",
+            "available={} {failure} recordedCount={} recordedPids={recorded_pids:?} observationAttempts={} elapsedUs={} budgetUs={} attemptTimings=[{}]",
             self.available,
             recorded_pids.len(),
             self.observation_attempts,
             self.capture_elapsed.as_micros(),
-            self.capture_budget.as_micros()
+            self.capture_budget.as_micros(),
+            attempt_timings.join(", ")
         )
     }
     pub fn validate(&self, intent: &ContainmentIntent) -> Result<ValidatedTarget, HeldReason> {
@@ -375,7 +555,7 @@ pub struct ValidatedTarget {
 }
 impl ValidatedTarget {
     pub fn attempt(self, deadline: Instant) -> ContainmentReceipt {
-        self.attempt_with(&mut NativeObserver, deadline)
+        self.attempt_with(&mut NativeObserver::default(), deadline)
     }
     fn attempt_with(self, observer: &mut impl Observer, deadline: Instant) -> ContainmentReceipt {
         let mut receipt =
@@ -495,21 +675,96 @@ fn platform_birth(_pid: u32) -> Result<(u32, Birth), String> {
     Err("process instance observation unsupported on this target".into())
 }
 
-/// Match the selected legacy comm representation without a shell, caller PATH,
-/// unbounded output, or a child whose lifetime escapes the lookup deadline.
+/// Read the qualified Darwin legacy representation using native OS APIs.
+/// The enclosing NativeObserver retains parent/birth and instance rechecks.
+/// An unavailable native result stays unavailable: there is no subprocess retry.
+#[cfg(target_os = "macos")]
 fn legacy_comm(
     pid: u32,
     deadline: Instant,
     mode: LookupMode,
+    timing: &mut CommTiming,
+) -> Result<String, CaptureFailureClass> {
+    native_comm_with(
+        pid,
+        deadline,
+        mode,
+        timing,
+        |pid, deadline| {
+            caws_native::process_comm_macos::read(pid, deadline)
+                .map(|observation| observation.comm_bytes().to_vec())
+        },
+        comm_checkpoint,
+    )
+}
+
+// A deterministic boundary seam for reader errors and before/after checkpoints.
+// Tests exercise adapter behavior here; actual SDK acquisition and byte parity
+// require the independent System-strvis and owned-process qualifier artifacts.
+#[cfg(target_os = "macos")]
+fn native_comm_with(
+    pid: u32,
+    deadline: Instant,
+    mode: LookupMode,
+    timing: &mut CommTiming,
+    read: impl FnOnce(u32, Instant) -> Result<Vec<u8>, caws_native::process_comm_macos::ReadError>,
+    mut guard: impl FnMut(
+        Instant,
+        LookupMode,
+        &mut Option<CommCheckpoint>,
+        CommCheckpoint,
+    ) -> Result<(), CaptureFailureClass>,
+) -> Result<String, CaptureFailureClass> {
+    use caws_native::process_comm_macos::ReadError;
+    guard(
+        deadline,
+        mode,
+        &mut timing.failed_checkpoint,
+        CommCheckpoint::Entry,
+    )?;
+    let result = read(pid, deadline);
+    guard(
+        deadline,
+        mode,
+        &mut timing.failed_checkpoint,
+        CommCheckpoint::AfterNativeRead,
+    )?;
+    let bytes = result.map_err(|error| match error {
+        ReadError::Deadline => {
+            timing.failed_checkpoint = Some(CommCheckpoint::AfterNativeRead);
+            CaptureFailureClass::DeadlineExpired
+        }
+        ReadError::InvalidPid | ReadError::Unavailable(_) => {
+            CaptureFailureClass::CommLookupUnavailable
+        }
+    })?;
+    let text = String::from_utf8(bytes).map_err(|_| CaptureFailureClass::CommLookupUnavailable)?;
+    if text.is_empty() || text.len() > COMM_LIMIT || text.contains('\0') {
+        return Err(CaptureFailureClass::CommLookupUnavailable);
+    }
+    // The native API returns representation bytes, with no ps row separator.
+    // Preserve them exactly: no whitespace trimming, basename/path substitution,
+    // lossy decoding or fallback to a second representation source.
+    Ok(text)
+}
+
+/// Match the selected legacy comm representation without a shell, caller PATH,
+/// unbounded output, or a child whose lifetime escapes the lookup deadline.
+#[cfg(not(target_os = "macos"))]
+fn legacy_comm(
+    pid: u32,
+    deadline: Instant,
+    mode: LookupMode,
+    timing: &mut CommTiming,
 ) -> Result<String, CaptureFailureClass> {
     use std::{
         io::Read,
         os::fd::AsRawFd,
         process::{Child, Command, Stdio},
     };
-    struct LookupChild(Child);
-    impl Drop for LookupChild {
-        fn drop(&mut self) {
+    struct LookupChild<'a>(Child, &'a mut Option<Duration>);
+    impl LookupChild<'_> {
+        fn cleanup(&mut self) {
             // The observer owns this unreaped child. Kill/reap only that child;
             // never a group or a PID supplied by the engine.
             match self.0.try_wait() {
@@ -533,7 +788,19 @@ fn legacy_comm(
             }
         }
     }
-    checkpoint(deadline, mode)?;
+    impl Drop for LookupChild<'_> {
+        fn drop(&mut self) {
+            let started = Instant::now();
+            self.cleanup();
+            *self.1 = Some(started.elapsed());
+        }
+    }
+    comm_checkpoint(
+        deadline,
+        mode,
+        &mut timing.failed_checkpoint,
+        CommCheckpoint::Entry,
+    )?;
     let child = Command::new("/bin/ps")
         .args(["-o", "comm=", "-p", &pid.to_string()])
         .env_clear()
@@ -544,7 +811,7 @@ fn legacy_comm(
         .stderr(Stdio::null())
         .spawn()
         .map_err(|_| CaptureFailureClass::CommLookupUnavailable)?;
-    let mut child = LookupChild(child);
+    let mut child = LookupChild(child, &mut timing.cleanup_elapsed);
     let mut output = child
         .0
         .stdout
@@ -559,7 +826,12 @@ fn legacy_comm(
     let mut bytes = Vec::new();
     let mut eof = false;
     loop {
-        checkpoint(deadline, mode)?;
+        comm_checkpoint(
+            deadline,
+            mode,
+            &mut timing.failed_checkpoint,
+            CommCheckpoint::WaitLoop,
+        )?;
         if !eof {
             let mut chunk = [0u8; 4097];
             match output.read(&mut chunk) {
@@ -697,7 +969,9 @@ mod tests {
             signals: Vec::new(),
         };
         let started = Instant::now();
-        let mut ticks = [started, started + Duration::from_micros(37)].into_iter();
+        let mut clock_values = vec![started; 1 + observer.steps.len() * 2];
+        clock_values.push(started + Duration::from_micros(37));
+        let mut ticks = clock_values.into_iter();
         let captured = CapturedAncestors::capture_with_clock(
             &mut observer,
             99,
@@ -735,6 +1009,401 @@ mod tests {
             Err(HeldReason::CaptureUnavailable)
         ));
         assert!(observer.signals.is_empty());
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_comm_adapter_preserves_exact_representation_and_lookup_mode() {
+        for mode in [LookupMode::Strict, LookupMode::Terminal] {
+            for bytes in [
+                b"/owned/path with spaces\\011\\012\\\\tail  ".to_vec(),
+                b"relative/name".to_vec(),
+                b"(kernel-fallback)".to_vec(),
+                b"<defunct>".to_vec(),
+                vec![b'x'; COMM_LIMIT],
+            ] {
+                let expected = String::from_utf8(bytes.clone()).unwrap();
+                let expires = deadline();
+                let mut timing = CommTiming::default();
+                let mut reads = 0;
+                let mut checkpoints = Vec::new();
+                let found = native_comm_with(
+                    44,
+                    expires,
+                    mode,
+                    &mut timing,
+                    |pid, passed_deadline| {
+                        reads += 1;
+                        assert_eq!(pid, 44);
+                        assert_eq!(passed_deadline, expires);
+                        Ok(bytes)
+                    },
+                    |passed_deadline, passed_mode, failed, site| {
+                        assert_eq!(passed_deadline, expires);
+                        assert!(failed.is_none());
+                        assert_eq!(
+                            matches!(passed_mode, LookupMode::Strict),
+                            matches!(mode, LookupMode::Strict)
+                        );
+                        checkpoints.push(site);
+                        Ok(())
+                    },
+                );
+                assert_eq!(found, Ok(expected));
+                assert_eq!(reads, 1);
+                assert_eq!(
+                    checkpoints,
+                    [CommCheckpoint::Entry, CommCheckpoint::AfterNativeRead]
+                );
+                assert_eq!(timing.failed_checkpoint, None);
+                assert_eq!(timing.cleanup_elapsed, None);
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_comm_adapter_rejects_malformed_or_oversized_result_bytes() {
+        for bytes in [
+            Vec::new(),
+            b"x\0y".to_vec(),
+            vec![0xff],
+            vec![b'x'; COMM_LIMIT + 1],
+        ] {
+            let mut timing = CommTiming::default();
+            let mut reads = 0;
+            let mut checks = 0;
+            let result = native_comm_with(
+                44,
+                deadline(),
+                LookupMode::Terminal,
+                &mut timing,
+                |_, _| {
+                    reads += 1;
+                    Ok(bytes)
+                },
+                |_, _, _, _| {
+                    checks += 1;
+                    Ok(())
+                },
+            );
+            assert_eq!(result, Err(CaptureFailureClass::CommLookupUnavailable));
+            assert_eq!(reads, 1);
+            assert_eq!(checks, 2);
+            assert_eq!(timing.cleanup_elapsed, None);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_comm_unavailable_is_not_retried_or_reported_as_an_identity() {
+        use caws_native::process_comm_macos::{ReadError, Unavailable};
+        for error in [
+            ReadError::InvalidPid,
+            ReadError::Unavailable(Unavailable::UnsupportedPlatform),
+            ReadError::Unavailable(Unavailable::KernelSnapshot),
+            ReadError::Unavailable(Unavailable::ArgumentSizeLimit),
+            ReadError::Unavailable(Unavailable::RenderedSizeLimit),
+            ReadError::Unavailable(Unavailable::Allocation),
+            ReadError::Unavailable(Unavailable::EmbeddedNul),
+        ] {
+            let mut timing = CommTiming::default();
+            let mut reads = 0;
+            let mut checks = 0;
+            let result = native_comm_with(
+                44,
+                deadline(),
+                LookupMode::Strict,
+                &mut timing,
+                |_, _| {
+                    reads += 1;
+                    Err(error)
+                },
+                |_, mode, _, _| {
+                    assert!(matches!(mode, LookupMode::Strict));
+                    checks += 1;
+                    Ok(())
+                },
+            );
+            assert_eq!(result, Err(CaptureFailureClass::CommLookupUnavailable));
+            assert_eq!(reads, 1);
+            assert_eq!(checks, 2);
+            assert_eq!(timing.failed_checkpoint, None);
+            assert_eq!(timing.cleanup_elapsed, None);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_reader_deadline_keeps_deadline_class_and_comm_checkpoint() {
+        let mut timing = CommTiming::default();
+        let mut reads = 0;
+        let mut sites = Vec::new();
+        let result = native_comm_with(
+            44,
+            deadline(),
+            LookupMode::Strict,
+            &mut timing,
+            |_, _| {
+                reads += 1;
+                Err(caws_native::process_comm_macos::ReadError::Deadline)
+            },
+            |_, _, _, site| {
+                sites.push(site);
+                Ok(())
+            },
+        );
+        assert_eq!(result, Err(CaptureFailureClass::DeadlineExpired));
+        assert_eq!(reads, 1);
+        assert_eq!(
+            sites,
+            [CommCheckpoint::Entry, CommCheckpoint::AfterNativeRead]
+        );
+        assert_eq!(
+            timing.failed_checkpoint,
+            Some(CommCheckpoint::AfterNativeRead)
+        );
+        assert_eq!(timing.cleanup_elapsed, None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_entry_checkpoint_stops_acquisition_without_cancellation_global_mutation() {
+        for class in [
+            CaptureFailureClass::Cancelled,
+            CaptureFailureClass::DeadlineExpired,
+        ] {
+            let mut timing = CommTiming::default();
+            let mut reads = 0;
+            let mut sites = Vec::new();
+            let result = native_comm_with(
+                44,
+                deadline(),
+                LookupMode::Strict,
+                &mut timing,
+                |_, _| {
+                    reads += 1;
+                    Ok(b"/owned/fixture".to_vec())
+                },
+                |_, mode, failed, site| {
+                    assert!(matches!(mode, LookupMode::Strict));
+                    sites.push(site);
+                    *failed = Some(site);
+                    Err(class)
+                },
+            );
+            assert_eq!(result, Err(class));
+            assert_eq!(reads, 0);
+            assert_eq!(sites, [CommCheckpoint::Entry]);
+            assert_eq!(timing.failed_checkpoint, Some(CommCheckpoint::Entry));
+            assert_eq!(timing.cleanup_elapsed, None);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_post_read_checkpoint_withholds_success_or_lookup_failure() {
+        for class in [
+            CaptureFailureClass::Cancelled,
+            CaptureFailureClass::DeadlineExpired,
+        ] {
+            for reader_fails in [false, true] {
+                let mut timing = CommTiming::default();
+                let mut reads = 0;
+                let mut sites = Vec::new();
+                let result = native_comm_with(
+                    44,
+                    deadline(),
+                    LookupMode::Strict,
+                    &mut timing,
+                    |_, _| {
+                        reads += 1;
+                        if reader_fails {
+                            Err(caws_native::process_comm_macos::ReadError::Unavailable(
+                                caws_native::process_comm_macos::Unavailable::KernelSnapshot,
+                            ))
+                        } else {
+                            Ok(b"/owned/fixture".to_vec())
+                        }
+                    },
+                    |_, mode, failed, site| {
+                        assert!(matches!(mode, LookupMode::Strict));
+                        sites.push(site);
+                        if site == CommCheckpoint::AfterNativeRead {
+                            *failed = Some(site);
+                            Err(class)
+                        } else {
+                            Ok(())
+                        }
+                    },
+                );
+                assert_eq!(result, Err(class));
+                assert_eq!(reads, 1);
+                assert_eq!(
+                    sites,
+                    [CommCheckpoint::Entry, CommCheckpoint::AfterNativeRead]
+                );
+                assert_eq!(
+                    timing.failed_checkpoint,
+                    Some(CommCheckpoint::AfterNativeRead)
+                );
+                assert_eq!(timing.cleanup_elapsed, None);
+            }
+        }
+    }
+
+    #[test]
+    fn producer_timings_account_for_entered_phases_and_fixed_failure_site() {
+        let started = Instant::now();
+        let mut timing = ProducerTiming::default();
+        let mut clock = [started, started + Duration::from_micros(11)].into_iter();
+        assert_eq!(
+            timing.measure_with_clock(
+                ProducerStage::PlatformBirth,
+                || clock.next().unwrap(),
+                || Ok(44_u32),
+            ),
+            Ok(44)
+        );
+        let mut clock = [started, started + Duration::from_micros(19)].into_iter();
+        assert_eq!(
+            timing.measure_with_clock::<()>(
+                ProducerStage::CommLookup,
+                || clock.next().unwrap(),
+                || Err(CaptureFailureClass::DeadlineExpired),
+            ),
+            Err(CaptureFailureClass::DeadlineExpired)
+        );
+        assert_eq!(
+            timing.elapsed,
+            [
+                None,
+                Some(Duration::from_micros(11)),
+                Some(Duration::from_micros(19)),
+                None,
+                None
+            ]
+        );
+        assert_eq!(timing.failed_stage, Some(ProducerStage::CommLookup));
+        assert_eq!(timing.comm.cleanup_elapsed, None);
+        for site in [
+            CommCheckpoint::Entry,
+            #[cfg(target_os = "macos")]
+            CommCheckpoint::AfterNativeRead,
+            #[cfg(not(target_os = "macos"))]
+            CommCheckpoint::WaitLoop,
+        ] {
+            let mut failed = None;
+            assert_eq!(
+                comm_checkpoint(Instant::now(), LookupMode::Terminal, &mut failed, site),
+                Err(CaptureFailureClass::DeadlineExpired)
+            );
+            assert_eq!(failed, Some(site));
+        }
+    }
+    #[test]
+    fn per_observation_timings_use_monotonic_offsets_and_never_grant_target_authority() {
+        struct TimedObserver {
+            fake: Fake,
+            timing: Option<ProducerTiming>,
+            failure: Option<CaptureFailureClass>,
+        }
+        impl Observer for TimedObserver {
+            fn observe(
+                &mut self,
+                pid: u32,
+                deadline: Instant,
+                mode: LookupMode,
+            ) -> Result<Observation, CaptureFailureClass> {
+                if let Some(class) = self.failure {
+                    return Err(class);
+                }
+                self.fake.observe(pid, deadline, mode)
+            }
+            fn sigterm(&mut self, pid: u32) -> Result<(), i32> {
+                self.fake.sigterm(pid)
+            }
+            fn take_timing(&mut self) -> Option<ProducerTiming> {
+                self.timing.take()
+            }
+        }
+        let started = Instant::now();
+        let deadline = started + Duration::from_micros(100);
+        let mut captured = CapturedAncestors::capture_with(&mut fake(), 99, 1, deadline);
+        let mut producer = ProducerTiming::default();
+        producer.elapsed[ProducerStage::CommLookup as usize] = Some(Duration::from_micros(9));
+        producer.comm.cleanup_elapsed = Some(Duration::from_micros(3));
+        let mut observer = TimedObserver {
+            fake: fake(),
+            timing: Some(producer),
+            failure: None,
+        };
+        captured.observation_attempts = 1;
+        let mut clock = [
+            started + Duration::from_micros(25),
+            started + Duration::from_micros(40),
+        ]
+        .into_iter();
+        let result = captured.observe_recorded_with_clock(
+            &mut observer,
+            (44, 0, CaptureFailureStage::Lookup),
+            deadline,
+            started,
+            || clock.next().unwrap(),
+        );
+        assert_eq!(result, Ok(row()));
+        assert!(observer.timing.is_none());
+        assert_eq!(captured.observation_timings.len(), 1);
+        let timing = &captured.observation_timings[0];
+        assert_eq!(timing.start_offset, Duration::from_micros(25));
+        assert_eq!(timing.remaining_at_start, Duration::from_micros(75));
+        assert_eq!(timing.elapsed, Duration::from_micros(15));
+        assert_eq!(timing.observer_failure, None);
+        let diagnostic = captured.diagnostic();
+        assert!(diagnostic.contains(
+            "attempt=1 stage=Lookup pid=44 depth=0 offsetUs=25 remainingUs=75 elapsedUs=15"
+        ));
+        assert!(diagnostic.contains(
+            "phasesUs(entry,birth,comm,afterComm,final)=[None, None, Some(9), None, None]"
+        ));
+        assert!(diagnostic.contains("commCleanupUs=Some(3)"));
+        assert!(!diagnostic.contains("/fixture/agent"));
+        let mut failed_producer = ProducerTiming::default();
+        failed_producer.elapsed[ProducerStage::EntryCheckpoint as usize] =
+            Some(Duration::from_micros(2));
+        failed_producer.failed_stage = Some(ProducerStage::EntryCheckpoint);
+        observer.timing = Some(failed_producer);
+        observer.failure = Some(CaptureFailureClass::DeadlineExpired);
+        captured.observation_attempts = 2;
+        let mut clock = [deadline, deadline + Duration::from_micros(2)].into_iter();
+        assert_eq!(
+            captured.observe_recorded_with_clock(
+                &mut observer,
+                (44, 0, CaptureFailureStage::Lookup),
+                deadline,
+                started,
+                || clock.next().unwrap(),
+            ),
+            Err(CaptureFailureClass::DeadlineExpired)
+        );
+        assert_eq!(captured.observation_timings.len(), 2);
+        let failed = &captured.observation_timings[1];
+        assert_eq!(failed.remaining_at_start, Duration::ZERO);
+        assert_eq!(failed.elapsed, Duration::from_micros(2));
+        assert_eq!(
+            failed.observer_failure,
+            Some(CaptureFailureClass::DeadlineExpired)
+        );
+        assert_eq!(
+            failed.producer.as_ref().unwrap().failed_stage,
+            Some(ProducerStage::EntryCheckpoint)
+        );
+        assert!(observer.timing.is_none());
+        // Recording an observation is not admission to the captured chain.
+        assert!(matches!(
+            captured.validate(&intent()),
+            Err(HeldReason::NotCaptured)
+        ));
+        assert!(observer.fake.signals.is_empty());
     }
     #[test]
     fn observation_deadline_has_a_fixed_producer_class() {
@@ -918,6 +1587,7 @@ mod tests {
         assert_eq!(captured.failure, None);
         assert_eq!(captured.observations.len(), MAX_ANCESTORS);
         assert_eq!(captured.observation_attempts, MAX_ANCESTORS * 2 - 1);
+        assert_eq!(captured.observation_timings.len(), MAX_OBSERVATION_ATTEMPTS);
         assert!(captured.validate(&intent()).is_ok());
         assert!(observer.signals.is_empty());
         let diagnostic = captured.diagnostic();

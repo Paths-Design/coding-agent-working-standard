@@ -73,6 +73,11 @@ R32 reliability and R33's selected-client/service ownership remain open.
 E70 records typed render requests and a Rust durable-outcome journal exercised
 across separate processes. It does not establish a running renderer owner or
 request-time grant revalidation.
+E71 replaces the opt-in Darwin observer's per-lookup process with SDK reads
+after formatter/process comparisons, and observes terminal containment and
+strict cleanup checks in private protocol fixtures. E69's historical expiry
+remains unattributed; complete process ownership and containment parity remain
+open.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -119,7 +124,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
-| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; terminal bridge exercises selected explicit-session Codex Bash path and larger/escaped latch state, E51–E56; complete containment parity open | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races and unqualified compatibility paths remain obligations; no installed replacement |
+| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement |
 | R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced compatibility gap, E57; unreplaced | Legacy cold start survives and serves the next request; native calls return 0 and retain expected user-turn strings while both daemon attempts disappear and the second render falls back inline. Explicit service binding/client integration, source retirement, startup races and cancellation outcomes remain open |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
@@ -1068,6 +1073,48 @@ Additional bounded evidence and unresolved dependencies:
   bounded constructor parameter, not a production default. The actual owner
   must revalidate queued grants before dispatch and preserve uncertain outcomes;
   these source primitives do not repair R33 by themselves.
+
+- E71: The opt-in Darwin observer reads the existing C-locale `ps comm`
+  representation through native SDK APIs, retaining complete ancestor capture,
+  parent/microsecond-birth rechecks, target selection, cancellation and the
+  250ms capture cap. Unavailable native reads remain unavailable; they do not
+  trigger subprocess retries or authorize a captured prefix. Rust owns parsing
+  and formatting; a small C bridge supplies SDK-owned `kinfo_proc` fields
+  without copied Rust structure offsets or policy/signal code.
+  `target/qualification/native-comm-owned-2026-10-19T17-47-08.369Z/`
+  retains an initial exit-1 comparison: actual System `strvis` matches all 283
+  cases and nine live-process cases match, but the qualifier's libproc birth
+  query is unavailable for its deliberately unreaped zombie. No zombie text
+  comparison or later interpreter proof follows from that attempt. The repair
+  uses qualification-only SDK zombie identity, preserves all four fresh
+  parent/birth observations and leaves the production metadata bridge unchanged.
+  `target/qualification/native-comm-zombie-2026-10-19T17-58-30.663Z/`
+  records comparison exit 0: all 283 formatter cases and 14 owned process cases
+  match, including custom/empty/oversized argv0, whitespace/control/high bytes,
+  deleted executable, zombie, shell, Node title and Python interpreter controls.
+  The generated Python body is an external-interpreter representation fixture,
+  not a replacement implementation or an exemption for first-party Python.
+  Under `target/qualification/service-primitives-2026-10-19/`,
+  `ps-oracle-mutant.log` exits 101 when empty-output-as-absence is reintroduced:
+  a still-live child 15652 is falsely accepted. Exact restoration removes that
+  mutant; `ps-oracle-restored.log` records both strict observation checks
+  passing. Only exit 1 with exactly empty stdout/stderr establishes absence;
+  invalid/failed/omitted observations cannot certify cleanup.
+  `legacy-comm-instrumented-terminal.log` records a passing instrumented replay
+  before the native route, without explaining E69's earlier failure.
+  `native-comm-integrated-tests.log` records full serial Cargo exit 0:
+  63 library, 34 binary and 27 executable checks; strict all-target Clippy also
+  exits 0 after removing two unnecessary unit expressions in the qualifier.
+  `caws-native-47756-133/post-effect-stall/` retains caller 53180 SIGTERM 15,
+  native 53182 reaped with code 2, complete 1,000,033-byte output, strictly
+  absent engine 53198/holder 53210, sibling heartbeat 1→38 and no continuation
+  marker. Its receipt explicitly limits observations to known members and
+  uses filesystem/SystemTime for the cross-process handoff interval.
+  This is not actual typed-dispatcher requalification, universal descendant
+  reap, different-credential/protected-process entitlement equivalence,
+  deadline interruption of a stalled kernel, a performance distribution or
+  installed behavior. R32 remains open; no full acceptance or installation is
+  inferred.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint

@@ -545,22 +545,7 @@ fn engine_exit_with_grandchild_held_pipes_is_bounded_and_owned_child_is_killed()
             String::from_utf8_lossy(&output.stderr)
         )
     });
-    let deadline = Instant::now() + Duration::from_secs(2);
-    loop {
-        let state = Command::new("ps")
-            .args(["-p", pid.trim(), "-o", "stat="])
-            .output()
-            .unwrap();
-        let text = String::from_utf8_lossy(&state.stdout);
-        if text.trim().is_empty() || text.trim().starts_with('Z') {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "owned child {pid} remains running: {text}"
-        );
-        thread::sleep(Duration::from_millis(10));
-    }
+    assert_not_running(&pid);
 }
 
 #[test]
@@ -728,23 +713,360 @@ fn captured(child: &mut std::process::Child) -> Output {
     }
 }
 
-fn assert_not_running(pid: &str) {
-    let deadline = Instant::now() + Duration::from_secs(2);
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "state", rename_all = "kebab-case")]
+enum PsObservation {
+    Absent {
+        pid: u32,
+    },
+    Zombie {
+        pid: u32,
+        ppid: u32,
+        pgid: u32,
+        stat: String,
+    },
+    Live {
+        pid: u32,
+        ppid: u32,
+        pgid: u32,
+        stat: String,
+    },
+}
+impl PsObservation {
+    fn pid(&self) -> u32 {
+        match self {
+            Self::Absent { pid } | Self::Zombie { pid, .. } | Self::Live { pid, .. } => *pid,
+        }
+    }
+    fn not_running(&self) -> bool {
+        matches!(self, Self::Absent { .. } | Self::Zombie { .. })
+    }
+}
+fn query_ps(pids: &[u32]) -> std::io::Result<Output> {
+    let selection = pids
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    Command::new("/bin/ps")
+        .env_clear()
+        .env("LC_ALL", "C")
+        .args(["-p", &selection, "-o", "pid=,ppid=,pgid=,stat="])
+        .output()
+}
+fn parse_ps_observations(pids: &[u32], output: &Output) -> Result<Vec<PsObservation>, String> {
+    let requested: std::collections::BTreeSet<_> = pids.iter().copied().collect();
+    if pids.is_empty()
+        || requested.len() != pids.len()
+        || pids.iter().any(|pid| *pid == 0 || *pid > i32::MAX as u32)
+    {
+        return Err("invalid process-state query selection".into());
+    }
+    if !output.stderr.is_empty() {
+        return Err(format!("process-state query wrote stderr: {output:?}"));
+    }
+    // Only this exact unsuccessful response establishes no matching PID.
+    if output.status.code() == Some(1) && output.stdout.is_empty() {
+        return Ok(pids
+            .iter()
+            .map(|pid| PsObservation::Absent { pid: *pid })
+            .collect());
+    }
+    if !output.status.success() {
+        return Err(format!("process-state query unavailable: {output:?}"));
+    }
+    if output.stdout.len() > pids.len() * 128 {
+        return Err("process-state query exceeds expected output bound".into());
+    }
+    let text =
+        std::str::from_utf8(&output.stdout).map_err(|_| "process-state query is not UTF-8")?;
+    let mut observations = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for line in text.lines() {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        if fields.len() != 4 {
+            return Err(format!("invalid process-state row: {line:?}"));
+        }
+        let number = |field: &str| -> Result<u32, String> {
+            if field.is_empty() || !field.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err("invalid numeric process-state field".into());
+            }
+            let value = field
+                .parse::<u32>()
+                .map_err(|_| "invalid process-state number")?;
+            if value > i32::MAX as u32 {
+                return Err("process-state number exceeds PID range".into());
+            }
+            Ok(value)
+        };
+        let pid = number(fields[0])?;
+        let ppid = number(fields[1])?;
+        let pgid = number(fields[2])?;
+        if !requested.contains(&pid) || !seen.insert(pid) {
+            return Err("unexpected or duplicate process-state PID".into());
+        }
+        let stat = fields[3].as_bytes();
+        // Admit known Darwin/Linux state codes and flags. Unknown formats
+        // fail observation instead of masquerading as death or a zombie.
+        if stat.is_empty()
+            || stat.len() > 32
+            || !matches!(
+                stat[0],
+                b'D' | b'I' | b'R' | b'S' | b'T' | b't' | b'U' | b'W' | b'X' | b'Z'
+            )
+            || stat[1..].iter().enumerate().any(|(index, byte)| {
+                !matches!(
+                    *byte,
+                    b'<' | b'>'
+                        | b'N'
+                        | b'L'
+                        | b's'
+                        | b'l'
+                        | b'+'
+                        | b'A'
+                        | b'E'
+                        | b'S'
+                        | b'V'
+                        | b'W'
+                        | b'X'
+                ) || stat[1..index + 1].contains(byte)
+            })
+        {
+            return Err("invalid process-state status".into());
+        }
+        let stat = fields[3].to_owned();
+        observations.push(if stat.starts_with('Z') {
+            PsObservation::Zombie {
+                pid,
+                ppid,
+                pgid,
+                stat,
+            }
+        } else {
+            PsObservation::Live {
+                pid,
+                ppid,
+                pgid,
+                stat,
+            }
+        });
+    }
+    if observations.is_empty() {
+        return Err("successful process-state query returned no rows".into());
+    }
+    Ok(observations)
+}
+fn single_ps_observation(pid: u32, output: &Output) -> Result<PsObservation, String> {
+    let mut observations = parse_ps_observations(&[pid], output)?;
+    if observations.len() != 1 {
+        return Err("process-state query omitted the requested PID".into());
+    }
+    Ok(observations.remove(0))
+}
+fn observe_ps_snapshot_with(
+    pids: &[u32],
+    output: &Output,
+    mut query_missing: impl FnMut(u32) -> std::io::Result<Output>,
+) -> Result<Vec<PsObservation>, String> {
+    let mut observations = parse_ps_observations(pids, output)?;
+    // A successful multi-PID response may omit an absent member. Resolve it
+    // with a strict single query rather than interpreting omission as absence.
+    for pid in pids {
+        if !observations
+            .iter()
+            .any(|observation| observation.pid() == *pid)
+        {
+            let output = query_missing(*pid)
+                .map_err(|error| format!("process-state query could not execute: {error}"))?;
+            observations.push(single_ps_observation(*pid, &output)?);
+        }
+    }
+    Ok(observations)
+}
+fn require_not_running_observations(
+    observations: Result<Vec<PsObservation>, String>,
+) -> Vec<PsObservation> {
+    let observations = observations.expect("process observation unavailable; cleanup unproved");
+    assert!(
+        !observations.is_empty(),
+        "no process observations; cleanup unproved"
+    );
+    assert!(
+        observations.iter().all(PsObservation::not_running),
+        "owned group contains an observed live member: {observations:?}"
+    );
+    observations
+}
+fn assert_not_running_with(
+    pid: u32,
+    deadline: Instant,
+    mut query: impl FnMut(u32) -> std::io::Result<Output>,
+) -> PsObservation {
     loop {
-        let state = Command::new("ps")
-            .args(["-p", pid.trim(), "-o", "stat="])
-            .output()
-            .unwrap();
-        let text = String::from_utf8_lossy(&state.stdout);
-        if text.trim().is_empty() || text.trim().starts_with('Z') {
-            return;
+        let output = query(pid).expect("process-state query could not execute; cleanup unproved");
+        let observation = single_ps_observation(pid, &output)
+            .expect("process observation unavailable; cleanup unproved");
+        if observation.not_running() {
+            return observation;
         }
         assert!(
             Instant::now() < deadline,
-            "owned process {pid} remains running: {text}"
+            "owned process {pid} remains running: {observation:?}"
         );
         thread::sleep(Duration::from_millis(10));
     }
+}
+fn assert_not_running(pid: &str) {
+    let pid = pid.trim().parse::<u32>().expect("invalid owned PID");
+    assert_not_running_with(pid, Instant::now() + Duration::from_secs(2), |pid| {
+        query_ps(&[pid])
+    });
+}
+fn ps_test_output(raw_status: i32, stdout: &[u8], stderr: &[u8]) -> Output {
+    use std::os::unix::process::ExitStatusExt;
+    Output {
+        status: std::process::ExitStatus::from_raw(raw_status),
+        stdout: stdout.to_vec(),
+        stderr: stderr.to_vec(),
+    }
+}
+#[test]
+fn ps_errors_never_establish_absence_of_a_live_owned_child() {
+    struct OwnedControl(std::process::Child);
+    impl Drop for OwnedControl {
+        fn drop(&mut self) {
+            // None pins this retained, unreaped direct child. An uncertain
+            // wait does not authorize signaling a numeric PID.
+            if matches!(self.0.try_wait(), Ok(None)) {
+                stop_test_child(&mut self.0);
+            }
+        }
+    }
+    let fixture = Fixture::new();
+    let ready = fixture.dir.join("ps-control-ready");
+    let mut child = OwnedControl(Command::new(&fixture.node)
+        .args(["-e", "require('node:fs').writeFileSync(process.env.PS_CONTROL_READY,'ready'); setInterval(()=>{},1000)"])
+        .env("PS_CONTROL_READY", &ready)
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+        .spawn().unwrap());
+    assert_eq!(wait_for_file(&ready), "ready");
+    let pid = child.0.id();
+    assert!(child.0.try_wait().unwrap().is_none());
+    assert!(matches!(
+        single_ps_observation(pid, &query_ps(&[pid]).unwrap()).unwrap(),
+        PsObservation::Live { .. }
+    ));
+    let live_rejected = std::panic::catch_unwind(|| {
+        assert_not_running_with(pid, Instant::now(), |pid| query_ps(&[pid]));
+    });
+    assert!(
+        live_rejected.is_err(),
+        "real live process was accepted as absent"
+    );
+    assert!(child.0.try_wait().unwrap().is_none());
+    let cases = [
+        (2 << 8, Vec::new(), Vec::new()),
+        (1 << 8, Vec::new(), b"ps failed".to_vec()),
+        (1 << 8, b" ".to_vec(), Vec::new()),
+        (libc::SIGTERM, Vec::new(), Vec::new()),
+        (0, Vec::new(), Vec::new()),
+        (0, format!("{pid} 1 {pid} Zbad\n").into_bytes(), Vec::new()),
+        (
+            0,
+            format!("{pid} 1 {pid} Z\n").into_bytes(),
+            b"ps failed".to_vec(),
+        ),
+        (0, vec![0xff], Vec::new()),
+    ];
+    for (raw_status, stdout, stderr) in cases {
+        let rejected = std::panic::catch_unwind(|| {
+            assert_not_running_with(pid, Instant::now(), |_| {
+                Ok(ps_test_output(raw_status, &stdout, &stderr))
+            });
+        });
+        assert!(
+            rejected.is_err(),
+            "failed observation accepted for live child {pid}"
+        );
+        assert!(child.0.try_wait().unwrap().is_none());
+        let snapshot = ps_test_output(raw_status, &stdout, &stderr);
+        let group_rejected = std::panic::catch_unwind(|| {
+            require_not_running_observations(observe_ps_snapshot_with(&[pid], &snapshot, |_| {
+                panic!("invalid snapshot must fail before fallback")
+            }));
+        });
+        assert!(group_rejected.is_err(), "invalid group snapshot accepted");
+        assert!(child.0.try_wait().unwrap().is_none());
+    }
+    let execution_error = std::panic::catch_unwind(|| {
+        assert_not_running_with(pid, Instant::now(), |_| {
+            Err(std::io::Error::other("injected ps execution failure"))
+        });
+    });
+    assert!(execution_error.is_err());
+    assert!(child.0.try_wait().unwrap().is_none());
+    fs::write(fixture.dir.join("ps-error-control.json"), serde_json::to_vec_pretty(&serde_json::json!({"pid":pid,"liveObservationRejected":true,"injectedObservationErrorsRejected":true,"childStillLive":true})).unwrap()).unwrap();
+    stop_test_child(&mut child.0);
+    assert!(child.0.try_wait().unwrap().is_some());
+    let output = query_ps(&[pid]).unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty() && output.stderr.is_empty());
+    assert_eq!(
+        assert_not_running_with(pid, Instant::now(), |pid| query_ps(&[pid])),
+        PsObservation::Absent { pid }
+    );
+}
+#[test]
+fn ps_snapshot_requires_valid_rows_and_resolves_omitted_members_without_assuming_absence() {
+    let partial = ps_test_output(0, b"44 1 44 Z\n", b"");
+    let mut queried = Vec::new();
+    let observations = observe_ps_snapshot_with(&[44, 55], &partial, |pid| {
+        queried.push(pid);
+        Ok(ps_test_output(1 << 8, b"", b""))
+    })
+    .unwrap();
+    assert_eq!(queried, vec![55]);
+    assert_eq!(
+        observations,
+        vec![
+            PsObservation::Zombie {
+                pid: 44,
+                ppid: 1,
+                pgid: 44,
+                stat: "Z".into()
+            },
+            PsObservation::Absent { pid: 55 }
+        ]
+    );
+    require_not_running_observations(Ok(observations));
+    assert!(
+        observe_ps_snapshot_with(&[44, 55], &partial, |_| Ok(ps_test_output(
+            2 << 8,
+            b"",
+            b""
+        )))
+        .is_err()
+    );
+    for output in [
+        ps_test_output(0, b"44 1 44 Z\n44 1 44 Z\n", b""),
+        ps_test_output(0, b"56 1 56 Z\n", b""),
+        ps_test_output(0, b"44 bad 44 Z\n", b""),
+        ps_test_output(0, b"44 1 44 Z\n", b"error"),
+    ] {
+        assert!(
+            observe_ps_snapshot_with(&[44, 55], &output, |_| panic!(
+                "invalid output cannot authorize fallback"
+            ))
+            .is_err()
+        );
+    }
+    let live = ps_test_output(0, b"44 1 44 Z\n55 1 55 S\n", b"");
+    let rejected = std::panic::catch_unwind(|| {
+        require_not_running_observations(observe_ps_snapshot_with(&[44, 55], &live, |_| {
+            panic!("complete snapshot")
+        }))
+    });
+    assert!(rejected.is_err());
 }
 
 #[test]
@@ -1380,15 +1702,32 @@ fn terminal_output_loss_does_not_veto_earned_containment_or_borrow_another_proce
             let member_checks_started = Instant::now();
             assert_not_running(&engine);
             assert_not_running(&holder);
-            let snapshot = Command::new("/bin/ps")
-                .args([
-                    "-p",
-                    &format!("{engine},{holder}"),
-                    "-o",
-                    "pid=,ppid=,pgid=,stat=",
-                ])
-                .output()
-                .unwrap();
+            let member_pids = [
+                engine.parse::<u32>().unwrap(),
+                holder.parse::<u32>().unwrap(),
+            ];
+            let snapshot = query_ps(&member_pids).unwrap();
+            let observations =
+                observe_ps_snapshot_with(&member_pids, &snapshot, |pid| query_ps(&[pid]));
+            let group_members_not_runnable = observations
+                .as_ref()
+                .is_ok_and(|rows| !rows.is_empty() && rows.iter().all(PsObservation::not_running));
+            // Retain failed observations before qualification can panic.
+            fs::write(
+                root.join("post-effect-ps-observation.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "observationAvailable": observations.is_ok(),
+                    "groupMembersNotRunnable": group_members_not_runnable,
+                    "observations": observations.as_ref().ok(),
+                    "observationError": observations.as_ref().err(),
+                    "psExitCode": snapshot.status.code(),
+                    "psStdout": String::from_utf8_lossy(&snapshot.stdout),
+                    "psStderr": String::from_utf8_lossy(&snapshot.stderr)
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            let observations = require_not_running_observations(observations);
             let native_stderr = fs::read_to_string(root.join("native-stderr.bin")).unwrap();
             assert!(
                 native_stderr.contains("engine settlement:"),
@@ -1437,7 +1776,8 @@ fn terminal_output_loss_does_not_veto_earned_containment_or_borrow_another_proce
                 root.join("post-effect-cleanup-observation.json"),
                 serde_json::to_vec_pretty(&serde_json::json!({
                     "nativeWait": waited, "ownedGroupBeforeEffect": group,
-                    "groupMembersNotRunnable": true, "knownMembersOnly": true,
+                    "groupMembersNotRunnable": group_members_not_runnable, "knownMembersOnly": true,
+                    "observationAvailable": true, "validatedProcessObservations": observations,
                     "memberChecksElapsedMs": member_checks_started.elapsed().as_millis(),
                     "perMemberObservationBudgetMs": 2000,
                     "psExitCode": snapshot.status.code(),
