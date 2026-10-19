@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-FRAME-SCAN-001
 title: 'Bound native frame delimiter scanning to newly received bytes'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-frame-scan
 created_at: '2026-10-19T11:29:05.496Z'
-updated_at: '2026-10-19T11:29:05.496Z'
+updated_at: '2026-10-19T11:30:10.643Z'
 created_by_session: '01a153d3-44ea-7c00-8e87-a18757db0ed0'
 blast_radius:
   modules:
