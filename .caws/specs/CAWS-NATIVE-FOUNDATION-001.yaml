@@ -1,0 +1,63 @@
+id: CAWS-NATIVE-FOUNDATION-001
+title: 'Land the opt-in Rust and typed one-shot foundation with shared safety repairs'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-19T13:21:12.167Z'
+updated_at: '2026-10-19T13:21:12.167Z'
+created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
+blast_radius:
+  modules:
+    - 'Rust one-shot native transport, typed invocation modules, selected stock guard bridge, shared validation and Git helpers, qualification tooling and migration tracker'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/'
+    - 'packages/caws-cli/src/runtime/'
+    - 'packages/caws-cli/tests/runtime/'
+    - 'packages/caws-cli/src/init/repo-hook-policy.ts'
+    - 'packages/caws-cli/src/store/git-binary.ts'
+    - 'packages/caws-cli/src/store/repo-root.ts'
+    - 'packages/caws-cli/tests/init/repo-hook-policy.test.js'
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous.bats'
+    - 'packages/caws-cli/scripts/qualify-native-containment.ts'
+    - 'packages/caws-cli/scripts/qualify-native-services.ts'
+    - 'packages/caws-cli/scripts/qualify-native-substitution.ts'
+    - 'packages/caws-cli/package.json'
+    - 'packages/caws-cli/eslint.config.js'
+    - 'packages/caws-cli/tsconfig.vnext.json'
+    - 'packages/caws-cli/tsconfig.vnext.test.json'
+    - 'docs/architecture/caws-native-runtime.md'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'CAWS-NATIVE-RUNTIME-001 retains the full A1-A8 migration obligation, its active owned lane and retained runtime artifacts; this component does not assert full migration or parity.'
+  - 'Normal launcher/registration selection and this machine''s installed generation remain unchanged; native execution requires explicit invocation until full parity and separate adoption.'
+  - 'Ambient values cannot delegate the shared guard''s PID escalation; an eligible native handoff uses an explicit descriptor and retains process/latch verification, refusal and receipt custody.'
+  - 'R32 shared-backend identity/reset/caller-death cleanup and R33 persistent selected-service lifetime remain open and block native installation; ordinary request-group cleanup is preserved.'
+acceptance:
+  - id: A1
+    given: 'the committed additive one-shot source and current main integration'
+    when: 'the CLI builds and strict runtime typing, full runtime Jest, Rust format/Clippy/Cargo and shared validation/Git-helper checks execute'
+    then: 'the actual selected tests pass with assertions over shell proof context, opaque native bytes, deadlines, cancellation, bounded delivery, policy validation and explicit Git execution context; no full-package or performance claim is inferred.'
+  - id: A2
+    given: 'private homes and exclusively owned fixture callers using the selected stock Codex guard'
+    when: 'substitution warning/latch and containment qualification plus hostile direct-guard descriptor controls execute'
+    then: 'first warnings and repeated-risk blocks retain matching state, valid owned callers actually receive SIGTERM with matching native receipt and protective handoff, mismatched identities remain unsignaled, siblings progress, prohibited markers stay absent and omitted/corrupted evidence is rejected.'
+  - id: A3
+    given: 'the component source and canonical migration governance'
+    when: 'default CLI/installer selection, shared consumer changes, source identities and retained parent state are inspected'
+    then: 'native selection remains explicit, the identified shared guard/validation/store repairs have their focused consumer evidence, the original migration spec remains active with all eight acceptance obligations and its lane/artifacts retained, and known resident/service/harness/retirement gaps remain explicit without installation or full-parity claims.'
+observability:
+  - 'Retain exact source revision and dirty state, commands/exits, selected source/build/runtime identities, raw native channels/journals, actual caller wait status, latch state, sibling progress and hostile oracle results in ignored storage outside the disposable component lane.'
+rollback:
+  - 'Keep the shared machine runtime unchanged. Source rollback uses a separately governed forward revert; preserve canonical governance and original migration evidence.'
+non_functional:
+  security:
+    - 'No worker lease, heartbeat, ambient variable or PID/token file grants project authority or ownership of a process; required refusal and owned cancellation remain fail-closed.'
+contracts:
+  - name: 'native-hook-protocol'
+    type: schema
+  - name: 'bounded-one-shot-consumer-behavior'
+    type: contract-test
