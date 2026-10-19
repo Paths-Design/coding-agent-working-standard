@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-SUBSTITUTION-QUALIFICATION-001
 title: 'Qualify native command substitution warning and latch consumer behavior'
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-substitution-qualification
 created_at: '2026-10-19T11:29:47.506Z'
-updated_at: '2026-10-19T11:29:47.506Z'
+updated_at: '2026-10-19T11:30:20.505Z'
 created_by_session: '01a153d3-aa1c-7cc3-9396-42b64a0f1efb'
 blast_radius:
   modules:
