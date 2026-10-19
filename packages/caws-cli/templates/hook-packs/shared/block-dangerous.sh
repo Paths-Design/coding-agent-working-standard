@@ -26,6 +26,13 @@
 
 set -euo pipefail
 
+# The direct native executor passes a receipt descriptor explicitly. Ambient
+# environment values cannot delegate the legacy guard's verified escalation.
+_CAWS_NATIVE_CONTAINMENT_FD_REQUESTED=0
+if [[ $# -eq 1 && "${1:-}" == '--caws-native-containment-fd=3' ]]; then
+  _CAWS_NATIVE_CONTAINMENT_FD_REQUESTED=1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=lib/agent-surface.sh
@@ -108,12 +115,12 @@ caws_source_lib emit.sh 2>/dev/null || true
 trap_escalation_note() {
   case "${CAWS_TRAP_KILL:-0}" in
     1)
-      printf '%s' "On THIS surface the first such attempt also ends this session's process (identity-verified SIGTERM to the agent pid)."
+      printf '%s' "On THIS surface a denied attempt triggers SIGTERM escalation to the verified agent process. A held or unsuccessful signal does not release quarantine."
       ;;
     dryrun)
       # dryrun runs the whole verification path and stops at the signal
       # boundary, so promising an ended process would be a lie.
-      printf '%s' "On THIS surface kill escalation is in dry-run: the agent process is identified and logged, but no signal is sent."
+      printf '%s' "On THIS surface kill escalation is in dry-run: target verification is attempted and its outcome is logged, but no signal is sent."
       ;;
     *)
       printf '%s' "THIS surface does not process-kill (kill escalation is disabled here), which changes nothing about the quarantine: every further Bash command and file mutation stays denied and recorded until a human clears it."
@@ -188,6 +195,11 @@ record_danger_latch() {
   local decision="$2"
   local reason="$3"
   local command="$4"
+  # A reset and rearm can keep the same PID, command and timestamp. Give each
+  # arm a distinct generation so a late native receipt cannot name its successor.
+  local generation
+  generation="$(/usr/bin/od -An -N16 -tx1 /dev/urandom 2>/dev/null | /usr/bin/tr -d '[:space:]')" || generation=""
+  [[ "$generation" =~ ^[0-9a-f]{32}$ ]] || generation=""
 
   mkdir -p "$(dirname "$file")"
   jq -n \
@@ -196,12 +208,14 @@ record_danger_latch() {
     --arg decision "$decision" \
     --arg reason "$reason" \
     --arg command "$command" \
+    --arg generation "$generation" \
     '{
       ts: $ts,
       hook: $hook,
       decision: $decision,
       reason: $reason,
       command: $command,
+      latch_generation: $generation,
       message: "Dangerous command boundary engaged. User reset required before more Bash commands may run in this session."
     }' > "$file"
   # DANGER-LATCH-QUARANTINE-TRAP-001: stamp the ancestor agent-process
@@ -447,6 +461,10 @@ trap_escalate() {
     trap_log_event "$session_id" "held" "no-kill" "invalid kill target pid=$pid" "$command"
     return 0
   fi
+  if [[ ! "$pid" =~ ^[1-9][0-9]*$ || ! "$start" =~ ^[1-9][0-9]*$ || -z "$comm" ]]; then
+    trap_log_event "$session_id" "held" "no-kill" "live agent identity incomplete or malformed" "$command"
+    return 0
+  fi
   if ! kill -0 "$pid" 2>/dev/null; then
     trap_log_event "$session_id" "held" "no-kill" "agent process $pid already gone" "$command"
     return 0
@@ -454,15 +472,19 @@ trap_escalate() {
   rec_pid="$(jq -r '.agent_pid // ""' "$latch_file" 2>/dev/null || true)"
   rec_start="$(jq -r '.agent_pid_started_at // ""' "$latch_file" 2>/dev/null || true)"
   rec_comm="$(jq -r '.agent_pid_comm // ""' "$latch_file" 2>/dev/null || true)"
-  if [[ -n "$rec_pid" && "$rec_pid" != "$pid" ]]; then
+  if [[ ! "$rec_pid" =~ ^[1-9][0-9]*$ || ! "$rec_start" =~ ^[1-9][0-9]*$ || -z "$rec_comm" ]]; then
+    trap_log_event "$session_id" "held" "no-kill" "arm-time agent identity incomplete or malformed" "$command"
+    return 0
+  fi
+  if [[ "$rec_pid" != "$pid" ]]; then
     trap_log_event "$session_id" "held" "no-kill" "pid drifted: armed=$rec_pid live=$pid" "$command"
     return 0
   fi
-  if [[ -n "$rec_start" && -n "$start" && "$rec_start" != "$start" ]]; then
+  if [[ "$rec_start" != "$start" ]]; then
     trap_log_event "$session_id" "held" "no-kill" "start-time mismatch (PID reuse suspected): armed=$rec_start live=$start" "$command"
     return 0
   fi
-  if [[ -n "$rec_comm" && -n "$comm" && "$rec_comm" != "$comm" ]]; then
+  if [[ "$rec_comm" != "$comm" ]]; then
     trap_log_event "$session_id" "held" "no-kill" "comm mismatch: armed=$rec_comm live=$comm" "$command"
     return 0
   fi
@@ -475,6 +497,23 @@ trap_escalate() {
        '.trap_dryrun_at = $ts | .trap_dryrun_pid = $pid' \
        "$latch_file" > "$_dtmp" 2>/dev/null && mv "$_dtmp" "$latch_file" || rm -f "$_dtmp" 2>/dev/null || true
     return 0
+  fi
+  # The qualified native executor owns output delivery, the OS effect and its
+  # receipt as one terminal transaction. A selected shell must not kill its
+  # caller before the native client has captured the protective decision.
+  if [[ "$_CAWS_NATIVE_CONTAINMENT_FD_REQUESTED" == 1 ]]; then
+    local generation
+    generation="$(jq -r '.latch_generation // ""' "$latch_file" 2>/dev/null || true)"
+    if [[ "$generation" =~ ^[0-9a-f]{32}$ && -f /dev/fd/3 ]] \
+      && jq -c -n --argjson pid "$pid" --arg start "$start" --arg comm "$comm" \
+      --arg session "$session_id" --arg latch "$latch_file" --arg generation "$generation" \
+      '{schema:"caws.containment.intent.v1",pid:$pid,startEpoch:$start,comm:$comm,sessionId:$session,latchPath:$latch,latchGeneration:$generation}' \
+      >&3; then
+      trap_log_event "$session_id" "proposed" "native-sigterm" "verified target $pid submitted to native containment owner" "$command"
+      return 0
+    else
+      trap_log_event "$session_id" "handoff-unavailable" "legacy-sigterm" "native receipt unavailable; retaining verified legacy escalation" "$command"
+    fi
   fi
   if kill -TERM "$pid" 2>/dev/null; then
     trap_log_event "$session_id" "escalated" "sigterm" "terminated agent process $pid (${comm:-unknown}) after strike $strikes" "$command"

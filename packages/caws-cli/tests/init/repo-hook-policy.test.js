@@ -1110,6 +1110,18 @@ describe('R1 append-only: only additional_* shapes exist', () => {
     }
   });
 
+  test.each(['constructor', '__proto__', 'toString'])(
+    'inherited guard name %s is refused without throwing',
+    (name) => {
+      const guards = JSON.parse(`{"${name}":{}}`);
+      const parsed = parseRepoHookPolicy(guardsDoc(guards));
+      expect(parsed).toEqual({
+        ok: false,
+        error: expect.stringContaining(`guards.${name} is not a configurable guard`),
+      });
+    }
+  );
+
   test('a floor guard named in guards is refused', () => {
     const parsed = parseRepoHookPolicy(
       guardsDoc({ 'protected-paths.sh': { additional_allow_prefixes: [] } })
@@ -1267,6 +1279,43 @@ describe('R3 contained and bounded', () => {
     expect(parsed.error).toContain('duplicate');
   });
 
+  test.each([199, 200, 201])(
+    'prefix limit counts %i Unicode code points rather than UTF-16 units',
+    (length) => {
+      const prefix = `${'\u{1f331}'.repeat(length - 1)}/`;
+      const parsed = parseRepoHookPolicy(
+        guardsDoc({
+          'scope-guard.sh': { additional_allow_prefixes: [{ prefix, reason: GOOD_REASON }] },
+        })
+      );
+      expect(parsed.ok).toBe(length <= 200);
+      if (length <= 200) {
+        expect(parsed.policy.guards['scope-guard.sh'].additional_allow_prefixes).toEqual([
+          { prefix, reason: GOOD_REASON },
+        ]);
+      } else {
+        expect(parsed.error).toContain('at most 200 characters');
+      }
+    }
+  );
+
+  test.each([11, 12])('reason minimum counts %i Unicode code points after trimming', (length) => {
+    const reason = `  ${'\u{1f331}'.repeat(length)}  `;
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': { additional_allow_prefixes: [{ prefix: 'native/', reason }] },
+      })
+    );
+    expect(parsed.ok).toBe(length >= 12);
+    if (length >= 12) {
+      expect(parsed.policy.guards['scope-guard.sh'].additional_allow_prefixes[0].reason).toBe(
+        reason
+      );
+    } else {
+      expect(parsed.error).toContain('at least 12 characters');
+    }
+  });
+
   test('the entry cap is enforced', () => {
     const many = Array.from({ length: 65 }, (_, i) => ({
       prefix: `dir${i}/`,
@@ -1330,6 +1379,18 @@ describe('thresholds are clamped by the schema, not trusted', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.policy.guards['loc-delta-check.sh'].thresholds).toEqual({ delta: 500 });
   });
+
+  test.each(['constructor', '__proto__', 'toString'])(
+    'inherited threshold name %s is refused',
+    (name) => {
+      const thresholds = JSON.parse(`{"${name}":2500}`);
+      const parsed = parseRepoHookPolicy(guardsDoc({ 'god-object-check.sh': { thresholds } }));
+      expect(parsed).toEqual({
+        ok: false,
+        error: expect.stringContaining(`thresholds.${name} is not a threshold this guard reads`),
+      });
+    }
+  );
 
   test("loc-delta-check's threshold is named for the quantity it bounds, matching god-object's", () => {
     // Both guards bound a per-edit line DELTA, so both spell it `delta`. The
