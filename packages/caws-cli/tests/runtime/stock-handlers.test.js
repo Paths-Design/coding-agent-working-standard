@@ -366,11 +366,15 @@ test.each([
 );
 
 test('an unresolvable utility cwd retains the selected shell fallback', () => {
+  const policy = path.join(project, 'utility-policy.json');
+  fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));
+  environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
   command('git add -f private.generated');
   const handler = select('hook-utilities.sh');
   expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
   fs.symlinkSync('loop', path.join(project, 'loop'));
   request.payload.cwd = 'loop';
+  request.inputJson = JSON.stringify(request.payload);
   expect(tryExecuteStockHandler(handler, context())).toBeNull();
 });
 

@@ -749,7 +749,10 @@ Additional bounded evidence and unresolved dependencies:
   commands/status, journals and copied review/red/green receipts are retained;
   no dependency-closure or OS subprocess trace is claimed. The final focused
   suites pass 107 checks, including an unresolvable-cwd shell-fallback control;
-  scoped ESLint and strict runtime test TypeScript exit 0. Doctor reports the
+  a subsequent configured-policy refinement of that fallback control passes
+  its one selected recheck (31 unrelated cases unselected), retained in
+  `/tmp/caws-utility-cwd-fallback-final.json`. Scoped ESLint and strict runtime
+  test TypeScript exit 0. Doctor reports the
   inherited 0E/3W/4I and five policy gates pass over branch plus staged changes.
   Two runner-creation attempts are refused before execution: an external tool
   symlink and then a foreign-path literal in unrelated historical prose. The
