@@ -65,8 +65,9 @@ E65 observes its typed execution, selected-shell warning/latch effects and nativ
 handoff in a private installation. E64's complete native suite passes without
 attributing the earlier backpressure timeout. E66 repairs an ambient containment
 handoff in independently adopted shared guards; E67 exercises its committed
-native effect path. Source landing and R33's selected-client/service ownership
-work remain obligations.
+native effect path. E68 records the opt-in foundation's source landing and
+retained full migration obligation. R33's selected-client/service ownership
+work remains open.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -965,6 +966,38 @@ Additional bounded evidence and unresolved dependencies:
   snapshot, not the installed release. No resident service, thirteen-session
   workload, installation, Python retirement or full R32 acceptance follows.
 
+- E68: Component `CAWS-NATIVE-FOUNDATION-001` imports the unchanged 81 source
+  paths from `8c1adc8a` into clean integration `aafa1920378c20273ed8061251a67a7f049cab5e`.
+  Its ordinary merge retains current main's governance. Fresh checks are retained
+  under `packages/caws-native/target/qualification/foundation-integration-2026-10-19T13-32-19-882Z/`:
+  `manifest.json` records CLI build, strict runtime typing, 175 shared
+  policy/Git/context checks, two selected normal Python-launcher checks (20
+  unselected), 616 runtime checks in 16 suites, Rust format, strict all-target
+  Clippy and serial Cargo (29 library, 21 binary, 24 executable checks), all exit
+  0. The included `substitution-replay-command.json`, log and
+  `substitution-replay/` retain ten current-guard native cases, actual typed
+  classifier coverage, warning/latch state and hostile evidence controls.
+  `source-and-state.json` records all imported source hashes, source comparison
+  exit 0, unchanged actual `src/index.js`/installer/registration/store barrel,
+  retained parent artifacts and installed pointer `408c06a7…77baa0`.
+  Independent integration review identifies a mistaken receipt coordinate
+  (`src/index.ts`); the corrected receipt checks existing `src/index.js` and
+  exits 0. No integration-induced default-selection defect is established.
+  E66/E67 supply the matching shared-guard descriptor and actual signal evidence;
+  their complete source bytes remain identical in this integration.
+  Component A1–A3 are recorded through the single writer and read back with
+  `ac_recorded` events 9205–9207. The writer checks commit reachability; ignored
+  raw runtime artifacts are inspected by the verifier, not mechanically
+  rederived. An initial absolute artifact citation is refused before any write;
+  generated evidence remains uncommitted. The governed merge exits 0 at
+  `6da6548c9842549b6bd8b5307defb52c2ea083c2`, closes only the component and removes
+  its lane. The original lane fast-forwards to main, retaining the active
+  `CAWS-NATIVE-RUNTIME-001`, all eight acceptance obligations and ignored
+  qualification artifacts. Native remains explicitly invoked; normal bootstrap
+  stays Python. Source landing does not establish R32/R33 repair, resident
+  operation, thirteen sessions across four projects, installed/harness parity,
+  Python retirement or performance. No machine installation occurs.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -1054,15 +1087,13 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-E65 and E67 supply the bounded substitution and containment replays through the
-native client; full acceptance remains open. Land the additive opt-in one-shot
-foundation and its identified shared safety/validation repairs through a coherent
-component spec while retaining the original lane, evidence and all A1–A8
-obligations. Native installation is separate. The normal machine bootstrap
-remains Python, but a future legacy adapters installation receives changed
-shared guard bytes, so source landing is not a behavior-inert claim. Then
-continue the dependency order below. Keep the failed backpressure witness;
-instrument startup, ancestor capture, proposal arrival and output delivery before
+E68 lands the additive opt-in one-shot foundation and its identified shared
+safety/validation repairs through a separately accepted component. The original
+lane, evidence and all A1–A8 obligations remain active. Native installation is
+separate. The normal machine bootstrap remains Python, but a future legacy
+adapters installation receives changed shared guard bytes, so source landing is
+not a behavior-inert claim. Continue the dependency order below. Keep the failed
+backpressure witness; instrument startup, ancestor capture, proposal arrival and output delivery before
 attributing its timeout or claiming concurrent performance.
 
 1. Resolve R33 through explicit service binding and client integration. Define
@@ -1137,14 +1168,15 @@ checks current component scope, not the original commit's spec assignment.
 CAWS create uses the same base to start a branch and select its merge target;
 it has no independent start-ref. A component created against main therefore
 needs a separately admitted ordinary Git integration of the committed candidate,
-with main as an ancestor for a fast-forward. Actual admission, integrated checks
-and component acceptance remain unverified. Narrowing the original write scope
-to tracker/architecture responsibility follows source landing, not an assertion
-that the whole migration is complete; its full acceptance criteria remain.
+with main as an ancestor for a fast-forward. E68 records admitted integration,
+checks, component acceptance and source landing. The original scope retains the
+remaining implementation obligation; narrow a future responsibility only when a
+separately admitted owner actually carries that work. Source landing does not
+close the full acceptance criteria.
 
 | Milestone | Observed state | Proof required to advance |
 | --- | --- | --- |
-| Component foundations | Tested components; installed hooks use the original runtime | Committed source and checks remain scoped to what actually ran |
+| Component foundations | Opt-in source landed at `6da6548c`; installed hooks use the original runtime | E68 retains integrated checks and component evidence; claims remain scoped to what actually ran |
 | Executable replacement spine | Isolated nonlatching Codex branch exercised; full replacement open | E33 preserves raw selected-guard/index/journal/native-output evidence. Full required chain, identity/containment, overrides and event/harness behavior require their own causal observations |
 | Packaged selection and rollback | Unproven | Clean candidate package selects the replacement in an isolated home/harness; native guarded write is withheld; rollback restores the prior selected generation without losing governed state; actual machine replacement waits for full parity |
 | Resident multi-project operation | Unimplemented | Same engine serves the required native workload with fresh authority, bounded fair capacity, owner-specific ordering, explicit uncertain outcomes and safe upgrades |
