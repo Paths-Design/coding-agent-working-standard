@@ -70,6 +70,9 @@ retained full migration obligation. E69 adds externally owned post-effect
 cleanup qualification and capture diagnostics, and retains a failed replay:
 ancestor capture expires above the intended target and containment is held.
 R32 reliability and R33's selected-client/service ownership remain open.
+E70 records typed render requests and a Rust durable-outcome journal exercised
+across separate processes. It does not establish a running renderer owner or
+request-time grant revalidation.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -110,7 +113,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
 | R25 | Demand-start, warm residency and idle exit | Rust startup + TS resident host | unreplaced | Machine-wide bounded capacity, fair project/session admission, owner-specific serialization, single starter, no heartbeat authority, no active-request eviction, drain/version tests |
-| R26 | Persistent request outcomes / deferred queue | TS journal/spool and bounded scheduler | unreplaced | Crash/reconnect/unknown outcomes, no blind mutation replay, isolation and bounded disk/queue |
+| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | component and separate-process recovery exercised, E70; resident integration open | Exact request custody, queued-only cancellation and cross-generation unknown fences exercised. Owner admission, grant freshness, autonomous drain and production retention remain open |
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
 | R28 | Performance and load qualification | Replayable TS/native workload | unreplaced | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
@@ -1035,6 +1038,36 @@ Additional bounded evidence and unresolved dependencies:
   regression. Per-observation/substage cost and the required capture/target
   policy need investigation before claiming R32 reliability. No acceptance or
   installation follows from this slice.
+
+- E70: Typed render request/outcome schemas and the Rust private durable journal
+  are component implementations; they do not activate a service. Evidence lives
+  under `packages/caws-native/target/qualification/service-primitives-2026-10-19/`.
+  `cancellation-journal-tests.log` records 26 selected journal cases and
+  `cancellation-protocol-tests.log` records 100 typed protocol cases, exit 0.
+  CLI build, strict runtime test typing and repaired all-target Clippy exit 0.
+  The initial Clippy attempt exits 101 for an unnecessary unit expression and
+  an oversized admission enum; the repair boxes accepted operations without
+  changing their wire bytes. The journal persists queued/running/returned/unknown
+  outcomes before releasing the corresponding operation, refuses conflicting
+  duplicates, and retains uncertain work as a fence across source generations.
+  Queued source retirement or grant withdrawal publishes an explicit cancellation
+  tombstone; it cannot relabel running, unknown or returned work.
+  `cross-process-WLGXfH/observation.json` retains actual separate processes:
+  `service-journal-observer seed-abort` exits 73 without Rust Drop; disk contains
+  running/queued records. `recover` exits 0 after retaining unknown/queued, both
+  generation dispatch attempts are fenced, and an exact duplicate returns the
+  old unknown outcome. A fresh `returned-child` process exits 0 after reaping its
+  owned child with code 7/no signal and storing that observed result. Independent
+  Node reads verify private modes, body checksums, exact producer request bytes
+  and typed originating-request outcome correlation. The inline heredoc harness
+  is refused by the shell recognizer before execution; the retained runner is
+  invoked as a plain command and exits 0.
+  This does not simulate a physical power cut, interrupt a stalled kernel call,
+  independently validate native request authority, dispatch a daemon, or
+  establish production admission/retention policy. Capacity is an explicit
+  bounded constructor parameter, not a production default. The actual owner
+  must revalidate queued grants before dispatch and preserve uncertain outcomes;
+  these source primitives do not repair R33 by themselves.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
