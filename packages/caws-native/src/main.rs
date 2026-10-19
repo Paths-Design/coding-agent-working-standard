@@ -53,16 +53,18 @@ fn main() {
             };
             (
                 if guarded || error.started { 2 } else { 0 },
-                stdout,
-                format!("{reason}\n"),
+                stdout.into_bytes(),
+                format!("{reason}\n").into_bytes(),
             )
         }
     };
     // Bounded local writes are not an acknowledgment from the native consumer.
     if let Err(error) = runner::write_native(&stdout, &stderr) {
-        runner::write_diagnostic(&format!(
-            "{stderr}CAWS native output delivery failed: {error}. Output may be partial; consumer receipt is unconfirmed.\n"
-        ));
+        let mut diagnostic = stderr;
+        diagnostic.extend_from_slice(format!(
+            "CAWS native output delivery failed: {error}. Output may be partial; consumer receipt is unconfirmed.\n"
+        ).as_bytes());
+        runner::write_diagnostic(&diagnostic);
         std::process::exit(2);
     }
     std::process::exit(code.into());

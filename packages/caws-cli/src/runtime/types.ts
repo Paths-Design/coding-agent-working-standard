@@ -7,6 +7,13 @@ export type HookEvent = keyof typeof MACHINE_EVENTS;
 /** Native bytes and exit status are independent of RPC success. */
 export interface NativeResult {
   readonly exitCode: number;
+  readonly stdout: Uint8Array;
+  readonly stderr: Uint8Array;
+}
+
+/** Generated or explicitly decoded text; UTF-8 conversion belongs at the native boundary. */
+export interface NativeTextResult {
+  readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
 }

@@ -1,4 +1,10 @@
-import type { DispatchPhase, NativeResult, NativeResultContext, StopFailureBudget } from './types';
+import type {
+  DispatchPhase,
+  NativeResult,
+  NativeTextResult,
+  NativeResultContext,
+  StopFailureBudget,
+} from './types';
 
 /** A handler answered, but its native output cannot safely be delivered. */
 export class NativeOutputError extends Error {
@@ -17,10 +23,10 @@ function diagnostic(stderr: string, message: string): string {
 }
 
 /** Preserve transport bytes, except for the native Codex Stop text envelope. */
-export function normalizeNativeResult(
+function normalizeNativeTextResult(
   context: NativeResultContext,
-  result: NativeResult
-): NativeResult {
+  result: NativeTextResult
+): NativeTextResult {
   if (context.surface !== 'codex') return result;
   const text = result.stdout.trim();
   let output: unknown;
@@ -65,13 +71,57 @@ export function normalizeNativeResult(
   return { ...result, stderr };
 }
 
+/** Interpret Codex control text without replacing otherwise uninterpreted native bytes. */
+export function normalizeNativeResult(
+  context: NativeResultContext,
+  result: NativeResult
+): NativeResult;
+export function normalizeNativeResult(
+  context: NativeResultContext,
+  result: NativeTextResult
+): NativeTextResult;
+export function normalizeNativeResult(
+  context: NativeResultContext,
+  result: NativeResult | NativeTextResult
+): NativeResult | NativeTextResult {
+  if (typeof result.stdout === 'string' && typeof result.stderr === 'string') {
+    return normalizeNativeTextResult(context, {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+  }
+  if (!(result.stdout instanceof Uint8Array) || !(result.stderr instanceof Uint8Array)) {
+    throw new NativeOutputError('Native output channels must use the same representation');
+  }
+  if (context.surface !== 'codex') return result;
+  // The baseline Codex adapter decodes with replacement for interpretation only.
+  const text = {
+    exitCode: result.exitCode,
+    stdout: Buffer.from(result.stdout).toString('utf8'),
+    stderr: Buffer.from(result.stderr).toString('utf8'),
+  };
+  const normalized = normalizeNativeTextResult(context, text);
+  return {
+    exitCode: normalized.exitCode,
+    stdout:
+      normalized.stdout === text.stdout
+        ? Buffer.from(result.stdout)
+        : Buffer.from(normalized.stdout, 'utf8'),
+    stderr: Buffer.concat([
+      Buffer.from(result.stderr),
+      Buffer.from(normalized.stderr.slice(text.stderr.length), 'utf8'),
+    ]),
+  };
+}
+
 /** Infrastructure failure policy; a valid guard refusal never enters this path. */
 export async function adapterFailure(
   context: NativeResultContext,
   phase: DispatchPhase,
   errorMessage: string,
   budget?: StopFailureBudget
-): Promise<NativeResult> {
+): Promise<NativeTextResult> {
   const message = 'CAWS machine adapter: ' + errorMessage;
   const stderr = diagnostic('', '[caws machine adapter] ' + message);
   if (phase === 'configuration' && context.event !== 'pre_tool_use') {

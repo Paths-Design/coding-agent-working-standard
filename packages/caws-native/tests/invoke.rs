@@ -167,6 +167,9 @@ fn hostile_response_and_uncertain_process_failure_refuse_without_retry() {
         "nonzero",
         "oversize",
         "stderr-oversize",
+        "bad-base64",
+        "pad-bits",
+        "old-text-shape",
     ] {
         let fixture = Fixture::new();
         let output = execute(
@@ -184,6 +187,19 @@ fn hostile_response_and_uncertain_process_failure_refuse_without_retry() {
         );
         assert_eq!(fixture.requests().len(), 1, "{mode} replayed the request");
     }
+}
+
+#[test]
+fn opaque_native_channels_deliver_invalid_utf8_nul_and_every_byte_exactly() {
+    let fixture = Fixture::new();
+    let output = execute(
+        fixture.command("binary", "post_tool_use", "2000"),
+        b"{}".to_vec(),
+    );
+    assert_eq!(output.status.code(), Some(7));
+    assert_eq!(output.stdout, [0xff, 0x00, 0x61]);
+    assert_eq!(output.stderr, (0..=255).collect::<Vec<u8>>());
+    assert_eq!(fixture.requests().len(), 1);
 }
 
 #[test]

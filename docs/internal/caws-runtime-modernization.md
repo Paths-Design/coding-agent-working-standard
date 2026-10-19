@@ -87,11 +87,12 @@ Qualify mixed harnesses, repeated session IDs across projects, slow extensions,
 large transcripts, bursts, overload and generation upgrades. Report per-project
 and per-session distributions so aggregate performance cannot hide starvation.
 
-The response protocol's text strings cannot represent arbitrary native output
-bytes: stdout `ff 00 61` cannot pass through Rust `String::as_bytes()` unchanged.
-Baseline non-Codex forwarding preserves raw stdout. Lossless byte transport and
-explicit text interpretation are required before engine integration/adoption;
-text-component checks do not close that requirement. The Stop budget also needs
+The response protocol carries canonical base64 channels, decoded to native byte
+buffers. Component fixtures preserve stdout `ff 00 61`, NUL and every byte value;
+Codex JSON interpretation and generated text have explicit UTF-8 boundaries.
+Composition retains its defined LF framing and raw journal captures. These
+checks do not establish integration with an actual typed engine or installation.
+The Stop budget also needs
 project-scoped identity: a machine-global session ID cannot isolate cross-project
 work. Ambiguous legacy counters remain untouched instead of acquiring a project.
 
@@ -164,6 +165,15 @@ Additional component evidence:
   retains capacity until execution settles. This is controlled-worker component
   evidence, not native-client fan-out or daemon recovery. The runtime test
   TypeScript configuration also compiled successfully.
+- E22: Byte-based composer, response normalization and canonical binary protocol
+  checks passed in the E21 run. Cancellation during awaited eligibility or start
+  recording prevents handler execution; known refusals remain preserved. Rust
+  formatting, all-target strict Clippy, and the full serial Cargo suite passed:
+  five binary unit checks, sixteen executable groups, and twenty-seven Stop
+  library checks. Executable fixtures delivered `ff 00 61` and all 256 stderr
+  byte values exactly, rejected malformed/pad-bit/legacy text replies, and
+  retained cancellation/backpressure bounds. This is native fixture transport,
+  not an actual typed enforcement engine, native harness or installed runtime.
 
 ## Embedded and developer implementation coverage
 

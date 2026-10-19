@@ -74,6 +74,51 @@ test('successful plain Stop text becomes a native system message', () => {
   ).toEqual(result('{"systemMessage":"stopped session"}\n', 0, 'notice\n'));
 });
 
+test.each(['claude-code', 'codex'])(
+  'preserves opaque native bytes for %s when no output envelope is required',
+  (surface) => {
+    const input = {
+      exitCode: 0,
+      stdout: Buffer.from([0xff, 0x00, 0x61]),
+      stderr: Buffer.from([0x80, 0xfe, 0x00]),
+    };
+    expect(normalizeNativeResult(context('post_tool_use', surface), input)).toEqual(input);
+  }
+);
+
+test('Codex refusal appends interpreted diagnostics without replacing original channel bytes', () => {
+  const input = {
+    exitCode: 2,
+    stdout: Buffer.from([0xff, 0x00, 0x61]),
+    stderr: Buffer.from([0x80, 0xfe, 0x00]),
+  };
+  const actual = normalizeNativeResult(context(), input);
+  expect(actual.stdout).toEqual(input.stdout);
+  expect(Buffer.from(actual.stderr).subarray(0, input.stderr.length)).toEqual(input.stderr);
+  expect(Buffer.from(actual.stderr).subarray(input.stderr.length).toString('utf8')).toBe(
+    '\n[caws machine adapter digest-a] \ufffd\u0000a\n'
+  );
+});
+
+test('Codex Stop transforms replacement-decoded lifecycle text while preserving raw stderr', () => {
+  const input = {
+    exitCode: 0,
+    stdout: Buffer.from([0xff, 0x00, 0x61]),
+    stderr: Buffer.from([0x80, 0x00]),
+  };
+  const actual = normalizeNativeResult(context('stop'), input);
+  expect(JSON.parse(Buffer.from(actual.stdout).toString('utf8'))).toEqual({
+    systemMessage: '\ufffd\u0000a',
+  });
+  expect(actual.stderr).toEqual(input.stderr);
+});
+
+test('native normalization rejects mixed text and byte representations', () => {
+  expect(() =>
+    normalizeNativeResult(context(), { exitCode: 0, stdout: '', stderr: Buffer.alloc(0) })
+  ).toThrow('same representation');
+});
+
 test.each([
   '{"decision":',
   '[',

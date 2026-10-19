@@ -136,7 +136,11 @@ describe('native runtime protocol', () => {
     expect(decodeRuntimeResponse(frame, identity)).toEqual({
       schema: RESPONSE_SCHEMA,
       ...identity,
-      result,
+      result: {
+        exitCode: result.exitCode,
+        stdout: Buffer.from(result.stdout),
+        stderr: Buffer.from(result.stderr),
+      },
     });
   });
 
@@ -144,24 +148,52 @@ describe('native runtime protocol', () => {
     { schema: 'wrong' },
     { id: 'other' },
     { runtimeDigest: 'b'.repeat(64) },
-    { result: { exitCode: '2', stdout: '', stderr: '' } },
-    { result: { exitCode: 256, stdout: '', stderr: '' } },
-    { result: { exitCode: -1, stdout: '', stderr: '' } },
-    { result: { exitCode: 0.5, stdout: '', stderr: '' } },
-    { result: { exitCode: 0, stdout: null, stderr: '' } },
-    { result: { exitCode: 0, stdout: '', stderr: '', admitted: true } },
+    { result: { exitCode: '2', stdoutBase64: '', stderrBase64: '' } },
+    { result: { exitCode: 256, stdoutBase64: '', stderrBase64: '' } },
+    { result: { exitCode: -1, stdoutBase64: '', stderrBase64: '' } },
+    { result: { exitCode: 0.5, stdoutBase64: '', stderrBase64: '' } },
+    { result: { exitCode: 0, stdoutBase64: null, stderrBase64: '' } },
+    { result: { exitCode: 0, stdoutBase64: '', stderrBase64: '', admitted: true } },
+    { result: { exitCode: 0, stdout: '', stderr: '' } },
     { extra: true },
   ])('rejects mismatched native response %#', (changes) => {
     const response = {
       schema: RESPONSE_SCHEMA,
       ...identity,
-      result: { exitCode: 0, stdout: '', stderr: '' },
+      result: { exitCode: 0, stdoutBase64: '', stderrBase64: '' },
       ...changes,
     };
     expect(() => decodeRuntimeResponse(JSON.stringify(response), identity)).toThrow(/mismatched/);
   });
 
-  test('bounds the serialized response including JSON escaping', () => {
+  test('retains all native byte values including invalid UTF8 and NUL', () => {
+    const native = {
+      exitCode: 0,
+      stdout: Buffer.from([0xff, 0x00, 0x61]),
+      stderr: Buffer.from(Array.from({ length: 256 }, (_, value) => value)),
+    };
+    const frame = encodeRuntimeResponse(identity, native);
+    expect(JSON.parse(frame).result.stdoutBase64).toBe('/wBh');
+    expect(decodeRuntimeResponse(frame, identity).result).toEqual(native);
+  });
+
+  test.each(['Zg', 'Zg=', 'Zg===', 'Zh==', 'Zm9=', 'Z g==', 'Zg==\n', '-w==', '雪'])(
+    'rejects noncanonical native byte encoding %j',
+    (encoded) => {
+      for (const channel of ['stdoutBase64', 'stderrBase64']) {
+        const response = {
+          schema: RESPONSE_SCHEMA,
+          ...identity,
+          result: { exitCode: 0, stdoutBase64: '', stderrBase64: '', [channel]: encoded },
+        };
+        expect(() => decodeRuntimeResponse(JSON.stringify(response), identity)).toThrow(
+          /mismatched/
+        );
+      }
+    }
+  );
+
+  test('bounds the serialized response including binary transport expansion', () => {
     expect(() =>
       encodeRuntimeResponse(identity, {
         exitCode: 0,
@@ -169,5 +201,14 @@ describe('native runtime protocol', () => {
         stderr: '',
       })
     ).toThrow(/byte limit/);
+  });
+
+  test('round trips a large valid binary frame without regex stack growth', () => {
+    const stdout = Buffer.alloc(1024 * 1024, 0xff);
+    const stderr = Buffer.alloc(1024 * 1024, 0x00);
+    const result = { exitCode: 0, stdout, stderr };
+    const frame = encodeRuntimeResponse(identity, result);
+    expect(Buffer.byteLength(frame)).toBeLessThan(MAX_RESPONSE_BYTES);
+    expect(decodeRuntimeResponse(frame, identity).result).toEqual(result);
   });
 });

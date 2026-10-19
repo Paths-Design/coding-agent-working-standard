@@ -59,14 +59,16 @@ export interface CompositionResult {
 /** Carries released membership when execution fails before a composition can return. */
 export class ComposerExecutionError extends Error {
   readonly offers: readonly OfferMembership[];
+  readonly stderr: Uint8Array;
   constructor(
     message: string,
     readonly originalError: unknown,
     offers: readonly OfferMembership[],
-    readonly stderr = ''
+    stderr: Uint8Array = new Uint8Array()
   ) {
     super(message);
     this.name = 'ComposerExecutionError';
+    this.stderr = Buffer.from(stderr);
     this.offers = Object.freeze(
       offers.map((offer) =>
         Object.freeze({
@@ -85,9 +87,10 @@ function object(value: unknown): value is Record<string, unknown> {
 function field(value: unknown, key: string): unknown {
   return object(value) && Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined;
 }
-function parse(text: string): unknown {
+function parse(bytes: Uint8Array): unknown {
   try {
-    return JSON.parse(text);
+    // Interpretation is explicit and lossy; untransformed transport remains bytes.
+    return JSON.parse(Buffer.from(bytes).toString('utf8'));
   } catch {
     return undefined;
   }
@@ -105,8 +108,21 @@ function numberOption(value: number | undefined, fallback: number): number {
   return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : fallback;
 }
 /** Explicit legacy shell capture normalization, separate from the raw journal observation. */
-export function normalizeCompositionCapture(stdout: string): string {
-  return stdout.replace(/\n+$/, '');
+export function normalizeCompositionCapture(stdout: Uint8Array): Buffer {
+  let end = stdout.byteLength;
+  while (end > 0 && stdout[end - 1] === 0x0a) end--;
+  return Buffer.from(stdout.subarray(0, end));
+}
+function newline(stdout: Uint8Array): Buffer {
+  return stdout.byteLength ? Buffer.concat([stdout, Buffer.from('\n')]) : Buffer.alloc(0);
+}
+function copyCompletion(completion: HandlerResult): HandlerResult {
+  return Object.freeze({
+    exitCode: completion.exitCode,
+    stdout: Buffer.from(completion.stdout),
+    stderr: Buffer.from(completion.stderr),
+    offers: Object.freeze((completion.offers ?? []).map((offer) => Object.freeze({ ...offer }))),
+  });
 }
 function cutCard(text: string, cap: number): string | null {
   const bytes = Buffer.from(text, 'utf8');
@@ -136,24 +152,38 @@ export async function composeHandlers(
   const floor = numberOption(options.cardFloorBytes, 256);
   const offers: OfferMembership[] = [];
   const cards: PendingDedup[] = [];
-  const stderr: string[] = [];
+  const stderr: Uint8Array[] = [];
   let maxExit = 0;
-  let base = '';
+  let base: Buffer = Buffer.alloc(0);
   let basePriority = 0;
   let template: unknown;
   let cardBytes = 0;
 
   const diagnostic = (message: string): void => {
-    stderr.push(message + '\n');
+    stderr.push(Buffer.from(message + '\n', 'utf8'));
   };
   const record = async (observation: HandlerObservation): Promise<void> => {
     try {
-      await dependencies.record(Object.freeze(observation));
+      // A recorder can retain/mutate byte views. It never receives decision-owned bytes.
+      await dependencies.record(
+        Object.freeze({
+          ...observation,
+          handler: Object.freeze({
+            ...observation.handler,
+            args: Object.freeze([...observation.handler.args]),
+          }),
+          ...(observation.result ? { result: copyCompletion(observation.result) } : {}),
+        })
+      );
     } catch (error) {
       diagnostic('[composer journal] incomplete: ' + String(error));
     }
   };
-  const result = (exitCode: number, stdout: string, deliveredCards: boolean): CompositionResult => {
+  const result = (
+    exitCode: number,
+    stdout: Uint8Array,
+    deliveredCards: boolean
+  ): CompositionResult => {
     const admitted = deliveredCards
       ? new Set(cards.map((card) => card.selectedIndex))
       : new Set<number>();
@@ -174,7 +204,11 @@ export async function composeHandlers(
           )
         : [];
     return Object.freeze({
-      nativeResult: Object.freeze({ exitCode, stdout, stderr: stderr.join('') }),
+      nativeResult: Object.freeze({
+        exitCode,
+        stdout: Buffer.from(stdout),
+        stderr: Buffer.concat(stderr),
+      }),
       offers: Object.freeze(memberships),
       pendingDedup: Object.freeze(pending),
     });
@@ -187,14 +221,14 @@ export async function composeHandlers(
         'Selected handler is absent',
         undefined,
         offers,
-        stderr.join('')
+        Buffer.concat(stderr)
       );
     if (options.signal?.aborted)
       throw new ComposerExecutionError(
         'Hook composition was cancelled',
         options.signal.reason,
         offers,
-        stderr.join('')
+        Buffer.concat(stderr)
       );
     let eligibility: HandlerEligibility = { status: 'run' };
     try {
@@ -202,6 +236,13 @@ export async function composeHandlers(
     } catch (error) {
       diagnostic(`[${handler.name}] eligibility unavailable; running guard: ${String(error)}`);
     }
+    if (options.signal?.aborted)
+      throw new ComposerExecutionError(
+        'Hook composition was cancelled',
+        options.signal.reason,
+        offers,
+        Buffer.concat(stderr)
+      );
     if (eligibility.status !== 'run') {
       if (
         eligibility.status !== 'reprieved' &&
@@ -211,7 +252,7 @@ export async function composeHandlers(
           'Invalid handler skip for ' + handler.name,
           eligibility,
           offers,
-          stderr.join('')
+          Buffer.concat(stderr)
         );
       }
       await record({
@@ -224,6 +265,13 @@ export async function composeHandlers(
       continue;
     }
     await record({ stage: 'handler_started', handler, selectedIndex: index });
+    if (options.signal?.aborted)
+      throw new ComposerExecutionError(
+        'Hook composition was cancelled',
+        options.signal.reason,
+        offers,
+        Buffer.concat(stderr)
+      );
     let completion: HandlerResult;
     try {
       const raw = await dependencies.execute(handler, index);
@@ -231,17 +279,12 @@ export async function composeHandlers(
         !Number.isInteger(raw.exitCode) ||
         raw.exitCode < 0 ||
         raw.exitCode > 255 ||
-        typeof raw.stdout !== 'string' ||
-        typeof raw.stderr !== 'string'
+        !(raw.stdout instanceof Uint8Array) ||
+        !(raw.stderr instanceof Uint8Array)
       ) {
         throw new Error('Invalid handler execution result');
       }
-      completion = Object.freeze({
-        exitCode: raw.exitCode,
-        stdout: raw.stdout,
-        stderr: raw.stderr,
-        offers: Object.freeze((raw.offers ?? []).map((offer) => Object.freeze({ ...offer }))),
-      });
+      completion = copyCompletion(raw);
     } catch (error) {
       await record({
         stage: 'handler_error',
@@ -253,7 +296,7 @@ export async function composeHandlers(
         `Handler ${handler.name} could not execute: ${String(error)}`,
         error,
         offers,
-        stderr.join('')
+        Buffer.concat(stderr)
       );
     }
     await record({ stage: 'handler_completed', handler, selectedIndex: index, result: completion });
@@ -267,8 +310,19 @@ export async function composeHandlers(
           reason: 'handler output not selected',
         })
       );
-    for (const line of normalizeCompositionCapture(completion.stderr).split('\n')) {
-      if (line) diagnostic(`[${handler.name}] ${line}`);
+    const lines = normalizeCompositionCapture(completion.stderr);
+    let lineStart = 0;
+    for (let offset = 0; offset <= lines.byteLength; offset++) {
+      if (offset !== lines.byteLength && lines[offset] !== 0x0a) continue;
+      if (offset > lineStart)
+        stderr.push(
+          Buffer.concat([
+            Buffer.from(`[${handler.name}] `, 'utf8'),
+            lines.subarray(lineStart, offset),
+            Buffer.from('\n'),
+          ])
+        );
+      lineStart = offset + 1;
     }
     let exitCode = completion.exitCode;
     if (options.dryRun && exitCode !== 0) {
@@ -278,11 +332,11 @@ export async function composeHandlers(
     const output = normalizeCompositionCapture(completion.stdout);
     const parsed = parse(output);
     const rank = priority(parsed);
-    if (output && rank === 3) return result(2, output + '\n', false);
-    if (output) {
+    if (output.byteLength && rank === 3) return result(2, newline(output), false);
+    if (output.byteLength) {
       const specific = field(parsed, 'hookSpecificOutput');
       const advisory = field(specific, 'additionalContext');
-      const text = typeof advisory === 'string' ? normalizeCompositionCapture(advisory) : '';
+      const text = typeof advisory === 'string' ? advisory.replace(/\n+$/, '') : '';
       if (text) {
         let seen = false;
         if (options.dedupEnabled !== false && !completion.offers?.length) {
@@ -330,7 +384,7 @@ export async function composeHandlers(
       }
     }
     if (selection.event === 'pre_tool_use' && exitCode === 2)
-      return result(2, base ? base + '\n' : '', false);
+      return result(2, newline(base), false);
     maxExit = Math.max(maxExit, exitCode);
   }
   if (selection.surface === 'kimi-code' && maxExit !== 0) maxExit = 2;
@@ -339,28 +393,31 @@ export async function composeHandlers(
       'Hook composition was cancelled',
       options.signal.reason,
       offers,
-      stderr.join('')
+      Buffer.concat(stderr)
     );
   }
   const exitCode = options.dryRun ? 0 : maxExit;
   let stdout = base;
   let deliveredCards = false;
   if (cards.length) {
-    const envelope = base ? parse(base) : template;
+    const envelope = base.byteLength ? parse(base) : template;
     const specific = field(envelope, 'hookSpecificOutput');
     if (object(envelope) && object(specific)) {
-      stdout = JSON.stringify({
-        ...envelope,
-        hookSpecificOutput: {
-          ...specific,
-          additionalContext: cards.map((card) => card.emittedText).join('\n\n'),
-        },
-      });
+      stdout = Buffer.from(
+        JSON.stringify({
+          ...envelope,
+          hookSpecificOutput: {
+            ...specific,
+            additionalContext: cards.map((card) => card.emittedText).join('\n\n'),
+          },
+        }),
+        'utf8'
+      );
       deliveredCards = true;
     } else
       diagnostic(
         '[composer] optional advisories omitted: selected control envelope cannot carry additionalContext'
       );
   }
-  return result(exitCode, stdout ? stdout + '\n' : '', deliveredCards && exitCode !== 2);
+  return result(exitCode, newline(stdout), deliveredCards && exitCode !== 2);
 }

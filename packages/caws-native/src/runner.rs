@@ -394,12 +394,12 @@ fn write_output(
     Ok(())
 }
 
-pub fn write_native(stdout: &str, stderr: &str) -> Result<(), String> {
-    write_output(stdout.as_bytes(), stderr.as_bytes(), DELIVERY_BUDGET, true)
+pub fn write_native(stdout: &[u8], stderr: &[u8]) -> Result<(), String> {
+    write_output(stdout, stderr, DELIVERY_BUDGET, true)
 }
 
-pub fn write_diagnostic(stderr: &str) {
+pub fn write_diagnostic(stderr: &[u8]) {
     // Cancellation diagnostics are best effort with their own 100ms ceiling;
     // they must not recurse through the cancellation that caused the failure.
-    let _ = write_output(&[], stderr.as_bytes(), Duration::from_millis(100), false);
+    let _ = write_output(&[], stderr, Duration::from_millis(100), false);
 }

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { TextDecoder } from 'node:util';
 import type { AgentSurface } from '../init/hook-packs/types';
 import { MACHINE_EVENTS } from '../init/native-hook-identification';
-import type { HookEvent, NativeResult } from './types';
+import type { HookEvent, NativeResult, NativeTextResult } from './types';
 
 export const REQUEST_SCHEMA = 'caws.runtime.request.v1';
 export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
@@ -195,17 +195,26 @@ export function nativeInputDigest(request: RuntimeRequest): string {
   return createHash('sha256').update(request.inputJson, 'utf8').digest('hex');
 }
 
-function nativeResult(value: unknown): value is NativeResult {
-  return (
-    record(value) &&
-    exactKeys(value, ['exitCode', 'stdout', 'stderr']) &&
-    typeof value.exitCode === 'number' &&
-    Number.isInteger(value.exitCode) &&
-    value.exitCode >= 0 &&
-    value.exitCode <= 255 &&
-    typeof value.stdout === 'string' &&
-    typeof value.stderr === 'string'
-  );
+function decodeNativeBytes(value: unknown): Buffer | null {
+  if (typeof value !== 'string' || value.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(value))
+    return null;
+  const bytes = Buffer.from(value, 'base64');
+  return bytes.toString('base64') === value ? bytes : null;
+}
+
+function nativeResult(value: unknown): NativeResult | null {
+  if (
+    !record(value) ||
+    !exactKeys(value, ['exitCode', 'stdoutBase64', 'stderrBase64']) ||
+    typeof value.exitCode !== 'number' ||
+    !Number.isInteger(value.exitCode) ||
+    value.exitCode < 0 ||
+    value.exitCode > 255
+  )
+    return null;
+  const stdout = decodeNativeBytes(value.stdoutBase64);
+  const stderr = decodeNativeBytes(value.stderrBase64);
+  return stdout !== null && stderr !== null ? { exitCode: value.exitCode, stdout, stderr } : null;
 }
 
 export function decodeRuntimeResponse(
@@ -218,29 +227,37 @@ export function decodeRuntimeResponse(
     !exactKeys(value, ['schema', 'id', 'runtimeDigest', 'result']) ||
     value.schema !== RESPONSE_SCHEMA ||
     value.id !== expected.id ||
-    value.runtimeDigest !== expected.runtimeDigest ||
-    !nativeResult(value.result)
+    value.runtimeDigest !== expected.runtimeDigest
   ) {
     throw new RuntimeProtocolError('Invalid or mismatched runtime response');
   }
+  const result = nativeResult(value.result);
+  if (result === null)
+    throw new RuntimeProtocolError('Invalid or mismatched binary runtime result');
   return Object.freeze({
     schema: RESPONSE_SCHEMA,
     id: value.id as string,
     runtimeDigest: value.runtimeDigest as string,
-    result: Object.freeze(value.result),
+    result: Object.freeze(result),
   });
 }
 
 export function encodeRuntimeResponse(
   request: Pick<RuntimeRequest, 'id' | 'runtimeDigest'>,
-  result: NativeResult
+  result: NativeResult | NativeTextResult
 ): string {
+  const bytes = (value: Uint8Array | string): Buffer =>
+    typeof value === 'string' ? Buffer.from(value, 'utf8') : Buffer.from(value);
   const frame =
     JSON.stringify({
       schema: RESPONSE_SCHEMA,
       id: request.id,
       runtimeDigest: request.runtimeDigest,
-      result,
+      result: {
+        exitCode: result.exitCode,
+        stdoutBase64: bytes(result.stdout).toString('base64'),
+        stderrBase64: bytes(result.stderr).toString('base64'),
+      },
     }) + '\n';
   decodeRuntimeResponse(frame, request);
   return frame;
