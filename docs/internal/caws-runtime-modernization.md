@@ -71,8 +71,8 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
 | R28 | Performance and load qualification | Replayable TS/native workload | unreplaced | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
-| R30 | Stop infrastructure budget persistence | Rust project/session budget library | component tested; mutation qualification running | Required canonical project key, separate identified/unkeyed sessions, anchored filesystem transactions and bounded locking; no host/wire consumption yet |
-| R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | implementing | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
+| R30 | Stop infrastructure budget persistence | Rust project/session budget library | implementing; mutation gaps identified | Required canonical project key, separate identified/unkeyed sessions, anchored filesystem transactions and bounded locking; no host/wire consumption yet |
+| R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 
 ## Machine-wide workload and representation boundary
 
@@ -148,9 +148,22 @@ Additional component evidence:
 - E20: `caws specs amend` added A8 and a machine-wide isolation invariant for the
   user's thirteen-session/four-repository workload. No acceptance was recorded.
   Native Stop-budget library checks passed sixteen module cases, including same
-  session IDs across projects; parent per-file mutation qualification is running.
+  session IDs across projects. Initial mutation baseline failed before testing
+  mutants because its copied crate lacked the sibling registry fixture. The
+  library-only run tested 184 mutants: 112 caught, 55 missed, 12 unviable and five
+  timeouts, exit 3. Artifacts are in
+  `packages/caws-native/target/stop-budget-mutation-lib/mutants.out`; the missed
+  directory/lock/read checks expose weak hostile-path fixtures and require repair.
   A delegated redirected mutation command was refused by the installed write
   guard; the owning parent verified scope and started the explicit scoped command.
+- E21: The strict CLI build and targeted ESLint passed. Four focused suites
+  (scheduler, composer, protocol and native-response) passed 210 checks. Scheduler
+  coverage independently observes actual unresolved executors for thirteen
+  sessions across four projects, machine/project peaks, exact state-owner overlap,
+  rendering/required reservations, queue quotas, drain, and cancellation that
+  retains capacity until execution settles. This is controlled-worker component
+  evidence, not native-client fan-out or daemon recovery. The runtime test
+  TypeScript configuration also compiled successfully.
 
 ## Embedded and developer implementation coverage
 
