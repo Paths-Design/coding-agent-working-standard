@@ -97,6 +97,8 @@ function compatibilityRequired(
   // adapters retain their full dispatcher until their normalization is ported.
   return (
     selection.configuration !== 'system' ||
+    // Extensions retain the selected parser's complete normalization contract.
+    selection.handlers.some((handler) => handler.kind !== 'stock') ||
     Boolean(prior) ||
     Object.values(selection.libraries).some(
       (library) => library.kind === 'project' || library.kind === 'user'

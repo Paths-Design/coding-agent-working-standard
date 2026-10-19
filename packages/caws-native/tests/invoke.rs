@@ -72,6 +72,10 @@ impl Fixture {
             .env("CAWS_NATIVE_TEST_BUDGET_HOME", self.dir.join("budget-home"))
             .env("CAWS_NATIVE_TEST_EVENTS", self.dir.join("events.jsonl"))
             .env("CAWS_NATIVE_TEST_RECEIPT", self.dir.join("requests.jsonl"))
+            .env(
+                "CAWS_NATIVE_TEST_RAW_REQUEST",
+                self.dir.join("raw-requests.jsonl"),
+            )
             .env("CAWS_NATIVE_TEST_CHILD", self.dir.join("child"))
             .env("CAWS_NATIVE_TEST_ENGINE_PID", self.dir.join("engine"))
             // Native execution uses the absolute Node path; no Python or shell is available.
@@ -221,6 +225,64 @@ fn exact_native_result_and_original_payload_are_delivered_without_path_interpret
     );
     assert!(request["deadlineEpochMs"].as_u64().unwrap() <= 9_007_199_254_740_991);
     assert!(!request["id"].as_str().unwrap().is_empty());
+}
+
+#[test]
+fn opaque_numeric_payload_tokens_reach_the_engine_without_narrowing() {
+    for number in [
+        "9007199254740993",
+        "18446744073709551615",
+        "18446744073709551617",
+        "-9223372036854775809",
+        "0.12345678901234567890123456789",
+        "1e-400",
+        "1e400",
+        "-0",
+        "1E+004",
+    ] {
+        let fixture = Fixture::new();
+        let input = format!(
+            " {{\"revision\":{number},\"nested\":[{number},{{\"$serde_json::private::Number\":\"123\",\"sibling\":true}},{{\"$serde_json::private::RawValue\":\"123\",\"sibling\":true}}]}}\n"
+        );
+        let output = execute(
+            fixture.command("exact", "pre_tool_use", "2000"),
+            input.as_bytes().to_vec(),
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(7),
+            "{number}: {:?}",
+            output.stderr
+        );
+        let raw = fs::read_to_string(fixture.dir.join("raw-requests.jsonl")).unwrap();
+        assert!(
+            raw.contains(&format!("\"payload\":{}", input.trim())),
+            "numeric payload changed: {number}"
+        );
+        assert!(
+            raw.contains(&format!(
+                "\"inputJson\":{}",
+                serde_json::to_string(&input).unwrap()
+            )),
+            "original input changed: {number}"
+        );
+    }
+}
+
+#[test]
+fn invalid_numeric_json_is_rejected_before_an_engine_can_start() {
+    for number in ["01", "+1", "1e", "NaN", "Infinity", "-Infinity"] {
+        let fixture = Fixture::new();
+        let output = execute(
+            fixture.command("exact", "pre_tool_use", "2000"),
+            format!("{{\"revision\":{number}}}").into_bytes(),
+        );
+        failure(&output, 2, "configuration");
+        assert!(
+            !fixture.dir.join("engine").exists(),
+            "invalid numeric input started engine: {number}"
+        );
+    }
 }
 
 #[test]

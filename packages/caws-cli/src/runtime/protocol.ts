@@ -4,6 +4,7 @@ import type { AgentSurface } from '../init/hook-packs/types';
 import { MACHINE_EVENTS } from '../init/native-hook-identification';
 import type { HookEvent, NativeResult, NativeTextResult } from './types';
 import { invocationCaller, type InvocationCaller } from './context';
+import { objectMemberSource, parseJsonSource, sameJsonSource } from './json-custody';
 
 export const REQUEST_SCHEMA = 'caws.runtime.request.v1';
 export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
@@ -37,6 +38,7 @@ export interface RuntimeRequest {
   readonly deadlineEpochMs: number;
   /** Exact native stdin text: hashing a reserialization would lose custody. */
   readonly inputJson: string;
+  /** Convenience projection for audited fields; forward extensions from inputJson source spans. */
   readonly payload: Readonly<Record<string, unknown>>;
 }
 
@@ -73,34 +75,6 @@ function decode(frame: Uint8Array | string, limit: number): unknown {
   } catch {
     throw new RuntimeProtocolError('Runtime frame must contain valid UTF-8 JSON');
   }
-}
-
-/** Compare JSON values without recursive stack growth; reject excessive nesting. */
-function sameJson(left: unknown, right: unknown): boolean {
-  const pending: [unknown, unknown, number][] = [[left, right, 0]];
-  let nodes = 0;
-  while (pending.length > 0) {
-    const [a, b, depth] = pending.pop() as [unknown, unknown, number];
-    if (++nodes > MAX_JSON_NODES || depth > MAX_JSON_DEPTH) {
-      throw new RuntimeProtocolError('Hook input exceeds structural limit');
-    }
-    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
-      if (a !== b) return false;
-      continue;
-    }
-    if (Array.isArray(a) !== Array.isArray(b)) return false;
-    const keys = Object.keys(a);
-    if (keys.length !== Object.keys(b).length) return false;
-    for (const key of keys) {
-      if (!Object.hasOwn(b, key)) return false;
-      pending.push([
-        (a as Record<string, unknown>)[key],
-        (b as Record<string, unknown>)[key],
-        depth + 1,
-      ]);
-    }
-  }
-  return true;
 }
 
 function freezeJson(value: Record<string, unknown>): Readonly<Record<string, unknown>> {
@@ -201,9 +175,19 @@ export function decodeRuntimeRequest(
     throw new RuntimeProtocolError('Original hook input must represent valid UTF-8 bytes');
   }
   const payload = value.inputJson === '' ? {} : decode(value.inputJson, MAX_INPUT_BYTES);
-  if (!record(payload) || !record(value.payload) || !sameJson(payload, value.payload)) {
+  if (!record(payload) || !record(value.payload)) {
     throw new RuntimeProtocolError('Hook payload does not match original native input');
   }
+  const source = parseJsonSource(value.inputJson || '{}', MAX_JSON_DEPTH, MAX_JSON_NODES);
+  const wireText = new TextDecoder('utf-8', { fatal: true }).decode(
+    typeof frame === 'string' ? Buffer.from(frame, 'utf8') : frame
+  );
+  const wire = objectMemberSource(
+    parseJsonSource(wireText, MAX_JSON_DEPTH + 2, MAX_JSON_NODES * 2),
+    'payload'
+  );
+  if (!wire || !sameJsonSource(source, wire))
+    throw new RuntimeProtocolError('Hook payload does not match original native input');
   return Object.freeze({
     schema: REQUEST_SCHEMA,
     id: value.id,

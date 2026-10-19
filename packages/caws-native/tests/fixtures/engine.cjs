@@ -166,6 +166,8 @@ else {
     while ((end = text.indexOf('\n')) >= 0) {
       const line = text.slice(0, end);
       text = text.slice(end + 1);
+      if (process.env.CAWS_NATIVE_TEST_RAW_REQUEST)
+        fs.appendFileSync(process.env.CAWS_NATIVE_TEST_RAW_REQUEST, line + '\n');
       accept(JSON.parse(line));
     }
   });

@@ -21,6 +21,12 @@ import type { ComposerDependencies, HandlerResult, OfferReference } from './comp
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 import { tryExecuteStockHandler } from './stock-handlers';
+import {
+  enrichObjectJson,
+  objectMemberJson,
+  parseJsonSource,
+  type JsonSource,
+} from './json-custody';
 
 export const HANDLER_CAPTURE_LIMIT_BYTES = 2 * 1024 * 1024;
 const OFFER_LIMIT_BYTES = 64 * 1024;
@@ -131,6 +137,7 @@ function offersFrom(file: string, compatibility = false): OfferReference[] {
 function childEnvironment(
   options: HandlerExecutorOptions,
   payload: string,
+  source: JsonSource,
   payloadFile: string,
   receiptFile: string,
   executionFile: string,
@@ -143,7 +150,6 @@ function childEnvironment(
     )
   );
   const tool = object(request.payload.tool_input) ? request.payload.tool_input : {};
-  const response = object(request.payload.tool_response) ? request.payload.tool_response : {};
   const scalar = (value: unknown, fallback = ''): string =>
     typeof value === 'string' && value ? value : fallback;
   const threshold = /^\d+$/.test(env.CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES ?? '')
@@ -182,9 +188,9 @@ function childEnvironment(
     CAWS_HANDLER_OFFER_FILE: receiptFile,
     HOOK_PAYLOAD_FILE: payloadFile,
     HOOK_PAYLOAD_TRUNCATED: inline ? '0' : '1',
-    HOOK_INPUT_JSON: inline ? payload : '',
-    HOOK_TOOL_INPUT_JSON: inline ? JSON.stringify(tool) : '',
-    HOOK_TOOL_RESPONSE_JSON: inline ? JSON.stringify(response) : '',
+    // The selected parser keeps full JSON local; children receive stdin/file bytes.
+    HOOK_TOOL_INPUT_JSON: inline ? objectMemberJson(source, 'tool_input') : '',
+    HOOK_TOOL_RESPONSE_JSON: inline ? objectMemberJson(source, 'tool_response') : '',
     HOOK_TOOL_NAME: scalar(request.payload.tool_name),
     HOOK_FILE_PATH: scalar(tool.file_path),
     HOOK_COMMAND: scalar(tool.command),
@@ -236,10 +242,8 @@ async function runChild(
   const directory = mkdtempSync(join(temporaryRoot, 'caws-native-handler-'));
   let inputFd: number | undefined;
   try {
-    const payload = JSON.stringify({
-      ...request.payload,
-      hook_event_name: MACHINE_EVENTS[request.event],
-    });
+    const source = parseJsonSource(request.inputJson || '{}');
+    const payload = enrichObjectJson(source, 'hook_event_name', MACHINE_EVENTS[request.event]);
     const payloadFile = join(directory, 'payload.json');
     const receiptFile = join(directory, 'offer.json');
     const executionFile = join(directory, 'execution.jsonl');
@@ -250,6 +254,7 @@ async function runChild(
     const env = childEnvironment(
       options,
       payload,
+      source,
       payloadFile,
       receiptFile,
       executionFile,

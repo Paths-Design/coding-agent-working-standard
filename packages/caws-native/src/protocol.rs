@@ -1,7 +1,7 @@
 use crate::cli::Config;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::value::RawValue;
 use std::collections::BTreeMap;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -52,14 +52,14 @@ pub struct Request {
     configuration: String,
     caller: Caller,
     deadline_epoch_ms: u64,
-    payload: Map<String, Value>,
+    payload: Box<RawValue>,
     input_json: String,
 }
 
 impl Request {
     pub fn new(
         config: &Config,
-        payload: Map<String, Value>,
+        payload: Box<RawValue>,
         input_json: String,
         expires: Instant,
     ) -> Result<Self, String> {

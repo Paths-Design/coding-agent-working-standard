@@ -33,6 +33,35 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('rejects numeric payload differences hidden by JavaScript rounding', () => {
+    for (const [original, changed] of [
+      ['9007199254740993', '9007199254740992'],
+      ['18446744073709551617', '18446744073709551616'],
+      ['1e400', '1e401'],
+      ['1e-400', '0'],
+      ['-0', '0'],
+    ]) {
+      const inputJson = '{"nested":{"revision":' + original + '}}';
+      const frame = JSON.stringify(request({ inputJson, payload: {} })).replace(
+        '"payload":{}',
+        '"payload":{"nested":{"revision":' + changed + '}}'
+      );
+      expect(() => decodeRuntimeRequest(frame, now)).toThrow(/does not match/);
+    }
+  });
+
+  test('accepts exact opaque numeric tokens and private-looking object keys', () => {
+    const inputJson =
+      '{"revision":18446744073709551617,"tiny":1e-400,"huge":1E+004,"object":{"$serde_json::private::Number":"123","sibling":true}}';
+    const frame = JSON.stringify(request({ inputJson, payload: {} })).replace(
+      '"payload":{}',
+      '"payload":' + inputJson
+    );
+    const result = decodeRuntimeRequest(frame, now);
+    expect(result.inputJson).toBe(inputJson);
+    expect(result.payload.object).toEqual({ '$serde_json::private::Number': '123', sibling: true });
+  });
+
   test('retains exact native input custody and freezes nested request state', () => {
     const result = decode();
     expect(result.inputJson).toBe(request().inputJson);

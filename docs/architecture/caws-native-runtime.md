@@ -99,6 +99,33 @@ evaluation, extension execution, journal, Stop budget and scheduling. The engine
 depends on these interfaces. It is not a service locator and does not own every
 store writer.
 
+## Payload custody and extension normalization
+
+Unknown payload numerals remain opaque JSON tokens during transport. Rust
+validates JSON grammar and object shape without converting extension values to
+floating point. The TypeScript protocol compares source tokens, including
+negative zero and nested values, rather than comparing two rounded JavaScript
+projections. Hook stdin and nested JSON environment projections use source
+spans; CAWS replaces its owned event metadata explicitly. An original-input hash
+alone does not establish the value delivered to a consumer.
+
+The decoded JavaScript payload is a convenience projection for audited fields,
+not a lossless representation of extension values. Python decimal/exponent
+serialization, nonstandard numeric values, sanitization and transport-threshold
+behavior require separate qualification; exact integer observations do not
+establish that broader parity.
+
+Every non-stock selected handler uses the complete selected compatibility
+dispatcher until input normalization is qualified. This preserves parser-owned
+fields such as Codex's original tool name and file-path list. Preloading the
+parser does not fill missing fields when a pre-set tool name makes it return
+early. The direct executor remains component-tested; that does not authorize
+production extension routing through a partial environment projection.
+
+Parity includes guard strength and the complete caller-to-effect chain. Neither
+compatible nouns and interfaces nor a successful local output handoff establish
+that a prohibited tool was withheld or a latched agent terminated.
+
 First-party helpers execute through typed worker-local interfaces. A worker must
 not wait for nested work queued behind its own state owner or a saturated worker
 pool. Extension reentry requires an explicit supported path or an immediate

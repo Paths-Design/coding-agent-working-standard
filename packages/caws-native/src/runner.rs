@@ -1,5 +1,5 @@
 use crate::cli::Config;
-use serde_json::{Map, Value};
+use serde_json::value::RawValue;
 use std::{
     io,
     os::{
@@ -82,7 +82,7 @@ fn read_chunk(fd: RawFd, output: &mut Vec<u8>, limit: usize) -> Result<bool, Str
     Ok(false)
 }
 
-pub fn read_payload(deadline: Instant) -> Result<(Map<String, Value>, String), String> {
+pub fn read_payload(deadline: Instant) -> Result<(Box<RawValue>, String), String> {
     let fd = libc::STDIN_FILENO;
     let original = nonblocking(fd)?;
     let read = (|| {
@@ -99,12 +99,17 @@ pub fn read_payload(deadline: Instant) -> Result<(Map<String, Value>, String), S
             }
         }
         let input = String::from_utf8(bytes).map_err(|_| "hook JSON must be valid UTF-8")?;
-        let value: Value = serde_json::from_str(if input.is_empty() { "{}" } else { &input })
-            .map_err(|e| format!("invalid hook JSON: {e}"))?;
-        let payload = value
-            .as_object()
-            .cloned()
-            .ok_or("hook JSON must be an object")?;
+        // Validate JSON grammar without materializing unknown numerals as f64 or
+        // interpreting object keys as a serializer's private numeric sentinel.
+        let payload = RawValue::from_string(if input.is_empty() {
+            "{}".into()
+        } else {
+            input.clone()
+        })
+        .map_err(|e| format!("invalid hook JSON: {e}"))?;
+        if !payload.get().trim_start().starts_with('{') {
+            return Err("hook JSON must be an object".into());
+        }
         Ok((payload, input))
     })();
     // SAFETY: restore flags on the same live descriptor, including error paths.

@@ -78,6 +78,8 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking dependency investigation; unreplaced | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution; use owned disposable targets and a surviving sibling control. Root/review-subagent shared PID is observed; other user-chat sharing and effective deployed kill policy require verification |
 | R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking compatibility gap; unreplaced | Cold renderer start must survive request cleanup and serve the next request; source-change retirement and concurrent startup must not duplicate or kill the service. Existing warm-daemon evidence does not cover first-start group ownership |
+| R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
+| R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 
 ## Machine-wide workload and representation boundary
 
@@ -305,6 +307,64 @@ Additional bounded evidence and unresolved dependencies:
   by the runner and retained. Its engine is a protocol fixture; it cannot
   establish production selection/context, containment, harness action,
   resident operation or crash/power-loss durability.
+- E35: The counterexample is retained under
+  `packages/caws-native/target/qualification/numeric-custody-red-2026-10-19T04-36-05-075Z/`.
+  Its runner exits 1 because the actual Rust → typed engine → selected project
+  override path delivers 9007199254740993 as 9007199254740992 and
+  18446744073709551617 as 18446744073709552000. The source Python adapter
+  delivers both integers exactly through the same selected snapshot. All six
+  individual adapter calls exit 0. Consumed stdin, raw outputs, statuses,
+  commands, source/build identities and journals retain the distinction.
+  Two preceding attempts used an incorrect Python script path; their failed
+  artifacts remain in the qualification directory and establish no baseline
+  behavior.
+- E36: The expanded probe
+  `numeric-custody-green-2026-10-19T04-51-04-316Z/` retains an incorrect oracle:
+  it expects exported full JSON where the selected parser keeps
+  `HOOK_INPUT_JSON` local. Source inspection of shared and Codex
+  `parse_hook_input` establishes that contract. The corrected guarded probe
+  `numeric-custody-guarded-integer-2026-10-19T04-57-20-643Z/` passes integer,
+  nested projection, absence and 0/2 refusal controls, but precedes the R35
+  routing correction. Neither failed oracle nor predecessor is relabeled as
+  final-candidate evidence.
+- E37: The corrected extension scenario is retained under
+  `packages/caws-native/target/qualification/numeric-custody-extension-parity-2026-10-19T05-06-21-524Z/`.
+  `node <scenario>/run.cjs` exits 0. For plain and inherited-startup contexts,
+  Python and the actual Rust → typed engine → selected dispatcher → extension
+  path each allow 9007199254740992 and refuse the two odd large revisions with
+  exit 2 and matching exact reasons. The 12 cases retain consumed stdin, nested
+  input/response projections, absence of exported full JSON, original tool
+  name, file path/list, stdout, stderr, status and invocation journals.
+  Every candidate case records `compatibility_dispatch_completed`.
+  This is an isolated custom guard with termination explicitly disabled; it
+  proves neither real harness withholding nor containment, Python retirement,
+  all extension contracts or complete guard parity.
+- E38: The stock-route control is retained under
+  `packages/caws-native/target/qualification/stock-route-2026-10-19T05-08-12-811Z/`.
+  Its actual native/typed-engine scenario exits 0, with stock selected-handler
+  stages, the staged-deletion refusal at exit 2, and explicit-path/unstaged
+  controls at exit 0. Index hashes remain unchanged and no PATH Python trap
+  fires. These commands are evaluated rather than executed; unchanged indexes
+  do not establish harness withholding. Termination is disabled in this
+  nonlatching fixture.
+- E39: Current Rust checks include raw wire-token custody and invalid-number
+  rejection before engine startup, alongside the existing cancellation,
+  output, protocol and Stop-library checks: `cargo clippy --all-targets -- -D
+  warnings` and `cargo test --all-targets -- --test-threads=1 --nocapture` exit
+  0. The six focused CLI suites exit 0 with 144 cases; the actual routing test
+  pins consumer fields, refusal and the compatibility journal stage. The
+  initial full-file source mutation report is
+  `packages/caws-cli/reports/mutation-runtime-json/mutation-report.json`:
+  181 killed, 10 timeout, 24 survived, one uncovered, raw score 88.43%.
+  Exact budget and negative-number controls were missing; strengthened tests
+  exercise those counterexamples. A separate selected-range report at
+  `reports/mutation-runtime-json-boundaries/mutation-report.json` records
+  32 killed, three timeout and two survived of 37 (94.59%). That is not a
+  recomputed full-file score. The remaining selected-range survivors alter a
+  redundant defined-character check and a root-token endpoint beyond EOF,
+  whose slice clamps to the same text after grammar validation; this does not
+  adjudicate every survivor in the full report. Passing tests and these
+  bounded observations confer no A2–A8 acceptance.
 
 The executable embedded-Python surface is 15 shell files, 19 inline bodies and
 seven external callsites. A textual `python` hit is not sufficient: seven broader

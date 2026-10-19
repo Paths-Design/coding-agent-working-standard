@@ -87,7 +87,6 @@ beforeEach(() => {
     configuration: 'system',
     caller: { cwd: project, environment },
     deadlineEpochMs: Date.now() + 60000,
-    inputJson: '{}',
     payload: {
       tool_name: 'Bash',
       session_id: 'fixture',
@@ -95,6 +94,7 @@ beforeEach(() => {
       tool_input: { command: 'echo safe' },
     },
   };
+  request.inputJson = JSON.stringify(request.payload);
   controller = new AbortController();
 });
 afterEach(() => {
@@ -144,6 +144,26 @@ test('custom stdout and stderr retain non-UTF8 bytes, NULs and trailing LFs exac
   expect(Buffer.from(result.stderr)).toEqual(Buffer.from([254, 0, 98, 10]));
 });
 
+test('selected handler consumes exact unknown numeric tokens in stdin, payload file and environment', async () => {
+  request.inputJson =
+    '{"tool_name":"Bash","hook_event_name":"WrongEvent","revision":9007199254740993,"tool_input":{"command":"echo safe","nested":[18446744073709551617,-0,1e-400]},"tool_response":{"n":9007199254740993},"unknown":{"$serde_json::private::Number":"123","sibling":true}}';
+  request.payload = JSON.parse(request.inputJson);
+  const selected = handler(
+    'numeric.sh',
+    "const fs=require('node:fs');process.stdout.write(JSON.stringify({stdin:fs.readFileSync(0,'utf8'),file:fs.readFileSync(process.env.HOOK_PAYLOAD_FILE,'utf8'),inline:Object.hasOwn(process.env,'HOOK_INPUT_JSON'),tool:process.env.HOOK_TOOL_INPUT_JSON,response:process.env.HOOK_TOOL_RESPONSE_JSON}));"
+  );
+  const result = await createHandlerExecutor(options())(selected, 0);
+  expect(result.exitCode).toBe(0);
+  const consumed = JSON.parse(Buffer.from(result.stdout).toString());
+  const expected =
+    '{"tool_name":"Bash","revision":9007199254740993,"tool_input":{"command":"echo safe","nested":[18446744073709551617,-0,1e-400]},"tool_response":{"n":9007199254740993},"unknown":{"$serde_json::private::Number":"123","sibling":true},"hook_event_name":"PreToolUse"}';
+  expect(consumed.stdin).toBe(expected);
+  expect(consumed.file).toBe(expected);
+  expect(consumed.inline).toBe(false);
+  expect(consumed.tool).toBe('{"command":"echo safe","nested":[18446744073709551617,-0,1e-400]}');
+  expect(consumed.response).toBe('{"n":9007199254740993}');
+});
+
 test('completed bare refusal is retained when its receipt cannot be decoded', async () => {
   const selected = handler(
     'refusal.sh',
@@ -176,15 +196,16 @@ test('shell fallback preserves inherited startup through the selected handler pr
 test('large payload file remains complete and scalar matching fields remain available', async () => {
   environment.CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES = '128';
   request.payload.tool_input.content = 'x'.repeat(300000);
+  request.inputJson = JSON.stringify(request.payload);
   const selected = handler(
     'large.sh',
-    'const fs=require("node:fs");const input=fs.readFileSync(0);const file=fs.readFileSync(process.env.HOOK_PAYLOAD_FILE);process.stdout.write(JSON.stringify({equal:input.equals(file),size:JSON.parse(file).tool_input.content.length,inline:process.env.HOOK_INPUT_JSON,truncated:process.env.HOOK_PAYLOAD_TRUNCATED,command:process.env.HOOK_COMMAND}));'
+    'const fs=require("node:fs");const input=fs.readFileSync(0);const file=fs.readFileSync(process.env.HOOK_PAYLOAD_FILE);process.stdout.write(JSON.stringify({equal:input.equals(file),size:JSON.parse(file).tool_input.content.length,inline:Object.hasOwn(process.env,"HOOK_INPUT_JSON"),truncated:process.env.HOOK_PAYLOAD_TRUNCATED,command:process.env.HOOK_COMMAND}));'
   );
   const result = await createHandlerExecutor(options())(selected, 0);
   expect(JSON.parse(Buffer.from(result.stdout).toString())).toEqual({
     equal: true,
     size: 300000,
-    inline: '',
+    inline: false,
     truncated: '1',
     command: 'echo safe',
   });
