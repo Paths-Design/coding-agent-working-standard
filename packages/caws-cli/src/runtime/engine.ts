@@ -24,6 +24,8 @@ import { normalizeNativeResult } from './native-response';
 import { resolveInvocationSelection, type ActiveInvocationSelection } from './selection';
 import { encodeRuntimeResponse, type RuntimeRequest } from './protocol';
 import type { NativeResult } from './types';
+import { prepareNativeRenderOffer, type NativeRenderOffer } from './service-offer';
+import { type NativeRenderAdmission, disposeNativeRenderAdmission } from './service-image';
 import {
   CONTAINMENT_ENV,
   containmentWire,
@@ -183,7 +185,8 @@ export interface PreparedRuntimeInvocation {
   readonly budgetHome: string;
   readonly projectDigest: string | null;
   readonly sessionId: string | null;
-  dispatch(): Promise<PreparedDispatchResult>;
+  readonly serviceOffer?: NativeRenderOffer;
+  dispatch(admission?: NativeRenderAdmission): Promise<PreparedDispatchResult>;
   acknowledgeHandoff(success: boolean, containment?: ContainmentReceipt | null): Promise<string>;
 }
 
@@ -231,7 +234,11 @@ export async function prepareRuntimeInvocation(
       budgetHome: home,
       projectDigest: null,
       sessionId: null,
-      async dispatch() {
+      async dispatch(admission) {
+        if (admission) {
+          disposeNativeRenderAdmission(admission);
+          throw new Error('Inactive invocation cannot accept service admission');
+        }
         if (used) throw new Error('Invocation dispatch is single-use');
         used = true;
         return {
@@ -265,6 +272,13 @@ export async function prepareRuntimeInvocation(
   const journal = new InvocationJournal(request, selection, identity.sessionId);
   const dedup = new AdvisoryDedup(home, selection.canonical, identity.sessionId, environment);
   const options = { request, selection, environment: Object.freeze(environment), signal };
+  const serviceOffer = prepareNativeRenderOffer(
+    request,
+    selection,
+    environment,
+    identity.sessionId,
+    home
+  );
   let dispatched = false,
     acknowledged = false,
     result: NativeResult | null = null;
@@ -275,6 +289,7 @@ export async function prepareRuntimeInvocation(
     active: true,
     budgetHome: home,
     projectDigest: digest(selection.canonical),
+    ...(serviceOffer ? { serviceOffer } : {}),
     sessionId:
       identity.sessionId &&
       identity.sessionId !== 'unknown' &&
@@ -282,7 +297,11 @@ export async function prepareRuntimeInvocation(
       !identity.sessionId.includes('\0')
         ? identity.sessionId
         : null,
-    async dispatch() {
+    async dispatch(admission) {
+      if (Boolean(serviceOffer) !== Boolean(admission)) {
+        if (admission) disposeNativeRenderAdmission(admission);
+        throw new Error('Native render admission must match the prepared service offer');
+      }
       if (dispatched || acknowledged)
         throw new Error('Invocation dispatch is single-use and cannot resume after settlement');
       if (signal.aborted) throw signal.reason;
@@ -290,7 +309,10 @@ export async function prepareRuntimeInvocation(
       journal.append('dispatch_started');
       try {
         if (compatibilityRequired(request, selection, environment)) {
-          const completed = await executeCompatibilityDispatch(options);
+          const completed = await executeCompatibilityDispatch({
+            ...options,
+            ...(admission ? { nativeRenderAdmission: admission } : {}),
+          });
           result = completed;
           try {
             offers = compatibilityOffers(completed.offerReceipts);

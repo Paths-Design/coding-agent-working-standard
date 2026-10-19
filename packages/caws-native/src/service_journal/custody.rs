@@ -341,4 +341,51 @@ impl Custody {
         self.check(expires)?;
         duplicate(self.root.as_raw_fd())
     }
+    /// Duplicate the actual anchored lifetime flock for an owned worker. This
+    /// grants no project authority and must remain held through backend cleanup.
+    pub fn duplicate_lifetime(&self, expires: Instant) -> Result<OwnedFd> {
+        self.check(expires)?;
+        duplicate(self.owner_lock.as_raw_fd())
+    }
+    /// Enumerate every existing service before admitting fresh global capacity.
+    /// Missing services is pristine operational state; malformed entries refuse.
+    pub fn service_keys(&self, limit: usize, expires: Instant) -> Result<Vec<String>> {
+        self.check(expires)?;
+        if limit == 0 || limit > 1024 {
+            return Err(JournalError::new(
+                ErrorKind::Invalid,
+                "service enumeration bound",
+            ));
+        }
+        let raw = unsafe {
+            libc::openat(
+                self.root.as_raw_fd(),
+                c"services".as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if raw < 0 {
+            let e = io::Error::last_os_error();
+            if e.raw_os_error() == Some(libc::ENOENT) {
+                return Ok(Vec::new());
+            }
+            return Err(JournalError::io("enumerate anchored services", e));
+        }
+        let services = owned_fd(raw, "anchored services")?;
+        private_directory(services.as_raw_fd())?;
+        let keys = names(services.as_raw_fd(), limit, expires)?;
+        for key in &keys {
+            if !digest(key) {
+                return Err(JournalError::new(
+                    ErrorKind::Corrupt,
+                    "invalid service directory",
+                ));
+            }
+            let name = CString::new(key.as_str()).expect("validated ASCII key");
+            let directory = directory_at(services.as_raw_fd(), &name, false, expires)?;
+            private_directory(directory.as_raw_fd())?;
+        }
+        self.check(expires)?;
+        Ok(keys.into_iter().collect())
+    }
 }

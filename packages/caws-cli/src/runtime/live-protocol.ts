@@ -1,4 +1,8 @@
-import { TextDecoder } from 'node:util';
+import { TextDecoder, isDeepStrictEqual } from 'node:util';
+import * as path from 'node:path';
+import { decodeServiceGrant } from './service-client';
+import { type NativeRenderAdmission, SERVICE_IMAGE_ADMISSION_SCHEMA } from './service-image';
+import type { NativeRenderOffer } from './service-offer';
 import type { Readable, Writable } from 'node:stream';
 import { MAX_REQUEST_BYTES, RuntimeProtocolError, type RuntimeRequest } from './protocol';
 import { parseJsonSource, objectMemberSource } from './json-custody';
@@ -9,7 +13,9 @@ import {
 } from './containment';
 
 export const READY_SCHEMA = 'caws.runtime.ready.v1';
+export const SERVICE_READY_SCHEMA = 'caws.runtime.ready.v2';
 export const DISPATCH_SCHEMA = 'caws.runtime.dispatch.v1';
+export const SERVICE_DISPATCH_SCHEMA = 'caws.runtime.dispatch.v2';
 export const PROPOSAL_SCHEMA = 'caws.runtime.proposal.v2';
 export const HANDOFF_SCHEMA = 'caws.runtime.handoff.v2';
 export const FAILURE_SCHEMA = 'caws.runtime.failure.v1';
@@ -44,8 +50,69 @@ function control(
   return row;
 }
 
-export function decodeDispatchGrant(frame: Uint8Array, identity: Identity): void {
-  control(frame, identity, DISPATCH_SCHEMA, ['schema', 'id', 'runtimeDigest']);
+export function decodeDispatchGrant(
+  frame: Uint8Array,
+  identity: Identity,
+  offer?: NativeRenderOffer
+): NativeRenderAdmission | null {
+  if (!offer) {
+    control(frame, identity, DISPATCH_SCHEMA, ['schema', 'id', 'runtimeDigest']);
+    return null;
+  }
+  // Reject duplicate object members before native input can name descriptor rights.
+  parseJsonSource(new TextDecoder('utf-8', { fatal: true }).decode(frame), 32, 65_536, true);
+  const row = control(
+    frame,
+    identity,
+    SERVICE_DISPATCH_SCHEMA,
+    ['schema', 'id', 'runtimeDigest', 'renderAdmission'],
+    2 * 1024 * 1024
+  );
+  const raw = row.renderAdmission;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    throw new RuntimeProtocolError('Missing native render admission');
+  const admission = raw as Record<string, unknown>;
+  if (
+    Object.keys(admission).sort().join(',') !==
+      'descriptors,gitCommonDirectory,gitDirectory,gitOriginalDirectory,gitWorkTree,grant,image,schema' ||
+    admission.schema !== SERVICE_IMAGE_ADMISSION_SCHEMA ||
+    !isDeepStrictEqual(admission.descriptors, { transport: 3, grant: 4, receipt: 5 }) ||
+    !isDeepStrictEqual(admission.image, {
+      imageKey: offer.prepared.imageKey,
+      imageDigest: offer.prepared.imageDigest,
+      manifest: offer.prepared.manifest,
+    })
+  )
+    throw new RuntimeProtocolError(
+      'Native admission differs from prepared image or descriptor contract'
+    );
+  for (const key of ['gitDirectory', 'gitWorkTree', 'gitOriginalDirectory', 'gitCommonDirectory']) {
+    const value = admission[key];
+    if (
+      typeof value !== 'string' ||
+      !path.isAbsolute(value) ||
+      path.normalize(value) !== value ||
+      Buffer.byteLength(value) > 4096 ||
+      /[\0\r\n]/.test(value)
+    )
+      throw new RuntimeProtocolError('Invalid native Git view path');
+  }
+  if (admission.gitWorkTree !== offer.checkout)
+    throw new RuntimeProtocolError('Native Git view differs from selected checkout');
+  const grant = decodeServiceGrant(JSON.stringify(admission.grant));
+  if (
+    grant.invocationId !== identity.id ||
+    grant.canonicalProject !== offer.expectedSelection.canonicalProject ||
+    grant.selectedIndex !== offer.expectedSelection.selectedIndex ||
+    grant.sourceGeneration !== offer.prepared.manifest.sourceGeneration ||
+    grant.executionImage.imageDigest !== offer.prepared.imageDigest
+  )
+    throw new RuntimeProtocolError('Native grant differs from service offer');
+  return Object.freeze({
+    ...admission,
+    grant,
+    descriptors: Object.freeze({ transport: 3, grant: 4, receipt: 5 }),
+  }) as unknown as NativeRenderAdmission;
 }
 
 export interface NativeHandoff {

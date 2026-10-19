@@ -170,6 +170,8 @@ pub struct Session {
     out_done: bool,
     err_done: bool,
     terminal_containment: bool,
+    render_bank: Option<crate::render_bridge::DescriptorBank>,
+    render_bridge: Option<crate::render_bridge::Bridge>,
 }
 
 impl Session {
@@ -184,17 +186,49 @@ impl Session {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        // Keep the raw snapshot in Request for admission, while preventing an
+        // ambient preload from replacing the pinned engine's Ready producer.
+        command.env_remove("NODE_OPTIONS").env_remove("NODE_PATH");
+        for (name, _) in std::env::vars_os() {
+            if name
+                .to_str()
+                .is_some_and(|s| s.starts_with("LD_") || s.starts_with("DYLD_"))
+            {
+                command.env_remove(name);
+            }
+        }
+        let mut render_bank = if config.configuration == "system"
+            && config.surface == "codex"
+            && config.event == "stop"
+        {
+            Some(crate::render_bridge::DescriptorBank::new()?)
+        } else {
+            None
+        };
+        let render_sources = render_bank.as_ref().map(|bank| bank.child_sources());
         // SAFETY: setpgid is async-signal-safe and this closure performs no allocation.
         unsafe {
-            command.pre_exec(|| {
-                if libc::setpgid(0, 0) == 0 {
-                    Ok(())
-                } else {
-                    Err(io::Error::last_os_error())
+            command.pre_exec(move || {
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(io::Error::last_os_error());
                 }
+                if let Some(sources) = render_sources {
+                    for (source, target) in sources.into_iter().zip([3, 4, 5]) {
+                        if libc::dup2(source, target) < 0 {
+                            return Err(io::Error::last_os_error());
+                        }
+                    }
+                    // FD6 is never an engine capability. All original bank
+                    // descriptions are >=10 and close-on-exec.
+                    libc::close(6);
+                }
+                Ok(())
             });
         }
         let child = command.spawn().map_err(|e| format!("engine spawn: {e}"))?;
+        if let Some(bank) = &mut render_bank {
+            bank.spawned();
+        }
         let mut group = OwnedGroup {
             child,
             cleanup_attempted: false,
@@ -219,13 +253,82 @@ impl Session {
             out_done: false,
             err_done: false,
             terminal_containment: false,
+            render_bank,
+            render_bridge: None,
+        })
+    }
+
+    /// Starts/connects the independently provisioned owner while continuing to
+    /// drain engine output. No service read ever blocks the engine frame pump.
+    /// Returns a v2 dispatch frame only after native image/grant admission.
+    pub fn admit_render_offer(
+        &mut self,
+        config: &Config,
+        request: &crate::protocol::Request,
+        ready: &mut crate::protocol::Ready,
+        deadline: Instant,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let Some(offer) = ready.service_offer.take() else {
+            if let Some(bank) = &mut self.render_bank {
+                bank.withdraw();
+            }
+            return Ok(None);
+        };
+        if self.render_bridge.is_some() {
+            return Err("render offer already admitted".into());
+        }
+        if self.render_bank.is_none() {
+            return Err("render offer has no native descriptor bank".into());
+        }
+        let preparation =
+            crate::render_bridge::prepare_offer(config, request, ready, *offer, deadline)?;
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        std::thread::Builder::new()
+            .name("caws-render-admission".into())
+            .spawn(move || {
+                let _ = sender.send(crate::render_bridge::connect(preparation, deadline));
+            })
+            .map_err(|e| format!("render admission thread: {e}"))?;
+        let admission = loop {
+            match receiver.try_recv() {
+                Ok(result) => break result?,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Err("render admission worker closed".into());
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    self.pump(None, deadline)?;
+                }
+            }
+        };
+        if Instant::now() >= deadline {
+            return Err("render admission exceeded native deadline".into());
+        }
+        let (bridge, dispatch) = crate::render_bridge::activate(
+            self.render_bank.as_mut().ok_or("render bank unavailable")?,
+            admission,
+            request,
+        )?;
+        self.render_bridge = Some(bridge);
+        Ok(Some(dispatch))
+    }
+
+    /// Diagnostic observation only: never substitutes for the engine proposal
+    /// or changes an already earned protective result.
+    pub fn render_diagnostic(&self) -> Option<String> {
+        self.render_bridge.as_ref().and_then(|bridge| {
+            self.render_bank
+                .as_ref()
+                .and_then(|bank| bridge.diagnostic(bank))
         })
     }
 
     // Every write also drains bounded engine output, so neither side can deadlock
     // by filling the opposite pipe. Request stdin remains open through handoff.
     fn pump(&mut self, write: Option<&[u8]>, deadline: Instant) -> Result<usize, String> {
-        let mut descriptors = [
+        if let Some(bridge) = &mut self.render_bridge {
+            bridge.tick();
+        }
+        let mut descriptors = vec![
             libc::pollfd {
                 fd: if write.is_some() {
                     self.stdin.as_raw_fd()
@@ -254,6 +357,9 @@ impl Session {
                 revents: 0,
             },
         ];
+        if let Some(bridge) = &self.render_bridge {
+            descriptors.extend(bridge.interests());
+        }
         poll_with_cancellation(&mut descriptors, deadline, !self.terminal_containment)?;
         let mut written = 0;
         if let Some(bytes) = write
@@ -291,6 +397,9 @@ impl Session {
                 &mut self.diagnostics,
                 MAX_ENGINE_STDERR,
             )?;
+        }
+        if let Some(bridge) = &mut self.render_bridge {
+            bridge.tick();
         }
         Ok(written)
     }

@@ -11,7 +11,12 @@ export interface JsonSource {
 }
 
 /** Grammar is checked before indexing; indexing adds bounded depth and node counts. */
-export function parseJsonSource(text: string, maxDepth = 128, maxNodes = 100_000): JsonSource {
+export function parseJsonSource(
+  text: string,
+  maxDepth = 128,
+  maxNodes = 100_000,
+  rejectDuplicates = false
+): JsonSource {
   JSON.parse(text);
   let cursor = 0;
   let nodes = 0;
@@ -42,7 +47,8 @@ export function parseJsonSource(text: string, maxDepth = 128, maxNodes = 100_000
         const key = JSON.parse(text.slice(keyStart, cursor)) as string;
         space();
         cursor++; // Colon: the complete source has already passed JSON grammar validation.
-        entries.set(key, read(depth + 1)); // JSON object readers select the last duplicate key.
+        if (rejectDuplicates && entries.has(key)) throw new Error('Duplicate JSON object member');
+        entries.set(key, read(depth + 1)); // Ordinary extension readers retain last-key semantics.
         space();
         if (text[cursor] !== ',') break;
         cursor++;

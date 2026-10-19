@@ -9,6 +9,7 @@ import {
   FAILURE_SCHEMA,
   PROPOSAL_SCHEMA,
   READY_SCHEMA,
+  SERVICE_READY_SCHEMA,
   RuntimeFrameReader,
   decodeDispatchGrant,
   decodeHandoff,
@@ -55,18 +56,23 @@ export async function runEngineEntry(): Promise<void> {
     await writeRuntimeFrame(
       process.stdout,
       {
-        schema: READY_SCHEMA,
+        schema: prepared.serviceOffer ? SERVICE_READY_SCHEMA : READY_SCHEMA,
         id: request.id,
         runtimeDigest: request.runtimeDigest,
         active: prepared.active,
         budgetHome: prepared.budgetHome,
         projectDigest: prepared.projectDigest,
         sessionId: prepared.sessionId,
+        ...(prepared.serviceOffer ? { serviceOffer: prepared.serviceOffer } : {}),
       },
       controller.signal
     );
-    decodeDispatchGrant(await reader.read(controller.signal), request);
-    const completion = await prepared.dispatch();
+    const admission = decodeDispatchGrant(
+      await reader.read(controller.signal),
+      request,
+      prepared.serviceOffer
+    );
+    const completion = await prepared.dispatch(admission ?? undefined);
     const result = completion.nativeResult;
     const containment = completion.containment ? containmentWire(completion.containment) : null;
     const token = randomUUID();

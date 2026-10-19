@@ -4,6 +4,7 @@ mod cancellation;
 mod cli;
 mod process_effect;
 mod protocol;
+mod render_bridge;
 mod runner;
 
 use caws_native::stop_budget::{BudgetIdentity, Charge, StopBudget};
@@ -60,10 +61,19 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                 _ => return Err("engine proposal before dispatch grant".into()),
             },
         );
+        let service_dispatch = session.admit_render_offer(
+            config,
+            &request,
+            ready.as_mut().ok_or("missing engine readiness")?,
+            deadline,
+        )?;
         // A failed write may deliver the complete grant. Record the attempt
         // BEFORE writing; creation of the engine alone is not dispatch.
         dispatched = ready.as_ref().is_some_and(|context| context.active);
-        session.send(&protocol::dispatch(&request), deadline)?;
+        session.send(
+            &service_dispatch.unwrap_or_else(|| protocol::dispatch(&request)),
+            deadline,
+        )?;
         match protocol::validate_frame(&session.frame(deadline)?, &request)? {
             protocol::EngineFrame::Proposal {
                 token,
@@ -90,6 +100,9 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     // A valid protective result survives invalid/held effects and late failures.
     // No path through this terminal phase can ask the engine for more work.
     let mut post_errors = Vec::new();
+    if let Some(diagnostic) = session.render_diagnostic() {
+        post_errors.push(diagnostic);
+    }
     let mut receipt = None;
     let target = match containment {
         protocol::ContainmentProposal::None => None,
@@ -256,6 +269,65 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
 }
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "renderer-host") {
+        let result = if args.len() == 3 && args[1] == "--config" {
+            caws_native::render_owner::host(std::path::Path::new(&args[2]))
+        } else {
+            Err("renderer-host requires --config <absolute path>".into())
+        };
+        if let Err(error) = result {
+            eprintln!("CAWS renderer host refused: {error}");
+            std::process::exit(2);
+        }
+        return;
+    }
+    if args
+        .first()
+        .is_some_and(|arg| arg == "renderer-service-init")
+    {
+        let result = (|| -> Result<(), String> {
+            if args.len() != 1 {
+                return Err("renderer-service-init reads one configuration from stdin".into());
+            }
+            use std::io::Read;
+            let mut bytes = Vec::new();
+            std::io::stdin()
+                .take(65_537)
+                .read_to_end(&mut bytes)
+                .map_err(|e| e.to_string())?;
+            if bytes.len() > 65_536 {
+                return Err("renderer owner configuration exceeds bound".into());
+            }
+            let config = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+            caws_native::render_owner::provision(&config, Instant::now() + Duration::from_secs(5))
+        })();
+        if let Err(error) = result {
+            eprintln!("CAWS renderer initialization refused: {error}");
+            std::process::exit(2);
+        }
+        return;
+    }
+    if args.first().is_some_and(|arg| arg == "renderer-worker") {
+        let result = if args.len() == 1 {
+            caws_native::renderer_backend::entry::run()
+        } else {
+            Err(caws_native::renderer_backend::Failure {
+                code: caws_native::renderer_backend::FailureCode::InvalidSpec,
+                errno: None,
+            })
+        };
+        match result {
+            Ok(exit) => std::process::exit(if exit.cleanup.direct_child_reaped {
+                0
+            } else {
+                2
+            }),
+            Err(failure) => {
+                eprintln!("CAWS renderer worker refused: {failure:?}");
+                std::process::exit(2);
+            }
+        }
+    }
     let event = |name| args.windows(2).any(|v| v[0] == "--event" && v[1] == name);
     let result = cancellation::install()
         .and_then(|()| cli::Config::parse(&args))

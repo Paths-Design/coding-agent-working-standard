@@ -94,6 +94,16 @@ that failure and collect raw observations before changing its oracle (E76).
 E77 adds raw-query retention without changing the strict oracle, then observes
 a successful targeted replay and complete Cargo run. The earlier missing token
 and the cause of that observation failure remain unknown.
+E78 reproduces a macOS cleanup stall and a separate early custody release, then
+retains actual repaired child/group/pipe observations. E79 exercises the reviewed
+source image and typed offer/dispatch boundary, including its original tool-order
+failure. The renderer owner, native descriptor bridge and complete selected Stop
+route are connected. E80 retains the actual admission/deadline failures; E81
+observes the full selected cold/warm path, exact foreign-renderer output and
+owned idle retirement in an isolated repository. Independent inspection exposes
+queued expiry and delayed-surplus framing defects; their repairs require the
+final integrated checks and actual replay. Wider compatibility, legacy writer
+exclusion, uncertain-outcome recovery and multi-project workload remain open.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -133,15 +143,15 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
-| R25 | Demand-start, warm residency and idle exit | Rust startup + TS resident host | unreplaced | Machine-wide bounded capacity, fair project/session admission, owner-specific serialization, single starter, no heartbeat authority, no active-request eviction, drain/version tests |
-| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | component and separate-process recovery exercised, E70; resident integration open | Exact request custody, queued-only cancellation and cross-generation unknown fences exercised. Owner admission, grant freshness, autonomous drain and production retention remain open |
+| R25 | Demand-start, warm residency and idle exit | Rust service owner/retained workers + typed engine | isolated renderer profile observed, E81; complete resident engine unreplaced | One actual backend survives three native requests, then owner idle cleanup retains custody through reap/EOF. Machine-wide fair admission, heartbeat retention, drain/version and thirteen-session workload remain open |
+| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | actual renderer owner records three returned operations, E81; recovery components E70/E75 | Actual source/grant/image admission and request outcomes reach the renderer. Live cancellation, restart, lost-response unknown fencing, autonomous drain and production retention need integrated hostile qualification |
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
 | R28 | Performance and load qualification | Replayable TS/native workload | unreplaced | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced gap, E57; fixture client E72, native codec E74 and root custody E75 exercised separately | Actual native service owner, selected grant/image/client admission, writer custody, source retirement, startup races and cancellation remain open. Component checks do not establish daemon survival/reuse or repair the cold-start regression |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | isolated actual full-chain cold/warm route observed, E81; E57 failure retained | Native image admission, actual selected handler/client, one retained backend, exact output and owned idle cleanup reach the consumer. Legacy writer exclusion, full fallback/input compatibility, source retirement, cancellation and multi-project behavior remain unqualified; no machine replacement |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
@@ -1273,6 +1283,108 @@ Additional bounded evidence and unresolved dependencies:
   with 77 library, 34 binary, 28 integration and three ancestor-example checks
   (`ps-retention-all-tests.log`). This replay does not identify E76's lost raw
   token or attribute its failure; future unknown formats remain unavailable.
+- E78: The macOS Git-capture replay stalls while cleanup retains an exited
+  unreaped direct child. `renderer-backend-2026-10-19/git-view-stall-sample.txt`
+  retains the stack; the old child/query group is absent on re-entry after the
+  user's latch reset. The repair uses the SDK `KERN_PROC_PGRP` layout, brackets
+  its complete bounded query with fresh `WNOWAIT` observations of the actual
+  retained Child, and permits reap after `EPERM` only for a complete all-zombie
+  group with its owned leader. It does not label that refusal signal acceptance.
+  `owned-group-tests.log` exits 0 for nine hostile decision checks. The actual
+  `renderer-backend-16408-1/reply-after-exit-observation.json` records one member,
+  one zombie, one leader, 648 returned bytes below the 2,654,208-byte capacity,
+  `groupSignalErrno: 1`, `groupSignalAccepted: false`, direct-child reap and both
+  EOF flags true. A different hostile check exposes a second defect:
+  `cleanup-sdk-backend-tests.log` exits 101 and
+  `renderer-backend-16408-0/cleanup-fault-observation.json` has both EOF flags
+  false after custody release. Removing the post-deadline early return retains
+  custody through pipe EOF. `cleanup-sdk-backend-replay.log` exits 0 across 12
+  backend checks; `renderer-backend-83191-0/cleanup-fault-observation.json` records
+  custody busy at reap, zero early reaps, one final reap and both EOF flags true
+  before return. `git-view-cleanup-repaired.log` exits 0 across four checks;
+  `git-view-81680-0/observation.json` contains identical expected/actual modified
+  file status bytes, no helper execution and an explicit fresh-capture refusal
+  after `core.fsmonitor` is introduced. `git-view-81680-1/linked-observation.json`
+  retains distinct original/common/private Git directories. These observations
+  exclude malicious same-UID interference, escaped descendants and hard kernel
+  stalls; they do not establish an atomic repository snapshot or LFS support.
+- E79: `reviewed-image-tests.log` exits 1: seven builder checks stop at
+  `incomplete toolchain`, because the validator sorts names while the declared
+  table places `bash` before lexical predecessor `basename`. Matching TS/native
+  declarations are repaired without relaxing the equality check. The actual
+  reviewed 28-file Sterling source profile is copied into private fixtures;
+  `typed-render-integration-replay.log` exits 0 across seven suites/209 checks.
+  The source-image tests exercise the complete four-entry default Stop chain,
+  original handler provenance, unchanged foreign handler bytes, immutable image
+  cache identity and an actual shell missing-grant refusal. Typed offer tests
+  require explicit private operator policy, independent selection derivation and
+  native v2 correlation; wrong image/FD/session context, extra members and
+  duplicate JSON members refuse. Engine tests cover matching admission and
+  descriptor disposal. The initial combined command names two nonexistent suite
+  paths and exits 1 (`typed-render-integration-tests.log`); its two real suites
+  pass, and the corrected command above exercises the actual suite names.
+  `npm run build` and the focused vNext TypeScript check exit 0
+  (`typed-build-replay.log`, `typed-check-replay.log`). The first direct local
+  compiler path is absent and exits 127 (`typed-check.log`); the replay resolves
+  the installed compiler through Node. No broker success, actual native image
+  publication, whole-runtime parity or installed behavior follows from these
+  typed/fixture checks. Evidence paths in E78/E79 are relative to
+  `packages/caws-native/target/qualification/renderer-backend-2026-10-19/`.
+- E80: The actual owner qualifier preserves failed attempts instead of treating
+  native exit zero as success. `render-owner-2026-10-19T22-54-28-767Z` fails before
+  service creation because tool discovery incorrectly requires nlink=1; this
+  machine's `/usr/bin/grep` has six links and `/usr/bin/stat` has two. Tool reads
+  retain byte/identity pinning while permitting aliases; private operator policy
+  retains the single-link requirement and a focused hostile test. The next
+  attempt (`22-56-59-311Z`) correctly refuses CLI initialization nested inside a
+  CAWS worktree. The qualifier uses an independent private repository and keeps
+  evidence in the owned ignored qualification directory. The independent run
+  (`22-58-13-943Z`) and instrumented replay (`23-02-08-111Z`) fail native image
+  admission. `owner-observations-final.json` identifies `unsupported_profile` /
+  `runtime lacks required image source`: an unused duplicate runtime client is
+  required even though execution consumes the separately pinned package client.
+  Removing that duplicate requirement retains full runtime membership and exact
+  package-client validation. The next debug run (`23-05-22-273Z`) creates actual
+  worker41518/backend41524 but expires at prepared revalidation before grant;
+  served remains zero. Budgets are unchanged. The release qualifier builds an
+  optimized candidate, records monotonic owner phases and keeps the same 30s
+  request budget. Its first run (`23-12-15-509Z`) serves one render but exposes a
+  qualification-oracle defect: native argv contains `--engine`, so substring
+  matching includes the qualifier's inherited process group. The correction
+  requires the actual direct engine child to lead its own group, and writes
+  observations before assertions. Every attempt records confirmed inactive
+  cleanup; no service PID is adopted or signalled by the qualifier. These paths
+  are under `packages/caws-native/target/qualification/`; raw command logs are
+  under E78/E79's `renderer-backend-2026-10-19/` directory.
+- E81: `node ../caws-native/target/qualification-tools/qualify-render-owner.js .
+  /Users/darianrosebrook/Desktop/Projects/sterling release` exits 0
+  (`owner-scenario-process-oracle-repair.log`). Its actual artifacts live in
+  `packages/caws-native/target/qualification/render-owner-2026-10-19T23-14-32-633Z/`.
+  Three native calls execute the complete four-entry default Stop chain with
+  unchanged copied reviewed foreign sources. `request-1..3/result.json` and the
+  source/selection/journal snapshots retain original execution coordinates,
+  actual lease transitions and semantic user/tool/result/assistant timelines.
+  Backend95100 has one kernel birth identity across served1/2/3; its cache full
+  count stays one, tail advances 0→1→1, and the third owner outcome is cached.
+  Three retained journal operations are returned, with no duplicate dispatch.
+  Request groups95008/96854/97447 contain zero live members after their native
+  calls; the final observation has 99 witnessed request processes absent or
+  replaced. Sampling does not establish custody of every transient descendant.
+  `foreign-byte-baseline/result.json` retains a separate unchanged renderer run
+  using the final durable argv except output directory: both turn files are
+  exactly 1764 bytes and byte-identical. Their respective SHA256 values are
+  `cd8f74b718054550235fef386f8ffef263e08c09a1b2cc717ce22b52fa4d5e9c`
+  and `5e8ee3b7d70a51e745906350668c45107ef7b518b54d1cd7f138597b1378ef0a`.
+  `owner-observations-final.jsonl` records actual backend reap, both pipe EOFs,
+  12ms cleanup without deadline excess, worker95099 exit0 and host95021 idle exit.
+  The final custody observer acquires/releases the actual anchored lock; the
+  socket and worker namespaces are absent. This is a successful isolated
+  compatibility slice, not deployed Sterling parity, first-party Python
+  retirement, thirteen-session/four-project behavior, fault recovery or a speed
+  distribution. Effective executable Git helpers including LFS remain refused;
+  the Git worktree/object database remain live data. The final integrated replay
+  must exercise the subsequent strict owner EOF check and retained cancellation
+  repairs before presenting the committed candidate.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -1373,16 +1485,18 @@ attributing its timeout or claiming concurrent performance. E69 adds a separate
 reproduced ancestor-capture deadline failure; inspect its typed stage and
 per-observation/substage timing before changing capture policy or budgets.
 
-1. Resolve R33 through explicit service binding and client integration. E70's
-   journal, E74's native codec, E75's custody and E72's descriptor client are
-   available source components; the next
-   implementation must connect actual selected-source admission to a native-owned
-   service and the immutable effective closure. Issue per-offer grants and
+1. Qualify R33's integrated hostile paths after the complete selected-source
+   cold/warm observation in E81. E70's journal, E74's codec, E75's custody and
+   E72's descriptor client reach an actual native owner through the admitted
+   immutable image. Retain final committed-candidate replay and independent
+   review, then exercise concurrent cold startup, cancellation, lost response,
+   unknown reservations across restart and generation replacement. Issue grants and
    descriptor rights only after validating the original selection, keep original
    authority paths separate from image routing, and revalidate queued grants
    before dispatch. Qualify exclusive writer custody against legacy clients,
    complete input snapshot/retention semantics and owned fallback for LF/US data.
-   The E57 cold-start/reuse regression remains the decisive consumer scenario.
+   E57 remains the original failing consumer scenario; E81 adds successful
+   cold/warm rendering through the replacement owner without erasing that failure.
    Define
    the actual selected client's broker seam and request/fallback outcome
    contract before implementing a startup-only relay or host. A lost response

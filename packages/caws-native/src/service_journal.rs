@@ -762,6 +762,27 @@ impl Drop for Temporary {
 }
 
 impl Journal {
+    /// A recovered running/unknown operation consumes the owner's backend
+    /// reservation across restart; opening another source generation cannot
+    /// manufacture a free slot.
+    pub fn has_unknown(&self, expires: Instant) -> Result<bool> {
+        self.current(expires)?;
+        Ok(self
+            .entries
+            .iter()
+            .any(|entry| entry.operation.outcome.fenced()))
+    }
+    /// Read-only identities of queued effects that have no Dispatch. The owner
+    /// independently establishes grant withdrawal before retaining cancellations.
+    pub fn queued_request_ids(&self, expires: Instant) -> Result<Vec<String>> {
+        self.current(expires)?;
+        Ok(self
+            .entries
+            .iter()
+            .filter(|entry| matches!(entry.operation.outcome, AcceptedOutcome::Queued { .. }))
+            .map(|entry| entry.operation.identity.request_id.clone())
+            .collect())
+    }
     pub fn open(
         custody: Arc<Custody>,
         project_service_key: &str,

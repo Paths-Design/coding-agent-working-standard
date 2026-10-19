@@ -58,6 +58,12 @@ pub struct Request {
 }
 
 impl Request {
+    pub fn caller_environment(&self) -> &BTreeMap<String, String> {
+        &self.caller.environment
+    }
+    pub fn caller_cwd(&self) -> &str {
+        &self.caller.cwd
+    }
     pub fn new(
         config: &Config,
         payload: Box<RawValue>,
@@ -141,6 +147,7 @@ pub struct Ready {
     pub budget_home: std::path::PathBuf,
     pub project_digest: Option<String>,
     pub session_id: Option<String>,
+    pub service_offer: Option<Box<caws_native::render_owner::Offer>>,
 }
 
 pub enum EngineFrame {
@@ -188,6 +195,21 @@ enum WireFrame {
         project_digest: Option<String>,
         #[serde(rename = "sessionId", deserialize_with = "required_nullable")]
         session_id: Option<String>,
+    },
+    #[serde(rename = "caws.runtime.ready.v2")]
+    ServiceReady {
+        id: String,
+        #[serde(rename = "runtimeDigest")]
+        runtime_digest: String,
+        active: bool,
+        #[serde(rename = "budgetHome")]
+        budget_home: String,
+        #[serde(rename = "projectDigest", deserialize_with = "required_nullable")]
+        project_digest: Option<String>,
+        #[serde(rename = "sessionId", deserialize_with = "required_nullable")]
+        session_id: Option<String>,
+        #[serde(rename = "serviceOffer")]
+        service_offer: Box<caws_native::render_owner::Offer>,
     },
     #[serde(rename = "caws.runtime.failure.v1")]
     Failure {
@@ -255,6 +277,32 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     let frame: WireFrame =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
     match frame {
+        WireFrame::ServiceReady {
+            id,
+            runtime_digest,
+            active,
+            budget_home,
+            project_digest,
+            session_id,
+            service_offer,
+        } => {
+            identity(&id, &runtime_digest, request)?;
+            if !active
+                || request.surface != "codex"
+                || request.event != "stop"
+                || request.configuration != "system"
+            {
+                return Err("service ready outside active system Codex Stop".into());
+            }
+            validate_ready(active, &budget_home, &project_digest, &session_id)?;
+            Ok(EngineFrame::Ready(Ready {
+                active,
+                budget_home: budget_home.into(),
+                project_digest,
+                session_id,
+                service_offer: Some(service_offer),
+            }))
+        }
         WireFrame::Ready {
             id,
             runtime_digest,
@@ -264,28 +312,13 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
             session_id,
         } => {
             identity(&id, &runtime_digest, request)?;
-            let home = std::path::PathBuf::from(&budget_home);
-            if !home.is_absolute() || budget_home.contains('\0') || budget_home.len() > 4096 {
-                return Err("invalid ready budget home".into());
-            }
-            if active != project_digest.is_some()
-                || project_digest
-                    .as_ref()
-                    .is_some_and(|d| !crate::cli::valid_digest(d))
-            {
-                return Err("invalid ready project identity".into());
-            }
-            if session_id
-                .as_ref()
-                .is_some_and(|s| s.len() > 128 || s.contains('\0'))
-            {
-                return Err("invalid ready session identity".into());
-            }
+            validate_ready(active, &budget_home, &project_digest, &session_id)?;
             Ok(EngineFrame::Ready(Ready {
                 active,
-                budget_home: home,
+                budget_home: budget_home.into(),
                 project_digest,
                 session_id,
+                service_offer: None,
             }))
         }
         WireFrame::Failure {
@@ -300,6 +333,31 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
             Ok(EngineFrame::Failure(message))
         }
     }
+}
+
+fn validate_ready(
+    active: bool,
+    home: &str,
+    project: &Option<String>,
+    session: &Option<String>,
+) -> Result<(), String> {
+    if !std::path::Path::new(home).is_absolute() || home.contains('\0') || home.len() > 4096 {
+        return Err("invalid ready budget home".into());
+    }
+    if active != project.is_some()
+        || project
+            .as_ref()
+            .is_some_and(|d| !crate::cli::valid_digest(d))
+    {
+        return Err("invalid ready project identity".into());
+    }
+    if session
+        .as_ref()
+        .is_some_and(|s| s.len() > 128 || s.contains('\0'))
+    {
+        return Err("invalid ready session identity".into());
+    }
+    Ok(())
 }
 
 pub fn dispatch(request: &Request) -> Vec<u8> {
@@ -402,6 +460,28 @@ mod tests {
             _ => panic!("known result was discarded or malformed intent admitted"),
         }
         frame["schema"] = serde_json::json!("caws.runtime.proposal.v1");
+        assert!(decode(&frame).is_err());
+    }
+    #[test]
+    fn ready_v1_remains_without_service_and_v2_cannot_omit_or_null_the_offer() {
+        let request = fixture_request();
+        let mut frame = serde_json::json!({"schema":"caws.runtime.ready.v1","id":request.id,"runtimeDigest":request.runtime_digest,
+            "active":true,"budgetHome":"/home/.caws","projectDigest":"a".repeat(64),"sessionId":"session"});
+        let decode = |frame: &serde_json::Value| {
+            validate_frame(&serde_json::to_vec(frame).unwrap(), &request)
+        };
+        match decode(&frame).unwrap() {
+            EngineFrame::Ready(ready) => {
+                assert!(ready.active);
+                assert!(ready.service_offer.is_none());
+            }
+            _ => panic!("Ready v1 changed variant"),
+        }
+        frame["serviceOffer"] = serde_json::Value::Null;
+        assert!(decode(&frame).is_err());
+        frame["schema"] = serde_json::json!("caws.runtime.ready.v2");
+        assert!(decode(&frame).is_err());
+        frame.as_object_mut().unwrap().remove("serviceOffer");
         assert!(decode(&frame).is_err());
     }
 }
