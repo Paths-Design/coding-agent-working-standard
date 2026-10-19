@@ -530,7 +530,9 @@ _arm_trap() {
 # way to exercise the verified-kill path. The match set carries BOTH comm
 # spellings: Homebrew's python3 runs as comm "Python" (framework binary),
 # while Linux distros report "python3"/"python3.11".
-# Args: kill mode (1 | dryrun | 0 | suppressed), then envelope files to feed the guard in
+# Args: kill mode (1 | dryrun | 0 | suppressed | native-fd | native-closed |
+# native-readonly | native-unflagged | native-extra),
+# then envelope files to feed the guard in
 # order. Prints the wrapper PID.
 _run_under_sacrificial_agent() {
   local mode="$1"; shift
@@ -553,7 +555,8 @@ def terminated(signum, frame):
 signal.signal(signal.SIGTERM, terminated)
 env = dict(os.environ)
 env.update(CAWS_PROJECT_DIR=proj, CAWS_AGENT_SURFACE="claude-code",
-           CAWS_TRAP_KILL='1' if mode == 'suppressed' else mode,
+           CAWS_TRAP_KILL='1' if mode in ('suppressed', 'native-fd', 'native-closed',
+                                        'native-readonly', 'native-unflagged', 'native-extra') else mode,
            CAWS_AGENT_PROCESS_NAMES="python3 python3.11 Python", HOOK_CWD=proj)
 if mode == 'suppressed':
     # Test-only mutation: preserve target checks and escalation stamps while
@@ -568,7 +571,25 @@ for index, f in enumerate(sys.argv[5:]):
     (root / f'input-{index}.json').write_bytes(payload)
     record('identity.json', {'pid': os.getpid(), 'mode': mode,
                             'session_id': json.loads(payload)['session_id']})
-    child = subprocess.Popen(['bash', guard], stdin=subprocess.PIPE, env=env)
+    argv = ['bash', guard]
+    native_fd = None
+    try:
+        if mode in ('native-fd', 'native-closed', 'native-readonly', 'native-extra'):
+            argv.append('--caws-native-containment-fd=3')
+        if mode == 'native-extra':
+            argv.append('unexpected')
+        if mode in ('native-fd', 'native-readonly', 'native-unflagged', 'native-extra'):
+            flags = os.O_RDONLY if mode == 'native-readonly' else os.O_WRONLY | os.O_TRUNC
+            opened = os.open(env['CAWS_TEST_NATIVE_CONTAINMENT_FILE'], flags | os.O_NOFOLLOW)
+            if opened != 3:
+                os.dup2(opened, 3)
+                os.close(opened)
+            native_fd = 3
+        child = subprocess.Popen(argv, stdin=subprocess.PIPE, env=env,
+                                 pass_fds=() if native_fd is None else (native_fd,))
+    finally:
+        if native_fd is not None:
+            os.close(native_fd)
     (root / f'child-{index}.pid').write_text(str(child.pid))
     child.communicate(payload)
     record(f'step-{index}.json', {'exit_status': child.returncode,
@@ -597,6 +618,102 @@ _wait_for_receipt() {
 _has_signal_receipt() {
   [[ -s "$1/signal.json" ]] &&
     jq -e --argjson pid "$2" '.signal == 15 and .pid == $pid' "$1/signal.json" >/dev/null
+}
+
+# Completion also ends this wait, but cannot substitute for a signal receipt.
+_wait_for_agent_outcome() {
+  local receipt="$1" deadline=$((SECONDS + 60))
+  while (( SECONDS < deadline )); do
+    [[ -s "$receipt/signal.json" || -s "$receipt/complete.json" ]] && return 0
+    sleep 0.2
+  done
+  return 1
+}
+
+_assert_legacy_signal_with_ambient_intent() {
+  local mode="$1" sid="$2" arm_env attempt_env intent base kpid receipt sentinel
+  base="${CAWS_TEST_ARTIFACT_DIR:-$BATS_TEST_TMPDIR}"
+  mkdir -p "$base"
+  intent="$(mktemp "$base/ambient-native-intent-XXXXXX")"
+  export CAWS_NATIVE_CONTAINMENT_FILE="$intent" CAWS_TEST_NATIVE_CONTAINMENT_FILE="$intent"
+  arm_env="$BATS_TEST_TMPDIR/ambient-arm.json"
+  attempt_env="$BATS_TEST_TMPDIR/ambient-attempt.json"
+  _cmd_envelope_sid "$sid" 'sudo rm -rf /private/tmp/trap-arm-probe' > "$arm_env"
+  _cmd_envelope_sid "$sid" 'git commit -m chore' > "$attempt_env"
+  kpid="$(_run_under_sacrificial_agent "$mode" "$arm_env" "$attempt_env")"
+  receipt="$(cat "$BATS_TEST_TMPDIR/agent-$kpid.path")"
+  _wait_for_agent_outcome "$receipt" || fail "no guard outcome; inspect $receipt"
+  assert _has_signal_receipt "$receipt" "$kpid"
+  [[ -f "$intent" && ! -s "$intent" ]]
+  sentinel="$(_sentinel_for "$sid")"
+  jq -e --argjson pid "$kpid" \
+    '.agent_pid == ($pid | tostring)
+     and .command == "sudo rm -rf /private/tmp/trap-arm-probe"
+     and (.latch_generation | test("^[0-9a-f]{32}$"))' "$sentinel"
+  jq -e -s 'any(.[]; .decision == "block")' "$receipt/stdout"
+  cp "$intent" "$receipt/ambient-native-intent.bin"
+}
+
+@test "trap: an ambient native receipt path does not defer legacy SIGTERM" {
+  _assert_legacy_signal_with_ambient_intent 1 "trap-ambient-native-$$"
+}
+
+@test "trap: private native argv with closed fd retains legacy SIGTERM" {
+  _assert_legacy_signal_with_ambient_intent native-closed "trap-closed-native-$$"
+}
+
+@test "trap: private native argv with read-only fd retains legacy SIGTERM" {
+  _assert_legacy_signal_with_ambient_intent native-readonly "trap-readonly-native-$$"
+}
+
+@test "trap: private native argv missing with writable fd retains legacy SIGTERM" {
+  _assert_legacy_signal_with_ambient_intent native-unflagged "trap-unflagged-native-$$"
+}
+
+@test "trap: private native argv with extra argument retains legacy SIGTERM" {
+  _assert_legacy_signal_with_ambient_intent native-extra "trap-extra-native-$$"
+}
+
+@test "trap: reset and rearm produce distinct latch generations" {
+  local sid="trap-generation-$$" sentinel first second
+  _arm_trap "$sid"
+  sentinel="$(_sentinel_for "$sid")"
+  first="$(jq -r '.latch_generation' "$sentinel")"
+  [[ "$first" =~ ^[0-9a-f]{32}$ ]]
+  rm "$sentinel"
+  _arm_trap "$sid"
+  second="$(jq -r '.latch_generation' "$sentinel")"
+  [[ "$second" =~ ^[0-9a-f]{32}$ ]]
+  [[ "$first" != "$second" ]]
+}
+
+@test "trap: explicit native argv and owned fd defer signaling and retain the verified target" {
+  local sid="trap-native-intent-$$" arm_env attempt_env kpid receipt base intent sentinel
+  base="${CAWS_TEST_ARTIFACT_DIR:-$BATS_TEST_TMPDIR}"
+  mkdir -p "$base"
+  intent="$(mktemp "$base/native-intent-XXXXXX")"
+  unset CAWS_NATIVE_CONTAINMENT_FILE
+  export CAWS_TEST_NATIVE_CONTAINMENT_FILE="$intent"
+  arm_env="$BATS_TEST_TMPDIR/native-arm.json"
+  attempt_env="$BATS_TEST_TMPDIR/native-attempt.json"
+  _cmd_envelope_sid "$sid" 'sudo rm -rf /private/tmp/trap-arm-probe' > "$arm_env"
+  _cmd_envelope_sid "$sid" 'git commit -m chore' > "$attempt_env"
+  kpid="$(_run_under_sacrificial_agent native-fd "$arm_env" "$attempt_env")"
+  receipt="$(cat "$BATS_TEST_TMPDIR/agent-$kpid.path")"
+  _wait_for_agent_outcome "$receipt" || fail "no native guard outcome; inspect $receipt"
+  [[ -s "$receipt/complete.json" ]] || fail "explicit native fd did not defer; inspect $receipt"
+  assert kill -0 "$kpid"
+  refute _has_signal_receipt "$receipt" "$kpid"
+  sentinel="$(_sentinel_for "$sid")"
+  jq -e --argjson pid "$kpid" --arg sid "$sid" --arg path "$sentinel" \
+    --slurpfile latch "$sentinel" \
+    '.schema == "caws.containment.intent.v1" and .pid == $pid and .sessionId == $sid and .latchPath == $path
+     and .startEpoch == $latch[0].agent_pid_started_at and .comm == $latch[0].agent_pid_comm
+     and .latchGeneration == $latch[0].latch_generation and (.latchGeneration | test("^[0-9a-f]{32}$"))' \
+    "$intent"
+  grep -q '"verdict":"proposed","action":"native-sigterm"' "$CAWS_TEST_REPO/.claude/logs/danger-latch-escalations.log"
+  cp "$intent" "$receipt/native-intent.json"
+  jq -n --argjson pid "$kpid" '{pid:$pid,alive_after_intent:true,signal_receipt_present:false}' > "$receipt/intent-observation.json"
 }
 
 # Wait (bounded) until a sentinel file exists and carries a non-empty agent_pid
@@ -895,7 +1012,10 @@ _edit_env() { jq -nc --arg s "$1" --arg f "$2" '{tool_name:"Edit",tool_input:{fi
     CAWS_TRAP_KILL=1 CAWS_AGENT_PROCESS_NAMES="nonexistent-agent-proc" HOOK_CWD="$CAWS_TEST_REPO" \
     bash -c "printf '%s' '$(_cmd_envelope_sid "$sid" 'git commit -m x')' | bash '$CAWS_TEST_HOOKS_DIR/block-dangerous.sh'"
   assert_output --partial '"decision": "block"'
-  assert_output --partial 'On THIS surface the first such attempt also ends this session'
+  assert_output --partial 'On THIS surface a denied attempt triggers SIGTERM escalation to the verified agent process'
+  assert_output --partial 'A held or unsuccessful signal does not release quarantine'
+  refute_output --partial 'ends this session'
+  grep -q 'agent pid unresolved' "$CAWS_TEST_REPO/.claude/logs/danger-latch-escalations.log"
   # The stale general-surface phrasing must not come back.
   refute_output --partial 'on surfaces with kill escalation enabled'
 }

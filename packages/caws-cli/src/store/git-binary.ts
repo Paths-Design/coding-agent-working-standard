@@ -83,17 +83,36 @@ function candidateNames(): readonly string[] {
  * can only ever refuse a candidate `execvp` would have accepted, never select a
  * different one, so it cannot silently change which git a working setup uses.
  */
-function scanPath(): string | undefined {
-  const raw = process.env.PATH;
+function scanPath(environment: Readonly<NodeJS.ProcessEnv>, cwd: string): string | undefined {
+  const raw = environment.PATH;
   if (typeof raw !== 'string' || raw.length === 0) return undefined;
   for (const dir of raw.split(path.delimiter)) {
     if (dir.length === 0) continue; // see the divergence note above
     for (const name of candidateNames()) {
-      const candidate = path.join(dir, name);
+      const candidate = path.resolve(cwd, dir, name);
       if (isExecutableFile(candidate)) return candidate;
     }
   }
   return undefined;
+}
+
+/** Resolve one caller's executable without borrowing a resident process's cache or PATH. */
+export function resolveGitBinaryForEnvironment(
+  environment: Readonly<NodeJS.ProcessEnv>,
+  cwd: string
+): string | undefined {
+  const override = environment[OVERRIDE_ENV];
+  if (typeof override === 'string' && override.length > 0) {
+    if (path.isAbsolute(override)) return override;
+    if (override.includes('/') || override.includes('\\')) return path.resolve(cwd, override);
+    for (const dir of (environment.PATH ?? '').split(path.delimiter)) {
+      if (!dir) continue;
+      const candidate = path.resolve(cwd, dir, override);
+      if (isExecutableFile(candidate)) return candidate;
+    }
+    return undefined;
+  }
+  return scanPath(environment, cwd);
 }
 
 /**
@@ -113,7 +132,7 @@ export function resolveGitBinary(): string {
     return override;
   }
   if (cached !== undefined) return cached;
-  cached = scanPath() ?? BARE;
+  cached = scanPath(process.env, process.cwd()) ?? BARE;
   return cached;
 }
 

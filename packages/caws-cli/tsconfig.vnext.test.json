@@ -7,6 +7,7 @@
   "include": [
     "src/store/**/*.ts",
     "src/shell/**/*.ts",
+    "src/runtime/**/*.ts",
     "tests/store/**/*.ts",
     "tests/shell/**/*.ts"
   ]
