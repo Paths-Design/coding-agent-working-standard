@@ -139,3 +139,8 @@ evidence:
     evidence_ref: "Declared analyzer subset:1318 passing baseline semantic/projection tests,3355-mutant fresh full run0timeouts, all5 embedded source bytes independently equal current4bde and2b2. Hostile Git/executable-sed deny and unresolved dynamic/nested/limit cases asserted against independent fixtures. Retained ignored packages/caws-cli/reports/mutation-analysis/mutation-report-2b2d1a01.json SHAa39790b4f1560dc9344d2eb235db67bb82731c02cd7aa9832c8c1cc44741bcc9 and run-2b2d1a01.log manually inspected. Final packaged hostile deny/backend/malformed holds corroborate. Does not establish arbitrary interpreter write authority/native execution. --verify below checks commit identity only; raw artifacts intentionally uncommitted."
     recorded_at: "2026-10-19T20:56:13.406Z"
     commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Clean4bde:9 installed isolated pin-guard Bats cases passed using repository bats dependency (bare bats initially unavailable127). Finite assigned sed admitted; quoted/assigned foreign Git denied; inert substitution/file-transport sentinels absent; missing analyzer held; lifecycle and destroyed-pin release reachable. Ignored packages/caws-cli/reports/mutation-analysis/pin-custody-4bde1f49.tap inspected. Final tarball d9055bb5999f97740007c3da925d109e1e1218b5ce5af0bfb90d1c5bb59cb0e7/package-4bde1f49.log shows parser6.0.0/loader/docs and installed benign allow/hostile deny. Synthetic complete Bash/claude-code context only; no native/global adoption claim. --verify checks commit identity only, not manually inspected behavioral output."
+    recorded_at: "2026-10-19T20:56:23.475Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
