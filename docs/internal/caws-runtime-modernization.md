@@ -47,7 +47,9 @@ retains its clean committed replay. Neither observation closes R32 or earns
 whole-runtime acceptance. E57 reproduces R33's cold-start service failure through
 the actual native/typed path. The next boundary is explicit service ownership
 and client integration, alongside the remaining R32 process-domain and identity
-contracts. No machine replacement follows from these bounded results.
+contracts. E61 exercises the R07 payload-cwd repair through the isolated native
+consumer with refusal and ordinary-file controls. No machine replacement follows
+from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 **packaged**, **installed**, **native-observed**, **retired**. Record exactly the
@@ -68,7 +70,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | selected production refusal and native Stop fixture exercised | E33 nonlatching refusal; E34 real native budget with fixture context. Complete event/harness/Stop producer behavior remains unqualified |
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component and bounded native consumer exercised | E33 bare staged-deletion refusal and explicit-path/unstaged-deletion controls; full classifier corpus, stateful consumer and harness parity remain open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
-| R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component tested; consumer unreplaced | Actual shell consumer is `shared/hook-utilities.sh`; real Git index and heredoc/routing controls exercised; lockfile restore belongs to the classifier, not this utility |
+| R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence | TS transcript store | unreplaced | Atomic replacement, identity, replay custody, malformed and concurrent inputs |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization | TS normalization interfaces/common implementation | unreplaced | Lossless occurrence/provenance and explicit unavailable fields |
@@ -698,6 +700,66 @@ Additional bounded evidence and unresolved dependencies:
   Service ownership, surviving-service/removed-request-child behavior, startup
   races, cancellation, source retirement, native workload and installation remain
   open; this is a reproduced defect, not its repair.
+- E59: Read-only branch review at clean `0ea4a4ad`, against merge base
+  `a9834f93`, finds a configured utility-policy bypass at
+  `src/runtime/stock-handlers.ts`: the typed bridge uses checkout root while the
+  Python helper resolves `HOOK_CWD` from the hook payload. The retained
+  `/tmp/caws-review-0ea4a4ad-utility-cwd.json` records absolute/relative nested
+  cwd cases returning typed 0/empty versus Python 2/block, absent/empty controls,
+  unchanged sentinel content and no Git index creation. Fresh CLI build and 18
+  focused Jest suites pass 747 checks; Cargo library/binary units pass 29/13.
+  Those checks miss the cross-directory consumer mismatch. Eight targeted
+  selected-handler controls cover nested ignore/refusal, root-only ignore/allow,
+  absent/empty fallback and filesystem symlink-before-parent traversal. Before
+  the repair, the first six controls produce four failures and two passes;
+  `/tmp/caws-utility-cwd-red.json` retains the incorrect allow/block values.
+  This is evidence of test sensitivity, not complete utility parity.
+- E60: R33 source investigation confirms that startup interception alone is
+  insufficient. Sterling's `session-log.sh:90` directly sources its client;
+  `lib/session-log-daemon-client.sh:107-108` launches the daemon through literal
+  `python3`, but `:84-95` sends render requests through `/dev/tcp` and permits
+  inline fallback after an unrecognized/timed-out response. The daemon writes
+  through `render_session` at `session_log_daemon.py:288-296` before responding
+  at `:311`; its wire carries no request ID or outcome lookup. This is inspected
+  source, not a new runtime scenario. A typed policy declaration and source-bound
+  native startup owner must reach the actual selected client and correlate
+  admission/fallback outcomes. R33 remains open until that integration exists;
+  a service-host library or relay alone cannot close it. Normal request cleanup,
+  unknown partial effects and independently surviving host-crash cleanup remain
+  separate obligations.
+- E61: `node /tmp/caws-native-utility-cwd-probe.cjs
+  /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-runtime-modernization`
+  exits 0. Artifacts live in
+  `packages/caws-native/target/qualification/utility-cwd-2026-10-19T10-32-57-367Z/`.
+  Twelve executions use the actual Python dispatcher or Rust client plus typed
+  engine, with private homes and a selected stock utility extension. Both modes
+  return 2/block for absolute/relative nested ignored targets, absent/empty cwd
+  root fallback and symlink-before-parent traversal; the root-ignored/nested-
+  ordinary control returns 0. All recorded index and target-file hashes remain
+  unchanged; the proposed staging command is input data and never executes.
+  Native journals record handler completion, output handoff and adapter finish;
+  no compatibility-dispatch stage occurs. The inspected absolute-cwd native
+  input SHA256 `7c88c014…b39f` matches every stage's input custody, and its index
+  remains `d5838795…9a6f`. Independent jq readback requires exact block decisions
+  and reason, empty allow stdout and unchanged target hashes in every case.
+  `manifest.json` records base `0ea4a4ad` plus the uncommitted diff SHA256
+  `cb52fdd9…3a66`, retained as `source.diff`; this is not a clean-commit replay.
+  The recorded stock-handler JS SHA256 `b6bd34c7…624f` matches the inspected
+  build. Recursive runtime-module hashes, selected source hashes, raw channels,
+  commands/status, journals and copied review/red/green receipts are retained;
+  no dependency-closure or OS subprocess trace is claimed. The final focused
+  suites pass 107 checks, including an unresolvable-cwd shell-fallback control;
+  scoped ESLint and strict runtime test TypeScript exit 0. Doctor reports the
+  inherited 0E/3W/4I and five policy gates pass over branch plus staged changes.
+  Two runner-creation attempts are refused before execution: an external tool
+  symlink and then a foreign-path literal in unrelated historical prose. The
+  successful runner uses the fixed system PATH and omits that prose; it does
+  not create tool aliases or weaken a guard. A later read-only summary is refused
+  for unsupported nesting. Attempts to copy the runner into the artifact tree
+  are also refused (relative claimed-path coordinate, then the worktree-copy
+  guard); no copied runner is produced. Its original `/tmp` file remains with
+  recorded SHA256 `76207214…78d4b`, a retention gap to resolve before scratch
+  cleanup. No installed runtime, whole-runtime parity or acceptance is earned.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -788,7 +850,12 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-1. Resolve R33 through explicit service binding and client integration. E57 is
+1. Resolve R33 through explicit service binding and client integration. Define
+   the actual selected client's broker seam and request/fallback outcome
+   contract before implementing a startup-only relay or host. A lost response
+   after dispatch stays unknown; only known nonexecution permits immediate
+   inline fallback. E60 grounds this dependency in the directly sourced client
+   and write-before-response daemon. E57 is
    the failing cold-start/reuse regression; preserve its native failure until
    the owning implementation changes. `SystemSurfacePolicy` has no service
    lifetime declaration, and Sterling directly sources its client rather than

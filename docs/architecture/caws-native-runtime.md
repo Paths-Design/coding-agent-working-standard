@@ -213,6 +213,28 @@ checks source-change retirement, cancellation and simultaneous startup. Warm
 reuse alone cannot establish this boundary. This integration remains
 unqualified.
 
+Service creation and render admission share one ownership contract. A relay at
+the selected interpreter invocation can reach Sterling's daemon start without
+changing foreign source bytes, but cannot alone provide that contract: its
+client sends requests directly through `/dev/tcp` and falls back inline after a
+response timeout. The daemon writes render artifacts before sending its
+response. A timeout therefore cannot authorize another renderer to repeat the
+operation. The actual selected client needs an explicit broker integration, or
+an explicitly selected compatibility adapter that owns both request admission
+and fallback. Only known nonexecution permits immediate inline fallback;
+dispatched work with a lost response remains unknown and serialized by its
+project/service owner until its effect is resolved or cancellation settles.
+
+Service declarations belong to the typed policy owner and effective selection.
+They bind the selected handler, client, executable, daemon and declared source
+closure to a named protocol adapter. Caller environment, PID/token leases and
+heartbeats cannot create a capability or transfer child ownership. The native
+service owner creates and retains its own child/group from the start; ordinary
+request-group cleanup remains intact. Source generations share a project/service
+serialization key, and replacement cannot write before the old writer settles.
+Host-crash child cleanup and recovery of unknown partial writes require their
+own mechanism and evidence; private IPC and normal idle exit do not prove them.
+
 | Severity | Trigger and failure                                                                                  | Cost                                                               | Resolve timing                                                                                           |
 | -------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | Critical | Stale cached claim/policy or Rust/TS authority disagreement permits a governed action                | Unauthorized mutation; later logs cannot undo it                   | Before any enforcement cutover; shared authority and freshness tests precede resident mode               |

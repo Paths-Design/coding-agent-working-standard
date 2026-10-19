@@ -204,14 +204,27 @@ export function tryExecuteStockHandler(
         return null;
       }
     }
+    const ports = createGuardUtilityPorts(environment, request.deadlineEpochMs);
+    let cwd = selection.checkout;
+    if (typeof payload.cwd === 'string' && payload.cwd) {
+      try {
+        // The shell utility resolves HOOK_CWD from its checkout-based process.
+        // Keep symlink/.. traversal intact until the filesystem resolver sees it.
+        cwd = ports.realpath(
+          isAbsolute(payload.cwd) ? payload.cwd : `${selection.checkout}/${payload.cwd}`
+        );
+      } catch {
+        return null;
+      }
+    }
     return runGuardUtilities(
       text,
       {
         tool: typeof payload.tool_name === 'string' ? payload.tool_name : '',
         toolInput,
-        cwd: selection.checkout,
+        cwd,
       },
-      createGuardUtilityPorts(environment, request.deadlineEpochMs)
+      ports
     );
   }
   // The bounded first consumer migration is Codex. Other surface emit/state semantics stay selected shell behavior.

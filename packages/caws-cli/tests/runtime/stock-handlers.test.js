@@ -295,6 +295,85 @@ test('opt-in exact stock utility evaluates document metadata without Python or a
   expect(spawn).not.toHaveBeenCalled();
 });
 
+test.each([
+  ['absolute', 'nested', 2],
+  ['relative', 'nested', 2],
+  ['symlink-parent', 'nested', 2],
+  ['absent', 'root', 2],
+  ['empty', 'root', 2],
+  ['absolute', 'root', 0],
+  ['relative', 'root', 0],
+  ['symlink-parent', 'root', 0],
+])(
+  'utility staging uses %s payload cwd with ignored files at %s',
+  async (cwd, ignored, exitCode) => {
+    const subdirectory = path.join(project, cwd === 'symlink-parent' ? 'parent' : 'sub');
+    fs.mkdirSync(subdirectory);
+    if (cwd === 'symlink-parent') {
+      fs.mkdirSync(path.join(subdirectory, 'child'));
+      fs.symlinkSync(path.join(subdirectory, 'child'), path.join(project, 'link'));
+    }
+    fs.writeFileSync(
+      path.join(project, '.gitignore'),
+      ignored === 'root' ? '/private.generated\n' : ''
+    );
+    fs.writeFileSync(
+      path.join(subdirectory, '.gitignore'),
+      ignored === 'nested' ? '*.generated\n' : ''
+    );
+    fs.writeFileSync(path.join(project, 'private.generated'), 'root sentinel\n');
+    fs.writeFileSync(path.join(subdirectory, 'private.generated'), 'nested sentinel\n');
+    fs.writeFileSync(path.join(project, 'tracked.txt'), 'tracked\n');
+    git('add', 'tracked.txt');
+    const indexBefore = fs.readFileSync(path.join(project, '.git/index'));
+    const policy = path.join(project, 'utility-policy.json');
+    fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));
+    environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
+    command('git add -f private.generated');
+    if (cwd === 'absent') delete request.payload.cwd;
+    else
+      request.payload.cwd =
+        cwd === 'absolute'
+          ? subdirectory
+          : cwd === 'relative'
+            ? 'sub'
+            : cwd === 'symlink-parent'
+              ? 'link/..'
+              : '';
+    request.inputJson = JSON.stringify(request.payload);
+    const handler = select('hook-utilities.sh');
+    const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+    const result = await createHandlerExecutor(context())(handler, 0);
+    expect({
+      exitCode: result.exitCode,
+      stdout: Buffer.from(result.stdout).toString('utf8'),
+    }).toEqual({
+      exitCode,
+      stdout:
+        exitCode === 2
+          ? JSON.stringify({
+              decision: 'block',
+              reason: 'Consumer ignored-staging policy: private.generated',
+            }) + '\n'
+          : '',
+    });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(indexBefore);
+    expect(fs.readFileSync(path.join(subdirectory, 'private.generated'), 'utf8')).toBe(
+      'nested sentinel\n'
+    );
+  }
+);
+
+test('an unresolvable utility cwd retains the selected shell fallback', () => {
+  command('git add -f private.generated');
+  const handler = select('hook-utilities.sh');
+  expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+  fs.symlinkSync('loop', path.join(project, 'loop'));
+  request.payload.cwd = 'loop';
+  expect(tryExecuteStockHandler(handler, context())).toBeNull();
+});
+
 test('utility absence is silent, malformed policy informational, and custom helper forces shell fallback', () => {
   const handler = select('hook-utilities.sh');
   expect(tryExecuteStockHandler(handler, context()).stdout).toEqual(new Uint8Array());
