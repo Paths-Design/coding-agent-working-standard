@@ -10,6 +10,9 @@ import type {
 } from './parser-types';
 import { loadParser } from './load-parser';
 import { inside, inspectInvocation, resolveDirectory, sensitiveBinding } from './policies';
+import { basename, dirname } from 'node:path';
+import { resolveGitContext } from './git-context';
+import type { GitContext, GitContextResolver } from './git-context';
 import { expandWord } from './words';
 import type {
   AnalysisContext,
@@ -26,10 +29,13 @@ const MAX_BYTES = 65536;
 const MAX_STATES = 32;
 const MAX_DEPTH = 16;
 const MAX_VISITS = 4096;
-const clone = (state: State): State => ({ cwd: state.cwd, bindings: new Map(state.bindings) });
+const clone = (state: State): State => ({ ...state, bindings: new Map(state.bindings) });
 
 /** A bounded abstract interpreter. It inspects source; it never executes it. */
-export async function analyzeCommand(request: AnalysisRequest): Promise<AnalysisResult> {
+export async function analyzeCommand(
+  request: AnalysisRequest,
+  dependencies: { gitContext?: GitContextResolver } = {}
+): Promise<AnalysisResult> {
   const result: AnalysisResult = { decision: 'allow', reasons: [], trace: [] };
   const whole = { pos: 0, end: request.command.length };
   const reason: AnalysisContext['reason'] = (node, code, message, deny = false) => {
@@ -65,12 +71,28 @@ export async function analyzeCommand(request: AnalysisRequest): Promise<Analysis
     return result;
   }
   if (result.decision !== 'allow') return result;
+  const gitContexts = new Map<string, GitContext | null>();
   const ctx: AnalysisContext = {
     result,
     worktree,
     canonical,
     outside: !inside(cwd, worktree),
     visits: 0,
+    gitContext: (input) => {
+      const key = JSON.stringify([input.cwd, Object.entries(input.overrides).sort()]);
+      if (gitContexts.has(key)) return gitContexts.get(key)!;
+      if (gitContexts.size >= 8) {
+        reason(
+          whole,
+          'git-discovery-budget',
+          'At most eight distinct Git discovery contexts are inspected.'
+        );
+        return null;
+      }
+      const context = (dependencies.gitContext ?? resolveGitContext)(input);
+      gitContexts.set(key, context);
+      return context;
+    },
     reason,
     trace: (node, kind, detail) =>
       result.trace.push({ kind, detail, start: node.pos, end: node.end }),
@@ -116,6 +138,7 @@ export async function analyzeCommand(request: AnalysisRequest): Promise<Analysis
     for (const state of states) {
       const key = JSON.stringify([
         state.cwd,
+        state.filesystemChanged === true,
         [...state.bindings].sort(([a], [b]) => a.localeCompare(b)),
       ]);
       unique.set(key, state);
@@ -201,7 +224,7 @@ export async function analyzeCommand(request: AnalysisRequest): Promise<Analysis
       reason(node, 'redirect-target', 'Redirection has no proven target.');
       return;
     }
-    const values = word(node.target, state, depth, true);
+    const values = word(node.target, state, depth);
     if (['>&', '<&'].includes(node.operator)) {
       if (values.some((args) => args.length !== 1 || !/^(?:[0-9]+|-)$/.test(args[0]?.value ?? '')))
         reason(node, 'redirect-descriptor', 'Only literal descriptor duplication is modeled.');
@@ -213,10 +236,30 @@ export async function analyzeCommand(request: AnalysisRequest): Promise<Analysis
         'substitution-effects',
         'Read substitutions cannot contain output redirections.'
       );
+    if (
+      node.operator !== '<' &&
+      values.some((args) => args.length !== 1 || args[0]?.value !== '/dev/null')
+    )
+      state.filesystemChanged = true;
     for (const args of values) {
       const value = args.length === 1 ? args[0]?.value : null;
       if (value === null || value === undefined)
         reason(node, 'redirect-target', 'Redirection requires a known single target.');
+      else if (node.operator !== '<') {
+        const parent = resolveDirectory(dirname(value), state.cwd);
+        const common = resolveDirectory(`${ctx.canonical}/.git`, '/');
+        const destination =
+          resolveDirectory(value, state.cwd) ?? (parent && `${parent}/${basename(value)}`);
+        if (
+          basename(destination ?? value).toLowerCase() === '.git' ||
+          (destination && common && inside(destination, common))
+        )
+          reason(
+            node,
+            'repository-mapping-write',
+            'Submitted writes to Git metadata invalidate repository routing assumptions.'
+          );
+      }
     }
   }
   function command(node: Command, state: State, reader: boolean, depth: number): State[] {
@@ -283,6 +326,7 @@ export async function analyzeCommand(request: AnalysisRequest): Promise<Analysis
     for (const suffix of node.suffix)
       if (suffix.type !== 'Word' && suffix.type !== 'Assignment')
         redirect(suffix, state, reader, depth + 1);
+    assigned.filesystemChanged = state.filesystemChanged === true;
     if (!node.name) return [assigned];
     const env = new Map<string, Value>();
     for (const [name, value] of assigned.bindings)
@@ -310,16 +354,29 @@ export async function analyzeCommand(request: AnalysisRequest): Promise<Analysis
           );
         return states;
       }
-      case 'Pipeline':
+      case 'Pipeline': {
         if (node.prefixes.length)
           reason(node, 'pipeline-prefix', 'Pipeline prefixes are outside the admitted subset.');
         if (node.commands.length === 1) return walk(node.commands[0]!, state, reader, depth + 1);
-        for (const next of node.commands) walk(next, clone(state), reader, depth + 1);
+        let filesystemChanged = state.filesystemChanged === true;
+        for (const next of node.commands) {
+          const outputs = walk(next, clone(state), reader, depth + 1);
+          filesystemChanged ||= outputs.some((item) => item.filesystemChanged === true);
+        }
         // Declared host contract: Bash lastpipe is disabled.
-        return [state];
-      case 'Subshell':
-        list(node.body.commands, [clone(state)], reader, depth + 1);
-        return [state];
+        return [{ ...state, filesystemChanged }];
+      }
+      case 'Subshell': {
+        const outputs = list(node.body.commands, [clone(state)], reader, depth + 1);
+        return [
+          {
+            ...state,
+            filesystemChanged:
+              state.filesystemChanged === true ||
+              outputs.some((item) => item.filesystemChanged === true),
+          },
+        ];
+      }
       case 'BraceGroup':
         return list(node.body.commands, [state], reader, depth + 1);
       case 'If': {

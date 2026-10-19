@@ -5,6 +5,7 @@ const fs = require('node:fs'),
   crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
+const linkedRepository = require('./git-fixture.cjs');
 const pkg = path.resolve(__dirname, '../../..');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-analysis-package-'));
 function run(program, args, options = {}) {
@@ -50,8 +51,7 @@ try {
   assert.equal(parser.version, '6.0.0');
   const own = path.join(root, 'project/.caws/worktrees/own'),
     foreign = path.join(root, 'project/.caws/worktrees/foreign');
-  fs.mkdirSync(own, { recursive: true });
-  fs.mkdirSync(foreign, { recursive: true });
+  linkedRepository(path.join(root, 'project'), [own, foreign]);
   const home = path.join(root, 'home');
   fs.mkdirSync(home);
   function analyze(command) {
@@ -80,6 +80,7 @@ try {
   const benign = analyze("P='src/a b.ts'; sed -n '1,40p' \"$P\"");
   assert.equal(benign.status, 0);
   assert.equal(benign.decision, 'allow');
+  assert.equal(analyze('git status').decision, 'allow');
   const hostile = analyze(`git -C '${foreign}' status`);
   assert.equal(hostile.status, 1);
   assert.equal(hostile.decision, 'deny');

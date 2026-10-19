@@ -26,7 +26,8 @@ teardown_file() {
 
 setup() {
   export PIN_DIR="$CAWS_TEST_REPO/.caws/worktrees/wt-pinned"
-  mkdir -p "$PIN_DIR"
+  git -C "$CAWS_TEST_REPO" worktree prune
+  git -C "$CAWS_TEST_REPO" -c core.hooksPath=/dev/null worktree add --quiet --detach "$PIN_DIR" HEAD
 }
 teardown() {
   rm -rf "$CAWS_TEST_REPO/.caws/worktrees"
@@ -110,9 +111,11 @@ run_pin_guard() {
 }
 
 @test "pin-guard A5d: git ops redirected outside the repository (scratch) — permitted" {
-  run_pin_guard "$PIN_DIR" "$PIN_DIR" "git -C /tmp status"
+  local scratch="$CAWS_TEST_HOME/scratch"
+  git init --quiet "$scratch"
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" "git -C '$scratch' status"
   assert_success
-  run_pin_guard "$PIN_DIR" "$PIN_DIR" "cd /tmp && git log"
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" "cd '$scratch' && git log"
   assert_success
 }
 
@@ -259,4 +262,35 @@ run_raw_pin_payload() {
   run_raw_pin_payload '{"cwd":"/tmp","tool_name":"Bash","tool_input":{"command":"printf x"}}'
   assert_failure 2
   assert_output --partial 'transport file is unavailable'
+}
+
+@test "pin-guard: plain nested directory cannot borrow canonical Git discovery" {
+  rm "$PIN_DIR/.git"
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'git status'
+  assert_failure 2
+  assert_output --partial 'git-mapping-unresolved'
+}
+
+@test "pin-guard: nested Git indirection is checked through real discovery" {
+  mkdir "$PIN_DIR/nested"
+  printf 'gitdir: %s/.git\n' "$CAWS_TEST_REPO" > "$PIN_DIR/nested/.git"
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'git -C nested status'
+  assert_failure 2
+  assert_output --partial 'foreign-git-target'
+}
+
+@test "pin-guard: quoted conditional variable reference stays unresolved and inert" {
+  local sentinel="$CAWS_TEST_HOME/conditional-executed"
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" "test -v 'BASH_VERSINFO[\$(touch $sentinel)]'"
+  assert_failure 2
+  assert_output --partial 'test-expression'
+  [[ ! -e "$sentinel" ]]
+}
+
+@test "pin-guard: unsupported behavior gets a reason-specific remedy" {
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'application-without-a-profile --read-only'
+  assert_failure 2
+  assert_output --partial 'utility-unsupported'
+  assert_output --partial 'source spans'
+  refute_output --partial 'Re-run the command from'
 }

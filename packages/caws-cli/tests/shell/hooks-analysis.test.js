@@ -3,14 +3,14 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const cli = path.resolve(__dirname, '../../dist/index.js');
+const linkedRepository = require('../fixtures/command-analysis/git-fixture.cjs');
 describe('hooks analyze public CLI', () => {
   let root, own, foreign;
   beforeAll(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-analysis-cli-'));
     own = path.join(root, '.caws/worktrees/own');
     foreign = path.join(root, '.caws/worktrees/foreign');
-    fs.mkdirSync(own, { recursive: true });
-    fs.mkdirSync(foreign, { recursive: true });
+    linkedRepository(root, [own, foreign]);
   });
   afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
   function run(input, args = [], env = {}) {

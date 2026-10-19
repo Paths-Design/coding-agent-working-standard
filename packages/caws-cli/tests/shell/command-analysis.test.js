@@ -3,17 +3,65 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const corpus = require('../fixtures/command-analysis/contract.json');
+const corpus = [
+  ...require('../fixtures/command-analysis/contract.json'),
+  ...require('../fixtures/command-analysis/profile-cases.cjs'),
+];
+const linkedRepository = require('../fixtures/command-analysis/git-fixture.cjs');
+const wordCases = require('../fixtures/command-analysis/abstract-words.cjs');
+require('../fixtures/command-analysis/git-context-cases.cjs')(
+  path.resolve(__dirname, '../../dist/shell/analysis/git-context.js')
+);
 // Feed inert command strings to the compiled consumer over stdin. Jest's VM
 // cannot import the parser's ESM, so use one real Node process, without a shell.
 const RUNNER = String.raw`
 const fs = require('node:fs');
 if (process.argv[2]) process.env.__STRYKER_ACTIVE_MUTANT__ = process.argv[2];
 const { analyzeCommand } = require(process.argv[1]);
+const { resolveGitContext } = require(require('node:path').join(require('node:path').dirname(process.argv[1]), 'git-context.js'));
+const { expandWord } = require(require('node:path').join(require('node:path').dirname(process.argv[1]), 'words.js'));
+const { loadParser } = require(require('node:path').join(require('node:path').dirname(process.argv[1]), 'load-parser.js'));
+// The fixture graph is immutable: submitted source never executes. Reuse only
+// real discovery results for that graph; the production CLI has no shared cache.
+const contexts = new Map();
+const gitContext = input => {
+  const key = JSON.stringify(input);
+  if (!contexts.has(key)) contexts.set(key, resolveGitContext(input));
+  return contexts.get(key);
+};
 (async () => {
   const out = [];
   for (const request of JSON.parse(fs.readFileSync(0, 'utf8'))) {
-    out.push({id: request.id, activeMutant:process.env.__STRYKER_ACTIVE_MUTANT__ ?? '', first: await analyzeCommand(request.input), repeated: await analyzeCommand(request.input)});
+    const previous = new Map(Object.keys(request.environment || {}).map(key => [key,process.env[key]]));
+    try {
+      Object.assign(process.env, request.environment || {});
+      if (request.wordDomain) {
+        const fixture = request.wordDomain;
+        const tree = (await loadParser()).parse('cat -- ' + fixture.source);
+        if(tree.errors?.length) throw Error('Invalid component-domain word');
+        const queue=[tree]; let word;
+        while(queue.length) {
+          const value=queue.shift();
+          if(value && typeof value==='object') {
+            if(value.type==='Word' && value.text===fixture.source) {word=value;break;}
+            queue.push(...Object.values(value));
+          }
+        }
+        if(!word) throw Error('Missing parsed component-domain word');
+        const reasons=[];
+        const context={reason:(_node,code)=>reasons.push(code)};
+        const fields=expandWord(word,{cwd:request.input.cwd,bindings:new Map(Object.entries(fixture.bindings))},context,()=>{throw Error('Unexpected producer in component-domain word');},0,fixture.assignment===true);
+        out.push({id:request.id, fields:fields.map(argv=>argv.map(arg=>arg.value)), reasons});
+        continue;
+      }
+      if (request.contextQuery) {
+        out.push({id:request.id, context:resolveGitContext(request.contextQuery)});
+        continue;
+      }
+      out.push({id: request.id, activeMutant:process.env.__STRYKER_ACTIVE_MUTANT__ ?? '', first: await analyzeCommand(request.input,{gitContext}), repeated: await analyzeCommand(request.input,{gitContext})});
+    } finally {
+      for(const [key,value] of previous) { if(value === undefined) delete process.env[key]; else process.env[key]=value; }
+    }
   }
   process.stdout.write(JSON.stringify(out));
 })().catch(error => { console.error(error); process.exitCode = 1; });
@@ -34,8 +82,48 @@ describe('bounded shell analysis contract', () => {
     };
     locations.OWN = path.join(locations.CANONICAL, '.caws/worktrees/own');
     locations.FOREIGN = path.join(locations.CANONICAL, '.caws/worktrees/foreign');
-    for (const key of ['CANONICAL', 'OWN', 'FOREIGN', 'SCRATCH'])
-      fs.mkdirSync(locations[key], { recursive: true });
+    locations.SYMLINK_PIN = path.join(locations.CANONICAL, '.caws/worktrees/symlink-pin');
+    locations.HARDLINK_PIN = path.join(locations.CANONICAL, '.caws/worktrees/hardlink-pin');
+    locations.LARGE_PIN = path.join(locations.CANONICAL, '.caws/worktrees/large-pin');
+    for (const key of ['CANONICAL', 'SCRATCH']) fs.mkdirSync(locations[key], { recursive: true });
+    linkedRepository(locations.CANONICAL, [
+      locations.OWN,
+      locations.FOREIGN,
+      locations.SYMLINK_PIN,
+      locations.HARDLINK_PIN,
+      locations.LARGE_PIN,
+    ]);
+    fs.renameSync(
+      path.join(locations.SYMLINK_PIN, '.git'),
+      path.join(locations.SYMLINK_PIN, 'pointer')
+    );
+    fs.symlinkSync('pointer', path.join(locations.SYMLINK_PIN, '.git'));
+    fs.linkSync(
+      path.join(locations.HARDLINK_PIN, '.git'),
+      path.join(locations.HARDLINK_PIN, 'pointer-alias')
+    );
+    fs.appendFileSync(path.join(locations.LARGE_PIN, '.git'), ' '.repeat(16385));
+    linkedRepository(locations.SCRATCH, []);
+    for (const key of ['UNMAPPED', 'FORGED', 'WRONG_RECIPROCAL']) {
+      locations[key] = path.join(locations.CANONICAL, '.caws/worktrees', key.toLowerCase());
+      fs.mkdirSync(locations[key]);
+    }
+    fs.writeFileSync(path.join(locations.FORGED, '.git'), `gitdir: ${locations.CANONICAL}/.git\n`);
+    fs.copyFileSync(
+      path.join(locations.FOREIGN, '.git'),
+      path.join(locations.WRONG_RECIPROCAL, '.git')
+    );
+    fs.symlinkSync(
+      path.join(locations.CANONICAL, '.git/config'),
+      path.join(locations.OWN, 'metadata-alias')
+    );
+    fs.mkdirSync(path.join(locations.OWN, 'nested'));
+    fs.writeFileSync(
+      path.join(locations.OWN, 'nested/.git'),
+      `gitdir: ${locations.CANONICAL}/.git\n`
+    );
+    for (let index = 0; index < 9; index++)
+      fs.mkdirSync(path.join(locations.OWN, `context${index}`));
     fs.symlinkSync(locations.FOREIGN, path.join(locations.OWN, 'escape'));
     fs.mkdirSync(path.join(locations.OWN, 'route'));
     fs.symlinkSync(locations.FOREIGN, path.join(locations.SCRATCH, 'route'));
@@ -54,14 +142,39 @@ describe('bounded shell analysis contract', () => {
       command = expand(command);
       return {
         id: fixture.id,
+        environment: fixture.environment,
         input: {
           command,
-          cwd: locations[(fixture.cwd || 'own').toUpperCase()],
-          worktree: locations.OWN,
+          cwd: fixture.cwdPath
+            ? expand(fixture.cwdPath)
+            : locations[(fixture.cwd || 'own').toUpperCase()],
+          worktree: fixture.worktreePath
+            ? expand(fixture.worktreePath)
+            : locations[(fixture.worktree || 'own').toUpperCase()],
           ...(fixture.shell ? { shell: fixture.shell } : {}),
         },
       };
     });
+    requests.push(
+      ...wordCases.map((fixture) => ({
+        id: 'word-domain-' + fixture.id,
+        wordDomain: fixture,
+        input: { cwd: locations.OWN },
+      }))
+    );
+    requests.push(
+      { id: 'query-own', contextQuery: { cwd: locations.OWN, overrides: {} } },
+      { id: 'query-scratch', contextQuery: { cwd: locations.SCRATCH, overrides: {} } },
+      {
+        id: 'query-missing',
+        contextQuery: { cwd: path.join(locations.OWN, 'missing'), overrides: {} },
+      },
+      {
+        id: 'query-host-override-ignored',
+        environment: { GIT_DIR: '/missing-foreign-metadata' },
+        contextQuery: { cwd: locations.OWN, overrides: {} },
+      }
+    );
     activeMutant = String(
       globalThis.__stryker__?.activeMutant ?? process.env.__STRYKER_ACTIVE_MUTANT__ ?? ''
     );
@@ -90,10 +203,41 @@ describe('bounded shell analysis contract', () => {
     const request = requests.find((item) => item.id === fixture.id);
     expect(actual.activeMutant).toBe(activeMutant);
     expect(actual.first.decision).toBe(fixture.decision);
+    expect(actual.first.reasons.map((item) => item.code)).not.toContain('analysis-failure');
     if (fixture.decision !== 'allow') expect(actual.first.reasons.length).toBeGreaterThan(0);
     expect(actual.repeated).toEqual(actual.first);
     if (fixture.reason)
       expect(actual.first.reasons.map((item) => item.code)).toContain(fixture.reason);
+    if (fixture.reasonSource !== undefined)
+      expect(
+        actual.first.reasons
+          .filter((item) => item.code === fixture.reason)
+          .map((item) => request.input.command.slice(item.start, item.end))
+      ).toContain(expand(fixture.reasonSource));
+    if (fixture.bytes) expect(Buffer.byteLength(request.input.command, 'utf8')).toBe(fixture.bytes);
+    if (fixture.reasonOccurrences) {
+      const { code, source, count } = fixture.reasonOccurrences;
+      const fragment = expand(source),
+        expected = [];
+      for (
+        let start = request.input.command.indexOf(fragment);
+        start >= 0;
+        start = request.input.command.indexOf(fragment, start + fragment.length)
+      )
+        expected.push([start, start + fragment.length]);
+      expect(expected).toHaveLength(count);
+      expect(
+        actual.first.reasons
+          .filter((item) => item.code === code)
+          .map((item) => [item.start, item.end])
+      ).toEqual(expected);
+    }
+    if (fixture.reasonNames) {
+      const matching = actual.first.reasons.filter((item) => item.code === fixture.reason);
+      expect(matching).toHaveLength(fixture.reasonNames.length);
+      for (const name of fixture.reasonNames)
+        expect(matching.filter((item) => item.message.includes(name))).toHaveLength(1);
+    }
     for (const entry of [...actual.first.reasons, ...actual.first.trace]) {
       if ('code' in entry) {
         expect(entry.code).toMatch(/^[a-z][a-z-]+$/);
@@ -116,22 +260,44 @@ describe('bounded shell analysis contract', () => {
       ).toContain(expand(command));
     }
   });
+  test('fixture identities are unique across the public and role corpora', () => {
+    expect(new Set(corpus.map((fixture) => fixture.id)).size).toBe(corpus.length);
+  });
   test('submitted code never executes its sentinel', () => {
     expect(results.get('submission-is-never-executed').first.decision).toBe('unresolved');
     expect(results.get('sed-execution-command').first.decision).toBe('deny');
     expect(fs.existsSync(locations.MARKER)).toBe(false);
   });
   test('delivers every unique case', () => {
-    expect(new Set(corpus.map((item) => item.id)).size).toBe(corpus.length);
-    expect([...results.keys()].sort()).toEqual(corpus.map((item) => item.id).sort());
+    expect(new Set(requests.map((item) => item.id)).size).toBe(requests.length);
+    expect([...results.keys()].sort()).toEqual(requests.map((item) => item.id).sort());
+  });
+  test.each(wordCases)('abstract word domain $id', (fixture) => {
+    const actual = results.get('word-domain-' + fixture.id);
+    expect(actual.fields).toEqual(fixture.fields);
+    expect([...new Set(actual.reasons)].sort()).toEqual([...(fixture.reasons || [])].sort());
+  });
+  test('constant Git discovery returns actual metadata and ignores unrequested host overrides', () => {
+    const physical = (value) => fs.realpathSync.native(value);
+    const ownMetadata = physical(
+      fs.readFileSync(path.join(locations.OWN, '.git'), 'utf8').trim().slice(8)
+    );
+    const own = {
+      directory: ownMetadata,
+      common: physical(path.join(locations.CANONICAL, '.git')),
+      worktree: physical(locations.OWN),
+    };
+    expect(results.get('query-own').context).toEqual(own);
+    expect(results.get('query-host-override-ignored').context).toEqual(own);
+    expect(results.get('query-scratch').context).toEqual({
+      directory: physical(path.join(locations.SCRATCH, '.git')),
+      common: physical(path.join(locations.SCRATCH, '.git')),
+      worktree: physical(locations.SCRATCH),
+    });
+    expect(results.get('query-missing').context).toBeNull();
   });
   test.each([
-    [
-      'policies.js',
-      'if (inside(cwd, ctx.canonical) && !inside(cwd, ctx.worktree))',
-      'if (false)',
-      'git-canonical',
-    ],
+    ['policies.js', 'gitPolicy(args, state, env, ctx, node, reader);', 'void 0;', 'git-canonical'],
     ['policies.js', 'sedPolicy(args, ctx, node);', 'void 0;', 'sed-execution-command'],
     ['words.js', 'inspect(part.script, state, depth + 1);', 'void 0;', 'nested-reader-foreign-git'],
     [
@@ -143,7 +309,7 @@ describe('bounded shell analysis contract', () => {
     ['analyze.js', 'if (tree.errors?.length)', 'if (false)', 'malformed-quote'],
     [
       'analyze.js',
-      /list\(node.body.commands, \[clone\(state\)\], reader, depth \+ 1\);\s*return \[state\];/,
+      'const outputs = list(node.body.commands, [clone(state)], reader, depth + 1);',
       'return list(node.body.commands, [clone(state)], reader, depth + 1);',
       'subshell-cannot-sanitize-parent',
     ],

@@ -45,6 +45,31 @@ is never interpolated into a shell program by the analyzer or its tests.
 
 ## Admitted mechanism
 
+Git admission requires reciprocal linked-worktree metadata for the pin and a
+constant read-only `git rev-parse` query for the effective context. The query
+receives validated directories and metadata overrides through argv/environment;
+it never receives the submitted subcommand or shell source. Its metadata,
+common-directory and worktree results expose parent or nested repository
+discovery that cwd containment alone cannot establish. Bare repositories,
+unsupported query output and query failures are unresolved. Mapping gitfiles
+must be ordinary, singly linked files.
+
+Each analysis caches at most eight distinct discovery contexts. A query has a
+500 ms deadline and a 64 KiB output limit. Submitted file writes and lifecycle
+effects invalidate subsequent Git admission, including effects inside pipelines
+and subshells; shell-local cwd and bindings retain their separate scope. Known
+Git metadata writes are unresolved. Git configuration, repository creation and
+other unprofiled subcommands are unresolved. This prevents a source-visible
+change from borrowing a repository fact measured before that change.
+
+Conditional `test`/`[` profiles admit data-only string/file predicates and
+literal integer comparisons. Variable-reference predicates and compound
+expressions are unresolved. Normal redirection targets preserve quote-sensitive
+field splitting; here-strings keep their distinct no-splitting behavior. The
+[Bash redirection rules](https://www.gnu.org/s/bash/manual/html_node/Redirections.html)
+and [Git discovery rules](https://git-scm.com/docs/git/2.56.0.html) define these
+boundaries.
+
 The pinned ISC-licensed `unbash` parser produces a Bash AST. A typed interpreter
 tracks literal assignments in source order, finite loops, branch alternatives,
 cwd changes, pipeline/subshell scope, quotation and default-IFS field splitting.
@@ -80,12 +105,13 @@ metadata overrides are checked separately. A missing pinned directory releases
 the pin so a merged session can create its next lane.
 
 This is a source-level guard, not a process sandbox. Its load-bearing host
-contract is Bash with default IFS, `lastpipe` disabled, trusted executable
-resolution, no unmodeled aliases/functions/startup hooks, and stable repository
-mappings during check and execution. Known source changes to these assumptions
-are unresolved. Executable identity, Git configuration/hooks, application
-internals, concurrent filesystem replacement, and the actual harness execution
-environment are not proved by an AST. Stronger containment requires runtime
+contract is Bash with default IFS, ordinary scalar bindings without inherited
+integer/nameref attributes, `lastpipe` disabled, trusted executable resolution,
+no unmodeled aliases/functions/startup hooks, and stable repository mappings
+during check and execution. Known source changes to these assumptions are
+unresolved. Executable identity, Git configuration/hooks, application internals,
+concurrent filesystem replacement, and the actual harness execution environment
+are not proved by an AST. Stronger containment requires runtime
 filesystem/process policy. Native `exec_command`/`shell_command` inputs require
 an explicit supported shell; native Bash also requires `login:false`. Native
 `workdir` is the execution cwd, resolved against the caller's base cwd;
@@ -93,6 +119,21 @@ conflicting command fields are unresolved. The normalized name `Bash` alone does
 not establish a native command's dialect. `CAWS_BIN` and the pin environment are
 trusted launcher configuration; validating a response schema does not
 authenticate a malicious replacement CLI.
+
+The assumptions have different evidence:
+
+| Dependency                                                                                      | Status and decisive check                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Submitted expansions remain inert during analysis.                                              | Established for the exercised corpus by compiled-consumer, installed-handler and packaged sentinel checks; unsupported syntax stays unresolved.                                                       |
+| Git discovery matches the pin's reciprocal metadata.                                            | Established for real linked-worktree, unmapped, forged, nested-foreign and source-visible mapping-change fixtures; concurrent replacement remains outside the host contract.                          |
+| Argument roles distinguish options from data.                                                   | Established only for the declared closed profiles and paired fixtures. Unknown options are unresolved; `uniq`'s second operand is an output, and ripgrep decompression is outside the reader profile. |
+| Bash startup state, executable identity and repository configuration satisfy the host contract. | Assumed, not established by source analysis. Native adoption must verify or enforce these properties.                                                                                                 |
+| The actual executor receives the checked command and cwd.                                       | Unverified across the full native hook chain; later command transformations require rechecking or binding to the final invocation.                                                                    |
+
+Git subcommand options use closed argument-role profiles. An option such as
+`--grep` consumes its data operand; identical bytes in an executable option
+position receive a different result. Unmodeled options, including output-file
+options and arbitrary formatting languages, remain unresolved.
 
 These boundaries determine the main failure modes:
 
@@ -112,6 +153,14 @@ examples that distinguish a correct interpretation from a plausible incorrect
 one.
 
 ## Verification and adoption
+
+Native adoption must bind the decision to the final effective command and cwd.
+The shared `quiet-merge.sh` interceptor follows blocking guards and can prepend
+a canonical-root `cd`. A decision about its input cannot authorize that changed
+invocation. Full-chain validation or rechecking after transformations is an
+adoption prerequisite; direct installed-handler tests establish only the payload
+boundary they exercise. The guard remains opt-in while that integration is
+unverified.
 
 `tests/shell/command-analysis.test.js` drives the compiled consumer over stdin
 and checks decisions, deterministic traces, source spans and absent side

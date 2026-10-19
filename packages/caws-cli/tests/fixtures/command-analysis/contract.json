@@ -1,113 +1,1024 @@
 [
-  {"id":"literal-read","command":"sed -n '1,40p' src/example.ts","decision":"allow"},
-  {"id":"cd-foreign-default-git","command":"cd '{{FOREIGN}}'; git status","decision":"deny"},
-  {"id":"cd-foreign-explicit-own-git","command":"D='{{OWN}}'; cd '{{FOREIGN}}'; git -C \"$D\" status","decision":"allow"},
-  {"id":"cd-scratch-default-git","command":"cd '{{SCRATCH}}'; git status","decision":"allow"},
-  {"id":"cd-subshell-does-not-leak","command":"(cd '{{FOREIGN}}'); git status","decision":"allow"},
-  {"id":"cd-pipeline-does-not-leak","command":"printf x | cd '{{FOREIGN}}'; git status","decision":"allow"},
-  {"id":"cd-updates-pwd-binding","command":"PWD='{{OWN}}'; cd '{{FOREIGN}}'; git -C \"$PWD\" status","decision":"unresolved"},
-  {"id":"cd-failure-cannot-repair-foreign","command":"cd '{{FOREIGN}}'; cd '{{OWN}}'; git status","decision":"deny"},
-  {"id":"cd-logical-parent","command":"cd '{{OWN}}/escape/..'; git status","decision":"unresolved"},
-  {"id":"cd-physical-parent","command":"cd -P '{{OWN}}/escape/..'; git status","decision":"deny"},
-  {"id":"cd-unknown","command":"cd \"$DIR\"; git status","decision":"unresolved"},
-  {"id":"git-common-relative-base","command":"GIT_COMMON_DIR=route git status","decision":"unresolved"},
-  {"id":"sed-last-address","command":"sed -n '$p' file","decision":"allow"},
-  {"id":"sed-expression-attached","command":"sed -n -e1p file","decision":"allow"},
-  {"id":"sed-expression-long","command":"sed -n --expression=1p file","decision":"allow"},
-  {"id":"sed-missing-script","command":"sed -n","decision":"unresolved"},
-  {"id":"sed-missing-expression","command":"sed -n -e","decision":"unresolved"},
-  {"id":"printf-variable-write","command":"printf -v D '%s' '{{FOREIGN}}'; git -C \"$D\" status","decision":"unresolved"},
-  {"id":"printf-format-write","command":"printf '%n' D","decision":"unresolved"},
-  {"id":"printf-unknown-format","command":"printf \"$FORMAT\" data","decision":"unresolved"},
-  {"id":"assignment-append","command":"D=one; D+=two; printf '%s' \"$D\"","decision":"unresolved"},
-  {"id":"assignment-array","command":"D=(one two); printf '%s' \"$D\"","decision":"unresolved"},
-  {"id":"read-destination-invalidates-binding","command":"D='{{FOREIGN}}'; read D; git -C \"$D\" status","decision":"unresolved"},
-  {"id":"pipeline-prefix","command":"! printf x","decision":"unresolved"},
-  {"id":"read-substitution-output-redirection","command":"printf '%s' \"$(printf x > file)\"","decision":"unresolved"},
-  {"id":"input-redirection","command":"cat < file","decision":"allow"},
-  {"id":"descriptor-redirection","command":"printf x 2>&1","decision":"allow"},
-  {"id":"unknown-redirection-target","command":"printf x > \"$FILE\"","decision":"unresolved"},
-  {"id":"background-command","command":"printf x &","decision":"unresolved"},
-  {"id":"finite-assignment-read","command":"FILE='src/a b.ts'; sed -n '1,40p' \"$FILE\"","decision":"allow"},
-  {"id":"finite-loop-read","command":"for FILE in 'src/a b.ts' src/c.ts; do sed -n '1,40p' \"$FILE\"; done","decision":"allow"},
-  {"id":"git-own-default","command":"git status --short","decision":"allow"},
-  {"id":"git-own-explicit","command":"git -C '{{OWN}}' status","decision":"allow"},
-  {"id":"git-scratch","command":"git -C '{{SCRATCH}}' status","decision":"allow"},
-  {"id":"git-final-c-overrides-foreign","command":"git -C '{{FOREIGN}}' -C '{{OWN}}' status","decision":"allow"},
-  {"id":"git-empty-c-preserves-own","command":"git -C '{{OWN}}' -C '' status","decision":"allow"},
-  {"id":"git-relative-c-own","command":"git -C '{{CANONICAL}}' -C .caws/worktrees/own status","decision":"allow"},
-  {"id":"prefix-expands-old-safe-executable","command":"G=printf; G=git \"$G\" '%s' data","decision":"allow"},
-  {"id":"subshell-binding-does-not-leak","command":"D='{{OWN}}'; (D='{{FOREIGN}}'); git -C \"$D\" status","decision":"allow"},
-  {"id":"pipeline-binding-does-not-leak","command":"D='{{OWN}}'; printf '%s' data | D='{{FOREIGN}}'; git -C \"$D\" status","decision":"allow"},
-  {"id":"literal-git-text-is-data","command":"printf '%s\\n' 'git -C {{FOREIGN}} status'","decision":"allow"},
-  {"id":"opaque-filename-after-options","command":"sed -n '1,40p' -- \"$FILE\"","decision":"allow"},
-  {"id":"opaque-cat-filename-after-options","command":"cat -- \"$FILE\"","decision":"allow"},
-  {"id":"lifecycle-destroy-outside","cwd":"canonical","command":"caws worktree destroy own","decision":"allow"},
-  {"id":"lifecycle-repoint-outside","cwd":"canonical","command":"caws worktree ensure next --spec EXAMPLE","decision":"allow"},
-  {"id":"nested-reader-data","command":"printf '%s' \"$(printf '%s' \"$(sed -n '1p' src/example.ts)\")\"","decision":"allow"},
-  {"id":"quoted-heredoc-data","command":"cat <<'DATA'\n$(git -C '{{FOREIGN}}' status)\nDATA","decision":"allow"},
-  {"id":"git-canonical","command":"git -C '{{CANONICAL}}' status","decision":"deny","reason":"foreign-git-target"},
-  {"id":"git-upload-pack-execution","command":"git fetch --upload-pack='git -C {{FOREIGN}} status' origin","decision":"deny","reason":"git-execution"},
-  {"id":"git-bisect-execution","command":"git bisect run sh -c 'git -C {{FOREIGN}} status'","decision":"deny"},
-  {"id":"rg-pre-execution","command":"rg --pre='sh script' pattern file","decision":"deny"},
-  {"id":"rg-option-looking-pattern-is-data","command":"rg -e '--pre=sh' file","decision":"allow"},
-  {"id":"rg-after-end-options-is-data","command":"rg -- '--pre=sh' file","decision":"allow"},
-  {"id":"rg-pattern-boundary-not-option-boundary","command":"rg -e -- \"$FILE\"","decision":"unresolved"},
-  {"id":"sort-compression-execution","command":"sort --compress-program='sh script' file","decision":"deny"},
-  {"id":"git-execution-word-is-data","command":"git add -- difftool --upload-pack=foo","decision":"allow"},
-  {"id":"git-foreign","command":"git -C '{{FOREIGN}}' status","decision":"deny","reason":"foreign-git-target"},
-  {"id":"git-final-c-foreign","command":"git -C '{{OWN}}' -C '{{FOREIGN}}' status","decision":"deny"},
-  {"id":"constant-executable-foreign","command":"G=git; \"$G\" -C '{{FOREIGN}}' status","decision":"deny"},
-  {"id":"prefix-expands-old-unsafe-executable","command":"G=git; G=printf \"$G\" -C '{{FOREIGN}}' status","decision":"deny"},
-  {"id":"prefix-expands-old-target","command":"D='{{FOREIGN}}'; D='{{OWN}}' git -C \"$D\" status","decision":"deny"},
-  {"id":"branch-retains-unsafe-alternative","command":"if test \"$FLAG\" = yes; then D='{{OWN}}'; else D='{{FOREIGN}}'; fi; git -C \"$D\" status","decision":"deny"},
-  {"id":"short-circuit-retains-unsafe-alternative","command":"D='{{OWN}}'; test -e marker && D='{{FOREIGN}}'; git -C \"$D\" status","decision":"deny"},
-  {"id":"subshell-cannot-sanitize-parent","command":"D='{{FOREIGN}}'; (D='{{OWN}}'); git -C \"$D\" status","decision":"deny"},
-  {"id":"pipeline-cannot-sanitize-parent","command":"D='{{FOREIGN}}'; printf '%s' data | read D; git -C \"$D\" status","decision":"deny"},
-  {"id":"nested-reader-foreign-git","command":"printf '%s' \"$(cat -- \"$(git -C '{{FOREIGN}}' status)\")\"","decision":"deny"},
-  {"id":"unicode-source-span","command":"printf '%s' 'λ'; git -C '{{FOREIGN}}' status","decision":"deny","traceCommands":["git -C '{{FOREIGN}}' status"]},
-  {"id":"command-wrapper-foreign","command":"command git -C '{{FOREIGN}}' status","decision":"deny"},
-  {"id":"env-wrapper-foreign","command":"env git -C '{{FOREIGN}}' status","decision":"deny"},
-  {"id":"git-dir-prefix-foreign","command":"GIT_DIR='{{CANONICAL}}' git status","decision":"deny"},
-  {"id":"git-relative-metadata-after-C","command":"git --git-dir=route -C '{{SCRATCH}}' status","decision":"deny"},
-  {"id":"git-dir-env-wrapper-foreign","command":"env GIT_DIR='{{CANONICAL}}' git status","decision":"deny"},
-  {"id":"symlink-parent-is-physical","command":"git -C '{{OWN}}/escape/..' status","decision":"deny"},
-  {"id":"sed-execution-command","command":"sed -n 'e touch {{MARKER}}' src/example.ts","decision":"deny","reason":"sed-execution"},
-  {"id":"sed-substitution-execution","command":"sed 's/input/output/e' src/example.ts","decision":"deny"},
-  {"id":"sed-execution-after-print","command":"sed -n '1p; e touch {{MARKER}}' src/example.ts","decision":"deny"},
-  {"id":"sed-address-e-is-data","command":"sed -n '/@custom:start/,/@custom:end/p' file","decision":"unresolved","reason":"sed-script-unsupported"},
-  {"id":"sed-replacement-e-is-data","command":"sed 's/receipt=//;s|/receipt.json||' file","decision":"unresolved","reason":"sed-script-unsupported"},
-  {"id":"sed-semicolon-e-is-data","command":"sed 's/;e touch marker/safe/' file","decision":"unresolved","reason":"sed-script-unsupported"},
-  {"id":"sed-escaped-delimiter-execution","command":"sed 's|in\\|put|out|ge' file","decision":"deny","reason":"sed-execution"},
-  {"id":"sed-unterminated-substitution","command":"sed 's/input/output' file","decision":"unresolved","reason":"sed-script-unsupported"},
-  {"id":"split-sed-option-execution","command":"P='-e 1e'; sed -n $P file","decision":"deny"},
-  {"id":"mixed-lifecycle-foreign","cwd":"canonical","command":"caws worktree destroy own; git -C '{{FOREIGN}}' status","decision":"deny"},
-  {"id":"expanding-heredoc-foreign","command":"cat <<DATA\n$(git -C '{{FOREIGN}}' status)\nDATA","decision":"deny"},
-  {"id":"opaque-sed-script","command":"sed \"$SCRIPT\" file","decision":"unresolved"},
-  {"id":"reader-output-as-script","command":"sed -n \"$(cat -- scripts)\" file","decision":"unresolved"},
-  {"id":"external-sed-script","command":"sed -n -f script file","decision":"unresolved"},
-  {"id":"unknown-filename-before-end-options","command":"sed -n '1p' \"$FILE\"","decision":"unresolved"},
-  {"id":"unknown-unquoted-filename","command":"cat -- $FILE","decision":"unresolved"},
-  {"id":"positional-spread","command":"cat -- \"$@\"","decision":"unresolved"},
-  {"id":"unknown-git-target","command":"git -C \"$TARGET\" status","decision":"unresolved"},
-  {"id":"unknown-executable","command":"\"$PROGRAM\" status","decision":"unresolved"},
-  {"id":"unknown-application","command":"application-without-a-profile --read-only","decision":"unresolved"},
-  {"id":"unmodeled-build-tool","command":"npm test","decision":"unresolved"},
-  {"id":"legacy-head-count","command":"F='src/example.ts'; sed -n 155,160p $F; echo ---; grep -n '^}' $F | head -12","decision":"allow"},
-  {"id":"legacy-tail-count","command":"tail -12 file","decision":"allow"},
-  {"id":"finite-loop-after-physical-cd","command":"cd -P '{{OWN}}'; for f in one two; do sed -n '20,36p' src/$f.ts | grep -n 'context'; echo \"-- $f context\"; sed -n '22,26p' src/$f.ts; done","decision":"allow"},
-  {"id":"ifs-change","command":"IFS=:; printf '%s' data","decision":"unresolved"},
-  {"id":"path-change","command":"PATH='{{SCRATCH}}'; git status","decision":"unresolved"},
-  {"id":"function-definition","command":"f() { printf '%s' data; }; f","decision":"unresolved"},
-  {"id":"process-substitution","command":"cat -- <(printf '%s' data)","decision":"unresolved"},
-  {"id":"malformed-quote","command":"printf '%s' 'unterminated","decision":"unresolved"},
-  {"id":"malformed-if","command":"if printf '%s' data; then","decision":"unresolved"},
-  {"id":"unsupported-shell","shell":"zsh","command":"printf '%s' data","decision":"unresolved"},
-  {"id":"byte-budget","command":"printf '%s' '{{PAYLOAD}}'","payload":{"value":"x","repeat":65537},"decision":"unresolved"},
-  {"id":"utf8-byte-budget","command":"printf '%s' '{{PAYLOAD}}'","payload":{"value":"€","repeat":22000},"decision":"unresolved"},
-  {"id":"loop-budget","command":"for FILE in {{PAYLOAD}}; do sed -n '1p' \"$FILE\"; done","payload":{"value":"src/a.ts ","repeat":33},"decision":"unresolved"},
-  {"id":"wrapper-budget","command":"{{PAYLOAD}}git status","payload":{"value":"command ","repeat":9},"decision":"unresolved"},
-  {"id":"substitution-depth-budget","nestedSubstitutions":18,"command":"unused","decision":"unresolved"},
-  {"id":"node-budget","command":"{{PAYLOAD}}","payload":{"value":"printf x; ","repeat":5000},"decision":"unresolved"},
-  {"id":"submission-is-never-executed","command":"printf '%s' \"$(touch '{{MARKER}}')\"","decision":"unresolved"}
+  { "id": "literal-read", "command": "sed -n '1,40p' src/example.ts", "decision": "allow" },
+  { "id": "cd-foreign-default-git", "command": "cd '{{FOREIGN}}'; git status", "decision": "deny" },
+  {
+    "id": "cd-foreign-explicit-own-git",
+    "command": "D='{{OWN}}'; cd '{{FOREIGN}}'; git -C \"$D\" status",
+    "decision": "allow"
+  },
+  {
+    "id": "cd-scratch-default-git",
+    "command": "cd '{{SCRATCH}}'; git status",
+    "decision": "allow"
+  },
+  {
+    "id": "cd-subshell-does-not-leak",
+    "command": "(cd '{{FOREIGN}}'); git status",
+    "decision": "allow"
+  },
+  {
+    "id": "cd-pipeline-does-not-leak",
+    "command": "printf x | cd '{{FOREIGN}}'; git status",
+    "decision": "allow"
+  },
+  {
+    "id": "cd-updates-pwd-binding",
+    "command": "PWD='{{OWN}}'; cd '{{FOREIGN}}'; git -C \"$PWD\" status",
+    "decision": "unresolved"
+  },
+  {
+    "id": "cd-failure-cannot-repair-foreign",
+    "command": "cd '{{FOREIGN}}'; cd '{{OWN}}'; git status",
+    "decision": "deny"
+  },
+  {
+    "id": "cd-logical-parent",
+    "command": "cd '{{OWN}}/escape/..'; git status",
+    "decision": "unresolved"
+  },
+  {
+    "id": "cd-physical-parent",
+    "command": "cd -P '{{OWN}}/escape/..'; git status",
+    "decision": "deny"
+  },
+  { "id": "cd-unknown", "command": "cd \"$DIR\"; git status", "decision": "unresolved" },
+  {
+    "id": "git-common-relative-base",
+    "command": "GIT_COMMON_DIR=route git status",
+    "decision": "unresolved"
+  },
+  { "id": "sed-last-address", "command": "sed -n '$p' file", "decision": "allow" },
+  { "id": "sed-expression-attached", "command": "sed -n -e1p file", "decision": "allow" },
+  { "id": "sed-expression-long", "command": "sed -n --expression=1p file", "decision": "allow" },
+  { "id": "sed-missing-script", "command": "sed -n", "decision": "unresolved" },
+  { "id": "sed-missing-expression", "command": "sed -n -e", "decision": "unresolved" },
+  {
+    "id": "printf-variable-write",
+    "command": "printf -v D '%s' '{{FOREIGN}}'; git -C \"$D\" status",
+    "decision": "unresolved"
+  },
+  { "id": "printf-format-write", "command": "printf '%n' D", "decision": "unresolved" },
+  { "id": "printf-unknown-format", "command": "printf \"$FORMAT\" data", "decision": "unresolved" },
+  {
+    "id": "assignment-append",
+    "command": "D=one; D+=two; printf '%s' \"$D\"",
+    "decision": "unresolved"
+  },
+  {
+    "id": "assignment-array",
+    "command": "D=(one two); printf '%s' \"$D\"",
+    "decision": "unresolved"
+  },
+  {
+    "id": "read-destination-invalidates-binding",
+    "command": "D='{{FOREIGN}}'; read D; git -C \"$D\" status",
+    "decision": "unresolved"
+  },
+  { "id": "pipeline-prefix", "command": "! printf x", "decision": "unresolved" },
+  {
+    "id": "read-substitution-output-redirection",
+    "command": "printf '%s' \"$(printf x > file)\"",
+    "decision": "unresolved"
+  },
+  { "id": "input-redirection", "command": "cat < file", "decision": "allow" },
+  { "id": "descriptor-redirection", "command": "printf x 2>&1", "decision": "allow" },
+  {
+    "id": "unknown-redirection-target",
+    "command": "printf x > \"$FILE\"",
+    "decision": "unresolved"
+  },
+  { "id": "background-command", "command": "printf x &", "decision": "unresolved" },
+  {
+    "id": "finite-assignment-read",
+    "command": "FILE='src/a b.ts'; sed -n '1,40p' \"$FILE\"",
+    "decision": "allow"
+  },
+  {
+    "id": "finite-loop-read",
+    "command": "for FILE in 'src/a b.ts' src/c.ts; do sed -n '1,40p' \"$FILE\"; done",
+    "decision": "allow"
+  },
+  { "id": "git-own-default", "command": "git status --short", "decision": "allow" },
+  { "id": "git-own-explicit", "command": "git -C '{{OWN}}' status", "decision": "allow" },
+  { "id": "git-scratch", "command": "git -C '{{SCRATCH}}' status", "decision": "allow" },
+  {
+    "id": "git-final-c-overrides-foreign",
+    "command": "git -C '{{FOREIGN}}' -C '{{OWN}}' status",
+    "decision": "allow"
+  },
+  {
+    "id": "git-empty-c-preserves-own",
+    "command": "git -C '{{OWN}}' -C '' status",
+    "decision": "allow"
+  },
+  {
+    "id": "git-relative-c-own",
+    "command": "git -C '{{CANONICAL}}' -C .caws/worktrees/own status",
+    "decision": "allow"
+  },
+  {
+    "id": "prefix-expands-old-safe-executable",
+    "command": "G=printf; G=git \"$G\" '%s' data",
+    "decision": "allow"
+  },
+  {
+    "id": "subshell-binding-does-not-leak",
+    "command": "D='{{OWN}}'; (D='{{FOREIGN}}'); git -C \"$D\" status",
+    "decision": "allow"
+  },
+  {
+    "id": "pipeline-binding-does-not-leak",
+    "command": "D='{{OWN}}'; printf '%s' data | D='{{FOREIGN}}'; git -C \"$D\" status",
+    "decision": "allow"
+  },
+  {
+    "id": "literal-git-text-is-data",
+    "command": "printf '%s\\n' 'git -C {{FOREIGN}} status'",
+    "decision": "allow"
+  },
+  {
+    "id": "opaque-filename-after-options",
+    "command": "sed -n '1,40p' -- \"$FILE\"",
+    "decision": "allow"
+  },
+  { "id": "opaque-cat-filename-after-options", "command": "cat -- \"$FILE\"", "decision": "allow" },
+  {
+    "id": "lifecycle-destroy-outside",
+    "cwd": "canonical",
+    "command": "caws worktree destroy own",
+    "decision": "allow"
+  },
+  {
+    "id": "lifecycle-repoint-outside",
+    "cwd": "canonical",
+    "command": "caws worktree ensure next --spec EXAMPLE",
+    "decision": "allow"
+  },
+  {
+    "id": "nested-reader-data",
+    "command": "printf '%s' \"$(printf '%s' \"$(sed -n '1p' src/example.ts)\")\"",
+    "decision": "allow"
+  },
+  {
+    "id": "quoted-heredoc-data",
+    "command": "cat <<'DATA'\n$(git -C '{{FOREIGN}}' status)\nDATA",
+    "decision": "allow"
+  },
+  {
+    "id": "git-canonical",
+    "command": "git -C '{{CANONICAL}}' status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "git-upload-pack-execution",
+    "command": "git fetch --upload-pack='git -C {{FOREIGN}} status' origin",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-bisect-execution",
+    "command": "git bisect run sh -c 'git -C {{FOREIGN}} status'",
+    "decision": "deny"
+  },
+  { "id": "rg-pre-execution", "command": "rg --pre='sh script' pattern file", "decision": "deny" },
+  {
+    "id": "rg-option-looking-pattern-is-data",
+    "command": "rg -e '--pre=sh' file",
+    "decision": "allow"
+  },
+  { "id": "rg-after-end-options-is-data", "command": "rg -- '--pre=sh' file", "decision": "allow" },
+  {
+    "id": "rg-pattern-boundary-not-option-boundary",
+    "command": "rg -e -- \"$FILE\"",
+    "decision": "unresolved"
+  },
+  {
+    "id": "sort-compression-execution",
+    "command": "sort --compress-program='sh script' file",
+    "decision": "deny"
+  },
+  {
+    "id": "git-execution-word-is-data",
+    "command": "git add -- difftool --upload-pack=foo",
+    "decision": "allow"
+  },
+  {
+    "id": "git-foreign",
+    "command": "git -C '{{FOREIGN}}' status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "git-final-c-foreign",
+    "command": "git -C '{{OWN}}' -C '{{FOREIGN}}' status",
+    "decision": "deny"
+  },
+  {
+    "id": "constant-executable-foreign",
+    "command": "G=git; \"$G\" -C '{{FOREIGN}}' status",
+    "decision": "deny"
+  },
+  {
+    "id": "prefix-expands-old-unsafe-executable",
+    "command": "G=git; G=printf \"$G\" -C '{{FOREIGN}}' status",
+    "decision": "deny"
+  },
+  {
+    "id": "prefix-expands-old-target",
+    "command": "D='{{FOREIGN}}'; D='{{OWN}}' git -C \"$D\" status",
+    "decision": "deny"
+  },
+  {
+    "id": "branch-retains-unsafe-alternative",
+    "command": "if test \"$FLAG\" = yes; then D='{{OWN}}'; else D='{{FOREIGN}}'; fi; git -C \"$D\" status",
+    "decision": "deny"
+  },
+  {
+    "id": "short-circuit-retains-unsafe-alternative",
+    "command": "D='{{OWN}}'; test -e marker && D='{{FOREIGN}}'; git -C \"$D\" status",
+    "decision": "deny"
+  },
+  {
+    "id": "subshell-cannot-sanitize-parent",
+    "command": "D='{{FOREIGN}}'; (D='{{OWN}}'); git -C \"$D\" status",
+    "decision": "deny"
+  },
+  {
+    "id": "pipeline-cannot-sanitize-parent",
+    "command": "D='{{FOREIGN}}'; printf '%s' data | read D; git -C \"$D\" status",
+    "decision": "deny"
+  },
+  {
+    "id": "nested-reader-foreign-git",
+    "command": "printf '%s' \"$(cat -- \"$(git -C '{{FOREIGN}}' status)\")\"",
+    "decision": "deny"
+  },
+  {
+    "id": "unicode-source-span",
+    "command": "printf '%s' 'λ'; git -C '{{FOREIGN}}' status",
+    "decision": "deny",
+    "traceCommands": ["git -C '{{FOREIGN}}' status"]
+  },
+  {
+    "id": "command-wrapper-foreign",
+    "command": "command git -C '{{FOREIGN}}' status",
+    "decision": "deny"
+  },
+  { "id": "env-wrapper-foreign", "command": "env git -C '{{FOREIGN}}' status", "decision": "deny" },
+  {
+    "id": "git-dir-prefix-foreign",
+    "command": "GIT_DIR='{{CANONICAL}}' git status",
+    "decision": "deny"
+  },
+  {
+    "id": "git-relative-metadata-after-C",
+    "command": "git --git-dir=route -C '{{SCRATCH}}' status",
+    "decision": "deny"
+  },
+  {
+    "id": "git-dir-env-wrapper-foreign",
+    "command": "env GIT_DIR='{{CANONICAL}}' git status",
+    "decision": "deny"
+  },
+  {
+    "id": "symlink-parent-is-physical",
+    "command": "git -C '{{OWN}}/escape/..' status",
+    "decision": "deny"
+  },
+  {
+    "id": "sed-execution-command",
+    "command": "sed -n 'e touch {{MARKER}}' src/example.ts",
+    "decision": "deny",
+    "reason": "sed-execution"
+  },
+  {
+    "id": "sed-substitution-execution",
+    "command": "sed 's/input/output/e' src/example.ts",
+    "decision": "deny"
+  },
+  {
+    "id": "sed-execution-after-print",
+    "command": "sed -n '1p; e touch {{MARKER}}' src/example.ts",
+    "decision": "deny"
+  },
+  {
+    "id": "sed-address-e-is-data",
+    "command": "sed -n '/@custom:start/,/@custom:end/p' file",
+    "decision": "unresolved",
+    "reason": "sed-script-unsupported"
+  },
+  {
+    "id": "sed-replacement-e-is-data",
+    "command": "sed 's/receipt=//;s|/receipt.json||' file",
+    "decision": "unresolved",
+    "reason": "sed-script-unsupported"
+  },
+  {
+    "id": "sed-semicolon-e-is-data",
+    "command": "sed 's/;e touch marker/safe/' file",
+    "decision": "unresolved",
+    "reason": "sed-script-unsupported"
+  },
+  {
+    "id": "sed-escaped-delimiter-execution",
+    "command": "sed 's|in\\|put|out|ge' file",
+    "decision": "deny",
+    "reason": "sed-execution"
+  },
+  {
+    "id": "sed-unterminated-substitution",
+    "command": "sed 's/input/output' file",
+    "decision": "unresolved",
+    "reason": "sed-script-unsupported"
+  },
+  {
+    "id": "split-sed-option-execution",
+    "command": "P='-e 1e'; sed -n $P file",
+    "decision": "deny"
+  },
+  {
+    "id": "mixed-lifecycle-foreign",
+    "cwd": "canonical",
+    "command": "caws worktree destroy own; git -C '{{FOREIGN}}' status",
+    "decision": "deny"
+  },
+  {
+    "id": "expanding-heredoc-foreign",
+    "command": "cat <<DATA\n$(git -C '{{FOREIGN}}' status)\nDATA",
+    "decision": "deny"
+  },
+  { "id": "opaque-sed-script", "command": "sed \"$SCRIPT\" file", "decision": "unresolved" },
+  {
+    "id": "reader-output-as-script",
+    "command": "sed -n \"$(cat -- scripts)\" file",
+    "decision": "unresolved"
+  },
+  { "id": "external-sed-script", "command": "sed -n -f script file", "decision": "unresolved" },
+  {
+    "id": "unknown-filename-before-end-options",
+    "command": "sed -n '1p' \"$FILE\"",
+    "decision": "unresolved"
+  },
+  { "id": "unknown-unquoted-filename", "command": "cat -- $FILE", "decision": "unresolved" },
+  { "id": "positional-spread", "command": "cat -- \"$@\"", "decision": "unresolved" },
+  { "id": "unknown-git-target", "command": "git -C \"$TARGET\" status", "decision": "unresolved" },
+  { "id": "unknown-executable", "command": "\"$PROGRAM\" status", "decision": "unresolved" },
+  {
+    "id": "unknown-application",
+    "command": "application-without-a-profile --read-only",
+    "decision": "unresolved"
+  },
+  { "id": "unmodeled-build-tool", "command": "npm test", "decision": "unresolved" },
+  {
+    "id": "legacy-head-count",
+    "command": "F='src/example.ts'; sed -n 155,160p $F; echo ---; grep -n '^}' $F | head -12",
+    "decision": "allow"
+  },
+  { "id": "legacy-tail-count", "command": "tail -12 file", "decision": "allow" },
+  {
+    "id": "finite-loop-after-physical-cd",
+    "command": "cd -P '{{OWN}}'; for f in one two; do sed -n '20,36p' src/$f.ts | grep -n 'context'; echo \"-- $f context\"; sed -n '22,26p' src/$f.ts; done",
+    "decision": "allow"
+  },
+  { "id": "ifs-change", "command": "IFS=:; printf '%s' data", "decision": "unresolved" },
+  { "id": "path-change", "command": "PATH='{{SCRATCH}}'; git status", "decision": "unresolved" },
+  {
+    "id": "function-definition",
+    "command": "f() { printf '%s' data; }; f",
+    "decision": "unresolved"
+  },
+  {
+    "id": "process-substitution",
+    "command": "cat -- <(printf '%s' data)",
+    "decision": "unresolved"
+  },
+  {
+    "id": "malformed-quote",
+    "command": "printf '%s' 'unterminated",
+    "decision": "unresolved",
+    "reason": "parse-error"
+  },
+  {
+    "id": "malformed-if",
+    "command": "if printf '%s' data; then",
+    "decision": "unresolved",
+    "reason": "parse-error"
+  },
+  {
+    "id": "unsupported-shell",
+    "shell": "zsh",
+    "command": "printf '%s' data",
+    "decision": "unresolved"
+  },
+  {
+    "id": "byte-budget",
+    "command": "printf '%s' '{{PAYLOAD}}'",
+    "payload": { "value": "x", "repeat": 65537 },
+    "decision": "unresolved"
+  },
+  {
+    "id": "utf8-byte-budget",
+    "command": "printf '%s' '{{PAYLOAD}}'",
+    "payload": { "value": "€", "repeat": 22000 },
+    "decision": "unresolved"
+  },
+  {
+    "id": "loop-budget",
+    "command": "for FILE in {{PAYLOAD}}; do sed -n '1p' \"$FILE\"; done",
+    "payload": { "value": "src/a.ts ", "repeat": 33 },
+    "decision": "unresolved"
+  },
+  {
+    "id": "wrapper-budget",
+    "command": "{{PAYLOAD}}git status",
+    "payload": { "value": "command ", "repeat": 9 },
+    "decision": "unresolved"
+  },
+  {
+    "id": "substitution-depth-budget",
+    "nestedSubstitutions": 18,
+    "command": "unused",
+    "decision": "unresolved",
+    "reason": "analysis-budget"
+  },
+  {
+    "id": "node-budget",
+    "command": "{{PAYLOAD}}",
+    "payload": { "value": "printf x; ", "repeat": 5000 },
+    "decision": "unresolved",
+    "reason": "analysis-budget"
+  },
+  {
+    "id": "empty-source",
+    "command": "",
+    "decision": "unresolved",
+    "reason": "empty-command",
+    "reasonSource": ""
+  },
+  {
+    "id": "whitespace-source",
+    "command": " \t\n",
+    "decision": "unresolved",
+    "reason": "empty-command",
+    "reasonSource": " \t\n"
+  },
+  {
+    "id": "nul-source",
+    "command": "printf x\u0000",
+    "decision": "unresolved",
+    "reason": "source-budget",
+    "reasonSource": "printf x\u0000"
+  },
+  {
+    "id": "missing-cwd-context",
+    "cwdPath": "{{OWN}}/missing",
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "context-unresolved",
+    "reasonSource": "printf x"
+  },
+  {
+    "id": "missing-pin-context",
+    "worktreePath": "{{OWN}}/missing",
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "context-unresolved",
+    "reasonSource": "printf x"
+  },
+  {
+    "id": "unmarked-pin-context",
+    "worktree": "scratch",
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "context-unresolved"
+  },
+  {
+    "id": "byte-limit-inclusive",
+    "command": "printf '%s' '{{PAYLOAD}}'",
+    "payload": { "value": "x", "repeat": 65522 },
+    "bytes": 65536,
+    "decision": "allow"
+  },
+  {
+    "id": "byte-limit-exceeded",
+    "command": "printf '%s' '{{PAYLOAD}}'",
+    "payload": { "value": "x", "repeat": 65523 },
+    "bytes": 65537,
+    "decision": "unresolved",
+    "reason": "source-budget"
+  },
+  {
+    "id": "unmapped-git-pin",
+    "cwd": "unmapped",
+    "worktree": "unmapped",
+    "command": "git status",
+    "decision": "unresolved",
+    "reason": "git-mapping-unresolved"
+  },
+  {
+    "id": "forged-git-pin",
+    "cwd": "forged",
+    "worktree": "forged",
+    "command": "git status",
+    "decision": "unresolved",
+    "reason": "git-mapping-unresolved"
+  },
+  {
+    "id": "wrong-reciprocal-pin",
+    "cwd": "wrong_reciprocal",
+    "worktree": "wrong_reciprocal",
+    "command": "git status",
+    "decision": "unresolved",
+    "reason": "git-mapping-unresolved"
+  },
+  {
+    "id": "nested-foreign-discovery",
+    "command": "git -C nested status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "mapping-write",
+    "command": "printf 'gitdir: {{CANONICAL}}/.git\\n' > .git; git status",
+    "decision": "unresolved",
+    "reason": "repository-mapping-write"
+  },
+  {
+    "id": "mapping-symlink-write",
+    "command": "printf x > metadata-alias; git status",
+    "decision": "unresolved",
+    "reason": "repository-mapping-write"
+  },
+  {
+    "id": "write-invalidates-git-context",
+    "command": "printf x > file; git status",
+    "decision": "unresolved",
+    "reason": "git-context-changed"
+  },
+  {
+    "id": "discard-output-keeps-git-context",
+    "command": "printf x >/dev/null; git status",
+    "decision": "allow"
+  },
+  {
+    "id": "git-config-effects",
+    "command": "git config core.worktree '{{CANONICAL}}'; git status",
+    "decision": "unresolved",
+    "reason": "git-effects-unresolved"
+  },
+  {
+    "id": "test-variable-evaluation",
+    "command": "test -v 'BASH_VERSINFO[$(touch {{MARKER}})]'",
+    "decision": "unresolved",
+    "reason": "test-expression"
+  },
+  {
+    "id": "bracket-variable-evaluation",
+    "command": "[ -v 'BASH_VERSINFO[$(touch {{MARKER}})]' ]",
+    "decision": "unresolved",
+    "reason": "test-expression"
+  },
+  {
+    "id": "test-data-string",
+    "command": "test 'BASH_VERSINFO[$(touch {{MARKER}})]' = value",
+    "decision": "allow"
+  },
+  { "id": "test-literal-integer", "command": "test 12 -eq +12", "decision": "allow" },
+  {
+    "id": "test-opaque-integer",
+    "command": "test \"$VALUE\" -eq 12",
+    "decision": "unresolved",
+    "reason": "test-expression"
+  },
+  {
+    "id": "test-missing-bracket",
+    "command": "[ -e file",
+    "decision": "unresolved",
+    "reason": "test-expression"
+  },
+  {
+    "id": "brace-persistent-own",
+    "command": "D='{{FOREIGN}}'; { D='{{OWN}}'; }; git -C \"$D\" status",
+    "decision": "allow"
+  },
+  {
+    "id": "brace-persistent-foreign",
+    "command": "D='{{OWN}}'; { D='{{FOREIGN}}'; }; git -C \"$D\" status",
+    "decision": "deny",
+    "reason": "foreign-git-target",
+    "reasonSource": "git -C \"$D\" status"
+  },
+  {
+    "id": "loop-final-own",
+    "command": "for D in '{{FOREIGN}}' '{{OWN}}'; do printf x; done; git -C \"$D\" status",
+    "decision": "allow"
+  },
+  {
+    "id": "loop-final-foreign",
+    "command": "for D in '{{OWN}}' '{{FOREIGN}}'; do printf x; done; git -C \"$D\" status",
+    "decision": "deny",
+    "reason": "foreign-git-target",
+    "reasonSource": "git -C \"$D\" status"
+  },
+  {
+    "id": "loop-zero-preserves-state",
+    "command": "D='{{FOREIGN}}'; for D in; do D='{{OWN}}'; done; git -C \"$D\" status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "if-no-else-preserves-state",
+    "command": "D='{{FOREIGN}}'; if test \"$FLAG\" = yes; then D='{{OWN}}'; fi; git -C \"$D\" status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "elif-unsafe-only-branch",
+    "command": "if test \"$A\" = yes; then D='{{OWN}}'; elif test \"$B\" = yes; then D='{{FOREIGN}}'; else D='{{OWN}}'; fi; git -C \"$D\" status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "elif-condition-effects",
+    "command": "D='{{OWN}}'; if test \"$A\" = yes; then printf x; elif D='{{FOREIGN}}'; test \"$B\" = yes; then printf x; else printf x; fi; git -C \"$D\" status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "braced-parameter-own",
+    "command": "D='{{OWN}}'; git -C \"${D}\" status",
+    "decision": "allow"
+  },
+  {
+    "id": "braced-parameter-foreign",
+    "command": "D='{{FOREIGN}}'; git -C \"${D}\" status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  { "id": "empty-quoted-field", "command": "E=\"\"; git -C \"$E\" status", "decision": "allow" },
+  {
+    "id": "empty-unquoted-field",
+    "command": "E=\"\"; git -C $E '{{FOREIGN}}' status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "default-ifs-fields",
+    "command": "R='  -C\t{{FOREIGN}}\n'; git $R status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "glob-unknown",
+    "command": "P='*.ts'; cat -- $P",
+    "decision": "unresolved",
+    "reason": "pathname-expansion",
+    "reasonSource": "$P"
+  },
+  { "id": "glob-quoted-data", "command": "P='*.ts'; cat -- \"$P\"", "decision": "allow" },
+  {
+    "id": "parameter-default-unsupported",
+    "command": "cat -- \"${FILE:-safe}\"",
+    "decision": "unresolved",
+    "reason": "parameter-operation"
+  },
+  {
+    "id": "here-string-nested-foreign",
+    "command": "cat <<< \"$(git -C '{{FOREIGN}}' status)\"",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "here-string-literal-data",
+    "command": "cat <<< '$(git -C FOREIGN status)'",
+    "decision": "allow"
+  },
+  {
+    "id": "redirect-splits-fields",
+    "command": "P='a b'; cat < $P",
+    "decision": "unresolved",
+    "reason": "redirect-target"
+  },
+  { "id": "redirect-quoted-field", "command": "P='a b'; cat < \"$P\"", "decision": "allow" },
+  { "id": "here-string-does-not-split", "command": "P='a b'; cat <<< $P", "decision": "allow" },
+  {
+    "id": "deny-before-unknown",
+    "command": "git -C '{{FOREIGN}}' status; application-without-a-profile",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "unknown-before-deny",
+    "command": "application-without-a-profile; git -C '{{FOREIGN}}' status",
+    "decision": "deny",
+    "reason": "foreign-git-target"
+  },
+  {
+    "id": "middle-denial-span",
+    "command": "printf x; git -C '{{FOREIGN}}' status; printf y",
+    "decision": "deny",
+    "reason": "foreign-git-target",
+    "reasonSource": "git -C '{{FOREIGN}}' status"
+  },
+  {
+    "id": "tilde-unknown",
+    "command": "cat -- ~/src",
+    "decision": "unresolved",
+    "reason": "tilde-expansion"
+  },
+  { "id": "tilde-quoted-data", "command": "cat -- '~/src'", "decision": "allow" },
+  { "id": "tilde-trailing-data", "command": "cat -- src~", "decision": "allow" },
+  {
+    "id": "subshell-write-invalidates-context",
+    "command": "(printf x > file); git status",
+    "decision": "unresolved",
+    "reason": "git-context-changed"
+  },
+  {
+    "id": "pipeline-write-invalidates-context",
+    "command": "printf x > file | cat; git status",
+    "decision": "unresolved",
+    "reason": "git-context-changed"
+  },
+  {
+    "id": "subshell-lifecycle-invalidates-context",
+    "command": "(caws worktree destroy own); git status",
+    "decision": "unresolved",
+    "reason": "git-context-changed"
+  },
+  {
+    "id": "loop-boundary-32",
+    "command": "for F in {{PAYLOAD}}; do printf x; done",
+    "payload": { "value": "x ", "repeat": 32 },
+    "decision": "allow"
+  },
+  {
+    "id": "loop-unknown-list",
+    "command": "for F in \"$UNKNOWN\"; do printf x; done",
+    "decision": "unresolved",
+    "reason": "loop-budget"
+  },
+  {
+    "id": "loop-implicit-list",
+    "command": "for F; do printf x; done",
+    "decision": "unresolved",
+    "reason": "loop-input"
+  },
+  {
+    "id": "host-startup-effect",
+    "environment": { "BASH_ENV": "inert-startup-file" },
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "inherited-environment",
+    "reasonSource": "printf x"
+  },
+  {
+    "id": "host-other-shell-env",
+    "environment": { "ENV": "inert-startup-file" },
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "inherited-environment"
+  },
+  {
+    "id": "host-reader-config",
+    "environment": { "RIPGREP_CONFIG_PATH": "inert-config-file" },
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "inherited-environment"
+  },
+  {
+    "id": "host-glob-config",
+    "environment": { "GLOBIGNORE": "inert-pattern" },
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "inherited-environment"
+  },
+  {
+    "id": "host-cd-search",
+    "environment": { "CDPATH": "inert-search" },
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "inherited-environment"
+  },
+  {
+    "id": "host-profiled-function",
+    "environment": { "BASH_FUNC_git%%": "() { :; }" },
+    "command": "git status",
+    "decision": "unresolved",
+    "reason": "inherited-environment"
+  },
+  {
+    "id": "host-unrelated-function",
+    "environment": { "BASH_FUNC_prefixgit%%": "() { :; }" },
+    "command": "git status",
+    "decision": "allow"
+  },
+  {
+    "id": "host-lastpipe",
+    "environment": { "BASHOPTS": "braceexpand:lastpipe:hashall" },
+    "command": "printf x | cat",
+    "decision": "unresolved",
+    "reason": "inherited-environment"
+  },
+  {
+    "id": "host-no-lastpipe",
+    "environment": { "BASHOPTS": "braceexpand:hashall" },
+    "command": "printf x | cat",
+    "decision": "allow"
+  },
+  { "id": "descriptor-multidigit", "command": "printf x 2>&12", "decision": "allow" },
+  { "id": "descriptor-close", "command": "cat 0<&-", "decision": "allow" },
+  {
+    "id": "descriptor-prefix-invalid",
+    "command": "printf x 2>&'x1'",
+    "decision": "unresolved",
+    "reason": "redirect-descriptor"
+  },
+  {
+    "id": "descriptor-suffix-invalid",
+    "command": "printf x 2>&'1x'",
+    "decision": "unresolved",
+    "reason": "redirect-descriptor"
+  },
+  {
+    "id": "git-opaque-mixed",
+    "command": "git status \"$UNKNOWN\"",
+    "decision": "unresolved",
+    "reason": "git-unknown-argument"
+  },
+  {
+    "id": "git-fetch-upload-pack",
+    "command": "git fetch --upload-pack sh remote",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-pull-upload-pack",
+    "command": "git pull --upload-pack=sh remote",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-clone-upload-pack",
+    "command": "git clone --upload-pack=sh remote",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-remote-upload-pack",
+    "command": "git ls-remote --upload-pack=sh remote",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-push-receive-pack",
+    "command": "git push --receive-pack sh remote",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-push-exec",
+    "command": "git push --exec=sh remote",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-fetch-ext-transport",
+    "command": "git fetch 'ext::sh -c echo'",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-submodule-foreach",
+    "command": "git submodule foreach 'echo x'",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "git-unknown-effect-subcommand",
+    "command": "git submodule status",
+    "decision": "unresolved",
+    "reason": "git-effects-unresolved"
+  },
+  { "id": "git-log-option-looking-data", "command": "git log -- --ext-diff", "decision": "allow" },
+  {
+    "id": "git-log-execution-option",
+    "command": "git log --ext-diff",
+    "decision": "deny",
+    "reason": "git-execution"
+  },
+  {
+    "id": "reader-missing-option-data",
+    "command": "head -n",
+    "decision": "unresolved",
+    "reason": "reader-option"
+  },
+  {
+    "id": "reader-count-data",
+    "command": "head -n 12 file; tail -c 12 file; grep -f patterns -- file",
+    "decision": "allow"
+  },
+  { "id": "rg-exec-option-data", "command": "rg -e --pre=x -- file", "decision": "allow" },
+  {
+    "id": "rg-exec-option-separated",
+    "command": "rg --pre x -- file",
+    "decision": "deny",
+    "reason": "reader-execution"
+  },
+  {
+    "id": "sensitive-locale",
+    "command": "LC_CTYPE=C; printf x",
+    "decision": "unresolved",
+    "reason": "environment-change"
+  },
+  {
+    "id": "sensitive-git-config",
+    "command": "GIT_CONFIG_SYSTEM=file; printf x",
+    "decision": "unresolved",
+    "reason": "environment-change"
+  },
+  {
+    "id": "ordinary-path-lookalikes",
+    "command": "PREFIX_PATH=file; PATH_SUFFIX=file; printf x",
+    "decision": "allow"
+  },
+  {
+    "id": "wrapper-missing-command",
+    "command": "command",
+    "decision": "unresolved",
+    "reason": "executable-unknown"
+  },
+  {
+    "id": "env-missing-command",
+    "command": "env",
+    "decision": "unresolved",
+    "reason": "executable-unknown"
+  },
+  {
+    "id": "wrapper-explicit-boundary",
+    "command": "command -- env -- printf x",
+    "decision": "allow"
+  },
+  {
+    "id": "lifecycle-in-substitution",
+    "command": "printf '%s' \"$(caws worktree ensure next --spec ID)\"",
+    "decision": "unresolved",
+    "reason": "substitution-effects"
+  },
+  {
+    "id": "distinct-span-reasons",
+    "command": "git -C '{{FOREIGN}}' status; git -C '{{FOREIGN}}' status",
+    "decision": "deny",
+    "reasonOccurrences": {
+      "code": "foreign-git-target",
+      "source": "git -C '{{FOREIGN}}' status",
+      "count": 2
+    }
+  },
+  {
+    "id": "same-span-state-dedup",
+    "command": "if test \"$FLAG\" = yes; then D=a; else D=b; fi; git -C '{{FOREIGN}}' status",
+    "decision": "deny",
+    "reasonOccurrences": {
+      "code": "foreign-git-target",
+      "source": "git -C '{{FOREIGN}}' status",
+      "count": 1
+    }
+  },
+  {
+    "id": "distinct-host-assumptions",
+    "environment": { "CDPATH": "inert", "RIPGREP_CONFIG_PATH": "inert" },
+    "command": "printf x",
+    "decision": "unresolved",
+    "reason": "inherited-environment",
+    "reasonNames": ["CDPATH", "RIPGREP_CONFIG_PATH"]
+  },
+  {
+    "id": "states-boundary-32",
+    "command": "if test \"$F\" = y; then A=a; else A=b; fi; if test \"$F\" = y; then B=a; else B=b; fi; if test \"$F\" = y; then C=a; else C=b; fi; if test \"$F\" = y; then D=a; else D=b; fi; if test \"$F\" = y; then E=a; else E=b; fi; printf x",
+    "decision": "allow"
+  },
+  {
+    "id": "states-boundary-exceeded",
+    "command": "if test \"$F\" = y; then A=a; else A=b; fi; if test \"$F\" = y; then B=a; else B=b; fi; if test \"$F\" = y; then C=a; else C=b; fi; if test \"$F\" = y; then D=a; else D=b; fi; if test \"$F\" = y; then E=a; else E=b; fi; if test \"$F\" = y; then F=a; else F=b; fi; printf x",
+    "decision": "unresolved",
+    "reason": "state-budget"
+  },
+  {
+    "id": "states-dedup-before-budget",
+    "command": "if test \"$F\" = y; then A=a; else A=a; fi; if test \"$F\" = y; then B=a; else B=a; fi; if test \"$F\" = y; then C=a; else C=a; fi; if test \"$F\" = y; then D=a; else D=a; fi; if test \"$F\" = y; then E=a; else E=a; fi; if test \"$F\" = y; then F=a; else F=a; fi; printf x",
+    "decision": "allow"
+  },
+  {
+    "id": "discovery-budget",
+    "command": "for D in context0 context1 context2 context3 context4 context5 context6 context7 context8; do git -C \"$D\" status; done",
+    "decision": "unresolved",
+    "reason": "git-discovery-budget"
+  },
+  {
+    "id": "submission-is-never-executed",
+    "command": "printf '%s' \"$(touch '{{MARKER}}')\"",
+    "decision": "unresolved"
+  }
 ]

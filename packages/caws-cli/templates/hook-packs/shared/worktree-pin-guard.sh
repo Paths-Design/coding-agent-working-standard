@@ -69,7 +69,12 @@ emit_block() {
   local why="$1"
   echo "[worktree-pin-guard] BLOCKED: $why" >&2
   echo "  This session is isolated in the worktree $PIN_DIR." >&2
-  echo "  Re-run the command from $PIN_DIR." >&2
+  if [[ "${2:-}" == "boundary" ]]; then
+    echo "  Re-run the command from $PIN_DIR." >&2
+  else
+    echo "  Inspect the reason codes and source spans with caws hooks analyze --json." >&2
+    echo "  Unsupported behavior needs a supported invocation or a defined execution policy." >&2
+  fi
   echo "  Sanctioned exits: caws worktree merge|destroy <name> (end the isolation); caws worktree create|ensure (start a fresh lane)." >&2
   echo "  Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this." >&2
   exit 2
@@ -150,8 +155,13 @@ DETAILS=""
 [[ "$VALIDATED" == *$'\n'* ]] && DETAILS="${VALIDATED#*$'\n'}"
 case "$DECISION" in
   allow) exit 0 ;;
-  deny) emit_block "typed command analysis denied an operation outside the pinned worktree or an execution-bearing argument.
-$DETAILS" ;;
+  deny)
+    REMEDIATION=""
+    if [[ "$DETAILS" == *"outside-cwd ["* || "$DETAILS" == *"foreign-git-target ["* ]]; then
+      REMEDIATION="boundary"
+    fi
+    emit_block "typed command analysis denied this invocation.
+$DETAILS" "$REMEDIATION" ;;
   *) emit_block "UNRESOLVED: typed command analysis could not prove this command satisfies the worktree boundary.
 $DETAILS" ;;
 esac

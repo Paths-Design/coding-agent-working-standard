@@ -1,3 +1,5 @@
+import type { GitContextResolver } from './git-context';
+
 export interface AnalysisRequest {
   command: string;
   cwd: string;
@@ -28,6 +30,7 @@ export type Value = readonly string[] | null;
 export interface State {
   bindings: Map<string, Value>;
   cwd: string;
+  filesystemChanged?: boolean;
 }
 export interface Location {
   pos: number;
@@ -39,6 +42,7 @@ export interface AnalysisContext {
   canonical: string;
   outside: boolean;
   visits: number;
+  gitContext: GitContextResolver;
   reason: (node: Location, code: string, message: string, deny?: boolean) => void;
   trace: (node: Location, kind: string, detail: string) => void;
 }
