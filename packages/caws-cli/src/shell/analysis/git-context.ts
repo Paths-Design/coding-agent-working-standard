@@ -10,10 +10,17 @@ export interface GitContext {
   common: string;
   worktree: string | null;
 }
-export type GitContextResolver = (request: GitContextRequest) => GitContext | null;
+export type GitDiscoveryFailure =
+  | 'git-discovery-timeout'
+  | 'git-discovery-protocol'
+  | 'git-discovery-failed';
+export type GitContextResolver = (
+  request: GitContextRequest,
+  onFailure?: (failure: GitDiscoveryFailure) => void
+) => GitContext | null;
 
 /** Constant read-only Git query, never the submitted subcommand or shell source. */
-export const resolveGitContext: GitContextResolver = ({ cwd, overrides }) => {
+export const resolveGitContext: GitContextResolver = ({ cwd, overrides }, onFailure) => {
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))
   );
@@ -46,14 +53,22 @@ export const resolveGitContext: GitContextResolver = ({ cwd, overrides }) => {
       }
     );
     const lines = stdout.split('\n');
-    if (lines.pop() !== '' || lines.length !== 4 || lines[2] !== 'false') return null;
+    if (lines.pop() !== '' || lines.length !== 4 || lines[2] !== 'false') {
+      onFailure?.('git-discovery-protocol');
+      return null;
+    }
     return {
       directory: realpathSync.native(lines[0]!),
       common: realpathSync.native(lines[1]!),
       worktree: realpathSync.native(lines[3]!),
     };
-  } catch {
+  } catch (error) {
     // Bare repositories and unsupported Git versions are deliberately unresolved.
+    onFailure?.(
+      error !== null && typeof error === 'object' && 'code' in error && error.code === 'ETIMEDOUT'
+        ? 'git-discovery-timeout'
+        : 'git-discovery-failed'
+    );
     return null;
   }
 };

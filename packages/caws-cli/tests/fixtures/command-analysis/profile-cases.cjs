@@ -276,7 +276,7 @@ for (const [id, command, decision, reason] of [
   ['git-diff-output-option', 'git diff --output=file', 'unresolved', 'git-option-unmodeled'],
   ['git-log-format-extension', "git log --format='%(exec)'", 'unresolved', 'git-option-unmodeled'],
   ['git-log-missing-data', 'git log --grep', 'unresolved', 'git-option-unmodeled'],
-  ['git-grep-missing-data', 'git grep --regexp', 'unresolved', 'git-option-unmodeled'],
+  ['git-grep-missing-data', 'git grep -e', 'unresolved', 'git-option-unmodeled'],
   ['git-diff-missing-data', 'git diff --unified', 'unresolved', 'git-option-unmodeled'],
   ['git-commit-missing-data', 'git commit --message', 'unresolved', 'git-option-unmodeled'],
   [
@@ -287,6 +287,94 @@ for (const [id, command, decision, reason] of [
   ],
 ])
   add(id, command, decision, reason);
+
+for (const [id, command, decision, reason] of [
+  ['printf-percent-literal', "printf '%%'", 'allow'],
+  ['printf-percent-write-looking-data', "printf '%%n'", 'allow'],
+  ['printf-real-write-after-percent', "printf '%%%n' destination", 'unresolved', 'printf-format'],
+  ['printf-missing-conversion', "printf '%'", 'unresolved', 'printf-format'],
+  ['printf-format-is-not-data', "printf '%n' destination", 'unresolved', 'printf-format'],
+  ['printf-argument-is-data', "printf '%s' '%n'", 'allow'],
+])
+  add(id, command, decision, reason);
+
+for (const [id, command, decision] of [
+  ['concurrent-write-first', 'printf x > note | git status', 'unresolved'],
+  ['concurrent-write-last', 'git status | printf x > note', 'unresolved'],
+  ['concurrent-nested-write', '(printf x > note | cat) | git status', 'unresolved'],
+  ['concurrent-lifecycle', 'caws worktree create next | git status', 'unresolved'],
+  ['concurrent-reader', 'printf x | git status', 'allow'],
+  ['concurrent-write-looking-data', "printf '%s' 'printf x > note' | git status", 'allow'],
+  ['sequential-later-write', 'git status; printf x > note', 'allow'],
+])
+  add(id, command, decision, decision === 'unresolved' ? 'git-context-changed' : undefined);
+
+for (const [failure, fact] of [
+  ['git-discovery-timeout', '500 ms'],
+  ['git-discovery-protocol', 'protocol'],
+  ['git-discovery-failed', 'availability'],
+])
+  cases.push({
+    id: `external-${failure}`,
+    command: 'git status',
+    gitFailure: failure,
+    decision: 'unresolved',
+    reason: failure,
+    reasonIncludes: fact,
+  });
+
+for (const [id, command, decision, reason, reasonSource] of [
+  [
+    'redirect-only-effects',
+    '> note; git status',
+    'unresolved',
+    'git-context-changed',
+    'git status',
+  ],
+  [
+    'assignment-redirect-effects',
+    'D=ordinary > note; git status',
+    'unresolved',
+    'git-context-changed',
+    'git status',
+  ],
+  ['redirect-only-null', '> /dev/null; git status', 'allow'],
+  [
+    'redirect-compound-effects',
+    '{ printf x; } > note; git status',
+    'unresolved',
+    'git-context-changed',
+    'git status',
+  ],
+  ['redirect-compound-null', '{ printf x; } > /dev/null; git status', 'allow'],
+  ['backtick-plain-source-custody', 'printf \'%s\' "`printf x`"', 'allow'],
+  ['parameter-length', 'D=known; cat -- "${#D}"', 'unresolved', 'parameter-operation', '${#D}'],
+  [
+    'parameter-indirection',
+    'D=known; cat -- "${!D}"',
+    'unresolved',
+    'parameter-operation',
+    '${!D}',
+  ],
+  ['parameter-index', 'D=known; cat -- "${D[0]}"', 'unresolved', 'parameter-operation', '${D[0]}'],
+])
+  cases.push({
+    id: `profile-${id}`,
+    command,
+    decision,
+    ...(reason ? { reason, reasonSource } : {}),
+  });
+for (const [target, decision] of [
+  ['OWN', 'allow'],
+  ['FOREIGN', 'deny'],
+])
+  cases.push({
+    id: `inherited-git-worktree-${target}`,
+    command: 'git status',
+    environment: { GIT_WORK_TREE: `{{${target}}}` },
+    decision,
+    ...(decision === 'deny' ? { reason: 'foreign-git-target', reasonSource: 'git status' } : {}),
+  });
 
 for (const pin of ['SYMLINK_PIN', 'HARDLINK_PIN', 'LARGE_PIN']) {
   cases.push({
@@ -362,5 +450,176 @@ for (const [id, command, decision, reason] of [
   ['bracket-opaque-close', '[ -n x "$CLOSE"', 'unresolved', 'test-expression'],
 ])
   add(id, command, decision, reason);
+
+cases.push({
+  id: 'profile-backtick-decoded-source-custody',
+  command: "printf '%s' \"`printf '%s' '\\$HOME'`\"",
+  decision: 'unresolved',
+  reason: 'substitution-source',
+  reasonSource: "`printf '%s' '\\$HOME'`",
+});
+
+cases.find((item) => item.id === 'profile-backtick-plain-source-custody').traceCommands = [
+  'printf x',
+];
+
+for (const [id, redirect] of [
+  ['output', '{D}> /dev/null'],
+  ['input', '{D}< /dev/null'],
+  ['duplicate', '{D}>&1'],
+  ['close', '{D}>&-'],
+  ['here-string', '{D}<<<data'],
+  ['here-doc', "{D}<<'EOF'\ndata\nEOF\n"],
+])
+  cases.push({
+    id: 'named-fd-' + id,
+    command: 'D=printf; ' + redirect + (redirect.endsWith('\n') ? '' : '; ') + '"$D" status',
+    decision: 'unresolved',
+    reason: 'redirect-variable',
+    reasonSource: '{D}',
+  });
+cases.push({
+  id: 'named-fd-git-routing',
+  command: 'GIT_DIR=\'{{OWN_METADATA}}\'; {GIT_DIR}> /dev/null; git --git-dir="$GIT_DIR" status',
+  decision: 'unresolved',
+  reason: 'redirect-variable',
+  reasonSource: '{GIT_DIR}',
+});
+add('numeric-fd-preserves-binding', 'D=printf; 3>/dev/null; "$D" status');
+const temporaryPrefix = 'G=printf; G=git :; cd \'{{FOREIGN}}\'; "$G" status';
+for (const [id, environment, decision] of [
+  ['default', {}, 'allow'],
+  ['ordinary-options', { SHELLOPTS: 'braceexpand:hashall' }, 'allow'],
+  ['posix-options', { SHELLOPTS: 'braceexpand:posix:hashall' }, 'unresolved'],
+  ['keyword-options', { SHELLOPTS: 'braceexpand:keyword:hashall' }, 'unresolved'],
+  ['posix-variable', { POSIXLY_CORRECT: '1' }, 'unresolved'],
+  ['empty-posix-variable', { POSIXLY_CORRECT: '' }, 'unresolved'],
+])
+  cases.push({
+    id: 'assignment-mode-' + id,
+    command: temporaryPrefix,
+    environment,
+    decision,
+    ...(decision === 'unresolved'
+      ? { reason: 'inherited-environment', reasonSource: temporaryPrefix }
+      : {}),
+  });
+
+for (const [id, command, reason] of [
+  ['opaque-assignment-git-target', 'D=$(printf data); git -C "$D" status', 'git-unknown-argument'],
+  [
+    'branch-write-first',
+    'if test "$F" = y; then printf x > note; else :; fi; git status',
+    'git-context-changed',
+  ],
+  [
+    'branch-write-second',
+    'if test "$F" = y; then :; else printf x > note; fi; git status',
+    'git-context-changed',
+  ],
+  [
+    'read-implicit-reply',
+    'REPLY=\'{{OWN}}\'; read; git -C "$REPLY" status',
+    'git-unknown-argument',
+  ],
+  [
+    'cd-invalidates-oldpwd',
+    "OLDPWD='{{OWN}}'; cd '{{OWN}}'; git -C \"$OLDPWD\" status",
+    'git-unknown-argument',
+  ],
+])
+  add(id, command, 'unresolved', reason);
+
+add(
+  'embedded-bin-is-not-executable-path',
+  "p/bin/rintf '%s' data",
+  'unresolved',
+  'executable-path'
+);
+add('absolute-bin-printf', "/bin/printf '%s' data");
+add('absolute-usr-bin-printf', "/usr/bin/printf '%s' data");
+add('git-writer-substitution', 'cat -- "$(git add -- file)"', 'unresolved', 'substitution-effects');
+add('git-writer-ordinary', 'git add -- file');
+for (const invocation of [
+  'status',
+  'diff',
+  'log',
+  'show',
+  'rev-parse HEAD',
+  'ls-files',
+  'ls-tree HEAD',
+])
+  add('git-reader-substitution-' + invocation.split(' ')[0], 'cat -- "$(git ' + invocation + ')"');
+for (const [id, value, decision] of [
+  ['cat', 'cat', 'allow'],
+  ['empty', "''", 'allow'],
+  ['program', 'tool', 'unresolved'],
+  ['opaque', '"$VALUE"', 'unresolved'],
+])
+  add(
+    'git-pager-' + id,
+    'GIT_PAGER=' + value + ' git status',
+    decision,
+    decision === 'unresolved' ? 'git-environment' : undefined
+  );
+for (const [id, destination] of [
+  ['sensitive', 'PATH'],
+  ['hyphen', 'bad-name'],
+  ['digit', '9NAME'],
+  ['empty', "''"],
+  ['opaque', '"$NAME"'],
+])
+  add('read-destination-' + id, 'read ' + destination, 'unresolved', 'read-options');
+
+add('literal-unquoted-heredoc', 'cat <<EOF\nliteral\nEOF\n');
+add('empty-unquoted-heredoc', 'cat <<EOF\nEOF\n');
+add(
+  'binding-insertion-order-is-not-state',
+  Array.from({ length: 6 }, (_, i) => {
+    const a = 'A' + (i + 1),
+      b = 'B' + (i + 1);
+    return 'if test "$F" = y; then ' + a + '=a; ' + b + '=b; else ' + b + '=b; ' + a + '=a; fi;';
+  }).join(' ') + ' printf x'
+);
+add(
+  'negation-preserves-directory-change',
+  "! cd '{{FOREIGN}}'; git status",
+  'deny',
+  'foreign-git-target'
+);
+
+for (const [id, command, source] of [
+  ['argument-format-binding', 'D=printf; HOME=%n; printf D=~ D; "$D" status', 'D=~'],
+  [
+    'assignment-colon-format-binding',
+    'G=printf; HOME=%n; F=x:~; printf "$F" G; "$G" status',
+    'x:~',
+  ],
+  ['argument-colon', "printf '%s' D=x:~", 'D=x:~'],
+  ['mixed-leading', 'printf %s ~"$V"', '~"$V"'],
+  [
+    'git-routing',
+    'GIT_DIR=\'{{OWN_METADATA}}\'; HOME=%n; printf D=~ GIT_DIR; git --git-dir="$GIT_DIR" status',
+    'D=~',
+  ],
+])
+  cases.push({
+    id: 'tilde-' + id,
+    command,
+    decision: 'unresolved',
+    reason: 'tilde-expansion',
+    reasonSource: source,
+  });
+for (const [id, command] of [
+  ['quoted-assignment', "printf '%s' 'D=~'"],
+  ['quoted-value', "printf '%s' D='~'"],
+  ['quoted-colon-value', "F=x:'~'; printf '%s' \"$F\""],
+  ['escaped-value', "printf '%s' D=\\~"],
+  ['ordinary-colon-data', "printf '%s' x:~"],
+  ['second-equals-argument', "printf '%s' D=x=~"],
+  ['second-equals-assignment', 'D=x=~; printf \'%s\' "$D"'],
+  ['expanded-tilde-data', "D='~'; printf '%s' \"$D\""],
+])
+  add('tilde-data-' + id, command);
 
 module.exports = cases;

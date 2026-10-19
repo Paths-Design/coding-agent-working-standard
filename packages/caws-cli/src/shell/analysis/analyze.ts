@@ -78,6 +78,7 @@ export async function analyzeCommand(
     canonical,
     outside: !inside(cwd, worktree),
     visits: 0,
+    gitInvocations: [],
     gitContext: (input) => {
       const key = JSON.stringify([input.cwd, Object.entries(input.overrides).sort()]);
       if (gitContexts.has(key)) return gitContexts.get(key)!;
@@ -89,7 +90,17 @@ export async function analyzeCommand(
         );
         return null;
       }
-      const context = (dependencies.gitContext ?? resolveGitContext)(input);
+      const context = (dependencies.gitContext ?? resolveGitContext)(input, (failure) =>
+        reason(
+          whole,
+          failure,
+          failure === 'git-discovery-timeout'
+            ? 'Read-only Git discovery exceeded its 500 ms budget; inspect host load and retry.'
+            : failure === 'git-discovery-protocol'
+              ? 'Read-only Git discovery returned an unsupported protocol or repository kind.'
+              : 'Read-only Git discovery failed; inspect Git availability and repository paths.'
+        )
+      );
       gitContexts.set(key, context);
       return context;
     },
@@ -112,7 +123,14 @@ export async function analyzeCommand(
     if (
       value !== undefined &&
       (/^(?:GIT_|BASH_FUNC_)/.test(name) ||
-        ['BASH_ENV', 'ENV', 'RIPGREP_CONFIG_PATH', 'GLOBIGNORE', 'CDPATH'].includes(name))
+        [
+          'BASH_ENV',
+          'ENV',
+          'RIPGREP_CONFIG_PATH',
+          'GLOBIGNORE',
+          'CDPATH',
+          'POSIXLY_CORRECT',
+        ].includes(name))
     ) {
       initial.bindings.set(name, [value]);
       if (!name.startsWith('GIT_'))
@@ -123,6 +141,15 @@ export async function analyzeCommand(
         whole,
         'inherited-environment',
         'Bash lastpipe conflicts with the declared pipeline-state model.'
+      );
+    if (
+      name === 'SHELLOPTS' &&
+      value?.split(':').some((option) => ['posix', 'keyword'].includes(option))
+    )
+      reason(
+        whole,
+        'inherited-environment',
+        'Inherited SHELLOPTS enables an unsupported assignment mode (posix or keyword).'
       );
   }
 
@@ -197,6 +224,14 @@ export async function analyzeCommand(
     return next;
   }
   function redirect(node: Redirection, state: State, reader: boolean, depth: number): void {
+    if (node.descriptor?.type === 'FileDescriptorVariable') {
+      reason(
+        node.descriptor,
+        'redirect-variable',
+        'Named file descriptor allocation or closure is outside the admitted binding model.'
+      );
+      return;
+    }
     if (node.type === 'HereDoc') {
       if (!node.delimiter) reason(node, 'heredoc-delimiter', 'Here-document delimiter is missing.');
       if (!node.delimiter?.quoted && node.body.parts?.length) {
@@ -358,11 +393,21 @@ export async function analyzeCommand(
         if (node.prefixes.length)
           reason(node, 'pipeline-prefix', 'Pipeline prefixes are outside the admitted subset.');
         if (node.commands.length === 1) return walk(node.commands[0]!, state, reader, depth + 1);
+        const firstGit = ctx.gitInvocations.length;
         let filesystemChanged = state.filesystemChanged === true;
         for (const next of node.commands) {
           const outputs = walk(next, clone(state), reader, depth + 1);
           filesystemChanged ||= outputs.some((item) => item.filesystemChanged === true);
         }
+        // Pipeline members run concurrently. A sibling's effects invalidate
+        // every Git mapping observation in this pipeline, in either order.
+        if (filesystemChanged)
+          for (const invocation of ctx.gitInvocations.slice(firstGit))
+            reason(
+              invocation,
+              'git-context-changed',
+              'Concurrent pipeline effects invalidate the filesystem context used for Git admission.'
+            );
         // Declared host contract: Bash lastpipe is disabled.
         return [{ ...state, filesystemChanged }];
       }

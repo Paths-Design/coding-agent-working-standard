@@ -2,6 +2,35 @@
 // does not currently originate. These are argv semantics, not runtime receipts.
 module.exports = [
   { id: 'union', source: '${V}', bindings: { V: ['a', 'b'] }, fields: [['a'], ['b']] },
+  { id: 'identifier-digits', source: '${A1}', bindings: { A1: ['a b'] }, fields: [['a', 'b']] },
+  { id: 'braced-quoted', source: '"${V}"', bindings: { V: ['a b'] }, fields: [['a b']] },
+  {
+    id: 'braced-opaque-assignment',
+    source: '${V}',
+    assignment: true,
+    bindings: {},
+    fields: [[null]],
+  },
+  {
+    id: 'default-assignment-mode',
+    source: '$V',
+    omitAssignment: true,
+    bindings: { V: ['a b'] },
+    fields: [['a', 'b']],
+  },
+  ...['${#V}', '$((1+2))'].flatMap((source) =>
+    [false, true, 'assignment'].map((mode) => ({
+      id: 'opaque-shape-' + source + '-' + mode,
+      source: mode === true ? '"' + source + '"' : source,
+      assignment: mode === 'assignment',
+      bindings: { V: ['text'] },
+      fields: [[null]],
+      reasons: [
+        source.startsWith('${') ? 'parameter-operation' : 'word-syntax',
+        ...(mode === false ? ['unknown-splitting'] : []),
+      ],
+    }))
+  ),
   {
     id: 'union-limit',
     source: '"$V"',

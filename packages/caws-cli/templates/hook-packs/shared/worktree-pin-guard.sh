@@ -71,6 +71,10 @@ emit_block() {
   echo "  This session is isolated in the worktree $PIN_DIR." >&2
   if [[ "${2:-}" == "boundary" ]]; then
     echo "  Re-run the command from $PIN_DIR." >&2
+  elif [[ "${2:-}" == "infrastructure" ]]; then
+    echo "  Check Git availability/version, repository paths and host load; retry discovery." >&2
+  elif [[ "${2:-}" == "environment" ]]; then
+    echo "  Use the declared Bash mode and startup environment before retrying analysis." >&2
   else
     echo "  Inspect the reason codes and source spans with caws hooks analyze --json." >&2
     echo "  Unsupported behavior needs a supported invocation or a defined execution policy." >&2
@@ -143,25 +147,27 @@ try {
     }
   }
   if (result.decision !== "allow" && result.reasons.length === 0) throw Error();
-  process.stdout.write(result.decision);
+  if (result.decision === "allow" && result.reasons.length !== 0) throw Error();
+  const boundary = result.reasons.some(item => ["outside-cwd","foreign-git-target"].includes(item.code));
+  const environment = result.reasons.some(item => item.code === "inherited-environment");
+  const infrastructure = result.reasons.some(item => ["git-discovery-timeout","git-discovery-protocol","git-discovery-failed"].includes(item.code));
+  process.stdout.write(result.decision + "|" + (boundary ? "boundary" : environment ? "environment" : infrastructure ? "infrastructure" : ""));
   for (const item of result.reasons) process.stdout.write("\n  " + item.code + " [" + item.start + ":" + item.end + "]: " + JSON.stringify(item.message));
 } catch { process.exit(1); }
 ' "$ANALYSIS_STATUS" 2>/dev/null)"; then
   emit_block "UNRESOLVED: the command analyzer did not return a valid decision."
 fi
 
-DECISION="${VALIDATED%%$'\n'*}"
+HEADER="${VALIDATED%%$'\n'*}"
+DECISION="${HEADER%%|*}"
+REMEDIATION="${HEADER#*|}"
 DETAILS=""
 [[ "$VALIDATED" == *$'\n'* ]] && DETAILS="${VALIDATED#*$'\n'}"
 case "$DECISION" in
   allow) exit 0 ;;
   deny)
-    REMEDIATION=""
-    if [[ "$DETAILS" == *"outside-cwd ["* || "$DETAILS" == *"foreign-git-target ["* ]]; then
-      REMEDIATION="boundary"
-    fi
     emit_block "typed command analysis denied this invocation.
 $DETAILS" "$REMEDIATION" ;;
   *) emit_block "UNRESOLVED: typed command analysis could not prove this command satisfies the worktree boundary.
-$DETAILS" ;;
+$DETAILS" "$REMEDIATION" ;;
 esac

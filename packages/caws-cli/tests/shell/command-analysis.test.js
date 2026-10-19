@@ -6,6 +6,7 @@ const { spawnSync } = require('node:child_process');
 const corpus = [
   ...require('../fixtures/command-analysis/contract.json'),
   ...require('../fixtures/command-analysis/profile-cases.cjs'),
+  ...require('../fixtures/command-analysis/git-profile-cases.cjs'),
 ];
 const linkedRepository = require('../fixtures/command-analysis/git-fixture.cjs');
 const wordCases = require('../fixtures/command-analysis/abstract-words.cjs');
@@ -50,7 +51,7 @@ const gitContext = input => {
         if(!word) throw Error('Missing parsed component-domain word');
         const reasons=[];
         const context={reason:(_node,code)=>reasons.push(code)};
-        const fields=expandWord(word,{cwd:request.input.cwd,bindings:new Map(Object.entries(fixture.bindings))},context,()=>{throw Error('Unexpected producer in component-domain word');},0,fixture.assignment===true);
+        const fields=expandWord(word,{cwd:request.input.cwd,bindings:new Map(Object.entries(fixture.bindings))},context,()=>{throw Error('Unexpected producer in component-domain word');},0,...(fixture.omitAssignment ? [] : [fixture.assignment===true]));
         out.push({id:request.id, fields:fields.map(argv=>argv.map(arg=>arg.value)), reasons});
         continue;
       }
@@ -58,7 +59,8 @@ const gitContext = input => {
         out.push({id:request.id, context:resolveGitContext(request.contextQuery)});
         continue;
       }
-      out.push({id: request.id, activeMutant:process.env.__STRYKER_ACTIVE_MUTANT__ ?? '', first: await analyzeCommand(request.input,{gitContext}), repeated: await analyzeCommand(request.input,{gitContext})});
+      const resolver = request.gitFailure ? (_input, onFailure) => {onFailure(request.gitFailure); return null;} : gitContext;
+      out.push({id: request.id, activeMutant:process.env.__STRYKER_ACTIVE_MUTANT__ ?? '', first: await analyzeCommand(request.input,{gitContext:resolver}), repeated: await analyzeCommand(request.input,{gitContext:resolver})});
     } finally {
       for(const [key,value] of previous) { if(value === undefined) delete process.env[key]; else process.env[key]=value; }
     }
@@ -93,6 +95,10 @@ describe('bounded shell analysis contract', () => {
       locations.HARDLINK_PIN,
       locations.LARGE_PIN,
     ]);
+    locations.OWN_METADATA = fs
+      .readFileSync(path.join(locations.OWN, '.git'), 'utf8')
+      .trim()
+      .slice(8);
     fs.renameSync(
       path.join(locations.SYMLINK_PIN, '.git'),
       path.join(locations.SYMLINK_PIN, 'pointer')
@@ -142,7 +148,10 @@ describe('bounded shell analysis contract', () => {
       command = expand(command);
       return {
         id: fixture.id,
-        environment: fixture.environment,
+        environment: Object.fromEntries(
+          Object.entries(fixture.environment || {}).map(([key, value]) => [key, expand(value)])
+        ),
+        gitFailure: fixture.gitFailure,
         input: {
           command,
           cwd: fixture.cwdPath
@@ -208,6 +217,12 @@ describe('bounded shell analysis contract', () => {
     expect(actual.repeated).toEqual(actual.first);
     if (fixture.reason)
       expect(actual.first.reasons.map((item) => item.code)).toContain(fixture.reason);
+    if (fixture.reasonIncludes)
+      expect(
+        actual.first.reasons
+          .filter((item) => item.code === fixture.reason)
+          .some((item) => item.message.includes(fixture.reasonIncludes))
+      ).toBe(true);
     if (fixture.reasonSource !== undefined)
       expect(
         actual.first.reasons

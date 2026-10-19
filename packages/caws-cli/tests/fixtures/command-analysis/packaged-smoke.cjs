@@ -36,6 +36,8 @@ try {
     );
   const tarball = path.join(root, metadata.filename),
     prefix = path.join(root, 'installed');
+  const tarballSha256 = crypto.createHash('sha256').update(fs.readFileSync(tarball)).digest('hex');
+  console.log(JSON.stringify({ phase: 'packed', tarballSha256 }));
   const installed = run(
     'npm',
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefix', prefix, tarball],
@@ -80,7 +82,36 @@ try {
   const benign = analyze("P='src/a b.ts'; sed -n '1,40p' \"$P\"");
   assert.equal(benign.status, 0);
   assert.equal(benign.decision, 'allow');
-  assert.equal(analyze('git status').decision, 'allow');
+  const ownGit = analyze('git status');
+  if (ownGit.decision !== 'allow') {
+    const query = run(
+      'git',
+      [
+        '--no-pager',
+        '-C',
+        own,
+        'rev-parse',
+        '--path-format=absolute',
+        '--absolute-git-dir',
+        '--git-common-dir',
+        '--is-bare-repository',
+        '--show-toplevel',
+      ],
+      {
+        env: {
+          ...Object.fromEntries(
+            Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))
+          ),
+          HOME: home,
+          CAWS_HOME: path.join(home, '.caws'),
+          GIT_OPTIONAL_LOCKS: '0',
+          GIT_TERMINAL_PROMPT: '0',
+          GIT_PAGER: 'cat',
+        },
+      }
+    );
+    assert.equal(ownGit.decision, 'allow', JSON.stringify({ ownGit, query }));
+  }
   const hostile = analyze(`git -C '${foreign}' status`);
   assert.equal(hostile.status, 1);
   assert.equal(hostile.decision, 'deny');
@@ -90,7 +121,7 @@ try {
   assert.equal(fs.existsSync(marker), false);
   console.log(
     JSON.stringify({
-      tarballSha256: crypto.createHash('sha256').update(fs.readFileSync(tarball)).digest('hex'),
+      tarballSha256,
       parserVersion: parser.version,
       loaderShipped: true,
       consumerDocsShipped: true,

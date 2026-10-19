@@ -56,6 +56,7 @@ function gitPolicy(
   node: Location,
   reader: boolean
 ): void {
+  ctx.gitInvocations.push(node);
   const ownMetadata = pinnedMetadata(ctx.worktree, ctx.canonical);
   if (!ownMetadata)
     ctx.reason(
@@ -157,20 +158,20 @@ function gitPolicy(
     show: [],
     diff: ['-U', '--unified'],
     commit: ['-m', '--message', '-F', '--file'],
-    grep: ['-e', '--regexp', '-f', '--file'],
+    grep: ['-e', '-f'],
   };
   const diffFlags =
-    /^(?:-[pqsw]|-U[0-9]+|--(?:stat|numstat|shortstat|name-only|name-status|check|raw|patch|no-patch|quiet|exit-code|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+))$/;
+    /^(?:-[psw]|-U[0-9]+|--(?:stat|numstat|shortstat|name-only|name-status|check|raw|patch|no-patch|quiet|exit-code|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+))$/;
   const flags: Record<string, RegExp> = {
     status: /^(?:-[sbz]+|--(?:short|branch|porcelain(?:=v[12])?|ignored|untracked-files(?:=.*)?))$/,
     diff: diffFlags,
-    log: /^(?:-[pqsw]|-n[0-9]+|-U[0-9]+|--(?:oneline|graph|all|first-parent|no-merges|merges|no-walk|decorate(?:=.*)?|stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:max-count|grep|author|committer|since|until)=.*|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
-    show: /^(?:-[pqsw]|-U[0-9]+|--(?:stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
+    log: /^(?:-[psw]|-n[0-9]+|-U[0-9]+|--(?:oneline|graph|all|first-parent|no-merges|merges|no-walk|decorate(?:=.*)?|stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:max-count|grep|author|committer|since|until)=.*|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
+    show: /^(?:-[psw]|-U[0-9]+|--(?:stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
     'rev-parse':
       /^--(?:verify|quiet|short(?:=[0-9]+)?|abbrev-ref|symbolic-full-name|show-toplevel|show-prefix|show-cdup|git-dir|absolute-git-dir|git-common-dir|is-inside-work-tree|is-bare-repository)$/,
     'ls-files': /^(?:-[zsomcd]+|--(?:stage|others|exclude-standard|cached|modified|deleted))$/,
     'ls-tree': /^(?:-[rzl]+|--(?:name-only|long|full-tree))$/,
-    grep: /^(?:-[nliIvowcHEFrsa]+|--(?:line-number|files-with-matches|fixed-strings|extended-regexp|ignore-case|count|color(?:=.*)?|regexp=.*|file=.*))$/,
+    grep: /^(?:-[nliIvowcHEFra]+|--(?:line-number|files-with-matches|fixed-strings|extended-regexp|ignore-case|count|color(?:=.*)?))$/,
     add: /^(?:-[Aunv]+|--(?:all|update|dry-run|verbose))$/,
     commit:
       /^(?:-[aq]+|--(?:all|quiet|dry-run|allow-empty|signoff|no-gpg-sign|message=.*|file=.*))$/,
@@ -520,7 +521,7 @@ export function inspectInvocation(
       format === null ||
       format === undefined ||
       format.startsWith('-') ||
-      /%(?!%|[-+ #0]*[0-9.*]*[diouxXfFeEgGaAcsbq])/.test(format)
+      format.replace(/%%|%[-+ #0]*[0-9.*]*[diouxXfFeEgGaAcsbq]/g, '').includes('%')
     ) {
       ctx.reason(
         node,

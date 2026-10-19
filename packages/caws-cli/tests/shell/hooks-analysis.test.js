@@ -47,6 +47,13 @@ describe('hooks analyze public CLI', () => {
     expect(result.status).toBe(1);
     expect(result.decision).toBe('deny');
   });
+  test('missing Git is an infrastructure refusal, not an opaque source explanation', () => {
+    const result = run({ cwd: own, command: 'git status' }, [], {
+      PATH: path.join(root, 'missing-bin'),
+    });
+    expect(result.status).toBe(2);
+    expect(result.reasons.map((item) => item.code)).toContain('git-discovery-failed');
+  });
   test.each([undefined, null, 17, ''])('native cwd cannot fall back from %s', (cwd) => {
     const result = run({ tool_name: 'Bash', cwd, tool_input: { command: 'printf x' } });
     expect(result.decision).toBe('unresolved');

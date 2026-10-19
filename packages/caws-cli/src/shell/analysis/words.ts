@@ -18,6 +18,28 @@ export function expandWord(
   depth: number,
   assignment = false
 ): Argument[][] {
+  // Bash expands literal tilde prefixes before parameter expansion, including
+  // assignment-shaped command arguments and colon-separated assignment values.
+  // Inspect only unquoted literal source; quoted/escaped tildes remain data.
+  const assignmentShape = assignment || /^[A-Za-z_][A-Za-z_0-9]*=/.test(word.text);
+  const firstEquals = assignment ? -1 : word.text.indexOf('=');
+  const literals = word.parts?.filter((part) => part.type === 'Literal') ?? [word];
+  if (
+    word.text.startsWith('~') ||
+    (assignmentShape &&
+      literals.some((part) => {
+        for (
+          let index = part.text.indexOf('~');
+          index >= 0;
+          index = part.text.indexOf('~', index + 1)
+        ) {
+          const offset = part.pos - word.pos + index;
+          if (offset === firstEquals + 1 || word.text[offset - 1] === ':') return true;
+        }
+        return false;
+      }))
+  )
+    ctx.reason(word, 'tilde-expansion', 'Home-directory expansion is not modeled.');
   function parts(nodes: readonly WordPart[], quoted: boolean): Pieces[] {
     let acc: Pieces[] = [[]];
     for (const part of nodes) {
@@ -89,9 +111,6 @@ export function expandWord(
   const variants = word.parts?.length
     ? parts(word.parts, false)
     : [[{ text: word.value, split: false }]];
-  if (!word.parts?.length && word.text.startsWith('~')) {
-    ctx.reason(word, 'tilde-expansion', 'Home-directory expansion is not modeled.');
-  }
   return variants.map((pieces) => {
     const fields: Argument[] = [];
     let current = '';

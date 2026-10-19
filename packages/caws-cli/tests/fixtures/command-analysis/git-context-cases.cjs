@@ -21,7 +21,11 @@ try {
     calls.push({ file, args, options: otherOptions,
       gitKeys: Object.keys(env).filter(key => key.startsWith('GIT_')).sort(),
       environment: Object.fromEntries(facts.map(key => [key, env[key] ?? null])) });
-    if (scenario.failure) throw new Error('Controlled discovery failure');
+    if (scenario.failure) {
+      if (scenario.primitive === 'null') throw null;
+      if (scenario.primitive === 'string') throw 'Controlled primitive failure';
+      throw Object.assign(new Error('Controlled discovery failure'), {code: scenario.errorCode});
+    }
     return scenario.stdout;
   };
   const { resolveGitContext } = require(process.argv[1]);
@@ -29,9 +33,10 @@ try {
   for (scenario of payload.cases) {
     calls = [];
     const before = Object.entries(process.env).sort(([a], [b]) => a.localeCompare(b));
-    const value = resolveGitContext({ cwd: payload.cwd, overrides: scenario.overrides || {} });
+    const failures = [];
+    const value = resolveGitContext({ cwd: payload.cwd, overrides: scenario.overrides || {} }, code => failures.push(code));
     const after = Object.entries(process.env).sort(([a], [b]) => a.localeCompare(b));
-    output.push({ id: scenario.id, value, calls,
+    output.push({ id: scenario.id, value, calls, failures,
       environmentUnchanged: JSON.stringify(before) === JSON.stringify(after) });
   }
   process.stdout.write(JSON.stringify({
@@ -118,6 +123,28 @@ module.exports = function registerGitContextCases(compiledModulePath) {
         },
         { id: 'empty-directory-field', stdout: protocol(''), expected: null },
         { id: 'query-exception', failure: true, stdout: valid, expected: null },
+        {
+          id: 'query-timeout',
+          failure: true,
+          errorCode: 'ETIMEDOUT',
+          stdout: valid,
+          expected: null,
+        },
+        {
+          id: 'query-missing-git',
+          failure: true,
+          errorCode: 'ENOENT',
+          stdout: valid,
+          expected: null,
+        },
+        {
+          id: 'query-primitive',
+          failure: true,
+          primitive: 'string',
+          stdout: valid,
+          expected: null,
+        },
+        { id: 'query-null', failure: true, primitive: 'null', stdout: valid, expected: null },
       ];
       activeMutant = String(
         globalThis.__stryker__?.activeMutant ?? process.env.__STRYKER_ACTIVE_MUTANT__ ?? ''
@@ -179,10 +206,31 @@ module.exports = function registerGitContextCases(compiledModulePath) {
       'missing-worktree',
       'empty-directory-field',
       'query-exception',
+      'query-timeout',
+      'query-missing-git',
+      'query-primitive',
+      'query-null',
     ])('%s returns its independently specified context or refusal', (id) => {
       const fixture = cases.find((item) => item.id === id);
       const actual = results.get(id);
       expect(actual.value).toEqual(fixture.expected);
+      const pathFailure = [
+        'missing-directory',
+        'missing-common',
+        'missing-worktree',
+        'empty-directory-field',
+      ].includes(id);
+      expect(actual.failures).toEqual(
+        fixture.expected
+          ? []
+          : [
+              fixture.errorCode === 'ETIMEDOUT'
+                ? 'git-discovery-timeout'
+                : fixture.failure || pathFailure
+                  ? 'git-discovery-failed'
+                  : 'git-discovery-protocol',
+            ]
+      );
       expect(actual.calls).toHaveLength(1);
       expect(actual.environmentUnchanged).toBe(true);
       const call = actual.calls[0];

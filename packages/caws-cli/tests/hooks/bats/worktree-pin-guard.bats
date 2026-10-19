@@ -294,3 +294,56 @@ run_raw_pin_payload() {
   assert_output --partial 'source spans'
   refute_output --partial 'Re-run the command from'
 }
+
+@test "pin-guard: concurrent pipeline writes invalidate either Git position" {
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'printf x > note | git status'
+  assert_failure 2
+  assert_output --partial 'git-context-changed'
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'git status | printf x > note'
+  assert_failure 2
+  assert_output --partial 'git-context-changed'
+  [[ ! -e "$PIN_DIR/note" ]]
+}
+
+@test "pin-guard: contradictory allow response cannot discard its refusal reason" {
+  local fake="$CAWS_TEST_HOME/contradictory-analyzer"
+  cat > "$fake" <<'SCRIPT'
+#!/bin/sh
+printf '%s' '{"schema":"caws.hooks_analyze.v1","decision":"allow","reasons":[{"code":"utility-unsupported","message":"Unknown effect profile.","start":0,"end":3}],"trace":[]}'
+SCRIPT
+  chmod +x "$fake"
+  export CAWS_PIN_TEST_BIN="$fake"
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'git status'
+  assert_failure 2
+  assert_output --partial 'did not return a valid decision'
+}
+
+@test "pin-guard: discovery infrastructure gets a distinct remedy" {
+  local fake="$CAWS_TEST_HOME/discovery-analyzer"
+  cat > "$fake" <<'SCRIPT'
+#!/bin/sh
+printf '%s' '{"schema":"caws.hooks_analyze.v1","decision":"unresolved","reasons":[{"code":"git-discovery-timeout","message":"Discovery exceeded 500 ms.","start":0,"end":10}],"trace":[]}'
+exit 2
+SCRIPT
+  chmod +x "$fake"
+  export CAWS_PIN_TEST_BIN="$fake"
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'git status'
+  assert_failure 2
+  assert_output --partial 'host load'
+  refute_output --partial 'Unsupported behavior'
+}
+
+@test "pin-guard: inherited shell mode gets an environment remedy" {
+  export POSIXLY_CORRECT=1
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'G=printf; G=git :; "$G" status'
+  assert_failure 2
+  assert_output --partial 'inherited-environment'
+  assert_output --partial 'Bash mode'
+  [[ ! -e "$PIN_DIR/note" ]]
+}
+
+@test "pin-guard: named descriptor allocation cannot reuse a tracked executable" {
+  run_pin_guard "$PIN_DIR" "$PIN_DIR" 'D=printf; {D}> /dev/null; "$D" status'
+  assert_failure 2
+  assert_output --partial 'redirect-variable'
+}

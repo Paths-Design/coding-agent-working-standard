@@ -42,6 +42,7 @@ export interface AnalysisContext {
   canonical: string;
   outside: boolean;
   visits: number;
+  gitInvocations: Location[];
   gitContext: GitContextResolver;
   reason: (node: Location, code: string, message: string, deny?: boolean) => void;
   trace: (node: Location, kind: string, detail: string) => void;

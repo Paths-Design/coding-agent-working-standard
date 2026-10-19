@@ -105,20 +105,34 @@ metadata overrides are checked separately. A missing pinned directory releases
 the pin so a merged session can create its next lane.
 
 This is a source-level guard, not a process sandbox. Its load-bearing host
-contract is Bash with default IFS, ordinary scalar bindings without inherited
-integer/nameref attributes, `lastpipe` disabled, trusted executable resolution,
-no unmodeled aliases/functions/startup hooks, and stable repository mappings
-during check and execution. Known source changes to these assumptions are
-unresolved. Executable identity, Git configuration/hooks, application internals,
-concurrent filesystem replacement, and the actual harness execution environment
-are not proved by an AST. Stronger containment requires runtime
-filesystem/process policy. Native `exec_command`/`shell_command` inputs require
-an explicit supported shell; native Bash also requires `login:false`. Native
-`workdir` is the execution cwd, resolved against the caller's base cwd;
-conflicting command fields are unresolved. The normalized name `Bash` alone does
-not establish a native command's dialect. `CAWS_BIN` and the pin environment are
-trusted launcher configuration; validating a response schema does not
-authenticate a malicious replacement CLI.
+contract is non-POSIX Bash with its keyword option disabled, default IFS,
+ordinary scalar bindings without inherited integer/nameref attributes,
+`lastpipe` disabled, trusted executable resolution, no unmodeled
+aliases/functions/startup hooks, and stable repository mappings during check and
+execution. Known source changes to these assumptions are unresolved. Executable
+identity, Git configuration/hooks, application internals, concurrent filesystem
+replacement, and the actual harness execution environment are not proved by an
+AST. Stronger containment requires runtime filesystem/process policy. Native
+`exec_command`/`shell_command` inputs require an explicit supported shell;
+native Bash also requires `login:false`. Native `workdir` is the execution cwd,
+resolved against the caller's base cwd; conflicting command fields are
+unresolved. The normalized name `Bash` alone does not establish a native
+command's dialect. `CAWS_BIN` and the pin environment are trusted launcher
+configuration; validating a response schema does not authenticate a malicious
+replacement CLI. Known inherited POSIX/keyword settings are refused. Their
+assignment rules can change the executable or Git environment selected by later
+source. The
+[Bash mode contract](https://www.gnu.org/s/bash/manual/html_node/Bash-POSIX-Mode.html)
+and
+[environment rules](https://www.gnu.org/software/bash/manual/html_node/Environment.html)
+define that distinction. Named file descriptor allocations are unsupported
+because they mutate shell bindings independently of ordinary assignments.
+Unquoted tilde prefixes are unresolved in ordinary words, assignment values and
+assignment-shaped arguments. Bash expands them before parameter expansion,
+including after assignment colons; treating the resulting bytes as literal data
+can hide a state-changing `printf` format. Quoted and escaped tildes remain
+data. See the
+[Bash tilde rules](https://www.gnu.org/s/bash/manual/html_node/Tilde-Expansion.html).
 
 The assumptions have different evidence:
 
@@ -133,24 +147,31 @@ The assumptions have different evidence:
 Git subcommand options use closed argument-role profiles. An option such as
 `--grep` consumes its data operand; identical bytes in an executable option
 position receive a different result. Unmodeled options, including output-file
-options and arbitrary formatting languages, remain unresolved.
+options and arbitrary formatting languages, remain unresolved. Source-visible
+writes invalidate later Git observations across subshell and pipeline
+boundaries. Concurrent pipeline siblings invalidate each other's Git
+observations regardless of their textual order. Discovery timeouts, incompatible
+output and I/O failures have distinct reason codes and infrastructure remedies.
+They remain unresolved; simplifying shell source does not establish the missing
+repository fact.
 
 These boundaries determine the main failure modes:
 
 | Severity | Trigger and cost                                                                                                         | Disposition                                                                                                                    |
 | -------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | Critical | Executing expansion to learn argv performs the prohibited effect before authorization.                                   | Excluded: source parsing only; sentinel tests must remain inert.                                                               |
+| Critical | A later interceptor changes an admitted command or cwd, applying a decision to a different invocation.                   | Resolve before native activation: bind or recheck the final effective invocation.                                              |
 | High     | Losing prefix-assignment order, branch alternatives, quotes or nested producers can admit foreign Git or executable sed. | Resolve before adoption: hostile corpus and mutation controls.                                                                 |
 | High     | Host functions, configuration, symlink changes or another shell disagree with the model.                                 | Retained boundary: declare dialect and host assumptions; use runtime isolation for adversarial enforcement.                    |
 | High     | Malformed input, parser recovery, resource exhaustion or invalid CLI response becomes allow.                             | Resolve before adoption: explicit unresolved results and fail-closed installed-consumer tests.                                 |
 | Medium   | Expanding utility support with string heuristics accumulates exceptions that become hard to replace.                     | Add typed role profiles with paired benign/hostile fixtures; classification may prioritize work but cannot authorize commands. |
 | Medium   | A runtime upgrade reaches concurrent projects with a stale CLI.                                                          | Isolated package/runtime validation and rollback first; preserve ordered CLI, runtime, native setup.                           |
 
-The strongest objection is semantic disagreement with the real shell. A bounded
-subset plus explicit uncertainty is preferable to an expansion runner, but it
-does not remove that objection. Widening the subset requires independent
-examples that distinguish a correct interpretation from a plausible incorrect
-one.
+The strongest objection to native activation is the final execution binding: a
+later interceptor can change the checked invocation. Within the declared payload
+boundary, agreement between the model and the shell remains a host assumption.
+Widening the subset requires independent examples that distinguish a correct
+interpretation from a plausible incorrect one.
 
 ## Verification and adoption
 
