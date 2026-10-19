@@ -81,16 +81,19 @@ function propose() {
     if (mode === 'pipe-holder-wait') return setInterval(() => {}, 1000);
   }
   const proposal = {
-    schema: 'caws.runtime.proposal.v1',
+    schema: 'caws.runtime.proposal.v2',
     id: request.id,
     runtimeDigest: request.runtimeDigest,
     token,
     response: answer,
+    containment: null,
   };
   if (mode === 'outer-id') proposal.id += '-foreign';
   if (mode === 'outer-digest') proposal.runtimeDigest = 'b'.repeat(64);
   if (mode === 'proposal-token') proposal.token = 'invalid token';
   if (mode === 'proposal-extra') proposal.extra = true;
+  if (mode === 'proposal-missing-containment') delete proposal.containment;
+  if (mode === 'proposal-malformed-containment') { proposal.containment = {pid:1}; answer.result = {exitCode:2,stdoutBase64:Buffer.from('{\"decision\":\"block\",\"reason\":\"retained\"}\n').toString('base64'),stderrBase64:''}; }
   if (mode === 'late-post-proposal-hang')
     return setTimeout(
       () => emit(proposal),
@@ -127,11 +130,12 @@ function accept(frame) {
     if (mode === 'ready-missing-project') delete ready.projectDigest;
     if (mode === 'proposal-before-ready')
       return emit({
-        schema: 'caws.runtime.proposal.v1',
+        schema: 'caws.runtime.proposal.v2',
         id: request.id,
         runtimeDigest: request.runtimeDigest,
         token,
         response: response(),
+        containment: null,
       });
     return emit(ready);
   }
@@ -144,10 +148,10 @@ function accept(frame) {
     return propose();
   }
   if (
-    frame.schema !== 'caws.runtime.handoff.v1' ||
+    frame.schema !== 'caws.runtime.handoff.v2' ||
     frame.token !== token ||
     typeof frame.success !== 'boolean' ||
-    Object.keys(frame).sort().join(',') !== 'id,runtimeDigest,schema,success,token'
+    Object.keys(frame).sort().join(',') !== 'containment,id,runtimeDigest,schema,success,token'
   )
     throw new Error('native ACK');
   record('CAWS_NATIVE_TEST_EVENTS', frame);

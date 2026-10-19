@@ -323,6 +323,7 @@ fn hostile_response_and_uncertain_process_failure_refuse_without_retry() {
         "outer-digest",
         "proposal-token",
         "proposal-extra",
+        "proposal-missing-containment",
         "ready-twice",
         "failure",
         "crash",
@@ -886,7 +887,7 @@ fn output_backpressure_is_bounded_and_never_claims_consumer_receipt() {
         acknowledged
             .lines()
             .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
-            .any(|row| row["schema"] == "caws.runtime.handoff.v1" && row["success"] == true)
+            .any(|row| row["schema"] == "caws.runtime.handoff.v2" && row["success"] == true)
     );
     let fixture = Fixture::new();
     let mut child = fixture
@@ -919,7 +920,7 @@ fn output_backpressure_is_bounded_and_never_claims_consumer_receipt() {
         .collect();
     let handoff = events
         .iter()
-        .find(|row| row["schema"] == "caws.runtime.handoff.v1")
+        .find(|row| row["schema"] == "caws.runtime.handoff.v2")
         .expect("partial local delivery must produce a handoff outcome");
     assert_eq!(handoff["id"], fixture.requests()[0]["id"]);
     assert_eq!(handoff["runtimeDigest"], "a".repeat(64));
@@ -1006,4 +1007,320 @@ fn valid_null_and_regular_file_outputs_do_not_cancel_native_execution() {
             assert_eq!(fs::read(path).unwrap(), "native\n雪\0exact".as_bytes());
         }
     }
+}
+
+#[test]
+fn malformed_effect_preserves_known_refusal_and_never_enters_signal_path() {
+    let fixture = Fixture::new();
+    let output = execute(
+        fixture.command("proposal-malformed-containment", "pre_tool_use", "3000"),
+        b"{}".to_vec(),
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "{\"decision\":\"block\",\"reason\":\"retained\"}\n"
+    );
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("containment intent rejected")
+    );
+    let events = fs::read_to_string(fixture.dir.join("events.jsonl")).unwrap();
+    let ack = events
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .find(|row| row["schema"] == "caws.runtime.handoff.v2")
+        .unwrap();
+    assert_eq!(ack["containment"], serde_json::Value::Null);
+}
+
+/// Cleanup pins the native group with a direct, unreaped anchor child. It never
+/// infers a cleanup signal target from Codex, the test harness, or a stale PID.
+struct TerminalFixtureCleanup {
+    anchor: std::process::Child,
+    caller: Option<std::process::Child>,
+    sibling: Option<std::process::Child>,
+    root: PathBuf,
+}
+fn terminal_wait(
+    child: &mut std::process::Child,
+    budget: Duration,
+) -> Option<std::process::ExitStatus> {
+    let deadline = Instant::now() + budget;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status),
+            Err(_) => return None,
+            Ok(None) => (),
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+impl Drop for TerminalFixtureCleanup {
+    fn drop(&mut self) {
+        let _ = fs::write(self.root.join("stop-sibling"), b"stop");
+        if let Some(caller) = self.caller.as_mut()
+            && matches!(caller.try_wait(), Ok(None))
+        {
+            // A timeout/panic cannot become an accepted effect witness: this
+            // cleanup runs after the scenario has already failed its assertions.
+            let _ = fs::write(
+                self.root.join("caller-cleanup-fired.marker"),
+                b"external cleanup",
+            );
+            let _ = caller.kill();
+            let _ = terminal_wait(caller, Duration::from_millis(500));
+        }
+        match self.anchor.try_wait() {
+            Ok(None) => {
+                // SAFETY: this direct child created its own group. Do not reap
+                // it between group signals: its live/zombie PID pins the PGID.
+                unsafe {
+                    libc::kill(-(self.anchor.id() as i32), libc::SIGTERM);
+                }
+                thread::sleep(Duration::from_millis(700));
+                unsafe {
+                    libc::kill(-(self.anchor.id() as i32), libc::SIGKILL);
+                }
+                let _ = terminal_wait(&mut self.anchor, Duration::from_millis(500));
+            }
+            Ok(Some(_)) | Err(_) => {
+                let _ = fs::write(
+                    self.root.join("group-cleanup-unconfirmed.txt"),
+                    b"anchor already reaped or wait failed; no group signal",
+                );
+            }
+        }
+        if let Some(sibling) = self.sibling.as_mut()
+            && terminal_wait(sibling, Duration::from_millis(500)).is_none()
+            && matches!(sibling.try_wait(), Ok(None))
+        {
+            let _ = sibling.kill();
+            let _ = terminal_wait(sibling, Duration::from_millis(500));
+        }
+    }
+}
+
+#[test]
+fn terminal_output_loss_does_not_veto_earned_containment_or_borrow_another_process() {
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    // Always retain these effect artifacts, including successful scenarios.
+    let fixture = std::mem::ManuallyDrop::new(Fixture::new());
+    let caller_binary = fixture.dir.join("caws-fx-agent");
+    let compiler_output = fs::File::create(fixture.dir.join("fixture-compiler.log")).unwrap();
+    let mut compiler = Command::new("rustc")
+        .args([
+            "--edition=2024",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/terminal-caller.rs"
+            ),
+            "-o",
+        ])
+        .arg(&caller_binary)
+        .stdout(Stdio::from(compiler_output.try_clone().unwrap()))
+        .stderr(Stdio::from(compiler_output))
+        .spawn()
+        .unwrap();
+    let compile = terminal_wait(&mut compiler, Duration::from_secs(30));
+    if compile.is_none() && matches!(compiler.try_wait(), Ok(None)) {
+        let _ = compiler.kill();
+        let _ = terminal_wait(&mut compiler, Duration::from_millis(500));
+    }
+    assert!(
+        compile.is_some_and(|status| status.success()),
+        "fixture compilation failed; {}",
+        fixture.dir.display()
+    );
+    for mode in ["close-after-prefix", "full-unread"] {
+        let root = fixture.dir.join(mode);
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(root.join("budget-home")).unwrap();
+        fs::write(
+            root.join("input.bin"),
+            b"{\"session_id\":\"terminal-fixture\"}",
+        )
+        .unwrap();
+        let anchor = Command::new(&fixture.node)
+            .args(["-e", "setInterval(()=>{},1000)"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let mut cleanup = TerminalFixtureCleanup {
+            anchor,
+            caller: None,
+            sibling: None,
+            root: root.clone(),
+        };
+        cleanup.sibling = Some(Command::new(&fixture.node).args(["-e", r#"
+            const fs=require('node:fs'),p=process.env.CASE;
+            setInterval(()=>{if(fs.existsSync(p+'/stop-sibling'))process.exit(0);fs.appendFileSync(p+'/sibling-heartbeat.bin','x')},20);
+        "#]).env("CASE", &root).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap());
+        wait_for_file(&root.join("sibling-heartbeat.bin"));
+        let sibling_before = fs::metadata(root.join("sibling-heartbeat.bin"))
+            .unwrap()
+            .len();
+        let caller = Command::new(&caller_binary)
+            .env("TERMINAL_CASE_ROOT", &root)
+            .env("TERMINAL_OUTPUT_MODE", mode)
+            .env("TERMINAL_GROUP_ANCHOR", cleanup.anchor.id().to_string())
+            .env("TERMINAL_NATIVE", env!("CARGO_BIN_EXE_caws-native"))
+            .env(
+                "TERMINAL_ENGINE",
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/tests/fixtures/terminal-engine.cjs"
+                ),
+            )
+            .env("TERMINAL_NODE", &fixture.node)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(
+                fs::File::create(root.join("caller-stderr.bin")).unwrap(),
+            ))
+            .spawn()
+            .unwrap();
+        let caller_pid = caller.id();
+        cleanup.caller = Some(caller);
+        let started = Instant::now();
+        let status = terminal_wait(cleanup.caller.as_mut().unwrap(), Duration::from_secs(12));
+        // Assert before Drop: watchdog cleanup must never manufacture SIGTERM
+        // evidence accepted by this test.
+        assert!(
+            status.is_some(),
+            "caller watchdog: artifacts {}",
+            root.display()
+        );
+        let status = status.unwrap();
+        fs::write(root.join("caller-wait-status.json"), serde_json::to_vec_pretty(&serde_json::json!({"pid":caller_pid,"exit_code":status.code(),"signal":status.signal(),"elapsed_ms":started.elapsed().as_millis()})).unwrap()).unwrap();
+        assert_eq!(
+            status.signal(),
+            Some(libc::SIGTERM),
+            "actual caller did not receive earned SIGTERM; inspect {}",
+            root.display()
+        );
+        let ack: serde_json::Value =
+            serde_json::from_str(&wait_for_file(&root.join("handoff.json"))).unwrap();
+        let intent: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(root.join("intent.json")).unwrap()).unwrap();
+        assert_eq!(ack["schema"], "caws.runtime.handoff.v2");
+        assert_eq!(
+            ack["success"], false,
+            "output acceptance is independent of signal acceptance"
+        );
+        assert_eq!(ack["containment"]["schema"], "caws.containment.receipt.v1");
+        assert_eq!(ack["containment"]["pid"], caller_pid);
+        assert_eq!(intent["pid"], caller_pid);
+        assert_ne!(caller_pid, std::process::id());
+        for key in [
+            "pid",
+            "startEpoch",
+            "comm",
+            "sessionId",
+            "latchPath",
+            "latchGeneration",
+        ] {
+            assert_eq!(
+                ack["containment"][key], intent[key],
+                "effect receipt changed {key}"
+            );
+        }
+        assert_eq!(ack["containment"]["status"], "signal-accepted");
+        assert_eq!(ack["containment"]["reason"], "signal-accepted");
+        assert_eq!(ack["containment"]["errno"], serde_json::Value::Null);
+        assert!(!root.join("forbidden-next-action.marker").exists());
+        assert!(!root.join("caller-watchdog-fired.marker").exists());
+        if mode == "close-after-prefix" {
+            assert_eq!(fs::read(root.join("accepted-prefix.bin")).unwrap(), b"{");
+        } else {
+            assert!(root.join("stdout-held-unread.marker").exists());
+            assert!(!root.join("accepted-prefix.bin").exists());
+        }
+        let events: Vec<serde_json::Value> = fs::read_to_string(root.join("wire-events.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|row| row["stage"] == "dispatch")
+                .count(),
+            1
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|row| row["stage"] == "proposal")
+                .count(),
+            1
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|row| row["stage"] == "handoff")
+                .count(),
+            1
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|row| row["stage"] == "dispatch-after-terminal"
+                    || row["stage"] == "fixture-watchdog-fired")
+        );
+        thread::sleep(Duration::from_millis(80));
+        let sibling_after = fs::metadata(root.join("sibling-heartbeat.bin"))
+            .unwrap()
+            .len();
+        assert!(sibling_after > sibling_before);
+        assert!(
+            cleanup
+                .sibling
+                .as_mut()
+                .unwrap()
+                .try_wait()
+                .unwrap()
+                .is_none()
+        );
+        assert!(cleanup.anchor.try_wait().unwrap().is_none());
+        fs::write(root.join("sibling-progress.json"), serde_json::to_vec_pretty(&serde_json::json!({"pid":cleanup.sibling.as_ref().unwrap().id(),"before":sibling_before,"after":sibling_after,"survived":true})).unwrap()).unwrap();
+        // No process state is inferred from syscall acceptance: separately
+        // observe fixture/native shutdown before external cleanup acts.
+        assert_not_running(&wait_for_file(&root.join("native-pid.txt")));
+        assert_not_running(&wait_for_file(&root.join("engine-pid.txt")));
+        let native_stderr = fs::read_to_string(root.join("native-stderr.bin")).unwrap();
+        assert!(
+            native_stderr.contains("output delivery failed"),
+            "no delivery failure witness: {native_stderr}"
+        );
+        if mode == "close-after-prefix" {
+            assert!(
+                native_stderr.contains("Broken pipe"),
+                "reader closure was not the observed failure: {native_stderr}"
+            );
+        } else {
+            assert!(
+                native_stderr.contains("bounded output write")
+                    && native_stderr.contains("deadline"),
+                "unread output did not reach its bounded delivery deadline: {native_stderr}"
+            );
+        }
+        eprintln!(
+            "terminal containment artifact {}: {}",
+            root.display(),
+            serde_json::json!({"caller_signal":status.signal(),"local_output_success":ack["success"],"effect":ack["containment"],"sibling_progress":sibling_after-sibling_before})
+        );
+        drop(cleanup);
+    }
+    eprintln!(
+        "terminal transport artifacts retained: {}",
+        fixture.dir.display()
+    );
 }

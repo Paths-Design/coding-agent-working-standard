@@ -345,3 +345,14 @@ test('compatibility executes the actual dispatcher with custom parser/composer a
     handler: 'custom.sh',
   });
 });
+
+test('an inherited containment capability never reaches an arbitrary selected handler', async () => {
+  environment.CAWS_NATIVE_CONTAINMENT_FILE = '/caller/forged-capability';
+  const selected = handler(
+    'no-capability.sh',
+    'process.stdout.write(JSON.stringify({capability:process.env.CAWS_NATIVE_CONTAINMENT_FILE??null}));'
+  );
+  const result = await createHandlerExecutor(options())(selected, 0);
+  expect(JSON.parse(Buffer.from(result.stdout).toString())).toEqual({ capability: null });
+  expect(result.containment).toBeUndefined();
+});

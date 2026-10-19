@@ -99,6 +99,7 @@ test('empty chains are an explicit empty success', async () => {
     nativeResult: { exitCode: 0, stdout: bytes(''), stderr: bytes('') },
     offers: [],
     pendingDedup: [],
+    containment: null,
   });
   expect(f.deps.execute).not.toHaveBeenCalled();
 });

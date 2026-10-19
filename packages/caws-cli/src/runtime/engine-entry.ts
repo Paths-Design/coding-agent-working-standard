@@ -15,6 +15,7 @@ import {
   writeRuntimeFrame,
 } from './live-protocol';
 import { prepareRuntimeInvocation, type PreparedRuntimeInvocation } from './engine';
+import { containmentWire } from './containment';
 
 /** Private one-shot protocol entry. Installation and resident-host selection are separate contracts. */
 export async function runEngineEntry(): Promise<void> {
@@ -65,7 +66,9 @@ export async function runEngineEntry(): Promise<void> {
       controller.signal
     );
     decodeDispatchGrant(await reader.read(controller.signal), request);
-    const result = await prepared.dispatch();
+    const completion = await prepared.dispatch();
+    const result = completion.nativeResult;
+    const containment = completion.containment ? containmentWire(completion.containment) : null;
     const token = randomUUID();
     clearTimeout(timer);
     wireTimer = setTimeout(
@@ -80,13 +83,14 @@ export async function runEngineEntry(): Promise<void> {
         runtimeDigest: request.runtimeDigest,
         token,
         response: JSON.parse(encodeRuntimeResponse(request, result)),
+        containment,
       },
       wire.signal
     );
     proposed = true;
-    const success = decodeHandoff(await reader.read(wire.signal), request, token);
+    const handoff = decodeHandoff(await reader.read(wire.signal), request, token, containment);
     handoffAcknowledged = true;
-    const diagnostics = await prepared.acknowledgeHandoff(success);
+    const diagnostics = await prepared.acknowledgeHandoff(handoff.success, handoff.containment);
     if (diagnostics) process.stderr.write(diagnostics);
   } catch (error) {
     if (prepared && !handoffAcknowledged) {

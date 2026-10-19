@@ -76,7 +76,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
-| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; E43 common missing-session lookup gap and E45 native loss of refusal on caller termination; incomplete-stamp signaling repaired in source, E46 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution; use owned disposable targets and a surviving sibling control. Root/review-subagent shared PID is observed; other user-chat sharing and effective deployed kill policy require verification |
+| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; terminal bridge exercises selected explicit-session Codex Bash path and larger/escaped latch state, E51–E55; complete containment parity open | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races and unqualified compatibility paths remain obligations; no installed replacement |
 | R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking compatibility gap; unreplaced | Cold renderer start must survive request cleanup and serve the next request; source-change retirement and concurrent startup must not duplicate or kill the service. Existing warm-daemon evidence does not cover first-start group ownership |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
@@ -526,6 +526,98 @@ Additional bounded evidence and unresolved dependencies:
   action marker is absent and sibling heartbeat advances 210→316 bytes. This
   strengthens the evidence oracle; it does not fix the native effect/transport
   ownership conflict or establish cleanup after caller death.
+- E51: The terminal bridge producer gives every newly armed latch a random
+  generation and can submit the verified tuple through a private per-handler
+  intent file instead of signaling inline. Seven selected Bats checks exit 0;
+  `packages/caws-native/target/qualification/native-intent-bats-2026-10-19/`
+  retains the submitted intent for PID 43513 and an observation that the caller
+  remains alive without a signal receipt. Its legacy control records signal 15
+  for PID 44159. This is producer evidence, not native consumption or retirement
+  of the shell/Python implementation. The bridge candidate is based on
+  `90fac044` and requires committed-candidate review.
+- E52: `npm run qualify:native:containment` exits 0 with the terminal bridge.
+  `packages/caws-native/target/qualification/containment-effect-2026-10-19T07-46-45-168Z/`
+  retains all 22 legacy/candidate cases and nine rejected audit corruptions.
+  Candidate caller 74133 exits via parent-observed SIGTERM, raw probe stdout
+  retains the quarantine block, and the surviving sibling heartbeat advances
+  440→696 bytes. Its input-bound invocation journal records one correlated
+  `signal-accepted` receipt, local output acceptance, unchanged latch snapshot
+  and adapter finish. The latch retains its strike without a legacy escalation
+  overwrite. The receipt explicitly does not claim process exit; the external
+  parent wait supplies that separate observation. This generated snapshot is
+  `3693319d…f70551`, not the installed `408c06a7…77baa0` generation. Only the
+  selected stock guard and explicit-session, non-dry-run Codex Bash route ran.
+- E53: The native terminal transport fixture exits 0 for a reader closed after
+  accepting a prefix and an open unread/full stdout pipe. Artifacts at
+  `packages/caws-native/target/qualification/terminal-bridge-2026-10-19/caws-native-71415-0/`
+  retain parent-observed signal 15 for callers 72233 and 73247, ACK
+  `success:false` with separate `signal-accepted` receipts, one
+  dispatch/proposal/handoff per case, native delivery-failure diagnostics and
+  surviving sibling progress. The fixture uses a separately pinned owned
+  cleanup group; it establishes transport/effect behavior, not selected-guard
+  authority or actual harness isolation. The first attempt used a relative
+  artifact root and failed configuration (`invalid ready budget home`, caller
+  exit 42); its artifacts remain under `caws-native-26193-0/`. The successful
+  rerun uses an absolute root and does not erase that failed attempt.
+- E54: Source inspection identifies a guard-strength gap in the first bridge's
+  64 KiB latch snapshot limit: the selected producer can retain a larger valid
+  command/reason, causing TypeScript to discard an otherwise valid intent.
+  The 22 effect cases do not cover this boundary. E55 records the producer
+  counterexample and repaired bound/escaping scenarios.
+  Global hook dry-run also rejects bridge eligibility while the fallback guard
+  can signal inline; the legacy dispatcher explicitly invokes handlers during
+  dry-run. This is an inherited unqualified path, not a no-signal control.
+  Mixed overrides, file tools, prior latch generations and reset/rearm
+  coordination are outside the qualified route. Full parity remains blocked.
+- E55: The producer counterexample at
+  `packages/caws-native/target/qualification/containment-effect-2026-10-19T08-07-07-585Z/`
+  retains a 72,313-byte latch. The first bridge's caller 25002 survives with
+  exit 0, block stdout and an operational-file-envelope diagnostic; no native
+  settlement exists. Legacy caller 19399 exits via SIGTERM. The run also exposes
+  a fixture-oracle defect: one `identitySafe` branch omitted the newly added
+  signal-enabled case. All effect expectations use the same classification.
+  The repaired reader derives its bound from successful producer argv admission:
+  six times observed ARG_MAX plus 32 KiB for fixed/bounded metadata. Absolute
+  `/usr/bin/getconf ARG_MAX` returns 1,048,576 here, yielding 6,324,224 bytes.
+  Sidecar-derived reason text prevents deriving this bound from hook input alone.
+  Small records allocate by observed size; final no-follow, type, owner and size
+  checks remain enforced. Other hosts/resource-limit histories are unqualified.
+  The first repaired comparison at `containment-effect-2026-10-19T08-11-49-418Z/`
+  fails overall: a 15s observer aborts legacy arming before its two serial 35s
+  watchdog bounds. Candidate caller 7677 terminates with retained refusal and
+  finalized receipt. The observer follows those call bounds; hook deadlines do
+  not change. The failed attempt remains retained.
+  Both final boundary commands exit 0: `qualify-native-containment.js .
+  escaped-latch` at `containment-effect-2026-10-19T08-16-46-493Z/` produces
+  74,361 bytes; caller 73702 exits via SIGTERM, sibling 708→1216.
+  `qualify-native-containment.js . large-latch` at
+  `containment-effect-2026-10-19T08-17-24-264Z/` produces 72,313 bytes; caller
+  97668 exits via SIGTERM, sibling 776→1164. Both retain block stdout, correlated
+  signal receipts, adapter finish and no forbidden-action marker. All recorded
+  runtime-module hashes match the inspected built files. The final six focused
+  suites pass 121 checks; strict runtime/store/shell TypeScript, scoped lint and
+  all-target strict Clippy exit 0. This closes the demonstrated size gap on this
+  host, not complete containment, installed behavior or multi-project parity.
+
+The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
+binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
+exit 0. Raw logs and retained native fixtures live under
+`packages/caws-native/target/qualification/terminal-bridge-2026-10-19/`.
+The broader `npm run typecheck` exits 2 at the unchanged
+`tests/kernel/telemetry-turn-log-schema.test.ts:237` access to `usage.required`;
+neither that test nor its imported schema differs from `90fac044`. This is not
+a green package-wide check or a reproduced baseline typecheck. E55 carries the
+separate large-latch producer/consumer evidence.
+
+Reorientation against all available session turn records retains the original
+whole-application scope, the thirteen-session/four-repository requirement and
+the user's containment and Sterling-inversions corrections. Image-only/null
+turn fragments did not cancel those obligations; A8 and R28/R31 carry them.
+Reorientation observed eighteen lane commits beyond main, not landed delivery. Demand-start
+residency, native workload/performance qualification, renderer migration,
+first-party Python retirement, packaged adoption and rollback remain open.
+The machine pointer remains on `408c06a7…77baa0`; no speedup or replacement of
+the active hook pipeline has been demonstrated.
 
 Containment qualification does not establish cleanup after intentional caller
 death. The caller's watchdog dies with it; capture EOF only closes observed
@@ -596,15 +688,14 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-1. Resolve the R32 containment dependency and qualify its actual effect before
-   accepting identity-policy changes or claiming safety parity. E45/E46 show
-   native cancellation destroys the original quarantine output after the shell
-   terminates its caller. Carry a validated terminal containment intent from
-   the selected guard through composition to the native owner: retain refusal,
-   verify the request-bound target, apply the effect once and finalize its
-   receipt under a bounded terminal state. Ordinary caller-death cancellation
-   must remain enforced; neither a generic grace period nor silently disabling
-   killing qualifies. A private intent record grants no authority by itself.
+1. Complete committed-candidate review of the terminal bridge and investigate
+   the remaining R32 identity/process-domain dependencies. E52/E53/E55 observe the selected
+   caller/refusal/effect/finalization chain and hostile output failure, but do
+   not discharge missing-session identity, exclusive process ownership,
+   reset/rearm coordination or compatibility-path containment. Retain ordinary
+   caller-death cancellation; neither a generic grace period nor silently
+   disabling killing qualifies. A private intent record grants no authority
+   by itself. Record the original failing and repaired boundary artifacts.
    Trace effective
    installed handlers/libraries and defaults, distinguish logical identity from
    target process instance, and retain isolated termination/refusal/state and

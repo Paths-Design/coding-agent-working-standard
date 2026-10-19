@@ -1,11 +1,17 @@
 import { TextDecoder } from 'node:util';
 import type { Readable, Writable } from 'node:stream';
 import { MAX_REQUEST_BYTES, RuntimeProtocolError, type RuntimeRequest } from './protocol';
+import { parseJsonSource, objectMemberSource } from './json-custody';
+import {
+  decodeContainmentReceipt,
+  type ContainmentIntent,
+  type ContainmentReceipt,
+} from './containment';
 
 export const READY_SCHEMA = 'caws.runtime.ready.v1';
 export const DISPATCH_SCHEMA = 'caws.runtime.dispatch.v1';
-export const PROPOSAL_SCHEMA = 'caws.runtime.proposal.v1';
-export const HANDOFF_SCHEMA = 'caws.runtime.handoff.v1';
+export const PROPOSAL_SCHEMA = 'caws.runtime.proposal.v2';
+export const HANDOFF_SCHEMA = 'caws.runtime.handoff.v2';
 export const FAILURE_SCHEMA = 'caws.runtime.failure.v1';
 type Identity = Pick<RuntimeRequest, 'id' | 'runtimeDigest'>;
 
@@ -13,9 +19,11 @@ function control(
   frame: Uint8Array,
   identity: Identity,
   schema: string,
-  keys: string[]
+  keys: string[],
+  maximum = 4096
 ): Record<string, unknown> {
-  if (frame.byteLength > 4096) throw new RuntimeProtocolError('Control frame exceeds byte limit');
+  if (frame.byteLength > maximum)
+    throw new RuntimeProtocolError('Control frame exceeds byte limit');
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(frame));
@@ -40,17 +48,40 @@ export function decodeDispatchGrant(frame: Uint8Array, identity: Identity): void
   control(frame, identity, DISPATCH_SCHEMA, ['schema', 'id', 'runtimeDigest']);
 }
 
-export function decodeHandoff(frame: Uint8Array, identity: Identity, token: string): boolean {
-  const row = control(frame, identity, HANDOFF_SCHEMA, [
-    'schema',
-    'id',
-    'runtimeDigest',
-    'token',
-    'success',
-  ]);
+export interface NativeHandoff {
+  readonly success: boolean;
+  readonly containment: ContainmentReceipt | null;
+}
+export function decodeHandoff(
+  frame: Uint8Array,
+  identity: Identity,
+  token: string,
+  expectedContainment: ContainmentIntent | null = null
+): NativeHandoff {
+  const row = control(
+    frame,
+    identity,
+    HANDOFF_SCHEMA,
+    ['schema', 'id', 'runtimeDigest', 'token', 'success', 'containment'],
+    64 * 1024
+  );
   if (row.token !== token || typeof row.success !== 'boolean')
     throw new RuntimeProtocolError('Mismatched native handoff');
-  return row.success;
+  try {
+    const source = parseJsonSource(
+      new TextDecoder('utf-8', { fatal: true }).decode(frame),
+      16,
+      256
+    );
+    const containment = decodeContainmentReceipt(
+      row.containment,
+      expectedContainment,
+      objectMemberSource(source, 'containment')
+    );
+    return Object.freeze({ success: row.success, containment });
+  } catch (error) {
+    throw new RuntimeProtocolError(String(error));
+  }
 }
 
 /** One outstanding read, with bounded per-frame storage; never waits for engine exit. */

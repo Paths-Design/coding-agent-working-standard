@@ -2,6 +2,7 @@
 compile_error!("caws-native currently requires POSIX process groups");
 mod cancellation;
 mod cli;
+mod process_effect;
 mod protocol;
 mod runner;
 
@@ -45,6 +46,8 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
         return Err(Failure::configuration("request exceeds byte limit".into()));
     }
     bytes.push(b'\n');
+    let captured = (config.surface == "codex" && config.event == "pre_tool_use")
+        .then(|| process_effect::CapturedAncestors::capture(deadline));
     let mut session = runner::Session::start(config, deadline).map_err(Failure::configuration)?;
     let mut ready = None;
     let mut dispatched = false;
@@ -62,12 +65,16 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
         dispatched = ready.as_ref().is_some_and(|context| context.active);
         session.send(&protocol::dispatch(&request), deadline)?;
         match protocol::validate_frame(&session.frame(deadline)?, &request)? {
-            protocol::EngineFrame::Proposal { token, result } => Ok((token, result)),
+            protocol::EngineFrame::Proposal {
+                token,
+                result,
+                containment,
+            } => Ok((token, result, containment)),
             protocol::EngineFrame::Failure(message) => Err(message),
             protocol::EngineFrame::Ready(_) => Err("unexpected ready after dispatch grant".into()),
         }
     })();
-    let (token, result) = match proposal {
+    let (token, result, containment) = match proposal {
         Ok(value) => value,
         Err(mut message) => {
             if let Err(error) = session.cleanup() {
@@ -80,11 +87,55 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             });
         }
     };
-    // A valid proposal remains known through late engine/cleanup failure. This
-    // ACK acknowledges local byte acceptance, not harness or model receipt.
-    let delivered = runner::write_native(&result.stdout, &result.stderr);
-    let post_deadline = Instant::now() + Duration::from_millis(500);
+    // A valid protective result survives invalid/held effects and late failures.
+    // No path through this terminal phase can ask the engine for more work.
     let mut post_errors = Vec::new();
+    let mut receipt = None;
+    let target = match containment {
+        protocol::ContainmentProposal::None => None,
+        protocol::ContainmentProposal::Invalid(error) => {
+            post_errors.push(format!("containment intent rejected: {error}; no signal"));
+            None
+        }
+        protocol::ContainmentProposal::Intent(intent) => {
+            let context = process_effect::EffectContext {
+                surface: &config.surface,
+                event: &config.event,
+                active: dispatched,
+                session_id: ready.as_ref().and_then(|row| row.session_id.as_deref()),
+                exit_code: result.exit_code,
+                stdout: &result.stdout,
+            };
+            let validated = if !process_effect::eligible(&intent, &context) {
+                Err(process_effect::HeldReason::UnsafeTarget)
+            } else if let Some(captured) = captured.as_ref() {
+                captured.validate(&intent)
+            } else {
+                Err(process_effect::HeldReason::CaptureUnavailable)
+            };
+            match validated {
+                Ok(target) => Some(target),
+                Err(reason) => {
+                    receipt = Some(process_effect::ContainmentReceipt::held(&intent, reason));
+                    None
+                }
+            }
+        }
+    };
+    // TS's wire phase has an 1100ms budget. Share one terminal budget across
+    // output (<=500ms), reobservation/effect (<=250ms), and receipt settlement.
+    let terminal_deadline = Instant::now() + Duration::from_millis(1000);
+    let delivered = if let Some(target) = target {
+        session.begin_terminal_containment(&target);
+        let delivered = runner::write_terminal_native(&result.stdout, &result.stderr, &target);
+        receipt = Some(
+            target.attempt(terminal_deadline.min(Instant::now() + Duration::from_millis(250))),
+        );
+        delivered
+    } else {
+        runner::write_native(&result.stdout, &result.stderr)
+    };
+    let post_deadline = terminal_deadline.min(Instant::now() + Duration::from_millis(500));
     if delivered.is_ok() && dispatched && config.event == "stop" && result.exit_code == 0 {
         // Unavailable may already have committed. Never retry this transaction.
         if let Some(context) = ready.as_ref()
@@ -94,10 +145,9 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             post_errors.push(format!("Stop reset: {error}; not retried"));
         }
     }
-    if let Err(error) = session.send(
-        &protocol::handoff(&request, &token, delivered.is_ok()),
-        post_deadline,
-    ) {
+    let ack = protocol::handoff(&request, &token, delivered.is_ok(), receipt.as_ref())
+        .and_then(|bytes| session.send(&bytes, post_deadline));
+    if let Err(error) = ack {
         post_errors.push(format!("handoff ACK: {error}; settlement unconfirmed"));
     }
     if let Err(error) = session.settle(post_deadline) {

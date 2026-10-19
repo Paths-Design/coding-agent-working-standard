@@ -166,6 +166,7 @@ pub struct Session {
     stdout_bytes: usize,
     out_done: bool,
     err_done: bool,
+    terminal_containment: bool,
 }
 
 impl Session {
@@ -211,6 +212,7 @@ impl Session {
             stdout_bytes: 0,
             out_done: false,
             err_done: false,
+            terminal_containment: false,
         })
     }
 
@@ -246,7 +248,7 @@ impl Session {
                 revents: 0,
             },
         ];
-        poll(&mut descriptors, deadline)?;
+        poll_with_cancellation(&mut descriptors, deadline, !self.terminal_containment)?;
         let mut written = 0;
         if let Some(bytes) = write
             && descriptors[0].revents != 0
@@ -295,7 +297,16 @@ impl Session {
         Ok(())
     }
 
+    pub fn begin_terminal_containment(&mut self, _target: &crate::process_effect::ValidatedTarget) {
+        // The private target capability is available only after terminal intent
+        // validation. This mode can only flush its ACK and settle; never dispatch.
+        self.terminal_containment = true;
+    }
+
     pub fn frame(&mut self, deadline: Instant) -> Result<Vec<u8>, String> {
+        if self.terminal_containment {
+            return Err("no engine frames admitted after terminal containment".into());
+        }
         loop {
             crate::cancellation::check()?;
             if let Some(end) = self.buffered.iter().position(|b| *b == b'\n') {
@@ -316,7 +327,9 @@ impl Session {
         // Pipes can close before the process exits. A nonblocking waitid observes
         // termination WITHOUT reaping, preserving ownership until group cleanup.
         loop {
-            crate::cancellation::check()?;
+            if !self.terminal_containment {
+                crate::cancellation::check()?;
+            }
             let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
             // SAFETY: valid child PID and initialized writable siginfo storage.
             let result = unsafe {
@@ -444,6 +457,16 @@ fn write_output(
 
 pub fn write_native(stdout: &[u8], stderr: &[u8]) -> Result<(), String> {
     write_output(stdout, stderr, DELIVERY_BUDGET, true)
+}
+
+/// Only the owner of a validated terminal target may use this delivery path.
+/// Output closure/backpressure cannot revoke an already earned containment effect.
+pub fn write_terminal_native(
+    stdout: &[u8],
+    stderr: &[u8],
+    _target: &crate::process_effect::ValidatedTarget,
+) -> Result<(), String> {
+    write_output(stdout, stderr, DELIVERY_BUDGET, false)
 }
 
 pub fn write_diagnostic(stderr: &[u8]) {

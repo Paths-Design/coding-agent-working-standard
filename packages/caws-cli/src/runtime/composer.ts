@@ -1,6 +1,7 @@
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 import type { NativeResult } from './types';
 import { truncateUtf8Prefix } from './utf8';
+import { copyContainment, type ValidatedContainmentIntent } from './containment';
 
 export interface OfferReference {
   readonly offerId: string;
@@ -8,6 +9,7 @@ export interface OfferReference {
 }
 export interface HandlerResult extends NativeResult {
   readonly offers?: readonly OfferReference[];
+  readonly containment?: ValidatedContainmentIntent;
 }
 export interface OfferMembership extends OfferReference {
   readonly handler: string;
@@ -43,6 +45,7 @@ export interface ComposerDependencies {
   dedup?: { seen(handler: SelectedHandler, text: string): boolean | Promise<boolean> };
 }
 export interface ComposerOptions {
+  readonly requestId?: string;
   readonly dryRun?: boolean;
   readonly dedupEnabled?: boolean;
   readonly advisoryBudgetBytes?: number;
@@ -52,6 +55,7 @@ export interface ComposerOptions {
 }
 export interface CompositionResult {
   readonly nativeResult: NativeResult;
+  readonly containment: ValidatedContainmentIntent | null;
   readonly offers: readonly OfferMembership[];
   readonly pendingDedup: readonly PendingDedup[];
 }
@@ -121,8 +125,12 @@ export function normalizeCompositionCapture(stdout: Uint8Array): Buffer {
 function newline(stdout: Uint8Array): Buffer {
   return stdout.byteLength ? Buffer.concat([stdout, Buffer.from('\n')]) : Buffer.alloc(0);
 }
-function copyCompletion(completion: HandlerResult): HandlerResult {
+function copyCompletion(
+  completion: HandlerResult,
+  containment: ValidatedContainmentIntent | null = null
+): HandlerResult {
   return Object.freeze({
+    ...(containment ? { containment } : {}),
     exitCode: completion.exitCode,
     stdout: Buffer.from(completion.stdout),
     stderr: Buffer.from(completion.stderr),
@@ -187,7 +195,8 @@ export async function composeHandlers(
   const result = (
     exitCode: number,
     stdout: Uint8Array,
-    deliveredCards: boolean
+    deliveredCards: boolean,
+    containment: ValidatedContainmentIntent | null = null
   ): CompositionResult => {
     const admitted = deliveredCards
       ? new Set(cards.map((card) => card.selectedIndex))
@@ -209,6 +218,7 @@ export async function composeHandlers(
           )
         : [];
     return Object.freeze({
+      containment,
       nativeResult: Object.freeze({
         exitCode,
         stdout: Buffer.from(stdout),
@@ -289,7 +299,12 @@ export async function composeHandlers(
       ) {
         throw new Error('Invalid handler execution result');
       }
-      completion = copyCompletion(raw);
+      const containment = copyContainment(raw.containment, selection, handler, options.requestId);
+      if (raw.containment && !containment)
+        diagnostic(
+          `[${handler.name}] containment ignored: executor provenance does not match this invocation`
+        );
+      completion = copyCompletion(raw, containment);
     } catch (error) {
       await record({
         stage: 'handler_error',
@@ -337,7 +352,13 @@ export async function composeHandlers(
     const output = normalizeCompositionCapture(completion.stdout);
     const parsed = parse(output);
     const rank = priority(parsed);
-    if (output.byteLength && rank === 3) return result(2, newline(output), false);
+    if (output.byteLength && rank === 3)
+      return result(
+        2,
+        newline(output),
+        false,
+        options.dryRun ? null : (completion.containment ?? null)
+      );
     if (output.byteLength) {
       const specific = field(parsed, 'hookSpecificOutput');
       const advisory = field(specific, 'additionalContext');

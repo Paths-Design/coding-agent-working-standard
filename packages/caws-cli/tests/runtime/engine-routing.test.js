@@ -25,6 +25,7 @@ test('a selected project override receives complete Codex normalization through 
     CAWS_HOME: home,
     CODEX_THREAD_ID: 'routing-fixture',
     CAWS_TRAP_KILL: '0',
+    CAWS_NATIVE_CONTAINMENT_FILE: '/caller/forged-capability',
     CONSUMED_FILE: path.join(root, 'consumed.json'),
   };
   try {
@@ -36,7 +37,7 @@ test('a selected project override receives complete Codex normalization through 
     const override = path.join(repo, '.caws/hooks/guard.sh');
     put(
       script,
-      "const fs=require('node:fs');const names=['HOOK_TOOL_NAME','HOOK_ORIGINAL_TOOL_NAME','HOOK_FILE_PATH','HOOK_FILE_PATHS'];const consumed=Object.fromEntries(names.map(name=>[name,process.env[name]??null]));fs.writeFileSync(process.env.CONSUMED_FILE,JSON.stringify(consumed));if(consumed.HOOK_ORIGINAL_TOOL_NAME==='Bash'&&consumed.HOOK_FILE_PATHS==='/owned/file'){process.stdout.write(JSON.stringify({decision:'block',reason:'normalized extension refusal'}));process.exitCode=2;}"
+      "const fs=require('node:fs');const names=['HOOK_TOOL_NAME','HOOK_ORIGINAL_TOOL_NAME','HOOK_FILE_PATH','HOOK_FILE_PATHS','CAWS_NATIVE_CONTAINMENT_FILE'];const consumed=Object.fromEntries(names.map(name=>[name,process.env[name]??null]));fs.writeFileSync(process.env.CONSUMED_FILE,JSON.stringify(consumed));if(consumed.HOOK_ORIGINAL_TOOL_NAME==='Bash'&&consumed.HOOK_FILE_PATHS==='/owned/file'){process.stdout.write(JSON.stringify({decision:'block',reason:'normalized extension refusal'}));process.exitCode=2;}"
     );
     put(override, '#!/bin/bash\nexec ' + quote(process.execPath) + ' ' + quote(script) + '\n');
     fs.chmodSync(override, 0o755);
@@ -86,7 +87,8 @@ test('a selected project override receives complete Codex normalization through 
     };
     const invocation = await prepareRuntimeInvocation(request, new AbortController().signal);
     expect(invocation.active).toBe(true);
-    const result = await invocation.dispatch();
+    const { nativeResult: result, containment } = await invocation.dispatch();
+    expect(containment).toBeNull();
     expect(result.exitCode).toBe(2);
     expect(JSON.parse(Buffer.from(result.stdout).toString()).reason).toBe(
       'normalized extension refusal'
@@ -96,6 +98,7 @@ test('a selected project override receives complete Codex normalization through 
       HOOK_ORIGINAL_TOOL_NAME: 'Bash',
       HOOK_FILE_PATH: '/owned/file',
       HOOK_FILE_PATHS: '/owned/file',
+      CAWS_NATIVE_CONTAINMENT_FILE: null,
     });
     await invocation.acknowledgeHandoff(true);
     const rows = fs

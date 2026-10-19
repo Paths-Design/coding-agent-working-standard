@@ -11,7 +11,7 @@ import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
-  'block-dangerous.sh': '39e99cf8df8ac6ffd686397d9c7ea26818c2349a371cce249a9d62f0ce57ffdc',
+  'block-dangerous.sh': 'c4f83e09503a6dc3915c1c55f063d49bbb3580b9006396c620aea458115318a4',
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
 };
 const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
@@ -102,6 +102,56 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
     assertMachinePath(selection.runtimeDirectory, file);
     return (
       sha(file) === (handler.name === 'hook-utilities.sh' ? DIRECT.utilities : DIRECT.classifier)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Exact direct-stock bridge eligibility; this grants a receipt, never signal authority. */
+export function qualifiesForNativeContainment(
+  handler: SelectedHandler,
+  context: StockHandlerContext
+): boolean {
+  const { request, selection, environment } = context;
+  if (
+    handler.name !== 'block-dangerous.sh' ||
+    !compatible(handler, context) ||
+    selection.surface !== 'codex' ||
+    selection.event !== 'pre_tool_use' ||
+    request.surface !== selection.surface ||
+    request.event !== selection.event ||
+    request.runtimeDigest !== selection.runtimeDigest ||
+    request.payload.tool_name !== 'Bash' ||
+    !object(request.payload.tool_input) ||
+    typeof request.payload.tool_input.command !== 'string' ||
+    selection.handlers.some((entry) => entry.kind !== 'stock') ||
+    Object.values(selection.libraries).some(
+      (entry) => entry.kind === 'project' || entry.kind === 'user'
+    ) ||
+    Object.keys(selection.libraryOverrides).length > 0 ||
+    Object.keys(selection.overrides).length > 0 ||
+    !selection.handlers.some(
+      (entry) =>
+        entry.path === handler.path &&
+        entry.sha256 === handler.sha256 &&
+        entry.entry === handler.entry
+    ) ||
+    environment.CAWS_TRAP_KILL === '0' ||
+    environment.CAWS_TRAP_KILL === 'dryrun' ||
+    [
+      environment.CAWS_HOOK_DRY_RUN,
+      environment.CLAUDE_HOOK_DRY_RUN,
+      environment.CODEX_HOOK_DRY_RUN,
+    ].some((value) => Boolean(value && value !== '0'))
+  )
+    return false;
+  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
+  try {
+    assertMachinePath(selection.runtimeDirectory, startup);
+    return (
+      lstatSync(startup).isFile() &&
+      sha(startup) === '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7'
     );
   } catch {
     return false;

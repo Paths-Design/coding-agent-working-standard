@@ -24,6 +24,14 @@ import { normalizeNativeResult } from './native-response';
 import { resolveInvocationSelection, type ActiveInvocationSelection } from './selection';
 import { encodeRuntimeResponse, type RuntimeRequest } from './protocol';
 import type { NativeResult } from './types';
+import {
+  CONTAINMENT_ENV,
+  containmentWire,
+  decodeContainmentReceipt,
+  observeContainmentLatch,
+  type ContainmentReceipt,
+  type ValidatedContainmentIntent,
+} from './containment';
 
 // Vendor directories match surfaces/registry.json; process names retain the
 // owning stock agent-surface.sh defaults. No process-name guess mints identity.
@@ -145,13 +153,38 @@ function compatibilityOffers(bytes: Uint8Array): OfferMembership[] {
   return [...latest.values()];
 }
 
+export interface PreparedDispatchResult {
+  readonly nativeResult: NativeResult;
+  readonly containment: ValidatedContainmentIntent | null;
+}
+/** Native effect receipt is a separate observation from output and message delivery. */
+export function recordContainmentHandoff(
+  journal: Pick<InvocationJournal, 'append' | 'diagnostics'>,
+  intent: ValidatedContainmentIntent | null,
+  success: boolean,
+  receipt: ContainmentReceipt | null
+): void {
+  if (!intent && receipt === null) return;
+  const wire = intent ? containmentWire(intent) : null;
+  const accepted = decodeContainmentReceipt(receipt, wire);
+  journal.append('containment_settled', {
+    observation_boundary: 'native_signal_syscall_receipt',
+    intent: wire,
+    receipt: accepted,
+    effect_observation: accepted?.status ?? 'not_observed',
+    native_output_accepted: success,
+    process_exit_observed: false,
+    latch_state: intent ? observeContainmentLatch(intent) : 'not_requested',
+    legacy_latch_written: false,
+  });
+}
 export interface PreparedRuntimeInvocation {
   readonly active: boolean;
   readonly budgetHome: string;
   readonly projectDigest: string | null;
   readonly sessionId: string | null;
-  dispatch(): Promise<NativeResult>;
-  acknowledgeHandoff(success: boolean): Promise<string>;
+  dispatch(): Promise<PreparedDispatchResult>;
+  acknowledgeHandoff(success: boolean, containment?: ContainmentReceipt | null): Promise<string>;
 }
 
 export async function prepareRuntimeInvocation(
@@ -166,6 +199,7 @@ export async function prepareRuntimeInvocation(
     'CAWS_HOOK_SETTLEMENT_FILE',
     'CAWS_HANDLER_OFFER_FILE',
     'CAWS_MACHINE_LOG_DIR',
+    CONTAINMENT_ENV,
   ])
     delete environment[name];
   const home = environment.CAWS_HOME || (environment.HOME ? join(environment.HOME, '.caws') : '');
@@ -201,10 +235,13 @@ export async function prepareRuntimeInvocation(
         if (used) throw new Error('Invocation dispatch is single-use');
         used = true;
         return {
-          ...empty(),
-          stderr: Buffer.from(
-            context.status === 'inactive' && context.diagnostic ? context.diagnostic + '\n' : ''
-          ),
+          nativeResult: {
+            ...empty(),
+            stderr: Buffer.from(
+              context.status === 'inactive' && context.diagnostic ? context.diagnostic + '\n' : ''
+            ),
+          },
+          containment: null,
         };
       },
       async acknowledgeHandoff() {
@@ -231,6 +268,7 @@ export async function prepareRuntimeInvocation(
   let dispatched = false,
     acknowledged = false,
     result: NativeResult | null = null;
+  let containment: ValidatedContainmentIntent | null = null;
   let offers: readonly OfferMembership[] = [],
     pending: readonly PendingDedup[] = [];
   return {
@@ -270,6 +308,7 @@ export async function prepareRuntimeInvocation(
             selection,
             {
               signal,
+              requestId: request.id,
               dedupEnabled: environment.CAWS_HOOK_ADVISORY_DEDUP !== '0',
               dryRun: truthy(
                 environment.CAWS_HOOK_DRY_RUN ||
@@ -296,6 +335,7 @@ export async function prepareRuntimeInvocation(
             }
           );
           result = composition.nativeResult;
+          containment = composition.containment;
           offers = composition.offers;
           pending = composition.pendingDedup;
         }
@@ -314,6 +354,7 @@ export async function prepareRuntimeInvocation(
             })),
           ];
         }
+        containment = null;
         journal.append('adapter_error', { error: String(error) });
         result = capturedRefusal(error);
         if (!result) throw error;
@@ -330,12 +371,33 @@ export async function prepareRuntimeInvocation(
       );
       encodeRuntimeResponse(request, native); // Refuse an unusable proposal before sending it.
       result = native;
-      return native;
+      if (containment && (native.exitCode !== 2 || !isProtectiveCapture(native.stdout)))
+        containment = null;
+      if (containment)
+        journal.append('containment_intent_prepared', {
+          intent: containmentWire(containment),
+          source_digest_boundary: 'before_and_after_dispatch',
+          process_exit_observed: false,
+        });
+      return Object.freeze({ nativeResult: native, containment });
     },
-    async acknowledgeHandoff(success) {
+    async acknowledgeHandoff(success, receipt = null) {
       if (acknowledged)
         throw new Error('Native handoff was already acknowledged; settlement is not retried');
       acknowledged = true;
+      try {
+        recordContainmentHandoff(journal, containment, success, receipt);
+      } catch (error) {
+        journal.append('containment_receipt_invalid', {
+          error: String(error),
+          process_exit_observed: false,
+        });
+        journal.diagnostics.push(
+          '[caws containment] invalid effect receipt; no latch write or signal retry: ' +
+            String(error) +
+            '\n'
+        );
+      }
       journal.append(success ? 'adapter_stdout_handoff' : 'adapter_handoff_unconfirmed', {
         observation_boundary: 'local_native_output',
         exit_code: result?.exitCode ?? null,

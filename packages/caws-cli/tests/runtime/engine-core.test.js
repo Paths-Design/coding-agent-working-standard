@@ -57,14 +57,21 @@ test('aborted work read leaves the same outstanding input for the subsequent wir
 
 test('control frames reject wrong proposal tokens and extra keys', () => {
   const ack = {
-    schema: 'caws.runtime.handoff.v1',
+    schema: 'caws.runtime.handoff.v2',
     ...identity,
     token: 'proposal-one',
     success: true,
+    containment: null,
   };
   const bytes = (value) => Buffer.from(JSON.stringify(value));
-  expect(decodeHandoff(bytes(ack), identity, 'proposal-one')).toBe(true);
-  expect(decodeHandoff(bytes({ ...ack, success: false }), identity, 'proposal-one')).toBe(false);
+  expect(decodeHandoff(bytes(ack), identity, 'proposal-one')).toEqual({
+    success: true,
+    containment: null,
+  });
+  expect(decodeHandoff(bytes({ ...ack, success: false }), identity, 'proposal-one')).toEqual({
+    success: false,
+    containment: null,
+  });
   for (const changed of [
     { ...ack, token: 'neighbor' },
     { ...ack, id: 'neighbor' },

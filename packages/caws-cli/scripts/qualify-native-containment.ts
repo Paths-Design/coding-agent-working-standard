@@ -22,6 +22,8 @@ type Owned = {
 };
 type CaseKind =
   | 'enabled'
+  | 'large-latch'
+  | 'escaped-latch'
   | 'disabled'
   | 'wrong-start'
   | 'wrong-pid'
@@ -34,6 +36,13 @@ type CaseKind =
   | 'malformed-start';
 type Mode = 'legacy-python' | 'candidate-native';
 type ObjectData = Record<string, unknown>;
+const enabledCase = (kind: CaseKind): boolean =>
+  kind === 'enabled' || kind === 'large-latch' || kind === 'escaped-latch';
+const selectedCase = process.argv[3];
+assert(
+  selectedCase === undefined || ['large-latch', 'escaped-latch'].includes(selectedCase),
+  'optional case must be large-latch or escaped-latch'
+);
 
 const cli = fs.realpathSync(path.resolve(process.argv[2] ?? '.'));
 assert(fs.existsSync(path.join(cli, 'src/runtime/engine.ts')), 'pass the caws-cli directory');
@@ -67,12 +76,13 @@ function auditProblems(
   kind: CaseKind,
   sid: string,
   command: string,
-  callerPid: number
+  callerPid: number,
+  native = false
 ): string[] {
   const problems: string[] = [];
   if (latch.trap_strikes !== 1) problems.push('strike-count');
   if (latch.trap_last_strike_command !== command) problems.push('strike-command');
-  if (kind === 'enabled') {
+  if (enabledCase(kind) && !native) {
     if (
       latch.trap_escalated_pid !== String(callerPid) ||
       typeof latch.trap_escalated_at !== 'string' ||
@@ -100,14 +110,16 @@ function auditProblems(
     return [...problems, 'audit-record'];
   const record = row as ObjectData;
   if (record.session_id !== sid || record.command !== command) problems.push('audit-request');
-  const enabled = kind === 'enabled';
+  const enabled = enabledCase(kind);
   if (
-    record.verdict !== (enabled ? 'escalated' : 'held') ||
-    record.action !== (enabled ? 'sigterm' : 'no-kill')
+    record.verdict !== (enabled ? (native ? 'proposed' : 'escalated') : 'held') ||
+    record.action !== (enabled ? (native ? 'native-sigterm' : 'sigterm') : 'no-kill')
   )
     problems.push('audit-effect');
   const reason = enabled
-    ? 'agent process ' + callerPid + ' ('
+    ? native
+      ? 'verified target ' + callerPid + ' submitted'
+      : 'agent process ' + callerPid + ' ('
     : kind === 'disabled'
       ? 'kill escalation disabled'
       : kind === 'wrong-pid'
@@ -120,6 +132,101 @@ function auditProblems(
   if (typeof record.detail !== 'string' || !record.detail.includes(reason))
     problems.push('audit-reason');
   return problems;
+}
+
+function records(file: string): ObjectData[] {
+  return fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line: string) => {
+      const value: unknown = JSON.parse(line);
+      assert(value !== null && typeof value === 'object' && !Array.isArray(value));
+      return value as ObjectData;
+    });
+}
+
+function nativeSettlement(
+  directory: string,
+  repo: string,
+  sid: string,
+  kind: CaseKind,
+  callerPid: number,
+  latch: ObjectData
+): { errors: string[]; file: string | null; settlement: ObjectData | null } {
+  const errors: string[] = [];
+  const calls = records(path.join(directory, 'caller-events.jsonl')).filter(
+    (entry) => entry.stage === 'hook_started' && entry.step === 'probe'
+  );
+  assert.equal(calls.length, 1, 'one actual probe hook process must be observed');
+  const hookPid = calls[0]!.hookPid;
+  assert(typeof hookPid === 'number' && Number.isSafeInteger(hookPid) && hookPid > 1);
+  const journals = path.join(repo, '.caws/sessions', sid, 'hook-invocations');
+  const names = fs.existsSync(journals)
+    ? fs
+        .readdirSync(journals)
+        .filter((name) => name.startsWith(String(hookPid) + '-') && name.endsWith('.jsonl'))
+    : [];
+  if (names.length !== 1) return { errors: ['native-journal'], file: null, settlement: null };
+  const file = path.join(journals, names[0]!);
+  const entries = records(file);
+  if (entries.some((entry) => entry.input_sha256 !== sha(path.join(directory, 'probe/input.bin'))))
+    errors.push('native-input-custody');
+  const settlements = entries.filter((entry) => entry.stage === 'containment_settled');
+  if (!enabledCase(kind)) {
+    if (
+      settlements.length !== 0 ||
+      entries.some((entry) => entry.stage === 'containment_intent_prepared')
+    )
+      errors.push('unexpected-native-effect');
+    if (
+      !entries.some((entry) => entry.stage === 'adapter_stdout_handoff') ||
+      !entries.some((entry) => entry.stage === 'adapter_finished')
+    )
+      errors.push('native-finalization');
+    json(path.join(directory, 'probe/native-journal-readback.json'), {
+      file,
+      settlement: null,
+      errors,
+    });
+    return { errors, file, settlement: null };
+  }
+  if (settlements.length !== 1)
+    return { errors: [...errors, 'native-settlement-count'], file, settlement: null };
+  const settlement = settlements[0]!;
+  if (
+    settlement.native_output_accepted !== true ||
+    settlement.process_exit_observed !== false ||
+    settlement.legacy_latch_written !== false
+  )
+    errors.push('native-settlement-facts');
+  if (!entries.some((entry) => entry.stage === 'adapter_finished'))
+    errors.push('native-finalization');
+  if (enabledCase(kind)) {
+    const receipt = settlement.receipt;
+    if (receipt === null || typeof receipt !== 'object' || Array.isArray(receipt)) {
+      errors.push('native-receipt');
+    } else {
+      const row = receipt as ObjectData;
+      if (
+        row.schema !== 'caws.containment.receipt.v1' ||
+        row.status !== 'signal-accepted' ||
+        row.reason !== 'signal-accepted' ||
+        row.errno !== null ||
+        row.pid !== callerPid ||
+        row.sessionId !== sid ||
+        row.startEpoch !== latch.agent_pid_started_at ||
+        row.comm !== latch.agent_pid_comm ||
+        row.latchPath !== path.join(repo, '.codex/hooks/state/danger-latch-' + sid + '.json') ||
+        row.latchGeneration !== latch.latch_generation ||
+        settlement.effect_observation !== 'signal-accepted' ||
+        settlement.latch_state !== 'unchanged'
+      )
+        errors.push('native-receipt-identity');
+    }
+  }
+  json(path.join(directory, 'probe/native-journal-readback.json'), { file, settlement, errors });
+  return { errors, file, settlement };
 }
 function start(
   executable: string,
@@ -240,6 +347,7 @@ const manifest: {
   }).stdout.trim(),
   root,
   cases: [],
+  selectedCase: selectedCase ?? 'all',
   failures: [],
   nonclaims: [
     'Both frontends select the same generated template snapshot, which may differ from the installed release',
@@ -419,6 +527,8 @@ async function run(): Promise<void> {
   for (const mode of ['legacy-python', 'candidate-native'] as const) {
     for (const kind of [
       'enabled',
+      'large-latch',
+      'escaped-latch',
       'disabled',
       'wrong-start',
       'wrong-pid',
@@ -430,6 +540,7 @@ async function run(): Promise<void> {
       'malformed-pid',
       'malformed-start',
     ] as const) {
+      if (selectedCase !== undefined && selectedCase !== kind) continue;
       try {
         await scenario(
           mode,
@@ -456,7 +567,7 @@ async function run(): Promise<void> {
       }
     }
   }
-  qualifyAuditOracle();
+  if (selectedCase === undefined) qualifyAuditOracle();
 }
 
 async function scenario(
@@ -505,7 +616,15 @@ async function scenario(
   const sid = 'effect-' + kind;
   for (const [step, command] of [
     ['unlatched', 'node -e \'process.stdout.write("fixture")\''],
-    ['arm', 'rm -rf /'],
+    [
+      'arm',
+      'rm -rf /' +
+        (kind === 'large-latch'
+          ? ' #' + 'x'.repeat(70 * 1024)
+          : kind === 'escaped-latch'
+            ? ' #' + '\u0001'.repeat(12 * 1024)
+            : ''),
+    ],
     ['probe', 'node -e \'process.stdout.write("fixture")\''],
   ]) {
     assert(step !== undefined && command !== undefined);
@@ -567,13 +686,29 @@ async function scenario(
         fs.existsSync(path.join(directory, 'ready-for-next-attempt')) ||
         caller.child.exitCode !== null ||
         caller.child.signalCode !== null,
-      'caller arming'
+      'caller arming',
+      // Two serial hook calls, each owned by the fixture's 35s watchdog.
+      // A shorter observer timeout can abort otherwise admissible work.
+      2 * 35000 + 500
     );
     assert.equal(caller.child.exitCode, null);
     assert.equal(caller.child.signalCode, null);
     assert(fs.existsSync(path.join(directory, 'allowed-before-latch.marker')));
     const latchFile = path.join(repo, '.codex/hooks/state/danger-latch-' + sid + '.json');
     const armed = object(latchFile);
+    if (kind === 'large-latch' || kind === 'escaped-latch') {
+      const latchBytes = fs.statSync(latchFile).size;
+      const armingInputBytes = fs.statSync(path.join(directory, 'arm/input.bin')).size;
+      json(path.join(directory, 'latch-size-observation.json'), {
+        latchBytes,
+        armingInputBytes,
+        formerReaderLimit: 65536,
+      });
+      assert(
+        latchBytes > 65536,
+        'producer must actually create state beyond the former reader limit'
+      );
+    }
     json(path.join(directory, 'latch-armed.json'), armed);
     assert.equal(armed.agent_pid, String(callerPid));
     assert.equal(armed.agent_pid_comm, binary);
@@ -594,7 +729,7 @@ async function scenario(
       delete armed.agent_pid_started_at;
       delete armed.agent_pid_comm;
     }
-    if (kind !== 'enabled' && kind !== 'disabled') json(latchFile, armed);
+    if (!enabledCase(kind) && kind !== 'disabled') json(latchFile, armed);
     json(path.join(directory, 'latch-before-next-attempt.json'), object(latchFile));
     const heartbeat = path.join(siblingDir, 'sibling-heartbeat.txt');
     await until(() => fs.existsSync(heartbeat), 'sibling heartbeat');
@@ -616,7 +751,7 @@ async function scenario(
     await bounded(caller.captureClosed, 45000);
     const stdout = fs.readFileSync(path.join(directory, 'probe/stdout.bin'), 'utf8');
     const stderr = fs.readFileSync(path.join(directory, 'probe/stderr.bin'), 'utf8');
-    const expectedSignal = kind === 'enabled' ? 'SIGTERM' : null;
+    const expectedSignal = enabledCase(kind) ? 'SIGTERM' : null;
     let refusal: unknown;
     try {
       refusal = JSON.parse(stdout);
@@ -632,7 +767,20 @@ async function scenario(
     const latch = object(latchFile);
     const audit = fs.existsSync(escalation) ? fs.readFileSync(escalation, 'utf8') : null;
     const command = 'node -e \'process.stdout.write("fixture")\'';
-    const auditErrors = auditProblems(latch, audit, kind, sid, command, callerPid);
+    const auditErrors = auditProblems(
+      latch,
+      audit,
+      kind,
+      sid,
+      command,
+      callerPid,
+      mode === 'candidate-native'
+    );
+    const native =
+      mode === 'candidate-native'
+        ? nativeSettlement(directory, repo, sid, kind, callerPid, latch)
+        : null;
+    auditErrors.push(...(native?.errors ?? []));
     const outcome = {
       mode,
       kind,
@@ -647,10 +795,9 @@ async function scenario(
       )
         ? fs.readFileSync(path.join(directory, 'probe/caller-observed-exit.txt'), 'utf8')
         : null,
-      identitySafe:
-        kind === 'enabled'
-          ? callerExit.signal === 'SIGTERM'
-          : callerExit.code === 0 && callerExit.signal === null,
+      identitySafe: enabledCase(kind)
+        ? callerExit.signal === 'SIGTERM'
+        : callerExit.code === 0 && callerExit.signal === null,
       allowedActionObserved: fs.existsSync(path.join(directory, 'allowed-before-latch.marker')),
       forbiddenActionObserved: fs.existsSync(path.join(directory, 'forbidden-after-latch.marker')),
       callerSurvivedRefusal: fs.existsSync(path.join(directory, 'survived-after-refusal.marker')),
@@ -658,6 +805,7 @@ async function scenario(
       siblingHeartbeatBytesAfter: after,
       knownRefusal,
       auditErrors,
+      native,
       stdout,
       stderr,
       latch,

@@ -21,6 +21,7 @@ import type { ComposerDependencies, HandlerResult, OfferReference } from './comp
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 import { tryExecuteStockHandler } from './stock-handlers';
+import { CONTAINMENT_ENV, createContainmentCapability } from './containment';
 import {
   enrichObjectJson,
   objectMemberJson,
@@ -146,7 +147,7 @@ function childEnvironment(
   const { request, selection } = options;
   const env = Object.fromEntries(
     Object.entries(options.environment).filter(
-      ([name]) => !name.startsWith('HOOK_') && !name.startsWith('GIT_')
+      ([name]) => !name.startsWith('HOOK_') && !name.startsWith('GIT_') && name !== CONTAINMENT_ENV
     )
   );
   const tool = object(request.payload.tool_input) ? request.payload.tool_input : {};
@@ -233,7 +234,8 @@ function verifyHandler(handler: SelectedHandler, selection: ActiveInvocationSele
 async function runChild(
   command: { path: string; args: readonly string[] },
   options: HandlerExecutorOptions,
-  compatibility: boolean
+  compatibility: boolean,
+  selectedHandler?: SelectedHandler
 ): Promise<CompatibilityDispatchResult> {
   const { selection, request, signal } = options;
   const temporaryRoot = options.environment.TMPDIR || '/tmp';
@@ -260,6 +262,11 @@ async function runChild(
       executionFile,
       compatibility
     );
+    const containment =
+      !compatibility && selectedHandler
+        ? createContainmentCapability({ ...options, handler: selectedHandler }, directory)
+        : null;
+    if (containment) env[CONTAINMENT_ENV] = containment.file;
     const startup = join(selection.runtimeDirectory, 'handler-env.sh');
     assertMachinePath(selection.runtimeDirectory, startup);
     if (!compatibility && !lstatSync(startup).isFile())
@@ -349,12 +356,19 @@ async function runChild(
           failure(`Handler offer receipt could not be captured: ${errorText(error)}`, code);
           return;
         }
+        const completed = {
+          exitCode: code,
+          stdout: Buffer.concat(stdout),
+          stderr: Buffer.concat(stderr),
+        };
+        const captured = containment?.consume(completed);
         settled = true;
         cleanup();
         accept({
           exitCode: code,
           stdout: Buffer.concat(stdout),
-          stderr: Buffer.concat(stderr),
+          stderr: Buffer.concat([completed.stderr, Buffer.from(captured?.diagnostic ?? '')]),
+          ...(captured?.intent ? { containment: captured.intent } : {}),
           offers,
           offerReceipts,
           executionRecords,
@@ -386,7 +400,8 @@ export function createHandlerExecutor(
   const environment = Object.freeze(
     Object.fromEntries(
       Object.entries(options.environment).filter(
-        ([name]) => !name.startsWith('GIT_') && !name.startsWith('HOOK_')
+        ([name]) =>
+          !name.startsWith('GIT_') && !name.startsWith('HOOK_') && name !== CONTAINMENT_ENV
       )
     )
   );
@@ -411,7 +426,7 @@ export function createHandlerExecutor(
       throw new HandlerExecutionError('Handler deadline expired');
     verifyHandler(expected, owned.selection);
     const result = tryExecuteStockHandler(expected, owned);
-    return result ?? runChild({ path: expected.path, args: expected.args }, owned, false);
+    return result ?? runChild({ path: expected.path, args: expected.args }, owned, false, expected);
   };
 }
 
