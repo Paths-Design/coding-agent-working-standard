@@ -447,6 +447,10 @@ trap_escalate() {
     trap_log_event "$session_id" "held" "no-kill" "invalid kill target pid=$pid" "$command"
     return 0
   fi
+  if [[ ! "$pid" =~ ^[1-9][0-9]*$ || ! "$start" =~ ^[1-9][0-9]*$ || -z "$comm" ]]; then
+    trap_log_event "$session_id" "held" "no-kill" "live agent identity incomplete or malformed" "$command"
+    return 0
+  fi
   if ! kill -0 "$pid" 2>/dev/null; then
     trap_log_event "$session_id" "held" "no-kill" "agent process $pid already gone" "$command"
     return 0
@@ -454,15 +458,19 @@ trap_escalate() {
   rec_pid="$(jq -r '.agent_pid // ""' "$latch_file" 2>/dev/null || true)"
   rec_start="$(jq -r '.agent_pid_started_at // ""' "$latch_file" 2>/dev/null || true)"
   rec_comm="$(jq -r '.agent_pid_comm // ""' "$latch_file" 2>/dev/null || true)"
-  if [[ -n "$rec_pid" && "$rec_pid" != "$pid" ]]; then
+  if [[ ! "$rec_pid" =~ ^[1-9][0-9]*$ || ! "$rec_start" =~ ^[1-9][0-9]*$ || -z "$rec_comm" ]]; then
+    trap_log_event "$session_id" "held" "no-kill" "arm-time agent identity incomplete or malformed" "$command"
+    return 0
+  fi
+  if [[ "$rec_pid" != "$pid" ]]; then
     trap_log_event "$session_id" "held" "no-kill" "pid drifted: armed=$rec_pid live=$pid" "$command"
     return 0
   fi
-  if [[ -n "$rec_start" && -n "$start" && "$rec_start" != "$start" ]]; then
+  if [[ "$rec_start" != "$start" ]]; then
     trap_log_event "$session_id" "held" "no-kill" "start-time mismatch (PID reuse suspected): armed=$rec_start live=$start" "$command"
     return 0
   fi
-  if [[ -n "$rec_comm" && -n "$comm" && "$rec_comm" != "$comm" ]]; then
+  if [[ "$rec_comm" != "$comm" ]]; then
     trap_log_event "$session_id" "held" "no-kill" "comm mismatch: armed=$rec_comm live=$comm" "$command"
     return 0
   fi

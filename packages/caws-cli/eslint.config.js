@@ -3,7 +3,7 @@ const tseslint = require('typescript-eslint');
 
 // TS-family globs shared by the tseslint blocks below. templates/ is included:
 // hook-pack templates are shipped consumer code, not docs.
-const TS_GLOBS = ['src/**/*.ts', 'tests/**/*.ts', 'templates/**/*.ts'];
+const TS_GLOBS = ['src/**/*.ts', 'tests/**/*.ts', 'templates/**/*.ts', 'scripts/**/*.ts'];
 // The runtime Node globals both blocks need. (eslint-plugin-node is gone; its
 // env presets died with .eslintrc.js.)
 const NODE_GLOBALS = {

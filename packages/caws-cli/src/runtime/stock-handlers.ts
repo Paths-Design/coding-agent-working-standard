@@ -11,7 +11,7 @@ import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
-  'block-dangerous.sh': 'eef8c81c9cda40f1ff9d1b7fe497f4ae2c658a419a597158c1e05656fef61d3a',
+  'block-dangerous.sh': '39e99cf8df8ac6ffd686397d9c7ea26818c2349a371cce249a9d62f0ce57ffdc',
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
 };
 const LIBRARIES: Readonly<Record<string, readonly string[]>> = {

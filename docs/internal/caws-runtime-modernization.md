@@ -76,7 +76,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
-| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; E43 demonstrates a common missing-identity lookup gap in the isolated selected Codex guard | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution; use owned disposable targets and a surviving sibling control. Root/review-subagent shared PID is observed; other user-chat sharing and effective deployed kill policy require verification |
+| R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; E43 common missing-session lookup gap and E45 native loss of refusal on caller termination; incomplete-stamp signaling repaired in source, E46 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution; use owned disposable targets and a surviving sibling control. Root/review-subagent shared PID is observed; other user-chat sharing and effective deployed kill policy require verification |
 | R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking compatibility gap; unreplaced | Cold renderer start must survive request cleanup and serve the next request; source-change retirement and concurrent startup must not duplicate or kill the service. Existing warm-daemon evidence does not cover first-start group ownership |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
@@ -440,6 +440,55 @@ Additional bounded evidence and unresolved dependencies:
   are required; a blanket child exemption or bare detachment does not discharge
   them. Cold-start survival, ordinary-child cleanup, interrupted ownership
   transfer and generation retirement have not been executed in the prototype.
+- E45: The repeatable typed runner `scripts/qualify-native-containment.ts` and
+  disposable Rust caller `tests/fixtures/containment-agent.rs` retain effect
+  observations under `packages/caws-native/target/qualification/containment-effect-2026-10-19T06-38-48-060Z/`.
+  The command `node packages/caws-native/target/qualification-tools/qualify-native-containment.js <absolute-cli-directory>`
+  exits 1 against the original selected template digest `408c06a7…77baa0`.
+  Both frontends select only stock Codex `block-dangerous.sh`; no input command
+  executes. The legacy enabled caller's parent wait records SIGTERM, raw stdout
+  contains the quarantine block, the forbidden marker is absent and a sibling
+  heartbeat advances. Native enabled also records SIGTERM, but raw stdout is
+  empty and stderr reports original-caller cancellation. Its escalation log is
+  absent; `scenario-incomplete.json` preserves that failed assertion rather than
+  treating it as a completed case. Native missing-stamp separately records
+  SIGTERM, empty stdout and a completed escalation line. Source inspection
+  locates the conflict: the shell signals before dispatcher output reaches the
+  proposal; Rust treats the caller exit as cancellation and kills the engine
+  group, potentially interrupting audit. Neither signal success nor baseline
+  agreement satisfies refusal/audit custody. Both frontends also signal after
+  deleting all arm-time identity fields: an inherited safety defect.
+- E46: Source repair requires complete positive-decimal PID/start fields and
+  nonempty comm in both fresh and arm-time identities, then exact tuple
+  agreement before any dry-run or signal. Refusal and strikes remain active
+  when signaling is held. The 22-case effect run retained at
+  `packages/caws-native/target/qualification/containment-effect-2026-10-19T06-44-00-583Z/`
+  exits 1 solely for native enabled refusal loss. Both frontends preserve block,
+  caller survival and advancing sibling heartbeat for disabled killing, wrong
+  PID/start/comm, all missing stamps, each missing stamp member and malformed
+  PID/start. The valid legacy target still exits via SIGTERM; the valid native
+  target exits via SIGTERM but has empty quarantine stdout. These frontends
+  share the repaired template snapshot; this is an intentional inherited safety
+  repair, not agreement with the previous installed guard. Actual harness
+  ingress, exclusive session target ownership, live partial-observation failure,
+  signal-ignore behavior and race-free process binding remain unverified.
+- E47: Seven focused Bats checks exit 0 for actual verified SIGTERM, suppressed
+  signal, unresolved identity, disabled killing, PID drift and two dry-run
+  controls. Receipts are retained under
+  `packages/caws-native/target/qualification/containment-bats-2026-10-19/`:
+  `trap-agent-39tte6/signal.json` records PID 31408/signal 15;
+  `trap-agent-P70FPk/observation.json` records a surviving PID 32168 with an
+  escalation stamp but false signal oracle; `trap-agent-3NyOXm/observation.json`
+  records surviving dry-run PID 37762 without a signal receipt. These legacy
+  receipts do not repair the native transport failure. An earlier accidental
+  `node …/bats` invocation exits 1 with SyntaxError before any test; the corrected
+  invocation uses `bash …/bats`. Strict runner compilation, actual script ESLint,
+  Rust formatting and shell syntax checks exit 0. Initial ESLint attempts
+  ignored the TS script; `scripts/**/*.ts` is explicitly included in the package
+  lint configuration. The Rust watchdog's independent `/bin/sleep 30` control
+  records owned-hook wait signal 15, caller exit 21 and no admitted-action marker.
+  Pipe EOF gates complete output capture; timeout aborts only owned capture
+  streams and records incompleteness, never an inferred successful receipt.
 
 The executable embedded-Python surface is 15 shell files, 19 inline bodies and
 seven external callsites. A textual `python` hit is not sufficient: seven broader
@@ -499,7 +548,15 @@ progress and does not replace that transaction or its event readback.
 ## Ordered next work
 
 1. Resolve the R32 containment dependency and qualify its actual effect before
-   accepting identity-policy changes or claiming safety parity. Trace effective
+   accepting identity-policy changes or claiming safety parity. E45/E46 show
+   native cancellation destroys the original quarantine output after the shell
+   terminates its caller. Carry a validated terminal containment intent from
+   the selected guard through composition to the native owner: retain refusal,
+   verify the request-bound target, apply the effect once and finalize its
+   receipt under a bounded terminal state. Ordinary caller-death cancellation
+   must remain enforced; neither a generic grace period nor silently disabling
+   killing qualifies. A private intent record grants no authority by itself.
+   Trace effective
    installed handlers/libraries and defaults, distinguish logical identity from
    target process instance, and retain isolated termination/refusal/state and
    surviving-sibling artifacts. Settle R33 service ownership before resident
