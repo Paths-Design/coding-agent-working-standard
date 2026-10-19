@@ -28,6 +28,9 @@ module, passing unit tests, or the existence of this document.
   their changes and reconcile shared build/package interfaces before landing.
 - The migration goal remains open until replacement, integration, adoption and
   acceptance obligations are met. A completed component does not close the goal.
+- Machine installation replaces the old runtime only after full parity with the
+  previous selected version is established. Isolated package/harness qualification
+  precedes that cutover; after cutover, verify actual selected execution here.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 **packaged**, **installed**, **native-observed**, **retired**. Record exactly the
@@ -48,7 +51,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | component tested; not integrated | Explicit context and injected Stop budget; consumer migration and transport-Stop recovery remain open |
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component tested; not integrated | Wrapped deletion, effective-checkout Git proofs, wrong-index and linked-HEAD controls checked with real Git/FS fixtures; full corpus/native-consumer proof remains open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
-| R07 | `shared/lib/hook-utilities.py`: ripgrep/staging/lockfile utilities | Typed TS guard utilities + bounded Git port | unreplaced | Unknown/dynamic cwd, forced ignored staging, option values, pathspec safety and lockfile fixtures |
+| R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | implementing; consumer unreplaced | Actual shell consumer is `shared/hook-utilities.sh`; lockfile restore belongs to the classifier, not this utility |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence | TS transcript store | unreplaced | Atomic replacement, identity, replay custody, malformed and concurrent inputs |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization | TS normalization interfaces/common implementation | unreplaced | Lossless occurrence/provenance and explicit unavailable fields |
@@ -71,7 +74,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
 | R28 | Performance and load qualification | Replayable TS/native workload | unreplaced | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
-| R30 | Stop infrastructure budget persistence | Rust project/session budget library | implementing; mutation gaps identified | Required canonical project key, separate identified/unkeyed sessions, anchored filesystem transactions and bounded locking; no host/wire consumption yet |
+| R30 | Stop infrastructure budget persistence | Rust project/session budget library | component tested; native integration open | Project/session isolation, anchored no-follow transactions, bounded locks/read/write, hostile filesystem and Darwin-specific mutation adjudication; no host/wire consumption yet |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 
 ## Machine-wide workload and representation boundary
@@ -182,6 +185,28 @@ Additional component evidence:
   exemption. Wrapped recursive deletion, inert command arguments, read-only find
   and allowed scratch-child controls distinguish the intended behavior. These
   are classifier decisions; no destructive classified operation was executed.
+- E24: Stop library repairs passed twenty-seven cases. The repaired full per-file
+  mutation run tested 178 changes: 139 caught, twenty missed, fifteen unviable,
+  four timeouts, exit 3. Nineteen misses have narrowly inspected Darwin
+  equivalents (eighteen disjoint-flag OR/XOR, one redundant directory flag when
+  opening literal `/`). The remaining fd0/stale-EEXIST test gap was repaired
+  without changing production logic; its focused test passed and a targeted
+  mutation rerun caught that one change, exit 0. Raw full-run score is unchanged.
+  Artifacts remain under `target/stop-budget-mutation-repaired/mutants.out` and
+  `target/stop-budget-mutation-fd-zero/mutants.out` in the native crate. This does
+  not establish other-target equivalence, power-loss durability or native Stop
+  integration. Unavailable-after-commit outcomes must not be retried.
+- E25: Caller-wire native all-target Clippy passed. The full serial Cargo run
+  exited 101: twenty-seven library cases and five binary units passed, with
+  sixteen of eighteen executable groups passing. The new concurrent-caller case
+  preserved independent cwd/environment/entry mode. One failed fixture attempted
+  a non-UTF8 filename that this Darwin filesystem rejects at `mkdir`; executable
+  rejection now covers native environment bytes and does not claim that path
+  case. The held-pipe fixture lacked its child marker under a 350 ms cold-start
+  allowance; its request budget is two seconds with an asserted 3.5-second total
+  ceiling and mandatory child/foreign-process checks. Both corrected focused
+  executable tests passed. This is not a fresh all-suite pass or typed-engine
+  integration proof.
 
 ## Embedded and developer implementation coverage
 
@@ -242,11 +267,38 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-1. Finish executable Python inventory and baseline refusal/bootstrap tests.
-2. Implement/test the typed native response and isolated invocation contracts.
-3. Implement Rust transport and the shared protocol against the one-shot engine.
-4. Replace feature implementations and their consumers, updating each row with
-   concrete checks; preserve project overrides and requirement-derived oracles.
-5. Add resident lifecycle, recovery and bounded scheduling using the same engine.
-6. Qualify package/native adoption, performance, independent committed-candidate
-   feedback and recorded acceptance; retire implementations only on earned proof.
+1. Finish validation and committed-candidate review for bounded work in flight:
+   caller wire context, scoped Stop persistence, classifier repairs and guard
+   utilities. Do not expand horizontal porting before the executable spine.
+2. Integrate native client → actual typed one-shot engine → selected production
+   guards → native result. Verify current authority, refusal channels, selected
+   overrides, journal custody and Stop/handoff behavior through that path.
+3. Qualify isolated packaged adoption and rollback. Install on this machine only
+   after full parity with the previous selected version; verify selected native
+   behavior after replacement. Identify which legacy consumers each slice retains; a
+   partial landing does not earn A4 or full migration acceptance.
+4. Reuse the verified engine in the resident host. Exercise thirteen real native
+   clients across four repositories, including warm policy changes, repeated IDs,
+   slow/reentrant extensions, overload, generation overlap and host replacement.
+5. Replace remaining implementations together with their consumers, qualify
+   supported harnesses and no-Python packaging, and record earned acceptance.
+
+## Landing obligations
+
+The migration must preserve CAWS authority, not only familiar filenames and
+interfaces. The architecture's reconstruction falsifiers translate the user's
+Sterling inversion reference into checks against actual CAWS consumer behavior.
+The reference itself grants no implementation or acceptance authority.
+
+| Milestone | Observed state | Proof required to advance |
+| --- | --- | --- |
+| Component foundations | Tested components; installed hooks use the original runtime | Committed source and checks remain scoped to what actually ran |
+| Executable replacement spine | Unintegrated | Compiled client runs the actual typed engine and selected production guard chain; positive and refusal controls reach native output with correct context and custody |
+| Packaged selection and rollback | Unproven | Clean candidate package selects the replacement in an isolated home/harness; native guarded write is withheld; rollback restores the prior selected generation without losing governed state; actual machine replacement waits for full parity |
+| Resident multi-project operation | Unimplemented | Same engine serves the required native workload with fresh authority, bounded fair capacity, owner-specific ordering, explicit uncertain outcomes and safe upgrades |
+| Complete migration | Open | Every first-party Python implementation and consumer has an earned replacement; supported native observations and authoritative A1–A8 evidence exist |
+
+Parity qualification identifies the previous selected CLI/runtime manifest and
+native registrations, and reconciles changes to that baseline before machine
+cutover. Intentional repairs to demonstrated inherited defects remain explicit;
+silently preserving or changing a bug cannot substitute for a behavior contract.

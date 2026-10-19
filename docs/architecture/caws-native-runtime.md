@@ -99,6 +99,14 @@ evaluation, extension execution, journal, Stop budget and scheduling. The engine
 depends on these interfaces. It is not a service locator and does not own every
 store writer.
 
+First-party helpers execute through typed worker-local interfaces. A worker must
+not wait for nested work queued behind its own state owner or a saturated worker
+pool. Extension reentry requires an explicit supported path or an immediate
+bounded refusal; increasing pool size cannot resolve that ownership cycle.
+Qualification includes a reentrant extension and observes both its outcome and
+the progress of unrelated sessions. This constrains host integration; a
+reentrant daemon defect has not been demonstrated in the current one-shot code.
+
 ## Resident lifecycle
 
 `absent -> starting -> ready -> draining -> stopped` has one startup owner and
@@ -178,12 +186,47 @@ acceptance claim.
 
 ## Execution order
 
-- **Investigate:** inventory every Python/embedded consumer and native failure
-  contract; attribute baseline cost; resolve lifecycle/identity persistence and
-  platform packaging before they constrain consumers.
-- **Implement:** native result adapter and isolated typed context, Rust client
-  and shared protocol, one-shot engine, feature replacements, then the resident
-  host and recovery. Tests exercise the consumer boundary at each step.
-- **Change:** install/adoption and shared machine selection only after package,
-  native harness and rollback evidence. Retire replaced implementations and
-  update the tracker in the same logical change as each replacement.
+The next implementation milestone is an executable one-shot path through the
+native client, typed engine, selected production guards and native result.
+Finish bounded component work already in flight, then prioritize that path over
+adding more isolated ports. It needs actual handler, environment, override,
+journal and Stop/handoff behavior; a fixture engine cannot discharge that
+milestone.
+
+- **Investigate:** map current guard behavior and retained failure lineage to
+  the consumer path; attribute baseline cost and settle package/rollback
+  boundaries. Historical ledger descriptions guide probes, not current authority
+  claims.
+- **Implement:** integrate the one-shot path and prove positive and refusal
+  behavior through it. Replace remaining features with their consumers, then run
+  that same engine under the resident host and thirteen-session workload.
+- **Change:** qualify an isolated packaged adoption and rollback before
+  selecting it for active machine sessions. Machine-wide replacement requires
+  full parity with the previous selected version, including supported native
+  harness and project-override behavior; component or partial-path success
+  cannot trigger installation. Once that parity is established, install the
+  replacement on this machine and verify its selected execution. Retire each old
+  consumer only after its real replacement is selected and checked. Keep the
+  full migration open until every replacement, supported harness and acceptance
+  obligation is discharged.
+
+## Authority boundaries and reconstruction falsifiers
+
+Sterling's sibling `docs/theory/sterling-inversions.md` identifies the risk of
+retaining familiar components while substituting their authority model. It is a
+reference for this review, not an additional source of CAWS write authority.
+CAWS's [failure lineage](../failure-lineage.md) preserves incident intent and
+residuals; current contracts and executable consumers establish current
+behavior.
+
+| Tempting substitution                                                           | Required CAWS boundary                                                                                                      | Discriminating observation                                                                                                                                  |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An available daemon, fresh lease or cached verdict establishes permission       | Runtime availability and agent visibility confer no authority; current canonical project/spec/claim policy remains decisive | Keep the host warm, withdraw a relevant binding or change policy, and observe the next real guarded request refuse without borrowing cached permission      |
+| A project/session queue replaces shared-state authority and transactions        | Scheduling owns capacity and declared execution order; existing governed writers own shared mutations and audit             | Concurrent same-project sessions cannot lose a governed update, bypass scope, or produce spec evidence without its corresponding event                      |
+| A valid frame or exit zero establishes that governance ran                      | Wire validity, engine execution, native delivery and harness action remain separate observations                            | A real guarded write is withheld by the native harness; corrupt identity, omit a required handler, or alter the refusal channel and the check fails         |
+| A common error fallback is equivalent to refusal                                | Valid guard refusals, configuration failure, execution uncertainty and undeliverable Stop infrastructure remain distinct    | Repeated valid Stop blocks never spend the infrastructure budget; only the documented unavailable-result sequence releases with an explicit diagnostic      |
+| Better speed, a new language or passing component tests establishes replacement | Performance changes cost; exercised production consumers establish preserved behavior and replacement                       | An unpacked candidate selects the actual replacement, exercises its guard and override paths, survives rollback, and no longer invokes the retired consumer |
+
+The tracker records component, package, installation, native observation and
+retirement separately. No status or acceptance follows from retaining the nouns,
+removing a Python filename, counting tests, or improving latency alone.
