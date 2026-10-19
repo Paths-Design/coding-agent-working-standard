@@ -44,10 +44,10 @@ installed work, and correct stale next steps before choosing another task.
 
 The terminal bridge at `e01a1b00` has completed committed-candidate review; E56
 retains its clean committed replay. Neither observation closes R32 or earns
-whole-runtime acceptance. The next executable investigation is R33's cold-start
-service lifetime, followed by the remaining R32 process-domain and identity
-contracts. No resident implementation or machine replacement follows from the
-bounded containment result.
+whole-runtime acceptance. E57 reproduces R33's cold-start service failure through
+the actual native/typed path. The next boundary is explicit service ownership
+and client integration, alongside the remaining R32 process-domain and identity
+contracts. No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 **packaged**, **installed**, **native-observed**, **retired**. Record exactly the
@@ -94,7 +94,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; terminal bridge exercises selected explicit-session Codex Bash path and larger/escaped latch state, E51–E56; complete containment parity open | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races and unqualified compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking compatibility gap; unreplaced | Cold renderer start must survive request cleanup and serve the next request; source-change retirement and concurrent startup must not duplicate or kill the service. Existing warm-daemon evidence does not cover first-start group ownership |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | blocking runtime-reproduced compatibility gap, E57; unreplaced | Legacy cold start survives and serves the next request; native calls return 0 and render correctly while both daemon attempts disappear and the second render falls back inline. Explicit service binding/client integration, source retirement, startup races and cancellation outcomes remain open |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
@@ -634,6 +634,44 @@ Additional bounded evidence and unresolved dependencies:
   disable the guard. The broader telemetry test type error and all unearned
   acceptance obligations remain open. This slice is committed, not installed
   or landed on main.
+- E57: `npm run qualify:native:services --
+  /Users/darianrosebrook/Desktop/Projects/sterling /usr/bin/python3 /usr/bin/jq`
+  from `packages/caws-cli` exits 1 after successful CLI/native builds and strict
+  runner compilation. The retained scenario is
+  `packages/caws-native/target/qualification/service-lifetime-2026-10-19T09-11-01-787Z/`.
+  Its isolated homes select only a copied Sterling session-log override; custody
+  records match all 28 copied source files. Neither real Sterling service state
+  nor installed machine selection is used. Both frontends use generated runtime
+  `3693319d…f70551`, not the installed generation.
+  Legacy requests exit 0, render users 1–2 then 1–3, and retain precise daemon
+  instance 68466 across requests. Its lease advances served 0→1; the second
+  request executes no one-shot renderer. The daemon log records listening and
+  idle exit; final observation is ESRCH and the private lease is absent.
+  Native requests also exit 0 and render those users, but witnesses 1158/group
+  97053 and 8359/group 3273 are absent after request completion. Neither
+  publishes a live lease, the daemon log is empty, and both requests execute
+  the inline renderer. Their input-bound journals record compatibility dispatch,
+  native handoff and adapter finish. This demonstrates failed service reuse
+  despite successful rendering; no daemon wait status independently identifies
+  its terminating signal. Request-group cleanup is the source-supported cause,
+  not an externally observed signal receipt.
+  `build-identities.json` records revision `36a110cc` plus working probe source
+  and emitted hashes. Independent readback matches the recorded native, engine,
+  interpreter/executable and recursive dist-module hashes and copied sources.
+  It does not establish a recursive dependency closure or a committed final
+  qualifier snapshot. The initial runner preflight exits 2 on an invalid
+  line-broken TypeScript assertion before execution; the corrected runner
+  compiles. Subsequent strict runner compilation, scoped ESLint, Rust formatting
+  and all-target strict Clippy exit 0. Final formatting changes probe bytes;
+  retained runtime artifacts remain the evidence for this run.
+  Cleanup observes only witnessed instances; all are absent and both leases
+  are absent. It does not prove reclamation of every descendant or a wedged
+  orphan. Unavailable/unwitnessed startup stops the probe rather than passing
+  an empty set. No daemon PID/group is signaled by this runner. The private
+  daemon uses a configured 60s idle window, with 68s observation; this keeps a
+  fresh lease outside the foreign PID-only reaper threshold during a bounded
+  35s hook call. Concurrent starters, cancellation, generation retirement,
+  all-harness behavior and service lifetime repair remain unqualified.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -724,16 +762,22 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-1. Investigate R33 through isolated copies of Sterling's actual selected renderer
-   override, client, daemon and renderer dependencies. Start with no daemon;
-   invoke the actual native/typed path, observe request cleanup, and issue a
-   second request. Retain render outputs, selection/build identities, precise
-   daemon birth/process-group observations and readiness/request evidence that
-   distinguishes reuse from replacement. Compare the legacy path. Observe only
-   the private service's configured idle retirement; if cleanup remains live or
-   ambiguous at the bounded deadline, retain the sandbox and stop further
-   scenarios. Do not signal an unowned process or detach arbitrary handler
-   descendants. Resolve service ownership before resident implementation.
+1. Resolve R33 through explicit service binding and client integration. E57 is
+   the failing cold-start/reuse regression; preserve its native failure until
+   the owning implementation changes. `SystemSurfacePolicy` has no service
+   lifetime declaration, and Sterling directly sources its client rather than
+   using library-selection indirection. Prewarming cannot cover restart or
+   stale-code fallback. Define a selected-source-bound service capability that
+   reaches the actual compatibility dispatcher/client and a Rust owner that
+   retains its own child/group from creation; PID/token leases and heartbeats
+   confer no ownership. Keep ordinary request-group cleanup unchanged.
+   Qualify serialized cold startup, ready/uncertain outcomes, source retirement,
+   cancellation and a surviving-service/removed-request-child control. The
+   foreign renderer can write after a client disconnects: owner creation alone
+   does not resolve that outcome, and retry must not blindly replay it. Observe
+   only owned private service retirement during qualification; if cleanup stays
+   live or ambiguous at its bounded deadline, retain the sandbox and stop
+   further scenarios. No arbitrary descendant receives a cleanup exemption.
 2. Investigate the remaining R32 identity/process-domain dependencies.
    E52/E53/E55/E56 observe the selected
    caller/refusal/effect/finalization chain and hostile output failure, but do
