@@ -43,10 +43,10 @@ bounded assignments transfer execution only, not acceptance ownership.
 | ID | Feature / authoritative source | Destination | State | Dependency / acceptance evidence |
 | --- | --- | --- | --- | --- |
 | R01 | `runtime/bootstrap.py`: immutable generation bootstrap | Rust client + TS generation resolver | unreplaced | Identity tamper, upgrade, absent runtime, native error tests; package targets unproven |
-| R02 | `runtime/caws-hook.py`: configuration, selection, overrides | TS invocation engine and existing authority adapters | selection component tested; not integrated | Shared authority validators, real filesystem freshness/tamper/override fixtures; Git-root acquisition and enforcement host remain open |
-| R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | unreplaced | No per-stage interpreter startup; ordering, interrupted start, refusal and failed-journal tests |
+| R02 | `runtime/caws-hook.py`: configuration, selection, overrides | TS invocation engine and existing authority adapters | selection and project-context components tested; not integrated | Shared authority validators, FS freshness/tamper/override and real Git-worktree fixtures; enforcement host remains open |
+| R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | ordered composition component tested; host/journal unintegrated | Ordered execution, refusal precedence, failed-journal preservation and actual output membership checked; execution/handoff persistence remain open |
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | component tested; not integrated | Explicit context and injected Stop budget; consumer migration and transport-Stop recovery remain open |
-| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | unreplaced | Preserve hostile command/argument/path fixtures; derive oracle on disagreements |
+| R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | component tested; not integrated | Ordered escalation, real Git/FS effects, hostile fixtures, strict sidecar reads and inherited executable-spelling repair checked; full corpus/native-consumer proof remains open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
 | R07 | `shared/lib/hook-utilities.py`: ripgrep/staging/lockfile utilities | Typed TS guard utilities + bounded Git port | unreplaced | Unknown/dynamic cwd, forced ignored staging, option values, pathspec safety and lockfile fixtures |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
@@ -66,11 +66,34 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport and cancellation component tested | Signal/parent/output cancellation and bounded cleanup/delivery checked; actual typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | implementing protocol and selection; engine not integrated | Request schema retains exact native input alongside parsed payload; no stock enforcement host exists yet |
-| R25 | Demand-start, warm residency and idle exit | Rust startup + TS resident host | unreplaced | Single starter, no heartbeat authority, no active-request eviction, drain/version tests |
+| R25 | Demand-start, warm residency and idle exit | Rust startup + TS resident host | unreplaced | Machine-wide bounded capacity, fair project/session admission, owner-specific serialization, single starter, no heartbeat authority, no active-request eviction, drain/version tests |
 | R26 | Persistent request outcomes / deferred queue | TS journal/spool and bounded scheduler | unreplaced | Crash/reconnect/unknown outcomes, no blind mutation replay, isolation and bounded disk/queue |
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
-| R28 | Performance and load qualification | Replayable TS/native workload | unreplaced | Cold/warm p50/p95/p99, per-stage cost, RSS, process count and bounded overload; 100 ms warm is a target |
+| R28 | Performance and load qualification | Replayable TS/native workload | unreplaced | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
+| R30 | Stop infrastructure budget persistence | Rust project/session budget library | component tested; mutation qualification running | Required canonical project key, separate identified/unkeyed sessions, anchored filesystem transactions and bounded locking; no host/wire consumption yet |
+| R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | implementing | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
+
+## Machine-wide workload and representation boundary
+
+The user requires at least thirteen simultaneous sessions across at least four
+repositories. This is a qualification workload, not a fixed maximum. Bound worker
+and cache capacity across the machine, and admit work fairly across projects and
+sessions. Serialize operations by their actual owning state, including canonical
+project plus session for session state; retain project-store transactions for
+cross-session mutations. Rendering cannot monopolize required enforcement.
+Heartbeat expiry never evicts an active request or discards recoverable work.
+Qualify mixed harnesses, repeated session IDs across projects, slow extensions,
+large transcripts, bursts, overload and generation upgrades. Report per-project
+and per-session distributions so aggregate performance cannot hide starvation.
+
+The response protocol's text strings cannot represent arbitrary native output
+bytes: stdout `ff 00 61` cannot pass through Rust `String::as_bytes()` unchanged.
+Baseline non-Codex forwarding preserves raw stdout. Lossless byte transport and
+explicit text interpretation are required before engine integration/adoption;
+text-component checks do not close that requirement. The Stop budget also needs
+project-scoped identity: a machine-global session ID cannot isolate cross-project
+work. Ambiguous legacy counters remain untouched instead of acquiring a project.
 
 ## Review findings carried into implementation
 
@@ -105,6 +128,29 @@ each remaining subprocess has a declared purpose and separately measured cost.
 | E14 | Foundation committed as `89fcc39f`; subsequent build passed and integrated ten-suite Jest run produced 440 pass / 2 fail | Classifier missed protected home when the platform resolves `/home` through a symlink; a kubectl read-effect oracle expected an undeclared builtin capability. Source and oracle repairs require a fresh run; passing neighboring suites are not classifier equivalence |
 | E15 | Native cancellation failed attempts: Darwin empty-mask pipe polling missed a closed reader; `/dev/null` produced `POLLNVAL` and a false cancellation | Corrected by polling `POLLOUT` and restricting closed-reader inference to FIFO/socket descriptors; added real-pipe and regular-file/null-device controls. A watchdog-owned orphan was identified and its owned group terminated |
 | E16 | Native worker: format, strict all-target Clippy and serial Cargo tests exited 0; three unit checks and fifteen executable groups | Nine TERM/INT/HUP phase cases, parent death, closed output, output backpressure and unrelated-process preservation exercised. A 1s request plus cleanup/delivery/diagnostic budgets finished below 2.1s in the fixture; reserve up to 1.1s overhead in integration. No SIGKILL/escaped-group, Stop recovery, harness or resident proof |
+
+Additional component evidence:
+
+- E17: Rebuilt classifier, composer, context and shared Git-binary suites passed
+  143 checks in four suites. Real linked-checkout/canonical identity, request
+  environment isolation, ordered composition and classifier repairs exercised.
+  Subsequent strict sidecar byte-read correction requires another run.
+- E18: Baseline Python and root-observed compiled classifier allowed
+  `/bin/rm -rf /` and `/usr/bin/find . -delete` while literal controls denied or
+  asked. Classification only; no destructive operation executed. Candidate
+  executable-name recognition repairs this inherited hole, with read-only and
+  scratch-child controls; it is an intentional repair rather than source parity.
+- E19: Build and ten suites passed 456 checks, including eighty classifier cases
+  with strict sidecar reads. Then the Git context reader was changed to reject
+  malformed UTF8 rather than replace authority-path bytes: focused context suite
+  passed nineteen checks. The quoted-token fixture passed its filtered recheck
+  (one selected, seventy-nine intentionally skipped); targeted ESLint passed.
+- E20: `caws specs amend` added A8 and a machine-wide isolation invariant for the
+  user's thirteen-session/four-repository workload. No acceptance was recorded.
+  Native Stop-budget library checks passed sixteen module cases, including same
+  session IDs across projects; parent per-file mutation qualification is running.
+  A delegated redirected mutation command was refused by the installed write
+  guard; the owning parent verified scope and started the explicit scoped command.
 
 ## Embedded and developer implementation coverage
 
@@ -158,6 +204,7 @@ commits and spec evidence refer to their actual checked revision and command.
 | A5 | unchecked | Supported harness and extension behavior through installed/native acceptance observations |
 | A6 | unchecked | Declared reproducible baseline/candidate workload with distributions, process counts and overload correctness |
 | A7 | unchecked | Artifact target identity, clean install, trust, upgrade, rollback and documentation proofs |
+| A8 | unchecked | Thirteen sessions across four repositories; fair admission, cross-project/session isolation, owner-specific ordering, independent enforcement capacity, overload and upgrade behavior |
 
 Only `caws specs evidence` records authoritative verdicts. This ledger explains
 progress and does not replace that transaction or its event readback.

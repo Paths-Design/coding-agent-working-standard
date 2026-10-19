@@ -115,6 +115,17 @@ Per-request cancellation prevents request-owned children from mutating state
 after completion. Disconnected or crashed requests have an explicit uncertain
 terminal outcome; reconnection does not manufacture exactly-once execution.
 
+The required machine workload includes at least thirteen simultaneous sessions
+across at least four repositories. Bound worker and cache capacity across the
+machine and admit work fairly by canonical project and session. Serialize only
+operations sharing an owning state; preserve project-store transactions where
+sessions mutate shared records. Rendering has separate bounded capacity from
+required enforcement. Heartbeat expiry cannot evict in-flight work.
+Qualification includes mixed harnesses, repeated session IDs across projects,
+slow extensions, large transcripts, bursts, overload and generation changes,
+with per-project and per-session measurements rather than aggregate-only
+latency.
+
 ## Ranked failure modes and decision timing
 
 | Severity | Trigger and failure                                                                                  | Cost                                                               | Resolve timing                                                                                           |
