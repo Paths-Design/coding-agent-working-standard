@@ -213,7 +213,9 @@ export async function analyzeCommand(
     return list(tree.commands, states, reader, depth);
   }
   function substitution(tree: ParsedScript, state: State, depth: number): void {
-    script(tree, [clone(state)], true, depth);
+    const outputs = script(tree, [clone(state)], true, depth);
+    // Bindings and cwd are local to the producer; filesystem effects are shared.
+    if (outputs.some((output) => output.filesystemChanged === true)) state.filesystemChanged = true;
     ctx.trace(
       tree,
       'substitution',
@@ -240,6 +242,7 @@ export async function analyzeCommand(
       return next;
     }
     const expanded = word(node.value, state, depth, true);
+    if (state.filesystemChanged === true) next.filesystemChanged = true;
     const values: string[] = [];
     let unknown = false;
     for (const variant of expanded) {
@@ -369,11 +372,12 @@ export async function analyzeCommand(
     for (const suffix of node.suffix)
       if (suffix.type !== 'Word' && suffix.type !== 'Assignment')
         redirect(suffix, state, reader, depth + 1);
+    if (assigned.filesystemChanged === true) state.filesystemChanged = true;
     assigned.filesystemChanged = state.filesystemChanged === true;
     if (!node.name) return [assigned];
     const env = new Map<string, Value>();
     for (const [name, value] of assigned.bindings)
-      if (name.startsWith('GIT_')) env.set(name, value);
+      if (name.startsWith('GIT_') || name === 'PAGER') env.set(name, value);
     const out = vectors.flatMap((argv) => {
       const before = clone(state);
       dependencies.observers?.invocation?.({

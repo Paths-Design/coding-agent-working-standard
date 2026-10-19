@@ -165,6 +165,8 @@ try {
     "node <<'JS'\nconst f = () => { console.log(1, 2); }; const obj = { a: 1, b: 2 }; f();\nJS"
   );
   assert.equal(benignInterpreter.status, 0, benignInterpreter.stderr);
+  const benignThenRead = writeGuard("node <<'JS'\nconst fn = x => x;\nJS\ngit status --short");
+  assert.equal(benignThenRead.status, 0, benignThenRead.stderr);
   const finiteForeign = writeGuard(`DEST='${foreign}/never-written'; touch "$DEST"`);
   assert.equal(finiteForeign.status, 2, JSON.stringify(finiteForeign));
   assert.match(finiteForeign.stderr, /worktree 'foreign'/);
@@ -196,6 +198,12 @@ try {
   assert.equal(changedMapping.status, 2, changedMapping.stderr);
   assert.match(changedMapping.stderr, /metadata-coordinate-unresolved/);
   assert.equal(fs.readFileSync(path.join(own, '.git'), 'utf8'), pointer);
+  const producerMapping = writeGuard(
+    `X=$(cp '${foreign}/.git' '${own}/.git') true; git add -- package-never-written`
+  );
+  assert.equal(producerMapping.status, 2, producerMapping.stderr);
+  assert.match(producerMapping.stderr, /metadata-coordinate-unresolved/);
+  assert.equal(fs.readFileSync(path.join(own, '.git'), 'utf8'), pointer);
   console.log(
     JSON.stringify({
       tarballSha256,
@@ -206,12 +214,14 @@ try {
       installedHostile: hostile.decision,
       submittedSideEffectObserved: false,
       packagedWriteGuardBenign: benignInterpreter.status,
+      packagedWriteGuardBenignThenRead: benignThenRead.status,
       packagedWriteGuardForeign: finiteForeign.status,
       packagedWriteGuardNestedForeign: nestedForeign.status,
       packagedWriteGuardOwnMetadata: ownMetadata.status,
       packagedWriteGuardForeignMetadata: foreignMetadata.status,
       packagedWriteGuardRoutedMetadata: routedMetadata.status,
       packagedWriteGuardChangedMapping: changedMapping.status,
+      packagedWriteGuardProducerMapping: producerMapping.status,
     })
   );
 } finally {

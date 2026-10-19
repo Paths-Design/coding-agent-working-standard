@@ -93,7 +93,61 @@ const BUILTINS = [
   'unset',
   'wait',
 ];
+const CODE_CASES = [
+  [
+    'node-eval-mode',
+    'node --eval \'const x = "a > b";\'',
+    'node',
+    'const x = "a > b";',
+    '\'const x = "a > b";\'',
+  ],
+  [
+    'node-print-mode',
+    'node --print=\'(() => "a > b")()\'',
+    'node',
+    '(() => "a > b")()',
+    '--print=\'(() => "a > b")()\'',
+  ],
+  [
+    'python-inline-mode',
+    'python3 -c\'print("a > b")\'',
+    'python',
+    'print("a > b")',
+    '-c\'print("a > b")\'',
+  ],
+];
+const sourceCase = (n, character = 'x') => 'bash -c \'printf %s "' + character.repeat(n) + '"\'';
+const textCase = (n, character = 'x') =>
+  "BIG='" +
+  character.repeat(n) +
+  "'; for I in " +
+  Array(32).fill('a').join(' ') +
+  '; do printf %s "$BIG"; done';
+const tokenCase = (n) =>
+  Array(n)
+    .fill("bash -c 'printf %s " + Array(128).fill('x').join(' ') + "'")
+    .join('; ');
 const CASES = [
+  ...CODE_CASES.map(([id, command]) => [id, command]),
+  ['node-missing-eval', 'node --eval'],
+  ['python-opaque-code', 'python3 -c "$CODE"'],
+  ['node-stdin-overridden', "node <<'JS' < input\nconst x = 1;\nJS\n"],
+  ['node-stdin-selected', "node < input <<'JS'\nconst x = 1;\nJS\n"],
+  ['shell-stdin-selected', "bash < input <<'SH'\nprintf x > '{{FOREIGN}}/chosen'\nSH\n"],
+  ['wrapper-boundaries', "command -- env -- exec -- node -e '1'"],
+  ['wrapper-query', "command -v node -e '1'"],
+  ['wrapper-eight', 'command '.repeat(8) + "node -e '1'"],
+  ['wrapper-nine', 'command '.repeat(9) + "node -e '1'"],
+  ['literal-tab-heredoc', "node <<'JS'\n\tconst x = 1;\nJS\n"],
+  ['transformed-tab-heredoc', "node <<-'JS'\n\tconst x = 1;\nJS\n"],
+  ['shared-source-limit', sourceCase(32751)],
+  ['shared-source-exceeded', sourceCase(32752)],
+  ['shared-source-unicode', sourceCase(20000, 'ç')],
+  ['shared-text-limit', textCase(8183)],
+  ['shared-text-exceeded', textCase(8184)],
+  ['shared-text-unicode', textCase(4096, 'ç')],
+  ['shared-token-limit', tokenCase(30)],
+  ['shared-token-exceeded', tokenCase(31)],
   ['node-arrow-argument', "node -e 'const fn = x => x;'"],
   ['node-arrow-heredoc', "node <<'JS'\nconst fn = x => x;\nJS\n"],
   ['real-redirection', "printf x > '{{FOREIGN}}/out'"],
@@ -139,6 +193,10 @@ const CASES = [
   ['sed-combined-edit', 'sed -ni -e p /foreign/out'],
   ['uniq-output', 'uniq /dev/null /foreign/out'],
   ['sort-output', 'sort -o /foreign/out /dev/null'],
+  ['git-source-pager', "PAGER='printf pager > {{MARKER}}' git log --oneline"],
+  ['git-source-pager-env', "env PAGER='printf pager > {{MARKER}}' git log --oneline"],
+  ['git-source-pager-cat', 'PAGER=cat git log --oneline'],
+  ['git-source-pager-data', "DATA='printf pager > {{MARKER}}' git log --oneline"],
   ['all-builtins-as-data', "printf '%s' '" + BUILTINS.join(' ') + "'"],
   ...BUILTINS.map((name) => ['builtin-profile-' + name, name + ' fixture']),
 ];
@@ -200,8 +258,46 @@ describe('mutation view uses shared traversal without granting scope', () => {
         rows: ['commit'],
       },
       { id: 'metadata-read-only', command: 'git status', plan: [], queries: [], rows: [] },
+      {
+        id: 'metadata-read-after-node',
+        command: "node -e 'const fn = x => x;'; git status --short",
+        plan: [],
+        queries: [],
+        rows: [],
+      },
+      {
+        id: 'metadata-read-after-application',
+        command: 'application-without-a-profile data; git status --short',
+        plan: [],
+        queries: [],
+        rows: [],
+      },
+      {
+        id: 'metadata-write-after-node',
+        command: "node -e 'const fn = x => x;'; git add -- file",
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
       ...[
         ['metadata-after-copy', "cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'; git add -- file"],
+        [
+          'metadata-after-substitution-copy',
+          "X=$(cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'); git add -- file",
+        ],
+        [
+          'metadata-after-prefix-substitution-copy',
+          "X=$(cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git') true; git add -- file",
+        ],
+        [
+          'metadata-after-substitution-word',
+          "printf %s \"$(cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git')\"; git add -- file",
+        ],
+        [
+          'metadata-after-substitution-nested',
+          "X=$(cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'); bash -c 'git add -- file'",
+        ],
         ['metadata-after-opaque-app', 'application-without-a-profile data; git add -- file'],
         ['metadata-after-opaque-argv-app', 'application-without-a-profile "$ARG"; git add -- file'],
         [
@@ -243,6 +339,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
       ...[
         ['metadata-after-prose', "printf '%s' 'cp foreign/.git owned/.git'; git add -- file"],
         ['metadata-after-reader', 'cat /dev/null; git add -- file'],
+        ['metadata-after-reader-substitution', 'X=$(cat /dev/null); git add -- file'],
         ['metadata-after-read-pipeline', 'printf x | cat; git add -- file'],
         ['metadata-sole-nested-shell', "bash -c 'git add -- file'"],
         ['metadata-nested-reader', "cat /dev/null; bash -c 'git add -- file'"],
@@ -502,33 +599,39 @@ describe('mutation view uses shared traversal without granting scope', () => {
     expect(metadataQueries.get('metadata-redirected-index')).toEqual([]);
     expect(view('metadata-redirected-index').gitMetadata).toEqual([]);
   });
-  test.each(CASES)('%s preserves source spans and the non-authoritative carrier', (id) => {
-    const actual = view(id),
-      command = requests.find((item) => item.id === id).input.command;
-    expect(actual.schema).toBe('caws.shell_mutation_view.v1');
-    expect(Object.hasOwn(actual, 'decision')).toBe(false);
-    expect(actual.tokens.length).toBeLessThanOrEqual(4096);
-    for (const token of actual.tokens) {
-      expect(token.prefix).toBe('');
-      expect(token.prefixBasis).toBe('none');
-      expect(token.resolution).toBe(token.dynamic ? 'runtime' : '');
-      expect(token.unrepresentable).toBe(/[\n\t]/.test(token.value));
-      expect(token.cwd).toBe(
-        id.startsWith('unknown-cwd-') ? null : fs.realpathSync.native(locations.PROJECT)
-      );
+  // Large boundary cases have concrete multiplicity/limit assertions below;
+  // repeating every scalar shape assertion for thousands of equal tokens adds
+  // no distinct provenance case.
+  test.each(CASES.filter(([id]) => !id.startsWith('shared-')))(
+    '%s preserves source spans and the non-authoritative carrier',
+    (id) => {
+      const actual = view(id),
+        command = requests.find((item) => item.id === id).input.command;
+      expect(actual.schema).toBe('caws.shell_mutation_view.v1');
+      expect(Object.hasOwn(actual, 'decision')).toBe(false);
+      expect(actual.tokens.length).toBeLessThanOrEqual(4096);
+      for (const token of actual.tokens) {
+        expect(token.prefix).toBe('');
+        expect(token.prefixBasis).toBe('none');
+        expect(token.resolution).toBe(token.dynamic ? 'runtime' : '');
+        expect(token.unrepresentable).toBe(/[\n\t]/.test(token.value));
+        expect(token.cwd).toBe(
+          id.startsWith('unknown-cwd-') ? null : fs.realpathSync.native(locations.PROJECT)
+        );
+      }
+      for (const item of [
+        ...actual.tokens,
+        ...actual.issues,
+        ...actual.interpreters,
+        ...actual.gitMetadata,
+      ]) {
+        expect(Number.isInteger(item.start)).toBe(true);
+        expect(item.start).toBeGreaterThanOrEqual(0);
+        expect(item.end).toBeGreaterThanOrEqual(item.start);
+        expect(item.end).toBeLessThanOrEqual(command.length);
+      }
     }
-    for (const item of [
-      ...actual.tokens,
-      ...actual.issues,
-      ...actual.interpreters,
-      ...actual.gitMetadata,
-    ]) {
-      expect(Number.isInteger(item.start)).toBe(true);
-      expect(item.start).toBeGreaterThanOrEqual(0);
-      expect(item.end).toBeGreaterThanOrEqual(item.start);
-      expect(item.end).toBeLessThanOrEqual(command.length);
-    }
-  });
+  );
   test.each(['node-arrow-argument', 'node-arrow-heredoc', 'wrapped-node'])(
     '%s keeps actual interpreter code separate from shell redirections',
     (id) => {
@@ -542,6 +645,113 @@ describe('mutation view uses shared traversal without granting scope', () => {
       ]);
     }
   );
+  test.each(CODE_CASES)(
+    '%s attributes actual code with original word provenance',
+    (id, _source, language, code, original) => {
+      const actual = view(id);
+      const source = requests.find((item) => item.id === id).input.command;
+      expect(actual.issues).toEqual([]);
+      expect(actual.tokens.filter((token) => token.kind === 'redirect')).toEqual([]);
+      expect(actual.interpreters).toHaveLength(1);
+      expect(actual.interpreters[0].language).toBe(language);
+      expect(actual.interpreters[0].payloads).toHaveLength(1);
+      const payload = actual.interpreters[0].payloads[0];
+      expect(payload.text).toBe(code);
+      expect(payload.origin).toBe('argument');
+      expect(source.slice(payload.start, payload.end)).toBe(original);
+    }
+  );
+  test.each(['node-missing-eval', 'python-opaque-code'])(
+    '%s cannot invent executable code',
+    (id) => {
+      expect(codes(id)).toContain('mutation-code-source');
+      expect(view(id).interpreters).toEqual([]);
+    }
+  );
+  test('the last stdin redirection selects executable input', () => {
+    expect(codes('node-stdin-overridden')).toContain('mutation-interpreter-source');
+    expect(view('node-stdin-overridden').interpreters).toHaveLength(1);
+    expect(view('node-stdin-overridden').interpreters[0].payloads).toEqual([]);
+    expect(words('shell-source-overridden')).not.toContain('rm');
+    expect(words('shell-source-overridden')).not.toContain(locations.FOREIGN + '/out');
+    for (const id of ['node-stdin-selected', 'literal-tab-heredoc']) {
+      const expected = (id === 'literal-tab-heredoc' ? '\t' : '') + 'const x = 1;\n';
+      const actual = view(id);
+      const source = requests.find((item) => item.id === id).input.command;
+      expect(actual.issues).toEqual([]);
+      expect(actual.interpreters).toHaveLength(1);
+      expect(actual.interpreters[0].payloads).toHaveLength(1);
+      const payload = actual.interpreters[0].payloads[0];
+      expect(payload.text).toBe(expected);
+      expect(payload.origin).toBe('heredoc');
+      expect(source.slice(payload.start, payload.end)).toBe(expected);
+      expect(actual.tokens.filter((token) => token.kind === 'redirect')).toEqual([]);
+    }
+    expect(view('shell-stdin-selected').issues).toEqual([]);
+    const target = view('shell-stdin-selected').tokens.find(
+      (token) => token.value === locations.FOREIGN + '/chosen'
+    );
+    expect(target).toBeDefined();
+    const source = requests.find((item) => item.id === 'shell-stdin-selected').input.command;
+    expect(source.slice(target.start, target.end)).toBe("'" + locations.FOREIGN + "/chosen'");
+    expect(codes('transformed-tab-heredoc')).toContain('mutation-heredoc-source');
+    expect(view('transformed-tab-heredoc').interpreters[0].payloads).toEqual([]);
+  });
+  test('wrapper roles and depth do not lend code identity to a query', () => {
+    for (const id of ['wrapper-boundaries', 'wrapper-eight']) {
+      expect(view(id).issues).toEqual([]);
+      expect(view(id).interpreters).toHaveLength(1);
+      expect(view(id).interpreters[0].argv).toEqual(['node', '-e', '1']);
+      expect(view(id).interpreters[0].payloads.map((payload) => payload.text)).toEqual(['1']);
+    }
+    for (const [id, code] of [
+      ['wrapper-query', 'mutation-wrapper-option'],
+      ['wrapper-nine', 'mutation-wrapper-budget'],
+    ]) {
+      expect(codes(id)).toContain(code);
+      expect(view(id).interpreters).toEqual([]);
+    }
+  });
+  test('shared source, byte and token limits stop projection with concrete lower controls', () => {
+    expect(
+      Buffer.byteLength(sourceCase(32751)) +
+        Buffer.byteLength('printf %s "' + 'x'.repeat(32751) + '"')
+    ).toBe(65536);
+    expect(view('shared-source-limit').issues).toEqual([]);
+    expect(words('shared-source-limit')).toContain('x'.repeat(32751));
+    expect(view('shared-text-limit').issues).toEqual([]);
+    expect(words('shared-text-limit').filter((value) => value === 'x'.repeat(8183))).toHaveLength(
+      32
+    );
+    expect(view('shared-text-limit').tokens).toHaveLength(128);
+    expect(view('shared-token-limit').issues).toEqual([]);
+    expect(view('shared-token-limit').tokens).toHaveLength(4050);
+    expect(words('shared-token-limit').filter((value) => value === 'printf')).toHaveLength(30);
+    expect(words('shared-token-limit').filter((value) => value === 'x')).toHaveLength(3840);
+    for (const id of [
+      'shared-source-exceeded',
+      'shared-source-unicode',
+      'shared-text-exceeded',
+      'shared-text-unicode',
+      'shared-token-exceeded',
+    ]) {
+      expect(codes(id)).toEqual(['mutation-view-budget']);
+      expect(view(id).tokens.every((token) => !token.dynamic)).toBe(true);
+    }
+    expect(words('shared-source-exceeded')).not.toContain('printf');
+    const sourceBudget = view('shared-source-exceeded').issues[0];
+    const sourceCommand = requests.find((item) => item.id === 'shared-source-exceeded').input
+      .command;
+    expect({ start: sourceBudget.start, end: sourceBudget.end }).toEqual({
+      start: 8,
+      end: sourceCommand.length,
+    });
+    expect(view('shared-text-exceeded').tokens).toHaveLength(126);
+    expect(view('shared-token-exceeded').tokens).toHaveLength(4096);
+    const textBudget = view('shared-text-exceeded').issues[0];
+    const source = requests.find((item) => item.id === 'shared-text-exceeded').input.command;
+    expect(source.slice(textBudget.start, textBudget.end)).toBe('"$BIG"');
+  });
   test('a real output redirection retains its original word span', () => {
     const actual = view('real-redirection');
     expect(actual.issues).toEqual([]);
@@ -622,7 +832,16 @@ describe('mutation view uses shared traversal without granting scope', () => {
     ['sed-combined-edit', 'sed-option'],
     ['uniq-output', 'reader-output'],
     ['sort-output', 'reader-option'],
+    ['git-source-pager', 'git-environment'],
+    ['git-source-pager-env', 'git-environment'],
   ])('%s exposes unresolved facts', (id, code) => expect(codes(id)).toContain(code));
+  test.each(['git-source-pager-cat', 'git-source-pager-data'])(
+    '%s retains no execution issue',
+    (id) => {
+      expect(view(id).issues).toEqual([]);
+      expect(view(id).gitMetadata).toEqual([]);
+    }
+  );
   test('input and descriptor duplication do not become file writes', () => {
     expect(
       view('input-versus-write')

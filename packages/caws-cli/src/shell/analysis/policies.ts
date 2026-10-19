@@ -75,6 +75,17 @@ function gitPolicy(
   const targets: { name: string; value: string }[] = [];
   let metadataRoutingKnown = true;
   for (const [name, values] of env) {
+    // Git falls back to PAGER and interprets its value through a shell on a
+    // terminal. Only source-tracked bindings reach this contextual check.
+    if (name === 'PAGER') {
+      if (values && values.length > 0 && values.every((value) => value === '' || value === 'cat')) {
+        ctx.trace(node, 'git-environment', 'Known disabled source-selected Git pager.');
+      } else {
+        metadataRoutingKnown = false;
+        ctx.reason(node, 'git-environment', 'Unmodeled source-selected Git pager PAGER.');
+      }
+      continue;
+    }
     if (!name.startsWith('GIT_')) continue;
     if (name === 'GIT_PAGER' && values?.every((value) => value === '' || value === 'cat')) {
       ctx.trace(node, 'git-environment', 'Known disabled or data-only Git pager.');

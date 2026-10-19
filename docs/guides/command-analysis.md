@@ -43,21 +43,29 @@ read-only Git query resolves these coordinates; the submitted operation is never
 executed. Discovery caches at most eight contexts per projection, including
 failures, with a 500 ms deadline and 64 KiB output limit per query and no retry.
 Unprofiled application effects invalidate later filesystem observations. Nested
-shell jobs also inherit parent effects; another unmodeled invocation or output
-redirection anywhere in the enclosing source conservatively invalidates nested
-metadata coordinates, including concurrent pipeline siblings. A sole inspected
-literal Bash invocation is exempt from its own enclosing invocation's opacity;
-mixed finite callees at that source position cannot borrow the exemption.
-Unproven cwd, prior filesystem effects, redirected index files and failed or
-bare-repository discovery remain unresolved. Both metadata directories receive
-the foreign-repository check. External metadata layouts without an established
-project boundary remain unresolved. The oracle separately matches the physical
-working tree, derived from reciprocal metadata pointers, to a unique registry
-entry and its stamped owner. An independently overridden `--work-tree` cannot
-lend its identity to another worktree's metadata. Canonical metadata is
-admitted; unknown identity, missing ownership and duplicate matches cannot grant
-admission for a linked working tree. A namespaced response prevents an older
-file-only oracle from silently accepting a metadata operation.
+command substitutions keep bindings and cwd local while carrying shared
+filesystem effects into later analysis, including command-local prefix
+assignments. Nested shell jobs also inherit parent effects; another unmodeled
+invocation or output redirection anywhere in the enclosing source conservatively
+invalidates nested metadata coordinates, including concurrent pipeline siblings.
+A sole inspected literal Bash invocation is exempt from its own enclosing
+invocation's opacity; mixed finite callees at that source position cannot borrow
+the exemption. Unproven cwd, prior filesystem effects, redirected index files
+and failed or bare-repository discovery remain unresolved. Both metadata
+directories receive the foreign-repository check. External metadata layouts
+without an established project boundary remain unresolved. The oracle separately
+matches the physical working tree, derived from reciprocal metadata pointers, to
+a unique registry entry and its stamped owner. An independently overridden
+`--work-tree` cannot lend its identity to another worktree's metadata. Canonical
+metadata is admitted; unknown identity, missing ownership and duplicate matches
+cannot grant admission for a linked working tree. A namespaced response prevents
+an older file-only oracle from silently accepting a metadata operation.
+
+Mapping uncertainty applies to recognized metadata writes in this consumer;
+read-only Git invocations do not acquire an ownership requirement from the
+separate worktree-pin policy. This does not prove application internals or Git
+configuration safe: trusted executable/configuration assumptions and the
+limited-recognizer residual remain in force.
 
 The interpreter check retains a limited write-verb/path co-occurrence heuristic
 over actual payloads and bounded entry-script reads. It is weaker evidence than
@@ -193,16 +201,20 @@ aliases/functions/startup hooks, and stable repository mappings during check and
 execution. Known source changes to these assumptions are unresolved. Executable
 identity, Git configuration/hooks, application internals, concurrent filesystem
 replacement, and the actual harness execution environment are not proved by an
-AST. Stronger containment requires runtime filesystem/process policy. Native
-`exec_command`/`shell_command` inputs require an explicit supported shell;
-native Bash also requires `login:false`. Native `workdir` is the execution cwd,
-resolved against the caller's base cwd; conflicting command fields are
-unresolved. The normalized name `Bash` alone does not establish a native
-command's dialect. `CAWS_BIN` and the pin environment are trusted launcher
-configuration; validating a response schema does not authenticate a malicious
-replacement CLI. Known inherited POSIX/keyword settings are refused. Their
-assignment rules can change the executable or Git environment selected by later
-source. The
+AST. Source-selected `PAGER` values at Git invocations are unresolved unless
+every known value disables the pager (`cat` or empty); Git can interpret this
+value through a shell when stdout is a terminal. This check preserves the
+trusted inherited-configuration assumption and does not require non-terminal
+execution. Stronger containment requires runtime filesystem/process policy.
+Native `exec_command`/`shell_command` inputs require an explicit supported
+shell; native Bash also requires `login:false`. Native `workdir` is the
+execution cwd, resolved against the caller's base cwd; conflicting command
+fields are unresolved. The normalized name `Bash` alone does not establish a
+native command's dialect. `CAWS_BIN` and the pin environment are trusted
+launcher configuration; validating a response schema does not authenticate a
+malicious replacement CLI. Known inherited POSIX/keyword settings are refused.
+Their assignment rules can change the executable or Git environment selected by
+later source. The
 [Bash mode contract](https://www.gnu.org/s/bash/manual/html_node/Bash-POSIX-Mode.html)
 and
 [environment rules](https://www.gnu.org/software/bash/manual/html_node/Environment.html)

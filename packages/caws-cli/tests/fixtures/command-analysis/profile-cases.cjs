@@ -659,6 +659,22 @@ for (const [id, value, decision] of [
     decision,
     decision === 'unresolved' ? 'git-environment' : undefined
   );
+for (const [id, prefix, decision] of [
+  ['prefix', "PAGER='printf pager > {{MARKER}}' ", 'unresolved'],
+  ['assignment', "PAGER='printf pager > {{MARKER}}'; ", 'unresolved'],
+  ['env', "env PAGER='printf pager > {{MARKER}}' ", 'unresolved'],
+  ['opaque', 'PAGER="$VALUE" ', 'unresolved'],
+  ['cat', 'PAGER=cat ', 'allow'],
+  ['empty', "env PAGER='' ", 'allow'],
+  ['ordinary-data', "DATA='printf pager > {{MARKER}}' ", 'allow'],
+])
+  add(
+    'git-source-pager-' + id,
+    prefix + 'git log --oneline',
+    decision,
+    decision === 'unresolved' ? 'git-environment' : undefined
+  );
+add('pager-data-without-git', "PAGER='printf pager > {{MARKER}}'; printf '%s' \"$PAGER\"");
 for (const [id, destination] of [
   ['sensitive', 'PATH'],
   ['hyphen', 'bad-name'],

@@ -92,6 +92,20 @@ test('Node arrow/object data does not fabricate a shell target', () => {
   expect(result.stderr).not.toContain('ask_dynamic_unconfined');
   expect(fs.readdirSync(fx.sibling)).toEqual(['.git']);
 });
+test('read-only Git after opaque interpreter code does not require metadata ownership', () => {
+  const result = guard("node <<'JS'\nconst fn = x => x;\nJS\ngit status --short");
+  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+  const write = guard("node <<'JS'\nconst fn = x => x;\nJS\ngit add -- file");
+  expect(write.status).toBe(2);
+  expect(write.stderr).toContain('metadata-coordinate-unresolved');
+});
+test('source-selected Git pager code remains unresolved while ordinary data is admitted', () => {
+  const marker = path.join(fx.sibling, 'pager-marker');
+  refused('PAGER=' + quote('printf pager > ' + marker) + ' git log --oneline', 'git-environment');
+  expect(guard('PAGER=cat git log --oneline').status).toBe(0);
+  expect(guard('DATA=' + quote('printf pager > ' + marker) + ' git log --oneline').status).toBe(0);
+  expect(fs.existsSync(marker)).toBe(false);
+});
 test('an actual Node payload still blocks a foreign literal write', () => {
   refused(
     "node <<'NODE'\nrequire('fs').writeFileSync('" + fx.sibling + "/x.txt', 'x');\nNODE",
@@ -385,6 +399,27 @@ test('a named mapping mutation invalidates subsequent Git metadata discovery', (
   expect(result.stderr).toContain('metadata-coordinate-unresolved');
   expect(fs.readFileSync(path.join(own, '.git'), 'utf8')).toBe(pointer);
 });
+test.each([';', ' true;'])(
+  'a command-substitution mapping mutation invalidates subsequent metadata discovery: %s',
+  (assignmentEnd) => {
+    const { own } = metadataWorktrees();
+    const pointer = fs.readFileSync(path.join(own, '.git'), 'utf8');
+    const result = guard(
+      'X=$(cp ' +
+        quote(path.join(fx.foreign, '.git')) +
+        ' ' +
+        quote(path.join(own, '.git')) +
+        ')' +
+        assignmentEnd +
+        ' git -C ' +
+        quote(own) +
+        ' add -- file'
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('metadata-coordinate-unresolved');
+    expect(fs.readFileSync(path.join(own, '.git'), 'utf8')).toBe(pointer);
+  }
+);
 test.each(['gitdir', 'commondir', 'forward', 'hardlink', 'symlink'])(
   'nonreciprocal or nonordinary metadata pointers hold: %s',
   (kind) => {

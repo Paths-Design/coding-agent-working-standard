@@ -284,6 +284,7 @@ export async function projectMutationView(
   for (let cursor = 0; cursor < jobs.length && !exhausted; cursor++) {
     const job = jobs[cursor]!;
     const finiteCallees = new Set<string>();
+    const metadataInvocations = new Set<string>();
     const span = (location: Location): Location => job.map(location);
     const parent = (node: Location, state: State): NonNullable<ScriptJob['parent']> => ({
       job,
@@ -577,6 +578,7 @@ export async function projectMutationView(
       }
     };
     const observeGitMetadata = ({ node, subcommand, input }: GitMetadataObservation): void => {
+      metadataInvocations.add(JSON.stringify([node.pos, node.end]));
       if (exhausted) return;
       const original = span(node);
       if (request.cwd === null || input === null || inheritedEffects(job)) {
@@ -677,6 +679,14 @@ export async function projectMutationView(
     for (const reason of analysis.reasons) {
       if (reason.code === 'utility-unsupported')
         job.unmodeledInvocations.add(JSON.stringify([reason.start, reason.end]));
+      // Pin-policy mapping uncertainty matters to this consumer only when a
+      // recognized metadata write actually needs that mapping for ownership.
+      // This is a write-target recognizer, not an admission verdict for reads.
+      if (
+        reason.code === 'git-context-changed' &&
+        !metadataInvocations.has(JSON.stringify([reason.start, reason.end]))
+      )
+        continue;
       if (POLICY_ONLY.has(reason.code)) continue;
       if (
         reason.code === 'utility-unsupported' &&
