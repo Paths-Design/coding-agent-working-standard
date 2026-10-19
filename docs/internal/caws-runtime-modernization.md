@@ -63,8 +63,9 @@ regression: an earlier advisory masks a later confirmation-class command
 substitution. E63 restores substitution precedence with statement-specific proof;
 E65 observes its typed execution, selected-shell warning/latch effects and native
 handoff in a private installation. E64's complete native suite passes without
-attributing the earlier backpressure timeout. The next implementation boundary
-is R33's selected-client/service ownership contract.
+attributing the earlier backpressure timeout. E66 repairs an ambient containment
+handoff in independently adopted shared guards; its actual native effect replay
+precedes source landing and R33's selected-client/service ownership work.
 No machine replacement follows from these bounded results.
 
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
@@ -896,6 +897,39 @@ Additional bounded evidence and unresolved dependencies:
   complete guard/harness parity, thirteen-session workload, installation or
   retirement. EOF does not establish descendant cleanup. R32/R33 remain open.
 
+- E66: Source review at `7447c68e` traces an ambient
+  `CAWS_NATIVE_CONTAINMENT_FILE` through the legacy Python and shared dispatchers
+  into `block-dangerous.sh`. The guard writes an intent and returns before
+  SIGTERM despite the absence of a native receiver. The E51 direct producer
+  fixture already observes that no-owner behavior; this does not establish an
+  untrusted live-harness environment exploit. Root-applied GPT-6.1 Sol patches
+  replace that ambient delegation with an exact private argument and inherited
+  regular descriptor 3, opened from the typed executor's existing owned receipt
+  capability. Only eligible direct stock calls receive the argument/descriptor;
+  parent descriptors close after spawn and on setup failure. The shared guard
+  ignores ambient filenames on every entry route. Missing, closed, read-only or
+  unsuccessfully written channels retain verified legacy SIGTERM instead of
+  silently deferring. This descriptor transports a receipt, not signal authority.
+  Native intent, latch and process-instance verification remain required.
+  Before repair, four focused Bats controls exit 1: ambient/closed/read-only
+  cases reach `complete.json` without SIGTERM; the explicit-descriptor case
+  instead receives signal 15. Raw receipts are retained in
+  `packages/caws-native/target/qualification/containment-fd-red-2026-10-19T12-39-25-544Z/`.
+  The first repaired run exits 0 for five controls. Its sibling
+  `containment-fd-green-2026-10-19T12-42-11-811Z/` retains actual signal-15 receipts
+  for owned PIDs 89049/89901/90864 and a completed, unsignaled explicit-descriptor
+  producer 91917 with matching intent/latch. The suppressed-signal mutation is
+  rejected despite successful escalation stamps. Controls for a writable
+  descriptor without the argument and an extra argument extend this boundary.
+  CLI build, strict runtime TypeScript and scoped ESLint exit 0. The complete
+  focused run exits 0 for seven Bats controls and 82 checks in four runtime Jest
+  suites; `bats-complete.log`, `final/` receipts and `runtime-jest.json` in the
+  green directory retain those results. Clean committed native effect replay
+  remains pending; producer
+  receipts alone do not establish the native terminal owner or all legacy
+  dispatcher selection. R32 remains open for its broader identity/process-domain
+  and reset/rearm obligations.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -986,7 +1020,9 @@ progress and does not replace that transaction or its event readback.
 ## Ordered next work
 
 E65 supplies the bounded substitution replay through the native client; full
-acceptance remains open. Continue the dependency order below. Keep the failed backpressure witness;
+acceptance remains open. Finish E66's committed native effect replay and inspect
+its actual signal/refusal/state/finalization artifacts before source landing.
+Then continue the dependency order below. Keep the failed backpressure witness;
 instrument startup, ancestor capture, proposal arrival and output delivery before
 attributing its timeout or claiming concurrent performance.
 

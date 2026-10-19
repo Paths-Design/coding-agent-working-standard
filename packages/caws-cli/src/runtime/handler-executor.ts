@@ -31,6 +31,7 @@ import {
 
 export const HANDLER_CAPTURE_LIMIT_BYTES = 2 * 1024 * 1024;
 const OFFER_LIMIT_BYTES = 64 * 1024;
+const CONTAINMENT_FD_ARGUMENT = '--caws-native-containment-fd=3';
 export interface HandlerExecutorOptions {
   readonly request: RuntimeRequest;
   readonly selection: ActiveInvocationSelection;
@@ -243,6 +244,7 @@ async function runChild(
     throw new HandlerExecutionError('Handler temporary directory must be absolute');
   const directory = mkdtempSync(join(temporaryRoot, 'caws-native-handler-'));
   let inputFd: number | undefined;
+  let containmentFd: number | undefined;
   try {
     const source = parseJsonSource(request.inputJson || '{}');
     const payload = enrichObjectJson(source, 'hook_event_name', MACHINE_EVENTS[request.event]);
@@ -266,7 +268,8 @@ async function runChild(
       !compatibility && selectedHandler
         ? createContainmentCapability({ ...options, handler: selectedHandler }, directory)
         : null;
-    if (containment) env[CONTAINMENT_ENV] = containment.file;
+    if (containment)
+      containmentFd = openSync(containment.file, constants.O_WRONLY | constants.O_NOFOLLOW);
     const startup = join(selection.runtimeDirectory, 'handler-env.sh');
     assertMachinePath(selection.runtimeDirectory, startup);
     if (!compatibility && !lstatSync(startup).isFile())
@@ -277,12 +280,29 @@ async function runChild(
       let observedExitCode: number | undefined;
       let bytes = 0,
         settled = false;
-      const child = spawn(command.path, [...command.args], {
-        cwd: selection.checkout,
-        env,
-        stdio: [inputFd!, 'pipe', 'pipe'],
-        detached: false,
-      });
+      let child: ReturnType<typeof spawn>;
+      try {
+        child = spawn(
+          command.path,
+          [...command.args, ...(containment ? [CONTAINMENT_FD_ARGUMENT] : [])],
+          {
+            cwd: selection.checkout,
+            env,
+            stdio:
+              containmentFd === undefined
+                ? [inputFd!, 'pipe', 'pipe']
+                : [inputFd!, 'pipe', 'pipe', containmentFd],
+            detached: false,
+          }
+        );
+      } finally {
+        // spawn duplicates the owned descriptor into child fd 3.
+        if (containmentFd !== undefined) {
+          const fd = containmentFd;
+          containmentFd = undefined;
+          closeSync(fd);
+        }
+      }
       const cleanup = (): void => {
         if (timer !== undefined) clearTimeout(timer);
         signal.removeEventListener('abort', abort);
@@ -385,6 +405,8 @@ async function runChild(
     if (error instanceof HandlerExecutionError) throw error;
     throw new HandlerExecutionError(`Handler setup failed: ${errorText(error)}`);
   } finally {
+    // Covers setup failure after opening the receipt but before spawn.
+    if (containmentFd !== undefined) closeSync(containmentFd);
     if (inputFd !== undefined) closeSync(inputFd);
     try {
       rmSync(directory, { recursive: true, force: true });

@@ -26,6 +26,13 @@
 
 set -euo pipefail
 
+# The direct native executor passes a receipt descriptor explicitly. Ambient
+# environment values cannot delegate the legacy guard's verified escalation.
+_CAWS_NATIVE_CONTAINMENT_FD_REQUESTED=0
+if [[ $# -eq 1 && "${1:-}" == '--caws-native-containment-fd=3' ]]; then
+  _CAWS_NATIVE_CONTAINMENT_FD_REQUESTED=1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=lib/agent-surface.sh
@@ -494,26 +501,19 @@ trap_escalate() {
   # The qualified native executor owns output delivery, the OS effect and its
   # receipt as one terminal transaction. A selected shell must not kill its
   # caller before the native client has captured the protective decision.
-  if [[ -n "${CAWS_NATIVE_CONTAINMENT_FILE:-}" ]]; then
+  if [[ "$_CAWS_NATIVE_CONTAINMENT_FD_REQUESTED" == 1 ]]; then
     local generation
     generation="$(jq -r '.latch_generation // ""' "$latch_file" 2>/dev/null || true)"
-    if [[ ! "$generation" =~ ^[0-9a-f]{32}$ ]]; then
-      trap_log_event "$session_id" "held" "no-kill" "native containment latch generation unavailable" "$command"
-      return 0
-    fi
-    if [[ "$CAWS_NATIVE_CONTAINMENT_FILE" != /* || ! -f "$CAWS_NATIVE_CONTAINMENT_FILE" || -L "$CAWS_NATIVE_CONTAINMENT_FILE" ]]; then
-      trap_log_event "$session_id" "held" "no-kill" "native containment receipt capability unavailable" "$command"
-      return 0
-    fi
-    if jq -c -n --argjson pid "$pid" --arg start "$start" --arg comm "$comm" \
+    if [[ "$generation" =~ ^[0-9a-f]{32}$ && -f /dev/fd/3 ]] \
+      && jq -c -n --argjson pid "$pid" --arg start "$start" --arg comm "$comm" \
       --arg session "$session_id" --arg latch "$latch_file" --arg generation "$generation" \
       '{schema:"caws.containment.intent.v1",pid:$pid,startEpoch:$start,comm:$comm,sessionId:$session,latchPath:$latch,latchGeneration:$generation}' \
-      > "$CAWS_NATIVE_CONTAINMENT_FILE"; then
+      >&3; then
       trap_log_event "$session_id" "proposed" "native-sigterm" "verified target $pid submitted to native containment owner" "$command"
+      return 0
     else
-      trap_log_event "$session_id" "held" "no-kill" "native containment intent could not be retained" "$command"
+      trap_log_event "$session_id" "handoff-unavailable" "legacy-sigterm" "native receipt unavailable; retaining verified legacy escalation" "$command"
     fi
-    return 0
   fi
   if kill -TERM "$pid" 2>/dev/null; then
     trap_log_event "$session_id" "escalated" "sigterm" "terminated agent process $pid (${comm:-unknown}) after strike $strikes" "$command"
