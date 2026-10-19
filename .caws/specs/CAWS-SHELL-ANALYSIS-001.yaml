@@ -86,6 +86,20 @@ acceptance:
       shell targets; real foreign writes and nested shell writes remain refused,
       finite targets reach the ownership oracle, and unsupported or malformed
       analysis cannot become an empty allow
+  - id: A7
+    given: >-
+      Native execution envelopes may supply command aliases, shell and startup
+      choices, or a working directory, and the stock lifecycle hook can emit
+      updatedInput after guards
+    when: >-
+      The mandatory guard decodes the original transported envelope and a lifecycle
+      command is considered for directory rerooting
+    then: >-
+      Supplied source, shell and startup conflicts remain unresolved; the decoded
+      execution directory reaches downstream ownership checks; only a proven
+      standalone literal merge or destroy invocation is rerooted, quoted mentions
+      and compound neighbors are untouched, and rewritten lifecycle failures retain
+      their status and diagnostics
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
