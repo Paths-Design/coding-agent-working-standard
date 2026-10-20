@@ -143,9 +143,9 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | one-shot journal/composer/local ACK integrated; resident open | E33 retains actual input/handler/index/native-output artifacts; crash persistence, production message settlement and resident admission remain open |
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | selected production refusal and native Stop fixture exercised | E33 nonlatching refusal; E34 real native budget with fixture context. Complete event/harness/Stop producer behavior remains unqualified |
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | substitution precedence repaired; typed execution, selected-shell state and native handoff exercised, E63/E65 | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open |
-| R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | component tested; not integrated | Owning validator reused; inherited guard/threshold names rejected and Unicode code-point boundaries repaired at the shared owner |
+| R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | independent selected-stock candidate; root integration pending | The separate owner reports isolated invocation qualification at `4f1e40f2`; E100 distinguishes its retained evidence from parent acceptance. Custom/explicit parser compatibility and Python retirement remain separate |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
-| R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | component tested; not integrated | Uncut opaque bytes and truncated invalid-byte ignore preserved; no consumer switched |
+| R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | typed composer consumes the replacement; shared shell replacement pending | `composer.ts` imports `truncateUtf8Prefix` and calls it in `cutCard`; the shared runner retains the Python helper. An independent packaging/consumer slice owns the remaining switch, E100 |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence | TS transcript store | unreplaced | Atomic replacement, identity, replay custody, malformed and concurrent inputs |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization | TS normalization interfaces/common implementation | unreplaced | Lossless occurrence/provenance and explicit unavailable fields |
 | R11 | `shared/lib/harness_claude.py` | TS Claude adapter | unreplaced | Harness-specific transcript fixtures and installed render evidence |
@@ -174,6 +174,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
+| R37 | Plan snapshot producer/carrier/finalizer ownership | Native target locks and owner-partitioned tickets | native helper committed; sealed consumer source integrated; runtime qualification pending | E98 retains source/tests and explicit legacy/adoption limits. Shared producers, ownerless migration, Unicode plan names and foreign-owner target reuse remain open |
 
 ## Machine-wide workload and representation boundary
 
@@ -1822,6 +1823,106 @@ Additional bounded evidence and unresolved dependencies:
   and native-derived overlap eligibility require inspection. Implementation and
   acceptance of this split are not inferred from these design constraints.
 
+- E98: Native plan snapshot transactions are committed at `8c492aa0` with
+  a typed standalone CLI qualifier. Explicit project/surface/session ownership,
+  transcript inode/prefix provenance, independent tickets and stable kernel
+  target locks replace the ownerless carrier for this helper. Independent source
+  inspection identifies source/destination aliasing and first-use overwrite of an
+  ownerless snapshot; both refuse before claiming or publishing a ticket.
+  Sixteen focused controls exit0, including exact bytes, preserved legacy state,
+  concurrent ticket arrival and a created lock child reaped with raw status0.
+  The first full library run exits101 because two clock-only fixture names
+  collide; an atomic fixture sequence repairs that test isolation failure.
+  Preserve `prefix-cohort-2026-10-20/{first-compile,full-lib-first,snapshot-unit}.*`.
+  The helper permits bounded ASCII plan basenames and refuses permanent target
+  owner conflicts. Those restrictions, shared-producer adoption and migration of
+  ownerless legacy records require explicit disposition before full parity.
+  The sealed Codex Stop consumer uses a native-owned adapter and configured,
+  byte-pinned native helper. Stock Codex does not reach the ExitPlanMode producer;
+  direct helper qualification cannot establish that producer or other surfaces.
+
+- E99: The connected pending-cohort source preserves existing connection threads,
+  shared global/project permits, FIFO effects, same-session/incompatible-view
+  barriers and pending-demand residency. `prefix_disposition` records native
+  session/serial eligibility independently of caller declarations. Eligibility
+  uses42 explicit reviewed fingerprints in `service_image/prefix-profile.json`;
+  recompiling changed stock files does not automatically bless their mutation
+  domains. Valid unknown/legacy sources remain serial. The first successful full
+  native run exits0 with186 library/40 binary/31 invocation/3 example checks;
+  it precedes replacing automatic source embedding with that explicit policy.
+  The explicit-policy image suite then exits0 with26 checks; all-target Clippy
+  and strict compilation of all six qualifiers exit0. CLI image/offer suites
+  pass84 checks with two reviewed-profile integration checks skipped. Raw commands,
+  exits and untruncated output live in `prefix-cohort-2026-10-20/`. These source
+  checks do not qualify actual prefix overlap or thirteen successful callers.
+  The first successful run deleted invocation fixture directories. A committed
+  candidate replay retains them and independently queries their PIDs in E101.
+  The post-Dispatch publication fault control distinguishes a
+  durable Running fence from successful Unknown publication, poisoned handles
+  and recovered settled results; no replay authority comes from the local flag.
+  The six-case actual-owner qualifier and six-case direct snapshot qualifier
+  compile but have not executed at this checkpoint.
+
+- E100: The separate R06 owner reports selected-stock invocation qualification,
+  its own spec closure and source consolidation at `4f1e40f2`, with retained
+  evidence under `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-guard-config/`.
+  Root inspection confirms its four source paths; parent integration and
+  independent behavioral adjudication remain pending. It does not retire Python
+  compatibility or establish native harness delivery/PID containment. Root source
+  inspection corrects R08's stale consumer label: the typed composer already
+  imports/calls the TS truncator; the shared shell runner uses Python. The separate
+  R08 owner implements typed asset packaging and the installed shell consumer
+  under its own bound lane. Its source/report is not parent acceptance, and its
+  verification shares a scheduled machine resource slot with this lane.
+
+- E101: Committed `7aa97f6b` all-target native checks exit0 with retained fixtures
+  under `prefix-cohort-2026-10-20/native-fixtures/`. The returned console output
+  is truncated, explicitly recorded in `candidate-native.json`; it is not an
+  unabridged transcript. The nine retained signal cases identify27 exact created
+  PIDs. Separate read-only macOS `service-observer --observe <pid>` commands
+  each exit0 and report `state: absent`, errno3. `candidate-signal-absence.json`
+  retains commands, raw results, observer SHA and fixture bindings. Root sends no
+  signals. This establishes later absence for these retained cases, not complete
+  PID safety parity or historical cleanup for unretained fixtures.
+
+- E102: Source `22d2e007` builds the CLI, release native executable and seven
+  strict qualifiers with exit0 (`prefix-cohort-2026-10-20/release-build.*`). Native
+  SHA is `a94eb10871aedfcf19127ef213022235a30024307d9bddd6c089d2a11fca5766`.
+  Direct `qualify-plan-snapshots.js` exits0 with six scenarios and13 retained
+  direct child closes, including refusals75 for source/destination alias and
+  preexisting ownerless snapshot. Raw initial/final bytes, ownership/tickets and
+  command streams live in `plan-snapshots-2026-10-20T07-41-57-641Z/`.
+  Finalize stdout is `{"produced":0,"finalized":1,"diagnostics":[]}`.
+  These cases do not exercise alternate configured homes, actual Stop delivery,
+  shared producer adoption or deployed writer exclusion.
+
+- E103: Actual selected Stop qualification on that executable exits1 in
+  `render-plan-snapshots-2026-10-20T07-43-34-325Z/`: the qualifier incorrectly
+  expects a top-level `handler_completed` journal record. The actual compatibility
+  path emits `compatibility_dispatch_completed.execution_records_base64`, which
+  decodes to the four completed handlers, including native snapshot diagnostic.
+  Exact finalized snapshot, own-ticket acknowledgement, other-repository same-ID
+  preservation, legacy preservation and two semantic turn checks precede the
+  failed assertion. Root verifies169 original artifact hashes and retains21
+  additional failure-state observations, including the6191-byte invocation
+  journal and two1835-byte turn files. `failure-observation.json` records them;
+  cleanup is confirmed inactive, custody free and socket absent. Preserve this
+  failure; repair the oracle against the actual producer and replay before
+  claiming the complete selected path.
+
+- E104: Independent Sol source review identifies two isolation counterexamples.
+  Raw case-distinct session IDs can name one directory on macOS; root `stat`
+  confirms canonical `caws`/`CAWS` device16777231/inode215766425. Commit `d9d2133d`
+  conservatively serializes ASCII case aliases without changing caller identity;
+  unit and actual-owner case-alias controls require execution. Target locks under
+  configurable machine homes can also be distinct for one destination. A bounded
+  worker moves target custody beside the destination and adds distinct-home
+  producer controls; its source and execution remain pending. Target-side cache
+  ignore/distribution policy must be resolved before producer adoption. A stale
+  ticket can stop other tickets in its namespace; mixed stale/current progress,
+  legacy adoption and permanent foreign-owner reuse remain explicit obligations.
+  The review supplies counterexamples, not an acceptance verdict.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -1909,6 +2010,13 @@ Only `caws specs evidence` records authoritative verdicts. This ledger explains
 progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
+
+Finish the E104 destination-custody repair and E103 oracle repair, freeze and
+check the integrated candidate, then qualify the actual selected Stop path and
+the seven pending-owner scenarios, including actual case aliases. Inspect raw
+snapshots, tickets, execution records and cleanup before advancing. Replay the
+thirteen-client baseline only after these controls succeed; retain the unchanged
+30s budget and stop/inspect any failed or ambiguously cleaned scenario.
 
 E90 independently confirms E87's orphan absent without a root cleanup signal.
 E91/E92 retain repaired signal readiness, the complete native suite and all four
