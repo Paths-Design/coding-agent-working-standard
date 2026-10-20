@@ -14,7 +14,6 @@ import {
   pythonEqual,
   pythonStr,
   pythonRepr,
-  UnsupportedPythonProfileError,
 } from '../../src/transcripts/lossless-json.js';
 
 test('retains adjacent unsafe integers, nested numbers and separate nested JSON strings', () => {
@@ -183,7 +182,7 @@ test('truth and equality use Python numeric semantics without integer rounding',
   assert.equal(pythonEqual(undefined, null), false);
 });
 
-test('Python str/repr retain type spellings and expose the Unicode profile boundary', () => {
+test('Python str/repr retain type spellings under the pinned Unicode14 profile', () => {
   assert.equal(
     pythonStr(parsePythonJson('[true,null,1e1,NaN,Infinity]')),
     '[True, None, 10.0, nan, inf]'
@@ -193,15 +192,10 @@ test('Python str/repr retain type spellings and expose the Unicode profile bound
     "{'a': \"can't\", 'b': 'a\\nb'}"
   );
   assert.equal(pythonRepr('\x00\x7f\xa0\xad\ud800'), "'\\x00\\x7f\\xa0\\xad\\ud800'");
-  assert.throws(
-    () => pythonRepr(['😀']),
-    (error) => {
-      assert(error instanceof UnsupportedPythonProfileError);
-      assert.equal(error.code, 'PYTHON_PROFILE_UNSUPPORTED');
-      assert.equal(error.operation, 'repr-unicode-14');
-      return true;
-    }
-  );
+  assert.equal(pythonRepr(['😀']), "['😀']");
+  assert.equal(pythonRepr('π\u2028\u2029\u200b'), "'π\\u2028\\u2029\\u200b'");
+  // This character is assigned after Unicode14, regardless of the Node runtime's tables.
+  assert.equal(pythonRepr('\u{1fae8}'), "'\\U0001fae8'");
 });
 
 test('integer custody has no hidden decimal digit cap', () => {

@@ -9,9 +9,9 @@
  * state member; the framework provides transactional clone isolation, not
  * generic deep immutability of Sets and Maps.
  *
- * Python profile boundaries are explicit: container repr outside Latin-1/lone
- * surrogates and selected Unicode source syntax can be unsupported. Python
- * single-quoted adjacent surrogate codepoints are declined separately from JSON ingress. Integer
+ * Historical interpretation uses the pinned Python3.11.13/Unicode14 profile.
+ * Interpreted Python literals retain explicit codepoints separately from JSON
+ * ingress: adjacent surrogate codepoints must not silently become one scalar. Integer
  * custody intentionally exceeds CPython's configurable decimal digit cap.
  * No cache, aggregation, rewind or cross-surface parity is claimed here.
  */
@@ -20,3 +20,5 @@ export * from './harness-common';
 export { decodeOccurrence, isParsedRow } from './source-occurrence';
 export type { OccurrenceCoordinates } from './source-occurrence';
 export * from './harness-codex';
+export * from './codepoint-text';
+export * from './python-unicode-profile';
