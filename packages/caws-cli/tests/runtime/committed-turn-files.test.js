@@ -153,8 +153,12 @@ test.each(['directory', 'symlink', 'malformed', 'array', 'invalid-utf8', 'oversi
           : kind === 'array'
             ? '[]'
             : kind === 'invalid-utf8'
-              ? Buffer.from([0xff])
-              : Buffer.alloc(1025, 32)
+              ? Buffer.concat([
+                  Buffer.from('{"turn":1,"text":"'),
+                  Buffer.from([0xff]),
+                  Buffer.from('"}'),
+                ])
+              : JSON.stringify({ turn: 1, text: 'x'.repeat(1025) })
       );
     observation(root, 'named-entry', {
       file,
@@ -166,12 +170,39 @@ test.each(['directory', 'symlink', 'malformed', 'array', 'invalid-utf8', 'oversi
     });
     try {
       expect(committedTurnNames(session)).toEqual(['turn-001.json']);
-      expect(() => readCommittedTurnFile(session, 'turn-001.json', 1024)).toThrow();
+      const expected =
+        kind === 'invalid-utf8'
+          ? /encoded data was not valid/
+          : kind === 'oversize'
+            ? /exceeds qualification capture limit/
+            : undefined;
+      expect(() => readCommittedTurnFile(session, 'turn-001.json', 1024)).toThrow(expected);
     } finally {
       if (kind === 'symlink') fs.unlinkSync(file);
     }
   }
 );
+
+test('a valid JSON object fits exactly at the capture limit and fails one byte below it', () => {
+  const { root, session } = fixture();
+  const prefix = Buffer.from('{"turn":1,"text":"'),
+    suffix = Buffer.from('"}\n');
+  const text = 'x'.repeat(1024 - prefix.length - suffix.length);
+  const bytes = Buffer.concat([prefix, Buffer.from(text), suffix]);
+  expect(bytes.length).toBe(1024);
+  put(path.join(session, 'turn-001.json'), bytes);
+  const captured = readCommittedTurnFile(session, 'turn-001.json', 1024);
+  observation(root, 'exact-limit', {
+    bytes: captured.bytes.length,
+    sha256: sha(captured.bytes),
+    limit: 1024,
+  });
+  expect(captured.bytes).toEqual(bytes);
+  expect(captured.value).toEqual({ turn: 1, text });
+  expect(() => readCommittedTurnFile(session, 'turn-001.json', 1023)).toThrow(
+    /exceeds qualification capture limit/
+  );
+});
 
 test('a matching entry missing after enumeration is not silently omitted', () => {
   const { root, session } = fixture(),
