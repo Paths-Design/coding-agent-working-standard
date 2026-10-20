@@ -3189,6 +3189,47 @@ Additional bounded evidence and unresolved dependencies:
   obligations; source-chain coverage alone does not establish the original Node
   Child's identity.
 
+- E153: The terminal protocol fixture reads the original frontend PID written by
+  the actual retained native Child's owner before input delivery; Node's parent
+  remains an observation, not caller identity. A Sol patch also replaces
+  `execute()`'s unbounded writer/output thread joins with nonblocking collection
+  and a bounded original-Child watchdog. Child status, stdin terminal state,
+  both EOFs and partial bytes are separate observations, published before
+  failure. The bounded collector lives in `tests/invoke/collector.rs` rather
+  than expanding the invocation fixture's responsibilities. A dynamically
+  unconfined shell write is refused before execution; root applies the reviewed
+  patch through explicit scoped file edits. No guard, reprieve or installed
+  runtime changes are made.
+
+  Two selected Cargo collector controls exit0. Actual retained bytes
+  `raw\0partial` have EOF false and deadline outcome unknown while either pipe
+  is held; after closure the same bytes have EOF true and the collection
+  predicate accepts. Injected read failure preserves its prefix and error;
+  continuous output yields after16 reads and cannot mask an unsettled deadline.
+  The actual ordinary native fixture and native-self refusal/control replay each
+  exit0 at their test runners. Raw per-call `status.json` records native exit7
+  or2, child reaped, both EOFs and no collector failure. The unsafe-self handoff
+  retains `held / unsafe-target`, exact refusal output and successful local
+  handoff with no signal. These are protocol fixtures, not selected guard
+  policy.
+
+  The terminal effect test exits0 in5.59s across close-after-prefix, full-unread
+  and post-effect-stall. Original frontend/caller PIDs1348/2538/3803 differ from
+  observed Node parents1682/2613/3875. Intended sacrificial callers
+  616/2534/3796 have actual wait signal15; matching handoff receipts record
+  `signal-accepted`. Local output success is false/false/true independently.
+  Sibling heartbeat lengths advance1→53,1→40 and1→17 before external fixture
+  cleanup. Exact command/output and the unchanged native debug SHA256
+  `0107f86dd924bc97806924916375cee1e1530bd78b7728472dede790c23f295d` are
+  retained under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-collector/`.
+  `terminal-effect-replay.json` names the scenario root and all three modes;
+  each retains wire identity, caller status, sibling progress and cleanup
+  observations. This closes the stale terminal-parent oracle and the identified
+  `execute()` join gap within these controls. It does not qualify every harness
+  helper, full production latch/PID policy, missing-session/reset behavior,
+  renderer custody correlation, residency, fairness or installation.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3316,17 +3357,18 @@ failed cleanup pending. E142 wires that custodian and exercises pure contracts;
 E145 observes one pre-Ready frontend-death boundary with strict settlement,
 actual reap, both EOFs and correlated receipts. E149 exercises the corrected
 ordinary fixture with independently observed frontend/custodian/Node topology.
-E152 repairs request-local renderer coverage with pure counterexamples. Qualify
-the terminal fixture and bounded pipe collector, correlate selected source-chain
-observations with native custody receipts, then exercise the actual typed engine
-and renderer on the same candidate. A previous request's group cannot qualify a
-later request with missing chain evidence. Qualify closed-pipe nonleaders and
-frontend loss after Ready and dispatch in separately retained scenarios. Keep
-original caller capture and native effects in the frontend; preserve Node
-FD3/4/5 and exclude every liveness/control descriptor from Node. Normal request
-stdin EOF is not frontend death. Unknown cleanup must retain custody and stop
-the scenario chain. This private per-invocation boundary does not require a
-public pre-Ready spawn service and does not earn warm residency.
+E152 repairs request-local renderer coverage with pure counterexamples. E153
+exercises the corrected terminal fixture and bounded pipe collector on the same
+native executable. Finish committed-candidate review, correlate selected
+source-chain observations with native custody receipts, then exercise the actual
+typed engine and renderer on the same candidate. A previous request's group
+cannot qualify a later request with missing chain evidence. Qualify closed-pipe
+nonleaders and frontend loss after Ready and dispatch in separately retained
+scenarios. Keep original caller capture and native effects in the frontend;
+preserve Node FD3/4/5 and exclude every liveness/control descriptor from Node.
+Normal request stdin EOF is not frontend death. Unknown cleanup must retain
+custody and stop the scenario chain. This private per-invocation boundary does
+not require a public pre-Ready spawn service and does not earn warm residency.
 Missing-SID/cache branches additionally need a fresh logical-session binding or
 protective refusal without foreign strikes; process identity alone does not
 establish exclusive session ownership. The held E133 probe cannot supply that

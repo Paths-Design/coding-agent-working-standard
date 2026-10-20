@@ -13,6 +13,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "invoke/collector.rs"]
+mod collector;
+use collector::{PipeCapture, cleanup_execute_child, collection_outcome, set_nonblocking};
+
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 fn resolve_artifact_root(
     configured: Option<PathBuf>,
@@ -193,45 +197,226 @@ fn execute(mut command: Command, input: Vec<u8>) -> Output {
         )
         .unwrap();
     }
-    let mut stdin = child.stdin.take().unwrap();
-    let writer = thread::spawn(move || {
-        let _ = stdin.write_all(&input);
-    });
+    let mut stdin = child.stdin.take();
     let mut stdout = child.stdout.take().unwrap();
-    let out = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout.read_to_end(&mut bytes).unwrap();
-        bytes
-    });
     let mut stderr = child.stderr.take().unwrap();
-    let err = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stderr.read_to_end(&mut bytes).unwrap();
-        bytes
-    });
+    set_nonblocking(stdin.as_ref().unwrap());
+    set_nonblocking(&stdout);
+    set_nonblocking(&stderr);
     let started = Instant::now();
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
+    let mut input_written = 0;
+    let mut input_error = None;
+    let mut out = PipeCapture::default();
+    let mut err = PipeCapture::default();
+    let mut status = None;
+    let mut wait_error = None;
+    loop {
+        if let Some(pipe) = stdin.as_mut() {
+            if input_written < input.len() {
+                match pipe.write(&input[input_written..]) {
+                    Ok(0) => input_error = Some("stdin write returned zero".to_string()),
+                    Ok(count) => input_written += count,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(error) => input_error = Some(error.to_string()),
+                }
+            }
+            // Early refusal may close stdin before the entire input is accepted.
+            // Preserve that terminal error without replacing the native verdict.
+            if input_written == input.len() || input_error.is_some() {
+                stdin.take();
+            }
         }
-        if started.elapsed() > Duration::from_secs(8) {
-            stop_test_child(&mut child);
-            panic!("native invocation exceeded test watchdog");
+        out.poll(&mut stdout);
+        err.poll(&mut stderr);
+        if status.is_none() && wait_error.is_none() {
+            match child.try_wait() {
+                Ok(observed) => status = observed,
+                Err(error) => wait_error = Some(error.to_string()),
+            }
         }
-        thread::sleep(Duration::from_millis(5));
-    };
-    writer.join().unwrap();
-    let output = Output {
-        status,
-        stdout: out.join().unwrap(),
-        stderr: err.join().unwrap(),
-    };
-    if let Some(directory) = evidence {
-        fs::write(directory.join("stdout.bin"), &output.stdout).unwrap();
-        fs::write(directory.join("stderr.bin"), &output.stderr).unwrap();
-        fs::write(directory.join("status.json"), serde_json::to_vec(&serde_json::json!({"exit_code":output.status.code(),"elapsed_ms":started.elapsed().as_millis()})).unwrap()).unwrap();
+        let outcome = if wait_error.is_some() {
+            Err("native child observation failed")
+        } else {
+            collection_outcome(
+                status.is_some(),
+                stdin.is_none(),
+                &out,
+                &err,
+                started.elapsed() >= Duration::from_secs(8),
+            )
+        };
+        let failure = match outcome {
+            Ok(false) => {
+                thread::sleep(Duration::from_millis(5));
+                continue;
+            }
+            Ok(true) => None,
+            Err(reason) => Some(reason),
+        };
+        // Publish raw observations before cleanup or failure. Child exit alone
+        // does not establish EOF when another holder retains a pipe.
+        if let Some(directory) = &evidence {
+            fs::write(directory.join("stdout.bin"), &out.bytes).unwrap();
+            fs::write(directory.join("stderr.bin"), &err.bytes).unwrap();
+            fs::write(
+                directory.join("status.json"),
+                serde_json::to_vec(&serde_json::json!({
+                    "exit_code": status.as_ref().and_then(|value| value.code()),
+                    "signal": status.as_ref().and_then(|value| value.signal()),
+                    "child_reaped": status.is_some(),
+                    "wait_error": wait_error,
+                    "stdout_eof": out.eof,
+                    "stderr_eof": err.eof,
+                    "stdout_error": out.error,
+                    "stderr_error": err.error,
+                    "input_bytes": input.len(),
+                    "input_written": input_written,
+                    "input_error": input_error,
+                    "elapsed_ms": started.elapsed().as_millis(),
+                    "failure": failure,
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        }
+        if let Some(reason) = failure {
+            let cleanup = if status.is_none() && wait_error.is_none() {
+                cleanup_execute_child(&mut child)
+            } else {
+                "no signal: child reaped or ownership observation unavailable"
+            };
+            if let Some(directory) = &evidence {
+                fs::write(directory.join("watchdog-cleanup.txt"), cleanup).unwrap();
+            }
+            panic!("{reason}; {cleanup}; artifacts: {evidence:?}");
+        }
+        return Output {
+            status: status.unwrap(),
+            stdout: out.bytes,
+            stderr: err.bytes,
+        };
     }
-    output
+}
+
+#[test]
+fn held_pipe_retains_raw_bytes_and_deadline_refuses_even_after_child_exit() {
+    use std::os::unix::net::UnixStream;
+    let (mut reader, mut holder) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    holder.write_all(b"raw\0partial").unwrap();
+    let mut out = PipeCapture::default();
+    out.poll(&mut reader);
+    eprintln!(
+        "held-pipe observation: {}",
+        serde_json::json!({
+            "bytes": out.bytes,
+            "eof": out.eof,
+            "error": out.error,
+            "deadline_stdout_held": collection_outcome(true, true, &out, &PipeCapture { eof: true, ..Default::default() }, true),
+            "deadline_stderr_held": collection_outcome(true, true, &PipeCapture { eof: true, ..Default::default() }, &out, true),
+        })
+    );
+    assert_eq!(out.bytes, b"raw\0partial");
+    assert!(!out.eof);
+    assert!(out.error.is_none());
+    let err = PipeCapture {
+        eof: true,
+        ..Default::default()
+    };
+    assert_eq!(collection_outcome(true, true, &out, &err, false), Ok(false));
+    assert_eq!(collection_outcome(true, true, &err, &out, false), Ok(false));
+    for (stdout, stderr) in [(&out, &err), (&err, &out)] {
+        assert_eq!(
+            collection_outcome(true, true, stdout, stderr, true),
+            Err("native invocation watchdog: child/pipe settlement unknown")
+        );
+    }
+    drop(holder);
+    out.poll(&mut reader);
+    eprintln!(
+        "closed-pipe observation: {}",
+        serde_json::json!({
+            "bytes": out.bytes,
+            "eof": out.eof,
+            "error": out.error,
+            "outcome": collection_outcome(true, true, &out, &err, true),
+        })
+    );
+    assert!(out.eof);
+    assert_eq!(out.bytes, b"raw\0partial");
+    assert_eq!(collection_outcome(true, true, &out, &err, true), Ok(true));
+    assert_eq!(
+        collection_outcome(false, true, &out, &err, true),
+        Err("native invocation watchdog: child/pipe settlement unknown")
+    );
+    assert_eq!(
+        collection_outcome(true, false, &out, &err, true),
+        Err("native invocation watchdog: child/pipe settlement unknown")
+    );
+}
+
+#[test]
+fn capture_error_and_continuous_output_cannot_report_success_or_hide_deadline() {
+    struct Broken;
+    impl Read for Broken {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("collector fault"))
+        }
+    }
+    let mut broken = PipeCapture {
+        bytes: b"retained".to_vec(),
+        ..Default::default()
+    };
+    broken.poll(&mut Broken);
+    eprintln!(
+        "failed-pipe observation: {}",
+        serde_json::json!({
+            "bytes": broken.bytes, "eof": broken.eof, "error": broken.error,
+        })
+    );
+    assert_eq!(broken.bytes, b"retained");
+    assert!(!broken.eof);
+    assert_eq!(broken.error.as_deref(), Some("collector fault"));
+    let ended = PipeCapture {
+        eof: true,
+        ..Default::default()
+    };
+    for (stdout, stderr) in [(&broken, &ended), (&ended, &broken)] {
+        assert_eq!(
+            collection_outcome(true, true, stdout, stderr, false),
+            Err("native pipe observation failed")
+        );
+    }
+    struct Continuous {
+        reads: usize,
+    }
+    impl Read for Continuous {
+        fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+            self.reads += 1;
+            bytes[0] = b'x';
+            Ok(1)
+        }
+    }
+    let mut producer = Continuous { reads: 0 };
+    let mut capture = PipeCapture::default();
+    capture.poll(&mut producer);
+    eprintln!(
+        "continuous-pipe observation: {}",
+        serde_json::json!({
+            "reads": producer.reads, "bytes": capture.bytes, "eof": capture.eof,
+            "error": capture.error,
+            "outcome": collection_outcome(true, true, &capture, &ended, true),
+        })
+    );
+    assert_eq!(producer.reads, 16);
+    assert_eq!(capture.bytes, vec![b'x'; 16]);
+    assert!(!capture.eof);
+    assert!(capture.error.is_none());
+    assert_eq!(
+        collection_outcome(true, true, &capture, &ended, true),
+        Err("native invocation watchdog: child/pipe settlement unknown")
+    );
 }
 fn failure(output: &Output, code: i32, stage: &str) {
     assert_eq!(output.status.code(), Some(code));

@@ -19,8 +19,14 @@ const ps = (field, pid) => execFileSync('/bin/ps', ['-o', field + '=', '-p', Str
 function accept(frame) {
   if (!request) {
     request = frame;
-    if (frame.schema !== 'caws.runtime.request.v1' || frame.caller.processId !== process.ppid)
-      throw new Error('fixture request is not from native parent');
+    // The retained native Child publishes its PID before request input is sent.
+    // Custody may change this engine's parent without changing the request caller.
+    const frontend = Number(fs.readFileSync(path.join(root, 'native-pid.txt'), 'utf8'));
+    if (!Number.isSafeInteger(frontend) || frontend <= 1
+        || frame.schema !== 'caws.runtime.request.v1' || frame.caller.processId !== frontend)
+      throw new Error('fixture request does not identify the retained original frontend');
+    record({ stage: 'request-identity', frontendPid: frontend,
+      callerPid: frame.caller.processId, engineParentPid: process.ppid });
     fs.writeFileSync(path.join(root, 'engine-pid.txt'), String(process.pid));
     return emit({ schema: 'caws.runtime.ready.v1', id: frame.id, runtimeDigest: frame.runtimeDigest,
       active: true, budgetHome: path.join(root, 'budget-home'), projectDigest: 'c'.repeat(64), sessionId: 'terminal-fixture' });
