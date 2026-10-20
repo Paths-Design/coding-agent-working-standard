@@ -2,7 +2,6 @@ id: CAWS-NATIVE-ADVISORY-TRUNCATE-001
 title: 'Replace installed stock advisory truncation with a generated typed runtime asset'
 mode: refactor
 lifecycle_state: active
-worktree: native-advisory-truncation
 created_at: '2026-10-20T07:06:35.625Z'
 updated_at: '2026-10-20T07:25:18.247Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
