@@ -5,6 +5,8 @@
  * Number tokens remain source data until a named semantic operation interprets
  * them. JSON.parse is used only for an isolated, already-scanned string token.
  */
+import { isPythonPrintableCodepoint } from './python-unicode-profile';
+
 export type JsonNumber = Readonly<{
   kind: 'number';
   lexeme: string;
@@ -15,14 +17,6 @@ export type JsonObject = Readonly<{
   entries: readonly (readonly [string, JsonValue])[];
 }>;
 export type JsonValue = null | boolean | string | JsonNumber | readonly JsonValue[] | JsonObject;
-export class UnsupportedPythonProfileError extends RangeError {
-  readonly code = 'PYTHON_PROFILE_UNSUPPORTED';
-  readonly operation = 'repr-unicode-14';
-  constructor() {
-    super('Python Unicode 14 repr classification is not established for this character');
-    this.name = 'UnsupportedPythonProfileError';
-  }
-}
 const NUMBER = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?![\s\S])/;
 const INTEGER = /^-?(?:0|[1-9][0-9]*)(?![\s\S])/;
 const CONSTANTS = new Set(['NaN', 'Infinity', '-Infinity']);
@@ -404,26 +398,18 @@ function reprString(value: string): string {
     else if (character === '\n') result += '\\n';
     else if (character === '\r') result += '\\r';
     else if (character === '\t') result += '\\t';
-    else if (
-      code < 0x20 ||
-      (code >= 0x7f && code <= 0xa0) ||
-      code === 0xad ||
-      (code >= 0xd800 && code <= 0xdfff)
-    ) {
+    else if (!isPythonPrintableCodepoint(code)) {
       result +=
         code <= 0xff
           ? '\\x' + code.toString(16).padStart(2, '0')
-          : '\\u' + code.toString(16).padStart(4, '0');
-    } else if (code <= 0xff) result += character;
-    else throw new UnsupportedPythonProfileError();
+          : code <= 0xffff
+            ? '\\u' + code.toString(16).padStart(4, '0')
+            : '\\U' + code.toString(16).padStart(8, '0');
+    } else result += character;
   }
   return result + delimiter;
 }
-/** repr's Unicode classification is exact for Latin-1 and lone surrogates.
- * Other non-ASCII characters require a pinned Unicode14 table; fail explicitly
- * rather than silently use this Node installation's potentially newer table.
- * JSON dumping and pythonStr(string) do not have this classification restriction.
- */
+/** Python repr uses the pinned Unicode14 printability table, independent of Node's Unicode version. */
 export function pythonRepr(value: JsonValue): string {
   if (value === null) return 'None';
   if (typeof value === 'boolean') return value ? 'True' : 'False';

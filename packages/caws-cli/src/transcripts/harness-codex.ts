@@ -1,11 +1,26 @@
 /** Codex projection of the identified Python adapter. Source syntax is never execution evidence. */
-import { PYTHON_DECIMAL_PATTERN } from './python-unicode';
+import {
+  PYTHON_DECIMAL_PATTERN,
+  PYTHON_WORD_PATTERN,
+  UNICODE_PROFILE_ID,
+  lookupPythonLiteralName,
+} from './python-unicode-profile';
+import {
+  codepointText,
+  codepointTextFromString,
+  isCodepointText,
+  textLength,
+  textSlice,
+  textEqual,
+  quoteCodepointJson,
+  type CodepointText,
+} from './codepoint-text';
+import { PYTHON_WHITESPACE_PATTERN } from './source-occurrence';
 import {
   getMember,
   hasMember,
   isJsonNumber,
   isJsonObject,
-  jsonNumber,
   jsonObject,
   parsePythonJson,
   pythonEqual,
@@ -16,12 +31,9 @@ import {
   type JsonValue,
 } from './lossless-json';
 import {
-  codepointLength,
-  codepointSlice,
   decodeStructuredTextPayload,
   parseContextAuthorityBlock,
   parseTimestamp,
-  patchPaths,
   pythonStrip,
   type CanonicalEvent,
   type LocatedEvent,
@@ -29,8 +41,7 @@ import {
 } from './harness-common';
 
 // Bump the native revision when projection semantics change; the hash identifies the reference only.
-export const CODEX_ADAPTER_REVISION =
-  'native-codex/2;unicode:14.0.0;python-sha256:fca73c2b632122bc471322b38452db3ea41cf3eab693d02be757fd9217b31ee0';
+export const CODEX_ADAPTER_REVISION = `native-codex/3;interpretation-profile:${UNICODE_PROFILE_ID};python-sha256:fca73c2b632122bc471322b38452db3ea41cf3eab693d02be757fd9217b31ee0`;
 export const AGENTS_MD_PREFIX = '# AGENTS.md instructions for ';
 export type CodexState = Readonly<{ turnSeen: boolean; pendingToolId?: JsonValue }>;
 export function createCodexState(): CodexState {
@@ -40,38 +51,14 @@ export function cloneCodexState(state: CodexState): CodexState {
   return { ...state };
 }
 
-/** Python's named Unicode lookup has no built-in Node equivalent. Do not approximate it. */
-export class UnsupportedCodexStringEscape extends Error {
-  constructor() {
-    super('Named Unicode escapes in Python single-quoted source literals are unsupported');
-    this.name = 'UnsupportedCodexStringEscape';
-  }
-}
-/** Python literal escapes can retain surrogate codepoints that JS strings combine. */
-export class UnsupportedCodexSurrogateLiteral extends Error {
-  constructor() {
-    super(
-      'Adjacent surrogate codepoints in Python single-quoted literals require distinct custody'
-    );
-    this.name = 'UnsupportedCodexSurrogateLiteral';
-  }
-}
-export class UnsupportedCodexIdentifierProfile extends Error {
-  constructor() {
-    super(
-      'Non-ASCII letter/number code positions require an unqualified Unicode identifier profile'
-    );
-    this.name = 'UnsupportedCodexIdentifierProfile';
-  }
-}
 const PY_SPACE =
   '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]';
 const JS_STRING_TOKEN = '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|`(?:\\\\.|[^`\\\\])*`)';
-const PY_BOUNDARY = '(?<![\\p{L}\\p{N}_])';
-const identifier = '[A-Za-z_$][\\p{L}\\p{N}_$]*';
+const PY_BOUNDARY = `(?<!${PYTHON_WORD_PATTERN})`;
+const identifier = `[A-Za-z_$](?:${PYTHON_WORD_PATTERN}|\\$)*`;
 
 /** Decode the Python literal subset used by the reference's ast.literal_eval branch; never evaluate code. */
-function singleQuotedLiteral(token: string): string | null {
+function singleQuotedLiteral(token: string): CodepointText | null {
   if (token.length < 2 || !token.endsWith("'")) return null;
   // Python's AST parser rejects raw NUL and lone source surrogates before literal decoding.
   if (
@@ -82,19 +69,9 @@ function singleQuotedLiteral(token: string): string | null {
     })
   )
     return null;
-  let result = '';
-  let previousPoint: number | undefined;
+  const result: number[] = [];
   const appendPoint = (point: number): void => {
-    if (
-      previousPoint !== undefined &&
-      previousPoint >= 0xd800 &&
-      previousPoint <= 0xdbff &&
-      point >= 0xdc00 &&
-      point <= 0xdfff
-    )
-      throw new UnsupportedCodexSurrogateLiteral();
-    result += String.fromCodePoint(point);
-    previousPoint = point;
+    result.push(point);
   };
   const appendText = (text: string): void => {
     for (const character of text) appendPoint(character.codePointAt(0)!);
@@ -139,8 +116,14 @@ function singleQuotedLiteral(token: string): string | null {
       continue;
     }
     if (escape === 'N') {
-      if (token[index + 1] !== '{' || token.indexOf('}', index + 2) < 0) return null;
-      throw new UnsupportedCodexStringEscape();
+      if (token[index + 1] !== '{') return null;
+      const close = token.indexOf('}', index + 2);
+      if (close < 0) return null;
+      const point = lookupPythonLiteralName(token.slice(index + 2, close));
+      if (point === null) return null;
+      appendPoint(point);
+      index = close;
+      continue;
     }
     if (escape === 'x' || escape === 'u' || escape === 'U') {
       const count = escape === 'x' ? 2 : escape === 'u' ? 4 : 8;
@@ -157,27 +140,30 @@ function singleQuotedLiteral(token: string): string | null {
     appendPoint(point);
     if (point > 0xffff) index++;
   }
-  return result;
+  return codepointText(result, UNICODE_PROFILE_ID);
 }
 
-export function decodeJsString(token: string): string | null {
+export function decodeJsString(token: string): CodepointText | null {
   if (token.startsWith("'")) return singleQuotedLiteral(token);
   if (token.startsWith('"')) {
     try {
       const value = parsePythonJson(token);
-      return typeof value === 'string' ? value : null;
+      return typeof value === 'string' ? codepointTextFromString(value, UNICODE_PROFILE_ID) : null;
     } catch {
       return null;
     }
   }
   if (token.startsWith('`')) {
     if (token.includes('${')) return null;
-    return token
-      .slice(1, -1)
-      .replace(/\\([`\\])/g, '$1')
-      .replaceAll('\\n', '\n')
-      .replaceAll('\\r', '\r')
-      .replaceAll('\\t', '\t');
+    return codepointTextFromString(
+      token
+        .slice(1, -1)
+        .replace(/\\([`\\])/g, '$1')
+        .replaceAll('\\n', '\n')
+        .replaceAll('\\r', '\r')
+        .replaceAll('\\t', '\t'),
+      UNICODE_PROFILE_ID
+    );
   }
   return null;
 }
@@ -201,7 +187,7 @@ export function balancedCallArgument(source: string, openParen: number): readonl
   }
   return [source.slice(openParen + 1), source.length];
 }
-function stringField(source: string, field: string): string | null {
+function stringField(source: string, field: string): CodepointText | null {
   const match = new RegExp(
     `(?:["']?${field}["']?)${PY_SPACE}*:${PY_SPACE}*${JS_STRING_TOKEN}`,
     'su'
@@ -249,26 +235,66 @@ function jsCodePositions(source: string): boolean[] {
   }
   return code;
 }
-export function truncateCodexText(text: string | null | undefined, limit: number): string {
-  const value = text ?? '';
-  return codepointLength(value) <= limit ? value : codepointSlice(value, 0, limit) + '...';
+export function truncateCodexText(
+  text: CodepointText | null | undefined,
+  limit: number
+): CodepointText {
+  if (!Number.isSafeInteger(limit) || limit < 0)
+    throw new RangeError('Preview limit must be a nonnegative safe integer');
+  const value = text ?? codepointText([], UNICODE_PROFILE_ID);
+  return textLength(value) <= limit
+    ? value
+    : codepointText([...textSlice(value, 0, limit).codepoints, 46, 46, 46], value.profileId);
 }
 
-/** Optional static index. The original functions.exec input remains the primary retained source.
- * The ASCII code-identifier profile deliberately declines some Python-14-supported
- * inputs as well as newer Unicode identifiers; Unicode literals/comments/paths survive.
- * This avoids claiming Node Unicode tables are the reference's Python Unicode 14 tables.
- */
-export function extractCodexInnerActions(source: string): readonly JsonObject[] {
-  const code = jsCodePositions(source),
-    assignments = new Map<string, string>();
-  for (let index = 0; index < source.length; ) {
-    const point = source.codePointAt(index)!,
-      char = String.fromCodePoint(point);
-    if (point > 0x7f && code[index] && /[\p{L}\p{N}]/u.test(char))
-      throw new UnsupportedCodexIdentifierProfile();
-    index += char.length;
+function nonempty(value: CodepointText | null | undefined): value is CodepointText {
+  return value !== undefined && value !== null && textLength(value) !== 0;
+}
+
+/** Match the historical LF/whitespace regex while retaining original codepoint slices. */
+function codepointPatchPaths(patch: CodepointText): readonly CodepointText[] {
+  // Astral codepoints become a non-whitespace BMP placeholder; every regex
+  // offset then indexes one original codepoint. Surrogate codepoints stay separate.
+  const mapped = patch.codepoints
+    .map((point) => String.fromCharCode(point > 0xffff ? 0xe000 : point))
+    .join('');
+  const pattern = new RegExp(
+    `(?:^|\n)\\*\\*\\* (?:Add|Update|Delete) File:${PYTHON_WHITESPACE_PATTERN}*([^\n]+?)${PYTHON_WHITESPACE_PATTERN}*(?=\n|(?![\\s\\S]))`,
+    'gd'
+  );
+  const whitespace = new RegExp(`^${PYTHON_WHITESPACE_PATTERN}$`, 'u');
+  const paths: CodepointText[] = [];
+  for (const match of mapped.matchAll(pattern)) {
+    const [captureStart, captureEnd] = match.indices![1]!;
+    let start = captureStart,
+      end = captureEnd;
+    while (start < end && whitespace.test(mapped[start]!)) start++;
+    while (end > start && whitespace.test(mapped[end - 1]!)) end--;
+    const value = textSlice(patch, start, end);
+    if (textLength(value) && !paths.some((path) => textEqual(path, value))) paths.push(value);
   }
+  return Object.freeze(paths);
+}
+
+export type CodexInnerAction = Readonly<{
+  tool: string;
+  observation_boundary: 'source_syntax';
+  execution: 'not_observed';
+  command?: CodepointText;
+  workdir?: CodepointText;
+  path?: CodepointText;
+  files?: readonly CodepointText[];
+  patch_preview?: CodepointText;
+  patch_length?: number;
+  args_preview?: CodepointText;
+  batch_commands?: readonly CodepointText[];
+}>;
+type MutableAction = { -readonly [Key in keyof CodexInnerAction]: CodexInnerAction[Key] };
+
+/** Optional static index; retained functions.exec input remains the primary source. */
+export function extractCodexInnerActions(source: string): readonly CodexInnerAction[] {
+  const code = jsCodePositions(source),
+    assignments = new Map<string, CodepointText>();
   const assignment = new RegExp(
     `${PY_BOUNDARY}const${PY_SPACE}+(${identifier})${PY_SPACE}*=${PY_SPACE}*${JS_STRING_TOKEN}${PY_SPACE}*;`,
     'gsu'
@@ -277,7 +303,7 @@ export function extractCodexInnerActions(source: string): readonly JsonObject[] 
     const decoded = decodeJsString(match[2]!);
     if (decoded !== null) assignments.set(match[1]!, decoded);
   }
-  const actions: Array<Record<string, JsonValue>> = [];
+  const actions: MutableAction[] = [];
   const calls = new RegExp(`${PY_BOUNDARY}tools\\.(${identifier})${PY_SPACE}*\\(`, 'gu');
   for (;;) {
     const match = calls.exec(source);
@@ -286,102 +312,115 @@ export function extractCodexInnerActions(source: string): readonly JsonObject[] 
     const tool = match[1]!,
       [args, next] = balancedCallArgument(source, calls.lastIndex - 1);
     calls.lastIndex = next;
-    const action: Record<string, JsonValue> = {
+    const action: MutableAction = {
       tool,
       observation_boundary: 'source_syntax',
       execution: 'not_observed',
     };
     if (tool === 'exec_command') {
-      const command = stringField(args, 'cmd') || stringField(args, 'command');
-      if (command) action.command = command;
+      const cmd = stringField(args, 'cmd');
+      const command = nonempty(cmd) ? cmd : stringField(args, 'command');
+      if (nonempty(command)) action.command = command;
       const workdir = stringField(args, 'workdir');
-      if (workdir) action.workdir = workdir;
+      if (nonempty(workdir)) action.workdir = workdir;
     } else if (tool === 'apply_patch') {
       const token = pythonStrip(args);
       let patch = assignments.get(token) ?? null;
       if (patch === null && new RegExp(`^${JS_STRING_TOKEN}$`, 'su').test(token))
         patch = decodeJsString(token);
       if (patch !== null) {
-        action.files = patchPaths(patch);
+        action.files = codepointPatchPaths(patch);
         action.patch_preview = truncateCodexText(patch, 3000);
-        action.patch_length = jsonNumber(String(codepointLength(patch)));
+        action.patch_length = textLength(patch);
       }
     } else if (tool === 'view_image') {
       const imagePath = stringField(args, 'path');
-      if (imagePath) action.path = imagePath;
-    } else action.args_preview = truncateCodexText(pythonStrip(args), 3000);
+      if (nonempty(imagePath)) action.path = imagePath;
+    } else
+      action.args_preview = truncateCodexText(
+        codepointTextFromString(pythonStrip(args), UNICODE_PROFILE_ID),
+        3000
+      );
     actions.push(action);
   }
   if (source.includes('exec_command({cmd') && source.includes('Promise.all')) {
-    const commands: string[] = [];
+    const commands: CodepointText[] = [];
     const tuples = new RegExp(
       `\\[${PY_SPACE}*${JS_STRING_TOKEN}${PY_SPACE}*,${PY_SPACE}*${JS_STRING_TOKEN}${PY_SPACE}*\\]`,
       'gsu'
     );
     for (const match of source.matchAll(tuples)) {
       const command = decodeJsString(match[2]!);
-      if (command) commands.push(command);
+      if (nonempty(command)) commands.push(command);
     }
     const unresolved = actions.find(
-      (action) => action.tool === 'exec_command' && !pythonTruthy(action.command)
+      (action) => action.tool === 'exec_command' && !nonempty(action.command)
     );
-    if (unresolved && commands.length) unresolved.batch_commands = commands;
+    if (unresolved && commands.length) unresolved.batch_commands = Object.freeze(commands);
   }
-  return actions.map((action) => jsonObject(Object.entries(action)));
+  return Object.freeze(actions.map((action) => Object.freeze(action)));
 }
 
-export type CodexSourceIndex =
-  | Readonly<{
-      disposition: 'indexed';
-      rawSource: string;
-      actions: readonly JsonObject[];
-      observationBoundary: 'source_syntax';
-      execution: 'not_observed';
-    }>
-  | Readonly<{
-      disposition: 'unsupported';
-      rawSource: string;
-      reason: 'named_unicode_escape' | 'unicode_identifier_profile' | 'surrogate_literal_profile';
-      observationBoundary: 'source_syntax';
-      execution: 'not_observed';
-    }>;
-/** Unsupported interpretation is observable and cannot masquerade as an empty successful index. */
+export type CodexSourceIndex = Readonly<{
+  disposition: 'indexed';
+  rawSource: string;
+  interpretationProfileId: string;
+  actions: readonly CodexInnerAction[];
+  observationBoundary: 'source_syntax';
+  execution: 'not_observed';
+}>;
+
 export function extractCodexSourceIndex(rawSource: string): CodexSourceIndex {
-  try {
-    return {
-      disposition: 'indexed',
-      rawSource,
-      actions: extractCodexInnerActions(rawSource),
-      observationBoundary: 'source_syntax',
-      execution: 'not_observed',
-    };
-  } catch (error) {
-    if (error instanceof UnsupportedCodexSurrogateLiteral)
-      return {
-        disposition: 'unsupported',
-        rawSource,
-        reason: 'surrogate_literal_profile',
-        observationBoundary: 'source_syntax',
-        execution: 'not_observed',
-      };
-    if (error instanceof UnsupportedCodexStringEscape)
-      return {
-        disposition: 'unsupported',
-        rawSource,
-        reason: 'named_unicode_escape',
-        observationBoundary: 'source_syntax',
-        execution: 'not_observed',
-      };
-    if (error instanceof UnsupportedCodexIdentifierProfile)
-      return {
-        disposition: 'unsupported',
-        rawSource,
-        reason: 'unicode_identifier_profile',
-        observationBoundary: 'source_syntax',
-        execution: 'not_observed',
-      };
-    throw error;
-  }
+  return Object.freeze({
+    disposition: 'indexed',
+    rawSource,
+    interpretationProfileId: UNICODE_PROFILE_ID,
+    actions: extractCodexInnerActions(rawSource),
+    observationBoundary: 'source_syntax',
+    execution: 'not_observed',
+  });
+}
+
+/** Historical JSON projection. Retain action vectors before decoding this non-injective output. */
+export function serializeCodexInnerActions(
+  actions: readonly CodexInnerAction[],
+  options: { ensureAscii?: boolean } = {}
+): string {
+  const ascii = options.ensureAscii ?? true;
+  const string = (value: string): string =>
+    quoteCodepointJson(codepointTextFromString(value, UNICODE_PROFILE_ID), ascii);
+  const text = (value: CodepointText): string => {
+    if (!isCodepointText(value))
+      throw new TypeError('Expected constructed CodepointText for Codex action text');
+    if (value.profileId !== UNICODE_PROFILE_ID)
+      throw new RangeError('Codex action text requires the selected interpretation profile');
+    return quoteCodepointJson(value, ascii);
+  };
+  const encode = (value: CodexInnerAction[keyof CodexInnerAction]): string => {
+    if (typeof value === 'string') return string(value);
+    if (typeof value === 'number') {
+      if (!Number.isSafeInteger(value) || value < 0)
+        throw new RangeError('Patch length must be a nonnegative safe integer');
+      return String(value);
+    }
+    if (Array.isArray(value)) return '[' + value.map((item) => text(item)).join(', ') + ']';
+    if (value === undefined) throw new TypeError('Undefined action field cannot be serialized');
+    return text(value as CodepointText);
+  };
+  return (
+    '[' +
+    actions
+      .map(
+        (action) =>
+          '{' +
+          Object.entries(action)
+            .map(([key, value]) => string(key) + ': ' + encode(value))
+            .join(', ') +
+          '}'
+      )
+      .join(', ') +
+    ']'
+  );
 }
 
 export function codexOutputIsError(raw: string, decoded: string): boolean {

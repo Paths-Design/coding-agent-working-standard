@@ -1,4 +1,5 @@
 /** Shared historical projections and occurrence normalization; no environment or filesystem authority. */
+import { UNICODE_PROFILE_ID } from './python-unicode-profile';
 import {
   getMember,
   isJsonNumber,
@@ -231,6 +232,7 @@ export interface AdapterIdentity {
   readonly revision: string;
 }
 export interface NormalizationContext {
+  readonly interpretationProfileId: string;
   readonly surface: OptionalContext;
   readonly cacheGeneration: OptionalContext;
   readonly orderedAdapters: readonly AdapterIdentity[];
@@ -255,6 +257,7 @@ export function makeNormalizationContext(
     return Object.freeze({ id, revision });
   });
   const context = Object.freeze({
+    interpretationProfileId: UNICODE_PROFILE_ID,
     surface: optional(options.surface),
     cacheGeneration: optional(options.cacheGeneration),
     orderedAdapters: Object.freeze(ordered),
