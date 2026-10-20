@@ -4,8 +4,15 @@ use super::*;
 pub(super) const OBSERVATION_MAX_BYTES: u64 = 1_048_576;
 pub(super) const OBSERVATION_MAX_RECORD: usize = 8192;
 
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum AdmissionDenial {
+    UnknownFence,
+    BackendCapacityExhausted,
+}
+
 /// Diagnostic observations only: never admission, authority, custody, replay or
-/// capacity evidence. Append refusal cannot change a service decision. Sync is
+/// capacity decisions. Append refusal cannot change a service decision. Sync is
 /// bounded in bytes, not in kernel syscall latency. No rotation/reset is implicit.
 #[derive(Serialize)]
 #[serde(
@@ -37,6 +44,12 @@ pub(super) enum Observation<'a> {
     ActorQueueRefused {
         invocation_id: &'a str,
         reason: &'static str,
+    },
+    AdmissionDenied {
+        invocation_id: &'a str,
+        reason: AdmissionDenial,
+        backend_used: usize,
+        backend_maximum: usize,
     },
     JournalRecovered {
         project_service_key: &'a str,

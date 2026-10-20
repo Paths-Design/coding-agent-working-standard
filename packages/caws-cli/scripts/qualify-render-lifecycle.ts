@@ -13,12 +13,17 @@ import {
   type Data,
   type ProjectFixture,
   type RenderHarness,
+  type Receipt,
   type Started,
 } from './render-qualification-harness';
 
-assert(process.argv[2] && process.argv[3], 'CLI and Sterling source roots required');
-const cli = fs.realpathSync(process.argv[2]);
-const sterling = fs.realpathSync(process.argv[3]);
+const oracleSelfTest = process.argv[2] === '--oracle-self-test';
+assert(
+  oracleSelfTest || (process.argv[2] && process.argv[3]),
+  'CLI and Sterling source roots required'
+);
+const cli = oracleSelfTest ? '' : fs.realpathSync(process.argv[2]!);
+const sterling = oracleSelfTest ? '' : fs.realpathSync(process.argv[3]!);
 const requestedScenario = process.argv[4] ?? 'all';
 const selectedScenario = requestedScenario === 'restart' ? 'host-crash-restart' : requestedScenario;
 assert(
@@ -30,6 +35,233 @@ const summaryPath = path.resolve(
   cli,
   '../caws-native/target/qualification/render-lifecycle-latest.json'
 );
+
+type DenialReason = 'unknown_fence' | 'backend_capacity_exhausted';
+const ownerDenialDiagnostic =
+  'CAWS native infrastructure failure (configuration): renderer owner peer EOF. Checks did not complete; request was not retried.';
+const legacyDenialDiagnostic =
+  'CAWS render writer unavailable: renderer writer domain retains an unresolved execution; no replay or fallback';
+
+/** Positive causal witness required before unchanged-output assertions have meaning. */
+function assertOwnerDenial(
+  receipt: Receipt,
+  invocation: Data,
+  events: Data[],
+  reason: DenialReason,
+  stdout: string,
+  stderr: string
+): Data {
+  assert.equal(receipt.error, null, 'probe failed to start');
+  assert.equal(receipt.signal, null, 'probe was signaled');
+  // A Stop refused before dispatch follows the native configuration fallback:
+  // advisory exit zero, no stdout, and the owner's closed prepared connection.
+  assert.equal(receipt.code, 0, 'unexpected pre-dispatch Stop failure contract');
+  assert.equal(stdout, '', 'denied probe produced native stdout');
+  assert.equal(stderr.trim(), ownerDenialDiagnostic, 'probe failed outside owner admission');
+  assert.equal(invocation.schema, 'caws.hook_invocation.v1');
+  assert.equal(invocation.stage, 'invocation_started');
+  const id = invocation.invocation_id;
+  assert(typeof id === 'string' && receipt.pid && id.startsWith(receipt.pid + '-'));
+  const denied = events.filter(
+    (event) => event.event === 'admission_denied' && event.invocationId === id
+  );
+  assert.equal(denied.length, 1, 'probe lacks exactly one correlated owner denial');
+  const event = denied[0]!;
+  assert.equal(event.reason, reason, 'owner denied for a different cause');
+  assert(Number.isSafeInteger(event.backendUsed) && Number(event.backendUsed) > 0);
+  assert(Number.isSafeInteger(event.backendMaximum) && Number(event.backendMaximum) > 0);
+  if (reason === 'backend_capacity_exhausted') {
+    assert.equal(event.backendUsed, event.backendMaximum, 'capacity denial lacks occupied budget');
+  }
+  return event;
+}
+
+function probeIdentity(
+  fixture: Pick<ProjectFixture, 'project' | 'session'>,
+  receipt: Receipt,
+  timeoutMs: string
+): { command: Data; invocation: Data; journalPath: string; journal: Data[] } {
+  assert(Number.isSafeInteger(receipt.pid) && Number(receipt.pid) > 0);
+  const command = readJson(path.join(receipt.directory, 'command.json'));
+  const settled = readJson(path.join(receipt.directory, 'receipt.json'));
+  assert.equal(command.cwd, fixture.project);
+  const args = command.args as unknown[];
+  assert(Array.isArray(args));
+  assert.equal(args[args.indexOf('--event') + 1], 'stop');
+  assert.equal(args[args.indexOf('--timeout-ms') + 1], timeoutMs);
+  const candidates = files(path.join(fixture.session, 'hook-invocations')).filter(
+    (name) => name.startsWith(String(receipt.pid) + '-') && name.endsWith('.jsonl')
+  );
+  assert.equal(candidates.length, 1, 'retained caller lacks one invocation journal');
+  const journalPath = path.join(fixture.session, 'hook-invocations', candidates[0]!);
+  const journal = fs
+    .readFileSync(journalPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => row(JSON.parse(line)));
+  const starts = journal.filter((record) => record.stage === 'invocation_started');
+  assert.equal(starts.length, 1);
+  const invocation = starts[0]!;
+  assert.equal(invocation.schema, 'caws.hook_invocation.v1');
+  assert(String(invocation.invocation_id).startsWith(receipt.pid + '-'));
+  assert.equal(path.basename(journalPath), String(invocation.invocation_id) + '.jsonl');
+  assert.equal(invocation.dispatch_cwd, fixture.project);
+  assert.equal(
+    invocation.input_sha256,
+    digest(fs.readFileSync(path.join(receipt.directory, 'stdin.bin')))
+  );
+  assert.equal(invocation.event, 'stop');
+  assert.equal(invocation.surface, 'codex');
+  assert.equal(invocation.runtime_digest, args[args.indexOf('--runtime-digest') + 1]);
+  assert(Number(invocation.timestamp_ms) >= Number(settled.startedAt));
+  assert(Number(invocation.timestamp_ms) <= Number(settled.endedAt));
+  return { command, invocation, journalPath, journal };
+}
+
+function ownerDenied(
+  h: RenderHarness,
+  fixture: ProjectFixture,
+  receipt: Receipt,
+  reason: DenialReason,
+  label: string
+): Data {
+  const { command, invocation, journalPath, journal } = probeIdentity(fixture, receipt, '5000');
+  const stdout = fs.readFileSync(path.join(receipt.directory, 'stdout.bin'), 'utf8');
+  const stderr = fs.readFileSync(path.join(receipt.directory, 'stderr.bin'), 'utf8');
+  const denial = assertOwnerDenial(receipt, invocation, h.ownerEvents(), reason, stdout, stderr);
+  const evidence = { receipt, command, invocation, journalPath, journal, denial, stdout, stderr };
+  h.writeJson(label + '-admission-denial.json', evidence);
+  return evidence;
+}
+
+function assertLegacyDenial(receipt: Receipt, stdout: string, stderr: string): void {
+  assert.equal(receipt.error, null, 'legacy writer failed to start');
+  assert.equal(receipt.signal, null);
+  assert.equal(receipt.code, 75, 'unexpected legacy writer refusal contract');
+  assert.equal(stdout, '');
+  assert.equal(
+    stderr.trim(),
+    legacyDenialDiagnostic,
+    'legacy failed outside unresolved-execution fence'
+  );
+}
+
+function testDenialOracles(): void {
+  const receipt: Receipt = { code: 0, signal: null, error: null, directory: '/pure', pid: 123 };
+  const invocation = {
+    schema: 'caws.hook_invocation.v1',
+    stage: 'invocation_started',
+    invocation_id: '123-456',
+  };
+  const event = {
+    event: 'admission_denied',
+    invocationId: '123-456',
+    reason: 'unknown_fence',
+    backendUsed: 1,
+    backendMaximum: 1,
+  };
+  assertOwnerDenial(receipt, invocation, [event], 'unknown_fence', '', ownerDenialDiagnostic);
+  assertOwnerDenial(
+    receipt,
+    invocation,
+    [{ ...event, reason: 'backend_capacity_exhausted' }],
+    'backend_capacity_exhausted',
+    '',
+    ownerDenialDiagnostic
+  );
+  const rejected = [
+    () => assertOwnerDenial(receipt, {}, [event], 'unknown_fence', '', ownerDenialDiagnostic),
+    () => assertOwnerDenial(receipt, invocation, [], 'unknown_fence', '', ownerDenialDiagnostic),
+    () =>
+      assertOwnerDenial(
+        receipt,
+        invocation,
+        [{ ...event, invocationId: 'other-456' }],
+        'unknown_fence',
+        '',
+        ownerDenialDiagnostic
+      ),
+    () =>
+      assertOwnerDenial(
+        receipt,
+        invocation,
+        [{ ...event, reason: 'queue_full' }],
+        'unknown_fence',
+        '',
+        ownerDenialDiagnostic
+      ),
+    () =>
+      assertOwnerDenial(
+        { ...receipt, code: null, error: 'ENOENT' },
+        invocation,
+        [event],
+        'unknown_fence',
+        '',
+        ownerDenialDiagnostic
+      ),
+    () =>
+      assertOwnerDenial(
+        receipt,
+        invocation,
+        [event],
+        'unknown_fence',
+        '',
+        'CAWS native infrastructure failure (configuration): execution deadline'
+      ),
+    () =>
+      assertOwnerDenial(
+        receipt,
+        invocation,
+        [{ ...event, backendUsed: 0 }],
+        'unknown_fence',
+        '',
+        ownerDenialDiagnostic
+      ),
+    () =>
+      assertOwnerDenial(
+        receipt,
+        invocation,
+        [{ ...event, reason: 'backend_capacity_exhausted', backendMaximum: 2 }],
+        'backend_capacity_exhausted',
+        '',
+        ownerDenialDiagnostic
+      ),
+    () =>
+      assertLegacyDenial(
+        { ...receipt, code: 75 },
+        '',
+        'CAWS render writer unavailable: invalid home'
+      ),
+    () => assertLegacyDenial({ ...receipt, code: 2 }, '', legacyDenialDiagnostic),
+  ];
+  rejected.forEach((control) => assert.throws(control));
+  assertLegacyDenial({ ...receipt, code: 75 }, '', legacyDenialDiagnostic);
+  let retainedIdentity: Data | null = null;
+  if (process.argv[3]) {
+    const directory = fs.realpathSync(process.argv[3]);
+    const actualReceipt = readJson(path.join(directory, 'receipt.json')) as Receipt;
+    const command = readJson(path.join(directory, 'command.json'));
+    const input = row(JSON.parse(fs.readFileSync(path.join(directory, 'stdin.bin'), 'utf8')));
+    const project = String(command.cwd);
+    assert.equal(input.cwd, project);
+    assert(typeof input.session_id === 'string');
+    const parsed = probeIdentity(
+      { project, session: path.join(project, '.caws/sessions', input.session_id) },
+      actualReceipt,
+      '30000'
+    );
+    retainedIdentity = { directory, ...parsed };
+  }
+  process.stdout.write(
+    JSON.stringify({
+      state: 'passed',
+      validControls: 3,
+      rejectedHostileControls: rejected.length,
+      runtimeExecuted: false,
+      retainedIdentity,
+    }) + '\n'
+  );
+}
 
 function outcome(operation: Data): string {
   return String(row(row(operation.body).outcome).execution);
@@ -140,7 +372,11 @@ function legacyBlocked(h: RenderHarness, fixture: ProjectFixture): Data {
     ],
     fixture.project
   );
-  assert.notEqual(receipt.code, 0, 'cooperative legacy writer ignored durable unknown');
+  assertLegacyDenial(
+    receipt,
+    fs.readFileSync(path.join(receipt.directory, 'stdout.bin'), 'utf8'),
+    fs.readFileSync(path.join(receipt.directory, 'stderr.bin'), 'utf8')
+  );
   assert(!fs.existsSync(marker), 'legacy writer replayed uncertain effect');
   return { receipt, marker, exists: false };
 }
@@ -257,6 +493,7 @@ async function cancelled(h: RenderHarness): Promise<Data> {
   const beforeRetry = h.operations();
   const retry = await h.invoke(fixture, { timeoutMs: 5000 });
   h.writeJson('fresh-request-under-unknown.json', retry);
+  ownerDenied(h, fixture, retry, 'unknown_fence', 'fresh-request-under-unknown');
   assert.deepEqual(h.operations(), beforeRetry, 'unknown fence admitted fresh effect');
   assert.equal(
     h.ownerEvents().filter((event) => event.event === 'journal_dispatch').length,
@@ -412,6 +649,7 @@ async function crashed(h: RenderHarness): Promise<Data> {
   const beforeRetry = h.operations();
   const retry = await h.invoke(fixture, { timeoutMs: 5000 });
   h.writeJson('restart-fresh-request.json', retry);
+  ownerDenied(h, fixture, retry, 'unknown_fence', 'restart-fresh-request');
   assert.deepEqual(
     h.operations(),
     beforeRetry,
@@ -424,6 +662,13 @@ async function crashed(h: RenderHarness): Promise<Data> {
   );
   const capacityReceipt = await h.invoke(capacityControl, { timeoutMs: 5000 });
   h.writeJson('restart-global-capacity-control.json', capacityReceipt);
+  ownerDenied(
+    h,
+    capacityControl,
+    capacityReceipt,
+    'backend_capacity_exhausted',
+    'restart-global-capacity-control'
+  );
   assert.equal(
     h.ownerEvents().filter((event) => event.event === 'worker_created').length,
     1,
@@ -605,6 +850,10 @@ async function normal(h: RenderHarness): Promise<Data> {
 }
 
 async function main(): Promise<void> {
+  if (oracleSelfTest) {
+    testDenialOracles();
+    return;
+  }
   const scenarios = [
     ['normal', normal],
     ['queued-cancel', queuedCancelled],

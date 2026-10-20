@@ -1592,6 +1592,30 @@ Additional bounded evidence and unresolved dependencies:
   Live post-dispatch cancellation/restart and actual13-session/four-repository
   qualification are not established. No machine state is installed or upgraded.
 
+- E88: Source checkpoint `728793c41b988de3bc3d8a7e377d1d3327c2d191`
+  is committed with a clean worktree; its release rebuild exits0 and reproduces
+  E87's binary SHA256. Independent source inspection exposes a causal oracle
+  gap: unchanged journals/no outputs could pass when retry or capacity probes
+  failed before owner contact, and any nonzero legacy exit could masquerade as
+  unknown fencing. The repair records typed invocation-correlated denials at
+  the actual unknown/capacity branches. The qualifier requires that denial,
+  the original journal/input/cwd/runtime identity and the native Stop refusal
+  contract; cooperative legacy refusal must match the unresolved-execution
+  diagnostic. Ten hostile pure controls reject unrelated failures and three
+  valid controls pass in `lifecycle-denial-oracle-self-test.log`. The same parser
+  also matches retained actual normal caller77648 to its original invocation
+  `77648-1792461128379730000`, input digest and receipt timestamps. Compile,
+  all-target Clippy and scoped lint pass. The exact process-free Rust unit
+  exits0 in `lifecycle-denial-owner-unit.log`, checking capacity/flag/journal
+  branches and excluding an expired read as an unknown denial; live denial
+  behavior is unqualified.
+  A pure fixture-root resolver rejects relative roots before file creation or
+  Node execution; its exact selected test exits0 in
+  `absolute-artifact-root-pure-test.log`. The panic-unwind cleanup regression
+  and the repaired external-signal scenario remain unexecuted during the hold.
+  These source/proof repairs do not establish post-dispatch cleanup, restart,
+  final-candidate legacy execution or thirteen-session capacity.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -1679,6 +1703,21 @@ Only `caws specs evidence` records authoritative verdicts. This ledger explains
 progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
+
+The active execution hold is E87's orphaned private fixture control. Historical
+PID22917 is not a signal target without fresh instance verification and the
+requested cleanup authorization. Confirm its absence independently after
+authorized or user-managed cleanup before starting another runtime scenario.
+Then rebuild the committed candidate and qualification drivers. Use an absolute
+`CAWS_NATIVE_TEST_ARTIFACT_ROOT` for the repaired signal/unwind checks and complete
+native suite; qualify all four lifecycle modes against the same binary, then
+replay cooperative legacy execution and the load driver's `baseline`,
+`concurrent` and `overload` modes in separate retained runs. Stop on a failed
+scenario or live/ambiguous cleanup, inspect its artifacts, and preserve the
+original request budgets. Correlated denial witnesses are required; an unrelated
+timeout, exit0, empty output or absent turn file cannot qualify an unknown fence
+or capacity reservation. A successful isolated workload does not establish
+Sterling adoption/drain, Python retirement, heartbeat/upgrades or machine cutover.
 
 E68 lands the additive opt-in one-shot foundation and its identified shared
 safety/validation repairs through a separately accepted component. The original

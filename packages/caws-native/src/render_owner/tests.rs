@@ -767,6 +767,87 @@ fn restart_cancels_only_withdrawn_queued_grants_and_retains_unknown_capacity() {
 }
 
 #[test]
+fn admission_denials_bind_invocation_and_actual_unknown_or_capacity_branch() {
+    let scratch = Scratch::new();
+    let c = config(&scratch);
+    provision(&c, expires()).unwrap();
+    let custody = journal::Custody::acquire(&custody_path(&c), expires()).unwrap();
+    let journal = journal::Journal::open(
+        Arc::clone(&custody),
+        &request().project_service_key,
+        8,
+        expires(),
+    )
+    .unwrap();
+    let observations = Arc::new(ObservationLog::open(&c, Instant::now()).unwrap());
+    let log_path = base(&c).join("observations.jsonl");
+    let mut actor = Actor {
+        config: Arc::new(c),
+        custody,
+        writer_custody: None,
+        writer_intent: None,
+        journal,
+        budget: Arc::new(Mutex::new(Budget {
+            used: 0,
+            maximum: 1,
+        })),
+        process: None,
+        reserved: false,
+        unknown: false,
+        observations,
+        phase: "test",
+    };
+    actor.check_unknown_fence("healthy", expires()).unwrap();
+    actor.reserve_backend("healthy").unwrap();
+    assert!(
+        fs::read(&log_path).unwrap().is_empty(),
+        "successful admission invented a denial"
+    );
+    assert!(actor.reserve_backend("capacity-probe").is_err());
+    assert_eq!(actor.budget.lock().unwrap().used, 1);
+    actor.unknown = true;
+    assert!(actor.check_unknown_fence("flag-probe", expires()).is_err());
+    actor.unknown = false;
+    // A journal read failure is not positive evidence of an unknown fence.
+    assert!(
+        actor
+            .check_unknown_fence("expired-probe", Instant::now())
+            .is_err()
+    );
+    let request = request();
+    let bytes = wire::encode_render_request(&request).unwrap();
+    actor
+        .journal
+        .admit(operation_identity(&request), &bytes, expires())
+        .unwrap();
+    let dispatch = actor
+        .journal
+        .begin_next(
+            &request.source_generation,
+            &request.execution_image.image_digest,
+            expires(),
+        )
+        .unwrap()
+        .unwrap();
+    actor.journal.unknown(&dispatch, expires()).unwrap();
+    assert!(
+        actor
+            .check_unknown_fence("journal-probe", expires())
+            .is_err()
+    );
+    let records: Vec<serde_json::Value> = fs::read_to_string(log_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap()["observation"].clone())
+        .collect();
+    assert_eq!(records, serde_json::json!([
+        {"event":"admission_denied","invocationId":"capacity-probe","reason":"backend_capacity_exhausted","backendUsed":1,"backendMaximum":1},
+        {"event":"admission_denied","invocationId":"flag-probe","reason":"unknown_fence","backendUsed":1,"backendMaximum":1},
+        {"event":"admission_denied","invocationId":"journal-probe","reason":"unknown_fence","backendUsed":1,"backendMaximum":1}
+    ]).as_array().unwrap().clone());
+}
+
+#[test]
 fn diagnostic_log_appends_private_bounded_records_and_refuses_identity_replacement() {
     let scratch = Scratch::new();
     let c = config(&scratch);

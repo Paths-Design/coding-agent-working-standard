@@ -669,12 +669,23 @@ struct Budget {
     used: usize,
     maximum: usize,
 }
+#[derive(Debug)]
+struct BackendCapacityExhausted {
+    used: usize,
+    maximum: usize,
+}
+impl From<BackendCapacityExhausted> for String {
+    fn from(_: BackendCapacityExhausted) -> Self {
+        "renderer backend capacity exhausted; unknown reservations retained".into()
+    }
+}
 impl Budget {
-    fn reserve(&mut self) -> Result<()> {
+    fn reserve(&mut self) -> std::result::Result<(), BackendCapacityExhausted> {
         if self.used >= self.maximum {
-            return Err(
-                "renderer backend capacity exhausted; unknown reservations retained".into(),
-            );
+            return Err(BackendCapacityExhausted {
+                used: self.used,
+                maximum: self.maximum,
+            });
         }
         self.used += 1;
         Ok(())
@@ -1374,6 +1385,41 @@ impl Actor {
             invocation_id,
         });
     }
+    fn check_unknown_fence(&mut self, invocation_id: &str, expires: Instant) -> Result<()> {
+        if self.unknown || self.journal.has_unknown(expires).map_err(err)? {
+            self.unknown = true;
+            let (backend_used, backend_maximum) = {
+                let budget = self.budget.lock().unwrap_or_else(|e| e.into_inner());
+                (budget.used, budget.maximum)
+            };
+            self.observations.emit(Observation::AdmissionDenied {
+                invocation_id,
+                reason: observations::AdmissionDenial::UnknownFence,
+                backend_used,
+                backend_maximum,
+            });
+            return Err("project unknown effect retains backend reservation".into());
+        }
+        Ok(())
+    }
+    fn reserve_backend(&mut self, invocation_id: &str) -> Result<()> {
+        let result = self
+            .budget
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .reserve();
+        if let Err(capacity) = result {
+            self.observations.emit(Observation::AdmissionDenied {
+                invocation_id,
+                reason: observations::AdmissionDenial::BackendCapacityExhausted,
+                backend_used: capacity.used,
+                backend_maximum: capacity.maximum,
+            });
+            return Err(capacity.into());
+        }
+        self.reserved = true;
+        Ok(())
+    }
     fn retire(&mut self) {
         let mut backend_exit = None;
         if let Some(mut process) = self.process.take() {
@@ -1438,10 +1484,7 @@ impl Actor {
         self.phase = "config_revalidation";
         same_config(&self.config, &read_config(&config_path(&self.config))?)?;
         self.phase = "journal_fence";
-        if self.unknown || self.journal.has_unknown(job.expires).map_err(err)? {
-            self.unknown = true;
-            return Err("project unknown effect retains backend reservation".into());
-        }
+        self.check_unknown_fence(&job.offer.invocation_id, job.expires)?;
         let context = context(&self.config, &job.offer);
         self.stage("image_admission", &job.offer.invocation_id);
         let admitted = if let Some(stage) = &job.offer.prepared.staging_root {
@@ -1468,11 +1511,7 @@ impl Actor {
             return Err("admitted renderer image differs from offer".into());
         }
         if !self.reserved {
-            self.budget
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .reserve()?;
-            self.reserved = true;
+            self.reserve_backend(&job.offer.invocation_id)?;
         }
         self.stage("worker_namespace", &job.offer.invocation_id);
         let workers = base(&self.config).join("workers");
@@ -1544,11 +1583,7 @@ impl Actor {
                 )?);
             }
             if !self.reserved {
-                self.budget
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .reserve()?;
-                self.reserved = true;
+                self.reserve_backend(&job.offer.invocation_id)?;
             }
             self.stage("pre_spawn_revalidation", &job.offer.invocation_id);
             admitted

@@ -10,20 +10,52 @@ use std::{
 };
 
 static SERIAL: AtomicU64 = AtomicU64::new(0);
+fn resolve_artifact_root(
+    configured: Option<PathBuf>,
+    default: PathBuf,
+) -> Result<PathBuf, &'static str> {
+    let root = configured.unwrap_or(default);
+    if !root.is_absolute() {
+        return Err(
+            "native test artifact root must be absolute; check CAWS_NATIVE_TEST_ARTIFACT_ROOT",
+        );
+    }
+    Ok(root)
+}
+
+#[test]
+fn artifact_root_requires_an_absolute_path_without_normalizing_relative_input() {
+    let default = PathBuf::from("/private/tmp/native-tests");
+    assert_eq!(
+        resolve_artifact_root(Some(PathBuf::from("target/qualification")), default.clone()),
+        Err("native test artifact root must be absolute; check CAWS_NATIVE_TEST_ARTIFACT_ROOT")
+    );
+    assert!(resolve_artifact_root(Some(PathBuf::new()), default.clone()).is_err());
+    let configured = PathBuf::from("/private/tmp/explicit-native-tests");
+    assert_eq!(
+        resolve_artifact_root(Some(configured.clone()), default.clone()),
+        Ok(configured)
+    );
+    assert_eq!(resolve_artifact_root(None, default.clone()), Ok(default));
+    assert!(resolve_artifact_root(None, PathBuf::from("relative-default")).is_err());
+}
+
 struct Fixture {
     dir: PathBuf,
     node: String,
 }
 impl Fixture {
     fn new() -> Self {
-        let dir = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir)
-            .join(format!(
-                "caws-native-{}-{}",
-                std::process::id(),
-                SERIAL.fetch_add(1, Ordering::Relaxed)
-            ));
+        let artifact_root = resolve_artifact_root(
+            std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT").map(PathBuf::from),
+            std::env::temp_dir(),
+        )
+        .expect("invalid native test artifact root");
+        let dir = artifact_root.join(format!(
+            "caws-native-{}-{}",
+            std::process::id(),
+            SERIAL.fetch_add(1, Ordering::Relaxed)
+        ));
         fs::create_dir(&dir).unwrap();
         // Caller snapshots include environment values; test receipts remain private.
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
