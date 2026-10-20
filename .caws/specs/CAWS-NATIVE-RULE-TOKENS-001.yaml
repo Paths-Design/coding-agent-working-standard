@@ -1,0 +1,47 @@
+id: CAWS-NATIVE-RULE-TOKENS-001
+title: 'Replace rule token counter with offline typed Node utility'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-20T11:19:22.552Z'
+updated_at: '2026-10-20T11:19:22.552Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Developer Cursor rule token utility'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/calculate-rule-tokens.py'
+    - 'scripts/calculate-rule-tokens.mjs'
+    - 'scripts/calculate-rule-tokens.test.mjs'
+    - 'scripts/tsconfig.rule-tokens.json'
+    - 'package.json'
+    - 'package-lock.json'
+  out: []
+invariants:
+  - 'Token counts use pinned bundled cl100k_base encoding without Python, network fetch, or estimates.'
+  - 'Existing selection, Unicode, formatting, and update semantics are preserved except zero totals and inaccurate update totals.'
+acceptance:
+  - id: A1
+    given: 'retained original Python source and a pinned tiktoken reference'
+    when: 'both counters process qualified nonzero fixtures'
+    then: 'exact counts, stdout, selected files and updated bytes agree including Unicode and formatting edge cases'
+  - id: A2
+    given: 'empty bodies or rules without valid frontmatter'
+    when: 'the Node utility reports or updates them'
+    then: 'zero totals exit successfully with 0.0 percent and the final update total counts only successful updates'
+  - id: A3
+    given: 'installed pinned bundled tokenizer and Python unavailable'
+    when: 'the Node CLI runs offline and strict checkJs plus hostile-path tests execute'
+    then: 'token counts and update results remain correct with no Python fallback and failures preserve diagnostic and partial-write semantics'
+observability:
+  - 'Retain raw commands, exits, stdout, stderr, fixture before/after bytes, source and dependency hashes, and runtime versions outside tracked source.'
+rollback:
+  - 'Restore the prior utility and dependency declarations through a normal follow-up commit if qualification fails.'
+non_functional:
+  security:
+    - 'Do not add new path restrictions, symlink policy or atomic-write semantics in this parity slice.'
+contracts:
+  - name: 'rule-token-cli'
+    type: behavior
