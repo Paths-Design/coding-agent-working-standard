@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { installMachineRuntime } = require('../../dist/init/machine-adapters');
 const { scenario, temporaryRoot, invoke, succeeds } = require('./runtime-asset-fixture')();
 const cli = path.resolve(__dirname, '../..');
@@ -35,7 +36,12 @@ function fixture(selectedTemplates = templates, root = temporaryRoot()) {
   // Immutable machine generations keep non-shell programs mode 0600. Node
   // reads this asset; an executable-bit gate would silently omit every cut.
   expect(fs.statSync(helper).mode & 0o111).toBe(0);
-  expect(fs.existsSync(path.join(runtime, 'advisory_truncate.py'))).toBe(false);
+  expect(
+    crypto
+      .createHash('sha256')
+      .update(fs.readFileSync(path.join(runtime, 'advisory_truncate.py')))
+      .digest('hex')
+  ).toBe('33632a6a33606a8c284ad6b142b2a3f2c08058511f96e96449c50b9706d2ba44');
   const pythonLookup = invoke(root, '/bin/bash', ['-p', '-c', 'command -v python3'], undefined, {
     env,
   });
@@ -54,9 +60,9 @@ function fixture(selectedTemplates = templates, root = temporaryRoot()) {
   );
   put(
     path.join(bin, 'python3'),
-    '#!/bin/bash -p\ncase "$1" in */advisory_truncate.py) printf "forbidden\\n" >> ' +
+    '#!/bin/bash -p\ncase "$1" in */advisory_truncate.py) printf "called\\n" >> ' +
       quote(path.join(root, 'python-helper-called')) +
-      '; exit 97;; esac\nexec ' +
+      '; [[ "${CAWS_ALLOW_LEGACY_ADVISORY_HELPER:-}" == 1 ]] || exit 97;; esac\nexec ' +
       quote(python) +
       ' "$@"\n',
     0o755
@@ -124,7 +130,7 @@ scenario(
     expect(fs.existsSync(path.join(packaged, 'node_modules'))).toBe(false);
     expect(
       fs.existsSync(path.join(packaged, 'templates/hook-packs/shared/advisory_truncate.py'))
-    ).toBe(false);
+    ).toBe(true);
     const f = fixture(path.join(packaged, 'templates/hook-packs'), root);
     // Remove the unpacked template source after materialization: dispatch uses
     // only the private installed generation, not checkout or package fallbacks.
@@ -234,3 +240,114 @@ scenario(
     expect(fs.existsSync(path.join(f.root, 'python-helper-called'))).toBe(false);
   }
 );
+
+scenario('an admitted custom runner retains the callable Python compatibility asset', () => {
+  const f = fixture(),
+    project = f.env.CAWS_PROJECT_DIR,
+    home = f.env.CAWS_HOME;
+  put(path.join(project, '.caws/policy.yaml'), 'version: 1\n');
+  fs.mkdirSync(path.join(project, '.caws/specs'));
+  put(
+    path.join(home, 'surfaces/codex/settings.json'),
+    JSON.stringify({ version: 1, enabled: true })
+  );
+  f.handler('large.sh', advisory('😀'.repeat(400)));
+  const runner = path.join(project, '.caws/hooks/custom-runner.sh');
+  put(
+    runner,
+    [
+      'source "$CAWS_SHARED_LIB_DIR/run-handlers.sh"',
+      'printf called >> ' + quote(path.join(f.root, 'custom-runner-called')),
+      '_rh_truncate_complete_utf8() {',
+      '  printf \'%s\' "$1" | python3 "$CAWS_SHARED_LIB_DIR/../advisory_truncate.py" "$2"',
+      '}',
+      '',
+    ].join('\n')
+  );
+  const defaults = JSON.parse(fs.readFileSync(path.join(f.runtime, 'system-policy.json')));
+  const key = crypto.createHash('sha256').update(project).digest('hex');
+  const settings = {
+    version: 1,
+    root: project,
+    surfaces: {
+      codex: {
+        disabled: {
+          pre_tool_use: [
+            ...new Set(
+              defaults.events.pre_tool_use
+                .map((entry) => entry.split(' ')[0])
+                .filter((name) => name !== 'block-dangerous.sh')
+            ),
+          ],
+        },
+        extensions: {},
+        handlers: { 'block-dangerous.sh': '.caws/hooks/large.sh' },
+        libraries: { 'run-handlers.sh': '.caws/hooks/custom-runner.sh' },
+      },
+    },
+  };
+  put(path.join(home, 'state/projects', key + '.json'), JSON.stringify(settings));
+  put(
+    path.join(f.root, 'selection.json'),
+    JSON.stringify(
+      {
+        settings,
+        runner,
+        runnerSha256: crypto.createHash('sha256').update(fs.readFileSync(runner)).digest('hex'),
+      },
+      null,
+      2
+    )
+  );
+  const payload = {
+    cwd: project,
+    session_id: 'advisory-fixture',
+    tool_name: 'Read',
+    tool_input: { file_path: path.join(project, 'ordinary.txt') },
+  };
+  const request = {
+    schema: 'caws.runtime.request.v1',
+    id: 'legacy-custom',
+    runtimeDigest: path.basename(f.runtime),
+    surface: 'codex',
+    event: 'pre_tool_use',
+    configuration: 'system',
+    caller: {
+      processId: 0,
+      cwd: project,
+      environment: {
+        ...f.env,
+        CODEX_THREAD_ID: 'advisory-fixture',
+        CAWS_ALLOW_LEGACY_ADVISORY_HELPER: '1',
+      },
+    },
+    deadlineEpochMs: 0,
+    inputJson: JSON.stringify(payload),
+    payload,
+  };
+  const requestFile = path.join(f.root, 'request.json');
+  put(requestFile, JSON.stringify(request));
+  const entry = path.join(f.root, 'invoke-selected.js');
+  put(
+    entry,
+    `const fs=require('node:fs');
+const request=JSON.parse(fs.readFileSync(process.argv[2]));
+request.caller.processId=process.pid;request.deadlineEpochMs=Date.now()+15000;
+fs.writeFileSync(process.argv[2],JSON.stringify(request));
+(async()=>{const prepared=await require(${JSON.stringify(path.join(cli, 'dist/runtime/engine.js'))}).prepareRuntimeInvocation(request,new AbortController().signal);
+const completed=await prepared.dispatch();await prepared.acknowledgeHandoff(true);
+process.stdout.write(Buffer.from(completed.nativeResult.stdout));process.stderr.write(Buffer.from(completed.nativeResult.stderr));process.exitCode=completed.nativeResult.exitCode;})().catch(error=>{console.error(error);process.exitCode=1;});\n`
+  );
+  const result = invoke(f.root, process.execPath, [entry, requestFile], undefined, {
+    env: f.env,
+    timeoutMs: 20000,
+  });
+  succeeds(result);
+  const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
+  expect(context).toContain('😀');
+  expect(context).toContain('[truncated:');
+  expect(Buffer.byteLength(context)).toBeLessThanOrEqual(600);
+  expect(fs.readFileSync(path.join(f.root, 'custom-runner-called'), 'utf8')).toContain('called');
+  expect(fs.readFileSync(path.join(f.root, 'python-helper-called'), 'utf8')).toContain('called\n');
+  expect(fs.existsSync(path.join(f.root, 'node-helper-called'))).toBe(false);
+});

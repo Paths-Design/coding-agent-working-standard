@@ -1055,6 +1055,14 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    // Callable compatibility asset for admitted custom runners. Stock advisory
+    // composition uses the generated CJS and does not fall back to this file.
+    {
+      destPath: '.caws/hooks/advisory_truncate.py',
+      sourcePath: 'advisory_truncate.py',
+      executable: true,
+      managed: true,
+    },
 
     // -- Human-authorized escape hatches --
     {

@@ -51,6 +51,26 @@ scenario('missing projection check refuses without creating file or parent', () 
   refuses(f.generate('--check'));
   expect(fs.existsSync(path.join(f.root, 'templates'))).toBe(false);
 });
+scenario('package build checks freshness before downstream source generation', () => {
+  const f = fixture();
+  const metadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
+  fs.writeFileSync(
+    path.join(f.root, 'package.json'),
+    JSON.stringify({ scripts: { build: metadata.scripts.build } })
+  );
+  const marker = path.join(f.root, 'downstream-generator-called');
+  fs.writeFileSync(
+    path.join(f.root, 'scripts/generate-surface-registry.mjs'),
+    "import fs from 'node:fs'; fs.writeFileSync(" + JSON.stringify(marker) + ", 'called');\n"
+  );
+  const result = invoke(f.root, 'npm', ['run', 'build', '--ignore-scripts'], undefined, {
+    env: { HOME: f.root, PATH: process.env.PATH },
+  });
+  refuses(result);
+  expect(result.stderr.toString()).toContain('Runtime asset is missing or stale');
+  expect(fs.existsSync(marker)).toBe(false);
+  expect(fs.existsSync(path.join(f.root, 'templates'))).toBe(false);
+});
 scenario('stale projection check refuses without repair', () => {
   const f = fixture();
   succeeds(f.generate());
