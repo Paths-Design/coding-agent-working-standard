@@ -164,14 +164,14 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
 | R25 | Demand-start, warm residency and idle exit | Rust service owner/retained workers + typed engine | isolated renderer profile observed, E81; complete resident engine unreplaced | One actual backend survives three native requests, then owner idle cleanup retains custody through reap/EOF. Machine-wide fair admission, heartbeat retention, drain/version and thirteen-session workload remain open |
-| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | normal/queued/dispatched cancellation and host-crash restart observed, E92 | Actual source/grant/image admission, retained partial writes, correlated unknown/capacity denials and owned cleanup reach the renderer. Fatal worker loss, generation replacement, autonomous drain and production retention remain unqualified |
+| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | normal/queued/dispatched cancellation and host-crash restart observed on native43, E128/E130 | Runtime build39 and qualifier266 retain actual partial writes, accepted Unknown, correlated retry/capacity denials and reap/EOF/absence receipts. Fatal worker loss, generation replacement, autonomous drain and production retention remain unqualified |
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
 | R28 | Performance and load qualification | Replayable TS/native workload | workload and exact semantic/ordering hostile controls tested, E91/E94; runtime unqualified | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | earlier-binary lifecycle and cooperative writer race observed, E92/E93 | Native image admission, actual selected handler/client, retained backend, partial actual output and owned cleanup reach the consumer. Replay on the final executable remains required. Unchanged legacy adoption/drain, full fallback/input compatibility, source retirement and multi-project behavior remain unqualified; no machine replacement |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | native43 lifecycle and cooperative writer race observed, E128/E130/E131 | Source/image admission, selected handler/client, retained backend, partial output and owned cleanup reach the consumer in isolated runtime build39. Unchanged legacy writers demonstrably ignore custody; adoption and positively established drain remain prerequisites to shared-output cutover. Full fallback/input compatibility, source retirement and multi-project behavior remain unqualified; no machine replacement |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
@@ -2515,6 +2515,98 @@ Additional bounded evidence and unresolved dependencies:
   one R20 leaf plus its exact source/test/config/dependency paths; parent retains
   the remaining R20 inventory and full migration acceptance.
 
+- E129: `266b7476` separates flat committed-turn observation from strict artifact
+  enumeration and retains registered session files only after confirmed inactive
+  cleanup. Temporary renderer names are filtered before probing; matching-file
+  disappearance, replacement, mutation, malformed data and capture overflow fail.
+  Retention copies complete journals, envelopes and marker inventories with
+  source/copy hashes and identities, refuses overwrite or unstable sources, and
+  preserves an original scenario error when finalization also fails. Strict
+  compile exits0. Independent review finds two ineffective negative controls:
+  lone invalid UTF-8 and spaces can fail JSON parsing without testing their named
+  protections. `5bb87f99` uses otherwise valid JSON, specific errors and an exact
+  1024-byte positive/1023-byte negative boundary. Actual compiled-helper suites
+  exit0 with19 controls in `prefix-cohort-2026-10-20/collector-corrected-focused.log`;
+  retained fixtures bind the helper bytes. A private copied-helper mutant changes
+  only `fatal: true` to false; the UTF-8 control fails with exit1 and
+  `Received function did not throw` in `collector-decoder-mutant-command.log`.
+  The real helper remains unchanged. These are filesystem/collector observations,
+  not native cleanup proof. E128's original four roots also retain complete
+  post-cleanup session copies and expanded catalogs; initial catalogs remain
+  under `catalogs/pre-session-retention.json`. Later custody does not recreate
+  the failed restart's lost transient bytes or make it a host-crash observation.
+
+- E130: With native43e4b131 and runtime build39c76f51 unchanged, qualifier266b7476
+  replays host-crash restart with exit0 at
+  `render-lifecycle-host-crash-restart-2026-10-20T12-03-25-341Z/`.
+  Original host39035 has an actual SIGKILL exit receipt; caller39037 exits75.
+  Request `75f197c8e5411ffee04b5299ecf7f568fb44a9b92d75fbdf6e3fa53e9abb45fa`
+  remains accepted Unknown across replacement host42537, with one dispatch and
+  one worker. Fresh caller42541 has a correlated `unknown_fence` denial; separate
+  caller42635 has a correlated `backend_capacity_exhausted` denial with1/1 used.
+  Exit0 or absent output alone is not either denial witness. Final retained
+  session inventory has133 files/236357 bytes across three sessions, including
+  126 complete partial-render turns and actual journals. The first observed
+  count is30; neither count fixes the exact number at signal acceptance.
+  Cooperative legacy exits75 and `MUST-NOT-REPLAY` is absent in the final inventory.
+  Backend39360 has direct-child reap, both pipe EOFs and no exceeded cleanup
+  deadline; worker39358, backend and both hosts have separate absence observations,
+  free custody and no socket. Root and independent readback rehash371 cataloged
+  files/11345519 bytes without mismatch; catalog SHA is
+  `b304c61a2a271937a091e05ca93564c7116fb6704f853012d2cba223afee280f`.
+  Host crash does not replace E128's separate caller/queued cancellation cases.
+  Native-worker fatal loss, generation replacement, power loss, platform
+  delivery and installed parity remain unqualified.
+
+- E131: Actual legacy replay exits0 on the same native/runtime build at
+  `render-legacy-2026-10-20T12-05-33-405Z/`. Ten retained command exits are
+  `0/75/75/75/75/0/0/0/75/0`. Twenty-eight reviewed-source comparisons match;
+  actual daemon63170 matches the created Child, lease and request wire. Its
+  response is deliberately withheld after a DAEMON turn exists; the actual
+  client reaches inline fallback. Identical final turn hashes do not prove two
+  physical writes. Unchanged inline and daemon writers demonstrably ignore
+  native custody. Cooperative clients refuse under the held fence and succeed
+  after release, including different-generation/home and cache-replacement
+  controls. The managed-owner dependent root
+  `render-legacy-managed-owner-2026-10-20T12-05-39-380Z/` retains backend63282
+  alive before cooperative refusal75, unchanged artifact identity, then cleanup
+  reap/EOF/absence/free custody and a successful post-cleanup attempt0. That
+  dependent root is outside the two main catalogs. Root and independent readback
+  rehash the legacy catalog's53 files/128698 bytes without mismatch, SHA
+  `08eec037bd037cc74488ab9195299f7557b01ce5d5d5be922df9abbb97d038ce`.
+  Historical legacy turn snapshots retain parsed payload plus hashes; their
+  serialization check is source-derived, not independent historical raw-byte
+  custody. Unmanaged daemon close is not a separate kernel/group absence receipt.
+  All-writer adoption and positively established drain remain cutover
+  dependencies. No deployed Sterling exclusion or full A3/A8 acceptance follows.
+  The45-file pre/post identity receipts in `prefix-cohort-2026-10-20/` match before
+  the separate stock-profile rebuild; they bind runtime build39, not later bytes.
+
+- E132: `3862f225` restores typed stock admission for the explicitly reviewed
+  agent-surface9fb104ea closure alongside f8d154f1. Its source diff at f7a5af50
+  bypasses only the literal-empty override-map Python lookup; ordered source
+  resolution and all other inputs retain their prior parser. The old compiled
+  profile rejects current source and the focused baseline exits1 on expected
+  zero executor children versus actual one. Build exits0. The first instrumented
+  suite aborts134 in Node's native recursive copier on an intentional symlink
+  loop; preserve `current-stock-profile-focused.log`, its exit receipt and
+  `current-stock-profile-aborted-source/`. The test retention repair uses lstat
+  and readlink without resolving links. The corrected suite exits0 with39 checks
+  and39 retained fixtures. `current-stock-profile-artifact-readback.json` records
+  both reviewed profiles' actual protective blocks, identical before/after Git
+  index bytes and absent latch directories. Fresh metadata for modified library
+  bytes does not grant trust: the actual executor moves from zero children to
+  one shell fallback. Both profiles' containment-eligibility controls reject
+  source/startup/override/event/generation/effect mismatches. Independent
+  read-only Sol review finds no defect in that bounded admission change;
+  source closure is also rechecked by the effect consumer. Component eligibility
+  is not signal execution, fresh session binding or exclusive PID ownership.
+  R32 remains blocking. A separately scheduled original-caller identity probe
+  must retain actual arming, own-cache loss/contradiction, protective output,
+  external Child exit, forbidden-marker absence, foreign-latch identity and a
+  surviving sibling. No identity cache may choose a foreign session or authorize
+  killing a shared backend. No acceptance, installation or fairness is recorded.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2628,12 +2720,15 @@ actual cleanup plus a full pass. E125 exercises the separate retained-join
 unwind branch; injected-quarantine unwind remains unqualified. E126 preserves
 the failed advisory baseline; E127 observes exact local native boundary cuts and
 required-goal output, with platform consumption explicitly unverified. E128
-replays three lifecycle modes on the final executable and preserves a pre-crash
-collector failure. Qualify the committed-turn collector and stable journal/marker
-retention, then replay restart and legacy exclusion separately after known
-cleanup. The missing-SID/PID-cache latch branch and current stock profile
-mismatch need an original-caller probe before a containment or required-capacity
-claim. E122 forbids a
+replays three lifecycle modes on native43 and preserves a pre-crash collector
+failure. E129 qualifies committed-turn collection and stable session retention;
+E130 replays restart and E131 replays the cooperative legacy boundary on the
+same frozen native/runtime bytes. The unchanged legacy counterexample remains
+an adoption/drain obligation. E132 restores the reviewed typed stock profile
+without changing its authority predicates. The missing-SID/PID-cache latch
+branch needs an original-caller probe before a containment or required-capacity
+claim. Complete resident-engine ownership and measured image/publication cost
+remain prerequisites to the unchanged fairness replay. E122 forbids a
 pre-Node queue which skips required latch/Stop semantics. Keep the original
 1000-turn hot transcript, counts,30s request budgets and later hot Running
 witness requirements. Correct output and source-level capacity are not fairness
