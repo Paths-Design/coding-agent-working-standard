@@ -114,6 +114,26 @@ function projectResult(value, initialization = false) {
   return result;
 }
 
+/** Decode one independently observed transport value before considering another.
+ * @param {unknown} encoded @param {boolean} [initialization]
+ * @returns {Record<string,unknown>}
+ */
+function projectTransport(encoded, initialization = false) {
+  if (typeof encoded !== 'string' || !encoded || encoded.length > (initialization ? 4096 : 131072))
+    return protocolFailure(initialization);
+  try { return projectResult(JSON.parse(encoded), initialization); }
+  catch { return protocolFailure(initialization); }
+}
+/** Empty invocation settlement means no additional fault. It cannot supply a
+ * classification or readiness, even if its JSON otherwise has a valid shape.
+ * @param {unknown} encoded @returns {Record<string,unknown> | null}
+ */
+function projectInvocationSettlement(encoded) {
+  if (encoded === '') return null;
+  const result = projectTransport(encoded);
+  return result.status === 'classified' || result.status === 'ready' ? protocolFailure(false) : result;
+}
+
 /**
  * The sole host callback is captured privately before selected code loads.
  * It accepts/returns JSON strings and never throws a host object into the VM.
@@ -398,6 +418,7 @@ async function engine(snapshot, manifestPath) {
     .runInContext(context, { timeout: 250 });
   /** @type {Record<string,unknown>} */
   let initialization = protocolFailure(true);
+  let factoriesCompiled = false;
   try {
     for (const [id, source] of Object.entries(sources)) {
       const body = id.endsWith('.json')
@@ -406,13 +427,19 @@ async function engine(snapshot, manifestPath) {
       new vm.Script('globalThis.__factories[' + JSON.stringify(id) + '] = function(exports, require, module, __filename, __dirname) {\n' + body + '\n};',
         { filename: '/' + id }).runInContext(context, { timeout: 250 });
     }
+    factoriesCompiled = true;
     const initialized = new vm.Script('globalThis.__initializeJSON()').runInContext(context, { timeout: 250 });
-    const settled = new vm.Script('globalThis.__settleInitializationJSON()').runInContext(context, { timeout: 250 });
-    const encoded = typeof settled === 'string' ? settled : initialized;
-    if (typeof encoded === 'string' && encoded.length <= 4096) initialization = projectResult(JSON.parse(encoded), true);
+    // Retain the first actual bootstrap result independently. Settlement may
+    // add a failure after readiness; it cannot erase a directly observed one.
+    initialization = projectTransport(initialized, true);
+    if (initialization.status === 'ready') {
+      const settled = new vm.Script('globalThis.__settleInitializationJSON()').runInContext(context, { timeout: 250 });
+      initialization = projectTransport(settled, true);
+    }
   } catch (error) {
     if (vmTimeout(error)) initialization = { status: 'timeout', phase: 'initialization' };
-    else initialization = { status: 'unsupported_build', phase: 'initialization', reason_code: 'build_admission' };
+    else initialization = factoriesCompiled ? protocolFailure(true) :
+      { status: 'unsupported_build', phase: 'initialization', reason_code: 'build_admission' };
   }
   progress('realm_initialization_finished');
   /** @param {string} command */
@@ -420,26 +447,26 @@ async function engine(snapshot, manifestPath) {
     const invocationDeadline = Date.now() + 250;
     if (initialization.status !== 'ready') return initialization;
     try {
-      let encoded = new vm.Script('globalThis.__invokeJSON(' + JSON.stringify(command) + ')')
+      const encoded = new vm.Script('globalThis.__invokeJSON(' + JSON.stringify(command) + ')')
         .runInContext(context, { timeout: Math.max(1, invocationDeadline - Date.now()) });
+      const first = projectTransport(encoded);
+      if (first.status !== 'classified') return first;
       if (Date.now() >= invocationDeadline) return { status: 'timeout', phase: 'invocation_or_serialization' };
       const post = new vm.Script('globalThis.__postInvocationJSON()').runInContext(context, { timeout: Math.max(1, invocationDeadline - Date.now()) });
-      if (typeof post === 'string' && post) encoded = post;
-      if (typeof encoded !== 'string' || encoded.length > 131072) return { status: 'error', error_type: 'ProtocolError' };
-      const result = JSON.parse(encoded);
-      return projectResult(result);
+      const settled = projectInvocationSettlement(post);
+      if (settled !== null) return settled;
+      if (Date.now() >= invocationDeadline) return { status: 'timeout', phase: 'invocation_or_serialization' };
+      return first;
     } catch (error) {
-      // An afterEvaluate microtask can throw after the invocation's own catch.
-      // Read the VM-owned fault record without transporting the thrown object.
+      // An actual timeout remains a timeout. A post callback cannot promote an
+      // exception to classification; only a safely projected fault is useful.
+      if (vmTimeout(error)) return { status: 'timeout', phase: 'invocation_or_serialization' };
       try {
         const pending = new vm.Script('globalThis.__postInvocationJSON()').runInContext(context, { timeout: 10 });
-        if (typeof pending === 'string' && pending) {
-          const fault = JSON.parse(pending);
-          return projectResult(fault);
-        }
+        const fault = projectInvocationSettlement(pending);
+        if (fault !== null) return fault;
       } catch {}
-      return vmTimeout(error) ? { status: 'timeout', phase: 'invocation_or_serialization' } :
-        { status: 'error', phase: 'invocation_or_serialization', error_type: 'ProtocolError' };
+      return protocolFailure(false);
     }
   };
   return { initialization, invoke };

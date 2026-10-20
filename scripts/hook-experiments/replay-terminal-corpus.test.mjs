@@ -223,6 +223,61 @@ for (const { name, corpus, malformed } of ZERO_ITEM_CORPORA) {
   });
 }
 
+test('empty corpus initialization refusal survives a forged ready settlement', async t => {
+  const f = await fixture(t);
+  const sentinel = path.join(f.root, 'initialization-settlement-effect');
+  const source = `try { require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'settlement effect'); } catch (error) {}
+globalThis.__settleInitializationJSON = function () { return JSON.stringify({status:'ready'}); };
+` + returned(ALLOW);
+  await writeFile(f.classifier, source);
+  await positiveEffect(f, sentinel, 'settlement effect');
+  await writeFile(f.corpus, '');
+  const args = [RUNNER, '--corpus', f.corpus, '--classifier', f.classifier, '--build-root', f.buildRoot,
+    '--output', f.output, '--worker-timeout-ms', String(ORDINARY_WORKER_WATCHDOG_MS)];
+  const result = await capture(args, '', f.root, ORDINARY_WORKER_WATCHDOG_MS + 6000);
+  await writeFile(path.join(f.root, 'settlement-cli.stdout'), result.stdout);
+  await writeFile(path.join(f.root, 'settlement-cli.stderr'), result.stderr);
+  await writeFile(path.join(f.root, 'settlement-cli.command.json'), JSON.stringify({
+    argv: [process.execPath, ...args], cwd: f.root,
+    exit_code: result.code, signal: result.signal, timed_out: result.timedOut,
+  }, null, 2) + '\n');
+  assert.equal(result.timedOut, false);
+  assert.equal(result.code, 1, 'a ready settlement cannot promote an observed initialization refusal');
+  assert.equal(result.signal, null);
+  assert.equal(await exists(sentinel), false);
+  assert.deepEqual(await classifications(f.output), []);
+  const { state, receipt, report } = await initialization(f.output, 'execution_attempt_refused');
+  assert.equal(receipt.operation, 'file write');
+  assert.equal(state.rows_expected, 0);
+  assert.equal(state.rows_returned, 0);
+  assert.equal(report.sampled, 0);
+  assert.deepEqual(JSON.parse(result.stdout.toString('utf8')), report);
+});
+
+test('invocation refusal survives a forged classified settlement', async t => {
+  const f = await fixture(t);
+  const sentinel = path.join(f.root, 'invocation-settlement-effect');
+  const forged = { status: 'classified', ...ALLOW, context_probes: [] };
+  const source = classifierSource(`try { require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'settlement effect'); } catch (error) {}
+globalThis.__postInvocationJSON = function () { return JSON.stringify(${JSON.stringify(forged)}); };
+return ${JSON.stringify(ALLOW)};`);
+  await writeFile(f.classifier, source);
+  await positiveEffect(f, sentinel, 'settlement effect');
+  const result = await replayFixture(f, source);
+  assert.equal(result.exitCode, 1, 'a classified settlement cannot promote an observed invocation refusal');
+  assert.equal(await exists(sentinel), false);
+  const { state } = await initialization(f.output, 'ready');
+  assert.equal(state.rows_expected, 1);
+  assert.equal(state.rows_returned, 1);
+  const rows = await classifications(f.output);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, 'execution_attempt_refused');
+  assert.equal(rows[0].phase, 'invocation');
+  assert.equal(rows[0].operation, 'file write');
+  assert.equal(rows[0].decision, undefined);
+  assert.equal(rows[0].reason_sha256, undefined);
+});
+
 for (const [name, source] of [
   ['unsupported import', 'require("node:inspector");\n' + returned(ALLOW)],
   ['missing classifier export', 'exports.unrelated = true;\n'],
