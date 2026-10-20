@@ -6,7 +6,7 @@
     "goal-ac-gate.sh": "ef16f932c95c0d8e32a070ddd5b3309705d720f0d1e6ff96c51781671f100402",
     "handler-env.sh": "901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7",
     "lib/agent-pid.sh": "f075356c6fe4179ac14ff3e1131ba355690f55a2ced04dd2f42df6aa0f8ff800",
-    "lib/agent-surface.sh": "f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a",
+    "lib/agent-surface.sh": "9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32",
     "lib/ask-capability.sh": "7aa8a0be53438fb45f82c3feae7d7043abb9b2734f77048a41794ac3d52ead30",
     "lib/bash-mutation-targets.sh": "3b40bcc29a9793c85c7db4f01c0e4650429be46db504df774e3ff95d6ab8f6ac",
     "lib/caws-state.sh": "2d27e94fbc3303ca96d7729720d8d7570ec772bc0f9a02d5b1bf46b98f4931e1",
