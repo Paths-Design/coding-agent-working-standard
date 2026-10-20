@@ -1,0 +1,39 @@
+id: CAWS-NATIVE-HOOK-HARVEST-001
+title: 'Replace read-only hook harvest Python with typed Node tooling'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-20T12:58:50.021Z'
+updated_at: '2026-10-20T12:58:50.021Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Developer read-only hook inventory and maintained reproduction command'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/hook-harvest.py'
+    - 'scripts/hook-harvest.test.py'
+    - 'scripts/hook-harvest.mjs'
+    - 'scripts/hook-harvest.test.mjs'
+    - 'scripts/tsconfig.hook-harvest.json'
+    - 'docs/audits/sterling-hook-harvest.md'
+  out: []
+invariants:
+  - 'Inventory is comparison evidence only, never authority, effective registration, execution, authorship or a cross-repository atomic snapshot; no CAWS hook execution or payload contents in report.'
+  - 'Preserve supported Python reference JSON semantic values, byte digests, deterministic ordering, literal declarations, excluded subtrees and stable-read refusals; no new runtime dependency or package changes.'
+acceptance:
+  - id: A1
+    given: 'retained Python reference and immutable disposable consumer/source repositories'
+    when: 'typed Node18 and Node22 harvest CLI reads the same trees'
+    then: 'parsed JSON values, byte lengths and hashes, tracked state, exclusions, categories and literal dispatcher declarations match the reference and no CAWS hooks execute or source files change.'
+  - id: A2
+    given: 'malformed literal declarations, symlinks, generated files, Unicode and changing source/HEAD/status'
+    when: 'focused hostile fixtures execute'
+    then: 'unsupported expressions stay unresolved, excluded targets stay unread, stable-read changes refuse, and expected non-authority limits persist.'
+  - id: A3
+    given: 'Node-only executable environment and committed dependency-free utility'
+    when: 'direct and executable-symlink CLI run and strict checkJs validation executes'
+    then: 'correct reports and diagnostic exits occur without Python and maintained reproduction points to typed tooling.'
+non_functional: {}
+contracts: []
