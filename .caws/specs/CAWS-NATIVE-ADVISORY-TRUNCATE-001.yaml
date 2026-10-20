@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-ADVISORY-TRUNCATE-001
 title: 'Replace installed stock advisory truncation with a generated typed runtime asset'
 mode: refactor
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Committed bounded standalone generated CJS distribution and ordinary private installed stock Bash consumer at6d44dc9f; production behavior qualified at byte-identical5f55. A1–A3 raw package/helper/composer/customcompat/snapshot artifacts retained outside worktree; records9355–9357 manually inspected, commit-only verification. Gates0/all5pass and doctor0 with inherited warnings. Independent completion feedback grounded at0600 readability/customcompat and actual artifact coordinates. Physical worktree and branch preserved and untracked; no parent/R06 merge. Parent native sealedimage cmp/toolclosure/reviewedprefix and full harness delivery unqualified; no globalactivation, general customconsumer parity, Node18 execution or Pythonretirement.'
 created_at: '2026-10-20T07:06:35.625Z'
-updated_at: '2026-10-20T07:25:18.247Z'
+updated_at: '2026-10-20T08:31:37.666Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
