@@ -1,7 +1,11 @@
 use super::*;
 use std::{
     fs::{self, OpenOptions},
-    os::unix::fs::{DirBuilderExt, PermissionsExt, symlink},
+    os::fd::RawFd,
+    os::unix::{
+        fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt, symlink},
+        process::{CommandExt, ExitStatusExt},
+    },
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -10,10 +14,14 @@ static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 struct Fixture {
     root: PathBuf,
     context: Context,
+    retained: bool,
 }
 impl Fixture {
     fn new() -> Self {
-        let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
+        Self::new_at(&std::env::temp_dir().canonicalize().unwrap(), false)
+    }
+    fn new_at(parent: &Path, retained: bool) -> Self {
+        let root = parent.join(format!(
             "caws-plan-snapshots-{}-{}-{}",
             std::process::id(),
             SystemTime::now()
@@ -39,7 +47,11 @@ impl Fixture {
             legacy_user_home: Some(root.join("user")),
             checkout: Some(root.join("checkout")),
         };
-        Self { root, context }
+        Self {
+            root,
+            context,
+            retained,
+        }
     }
     fn request(&self, project: &str, sid: &str, plan_name: &str) -> Request {
         let project = self.root.join(project);
@@ -77,7 +89,9 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
+        if !self.retained {
+            let _ = fs::remove_dir_all(&self.root);
+        }
     }
 }
 fn expires() -> Instant {
@@ -487,13 +501,277 @@ fn limits_identity_corrupt_ticket_and_expired_budget_refuse_without_acknowledgem
 
 #[test]
 fn same_target_cross_process_lock_is_bounded_and_released_by_process_exit() {
-    let fixture = Fixture::new();
+    const TEST: &str = "plan_snapshots::tests::same_target_cross_process_lock_is_bounded_and_released_by_process_exit";
+    const CHILD_MARKER: &str = "CAWS_PLAN_SNAPSHOT_FORK_TEST_CHILD";
+    const ARTIFACTS: &str = "CAWS_PLAN_SNAPSHOT_FORK_TEST_ARTIFACTS";
+    const SENTINEL: &str = "CAWS_PLAN_SNAPSHOT_FORK_TEST_SENTINEL_FD";
+    fn retain(root: &Path, name: &str, value: &serde_json::Value) -> io::Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(root.join(name))?;
+        file.write_all(&serde_json::to_vec_pretty(value)?)?;
+        file.sync_all()
+    }
+    fn record(root: &Path, name: &str, value: serde_json::Value) {
+        retain(root, name, &value).unwrap();
+        eprintln!("fork isolation evidence: {}", root.join(name).display());
+    }
+    if std::env::var_os(CHILD_MARKER).is_none() {
+        // Exec closes unrelated CLOEXEC descriptors from other libtest threads
+        // before this helper may create its fixture or intentionally raw-fork.
+        let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .canonicalize()
+            .unwrap();
+        let root = parent.join(format!(
+            "fork-isolation-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::DirBuilder::new().mode(0o700).create(&root).unwrap();
+        let sentinel = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(root.join("unrelated-cloexec.lock"))
+            .unwrap();
+        let high_fd = unsafe { libc::fcntl(sentinel.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 200) };
+        assert!(high_fd >= 200);
+        let sentinel = unsafe { File::from_raw_fd(high_fd) };
+        let sentinel_meta = sentinel.metadata().unwrap();
+        assert_eq!(
+            unsafe { libc::flock(high_fd, libc::LOCK_EX | libc::LOCK_NB) },
+            0
+        );
+        let executable = std::env::current_exe().unwrap();
+        record(
+            &root,
+            "helper-command.json",
+            serde_json::json!({
+                "test": TEST, "executable": executable,
+                "args": ["--exact", TEST, "--test-threads=1", "--nocapture"],
+                "outerPid": std::process::id(),
+                "sentinel": {"fd": high_fd, "device": sentinel_meta.dev(), "inode": sentinel_meta.ino(),
+                    "fdFlags": unsafe { libc::fcntl(high_fd, libc::F_GETFD) }},
+                "artifacts": root
+            }),
+        );
+        let mut command = std::process::Command::new(executable);
+        command
+            .args(["--exact", TEST, "--test-threads=1", "--nocapture"])
+            .env(CHILD_MARKER, "1")
+            .env(ARTIFACTS, &root)
+            .env(SENTINEL, high_fd.to_string())
+            .stdin(std::process::Stdio::null())
+            .stdout(File::create(root.join("helper-stdout.log")).unwrap())
+            .stderr(File::create(root.join("helper-stderr.log")).unwrap());
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setpgid(0, 0) == 0 {
+                    Ok(())
+                } else {
+                    Err(io::Error::last_os_error())
+                }
+            });
+        }
+        // This guard owns the original Child through verified group cleanup
+        // and reap, including unwinding. An unavailable kernel cleanup retains
+        // ownership; it does not become an orphan-producing timeout success.
+        struct Helper {
+            child: Option<std::process::Child>,
+            root: PathBuf,
+        }
+        impl Helper {
+            fn observe(&self, expires: Instant) -> std::result::Result<(), String> {
+                let child = self.child.as_ref().unwrap();
+                loop {
+                    let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                    let result = unsafe {
+                        libc::waitid(
+                            libc::P_PID,
+                            child.id() as libc::id_t,
+                            info.as_mut_ptr(),
+                            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                        )
+                    };
+                    if result != 0 {
+                        return Err(io::Error::last_os_error().to_string());
+                    }
+                    let pid = unsafe { info.assume_init().si_pid() };
+                    if pid == child.id() as libc::pid_t {
+                        return Ok(());
+                    }
+                    if pid != 0 {
+                        return Err("helper ownership observation changed".into());
+                    }
+                    if Instant::now() >= expires {
+                        return Err("helper observation deadline expired".into());
+                    }
+                    thread::sleep(Duration::from_millis(2));
+                }
+            }
+            fn settle(&mut self) -> std::process::ExitStatus {
+                let mut reported = false;
+                loop {
+                    let child = self.child.as_mut().unwrap();
+                    let stopped = crate::owned_group::stop_before_reap(child);
+                    if let Ok(stop) = &stopped {
+                        match child.wait() {
+                            Ok(status) => {
+                                let pid = child.id();
+                                self.child = None;
+                                let _ = retain(
+                                    &self.root,
+                                    "helper-cleanup.json",
+                                    &serde_json::json!({
+                                        "helperPid": pid, "ownedStop": format!("{stop:?}"),
+                                        "code": status.code(), "signal": status.signal(),
+                                        "rawWaitStatus": status.into_raw(), "state": "original_child_reaped"
+                                    }),
+                                );
+                                return status;
+                            }
+                            Err(error) => {
+                                if !reported {
+                                    eprintln!(
+                                        "fork isolation unknown cleanup: retaining helper {} after wait error {error}",
+                                        child.id()
+                                    );
+                                    let _ = retain(
+                                        &self.root,
+                                        "helper-cleanup-unknown.json",
+                                        &serde_json::json!({
+                                            "helperPid": child.id(), "state": "unknown_retaining_original_child",
+                                            "waitError": error.to_string(), "waitErrno": error.raw_os_error()
+                                        }),
+                                    );
+                                    reported = true;
+                                }
+                            }
+                        }
+                    } else if !reported {
+                        eprintln!(
+                            "fork isolation unknown cleanup: retaining helper {} after {stopped:?}",
+                            child.id()
+                        );
+                        let _ = retain(
+                            &self.root,
+                            "helper-cleanup-unknown.json",
+                            &serde_json::json!({
+                                "helperPid": child.id(), "state": "unknown_retaining_original_child",
+                                "ownedStopError": format!("{:?}", stopped.unwrap_err())
+                            }),
+                        );
+                        reported = true;
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+            }
+        }
+        impl Drop for Helper {
+            fn drop(&mut self) {
+                if self.child.is_some() {
+                    self.settle();
+                }
+            }
+        }
+        let mut helper = Helper {
+            child: Some(command.spawn().unwrap()),
+            root: root.clone(),
+        };
+        let helper_pid = helper.child.as_ref().unwrap().id();
+        eprintln!(
+            "fork isolation original helper child={helper_pid} artifacts={}",
+            root.display()
+        );
+        let observation = helper.observe(Instant::now() + Duration::from_secs(5));
+        record(
+            &root,
+            "helper-observation.json",
+            serde_json::json!({
+                "helperPid": helper_pid, "observation": observation,
+                "sentinelStillHeld": {"device": sentinel.metadata().unwrap().dev(), "inode": sentinel.metadata().unwrap().ino()}
+            }),
+        );
+        let status = helper.settle();
+        // Cleanup success never erases an observation deadline/failure.
+        assert!(
+            observation.is_ok(),
+            "{observation:?}; artifacts={}",
+            root.display()
+        );
+        assert!(
+            status.success(),
+            "helper {helper_pid}: {status}; artifacts={}",
+            root.display()
+        );
+        let cleanup: serde_json::Value =
+            serde_json::from_slice(&fs::read(root.join("helper-cleanup.json")).unwrap()).unwrap();
+        let inner: serde_json::Value =
+            serde_json::from_slice(&fs::read(root.join("inner-settled.json")).unwrap()).unwrap();
+        let boundary: serde_json::Value =
+            serde_json::from_slice(&fs::read(root.join("exec-boundary.json")).unwrap()).unwrap();
+        assert_eq!(cleanup["helperPid"], helper_pid);
+        assert_eq!(cleanup["state"], "original_child_reaped");
+        assert_eq!(inner["helperPid"], helper_pid);
+        assert_eq!(inner["innerWaitStatus"], 0);
+        assert_eq!(boundary["helperPid"], helper_pid);
+        assert_eq!(boundary["fcntlErrno"], libc::EBADF);
+        assert_eq!(boundary["fstatErrno"], libc::EBADF);
+        record(
+            &root,
+            "case-settled.json",
+            serde_json::json!({
+                "test": TEST, "helperPid": helper_pid, "cleanup": cleanup,
+                "inner": inner, "execBoundary": boundary, "state": "all_assertions_passed"
+            }),
+        );
+        return;
+    }
+    assert_eq!(std::env::var(CHILD_MARKER).unwrap(), "1");
+    let artifacts = PathBuf::from(std::env::var_os(ARTIFACTS).unwrap());
+    let sentinel: RawFd = std::env::var(SENTINEL).unwrap().parse().unwrap();
+    let flags = unsafe { libc::fcntl(sentinel, libc::F_GETFD) };
+    let flags_errno = (flags < 0).then(|| io::Error::last_os_error().raw_os_error());
+    let mut sentinel_meta = std::mem::MaybeUninit::<libc::stat>::uninit();
+    let stat_result = unsafe { libc::fstat(sentinel, sentinel_meta.as_mut_ptr()) };
+    let stat_errno = (stat_result < 0).then(|| io::Error::last_os_error().raw_os_error());
+    record(
+        &artifacts,
+        "exec-boundary.json",
+        serde_json::json!({
+            "test": TEST, "helperPid": std::process::id(), "sentinelFd": sentinel,
+            "fcntlResult": flags, "fcntlErrno": flags_errno,
+            "fstatResult": stat_result, "fstatErrno": stat_errno,
+            "observedIdentity": if stat_result == 0 { let m = unsafe { sentinel_meta.assume_init() };
+                Some((m.st_dev,m.st_ino)) } else { None }
+        }),
+    );
+    assert_eq!((flags, flags_errno), (-1, Some(Some(libc::EBADF))));
+    assert_eq!((stat_result, stat_errno), (-1, Some(Some(libc::EBADF))));
+    // The exact original cross-process body starts only after exec isolation.
+    let fixture = Fixture::new_at(&artifacts, true);
     let request = fixture.request("project-a", "session-a", "plan-a");
     let owner = validate_request(&fixture.context, &request, expires()).unwrap();
     let ns = namespace(&fixture.context, &owner, expires()).unwrap();
     let snapshot = Fixture::snapshot(&request);
     let (target, lock) = lock_target(&ns, &snapshot, expires()).unwrap();
     drop(lock);
+    record(
+        &artifacts,
+        "inner-before-fork.json",
+        serde_json::json!({
+            "helperPid": std::process::id(), "fixture": fixture.root,
+            "targetDirectory": {"device": target.file.metadata().unwrap().dev(), "inode": target.file.metadata().unwrap().ino()}
+        }),
+    );
     fn pipe() -> (File, File) {
         let mut pair = [0; 2];
         assert_eq!(unsafe { libc::pipe(pair.as_mut_ptr()) }, 0);
@@ -605,6 +883,15 @@ fn same_target_cross_process_lock_is_bounded_and_released_by_process_exit() {
         .mode()
             & 0o7777,
         0o600
+    );
+    record(
+        &artifacts,
+        "inner-settled.json",
+        serde_json::json!({
+            "helperPid": std::process::id(), "innerForkChildPid": child.pid,
+            "innerWaitStatus": status, "fixture": fixture.root,
+            "state": "original_30ms_denial_2s_polls_exit0_and_reacquisition_assertions_passed"
+        }),
     );
 }
 
