@@ -109,6 +109,74 @@ function observed(value: unknown): ProcessInstance | null {
 function sameBirth(a: ProcessInstance, b: ProcessInstance): boolean {
   return a.pid === b.pid && a.startSeconds === b.startSeconds && a.startMicros === b.startMicros;
 }
+/** One actual frontend invocation owns this coverage, including failed samples. */
+export type RequestCoverage = {
+  expected: RequestExpectation | null;
+  originalFrontend: unknown;
+  confirmedChains: ProcessInstance[][];
+  witnesses: ProcessInstance[];
+};
+export function retainRequestInstance(coverage: RequestCoverage, instance: ProcessInstance): void {
+  if (!coverage.witnesses.some((known) => sameBirth(known, instance)))
+    coverage.witnesses.push(instance);
+}
+/** Missing current-request coverage cannot be supplied by any earlier request.
+ * This checks observations only; it never grants signal or Child ownership.
+ */
+export function requestCleanupObservation(
+  coverage: RequestCoverage,
+  inventory: readonly ProcessRow[] | null,
+  observe: (pid: number) => unknown
+) {
+  const original = observed(coverage.originalFrontend);
+  const coverageComplete = Boolean(
+    coverage.expected &&
+      original &&
+      original.pid === coverage.expected.frontendPid &&
+      coverage.confirmedChains.length > 0 &&
+      coverage.confirmedChains.every(
+        (chain) =>
+          chain.length === (coverage.expected!.platform === 'darwin' ? 3 : 2) &&
+          sameBirth(chain[0]!, original) &&
+          chain.every((instance) => coverage.witnesses.some((p) => sameBirth(p, instance)))
+      )
+  );
+  // The frontend may share the qualifier's group; only its selected child
+  // group leaders define request-owned descendant groups.
+  const witnessedGroups = [
+    ...new Set(coverage.confirmedChains.flatMap((chain) => chain.slice(1).map((p) => p.group))),
+  ];
+  const processObservations = coverage.witnesses.map((witness) => ({
+    witness,
+    observation: observe(witness.pid),
+  }));
+  const instancesAbsent = processObservations.every(({ witness, observation }) => {
+    if (!observation || typeof observation !== 'object') return false;
+    const value = observation as Record<string, unknown>;
+    if (value.state === 'absent') return true;
+    // A positively observed different birth establishes absence of the old
+    // instance; an unavailable lookup or malformed observation does not.
+    const current = observed(observation);
+    return current !== null && !sameBirth(witness, current);
+  });
+  const liveRequestGroup =
+    inventory?.filter(
+      (entry) => witnessedGroups.includes(entry.group) && !entry.state.startsWith('Z')
+    ) ?? null;
+  return {
+    state:
+      coverageComplete &&
+      instancesAbsent &&
+      liveRequestGroup !== null &&
+      liveRequestGroup.length === 0
+        ? ('confirmed_inactive' as const)
+        : ('unknown' as const),
+    coverageComplete,
+    witnessedGroups,
+    processObservations,
+    liveRequestGroup,
+  };
+}
 /** Reobserve precise instances; a new birth or moved ancestry cannot qualify. */
 export function confirmRequestChain(
   chain: readonly ProcessRow[],

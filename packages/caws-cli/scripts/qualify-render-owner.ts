@@ -13,9 +13,11 @@ import { spawn, spawnSync } from 'node:child_process';
 import {
   selectRequestChain,
   confirmRequestChain,
+  retainRequestInstance,
+  requestCleanupObservation,
   type ProcessInstance as Instance,
   type ProcessRow,
-  type RequestExpectation,
+  type RequestCoverage,
 } from './render-request-topology';
 
 type Data = Record<string, unknown>;
@@ -68,7 +70,7 @@ const failures: string[] = [],
 const requests: Data[] = [];
 const processes = new Map<number, Instance>();
 const requestProcesses = new Map<number, Instance>();
-const requestGroups = new Set<number>();
+const requestCoverage = new Map<string, RequestCoverage>();
 const backendPids = new Set<number>();
 const manifest: Data = {
   schema: 'caws.qualification.render-owner.v1',
@@ -262,16 +264,20 @@ function processRows(): ProcessRow[] {
       };
     });
 }
-function remember(p: ProcessRow, requestChild = false): void {
+function remember(p: ProcessRow, request?: RequestCoverage): void {
   if (processes.has(p.pid)) {
-    if (requestChild) requestProcesses.set(p.pid, processes.get(p.pid)!);
-    return;
+    // Request witnesses must be freshly observed, even when a PID appeared in
+    // a previous invocation. The global map is discovery, never coverage.
+    if (!request) return;
   }
   const result = observe(p.pid);
   if (result.state !== 'observed') return;
   const witnessed = instance(result.process);
   processes.set(p.pid, witnessed);
-  if (requestChild) requestProcesses.set(p.pid, witnessed);
+  if (request) {
+    requestProcesses.set(p.pid, witnessed);
+    retainRequestInstance(request, witnessed);
+  }
 }
 function captureWorkers(): void {
   const workers = path.join(owner, 'workers');
@@ -298,10 +304,10 @@ function captureWorkers(): void {
     }
   }
 }
-function sample(request?: { expected: RequestExpectation; originalFrontend: Data }): void {
+function sample(request?: RequestCoverage): void {
   captureWorkers();
   const rows = processRows(),
-    nativePid = request?.expected.frontendPid,
+    nativePid = request?.expected?.frontendPid,
     requestTree = new Set<number>(nativePid ? [nativePid] : []);
   for (let pass = 0; pass < 6; pass++) {
     for (const p of rows)
@@ -321,22 +327,30 @@ function sample(request?: { expected: RequestExpectation; originalFrontend: Data
         (known) => known.pid === p.parent && !requestProcesses.has(known.pid)
       )
   );
-  for (const p of retained) remember(p, requestTree.has(p.pid));
+  for (const p of retained) remember(p, requestTree.has(p.pid) ? request : undefined);
   let requestWitness: Data | undefined;
   if (request) {
-    const chain = selectRequestChain(rows, request.expected);
+    const chain = request.expected ? selectRequestChain(rows, request.expected) : null;
     const before = chain?.map((p) => observe(p.pid)) ?? [];
     const after = chain?.map((p) => observe(p.pid)) ?? [];
     const confirmed = chain
       ? confirmRequestChain(chain, request.originalFrontend, before, after)
       : null;
-    requestWitness = { ...request, chain, before, after, confirmed };
+    requestWitness = {
+      expected: request.expected,
+      originalFrontend: request.originalFrontend,
+      chain,
+      before,
+      after,
+      confirmed,
+    };
     if (chain && confirmed) {
       // This grants observation only. Cleanup stays with actual Child owners.
-      requestGroups.add(chain[chain.length - 1]!.group);
+      request.confirmedChains.push(confirmed);
       for (const p of confirmed) {
         processes.set(p.pid, p);
         requestProcesses.set(p.pid, p);
+        retainRequestInstance(request, p);
       }
     }
   }
@@ -508,19 +522,28 @@ async function invoke(
   json(path.join(directory, 'original-frontend.json'), originalFrontend);
   if (originalFrontend.state !== 'observed')
     gaps.push('original native request identity unavailable: ' + directory);
-  const request = child.pid
-    ? {
-        expected: {
+  const request: RequestCoverage = {
+    expected: child.pid
+      ? {
           platform: process.platform,
           frontendPid: child.pid,
           frontendCommand: [native, ...args].join(' '),
           native,
           node: process.execPath,
           engine,
-        },
-        originalFrontend,
-      }
-    : undefined;
+        }
+      : null,
+    originalFrontend,
+    confirmedChains: [],
+    witnesses: [],
+  };
+  requestCoverage.set(directory, request);
+  if (originalFrontend.state === 'observed') {
+    const frontend = instance(originalFrontend.process);
+    processes.set(frontend.pid, frontend);
+    requestProcesses.set(frontend.pid, frontend);
+    retainRequestInstance(request, frontend);
+  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   const watchRequest = (): void => {
     try {
@@ -563,6 +586,7 @@ async function invoke(
     child.stdin!.end(input);
   });
   json(path.join(directory, 'receipt.json'), result);
+  json(path.join(directory, 'request-coverage.json'), request);
   return result;
 }
 async function awaitCleanup(): Promise<Data> {
@@ -602,16 +626,22 @@ async function awaitCleanup(): Promise<Data> {
         custodyObservation = { state: 'unavailable', error: String(error), receipt };
       }
     }
+    const requestCleanups = [...requestCoverage].map(([directory, coverage]) => ({
+      directory,
+      ...requestCleanupObservation(coverage, processRows(), observe),
+    }));
     result = {
       state:
         !unknown &&
         active.length === 0 &&
         workers.length === 0 &&
         !fs.existsSync(nativeSocket) &&
-        lockFree
+        lockFree &&
+        requestCleanups.every((request) => request.state === 'confirmed_inactive')
           ? 'confirmed_inactive'
           : 'unknown',
       observations,
+      requestCleanups,
       active,
       workers,
       custodyObservation,
@@ -1231,32 +1261,19 @@ async function main(): Promise<void> {
     );
     requestResult.ownerObservations = ownerEvents;
     const processInventory = processRows();
-    const requestState = [...requestProcesses.values()].map((witness) => ({
-      witness,
-      observation: observe(witness.pid),
-    }));
-    const liveRequestGroup = processInventory.filter(
-      (entry) => requestGroups.has(entry.group) && !entry.state.startsWith('Z')
-    );
-    const requestCleanup = {
-      witnessedGroups: [...requestGroups],
-      processObservations: requestState,
-      liveRequestGroup,
-    };
+    const coverage = requestCoverage.get(status.directory);
+    assert(coverage, 'current native request coverage record missing');
+    const requestCleanup = requestCleanupObservation(coverage, processInventory, observe);
     requestResult.requestCleanup = requestCleanup;
     json(path.join(directory, 'request-cleanup.json'), requestCleanup);
     json(path.join(directory, 'result.json'), requestResult);
     persist();
-    assert(requestGroups.size > 0, 'native request engine group was not witnessed');
-    assert(
-      requestState.every(
-        ({ witness, observation }) =>
-          observation.state === 'absent' ||
-          (observation.state === 'observed' && !same(witness, instance(observation.process)))
-      ),
-      'native request child absence unconfirmed'
+    assert(requestCleanup.coverageComplete, 'current native request chain was not confirmed');
+    assert.equal(
+      requestCleanup.state,
+      'confirmed_inactive',
+      'current native request cleanup unconfirmed'
     );
-    assert.equal(liveRequestGroup.length, 0, 'native request group retained a live descendant');
     json(path.join(directory, 'daemon-live.json'), requestResult.daemon);
     captureWorkers();
     const leaseAfter = read(leaseFile);

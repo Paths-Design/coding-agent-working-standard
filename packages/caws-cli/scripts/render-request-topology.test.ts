@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import {
   selectRequestChain,
   confirmRequestChain,
+  retainRequestInstance,
+  requestCleanupObservation,
+  type RequestCoverage,
   type ProcessRow,
   type RequestExpectation,
 } from './render-request-topology';
@@ -36,6 +39,112 @@ const observation = (p: ProcessRow) => ({
     startMicros: '123',
     zombie: false,
   },
+});
+
+function coverage(rows = fixture()): RequestCoverage {
+  const requestExpected = { ...expected, frontendPid: rows[0]!.pid };
+  assert.deepEqual(selectRequestChain(rows, requestExpected), rows);
+  const original = rows.map(observation);
+  const confirmed = confirmRequestChain(rows, original[0], original, original);
+  assert(confirmed);
+  return {
+    expected: requestExpected,
+    originalFrontend: original[0],
+    confirmedChains: [confirmed],
+    witnesses: [...confirmed],
+  };
+}
+const absent = () => ({ state: 'absent' });
+test('a clean prior request cannot qualify missing current-request coverage', () => {
+  const first = coverage();
+  assert.equal(requestCleanupObservation(first, [], absent).state, 'confirmed_inactive');
+  const secondRows = fixture().map((p) => ({
+    ...p,
+    pid: p.pid + 1000,
+    parent: p.parent + 1000,
+    group: p.group + 1000,
+  }));
+  const second: RequestCoverage = {
+    expected: { ...expected, frontendPid: secondRows[0]!.pid },
+    originalFrontend: observation(secondRows[0]!),
+    confirmedChains: [],
+    witnesses: [],
+  };
+  for (const inventory of [secondRows, []]) {
+    const result = requestCleanupObservation(second, inventory, absent);
+    assert.equal(result.coverageComplete, false);
+    assert.equal(result.state, 'unknown');
+  }
+  second.originalFrontend = { state: 'unavailable' };
+  assert.equal(requestCleanupObservation(second, secondRows, absent).state, 'unknown');
+  assert.equal(requestCleanupObservation(second, [], absent).state, 'unknown');
+  const matchedSecond = coverage(secondRows);
+  assert.equal(requestCleanupObservation(matchedSecond, [], absent).state, 'confirmed_inactive');
+  assert.equal(requestCleanupObservation(matchedSecond, secondRows, absent).state, 'unknown');
+  matchedSecond.confirmedChains = first.confirmedChains;
+  assert.equal(requestCleanupObservation(matchedSecond, [], absent).coverageComplete, false);
+  assert.equal(requestCleanupObservation(matchedSecond, [], absent).state, 'unknown');
+});
+test('confirmed current chain requires every actual instance absent and no live owned group', () => {
+  const request = coverage();
+  const confirmed = request.confirmedChains[0]!;
+  const observations = fixture().map(observation);
+  for (const witness of confirmed) {
+    assert.equal(
+      requestCleanupObservation(request, [], (pid) =>
+        pid === witness.pid ? observations.find((o) => o.process.pid === pid) : absent()
+      ).state,
+      'unknown'
+    );
+    assert.equal(
+      requestCleanupObservation(request, [], (pid) =>
+        pid === witness.pid ? { state: 'unavailable' } : absent()
+      ).state,
+      'unknown'
+    );
+  }
+  for (const group of [200, 300]) {
+    const descendant = { pid: 999, parent: 1, group, state: 'S', command: '/unknown/child' };
+    assert.equal(requestCleanupObservation(request, [descendant], absent).state, 'unknown');
+    assert.equal(
+      requestCleanupObservation(request, [{ ...descendant, state: 'Z' }], absent).state,
+      'confirmed_inactive'
+    );
+  }
+  assert.equal(requestCleanupObservation(request, null, absent).state, 'unknown');
+  assert.equal(requestCleanupObservation(request, [], absent).state, 'confirmed_inactive');
+});
+test('transient missing chain recovers only from this request confirmed chain', () => {
+  const request = coverage();
+  const confirmed = request.confirmedChains.splice(0);
+  assert.equal(requestCleanupObservation(request, [], absent).state, 'unknown');
+  request.confirmedChains.push(...confirmed);
+  assert.equal(requestCleanupObservation(request, [], absent).state, 'confirmed_inactive');
+  request.originalFrontend = { state: 'unavailable' };
+  assert.equal(requestCleanupObservation(request, [], absent).state, 'unknown');
+});
+test('request witnesses preserve different births and require their own absence observations', () => {
+  const request = coverage();
+  const original = request.witnesses[0]!;
+  retainRequestInstance(request, { ...original });
+  assert.equal(request.witnesses.length, 3);
+  retainRequestInstance(request, { ...original, startMicros: '124' });
+  assert.equal(request.witnesses.length, 4);
+  const replacement = { ...original, startMicros: '125' };
+  assert.equal(
+    requestCleanupObservation(request, [], (pid) =>
+      pid === original.pid ? { state: 'observed', process: replacement } : absent()
+    ).state,
+    'confirmed_inactive'
+  );
+  assert.equal(
+    requestCleanupObservation(request, [], (pid) =>
+      pid === original.pid
+        ? { state: 'observed', process: { ...replacement, startMicros: '124' } }
+        : absent()
+    ).state,
+    'unknown'
+  );
 });
 
 test('macOS selects caller, named custodian and exact selected Node in distinct groups', () => {

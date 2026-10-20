@@ -3169,6 +3169,26 @@ Additional bounded evidence and unresolved dependencies:
   repair and closed component are integrated here; package-wide migration
   checks, native parity and machine cutover remain separate.
 
+- E152: A bounded Sol implementation replaces cumulative renderer-qualifier
+  group coverage with one record per actual frontend invocation. Original
+  frontend birth, confirmed chains and observed descendants stay with that
+  request; global process discovery cannot supply another request's coverage.
+  Both per-request continuation and final cleanup require complete current
+  coverage. Strict TypeScript compilation exits0 and43 pure checks exit0. Root
+  inspects the exact source, source hashes and raw outputs under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/request-coverage/`.
+  The actual emitted cleanup predicate returns `confirmed_inactive` for the
+  first confirmed/absent request, then `unknown` with `coverageComplete:false`
+  for a later unconfirmed request, both with a live unknown group and with an
+  empty inventory. Concrete outputs are retained in
+  `two-request-counterexample.json`; these inputs and observations are pure
+  fixtures, not OS cleanup. The original pre-execution nested-runner refusal is
+  retained; directly inspectable compiler/test commands execute through normal
+  guards. No runtime scenario or signal is issued by this repair. Independent
+  custody-receipt correlation and actual selected-renderer execution remain
+  obligations; source-chain coverage alone does not establish the original Node
+  Child's identity.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3296,16 +3316,17 @@ failed cleanup pending. E142 wires that custodian and exercises pure contracts;
 E145 observes one pre-Ready frontend-death boundary with strict settlement,
 actual reap, both EOFs and correlated receipts. E149 exercises the corrected
 ordinary fixture with independently observed frontend/custodian/Node topology.
-Require confirmed topology coverage for each renderer invocation, repair the
-terminal fixture and bounded pipe-join watchdog, then exercise the actual typed
-engine and renderer on the same candidate. A previous request's group cannot
-qualify a later request with missing chain evidence. Qualify closed-pipe
-nonleaders and frontend loss after Ready and dispatch in separately retained
-scenarios. Keep original caller capture and native effects in the frontend;
-preserve Node FD3/4/5 and exclude every liveness/control descriptor from Node.
-Normal request stdin EOF is not frontend death. Unknown cleanup must retain
-custody and stop the scenario chain. This private per-invocation boundary does
-not require a public pre-Ready spawn service and does not earn warm residency.
+E152 repairs request-local renderer coverage with pure counterexamples. Qualify
+the terminal fixture and bounded pipe collector, correlate selected source-chain
+observations with native custody receipts, then exercise the actual typed engine
+and renderer on the same candidate. A previous request's group cannot qualify a
+later request with missing chain evidence. Qualify closed-pipe nonleaders and
+frontend loss after Ready and dispatch in separately retained scenarios. Keep
+original caller capture and native effects in the frontend; preserve Node
+FD3/4/5 and exclude every liveness/control descriptor from Node. Normal request
+stdin EOF is not frontend death. Unknown cleanup must retain custody and stop
+the scenario chain. This private per-invocation boundary does not require a
+public pre-Ready spawn service and does not earn warm residency.
 Missing-SID/cache branches additionally need a fresh logical-session binding or
 protective refusal without foreign strikes; process identity alone does not
 establish exclusive session ownership. The held E133 probe cannot supply that
