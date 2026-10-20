@@ -557,6 +557,170 @@ fn private_observation(fixture: &Fixture, name: &str, value: &serde_json::Value)
         .unwrap();
 }
 #[test]
+fn intentional_unwind_joins_actual_worker_before_releasing_custody() {
+    use std::os::unix::fs::MetadataExt;
+
+    const EXPECTED_PANIC: &str = "intentional ReleaseProbe unwind after actual readiness";
+    let mut fixture = Fixture::new("stall");
+    fixture.retained = true;
+    identify_stop_case(
+        &fixture,
+        "intentional_unwind_joins_actual_worker_before_releasing_custody",
+        "stall",
+        "intentional_unwind_after_ready_before_render",
+    );
+    let (host, mut reader, join, probe) = launch_probed(&fixture, false);
+    let mut actual_pid = None;
+    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // Keep the actual join in ReleaseProbe: consuming it with join() would
+        // bypass the Drop branch this control is intended to exercise.
+        let _release = ReleaseProbe {
+            probe: Arc::clone(&probe),
+            work_dir: fixture.spec.work_dir.clone(),
+            control: host,
+            join: Some(join),
+        };
+        let pid = ready(&mut reader);
+        actual_pid = Some(pid);
+        let custody_held = custody_busy(
+            &probe
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .lock_probe,
+        );
+        write_stop_case_evidence(
+            &fixture,
+            "before-intentional-unwind.json",
+            &serde_json::json!({
+                "caseIdentity": fixture.base.join("test-case.json"),
+                "backendChildPid": pid, "expectedPanic": EXPECTED_PANIC,
+                "custodyBusy": custody_held, "retainedActualWorkerJoin": true,
+                "state": "ready_before_intentional_unwind_before_any_render"
+            }),
+        );
+        assert!(custody_held);
+        panic!("{EXPECTED_PANIC}");
+    }));
+    // The first fresh-open lock attempt after catch observes whether Drop has
+    // actually joined and released custody; retain its original errno without
+    // a retry or PID-based cleanup of our own.
+    let lock_path = fixture.base.join("lifetime.lock");
+    let fresh = OpenOptions::new()
+        .write(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&lock_path);
+    let fresh_flock = fresh.as_ref().ok().map(|file| {
+        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        let error = (result < 0).then(io::Error::last_os_error);
+        (result, error)
+    });
+    let panic_message = caught.as_ref().err().and_then(|payload| {
+        payload
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+    });
+    let joined_path = fixture.spec.work_dir.join("panic-joined-worker-exit.json");
+    let raw_path = fixture.spec.work_dir.join("worker-exit.json");
+    let joined_bytes = fs::read(&joined_path);
+    let raw_bytes = fs::read(&raw_path);
+    let joined_exit = joined_bytes
+        .as_ref()
+        .ok()
+        .map(|bytes| serde_json::from_slice::<WorkerExit>(bytes));
+    let held_metadata = fresh.as_ref().ok().and_then(|file| file.metadata().ok());
+    let named_metadata = fs::symlink_metadata(&lock_path).ok();
+    let probe = probe.lock().unwrap_or_else(|error| error.into_inner());
+    let log_evidence = ["stdout.bin", "stderr.bin"].map(|name| {
+        let path = fixture.spec.work_dir.join(name);
+        let bytes = fs::read(&path);
+        serde_json::json!({
+            "path": path,
+            "bytes": bytes.as_ref().ok().map(Vec::len),
+            "sha256": bytes.as_ref().ok().map(|value| format!("{:x}", Sha256::digest(value))),
+            "readErrno": bytes.as_ref().err().and_then(io::Error::raw_os_error)
+        })
+    });
+    write_stop_case_evidence(
+        &fixture,
+        "after-caught-unwind.json",
+        &serde_json::json!({
+            "caseIdentity": fixture.base.join("test-case.json"),
+            "backendChildPid": actual_pid, "caughtPanic": panic_message,
+            "panicJoinedWorkerExit": joined_path,
+            "panicJoinedWorkerExitSha256": joined_bytes.as_ref().ok().map(|bytes| format!("{:x}", Sha256::digest(bytes))),
+            "panicJoinedWorkerExitReadErrno": joined_bytes.as_ref().err().and_then(io::Error::raw_os_error),
+            "panicJoinedWorkerExitDecodeError": joined_exit.as_ref().and_then(|exit| exit.as_ref().err()).map(ToString::to_string),
+            "rawWorkerExit": raw_path,
+            "rawWorkerExitSha256": raw_bytes.as_ref().ok().map(|bytes| format!("{:x}", Sha256::digest(bytes))),
+            "rawWorkerExitReadErrno": raw_bytes.as_ref().err().and_then(io::Error::raw_os_error),
+            "freshOpenErrno": fresh.as_ref().err().and_then(io::Error::raw_os_error),
+            "firstFreshFlockResult": fresh_flock.as_ref().map(|(result, _)| result),
+            "firstFreshFlockErrno": fresh_flock.as_ref().and_then(|(_, error)| error.as_ref()).and_then(io::Error::raw_os_error),
+            "freshLockIdentity": held_metadata.as_ref().map(|meta| (meta.dev(), meta.ino())),
+            "namedLockIdentity": named_metadata.as_ref().map(|meta| (meta.dev(), meta.ino())),
+            "reapCalls": probe.reap_calls, "custodyBusyAtEveryReap": probe.reap_custody_busy,
+            "logs": log_evidence, "testIssuedPidSignals": false,
+            "state": "after_catch_before_semantic_assertions"
+        }),
+    );
+    assert_eq!(panic_message, Some(EXPECTED_PANIC));
+    assert_eq!(fresh_flock.as_ref().map(|(result, _)| *result), Some(0));
+    let held_metadata = held_metadata.unwrap();
+    let named_metadata = named_metadata.unwrap();
+    assert_eq!(
+        (held_metadata.dev(), held_metadata.ino()),
+        (named_metadata.dev(), named_metadata.ino())
+    );
+    assert!(probe.reap_calls > 0 && probe.reap_custody_busy);
+    assert!(
+        !fixture
+            .spec
+            .work_dir
+            .join("panic-worker-join-error.txt")
+            .exists()
+    );
+    let exit = joined_exit.unwrap().unwrap();
+    assert_eq!(exit.cleanup.child_pid, actual_pid);
+    assert!(actual_pid.is_some());
+    assert_eq!(exit.failure.unwrap().code, FailureCode::HostClosed);
+    assert!(exit.last_request_id.is_none() && exit.last_result.is_none());
+    assert!(exit.last_reply_bytes.is_empty());
+    assert!(exit.cleanup.identity_verified_before_signal && exit.cleanup.group_signal_accepted);
+    assert!(exit.cleanup.direct_child_reaped && exit.cleanup.logs_persisted);
+    assert!(exit.cleanup.stdout.eof && exit.cleanup.stderr.eof);
+    assert!(!exit.cleanup.stdout.io_failed && !exit.cleanup.stderr.io_failed);
+    assert_eq!(
+        exit.cleanup.backend_exit.as_ref().unwrap().signal,
+        Some(libc::SIGKILL)
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&raw_bytes.unwrap()).unwrap(),
+        serde_json::from_slice::<serde_json::Value>(&joined_bytes.unwrap()).unwrap()
+    );
+    for (name, stats) in [
+        ("stdout.bin", &exit.cleanup.stdout),
+        ("stderr.bin", &exit.cleanup.stderr),
+    ] {
+        assert_eq!(
+            fs::metadata(fixture.spec.work_dir.join(name))
+                .unwrap()
+                .len(),
+            stats.bytes_retained as u64
+        );
+    }
+    write_stop_case_evidence(
+        &fixture,
+        "test-settled.json",
+        &serde_json::json!({
+            "caseIdentity": fixture.base.join("test-case.json"),
+            "backendChildPid": actual_pid,
+            "afterCatchEvidence": fixture.base.join("after-caught-unwind.json"),
+            "state": "expected_panic_caught_and_all_cleanup_assertions_passed"
+        }),
+    );
+}
+#[test]
 fn cleanup_failures_keep_exited_leader_and_custody_until_holder_group_is_stopped() {
     let mut fixture = Fixture::new("leader_holder");
     fixture.retained = true;
