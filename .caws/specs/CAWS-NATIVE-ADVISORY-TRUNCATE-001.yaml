@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-advisory-truncation
 created_at: '2026-10-20T07:06:35.625Z'
-updated_at: '2026-10-20T07:16:53.593Z'
+updated_at: '2026-10-20T07:21:38.719Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
@@ -27,6 +27,7 @@ scope:
     - scripts/install-cli-snapshot.test.mjs
     - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-budget.bats
     - packages/caws-cli/tests/runtime/runtime-asset-fixture.js
+    - packages/caws-cli/scripts/qualify-advisory-truncate.mjs
   out: []
 invariants:
   - 'The authoritative UTF8 algorithm is src/runtime/utf8.ts; the shipped CJS is a deterministic declared generated projection.'
