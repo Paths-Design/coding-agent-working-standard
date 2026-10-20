@@ -28,3 +28,10 @@ rollback:
   - 'Restore the prior paragraph through a governed documentation change if contradicted by the actual publisher contract.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Direct source inspection at 8feede6e: transcript-store.py110-125 anchors an exclusive temporary file and relative replace, omits file/directory fsync, and prints receipt after replacement; session-log.sh93-95 redirects receipt separately. Installed fidelity test311-316 hashes only main database. Updated audit distinguishes these exact boundaries. Source/doc snapshots and candidate.patch retained under /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/transcript-publication-doc/source-contract.json. Raw validation/gates/doctor receipts under sibling native-sensitivity/038-doc-candidate-gates,039-doc-candidate-validation,040-doc-candidate-doctor all exit0; validator has same30lenientwarnings and does not check semantics. No runtime, SQLite, WAL/SHM, concurrency or crash-durability probe. Verification here checks cited path/commit identity, not behavioral execution."
+    recorded_at: "2026-10-20T15:30:29.112Z"
+    artifact_path: docs/audits/hook-port-qualification.md
+    commit_sha: "8feede6e43cc25a728d66fbe8f604ee3493d2b28"
