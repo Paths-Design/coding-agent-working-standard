@@ -45,7 +45,11 @@ acceptance:
   - id: A3
     given: 'an unpacked candidate package outside the checkout and a private installed runtime'
     when: 'stock dispatcher composes truncating ordinary and protective handler output'
-    then: 'the installed CJS executes without source dev dependencies or old truncation Python and protective output retains precedence'
+    then: >-
+      the installed stock CJS executes with source and dev dependencies absent and
+      Python truncation execution refused, protective output retains precedence, and
+      the unchanged callable Python compatibility asset remains available to custom
+      consumers
 observability:
   - 'Retain baseline bytes raw process inputs outputs statuses generated helper package and installed runtime identities plus process observations outside disposable worktrees.'
 rollback:
