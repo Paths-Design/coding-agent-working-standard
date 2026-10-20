@@ -62,3 +62,10 @@ evidence:
     command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/node18/bin/node /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-transcript-foundation/packages/caws-cli/tests/transcripts/run.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/compiled/tests/transcripts"
     exit_code: 0
     commit_sha: cdd74dcd7d2c3d4cd3784e18460244ac190a7145
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Actual raw occurrences/event envelopes: wrong unsafe ID retains pending9007199254740993; matching result clears; tentative commitAllowedfalse; changed surface context_mismatch; clone-owned Set/Map failure cases in focused suite. No cache/aggregation/rewind/other-harness inference. Evidence root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation; artifact-index.json; candidate-identity.json; raw commands/077-corrective-committed-control18. --verify checks commit reachability only; recorded command is not executed by CAWS."
+    recorded_at: "2026-10-20T18:18:13.214Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/node18/bin/node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/node-only-control.mjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/compiled/src/transcripts"
+    exit_code: 0
+    commit_sha: cdd74dcd7d2c3d4cd3784e18460244ac190a7145
