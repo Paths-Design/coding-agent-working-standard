@@ -67,3 +67,10 @@ evidence:
     command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python qualify.py --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --node /Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node --worktree /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-rule-tokens --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/differential-entry-repair-node22"
     exit_code: 0
     commit_sha: "58a65d5defac4d53410b60502f26ff114d031cb8"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Final commands025 focused15 tests exit0, 026 strictcheckJs exit0, 027/028 both37-case differentials exit0; hostile rejection/partialwrites inspected. 024 repaired actual executable symlink output+bytes agree with Python/directNode18+22 at final source97558daba7f19cf5de4564fc0db8071440e0e1b290a1b79a06d856eb40ae98f4. 029 offline restriction exit0: positive actual loopback/Python controls succeed; same probes under profile denied EPERM; actual restricted Node18+22 PATH=/nonexistent CLI each exit0 count2/100.0%/Updated1, exact updated bytes/unchanged sentinel/serverclosed. Pin1.0.22 rootmanifest/lock bundledranks+WASM inspected. Selected Darwin scenario only; no claim zero denied attempts/everybranch/otherOS/nativecontainment. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens CLI --verify checks committed citation existence/reachability only; behavioral adjudication uses inspected raw artifacts, not rerun by this command."
+    recorded_at: "2026-10-20T12:50:13.390Z"
+    command: node offline-qualification.mjs
+    exit_code: 0
+    commit_sha: "58a65d5defac4d53410b60502f26ff114d031cb8"
