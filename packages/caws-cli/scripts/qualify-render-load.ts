@@ -353,7 +353,13 @@ function oracleControls(): void {
     user: 'control user 101',
     status: 'ok',
     timeline: [
-      { kind: 'tool_call', name: 'exec_command', output: 'control result 101' },
+      {
+        kind: 'tool_call',
+        name: 'exec_command',
+        id: 'control-call-101',
+        input: { cmd: 'touch MUST-NOT-EXECUTE' },
+        output: 'control result 101',
+      },
       { kind: 'reasoning', text: 'control assistant 101' },
     ],
   };
@@ -387,6 +393,26 @@ function oracleControls(): void {
       () => semanticTurn({ ...semantic, timeline: [tool, semantic.timeline[1]] }, subject, 101),
       /tool output identity/,
       'prefix collisions and unrelated metadata cannot establish exact tool output'
+    );
+  }
+  for (const timeline of [
+    [...semantic.timeline, { kind: 'reasoning', text: 'other-project secret' }],
+    [{ kind: 'tool_call', name: 'other-tool' }, ...semantic.timeline],
+    [...semantic.timeline].reverse(),
+  ]) {
+    assert.throws(
+      () => semanticTurn({ ...semantic, timeline }, subject, 101),
+      /tool\/assistant ordering/,
+      'a matching pair cannot hide extra or reordered transcript entries'
+    );
+  }
+  for (const tool of [
+    { ...semantic.timeline[0], id: 'other-session-call-101' },
+    { ...semantic.timeline[0], input: { cmd: 'other-session command' } },
+  ]) {
+    assert.throws(
+      () => semanticTurn({ ...semantic, timeline: [tool, semantic.timeline[1]] }, subject, 101),
+      /tool call identity|tool input identity/
     );
   }
   for (const [changed, refusal] of [
@@ -480,14 +506,17 @@ function semanticTurn(turn: Data, subject: SemanticSubject, number: number): voi
   assert.equal(turn.status, 'ok');
   assert(Array.isArray(turn.timeline));
   const timeline = turn.timeline.map((item) => row(item));
-  const call = timeline.findIndex(
-    (item) => item.kind === 'tool_call' && item.name === 'exec_command'
+  assert(
+    timeline.length === 2 &&
+      timeline[0]!.kind === 'tool_call' &&
+      timeline[0]!.name === 'exec_command' &&
+      timeline[1]!.kind === 'reasoning' &&
+      timeline[1]!.text === label + ' assistant ' + number,
+    'tool/assistant ordering: ' + label
   );
-  const reply = timeline.findIndex(
-    (item) => item.kind === 'reasoning' && item.text === label + ' assistant ' + number
-  );
-  assert(call >= 0 && reply > call, 'tool/assistant ordering: ' + label);
-  assert.equal(timeline[call]!.output, label + ' result ' + number, 'tool output identity');
+  assert.equal(timeline[0]!.id, label + '-call-' + number, 'tool call identity');
+  assert.deepEqual(timeline[0]!.input, { cmd: 'touch MUST-NOT-EXECUTE' }, 'tool input identity');
+  assert.equal(timeline[0]!.output, label + ' result ' + number, 'tool output identity');
 }
 
 function semanticOutput(harness: RenderHarness, subject: Subject): Data {
