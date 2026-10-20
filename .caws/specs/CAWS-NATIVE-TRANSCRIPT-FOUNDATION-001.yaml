@@ -47,3 +47,11 @@ contracts:
   - name: 'typed-transcript-foundation'
     type: api
     path: 'packages/caws-cli/src/transcripts/index.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Finite admitted common/Codex Python comparison: 276 supported checks per Node18/22; zero mismatches, 5 explicit incomplete cases never counted as parity. Retained exact originals/profile/fixture/codepoint outputs. Evidence root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation; artifact-index.json; candidate-identity.json; raw commands/076-corrective-committed-compare. --verify checks commit reachability only; recorded command is not executed by CAWS."
+    recorded_at: "2026-10-20T18:18:08.628Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/compare.py 063-reference-boundaries 074-corrective-committed-differential22 075-corrective-committed-differential18"
+    exit_code: 0
+    commit_sha: cdd74dcd7d2c3d4cd3784e18460244ac190a7145
