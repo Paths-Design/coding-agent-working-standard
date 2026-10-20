@@ -22,6 +22,7 @@ scope:
 invariants:
   - 'A mutant counts as killed only after a matched green control and the declared decision-bearing assertion; runtime or setup failure confers no sensitivity evidence.'
   - 'Keep the six source anchors, source hashes, raw subprocess output and command identities; fixture qualification never establishes production mutant sensitivity or R21 retirement.'
+  - 'Repair the inherited uncorrelated-stderr false positive through selected-test traceback attribution; retain old/new hostile-output differences explicitly rather than treating old bugs as parity authority.'
 acceptance:
   - id: A1
     given: 'the six declared experiment cases and harmless independent synthetic test consumers'
