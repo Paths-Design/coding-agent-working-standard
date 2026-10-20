@@ -60,3 +60,10 @@ evidence:
     command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python qualify.py --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/node18/bin/node --worktree /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-rule-tokens --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/differential-entry-repair-node18"
     exit_code: 0
     commit_sha: "58a65d5defac4d53410b60502f26ff114d031cb8"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Final differential-entry-repair-node18 and node22 zero-total/update-total raw commands, stdout/stderr and before/after rule bytes inspected. Zero-total Python exit1 ZeroDivisionError after Total 0; Node exit0 0.0% and Updated 1; same updated bytes. Partial metadata update both exit0 identical written bytes, warning for b.mdc; old Updated 2, Node Updated 1 successful write. Two authorized repairs only. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens CLI --verify checks committed citation existence/reachability only; behavioral adjudication uses inspected raw artifacts, not rerun by this command."
+    recorded_at: "2026-10-20T12:50:12.103Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python qualify.py --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --node /Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node --worktree /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-rule-tokens --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/differential-entry-repair-node22"
+    exit_code: 0
+    commit_sha: "58a65d5defac4d53410b60502f26ff114d031cb8"
