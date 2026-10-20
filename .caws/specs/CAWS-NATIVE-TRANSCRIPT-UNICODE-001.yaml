@@ -71,3 +71,10 @@ evidence:
     command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode/compare-fixtures.py /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/commands/063-reference-boundaries/stdout.bin /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode/commands/026-final-fixtures18/stdout.bin /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode/commands/027-final-fixtures22/stdout.bin"
     exit_code: 0
     commit_sha: "25d114c9fbf5ebc3dbf47badaedaa69177777437"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Actual /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode/candidate-identity.json validates19committed and23checked file hashes unchanged;016/019compile,020/021/040execute74cases;034lint035doctor036fivegates all0.015actualprofile-mutation/foreign acceptance failure reversed017/031. Targeted mutation artifacts retained, no fullStrykerscore. Freshread-only Sol feedback grounded at serializer384-423/UTF8helper129-142 and029/030; future writer/cache adoption open. External artifacts root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode. CLI --verify re-derives commit reachability ONLY; recorded command is not executed. Absolute artifact citation was correctly refused in041; artifacts inspected directly, no verifier content claim."
+    recorded_at: "2026-10-20T19:44:22.123Z"
+    command: caws gates run --spec CAWS-NATIVE-TRANSCRIPT-UNICODE-001
+    exit_code: 0
+    commit_sha: "25d114c9fbf5ebc3dbf47badaedaa69177777437"
