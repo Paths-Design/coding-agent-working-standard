@@ -232,6 +232,10 @@ export function invocationGuardConfiguration(
   const startup = join(selection.runtimeDirectory, 'handler-env.sh');
   if (
     selection.configuration !== 'system' ||
+    Object.keys(selection.libraryOverrides).length > 0 ||
+    Object.values(selection.libraries).some(
+      (library) => library.kind === 'project' || library.kind === 'user'
+    ) ||
     environment.CAWS_GUARD_CONFIG_PY ||
     environment.CAWS_PRIOR_BASH_ENV ||
     (environment.BASH_ENV && environment.BASH_ENV !== startup) ||
@@ -267,8 +271,9 @@ export function invocationGuardConfiguration(
     );
   }
   const assignments = loadGuardConfigurationEnvironment(selection.checkout);
-  // Reject unrepresentable stock data. Bash removing NUL could transform a
-  // repo-relative prefix into an absolute grant; compatibility cannot license it.
+  // Reject unrepresentable stock data. Shell NUL handling can truncate data;
+  // native UTF-8 encoding can replace unencodable text. Neither partial nor
+  // altered assignments establish the authored guard configuration.
   if (
     Object.values(assignments).some(
       (value) => value.includes('\0') || Buffer.from(value, 'utf8').toString('utf8') !== value

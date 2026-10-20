@@ -598,6 +598,43 @@ scenario(
 );
 
 scenario(
+  'a custom runner retains parser selection before stock loading',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      const parser = path.join(f.root, 'runner-parser.py');
+      f.put(
+        parser,
+        "import os\nopen(os.path.join(os.environ['CONSUMER_ROOT'],'runner-parser-called'),'a').write('called\\n')\nprint('CAWS_GUARD_CONFIG_STATUS=absent')\nprint('CAWS_GUARD_ZONE_COUNT=0')\n"
+      );
+      const runner = path.join(f.repo, '.caws/hooks/custom-runner.sh');
+      f.put(
+        runner,
+        [
+          'source "$CAWS_SHARED_LIB_DIR/run-handlers.sh"',
+          'eval "$(declare -f run_handlers | sed \'1s/run_handlers/stock_run_handlers/\')"',
+          'run_handlers() {',
+          '  export CAWS_GUARD_CONFIG_PY="$CONSUMER_ROOT/runner-parser.py"',
+          '  stock_run_handlers "$@"',
+          '}',
+          '',
+        ].join('\n')
+      );
+      const settings = JSON.parse(fs.readFileSync(f.projectSettings));
+      settings.surfaces.codex.libraries['run-handlers.sh'] = '.caws/hooks/custom-runner.sh';
+      f.put(f.projectSettings, settings);
+      shipped(await f.run());
+      expect(fs.readFileSync(path.join(f.root, 'runner-parser-called'), 'utf8')).toBe('called\n');
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
+
+scenario(
   'stock-source tampering after preparation cannot retain typed admission',
   async () => {
     const f = fixture();
