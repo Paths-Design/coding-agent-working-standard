@@ -38,3 +38,11 @@ acceptance:
     then: 'correct reports and diagnostic exits occur without Python and maintained reproduction points to typed tooling.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected actual final differential-node22-dash-space and node18-dash-space per-case command receipts/stdout/stderr/report JSON and before/after owned-source manifests: 19 planned/executed each, exit0, successful report stdout byte-identical to retained Python3.11.13/Unicode14 reference. Preserves five classifications, raw hashes/lengths, tracking, codepoint order, exclusions, literal shlex declarations/unresolved[6,6,7,12,13], CRLF stamp distinction, symlink-dotdot selection and dash-space root. File states unchanged; no CAWS hook marker created. Source SHA38630bde0d4307223c9e57ee25e22b2a98d8648da8620f34bb052556d6c57725 matches final commit. Finite Darwin reference fixtures only; help/exception wording differs; no arbitrary interpreter/platform/input/race/cutover claim. Full raw artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest. CLI --verify checks committed citation identity/reachability only; command recorded, never re-executed; behavioral adjudication uses independently inspected raw artifacts."
+    recorded_at: "2026-10-20T13:49:31.101Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python qualify.py --node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/node18/bin/node --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --worktree /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-hook-harvest --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest/differential-node18-dash-space"
+    exit_code: 0
+    commit_sha: "51d0b6acfa6a6a2210f83f56c3d38dda3a56f5e3"
