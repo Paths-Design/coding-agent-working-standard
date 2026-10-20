@@ -876,6 +876,7 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
       10000,
       'same Node actual reap/EOF/SDK settlement and request-group absence'
     );
+    h.writeJson('frontend-loss-native-cleanup.json', nativeCleanup);
     const settled = await h.waitFor(
       () => {
         const value = operationForInvocation(h, fixture, active.invocation!.expected!.invocationId);
@@ -934,6 +935,7 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
       10000,
       'owned renderer backend reap/EOF, worker actual wait and independent absence'
     );
+    h.writeJson('frontend-loss-renderer-cleanup.json', rendererCleanup);
     const siblingAfter = h.originalChildAlive(sibling);
     h.writeJson('surviving-sibling-after-target-cleanup.json', {
       before: siblingBefore,
@@ -985,16 +987,22 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
       10000,
       'fresh refused request native custody/absence'
     );
-    assert(
-      writerOperations(fixture).some((value) => outcome(value) === 'unknown'),
-      'cooperative writer domain lost unresolved effect'
-    );
+    h.writeJson('writer-operations-before-recovery.json', writerOperations(fixture));
     const hostReceipt = await bounded(
       host.done,
       15000,
       'original host idle exit after frontend loss'
     );
     h.success(hostReceipt);
+    // The original owner's unresolved Running intent is fenced. Reopening under
+    // new custody durably recovers it to Unknown before any replay can be admitted.
+    const legacy = legacyBlocked(h, fixture);
+    const writerFinal = writerOperations(fixture);
+    h.writeJson('writer-operations-final.json', writerFinal);
+    assert(
+      writerFinal.some((value) => outcome(value) === 'unknown'),
+      'cooperative writer recovery lacks its durable unknown fence'
+    );
     return {
       requestId,
       dispatch,
@@ -1004,6 +1012,7 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
       rendererCleanup,
       retry,
       retryCleanup,
+      legacy,
       siblingBefore,
       siblingAfter,
       hostReceipt,
@@ -1012,6 +1021,7 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
         'same Node custody terminal reap/EOF/SDK settlement plus request absence',
         'surviving original renderer owners drain backend and retain unknown fence',
         'one fresh correlated request refused without another effect',
+        'cooperative writer reopens under new custody and refuses replay',
         'independent owned inert sibling survived target cleanup',
       ],
       nonclaims: [

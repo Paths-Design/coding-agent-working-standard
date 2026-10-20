@@ -3466,6 +3466,42 @@ Additional bounded evidence and unresolved dependencies:
   attributable. Strict compilation, scoped lint and phase-oracle controls exit0;
   no corrected actual run is implied.
 
+- E161: The second explicit `frontend-loss debug` attempt on `6e3e4660` exits1
+  after actual selected-renderer dispatch and402 committed turn files. Retained
+  frontend89262 receives SIGKILL4988ms before its original30s deadline. Its
+  correlated custodian89313/Node89317 receipt records `frontend_gone`, actual
+  child exit9, both EOFs and SDK settlement; independent observations find all
+  three processes and both request groups absent. Renderer owner observations
+  retain backend93024's reap/EOF and worker93007's actual exit. One fresh native
+  request2950 receives exactly one correlated `unknown_fence` refusal without
+  another durable effect or dispatch. The original inert sibling89244 retains
+  its birth identity through target cleanup and exits0 on ordinary input
+  release. Final cleanup is `confirmed_inactive`.
+
+  The overall scenario fails its subsequent cooperative-writer assertion; these
+  observations do not establish a complete lifecycle pass. Artifacts remain at
+  `packages/caws-native/target/qualification/render-lifecycle-frontend-loss-2026-10-20T19-42-37-662Z/`.
+  `commands/009-native-frontend-loss-rendering/request-completion.json`,
+  `frontend-loss-signal.json`, `owner-observations-final.json`,
+  `frontend-loss-unknown-fence-admission-denial.json` and `scenario.json` retain
+  the separate evidence. External
+  `frontend-loss-draft/attempt2-retained-manifest.json` hashes1748 files/
+  19693494 bytes across the original run and sandbox; raw export remains owed
+  under E160's guard refusals. No teardown or guessed cleanup signal occurs.
+
+  The persisted writer intent remains Running and fenced. `Journal::open`
+  (`service_journal.rs:985-997`) durably recovers Running to Unknown;
+  `render_writer::acquire` opens that journal before refusing unresolved work.
+  The qualifier asserted Unknown before exercising this recovery consumer. Its
+  repair waits for original-host exit, invokes the actual cooperative writer,
+  checks exact exit75/refusal and absence of its sentinel, then checks the
+  recovered durable Unknown record. It also persists native and renderer cleanup
+  checkpoints before later assertions. Strict render compilation, scoped lint
+  and denial/turn/phase controls exit0; raw commands/output and source hash are
+  in external `frontend-loss-draft/recovery-checks.json` and adjacent channels.
+  The corrected actual scenario remains unexecuted at this checkpoint. No parent
+  AC, warm residency, fairness or installation follows.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
