@@ -3502,6 +3502,43 @@ Additional bounded evidence and unresolved dependencies:
   The corrected actual scenario remains unexecuted at this checkpoint. No parent
   AC, warm residency, fairness or installation follows.
 
+- E162: The corrected actual `frontend-loss debug` scenario at committed
+  `eb2c411350c9765aef6da3659173da583323bd08` exits0. The unchanged native debug
+  binary remains SHA256
+  `0bf590321e05f26d339e756ab711bbeb13f8f10b25766c09370f62cca3b7fd0f`; the
+  engine/CLI and observer bytes match E159's preflight. The original30s budget
+  and10000-turn fixture are unchanged. Running typed dispatch and269 committed
+  turns precede SIGKILL to retained frontend71947,4474ms before its original
+  deadline. Correlated custodian71979/Node71985 records actual exit9,
+  `frontend_gone`, both EOFs and SDK settlement; independent observations find
+  all three processes and both request groups absent.
+
+  Separate renderer cleanup retains backend76451's actual SIGKILL reap and both
+  EOFs, worker76447's exit0, and independent absence of both groups. Fresh
+  caller85767 receives the correlated unknown-fence refusal without another
+  effect. Original host71915 exits0. The actual cooperative writer then exits75
+  with the exact unresolved-execution diagnostic and no sentinel: the same
+  writer request identity changes Running to durable Unknown on reopening. Inert
+  sibling71926 survives target cleanup with the same birth identity and exits0
+  through input release. Final cleanup is `confirmed_inactive`, custody free and
+  socket absent.
+
+  The run root is
+  `packages/caws-native/target/qualification/render-lifecycle-frontend-loss-2026-10-20T22-49-26-551Z/`.
+  `frontend-loss-signal.json`, `frontend-loss-native-cleanup.json`,
+  `frontend-loss-renderer-cleanup.json`, the before/final writer-operation
+  snapshots, unknown-fence refusal, sibling observations, `scenario.json` and
+  commands009-011 preserve the distinct observations. External
+  `frontend-loss-draft/attempt3-preflight.json` binds executable hashes;
+  `attempt3-retained-manifest.json` hashes1363 files/18625408 bytes across the
+  original run and sandbox. E160's raw-export obligation remains; originals are
+  retained. This is one actual selected copied-Python renderer loss after
+  Ready/dispatch, not a typed renderer replacement, pre-dispatch loss, second
+  frontend/surface proof, resident reuse, fair capacity or machine adoption.
+  Phase observations and the actual signal are distinct; the terminal Unknown
+  and retained cleanup receipts establish this sampled interruption, not an
+  exhaustive race proof. No parent AC is recorded from this scenario alone.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
