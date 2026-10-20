@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import {
   CODEX_ADAPTER,
   CODEX_ADAPTER_REVISION,
-  UnsupportedCodexStringEscape,
-  UnsupportedCodexIdentifierProfile,
   balancedCallArgument,
   cloneCodexState,
   codexOutputIsError,
@@ -15,9 +13,19 @@ import {
   extractCodexSourceIndex,
   matchesCodex,
   normalizeCodexRow,
+  serializeCodexInnerActions,
   truncateCodexText,
+  type CodexInnerAction,
   type CodexState,
 } from '../../src/transcripts/harness-codex';
+import {
+  codepointTextFromString,
+  isCodepointText,
+  textLength,
+  toJsStringLossless,
+  type CodepointText,
+} from '../../src/transcripts/codepoint-text';
+import { UNICODE_PROFILE_ID } from '../../src/transcripts/python-unicode-profile';
 import {
   encodeSourceJson,
   getMember,
@@ -49,6 +57,20 @@ function exact(value: JsonValue | undefined): string {
   assert.notEqual(value, undefined);
   return encodeSourceJson(value!);
 }
+function assertText(
+  value: CodepointText | null | undefined,
+  expected: string | readonly number[]
+): void {
+  assert.equal(isCodepointText(value), true);
+  assert(value !== null && value !== undefined);
+  assert.equal(value.profileId, UNICODE_PROFILE_ID);
+  assert.deepEqual(
+    value.codepoints,
+    typeof expected === 'string'
+      ? Array.from(expected, (character) => character.codePointAt(0)!)
+      : expected
+  );
+}
 const boundary = '{"type":"turn_context","payload":{"turn_id":"turn-A","model":"fixture"}}';
 const call = (id: string) =>
   `{"type":"function_call","name":"Read","call_id":${id},"arguments":"{}"}`;
@@ -60,7 +82,7 @@ test('Codex adapter identity and matching preserve ownership of uninteresting ev
   assert.equal(CODEX_ADAPTER.id, 'codex');
   assert.equal(
     CODEX_ADAPTER_REVISION,
-    'native-codex/2;unicode:14.0.0;python-sha256:fca73c2b632122bc471322b38452db3ea41cf3eab693d02be757fd9217b31ee0'
+    `native-codex/3;interpretation-profile:${UNICODE_PROFILE_ID};python-sha256:fca73c2b632122bc471322b38452db3ea41cf3eab693d02be757fd9217b31ee0`
   );
   for (const type of ['turn_context', 'response_item', 'token_usage_record', 'event_msg'])
     assert.equal(matchesCodex(row(`{"type":"${type}"}`)), true);
@@ -291,15 +313,16 @@ test('static inner actions preserve raw program and never claim observed executi
   assert.equal(result.rawSource, source);
   assert.equal(result.observationBoundary, 'source_syntax');
   assert.equal(result.execution, 'not_observed');
+  assert.equal(result.interpretationProfileId, UNICODE_PROFILE_ID);
   assert(result.disposition === 'indexed');
   assert.deepEqual(
-    result.actions.map((a) => getMember(a, 'tool')),
+    result.actions.map((a) => a.tool),
     ['exec_command', 'view_image']
   );
-  assert.equal(getMember(result.actions[0], 'command'), 'literal');
+  assertText(result.actions[0]!.command, 'literal');
   for (const action of result.actions) {
-    assert.equal(getMember(action, 'execution'), 'not_observed');
-    assert.equal(getMember(action, 'observation_boundary'), 'source_syntax');
+    assert.equal(action.execution, 'not_observed');
+    assert.equal(action.observation_boundary, 'source_syntax');
   }
   const event = only(
     item(`{"type":"custom_tool_call","name":"functions.exec","input":${pythonJsonDumps(source)}}`)
@@ -308,20 +331,24 @@ test('static inner actions preserve raw program and never claim observed executi
 });
 
 test('literal decoding/indexing preserves Python escapes, template refusal and Unicode codepoints', () => {
-  assert.equal(decodeJsString("'\\a\\101\\x42\\u0043\\U0001f600\\q'"), '\x07ABC😀\\q');
-  assert.equal(decodeJsString('"\\ud800"'), '\ud800');
-  assert.equal(decodeJsString("'\\ud800'"), '\ud800');
+  assertText(decodeJsString("'\\a\\101\\x42\\u0043\\U0001f600\\q'"), '\x07ABC😀\\q');
+  assertText(decodeJsString('"\\ud800"'), '\ud800');
+  assertText(decodeJsString("'\\ud800'"), '\ud800');
   assert.equal(decodeJsString("'" + '\ud800' + "'"), null);
-  assert.equal(decodeJsString('`literal\\nline`'), 'literal\nline');
+  assertText(decodeJsString('`literal\\nline`'), 'literal\nline');
   assert.equal(decodeJsString('`runtime ${command}`'), null);
   assert.equal(decodeJsString("'unterminated"), null);
-  assert.equal(truncateCodexText('😀😀😀x', 3), '😀😀😀...');
+  assertText(
+    truncateCodexText(codepointTextFromString('😀😀😀x', UNICODE_PROFILE_ID), 3),
+    '😀😀😀...'
+  );
   const patch = '*** Add File: 😀.txt\n+hello\n';
   const source = `const patch = ${pythonJsonDumps(patch)}; tools.apply_patch(patch);`;
   const actions = extractCodexInnerActions(source);
   assert.equal(actions.length, 1);
-  assert.equal(exact(getMember(actions[0], 'files')), '["😀.txt"]');
-  assert.equal(exact(getMember(actions[0], 'patch_length')), String(Array.from(patch).length));
+  assert.equal(actions[0]!.files!.length, 1);
+  assertText(actions[0]!.files![0], '😀.txt');
+  assert.equal(actions[0]!.patch_length, Array.from(patch).length);
   assert.deepEqual(balancedCallArgument('call("(literal)", nested(1)) rest', 4), [
     '"(literal)", nested(1)',
     28,
@@ -333,48 +360,55 @@ test('static indexing retains batch literals, generic argument previews and unre
     'const jobs = [["left", "echo left"], ["right", "echo right"]]; Promise.all(jobs.map(([label,cmd]) => tools.exec_command({cmd}))); tools.unknown({argument: 1}); tools.exec_command({cmd:`echo ${runtime}`});';
   const actions = extractCodexInnerActions(source);
   assert.equal(actions.length, 3);
-  assert.equal(exact(getMember(actions[0], 'batch_commands')), '["echo left","echo right"]');
-  assert.equal(getMember(actions[0], 'command'), undefined);
-  assert.equal(getMember(actions[1], 'args_preview'), '{argument: 1}');
-  assert.equal(getMember(actions[2], 'command'), undefined);
+  assert.equal(actions[0]!.batch_commands!.length, 2);
+  assertText(actions[0]!.batch_commands![0], 'echo left');
+  assertText(actions[0]!.batch_commands![1], 'echo right');
+  assert.equal(actions[0]!.command, undefined);
+  assertText(actions[1]!.args_preview, '{argument: 1}');
+  assert.equal(actions[2]!.command, undefined);
   assert.deepEqual(balancedCallArgument('call(nested(', 4), ['nested(', 12]);
 });
 
-test('unsupported named Unicode interpretation retains source and cannot appear as an empty index', () => {
+test('named Unicode literals use qualified names, aliases and algorithmic lookup', () => {
   const source = "tools.exec_command({cmd:'\\N{LATIN CAPITAL LETTER A}'})";
-  assert.throws(
-    () => decodeJsString("'\\N{LATIN CAPITAL LETTER A}'"),
-    UnsupportedCodexStringEscape
+  assertText(decodeJsString("'\\N{LATIN CAPITAL LETTER A}'"), 'A');
+  assertText(decodeJsString("'\\N{latin capital letter a}'"), 'A');
+  assertText(decodeJsString("'\\N{NULL}\\N{BYTE ORDER MARK}'"), [0, 0xfeff]);
+  assertText(
+    decodeJsString("'\\N{HANGUL SYLLABLE GA}\\N{CJK UNIFIED IDEOGRAPH-4E00}'"),
+    [0xac00, 0x4e00]
   );
-  assert.throws(() => extractCodexInnerActions(source), UnsupportedCodexStringEscape);
+  for (const token of [
+    "'\\N{UNKNOWN CHARACTER}'",
+    "'\\N{}'",
+    "'\\N{KEYCAP DIGIT ONE}'",
+    "'\\N'",
+    "'\\N{LATIN CAPITAL LETTER A'",
+  ])
+    assert.equal(decodeJsString(token), null, token);
   const result = extractCodexSourceIndex(source);
-  assert.deepEqual(result, {
-    disposition: 'unsupported',
-    rawSource: source,
-    reason: 'named_unicode_escape',
-    observationBoundary: 'source_syntax',
-    execution: 'not_observed',
-  });
-  assert.equal('actions' in result, false);
+  assert.equal(result.disposition, 'indexed');
+  assert.equal(result.rawSource, source);
+  assertText(result.actions[0]!.command, 'A');
 });
 
-test('source index explicitly declines even Python14 Unicode identifiers while preserving Unicode literals', () => {
-  // Greek pi predates Unicode14: this is a declared sacrificed subset, not an invalid-source claim.
+test('source indexing uses pinned Python word continuation and boundaries while preserving Unicode literals', () => {
   const source = 'const π = 1; tools.exec_command({cmd:"echo literal"});';
-  assert.throws(() => extractCodexInnerActions(source), UnsupportedCodexIdentifierProfile);
-  assert.deepEqual(extractCodexSourceIndex(source), {
-    disposition: 'unsupported',
-    rawSource: source,
-    reason: 'unicode_identifier_profile',
-    observationBoundary: 'source_syntax',
-    execution: 'not_observed',
-  });
+  assertText(extractCodexInnerActions(source)[0]!.command, 'echo literal');
   const unicodeLiteral = '// π is a comment\nconst text = "π"; tools.view_image({path:"π.png"});';
   const supported = extractCodexSourceIndex(unicodeLiteral);
   assert.equal(supported.disposition, 'indexed');
   assert(supported.disposition === 'indexed');
   assert.equal(supported.actions.length, 1);
-  assert.equal(getMember(supported.actions[0], 'path'), 'π.png');
+  assertText(supported.actions[0]!.path, 'π.png');
+  const wordSource =
+    'const pπ = "patch"; tools.apply_patch(pπ); tools.aπ(); tools.a²(); tools.a\u{1e4f0}(); πtools.hidden(); ²tools.hidden(); \u{1e4f0}tools.visible();';
+  const actions = extractCodexInnerActions(wordSource);
+  assert.deepEqual(
+    actions.map((action) => action.tool),
+    ['apply_patch', 'aπ', 'a²', 'visible']
+  );
+  assertText(actions[0]!.patch_preview, 'patch');
 });
 
 test('output errors require exact booleans or the retained textual status forms', () => {
@@ -416,32 +450,168 @@ test('source rows and input state remain unchanged after all normalized projecti
   assert.equal(exact(jsonObject([])), '{}');
 });
 
-test('adjacent Python surrogate codepoints are explicit incomplete indexes, distinct from JSON combining', () => {
+test('adjacent Python surrogate codepoints survive indexing, distinct from JSON combining', () => {
   for (const source of [
     "tools.apply_patch('\\ud83d\\ude00');",
     "tools.exec_command({cmd:'\\ud83d\\ude00'});",
   ]) {
     const result = extractCodexSourceIndex(source);
-    assert.deepEqual(result, {
-      disposition: 'unsupported',
-      rawSource: source,
-      reason: 'surrogate_literal_profile',
-      observationBoundary: 'source_syntax',
-      execution: 'not_observed',
-    });
-    assert.equal('actions' in result, false);
-    assert.throws(() => extractCodexInnerActions(source), {
-      name: 'UnsupportedCodexSurrogateLiteral',
+    assert.equal(result.disposition, 'indexed');
+    assert.equal(result.rawSource, source);
+    const action = result.actions[0]!;
+    const value = action.tool === 'apply_patch' ? action.patch_preview : action.command;
+    assertText(value, [0xd83d, 0xde00]);
+    assert(value);
+    assert.equal(textLength(value), 2);
+    assert.deepEqual(toJsStringLossless(value), {
+      ok: false,
+      reason: 'adjacentSurrogateCollapse',
+      index: 0,
+      codepoint: 0xd83d,
     });
   }
-  assert.equal(decodeJsString("'\\ud800'"), '\ud800');
-  assert.equal(decodeJsString("'\\U0000dc00'"), '\udc00');
-  assert.equal(decodeJsString("'😀'"), '😀');
-  assert.equal(decodeJsString("'\\U0001f600'"), '😀');
+  assertText(decodeJsString("'\\ud800'"), '\ud800');
+  assertText(decodeJsString("'\\U0000dc00'"), '\udc00');
+  assertText(decodeJsString("'😀'"), '😀');
+  assertText(decodeJsString("'\\U0001f600'"), '😀');
   // json.loads combines these escaped surrogate pairs, unlike ast.literal_eval.
-  assert.equal(decodeJsString('"\\ud83d\\ude00"'), '😀');
+  assertText(decodeJsString('"\\ud83d\\ude00"'), '😀');
   const jsonLiteral = extractCodexSourceIndex('tools.apply_patch("\\ud83d\\ude00");');
   assert.equal(jsonLiteral.disposition, 'indexed');
   assert(jsonLiteral.disposition === 'indexed');
-  assert.equal(exact(getMember(jsonLiteral.actions[0], 'patch_length')), '1');
+  assert.equal(jsonLiteral.actions[0]!.patch_length, 1);
+});
+
+test('literal decoding rejects malformed Python and JSON while retaining historical template replacements', () => {
+  for (const token of [
+    "'\\x0'",
+    "'\\u000'",
+    "'\\U00110000'",
+    "'a\nb'",
+    "'a\rb'",
+    "'a\0b'",
+    "'\\'",
+    '"\\x41"',
+    '"unterminated',
+    'false',
+  ])
+    assert.equal(decodeJsString(token), null, token);
+  assertText(decodeJsString("'\\777\\400\\8'"), [0x1ff, 0x100, 0x5c, 0x38]);
+  assertText(decodeJsString("'a\\\nb\\\r\nc'"), 'abc');
+  assertText(decodeJsString('`\\`\\\\\\n\\r\\t`'), '`\\\n\r\t');
+  const actions = extractCodexInnerActions(
+    "tools.exec_command({cmd:'',command:'fallback',workdir:''}); tools.view_image({path:''}); tools.apply_patch(''); tools.exec_command({cmd:'\\N{KEYCAP DIGIT ONE}'});"
+  );
+  assertText(actions[0]!.command, 'fallback');
+  assert.equal(actions[0]!.workdir, undefined);
+  assert.equal(actions[1]!.path, undefined);
+  assert.deepEqual(actions[2]!.files, []);
+  assertText(actions[2]!.patch_preview, []);
+  assert.equal(actions[2]!.patch_length, 0);
+  assert.equal(actions[3]!.command, undefined);
+});
+
+test('patch path extraction retains surrogate vector identity, ordered uniqueness and historical whitespace matching', () => {
+  const source = String.raw`tools.apply_patch('*** Add File:\u0085\ud83d\ude00.txt\u3000\n*** Update File: \U0001f600.txt\n*** Delete File: \ud83d\ude00.txt\n*** Add File:  \nnext-line\n*** Update File: a\rb.ts\n*** Update File: second\u2028piece.ts');`;
+  const action = extractCodexInnerActions(source)[0]!;
+  assert.equal(action.files!.length, 5);
+  assertText(action.files![0], [0xd83d, 0xde00, 46, 116, 120, 116]);
+  assertText(action.files![1], '😀.txt');
+  assertText(action.files![2], 'next-line');
+  assertText(action.files![3], 'a\rb.ts');
+  assertText(action.files![4], 'second\u2028piece.ts');
+  const ignored = extractCodexInnerActions(
+    String.raw`tools.apply_patch('prefix\r*** Add File: not-LF\n *** Add File: indented\n*** Rename File: unsupported');`
+  )[0]!;
+  assert.deepEqual(ignored.files, []);
+});
+
+test('previews slice codepoint vectors and preserve the original full patch length', () => {
+  const source = `tools.apply_patch('${'a'.repeat(2999)}\\ud83d\\ude00');`;
+  const action = extractCodexInnerActions(source)[0]!;
+  assert.equal(action.patch_length, 3001);
+  assertText(action.patch_preview, [...Array<number>(2999).fill(97), 0xd83d, 46, 46, 46]);
+  assertText(truncateCodexText(null, 2), []);
+  assertText(truncateCodexText(undefined, 2), []);
+  for (const limit of [-1, 0.5, NaN, Infinity])
+    assert.throws(() => truncateCodexText(null, limit), RangeError);
+  assertText(truncateCodexText(codepointTextFromString('a', UNICODE_PROFILE_ID), 0), '...');
+});
+
+test('action serialization is an explicit non-injective projection of independently retained immutable vectors', () => {
+  const pair = extractCodexInnerActions(
+    String.raw`tools.exec_command({cmd:'\ud83d\ude00',workdir:'\ud800'});`
+  );
+  const astral = extractCodexInnerActions(
+    String.raw`tools.exec_command({cmd:'\U0001f600',workdir:'\ud800'});`
+  );
+  assertText(pair[0]!.command, [0xd83d, 0xde00]);
+  assertText(astral[0]!.command, [0x1f600]);
+  const projected = serializeCodexInnerActions(pair);
+  assert.equal(
+    projected,
+    '[{"tool": "exec_command", "observation_boundary": "source_syntax", "execution": "not_observed", "command": "\\ud83d\\ude00", "workdir": "\\ud800"}]'
+  );
+  assert.equal(serializeCodexInnerActions(astral), projected);
+  assert.equal(serializeCodexInnerActions(pair, { ensureAscii: false }), projected);
+  assert.equal(
+    serializeCodexInnerActions(astral, { ensureAscii: false }),
+    '[{"tool": "exec_command", "observation_boundary": "source_syntax", "execution": "not_observed", "command": "😀", "workdir": "\\ud800"}]'
+  );
+  assert.equal(Object.isFrozen(pair), true);
+  assert.equal(Object.isFrozen(pair[0]), true);
+  assert.throws(() => {
+    (pair[0] as { execution: string }).execution = 'observed';
+  }, TypeError);
+  const patch = extractCodexInnerActions('tools.apply_patch("*** Add File: a\\n");');
+  assert.equal(Object.isFrozen(patch[0]!.files), true);
+  assert.equal(
+    serializeCodexInnerActions(patch),
+    '[{"tool": "apply_patch", "observation_boundary": "source_syntax", "execution": "not_observed", "files": ["a"], "patch_preview": "*** Add File: a\\n", "patch_length": 16}]'
+  );
+  const batch = extractCodexInnerActions(
+    String.raw`const jobs = [['a', '\ud83d\ude00'], ['b', '\U0001f600']]; Promise.all(jobs.map(([x,cmd]) => tools.exec_command({cmd})));`
+  );
+  assert.equal(Object.isFrozen(batch[0]!.batch_commands), true);
+  assertText(batch[0]!.batch_commands![0], [0xd83d, 0xde00]);
+  assertText(batch[0]!.batch_commands![1], [0x1f600]);
+  assert.equal(serializeCodexInnerActions([]), '[]');
+});
+
+test('historical action serialization rejects foreign profiles and structural text impostors', () => {
+  const selected = codepointTextFromString('A', UNICODE_PROFILE_ID);
+  const foreign = codepointTextFromString('A', 'foreign-interpretation-profile');
+  const impostor = { ...selected } as CodepointText;
+  const metadata = {
+    tool: 'fixture',
+    observation_boundary: 'source_syntax' as const,
+    execution: 'not_observed' as const,
+  };
+  for (const field of [
+    'command',
+    'workdir',
+    'path',
+    'patch_preview',
+    'args_preview',
+    'files',
+    'batch_commands',
+  ] as const) {
+    const isArray = field === 'files' || field === 'batch_commands';
+    const action = (value: CodepointText): CodexInnerAction => ({
+      ...metadata,
+      [field]: isArray ? [value] : value,
+    });
+    assert.equal(
+      serializeCodexInnerActions([action(selected)]),
+      `[{"tool": "fixture", "observation_boundary": "source_syntax", "execution": "not_observed", "${field}": ${isArray ? '["A"]' : '"A"'}}]`
+    );
+    assert.throws(() => serializeCodexInnerActions([action(foreign)]), {
+      name: 'RangeError',
+      message: 'Codex action text requires the selected interpretation profile',
+    });
+    assert.throws(() => serializeCodexInnerActions([action(impostor)]), {
+      name: 'TypeError',
+      message: 'Expected constructed CodepointText for Codex action text',
+    });
+  }
 });

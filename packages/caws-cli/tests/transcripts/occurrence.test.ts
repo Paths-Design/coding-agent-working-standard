@@ -206,7 +206,7 @@ test('preserves event order, native paths, occurrence multiplicity, and lossless
   assert.equal(Object.isFrozen(first.events[0]!.event), true);
 });
 
-test('binds absent versus empty surface, cache generation, adapter order, and reviewed revision', () => {
+test('binds interpretation profile, absent versus empty surface, cache generation, adapter order, and reviewed revision', () => {
   const absent = context(),
     state = createAdapterState(adapter, 'stream-A', 'generation-1', absent);
   const other = { id: 'other', revision: 'v1' };
@@ -236,6 +236,13 @@ test('binds absent versus empty surface, cache generation, adapter order, and re
     'context_mismatch'
   );
   assert.equal(normalizeOccurrence(row(), state, context(), adapter).disposition, 'normalized');
+  assert.equal(absent.interpretationProfileId, context().interpretationProfileId);
+  assert.match(absent.interpretationProfileId, /^python-3\.11\.13;unicode-14\.0\.0;/);
+  const forgedProfile = { ...absent, interpretationProfileId: 'unqualified-profile' };
+  const refused = normalizeOccurrence(row(), state, forgedProfile, adapter);
+  assert.equal(refused.disposition, 'context_mismatch');
+  assert.equal(refused.commitAllowed, false);
+  assert.deepEqual(refused.events, []);
   assert.deepEqual(absent.surface, { presence: 'absent' });
   assert.deepEqual(contexts[0]!.surface, { presence: 'present', value: '' });
   assert.throws(() => makeNormalizationContext({}, [adapter, adapter]), TypeError);
