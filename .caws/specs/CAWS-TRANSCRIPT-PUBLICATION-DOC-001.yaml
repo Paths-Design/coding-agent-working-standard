@@ -1,0 +1,38 @@
+id: CAWS-TRANSCRIPT-PUBLICATION-DOC-001
+title: 'Bound transcript publication and database evidence claims'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed source-bound audit correction at 8feede6e. Atomic projection replacement is separate from receipt redirection and crash durability; database hash observation covers main file only. Source snapshots, raw checks and matching A1 ac_recorded retained. No runtime implementation, SQLite/concurrency probe, installation or whole-migration acceptance.'
+created_at: '2026-10-20T15:21:58.583Z'
+updated_at: '2026-10-20T15:31:34.494Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Transcript qualification documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/audits/hook-port-qualification.md'
+  out: []
+invariants:
+  - 'Documentation separates projection replacement, receipt publication, crash durability and observed database effects.'
+acceptance:
+  - id: A1
+    given: 'the current transcript-store publisher and session-log caller'
+    when: 'qualification documentation describes SQLite projection'
+    then: 'it states atomic projection replacement separately from receipt publication and limits the database hash observation without claiming crash durability or zero WAL/SHM effects.'
+observability:
+  - 'Source coordinates and documentation-check outputs retained in the external qualification artifact directory.'
+rollback:
+  - 'Restore the prior paragraph through a governed documentation change if contradicted by the actual publisher contract.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Direct source inspection at 8feede6e: transcript-store.py110-125 anchors an exclusive temporary file and relative replace, omits file/directory fsync, and prints receipt after replacement; session-log.sh93-95 redirects receipt separately. Installed fidelity test311-316 hashes only main database. Updated audit distinguishes these exact boundaries. Source/doc snapshots and candidate.patch retained under /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/transcript-publication-doc/source-contract.json. Raw validation/gates/doctor receipts under sibling native-sensitivity/038-doc-candidate-gates,039-doc-candidate-validation,040-doc-candidate-doctor all exit0; validator has same30lenientwarnings and does not check semantics. No runtime, SQLite, WAL/SHM, concurrency or crash-durability probe. Verification here checks cited path/commit identity, not behavioral execution."
+    recorded_at: "2026-10-20T15:30:29.112Z"
+    artifact_path: docs/audits/hook-port-qualification.md
+    commit_sha: "8feede6e43cc25a728d66fbe8f604ee3493d2b28"

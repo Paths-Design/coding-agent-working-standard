@@ -1,0 +1,76 @@
+id: CAWS-NATIVE-ADVISORY-TRUNCATE-001
+title: 'Replace installed stock advisory truncation with a generated typed runtime asset'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Committed bounded standalone generated CJS distribution and ordinary private installed stock Bash consumer at6d44dc9f; production behavior qualified at byte-identical5f55. A1–A3 raw package/helper/composer/customcompat/snapshot artifacts retained outside worktree; records9355–9357 manually inspected, commit-only verification. Gates0/all5pass and doctor0 with inherited warnings. Independent completion feedback grounded at0600 readability/customcompat and actual artifact coordinates. Physical worktree and branch preserved and untracked; no parent/R06 merge. Parent native sealedimage cmp/toolclosure/reviewedprefix and full harness delivery unqualified; no globalactivation, general customconsumer parity, Node18 execution or Pythonretirement.'
+created_at: '2026-10-20T07:06:35.625Z'
+updated_at: '2026-10-20T08:31:37.666Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'standalone typed advisory helper build packaging and installed shell consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/advisory-truncate-entry.ts'
+    - 'packages/caws-cli/scripts/generate-runtime-assets.mjs'
+    - 'packages/caws-cli/scripts/build-cli.js'
+    - 'packages/caws-cli/package.json'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/advisory_truncate.cjs'
+    - 'packages/caws-cli/templates/hook-packs/shared/advisory_truncate.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
+    - 'packages/caws-cli/tests/runtime/generated-runtime-assets.test.js'
+    - 'packages/caws-cli/tests/runtime/advisory-truncate-integration.test.js'
+    - 'scripts/install-cli-snapshot.mjs'
+    - scripts/install-cli-snapshot.test.mjs
+    - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-budget.bats
+    - packages/caws-cli/tests/runtime/runtime-asset-fixture.js
+    - packages/caws-cli/scripts/qualify-advisory-truncate.mjs
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+  out: []
+invariants:
+  - 'The authoritative UTF8 algorithm is src/runtime/utf8.ts; the shipped CJS is a deterministic declared generated projection.'
+  - 'Helper failure or invalid output omits an advisory and never alters hard refusal precedence or bounded composition.'
+  - 'The old callable Python helper remains a compatibility asset until admitted custom consumers are inventoried and qualified; the switched stock path has no Python fallback.'
+acceptance:
+  - id: A1
+    given: 'authoritative typed sources and tracked generated runtime helper'
+    when: 'build package or snapshot freshness checks run'
+    then: 'stale or missing helper bytes are rejected without regenerating files and a clean package ships the declared helper'
+  - id: A2
+    given: 'valid stock shell decimal budgets and binary advisory input'
+    when: 'the generated installed helper and real shell composer truncate'
+    then: 'byte results and surrounding omission prefix validity trailing newline marker and aggregate budget behavior match the retained baseline'
+  - id: A3
+    given: 'an unpacked candidate package outside the checkout and a private installed runtime'
+    when: 'stock dispatcher composes truncating ordinary and protective handler output'
+    then: >-
+      the installed stock CJS executes with source and dev dependencies absent and
+      Python truncation execution refused, protective output retains precedence, and
+      the unchanged callable Python compatibility asset remains available to custom
+      consumers
+observability:
+  - 'Retain baseline bytes raw process inputs outputs statuses generated helper package and installed runtime identities plus process observations outside disposable worktrees.'
+rollback:
+  - 'Revert scoped source commits; no machine installation is authorized for this slice.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Manually inspected /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-advisory-truncation/qualified-phase1/focused.status.json (25 focused checks, exit0 at5f55), actual missing/stale/build preflight raw receipts, and /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-advisory-truncation/qualified-snapshot-bats-phase/snapshot.status.json plus snapshots/*/observations/0014-refusal.json and0015-refusal.json (exit0 at6d44; bin/home/lock absent, stale bytes unchanged). Actual npm pack/unpack exit0 and tgz in qualified-installed-phase. production-source-identity.json proves unchanged production5f55..6d44. --verify below checks committed identity only; it does not execute these checks. No real global activation or Node18 execution verified."
+    recorded_at: "2026-10-20T08:30:07.160Z"
+    commit_sha: "6d44dc9f77a5bda3be81a9504b0397514af0464c"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Manually inspected /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-advisory-truncation/repair-light-phase byte-comparisons (71 Python/Node pairs equal, raw inputs/outputs/statuses; strict CLI negatives separately in qualified-phase1), qualified-installed-phase/artifact-observations.json and fixtures/RmAEen raw dispatcher receipts0005/0006 (context166bytes with29emoji+1484elided+latercard, complete protective1544bytes exit2), hostile31Igci call deltas1 and positive abc receipt0016. qualified-snapshot-bats-phase/bats retained actual helper markers, omission outputs/status0 for invalid/empty. Paths use caws-runtime-assets- prefixes in artifacts. --verify below checks commit identity only. No arbitrary Python int grammar, all custom consumers, sealed-image or native harness parity claimed."
+    recorded_at: "2026-10-20T08:30:08.791Z"
+    commit_sha: "6d44dc9f77a5bda3be81a9504b0397514af0464c"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Manually inspected /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-advisory-truncation/qualified-installed-phase/integration.status.json (actual3 private package/install cases exit0 atclean5f55) and artifact-observations.json: installed CJS0600 SHA73e7e8914d4ee62d82adf89c359ed34c87a1150be41afda9ab4438e2985a53d6; package src/devdeps absent and templates unavailable; Node witness2/Pythonabsent; exact protective exit2. Selected custom o02S99 Pycompat33632a6a... marker1/Nodeabsent and journal completed0/local_native_output deliverynot_observed. generation-readback in installed-dependency-custody labels87originalfixturecopies+28recoveredmatchingcontent,115entries0mismatch; original installed dependency bytes unverified. No sealed-image/native-delivery/globalactivation/Pythonretirement claimed. --verify below checks committed identity only."
+    recorded_at: "2026-10-20T08:30:10.281Z"
+    commit_sha: "6d44dc9f77a5bda3be81a9504b0397514af0464c"

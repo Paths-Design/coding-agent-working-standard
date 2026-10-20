@@ -1,0 +1,77 @@
+id: CAWS-NATIVE-RULE-TOKENS-001
+title: 'Replace rule token counter with offline typed Node utility'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded Python3.11.13/tiktoken0.12.0/Unicode14 reference parity accepted A1-A3 against committed58a65d5d and inspected raw Node18+22 differentials, actual symlink execution and Darwin offline controls. Explicit zero-total and successful-update-count repairs. Artifacts retained outside removed lane at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens. Source component only; broaderR20, parentacceptance, installation and cutover unverified.'
+created_at: '2026-10-20T11:19:22.552Z'
+updated_at: '2026-10-20T12:52:07.056Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Developer Cursor rule token utility'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/calculate-rule-tokens.py'
+    - 'scripts/calculate-rule-tokens.mjs'
+    - 'scripts/calculate-rule-tokens.test.mjs'
+    - 'scripts/tsconfig.rule-tokens.json'
+    - 'package.json'
+    - 'package-lock.json'
+  out: []
+invariants:
+  - 'Token counts use pinned bundled cl100k_base encoding without Python, network fetch, or estimates.'
+  - 'Existing selection, Unicode, formatting, and update semantics are preserved except zero totals and inaccurate update totals.'
+  - 'The supported compatibility profile is the inspected Python 3.11.13 and tiktoken 0.12.0 baseline with Unicode 14 metadata; unpinned caller interpreter profiles are not inferred from this qualification.'
+acceptance:
+  - id: A1
+    given: >-
+      retained original source, Python 3.11.13 with tiktoken 0.12.0 and Unicode 14
+      metadata semantics, and npm tiktoken 1.0.22 bundled encoding
+    when: 'both counters process qualified nonzero fixtures including unseen Unicode and regex boundaries'
+    then: >-
+      exact counts, stdout, selected files and updated bytes agree; all 100256
+      mergeable ranks and special IDs match while differing regex patterns remain an
+      explicitly bounded qualification
+  - id: A2
+    given: 'empty bodies or rules without valid frontmatter'
+    when: 'the Node utility reports or updates them'
+    then: 'zero totals exit successfully with 0.0 percent and the final update total counts only successful updates'
+  - id: A3
+    given: 'installed pinned bundled tokenizer and Python unavailable'
+    when: 'the Node CLI runs offline and strict checkJs plus hostile-path tests execute'
+    then: 'token counts and update results remain correct with no Python fallback and failures preserve diagnostic and partial-write semantics'
+observability:
+  - 'Retain raw commands, exits, stdout, stderr, fixture before/after bytes, source and dependency hashes, and runtime versions outside tracked source.'
+rollback:
+  - 'Restore the prior utility and dependency declarations through a normal follow-up commit if qualification fails.'
+non_functional:
+  security:
+    - 'Do not add new path restrictions, symlink policy or atomic-write semantics in this parity slice.'
+contracts:
+  - name: 'rule-token-cli'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate 58a65d5defac4d53410b60502f26ff114d031cb8 source SHA256 97558daba7f19cf5de4564fc0db8071440e0e1b290a1b79a06d856eb40ae98f4. Inspected both differential-entry-repair-node22 and node18 raw commands/stdout/stderr/before/after bytes: 37 planned/executed each; valid nonzero parity excluding explicit A2 repairs, plus rejection and partial-write controls. commands/006-python-encoding and 007-node-encoding rank SHA d0be6a8c3dc0075995caec821aac159323b667b2c5eeae09a3b34d14f0269796 and special IDs agree; regex-vectors/comparison.json has 15690 identical token-ID arrays. Qualified Python 3.11.13/tiktoken 0.12.0/Unicode14 profile only; differing regex patterns are not universally proved equivalent. Full artifacts at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens. CLI --verify checks committed citation existence/reachability only; behavioral adjudication uses inspected raw artifacts, not rerun by this command."
+    recorded_at: "2026-10-20T12:50:10.826Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python qualify.py --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/node18/bin/node --worktree /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-rule-tokens --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/differential-entry-repair-node18"
+    exit_code: 0
+    commit_sha: "58a65d5defac4d53410b60502f26ff114d031cb8"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Final differential-entry-repair-node18 and node22 zero-total/update-total raw commands, stdout/stderr and before/after rule bytes inspected. Zero-total Python exit1 ZeroDivisionError after Total 0; Node exit0 0.0% and Updated 1; same updated bytes. Partial metadata update both exit0 identical written bytes, warning for b.mdc; old Updated 2, Node Updated 1 successful write. Two authorized repairs only. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens CLI --verify checks committed citation existence/reachability only; behavioral adjudication uses inspected raw artifacts, not rerun by this command."
+    recorded_at: "2026-10-20T12:50:12.103Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python qualify.py --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --node /Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node --worktree /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-rule-tokens --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/differential-entry-repair-node22"
+    exit_code: 0
+    commit_sha: "58a65d5defac4d53410b60502f26ff114d031cb8"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Final commands025 focused15 tests exit0, 026 strictcheckJs exit0, 027/028 both37-case differentials exit0; hostile rejection/partialwrites inspected. 024 repaired actual executable symlink output+bytes agree with Python/directNode18+22 at final source97558daba7f19cf5de4564fc0db8071440e0e1b290a1b79a06d856eb40ae98f4. 029 offline restriction exit0: positive actual loopback/Python controls succeed; same probes under profile denied EPERM; actual restricted Node18+22 PATH=/nonexistent CLI each exit0 count2/100.0%/Updated1, exact updated bytes/unchanged sentinel/serverclosed. Pin1.0.22 rootmanifest/lock bundledranks+WASM inspected. Selected Darwin scenario only; no claim zero denied attempts/everybranch/otherOS/nativecontainment. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens CLI --verify checks committed citation existence/reachability only; behavioral adjudication uses inspected raw artifacts, not rerun by this command."
+    recorded_at: "2026-10-20T12:50:13.390Z"
+    command: node offline-qualification.mjs
+    exit_code: 0
+    commit_sha: "58a65d5defac4d53410b60502f26ff114d031cb8"

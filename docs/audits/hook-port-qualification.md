@@ -6,6 +6,28 @@ decisions were approved by the user in the conversation and in
 qualification. Global installation and fresh native harness adoption are
 separate follow-on work, not established by this report.
 
+The maintained sensitivity runner is
+`node scripts/hook-experiments/sensitivity.mjs --output <scratch> [--case <name>]`.
+Use `--python <executable>` to select the regression-test interpreter
+explicitly. Option digit syntax follows the Python 3.11 / Unicode 14 reference
+profile. The dated Python commands below identify historical executions. The
+Node runner retains their six mutations, matched-control requirement and
+assertion-specific verdicts. Output paths follow POSIX symlinks before
+interpreting subsequent `..` components. The runner repairs the inherited
+two-substring false positive: it requires a complete selected-test CPython
+3.9/3.11 `unittest` failure report matching the invoked script, final test
+frame, decision-bearing assertion and failure count. Unrelated assertion errors
+plus echoed source text cannot count as a kill; unsupported reports remain
+unqualified. Parsing cannot authenticate a malicious consumer forging a complete
+traceback. It writes raw `stdout`/`stderr`, per-attempt `command.json`, retained
+`source.original`/`source.mutant` and `summary.json`; timeout and startup
+failures also retain command receipts and cannot count as killed mutants. Its
+focused synthetic-consumer qualification establishes orchestration and artifact
+custody, not the sensitivity of the six production regression tests. Those
+Python test consumers remain migration obligations. The direct-child timeout
+boundary does not establish descendant containment or cleanup after orchestrator
+death.
+
 ## Contract
 
 - Hook selection, handler return, adapter delivery, and native tool execution
@@ -190,10 +212,13 @@ hashes. Writers take an OS lock before input reads; each turn replacement is
 atomic. This is not a transactional snapshot across all turn files for readers.
 An explicitly configured `CAWS_TRANSCRIPT_DATABASE` supports OpenCode/ZCode
 SQLite projection in one read transaction, with session-qualified rows and an
-atomic JSONL projection/receipt. Empty results replace projected bytes with an
-empty file and do not reuse an old projection as a hit. Live database schemas,
-compressed transcript discovery, and native subagent-store discovery remain
-unverified; parent metadata is not a census of child sessions.
+atomically replaced JSONL projection. The caller writes the stdout receipt to a
+separate file; projection and receipt publication are not one transaction. The
+publisher does not sync the projection file or directory, so atomic replacement
+does not establish crash durability. Empty results replace projected bytes with
+an empty file and do not reuse an old projection as a hit. Live database
+schemas, compressed transcript discovery, and native subagent-store discovery
+remain unverified; parent metadata is not a census of child sessions.
 
 ### Observed artifacts
 
@@ -214,7 +239,9 @@ Scratch root remains `/private/tmp/caws-hook-qualification-20260912/`.
 - `fidelity-database-final/selection-kidwngt8/repo/.caws/sessions/{opencode,zcode}/`
   retains projections, receipts, turns and render-state. After source-session
   deletion, the projection is empty and preserved turns are explicitly stale.
-  The database byte hash remained unchanged during the read-only render.
+  The main database file's byte hash remained unchanged during the read-only
+  render. That check does not inspect SQLite WAL/SHM files or establish that the
+  read transaction has no filesystem effects.
 - `fidelity-context-final/selection-*/codex-fidelity.command.json` is the final
   Codex check after repairing direct adapter imports and the unborn-branch
   `HEAD\nunknown` capture. The fixture now records branch `main`.

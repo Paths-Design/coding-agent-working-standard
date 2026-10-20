@@ -1,0 +1,54 @@
+id: CAWS-NATIVE-GUARD-CONFIG-001
+title: 'Integrate typed guard configuration at qualified native shell consumers'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded selected-stock guard configuration completed, source consolidated only in caws/native-guard-config. Raw build/focused/customrunner/native request results inspected and retained externally; current A1/A2 refs identify those artifacts and their limits. Commit-only rederivation verifies identity, not behavioral proof. Combined source gates dec55-to-4f exit0. Custom/explicit and unsupported compatibility parsing remains. Parent integration, machine install, harness delivery, withholding, containment, Python retirement and cutover remain unverified.'
+created_at: '2026-10-20T05:24:25.239Z'
+updated_at: '2026-10-20T06:57:52.770Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'native invocation guard configuration and actual shell consumers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/guard-config.ts'
+    - 'packages/caws-cli/tests/runtime/guard-config-integration.test.js'
+    - 'packages/caws-cli/scripts/qualify-guard-config.ts'
+  out: []
+invariants:
+  - 'Typed preloading applies only to exact stock loader semantics; custom libraries and explicit parser selection retain compatibility.'
+  - 'Invalid or unavailable configuration retains shipped enforcement and never grants an authored subset.'
+acceptance:
+  - id: A1
+    given: 'qualified stock loader and valid repository guard policy'
+    when: 'native typed invocation reaches real shell consumers'
+    then: 'exact configured prefixes and thresholds are observed without Python guard configuration parsing'
+  - id: A2
+    given: 'malformed configuration or explicit parser override or custom loader'
+    when: 'invocation loads guard policy'
+    then: 'invalid data applies no entries and explicit or custom semantics are not bypassed'
+observability:
+  - 'Retained native invocation inputs outputs assignment tables interpreter trap and command receipts in ignored qualification artifacts.'
+rollback:
+  - 'Revert the scoped source commit; machine installation remains unchanged.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected two native invoke exits0 with pinned78f binary at c027afeb; raw assignments native/ thresholds100/10, four real consumers before/after, no stock parser witness, input-matched invocation journals through local adapter_finished. Private extension fixture; controlled scope refusal; no harness delivery/tool-withholding/whole-runtime claim. External artifact inspected directly; CLI verify only accepts repo-relative paths. Durable inspected evidence: /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-guard-config/custom-library-repair/guard-config-library-native/evidence-observation.json. --verify below checks cited committed identity only; it does not rerun the command or verify external artifacts."
+    recorded_at: "2026-10-20T06:57:29.697Z"
+    command: node packages/caws-native/target/qualification-tools/qualify-guard-config.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-guard-config-work/packages/caws-cli /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-guard-config-work/packages/caws-native/target/qualification/guard-config-library-native /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-guard-config-work/packages/caws-native/target/qualification/guard-config-native-executable/caws-native --native-only
+    exit_code: 0
+    commit_sha: c027afeb489e9771822928801cbd6ad5222e8f57
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected c412 focused66pass1skip at qualified-candidate/guard-config-focused plus c027 stock/custom-runner2pass24skip. Hostile controls cover malformed UTF8, lossy prefixes, numeric tokens, source tamper, deep metadata, forged transport, customloader and explicitparser. c027 excludes customlibraries; retained runner-parser-called is called followed by LF; absent/zero entries and shipped consumer outputs. Full focused suite not repeated after narrow c027 exclusion. External artifacts inspected directly, not behaviorally rederived by CLI. Durable inspected evidence: /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-guard-config/custom-library-repair/guard-config-library-boundary/test.status.json. --verify below checks cited committed identity only; it does not rerun the command or verify external artifacts."
+    recorded_at: "2026-10-20T06:57:31.171Z"
+    command: "node ../../node_modules/jest/bin/jest.js --runInBand --bail=1 --selectProjects caws-cli --runTestsByPath tests/runtime/guard-config-integration.test.js --testNamePattern 'compiled engine preloads|a custom runner retains'"
+    exit_code: 0
+    commit_sha: c027afeb489e9771822928801cbd6ad5222e8f57

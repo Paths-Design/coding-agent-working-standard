@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: shell-analysis
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-19T11:22:18.422Z'
+updated_at: '2026-10-19T14:26:07.682Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -45,11 +45,14 @@ scope:
     - packages/caws-cli/tests/init/pack-fingerprints.json
     - packages/caws-cli/tests/hooks/bats/bash-write-guard.bats
     - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - packages/caws-cli/templates/hook-packs/shared/quiet-merge.sh
+    - packages/caws-cli/tests/hooks/bats/quiet-merge.bats
   out: []
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
   - 'Literal data remains data; quotes, branch alternatives, assignment order and finite-loop state are preserved. Existing lifecycle release and foreign work remain preserved.'
+  - 'Known incomplete native producer projections never confer command admission or lifecycle rewrite authority; the deployed runtime is retained until a qualified execution contract and isolated native canary exist.'
 acceptance:
   - id: A1
     given: 'a declared supported Bash subset and exact command bytes'
@@ -84,6 +87,30 @@ acceptance:
       shell targets; real foreign writes and nested shell writes remain refused,
       finite targets reach the ownership oracle, and unsupported or malformed
       analysis cannot become an empty allow
+  - id: A7
+    given: >-
+      Native execution envelopes may supply command aliases, shell and startup
+      choices, or a working directory, and the stock lifecycle hook can emit
+      updatedInput after guards
+    when: >-
+      The mandatory guard decodes the original transported envelope and a lifecycle
+      command is considered for directory rerooting
+    then: >-
+      Supplied source, shell and startup conflicts remain unresolved; the decoded
+      execution directory reaches downstream ownership checks; only a proven
+      standalone literal merge or destroy invocation is rerooted, quoted mentions
+      and compound neighbors are untouched, and rewritten lifecycle failures retain
+      their status and diagnostics
+  - id: A8
+    given: >-
+      The trusted launcher identifies the known incomplete Codex native hook
+      projection, including native tool aliases and caller-added shell metadata
+    when: 'The mandatory consumer or either CLI decoder processes that native envelope'
+    then: >-
+      The result is execution-contract unresolved without surrogate facts,
+      admission, or lifecycle rewrite; caller fields and CLI shell flags cannot
+      override it, while literal diagnostic analysis remains usable with declared
+      context
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
@@ -97,8 +124,41 @@ contracts:
 evidence:
   - criterion_id: A4
     status: pass
-    evidence_ref: "Counterfactual replay at 52089e3cb549960029fbd2d595acda68706d06f5: indexed207 = allow68/unresolved139; 2 extra = allow1/unresolved1. Stored payloads never executed. Nine independently adjudicated representatives: two supported safe admits, one safe-but-cwd-dependent unresolved, other unsupported/dangerous-for-read-exemption cases held. Historical cwd known27; environment, ownership and native execution unverified. Private transcripts/artifacts remain uncommitted in /tmp/caws-shell-*. --verify here checks cited commit existence, not replay semantics; executed replay output was inspected."
-    recorded_at: "2026-10-19T13:49:47.232Z"
-    command: node tests/fixtures/command-analysis/replay.cjs /tmp/caws-shell-historical-replay.json /tmp/caws-sed-warning-count.json /tmp/caws-shell-historical-adjudications.json /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/shell-analysis /tmp/caws-shell-replay-result.json
-    exit_code: 0
-    commit_sha: "52089e3cb549960029fbd2d595acda68706d06f5"
+    evidence_ref: "Full209 frozen independent adjudications freshly compared at clean4bde:0disagreements; indexed207 allow68/unresolved139,extra2 allow1/unresolved1. Ignored packages/caws-cli/reports/mutation-analysis/corpus-replay-4bde1f49.json SHAceeaad06bafef7cbd9c49b20d9414cd3219fd1265921680b05cf5775ed45d314, corpus4532233edd122553e25bc2696f9a174c1b555b18b98a3281407f640540c04d4b,index194990be58fe0e863ca5ec0978b42ae55e7981f7e1487b271c40f0f5f31db873,oracle d8c39e3b88cc8835da9cfb5c6d500f9ff9dc1ffb96e8052959084acddccfbaf2 manually inspected. Wrong expected→1disagreement/exit1; invented prior observations ignored; changed subgroup index detected by changeddigest. Counterfactual owned Bash only; historycwd27,environment/ownership/nativeoutcomes unverified;2redacted unresolved. Stored commands never executed. Private inputs/labels/reports uncommitted. Native refusals not CAWS failures/false-positive rate. Supersedes9-representative evidence. --verify commit identity only."
+    recorded_at: "2026-10-19T20:56:33.266Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Scoped pure analyzer proof: full1318 semantic/projection baseline passed in fresh3355-mutant run; supported benign source, deterministic traces and sentinel absence asserted by tests/shell/command-analysis.test.js. All5 embedded mutation sources independently matched current4bde/2b2 bytes. Scores83.43/98.46/82.71/80.59/91.30%,zero timeouts; sensitivity is not general correctness/native execution proof. Manually inspected ignored packages/caws-cli/reports/mutation-analysis/mutation-report-2b2d1a01.json SHAa39790b4f1560dc9344d2eb235db67bb82731c02cd7aa9832c8c1cc44741bcc9 and full run-2b2d1a01.log. Initial structured artifact --verify correctly refused untracked generated evidence; nothing written. This citation verifies commit identity only; behavioral adjudication is manual, artifacts intentionally uncommitted."
+    recorded_at: "2026-10-19T20:55:40.998Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Declared analyzer subset:1318 passing baseline semantic/projection tests,3355-mutant fresh full run0timeouts, all5 embedded source bytes independently equal current4bde and2b2. Hostile Git/executable-sed deny and unresolved dynamic/nested/limit cases asserted against independent fixtures. Retained ignored packages/caws-cli/reports/mutation-analysis/mutation-report-2b2d1a01.json SHAa39790b4f1560dc9344d2eb235db67bb82731c02cd7aa9832c8c1cc44741bcc9 and run-2b2d1a01.log manually inspected. Final packaged hostile deny/backend/malformed holds corroborate. Does not establish arbitrary interpreter write authority/native execution. --verify below checks commit identity only; raw artifacts intentionally uncommitted."
+    recorded_at: "2026-10-19T20:56:13.406Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Clean4bde:9 installed isolated pin-guard Bats cases passed using repository bats dependency (bare bats initially unavailable127). Finite assigned sed admitted; quoted/assigned foreign Git denied; inert substitution/file-transport sentinels absent; missing analyzer held; lifecycle and destroyed-pin release reachable. Ignored packages/caws-cli/reports/mutation-analysis/pin-custody-4bde1f49.tap inspected. Final tarball d9055bb5999f97740007c3da925d109e1e1218b5ce5af0bfb90d1c5bb59cb0e7/package-4bde1f49.log shows parser6.0.0/loader/docs and installed benign allow/hostile deny. Synthetic complete Bash/claude-code context only; no native/global adoption claim. --verify checks commit identity only, not manually inspected behavioral output."
+    recorded_at: "2026-10-19T20:56:23.475Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "Candidate4bde is committed/clean, not merged/installed/published. Current packaged consumer/parser/loader/docs and9pin cases pass; doctor0E/3inheritedW/4I; gates allpass over46files. Full core mutation all5>=80%,zero timeouts. Independent peer inspected committed83c and4bde delta; load-bearing replay-index provenance repaired and counterexample checked; NUL semantics/fingerprint grounded in source/tests. Entire scoped completion remains unproven: A6 has same-project interpreter-write counterexample; final effective native invocation/full-chain canary and updated whole-machine rollback not demonstrated. Known Codex decoder refuses incomplete producer; routine adoption would block benign calls, so deployed runtime retained. Owner root session01a151c0-4722-76a0-9814-eb680a4be9b2 in owned shell-analysis lane. External prerequisite/resumption trigger: qualified trusted host final-launch integration with complete effective context/routing, then effect profiles/confinement, isolated native canary and rollback. Proposed design docs/guides/command-analysis.md:338; no executor implementation/host fork claimed."
+    recorded_at: "2026-10-19T20:57:10.666Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+  - criterion_id: A6
+    status: fail
+    evidence_ref: "Benign Node/search data, finite shell write targets, nested/foreign shell writes, cross-repository interpreter hints, missing/malformed backend cases passed installed tarball checks at4bde; raw ignored packages/caws-cli/reports/mutation-analysis/package-4bde1f49.log inspected. However earlier actual packaged probe observed0/admit for Node write source naming another worktree inside the same project, while explicit shell target was refused2. No submitted program executed. Current bash-write-guard.sh:390-396 confirms interpreter literal candidates stop before the ownership oracle; recognizing literals is not an effect profile. Thus real foreign interpreter writes are not generally refused and this criterion fails. Do not redefine foreign to cross-repository to make it pass. Proposed owned boundary must require proven effect profile or enforced confinement before opaque interpreter admission. Source held, native runtime unchanged; no heuristic blanket permission claim."
+    recorded_at: "2026-10-19T20:57:20.906Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+  - criterion_id: A7
+    status: unchecked
+    evidence_ref: "Source/component assertions establish original-envelope custody, conflicting source/shell/startup holds, decoded physical cwd reaching ownership, project-preserving standalone lifecycle selection, no compound/quoted reroot, and exit23/stdout/stderr preservation. Current packaged log explicitly syntheticExecutionContext=true/nativeProducerVerified=false. Matching published Codex rust-v0.163.0 source83086188ae0614bd882818ff1aa23f3194962012 omits actual shell/login/per-call workdir from hook input and permits later command replacement; installed binary is not byte-verified against that source. Known native projection now held(A8), not qualified. No native final-launch/full-chain canary proves that checked invocation is what executes. Resumption requires trusted complete final-launch host contract and rewrite authorization, not another parser-only rollout. Owner/current blocker/trigger retained inA5; no native activation."
+    recorded_at: "2026-10-19T20:57:31.175Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "At83c native-contract-83c09689.json records7 executed assertions: all5native aliases held even with caller shell/login/workdir plus CLI --shell, bothdecoder decisions unresolved/execution-contract with no surrogate execution/tokens/lifecycle; literal diagnostic declared-context allow; mandatory guard harmless-looking native source refused2. CLIdecoder/mandatory bridge unchanged at4bde, independently source-inspected. Current real installed tarball d9055bb5999f97740007c3da925d109e1e1218b5ce5af0bfb90d1c5bb59cb0e7 repeats packagedCodexNativeProjection2. Original envelope always forwarded, no --command downgrade; trusted launcher surface gate precedes native qualification. Ignored reports under packages/caws-cli/reports/mutation-analysis/ manually inspected. This refusal is not benign admission/native qualification or rollout readiness. --verify checks commit identity only; generated evidence intentionally uncommitted."
+    recorded_at: "2026-10-19T20:57:41.451Z"
+    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
