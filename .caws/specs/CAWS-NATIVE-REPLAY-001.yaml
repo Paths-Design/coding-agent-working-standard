@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-REPLAY-001
 title: 'Replace offline replay runner and boundary oracle with typed build-selected execution'
 mode: refactor
-lifecycle_state: active
-worktree: native-replay
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Retired the offline Python replay runner and boundary oracle through the selected reviewed CommonJS build profile. Final source3175d871; strict checkJs and55 controls on Node18.0/22.19, same hashes. Runtime artifacts preserve selected classifier/closure custody, exact synthetic sampling differential, actual positive bytes/refusals, initialization and terminal/EOF receipts; failures018/031/032/040/041 retained. A1-A3 recorded through specs evidence, ac_recorded9641-9643 inspected. Independent review findings repaired and rechecked. No arbitrary-JS sandbox, actual corpus labels, original018 phase cause, installed/native runtime, fullR20/R21 or cutover claim.'
 created_at: '2026-10-20T17:15:26.898Z'
-updated_at: '2026-10-20T17:15:36.324Z'
+updated_at: '2026-10-20T19:40:28.647Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
