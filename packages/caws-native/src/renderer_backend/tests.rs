@@ -173,7 +173,16 @@ if 'FIXTURE_MODE'=='leader_holder':
  holder=os.fork()
  if holder==0:
   root=Path(a.lease_file).parent
-  (root/'holder-ready.json').write_text(json.dumps({'pid':os.getpid(),'group':os.getpgrp()}))
+  ready=root/'holder-ready.json';stage=root/'holder-ready.json.pending'
+  payload=json.dumps({'pid':os.getpid(),'group':os.getpgrp()}).encode()
+  with stage.open('xb') as output:
+   os.chmod(stage,0o600);output.write(payload[:1]);output.flush();os.fsync(output.fileno())
+   (root/'holder-staging-partial').touch(mode=0o600,exist_ok=False)
+   until=time.monotonic()+5
+   while not (root/'publish-holder-ready').exists() and time.monotonic()<until:time.sleep(.001)
+   if not (root/'publish-holder-ready').exists():os._exit(12)
+   output.write(payload[1:]);output.flush();os.fsync(output.fileno())
+  stage.replace(ready)
   until=time.monotonic()+15
   while not (root/'release-holder').exists() and time.monotonic()<until:time.sleep(.01)
   os._exit(0)
@@ -494,6 +503,19 @@ fn launch_probed(fixture: &Fixture, cleanup_faults: bool) -> ProbedWorker {
 struct ReleaseProbe {
     probe: SharedProbe,
     work_dir: PathBuf,
+    control: UnixStream,
+    join: Option<thread::JoinHandle<WorkerExit>>,
+}
+impl ReleaseProbe {
+    fn is_finished(&self) -> bool {
+        self.join
+            .as_ref()
+            .expect("retained worker join")
+            .is_finished()
+    }
+    fn join(&mut self) -> thread::Result<WorkerExit> {
+        self.join.take().expect("one retained worker join").join()
+    }
 }
 impl Drop for ReleaseProbe {
     fn drop(&mut self) {
@@ -502,6 +524,26 @@ impl Drop for ReleaseProbe {
             .unwrap_or_else(|error| error.into_inner())
             .allow_stop = true;
         let _ = fs::write(self.work_dir.join("release-holder"), b"release");
+        let _ = self.control.shutdown(std::net::Shutdown::Both);
+        if let Some(join) = self.join.take() {
+            // On panic, retain and join the actual worker. Its existing owned
+            // cleanup retains the actual backend Child through reap/pipe EOF.
+            // No PID discovery or signal operation is introduced by the test.
+            match join.join() {
+                Ok(exit) => {
+                    if let Ok(bytes) = serde_json::to_vec_pretty(&exit) {
+                        let _ =
+                            fs::write(self.work_dir.join("panic-joined-worker-exit.json"), bytes);
+                    }
+                }
+                Err(_) => {
+                    let _ = fs::write(
+                        self.work_dir.join("panic-worker-join-error.txt"),
+                        b"actual worker thread panicked while retained join was observed\n",
+                    );
+                }
+            }
+        }
     }
 }
 fn private_observation(fixture: &Fixture, name: &str, value: &serde_json::Value) {
@@ -516,17 +558,88 @@ fn private_observation(fixture: &Fixture, name: &str, value: &serde_json::Value)
 }
 #[test]
 fn cleanup_failures_keep_exited_leader_and_custody_until_holder_group_is_stopped() {
-    let fixture = Fixture::new("leader_holder");
-    let (_host, mut reader, join, probe) = launch_probed(&fixture, true);
-    let release = ReleaseProbe {
+    let mut fixture = Fixture::new("leader_holder");
+    fixture.retained = true;
+    private_observation(
+        &fixture,
+        "test-case.json",
+        &serde_json::json!({
+            "test": "renderer_backend::tests::cleanup_failures_keep_exited_leader_and_custody_until_holder_group_is_stopped",
+            "fixture": fixture.base, "workerDirectory": fixture.spec.work_dir,
+            "state": "before_launch"
+        }),
+    );
+    let (host, mut reader, join, probe) = launch_probed(&fixture, true);
+    let mut release = ReleaseProbe {
         probe: Arc::clone(&probe),
         work_dir: fixture.spec.work_dir.clone(),
+        control: host,
+        join: Some(join),
     };
     let pid = ready(&mut reader);
     let expires = Instant::now() + Duration::from_secs(5);
+    while !fixture
+        .spec
+        .work_dir
+        .join("holder-staging-partial")
+        .exists()
+    {
+        assert!(
+            Instant::now() < expires,
+            "holder did not stage partial readiness"
+        );
+        thread::sleep(Duration::from_millis(1));
+    }
+    let partial_path = fixture.spec.work_dir.join("holder-ready.json.pending");
+    let final_path = fixture.spec.work_dir.join("holder-ready.json");
+    let partial = fs::read(&partial_path).unwrap();
+    let partial_identity = fs::symlink_metadata(&partial_path).unwrap();
+    let final_before_publication = fs::read(&final_path);
+    private_observation(
+        &fixture,
+        "holder-partial-publication.json",
+        &serde_json::json!({
+            "backendChildPid": pid, "partialPath": partial_path, "partialBytes": partial,
+        "partialIdentity": {"device":partial_identity.dev(), "inode":partial_identity.ino(), "mode":partial_identity.mode()},
+            "finalPath": final_path, "finalBytes": final_before_publication.as_ref().ok(),
+            "finalReadErrno": final_before_publication.as_ref().err().and_then(io::Error::raw_os_error),
+            "state": "producer_waiting_before_atomic_rename"
+        }),
+    );
+    assert_eq!(partial, b"{");
+    assert!(serde_json::from_slice::<serde_json::Value>(&partial).is_err());
+    assert_eq!(
+        final_before_publication.unwrap_err().kind(),
+        io::ErrorKind::NotFound
+    );
+    fs::write(
+        fixture.spec.work_dir.join("publish-holder-ready"),
+        b"publish",
+    )
+    .unwrap();
     let holder = loop {
         match fs::read(fixture.spec.work_dir.join("holder-ready.json")) {
-            Ok(bytes) => break serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            Ok(bytes) => {
+                // Retain exactly what this consumer read before parsing: a
+                // later final file must never stand in for failed bytes.
+                let final_identity = fs::symlink_metadata(&final_path).unwrap();
+                private_observation(
+                    &fixture,
+                    "holder-ready-publication.json",
+                    &serde_json::json!({
+                        "backendChildPid":pid, "finalPath":final_path, "rawFinalBytes":bytes,
+                        "finalIdentity":{"device":final_identity.dev(), "inode":final_identity.ino(), "mode":final_identity.mode()},
+                        "stagingPathExists":partial_path.exists(),
+                        "state":"first_final_read_before_parse"
+                    }),
+                );
+                assert_eq!(
+                    (final_identity.dev(), final_identity.ino()),
+                    (partial_identity.dev(), partial_identity.ino()),
+                    "published inode must be the observed staged file"
+                );
+                break serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 assert!(Instant::now() < expires, "holder did not become ready");
                 thread::sleep(Duration::from_millis(1));
@@ -534,6 +647,10 @@ fn cleanup_failures_keep_exited_leader_and_custody_until_holder_group_is_stopped
             Err(error) => panic!("holder observation: {error}"),
         }
     };
+    assert!(
+        !partial_path.exists(),
+        "atomic rename must consume its staging path"
+    );
     assert_eq!(holder["group"], serde_json::json!(pid));
     fs::write(fixture.spec.work_dir.join("exit-leader"), b"exit").unwrap();
     let deadline_seen = loop {
@@ -556,7 +673,7 @@ fn cleanup_failures_keep_exited_leader_and_custody_until_holder_group_is_stopped
         if reached {
             break true;
         }
-        if join.is_finished() || Instant::now() >= expires {
+        if release.is_finished() || Instant::now() >= expires {
             break false;
         }
         thread::sleep(Duration::from_millis(1));
@@ -571,7 +688,7 @@ fn cleanup_failures_keep_exited_leader_and_custody_until_holder_group_is_stopped
         state.allow_stop = true;
         observed
     };
-    let exit = join.join().unwrap();
+    let exit = release.join().unwrap();
     let (busy_after_return, final_reaps, reap_custody_busy) = {
         let state = probe.lock().unwrap_or_else(|error| error.into_inner());
         (
