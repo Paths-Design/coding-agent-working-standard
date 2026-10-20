@@ -74,13 +74,16 @@ test('inventory excludes every cache basename, generated suffix, link kind and n
   for (const name of ['.DS_Store', 'a.pyc', 'a.log']) put(path.join(root, name), 'excluded');
   symlinkSync(outside, path.join(root, 'linked-dir')); symlinkSync(path.join(outside, 'payload'), path.join(root, 'linked-file')); symlinkSync('missing', path.join(root, 'dangling')); symlinkSync(root, path.join(root, 'cycle'));
   put(path.join(root, '\ue000.sh'), Buffer.from([255])); put(path.join(root, '𐀀.sh'), Buffer.alloc(0));
-  const result = inventory(root);
+  /** @type {string[]} */ const payloadReads = [];
+  const result = inventory(root, { readFile: file => { payloadReads.push(file.toString()); return readFileSync(file); } });
   assert.deepEqual([...result.files.keys()], ['custom.sh', '\ue000.sh', '𐀀.sh']);
+  assert.deepEqual(payloadReads, ['custom.sh', '\ue000.sh', '𐀀.sh'].map(name => path.join(root, name)));
   assert.equal(result.files.get('\ue000.sh')?.[0], 255);
   assert.deepEqual(result.excluded.map(row => row.path), ['.DS_Store', '.pristine', '.pytest_cache', '__pycache__', 'a.log', 'a.pyc', 'cycle', 'dangling', 'linked-dir', 'linked-file', 'logs', 'nested/logs', 'node_modules', 'state']);
   assert.equal(result.excluded.find(row => row.path === 'linked-dir')?.reason, 'dependency/cache/state or symlink subtree');
   assert.equal(result.excluded.find(row => row.path === 'dangling')?.reason, 'symlink or generated file');
   assert.equal(readFileSync(path.join(outside, 'payload'), 'utf8'), 'excluded-payload');
+  put(path.join(base, 'payload-read-observation.json'), JSON.stringify({ payloadReads, excluded: result.excluded, outsidePayload: path.join(outside, 'payload'), outsidePayloadReadByInventory: payloadReads.includes(path.join(outside, 'payload')) }, null, 2));
 });
 
 test('code point ordering distinguishes BMP and astral paths', () => assert.deepEqual(['𐀀', '\ue000', 'a'].sort(codepointOrder), ['a', '\ue000', '𐀀']));
