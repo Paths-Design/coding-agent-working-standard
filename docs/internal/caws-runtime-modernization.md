@@ -2841,6 +2841,37 @@ Additional bounded evidence and unresolved dependencies:
   a gap. Private temporary receipts are diagnostic cache, not crash recovery or
   authority. No machine installation or parent AC is recorded.
 
+- E143: Custody source candidate `73c1dada` is committed; doctor exits0 with
+  inherited0E/3W/4I and five policy gates pass over124 named committed/staged
+  paths (`engine-custody-candidate-gates.json`). A fresh read-only Sol inspects
+  the committed producer, worker, frontend consumer and raw pure checks.
+  Its socket-alias question is bounded by the actual producer: Owner creates
+  separate control and render-bank socket pairs. Numeric-slot validation does
+  not independently prove distinct socket descriptions; actual descriptor-leak
+  qualification remains owed. The qualifier adds one explicitly invoked
+  pre-Ready frontend-death scenario and a Node fixture that stays alive after
+  original hook-input EOF. Its surviving external driver retains the original
+  frontend Child; only that Child authorizes its stop. File-discovered PIDs
+  authorize observations only. The observer preserves raw topology, private
+  configuration/journal copies, produced-byte mirrors and executable/source
+  identities, with separate EOF, actual Node exit and strict SDK settlement
+  expectations. Unknown receipt states and failed observations stop the chain.
+  Compilation without execution, strict qualifier Clippy and JS syntax checks
+  exit0. These are source/check observations, not frontend-death proof.
+  Custodian raw exit status and post-death fsync completion are unavailable to
+  this observer; no-running process observations cannot establish either one.
+  The test also excludes descriptor leakage, renderer behavior, escaped groups,
+  exact proxy delivery and complete parity. It does not replace the old
+  invocation fixture or silently relax its direct-parent assertion.
+  Parent directly reads sensitivity candidate `70f1f496`, matches its clean
+  source/test/config hashes to executed030/031 bytes and inspects the actual
+  CPython3.9/3.11 and Node18/22 fixture matrices plus raw selected/subtest and
+  hostile setUp tracebacks. The bounded orchestrator qualifies; six production
+  mutation tests and R21 do not. Component evidence/ordinary merge are released
+  to that lane's owner, pending canonical readback; no parent AC or installation
+  follows. The hook-harvest parser's later argv discrepancies remain held in its
+  separate component, alongside its intentional Git-admission repair.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
