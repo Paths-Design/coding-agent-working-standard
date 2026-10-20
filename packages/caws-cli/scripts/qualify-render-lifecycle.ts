@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { committedTurnNames, readCommittedTurnFile } from './committed-turn-files';
 import {
   createRenderHarness,
   digest,
@@ -390,7 +391,7 @@ function testRenderedTurnOracle(): void {
 }
 
 function outputs(h: RenderHarness, fixture: ProjectFixture): Data {
-  const names = files(fixture.session).filter((name) => /^turn-\d+\.json$/.test(name));
+  const names = committedTurnNames(fixture.session);
   const retained = path.join(h.root, 'retained-turn-bytes', fixture.name, fixture.sessionId);
   fs.mkdirSync(retained, { recursive: true, mode: 0o700 });
   return {
@@ -402,17 +403,28 @@ function outputs(h: RenderHarness, fixture: ProjectFixture): Data {
     count: names.length,
     members: names.map((name) => {
       const originalPath = path.join(fixture.session, name);
-      const bytes = fs.readFileSync(originalPath),
+      // This is an observation capture limit, not a renderer or request budget.
+      const committed = readCommittedTurnFile(fixture.session, name, 8 * 1024 * 1024);
+      const bytes = committed.bytes,
         sha256 = digest(bytes);
       const retainedPath = path.join(retained, sha256 + '.json');
       if (!fs.existsSync(retainedPath))
         fs.writeFileSync(retainedPath, bytes, { mode: 0o600, flag: 'wx' });
       assert.deepEqual(fs.readFileSync(retainedPath), bytes, 'retained turn bytes differ');
-      const value = row(JSON.parse(bytes.toString('utf8')));
+      const value = committed.value;
       assertRenderedTurn(value, fixture);
       assert.equal(name, 'turn-' + String(value.turn).padStart(3, '0') + '.json');
       assert(!fs.existsSync(path.join(fixture.project, 'MUST-NOT-EXECUTE')));
-      return { name, originalPath, retainedPath, bytes: bytes.length, sha256, semantics: 'passed' };
+      return {
+        name,
+        originalPath,
+        retainedPath,
+        bytes: bytes.length,
+        sha256,
+        dev: committed.dev,
+        ino: committed.ino,
+        semantics: 'passed',
+      };
     }),
   };
 }
@@ -466,7 +478,7 @@ async function largeFixture(h: RenderHarness, name: string): Promise<ProjectFixt
 }
 async function firstActualWrite(h: RenderHarness, fixture: ProjectFixture): Promise<Data> {
   await h.waitFor(
-    () => files(fixture.session).some((name) => /^turn-\d+\.json$/.test(name)),
+    () => committedTurnNames(fixture.session).length > 0,
     25000,
     'actual renderer first turn write'
   );
@@ -568,18 +580,35 @@ async function scenario(label: string, run: (h: RenderHarness) => Promise<Data>)
   } finally {
     // No cleanup signals are guessed from a PID or a lease. If retained child
     // cleanup cannot establish inactivity, keep the sandbox and stop scenarios.
-    result.cleanup = await h.cleanup(20000);
+    let finalizationFailure: unknown;
+    try {
+      result.cleanup = await h.cleanup(20000);
+      assert.equal(
+        row(result.cleanup).state,
+        'confirmed_inactive',
+        'cleanup uncertain; retained sandbox ' + h.sandbox
+      );
+    } catch (error) {
+      result.cleanupError = error instanceof Error ? error.stack : String(error);
+      result.state = 'failed';
+      finalizationFailure = error;
+    }
+    if (finalizationFailure === undefined) {
+      try {
+        result.sessionEvidence = h.retainSessionEvidence();
+      } catch (error) {
+        result.sessionEvidenceError = error instanceof Error ? error.stack : String(error);
+        result.state = 'failed';
+        finalizationFailure = error;
+      }
+    }
     h.writeJson('scenario.json', result);
     writeJson(summaryPath, {
       schema: 'caws.qualification.render-lifecycle.v1',
       requestedScenario,
       results,
     });
-    assert.equal(
-      row(result.cleanup).state,
-      'confirmed_inactive',
-      'cleanup uncertain; retained sandbox ' + h.sandbox
-    );
+    if (finalizationFailure !== undefined && result.error === undefined) throw finalizationFailure;
   }
 }
 

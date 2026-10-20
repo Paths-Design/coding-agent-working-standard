@@ -715,6 +715,198 @@ export class RenderHarness {
     } while (Date.now() < deadline);
     throw new Error('observation deadline: ' + label);
   }
+  /** Stable qualification evidence only; cleanup receipts are observations, never authority. */
+  retainSessionEvidence(): Data {
+    const maximumFileBytes = 8 * 1024 * 1024;
+    const identity = (stat: fs.Stats): number[] => [
+      stat.dev,
+      stat.ino,
+      stat.size,
+      stat.mtimeMs,
+      stat.ctimeMs,
+    ];
+    const stableRead = (file: string) => {
+      const named = fs.lstatSync(file);
+      assert(
+        named.isFile() && !named.isSymbolicLink(),
+        'session evidence must be regular: ' + file
+      );
+      const fd = fs.openSync(
+        file,
+        fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+      );
+      try {
+        const held = fs.fstatSync(fd);
+        assert(
+          held.isFile() && held.size <= maximumFileBytes,
+          'session evidence capture limit: ' + file
+        );
+        assert.deepEqual(identity(held), identity(named), 'session evidence replaced before read');
+        const buffer = Buffer.alloc(held.size + 1);
+        let count = 0;
+        while (count < buffer.length) {
+          const size = fs.readSync(fd, buffer, count, buffer.length - count, null);
+          if (!size) break;
+          count += size;
+        }
+        assert.equal(count, held.size, 'session evidence size changed during read');
+        assert.deepEqual(
+          identity(fs.fstatSync(fd)),
+          identity(held),
+          'session evidence changed during read'
+        );
+        const after = fs.lstatSync(file);
+        assert(after.isFile() && !after.isSymbolicLink());
+        assert.deepEqual(
+          identity(after),
+          identity(held),
+          'session evidence name replaced during read'
+        );
+        return {
+          bytes: buffer.subarray(0, count),
+          identity: identity(held),
+          dev: held.dev,
+          ino: held.ino,
+        };
+      } finally {
+        fs.closeSync(fd);
+      }
+    };
+    const cleanupPath = path.join(this.root, 'cleanup.json');
+    const cleanup = stableRead(cleanupPath),
+      cleanupSha256 = digest(cleanup.bytes);
+    assert.equal(
+      row(JSON.parse(cleanup.bytes.toString('utf8'))).state,
+      'confirmed_inactive',
+      'session evidence requires confirmed inactive cleanup; preserve sandbox'
+    );
+    const destination = path.join(this.root, 'session-evidence');
+    fs.mkdirSync(destination, { mode: 0o700 }); // Existing evidence is never overwritten.
+    const sessions: Data[] = [];
+    let capturedBytes = 0,
+      capturedFiles = 0;
+    for (const [key, session] of this.sessions) {
+      const parts = key.split('\0');
+      assert.equal(parts.length, 2);
+      const project = parts[0]!,
+        sid = parts[1]!;
+      assert.equal(
+        path.dirname(project),
+        this.sandbox,
+        'registered project must be a direct private sandbox child'
+      );
+      const projectName = path.basename(project);
+      assert(/^[a-zA-Z0-9_-]+$/.test(projectName) && /^[a-zA-Z0-9_-]+$/.test(sid));
+      assert.equal(sid, session.sessionId);
+      assert.equal(session.session, path.join(project, '.caws/sessions', sid));
+      for (const directory of [
+        this.sandbox,
+        project,
+        path.join(project, '.caws'),
+        path.join(project, '.caws/sessions'),
+        session.session,
+      ]) {
+        const stat = fs.lstatSync(directory);
+        assert(
+          stat.isDirectory() && !stat.isSymbolicLink(),
+          'session evidence directory is redirected'
+        );
+      }
+      const directoryBefore = fs.lstatSync(session.session),
+        flatBefore = fs.readdirSync(session.session).sort(),
+        before = files(session.session);
+      const retainedBase = path.join(destination, projectName, sid, 'files');
+      fs.mkdirSync(retainedBase, { recursive: true, mode: 0o700 });
+      const members = before.map((relative) => {
+        assert(++capturedFiles <= 32768, 'session evidence file count limit');
+        const originalPath = path.join(session.session, relative),
+          retainedPath = path.join(retainedBase, relative);
+        const original = stableRead(originalPath);
+        capturedBytes += original.bytes.length;
+        assert(capturedBytes <= 512 * 1024 * 1024, 'session evidence total capture limit');
+        fs.mkdirSync(path.dirname(retainedPath), { recursive: true, mode: 0o700 });
+        fs.writeFileSync(retainedPath, original.bytes, { flag: 'wx', mode: 0o600 });
+        assert.deepEqual(
+          fs.readFileSync(retainedPath),
+          original.bytes,
+          'session evidence copy differs'
+        );
+        return {
+          relative,
+          originalPath,
+          retainedPath,
+          bytes: original.bytes.length,
+          sha256: digest(original.bytes),
+          dev: original.dev,
+          ino: original.ino,
+          identity: original.identity,
+        };
+      });
+      const after = files(session.session),
+        flatAfter = fs.readdirSync(session.session).sort(),
+        directoryAfter = fs.lstatSync(session.session);
+      assert.deepEqual(after, before, 'session evidence filename inventory changed');
+      assert.deepEqual(flatAfter, flatBefore, 'session evidence flat filename inventory changed');
+      assert.deepEqual(
+        identity(directoryAfter),
+        identity(directoryBefore),
+        'session evidence directory changed'
+      );
+      for (const member of members) {
+        const final = stableRead(member.originalPath);
+        assert.deepEqual(
+          final.identity,
+          member.identity,
+          'session evidence changed before copy settled'
+        );
+        assert.equal(
+          digest(final.bytes),
+          member.sha256,
+          'session evidence bytes changed before copy settled'
+        );
+      }
+      const evidence = {
+        project,
+        projectName,
+        sessionId: sid,
+        originalDirectory: session.session,
+        retainedDirectory: retainedBase,
+        directoryIdentity: identity(directoryAfter),
+        beforeFiles: before,
+        afterFiles: after,
+        beforeFlatFilenames: flatBefore,
+        finalFlatFilenames: flatAfter,
+        members,
+      };
+      fs.writeFileSync(
+        path.join(destination, projectName, sid, 'inventory.json'),
+        JSON.stringify(evidence, null, 2) + '\n',
+        { flag: 'wx', mode: 0o600 }
+      );
+      sessions.push(evidence);
+    }
+    assert.equal(
+      digest(stableRead(cleanupPath).bytes),
+      cleanupSha256,
+      'cleanup receipt changed during retention'
+    );
+    const evidence = {
+      cleanupPath,
+      cleanupSha256,
+      maximumFileBytes,
+      maximumFiles: 32768,
+      maximumTotalBytes: 512 * 1024 * 1024,
+      capturedBytes,
+      capturedFiles,
+      sessions,
+    };
+    fs.writeFileSync(
+      path.join(destination, 'inventory.json'),
+      JSON.stringify(evidence, null, 2) + '\n',
+      { flag: 'wx', mode: 0o600 }
+    );
+    return evidence;
+  }
   async cleanup(ms = 20000): Promise<Data> {
     const deadline = Date.now() + ms,
       socket = path.join(
