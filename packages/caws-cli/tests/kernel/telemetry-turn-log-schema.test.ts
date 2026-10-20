@@ -234,7 +234,7 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
       // claude emits the four cache/input/output classes), so no class is
       // required — closure on the declared set is the invariant, not a
       // mandated class list.
-      expect(usage.required).toBeUndefined();
+      expect(Object.hasOwn(usage, 'required')).toBe(false);
       expect(Object.keys(usage.properties).sort()).toEqual(
         [
           'input_tokens',
