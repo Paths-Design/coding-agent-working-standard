@@ -8,6 +8,7 @@ const { installMachineRuntime } = require('../../dist/init/machine-adapters');
 const { prepareRuntimeInvocation } = require('../../dist/runtime/engine');
 const {
   loadGuardConfigurationEnvironment,
+  parseGuardConfiguration,
   parseNonGovernedZones,
 } = require('../../dist/runtime/guard-config');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
@@ -639,6 +640,20 @@ test('source indexing limits retain the selected parser rather than asserting in
     f.close();
   }
 }, 45000);
+
+test.each(['\0/', 'native\ud800/'])(
+  'unsafe prefix %j cannot hide behind source indexing limits',
+  (unsafe) => {
+    const raw = JSON.stringify(
+      document({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ ...prefix, prefix: unsafe }],
+        },
+      })
+    ).replace(/}$/, ',"metadata":' + '['.repeat(130) + '0' + ']'.repeat(130) + '}');
+    expect(parseGuardConfiguration(raw)).toEqual({ status: 'invalid', guards: {} });
+  }
+);
 
 test('stock NUL rejection prevents the absolute prefix emitted by an explicitly selected legacy parser', async () => {
   const f = fixture();
