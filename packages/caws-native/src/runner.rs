@@ -254,8 +254,58 @@ impl Drop for OwnedGroup {
     }
 }
 
+enum EngineOwner {
+    Direct(OwnedGroup),
+    #[cfg(target_os = "macos")]
+    Custodied(Box<crate::engine_custody::Owner>),
+}
+impl EngineOwner {
+    fn exit_observed(&mut self) -> Result<bool, String> {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Custodied(owner) => owner.exit_observed(),
+            Self::Direct(group) => {
+                let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                // Observe without reaping the original ownership anchor.
+                if unsafe {
+                    libc::waitid(
+                        libc::P_PID,
+                        group.child.id(),
+                        info.as_mut_ptr(),
+                        libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                    )
+                } != 0
+                {
+                    return Err(format!(
+                        "engine exit observation: {}",
+                        io::Error::last_os_error()
+                    ));
+                }
+                Ok(unsafe { info.assume_init().si_pid() } != 0)
+            }
+        }
+    }
+    fn finish(&mut self, deadline: Instant) -> Result<std::process::ExitStatus, String> {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Custodied(owner) => owner.finish(deadline),
+            Self::Direct(group) => {
+                let _ = deadline;
+                group.finish().map_err(|error| error.to_string())
+            }
+        }
+    }
+    fn cleanup(&mut self) -> Result<(), String> {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Custodied(owner) => owner.cleanup(),
+            Self::Direct(group) => group.cleanup().map_err(|error| error.to_string()),
+        }
+    }
+}
+
 pub struct Session {
-    group: OwnedGroup,
+    group: EngineOwner,
     stdin: ChildStdin,
     stdout: ChildStdout,
     stderr: ChildStderr,
@@ -273,7 +323,16 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn start(config: &Config, deadline: Instant) -> Result<Self, String> {
+    pub fn start(config: &Config, invocation_id: &str, deadline: Instant) -> Result<Self, String> {
+        Self::start_inner(config, invocation_id, deadline, cfg!(target_os = "macos"))
+    }
+
+    fn start_inner(
+        config: &Config,
+        invocation_id: &str,
+        deadline: Instant,
+        custody: bool,
+    ) -> Result<Self, String> {
         crate::cancellation::check()?;
         if Instant::now() >= deadline {
             return Err("request deadline expired before engine spawn".into());
@@ -304,36 +363,59 @@ impl Session {
             None
         };
         let render_sources = render_bank.as_ref().map(|bank| bank.child_sources());
-        // SAFETY: setpgid is async-signal-safe and this closure performs no allocation.
-        unsafe {
-            command.pre_exec(move || {
-                if libc::setpgid(0, 0) != 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                if let Some(sources) = render_sources {
-                    for (source, target) in sources.into_iter().zip([3, 4, 5]) {
-                        if libc::dup2(source, target) < 0 {
-                            return Err(io::Error::last_os_error());
-                        }
+        #[cfg(target_os = "macos")]
+        let spawned = if custody {
+            let spawned =
+                crate::engine_custody::Owner::spawn(config, invocation_id, render_sources)?;
+            Some((
+                EngineOwner::Custodied(Box::new(spawned.owner)),
+                spawned.stdin,
+                spawned.stdout,
+                spawned.stderr,
+            ))
+        } else {
+            None
+        };
+        #[cfg(not(target_os = "macos"))]
+        let spawned: Option<(EngineOwner, ChildStdin, ChildStdout, ChildStderr)> = {
+            let _ = (invocation_id, custody);
+            None
+        };
+        let (group, stdin, stdout, stderr) = if let Some(spawned) = spawned {
+            spawned
+        } else {
+            // SAFETY: setpgid is async-signal-safe and this closure performs no allocation.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::setpgid(0, 0) != 0 {
+                        return Err(io::Error::last_os_error());
                     }
-                    // FD6 is never an engine capability. All original bank
-                    // descriptions are >=10 and close-on-exec.
-                    libc::close(6);
-                }
-                Ok(())
-            });
-        }
-        let child = command.spawn().map_err(|e| format!("engine spawn: {e}"))?;
+                    if let Some(sources) = render_sources {
+                        for (source, target) in sources.into_iter().zip([3, 4, 5]) {
+                            if libc::dup2(source, target) < 0 {
+                                return Err(io::Error::last_os_error());
+                            }
+                        }
+                        // FD6 is never an engine capability. All original bank
+                        // descriptions are >=10 and close-on-exec.
+                        libc::close(6);
+                    }
+                    Ok(())
+                });
+            }
+            let child = command.spawn().map_err(|e| format!("engine spawn: {e}"))?;
+            let mut group = OwnedGroup {
+                child,
+                cleanup: CleanupState::default(),
+            };
+            let stdin = group.child.stdin.take().ok_or("missing engine stdin")?;
+            let stdout = group.child.stdout.take().ok_or("missing engine stdout")?;
+            let stderr = group.child.stderr.take().ok_or("missing engine stderr")?;
+            (EngineOwner::Direct(group), stdin, stdout, stderr)
+        };
         if let Some(bank) = &mut render_bank {
             bank.spawned();
         }
-        let mut group = OwnedGroup {
-            child,
-            cleanup: CleanupState::default(),
-        };
-        let stdin = group.child.stdin.take().ok_or("missing engine stdin")?;
-        let stdout = group.child.stdout.take().ok_or("missing engine stdout")?;
-        let stderr = group.child.stderr.take().ok_or("missing engine stderr")?;
         nonblocking(stdin.as_raw_fd())?;
         nonblocking(stdout.as_raw_fd())?;
         nonblocking(stderr.as_raw_fd())?;
@@ -564,29 +646,12 @@ impl Session {
             if !self.terminal_containment {
                 crate::cancellation::check()?;
             }
-            let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
-            // SAFETY: valid child PID and initialized writable siginfo storage.
-            let result = unsafe {
-                libc::waitid(
-                    libc::P_PID,
-                    self.group.child.id(),
-                    info.as_mut_ptr(),
-                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
-                )
-            };
-            if result != 0 {
-                return Err(format!(
-                    "engine exit observation: {}",
-                    io::Error::last_os_error()
-                ));
-            }
-            // SAFETY: waitid initialized this structure (zeroed when no child exited).
-            if unsafe { info.assume_init().si_pid() } != 0 {
+            if self.group.exit_observed()? {
                 break;
             }
             self.pump(None, deadline)?;
         }
-        let status = self.group.finish().map_err(|e| e.to_string())?;
+        let status = self.group.finish(deadline)?;
         if !status.success() {
             return Err(format!(
                 "engine exited unsuccessfully after proposal ({status})"
@@ -596,7 +661,7 @@ impl Session {
     }
 
     pub fn cleanup(&mut self) -> Result<(), String> {
-        self.group.cleanup().map_err(|e| e.to_string())
+        self.group.cleanup()
     }
 }
 
@@ -929,7 +994,9 @@ mod tests {
             digest: "a".repeat(64),
             timeout: Duration::from_secs(10),
         };
-        Session::start(&config, deadline()).unwrap()
+        // The unit-test executable is libtest, not the production custodian
+        // entrypoint. Actual custody is qualified through the built binary.
+        Session::start_inner(&config, "runner-unit", deadline(), false).unwrap()
     }
 
     #[test]

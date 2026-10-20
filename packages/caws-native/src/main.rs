@@ -2,6 +2,8 @@
 compile_error!("caws-native currently requires POSIX process groups");
 mod cancellation;
 mod cli;
+#[cfg(any(target_os = "macos", test))]
+mod engine_custody;
 mod process_effect;
 mod protocol;
 mod render_bridge;
@@ -49,7 +51,8 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     bytes.push(b'\n');
     let captured = (config.surface == "codex" && config.event == "pre_tool_use")
         .then(|| process_effect::CapturedAncestors::capture(deadline));
-    let mut session = runner::Session::start(config, deadline).map_err(Failure::configuration)?;
+    let mut session =
+        runner::Session::start(config, &request.id, deadline).map_err(Failure::configuration)?;
     let mut ready = None;
     let mut dispatched = false;
     let proposal = (|| {
@@ -269,6 +272,28 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
 }
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(target_os = "macos")]
+    if args.first().is_some_and(|arg| arg == "engine-custodian") {
+        let result = (|| {
+            let fd = args
+                .get(1)
+                .filter(|_| args.len() == 2)
+                .and_then(|value| {
+                    value
+                        .parse::<i32>()
+                        .ok()
+                        .filter(|fd| fd.to_string() == *value)
+                })
+                .filter(|fd| (32..=1_048_576).contains(fd))
+                .ok_or("engine-custodian requires one inherited configuration descriptor")?;
+            engine_custody::worker::run(fd)
+        })();
+        if let Err(error) = result {
+            eprintln!("CAWS engine custodian refused: {error}");
+            std::process::exit(75);
+        }
+        return;
+    }
     if args.first().is_some_and(|arg| arg == "plan-snapshots") {
         match caws_native::plan_snapshots::run(&args[1..]) {
             Ok(code) => std::process::exit(i32::from(code)),

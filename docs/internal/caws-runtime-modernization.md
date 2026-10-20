@@ -52,8 +52,10 @@ context, not proof of current behavior. Preserve outstanding obligations unless
 the user supersedes them. Distinguish committed, reviewed, landed, accepted and
 installed work, and correct stale next steps before choosing another task.
 
-The next ownership boundary is a surviving native custodian that creates the
-Node engine before readiness. E135 closes the raw patch-alias admission gap;
+The macOS invocation path includes a separate native custodian that creates the
+Node engine before readiness; E142 retains its pure contract checks. The next
+boundary is actual frontend-death qualification through that entry path.
+E135 closes the raw patch-alias admission gap;
 E136 closes false completion after a failed cleanup attempt. Neither closes
 frontend-death custody, complete group settlement, missing-session identity or
 the unchanged thirteen-session/four-repository fairness requirement. A
@@ -171,7 +173,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R20 | Python developer/harvest/qualification scripts | Typed TS tooling | one rule-token leaf accepted and landed on main; parent integration and eight other paths unreplaced | E134 retains bounded Python3.11/Unicode14 and Node18/22 differential artifacts, including failed Unicode and executable-symlink candidates. Parent bytes retain the original implementation until integration. The separately bound hook-harvest component owns its six paths; its source preparation is not qualification or parent acceptance |
 | R21 | Python-owned regression tests | TS/native behavioral tests | unreplaced | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes |
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
-| R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
+| R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation and bounded actual-engine replay tested; separate macOS engine custodian wired and pure contracts tested, E142 | Actual custodian survival/Node settlement, complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
 | R25 | Demand-start, warm residency and idle exit | Rust service owner/retained workers + typed engine | isolated renderer profile observed, E81; complete resident engine unreplaced | One actual backend survives three native requests, then owner idle cleanup retains custody through reap/EOF. Machine-wide fair admission, heartbeat retention, drain/version and thirteen-session workload remain open |
 | R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | normal/queued/dispatched cancellation and host-crash restart observed on native43, E128/E130 | Runtime build39 and qualifier266 retain actual partial writes, accepted Unknown, correlated retry/capacity denials and reap/EOF/absence receipts. Fatal worker loss, generation replacement, autonomous drain and production retention remain unqualified |
@@ -2788,6 +2790,57 @@ Additional bounded evidence and unresolved dependencies:
   no-hook-execution claim. A private harmless sentinel probe is authorized;
   no production execution or resolution follows from source suspicion alone.
 
+- E141: Reorientation against the retained user messages, tracker and live
+  `CAWS-NATIVE-RUNTIME-001` binding preserves the full Rust/typed Node replacement,
+  thirteen sessions/four repositories, PID safety, documentation after source
+  landing and installation after full parity. The active parent lane is owned;
+  untracked custody sources are implementation work, not inherited completion.
+  Root reads the hook-harvest fsmonitor observation directly: direct Git exits0
+  and writes one sentinel line; both original Python and candidate Node exit0
+  and write three. `core.hooksPath=/dev/null` does not suppress this configured
+  monitor. The raw observation is under peer `01a157bd`'s
+  `native-hook-harvest/fsmonitor-contract-probe/observation.json`; component A1
+  is failed and source integration held while its owner hardens Git admission.
+  Root also reads sensitivity's `018-review-counterexamples-driver-repair/`
+  stdout and command record: both output directories exist under different
+  symlink/parent resolutions, and unrelated setup AssertionError plus echoed
+  expected source is counted as a kill by both predicates. The bounded driver
+  exits0 to report those counterexamples, not successful component behavior.
+  Peer repairs require exact candidate/source/raw-output readback before
+  acceptance or integration. Neither tooling component supplies native proof.
+
+- E142: The macOS binary dispatches a private inherited-descriptor custodian
+  before frontend cancellation setup. The custodian creates Node in a private
+  group and retains that original Child independently of frontend lifetime;
+  original caller capture, request PID and native effects remain in the
+  frontend. Node receives the existing optional FD3/4/5 render capabilities;
+  private configuration, journal and liveness descriptors are close-on-exec.
+  The parent correlates an append-only bounded journal to its actual custodian
+  Child, rejects changed prefixes, invalid terminal rows and abnormal cached
+  custodian exits, and requires successful custodian exit after publication.
+  Normal stdin EOF is separate from private liveness EOF. Bounded queues retain
+  opaque bytes; cleanup keeps stop, complete group settlement, actual reap and
+  both EOF separate. Failed attempts retain ownership with explicit retry;
+  cached reap forbids later signals. Persistent HUP is removed from poll sources.
+  Pure checks exit0 and strict Clippy with binary/tests exits0. Raw output is in
+  `engine-custody-{pure-initial,checks}.json` under the E118 qualification root;
+  initial Clippy failures are separately retained. Successful pure fixture files
+  are removed by their normal Drop, not represented as retained runtime state.
+  The original relative artifact redirection is refused by the installed guard;
+  no test runs from that command. Absolute source/target invocation subsequently
+  executes; relative scope check admits the owned artifact path.
+  These checks use fake cleanup operations and local files/socket descriptors;
+  no Node, actual Child, SDK settlement, signal or reap runs in them. The old
+  invocation fixture assumes a direct Node/frontend parent relationship and
+  requires independent topology qualification before reuse with this path.
+  Actual frontend-death survival, descriptor leak observations, renderer replay,
+  performance and full migration acceptance remain open. Custodian SIGKILL,
+  escaped groups and other platforms are not qualified. A terminal fsync failure
+  resumes the same record until durable; its transient failure cannot be written
+  behind that terminal line, so complete failure-history instrumentation remains
+  a gap. Private temporary receipts are diagnostic cache, not crash recovery or
+  authority. No machine installation or parent AC is recorded.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2907,8 +2960,9 @@ E130 replays restart and E131 replays the cooperative legacy boundary on the
 same frozen native/runtime bytes. The unchanged legacy counterexample remains
 an adoption/drain obligation. E132 restores the reviewed typed stock profile
 without changing its authority predicates. E135 repairs raw patch-alias
-protective admission and E136 keeps failed cleanup pending. The next effect
-probe requires a custodian that creates Node before Ready, retains its actual
+protective admission and E136 keeps failed cleanup pending. E142 wires that
+custodian and exercises pure contracts; the next effect probe must observe its
+actual production entry creating Node before Ready and retaining its actual
 Child after frontend death, observes complete group settlement before reap and
 publishes a correlated cleanup receipt. Keep original caller capture and native
 effects in the frontend; preserve Node FD3/4/5 and exclude every liveness/control

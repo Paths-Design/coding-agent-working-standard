@@ -4,7 +4,7 @@
 //! exclude concurrent wait/reap operations (including other SIGCHLD handlers).
 use std::{fmt, io, process::Child};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GroupStop {
     Signalled,
     Absent,
@@ -15,7 +15,7 @@ pub enum GroupStop {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum StopStage {
     InvalidPid,
     Ownership,
@@ -39,7 +39,7 @@ pub struct GroupObservation {
     pub leaders: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GroupSettlement {
     LeaderRunning,
     /// The SDK observed a live member before finishing validation of its fetched
@@ -55,7 +55,7 @@ pub enum GroupSettlement {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SettlementStage {
     InvalidPid,
     BeforeOwnership,
@@ -64,13 +64,13 @@ pub enum SettlementStage {
     Snapshot,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SettlementLeader {
     pub pid: i32,
     pub code: i32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SettlementError {
     pub stage: SettlementStage,
     pub raw_errno: Option<i32>,
@@ -88,7 +88,7 @@ impl fmt::Display for SettlementError {
 }
 impl std::error::Error for SettlementError {}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StopError {
     pub stage: StopStage,
     /// The operation that failed (including the original kill EPERM).
