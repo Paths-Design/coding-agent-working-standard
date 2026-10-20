@@ -39,11 +39,52 @@ excluded dependency tree is not a source-harvest candidate.
 
 ## Reproduce the harvest
 
+This maintained reproduction uses the dependency-free typed Node utility on Node
+18 or later. The dated observations below retain their original Python execution
+history. Conversion qualification compares the retained Python 3.11 reference
+with Node 18 and 22 on owned fixtures; it does not establish every interpreter
+profile or operating system. Help and exception wording follow the host
+language; report values, literal declaration semantics and failure exit classes
+carry the comparison contract.
+
+CLI compatibility follows the qualified installed `argparse` profile. Option
+classification precedes action execution, so an ambiguous abbreviation refuses
+even after an earlier help token. Unknown operands are deferred until actions
+finish; help can exit before that final validation. Short-option clusters are
+validated before their pending help action executes. These ordering rules are
+distinct from treating every occurrence of help as an unconditional success.
+
+Git 2.45 or later is required. The inventory disables fsmonitor, ordinary Git
+hooks, pagers, lazy object fetching, optional index writes and trace
+destinations for every Git subprocess, including admission queries. It preserves
+effective system, global, local and worktree configuration and includes, then
+refuses any effective nonempty or valueless `filter.<driver>.clean` or
+`filter.<driver>.process` setting. This conservative admission also refuses an
+unused executable filter. Any indexed submodule, including one outside the hook
+subtree, refuses admission; the utility does not suppress submodule status and
+report the resulting incomplete view. These refusals intentionally repair the
+Python reference's ability to execute consumer-configured programs during an
+inventory.
+
+The child environment preserves `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` and
+`GIT_CONFIG_NOSYSTEM` so the admission query and status examine the same
+effective configuration. Inherited trace settings are disabled. Other inherited
+`GIT_*` variables refuse admission, including repository, index, object,
+configuration injection and pathspec overrides. Diagnostics do not copy
+arbitrary Git configuration values into the report.
+
+This profile assumes trusted Node/Git executables and stable configuration,
+attributes and index inputs throughout the invocation. A preflight query does
+not prevent concurrent replacement after admission and does not sandbox an
+arbitrary hostile Git repository. Inventory exclusions govern the Node payload
+traversal and report; Git status can read excluded tracked files internally.
+
 From the CAWS checkout, with the consumer root supplied explicitly:
 
 ```sh
-python3 scripts/hook-harvest.py --consumer-root ../sterling > /tmp/caws-sterling-hook-harvest.json
-PYTHONDONTWRITEBYTECODE=1 python3 scripts/hook-harvest.test.py -v
+node scripts/hook-harvest.mjs --consumer-root ../sterling > /tmp/caws-sterling-hook-harvest.json
+node --test scripts/hook-harvest.test.mjs
+node node_modules/typescript/bin/tsc --project scripts/tsconfig.hook-harvest.json
 jq '.counts, .consumer, .caws, .dispatchers' /tmp/caws-sterling-hook-harvest.json
 jq -r '.files[] | [.path,.status,.consumer_sha256,.caws_sha256] | @tsv' /tmp/caws-sterling-hook-harvest.json
 ```
@@ -61,6 +102,14 @@ Only an exact numeric managed version-header line is normalized. Other comments
 remain differences until reviewed. Dispatcher parsing is intentionally literal:
 dynamic elements are reported as unresolved, comments are not active handlers,
 and no shell code is evaluated.
+
+Two stable reads do not exclude ABA changes, same-byte inode replacement,
+permission changes or excluded symlink-target changes. The later tracking query
+is outside that stability check. The filesystem-name decoder preserves invalid
+UTF-8 bytes as distinct surrogateescaped keys; this Darwin filesystem refuses
+such names with `EILSEQ`, so actual invalid-name traversal requires separate
+qualification on a filesystem that admits them. The fixtures report that limit
+explicitly rather than claiming traversal coverage from decoder checks.
 
 ## Which code the configured machine selects
 
