@@ -10,7 +10,8 @@
  * generic deep immutability of Sets and Maps.
  *
  * Python profile boundaries are explicit: container repr outside Latin-1/lone
- * surrogates and selected Unicode source syntax can be unsupported. Integer
+ * surrogates and selected Unicode source syntax can be unsupported. Python
+ * single-quoted adjacent surrogate codepoints are declined separately from JSON ingress. Integer
  * custody intentionally exceeds CPython's configurable decimal digit cap.
  * No cache, aggregation, rewind or cross-surface parity is claimed here.
  */

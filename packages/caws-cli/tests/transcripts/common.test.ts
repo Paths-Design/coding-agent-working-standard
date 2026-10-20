@@ -212,3 +212,18 @@ test('retains large integers and object order inside decoded helper projections'
   const object = parsePythonJson('{"a":1,"b":2}');
   assert.equal(decodeStructuredTextPayload(object), object);
 });
+
+test('timestamp signed fractional rounding distinguishes the negative half-microsecond neighbors', () => {
+  const cases = [
+    ['-5.000000000000001e-7', '1969-12-31T23:59:59Z'],
+    ['-5e-7', '1970-01-01T00:00:00Z'],
+    ['-4.999999999999999e-7', '1970-01-01T00:00:00Z'],
+    ['5.000000000000001e-7', '1970-01-01T00:00:00Z'],
+    ['5e-7', '1970-01-01T00:00:00Z'],
+    ['4.999999999999999e-7', '1970-01-01T00:00:00Z'],
+    ['-0.9999995', '1969-12-31T23:59:59Z'],
+    ['-1.0000005', '1969-12-31T23:59:58Z'],
+  ] as const;
+  for (const [token, expected] of cases)
+    assert.equal(parseTimestamp(jsonNumber(token)), expected, token);
+});

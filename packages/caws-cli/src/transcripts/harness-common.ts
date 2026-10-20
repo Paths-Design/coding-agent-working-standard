@@ -38,13 +38,17 @@ export function parseTimestamp(value: JsonValue | undefined): string | null {
     } else seconds = Number(value.lexeme);
   } else return pythonStr(value);
   if (!Number.isFinite(seconds)) return pythonStr(value);
-  // CPython rounds the fractional part to microseconds before formatting whole seconds.
-  let whole = Math.floor(seconds);
-  const fraction = (seconds - whole) * 1_000_000;
+  // Retain the signed fraction as CPython's modf-based conversion does.
+  // Adding one before rounding a tiny negative fraction can lose the bit that
+  // distinguishes a value just below a half-microsecond from the exact tie.
+  let whole = Math.trunc(seconds);
+  const fraction = Math.abs((seconds - whole) * 1_000_000);
   const base = Math.floor(fraction),
     rest = fraction - base;
-  const micros = rest > 0.5 || (rest === 0.5 && base % 2 !== 0) ? base + 1 : base;
+  const rounded = rest > 0.5 || (rest === 0.5 && base % 2 !== 0) ? base + 1 : base;
+  const micros = seconds < 0 ? -rounded : rounded;
   if (micros === 1_000_000) whole++;
+  else if (micros < 0) whole--;
   if (whole < -62135596800 || whole > 253402300799) return pythonStr(value);
   const date = new Date(whole * 1000);
   if (!Number.isFinite(date.getTime())) return pythonStr(value);

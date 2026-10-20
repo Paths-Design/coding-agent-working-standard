@@ -60,7 +60,7 @@ test('Codex adapter identity and matching preserve ownership of uninteresting ev
   assert.equal(CODEX_ADAPTER.id, 'codex');
   assert.equal(
     CODEX_ADAPTER_REVISION,
-    'native-codex/1;unicode:14.0.0;python-sha256:fca73c2b632122bc471322b38452db3ea41cf3eab693d02be757fd9217b31ee0'
+    'native-codex/2;unicode:14.0.0;python-sha256:fca73c2b632122bc471322b38452db3ea41cf3eab693d02be757fd9217b31ee0'
   );
   for (const type of ['turn_context', 'response_item', 'token_usage_record', 'event_msg'])
     assert.equal(matchesCodex(row(`{"type":"${type}"}`)), true);
@@ -414,4 +414,34 @@ test('source rows and input state remain unchanged after all normalized projecti
   assert.notEqual(result.state, state);
   assert.equal(getMember(only(result).input, 'command'), 'echo unchanged');
   assert.equal(exact(jsonObject([])), '{}');
+});
+
+test('adjacent Python surrogate codepoints are explicit incomplete indexes, distinct from JSON combining', () => {
+  for (const source of [
+    "tools.apply_patch('\\ud83d\\ude00');",
+    "tools.exec_command({cmd:'\\ud83d\\ude00'});",
+  ]) {
+    const result = extractCodexSourceIndex(source);
+    assert.deepEqual(result, {
+      disposition: 'unsupported',
+      rawSource: source,
+      reason: 'surrogate_literal_profile',
+      observationBoundary: 'source_syntax',
+      execution: 'not_observed',
+    });
+    assert.equal('actions' in result, false);
+    assert.throws(() => extractCodexInnerActions(source), {
+      name: 'UnsupportedCodexSurrogateLiteral',
+    });
+  }
+  assert.equal(decodeJsString("'\\ud800'"), '\ud800');
+  assert.equal(decodeJsString("'\\U0000dc00'"), '\udc00');
+  assert.equal(decodeJsString("'😀'"), '😀');
+  assert.equal(decodeJsString("'\\U0001f600'"), '😀');
+  // json.loads combines these escaped surrogate pairs, unlike ast.literal_eval.
+  assert.equal(decodeJsString('"\\ud83d\\ude00"'), '😀');
+  const jsonLiteral = extractCodexSourceIndex('tools.apply_patch("\\ud83d\\ude00");');
+  assert.equal(jsonLiteral.disposition, 'indexed');
+  assert(jsonLiteral.disposition === 'indexed');
+  assert.equal(exact(getMember(jsonLiteral.actions[0], 'patch_length')), '1');
 });

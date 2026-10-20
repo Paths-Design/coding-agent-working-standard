@@ -30,7 +30,7 @@ import {
 
 // Bump the native revision when projection semantics change; the hash identifies the reference only.
 export const CODEX_ADAPTER_REVISION =
-  'native-codex/1;unicode:14.0.0;python-sha256:fca73c2b632122bc471322b38452db3ea41cf3eab693d02be757fd9217b31ee0';
+  'native-codex/2;unicode:14.0.0;python-sha256:fca73c2b632122bc471322b38452db3ea41cf3eab693d02be757fd9217b31ee0';
 export const AGENTS_MD_PREFIX = '# AGENTS.md instructions for ';
 export type CodexState = Readonly<{ turnSeen: boolean; pendingToolId?: JsonValue }>;
 export function createCodexState(): CodexState {
@@ -45,6 +45,15 @@ export class UnsupportedCodexStringEscape extends Error {
   constructor() {
     super('Named Unicode escapes in Python single-quoted source literals are unsupported');
     this.name = 'UnsupportedCodexStringEscape';
+  }
+}
+/** Python literal escapes can retain surrogate codepoints that JS strings combine. */
+export class UnsupportedCodexSurrogateLiteral extends Error {
+  constructor() {
+    super(
+      'Adjacent surrogate codepoints in Python single-quoted literals require distinct custody'
+    );
+    this.name = 'UnsupportedCodexSurrogateLiteral';
   }
 }
 export class UnsupportedCodexIdentifierProfile extends Error {
@@ -74,6 +83,22 @@ function singleQuotedLiteral(token: string): string | null {
   )
     return null;
   let result = '';
+  let previousPoint: number | undefined;
+  const appendPoint = (point: number): void => {
+    if (
+      previousPoint !== undefined &&
+      previousPoint >= 0xd800 &&
+      previousPoint <= 0xdbff &&
+      point >= 0xdc00 &&
+      point <= 0xdfff
+    )
+      throw new UnsupportedCodexSurrogateLiteral();
+    result += String.fromCodePoint(point);
+    previousPoint = point;
+  };
+  const appendText = (text: string): void => {
+    for (const character of text) appendPoint(character.codePointAt(0)!);
+  };
   const simple: Readonly<Record<string, string>> = {
     a: '\x07',
     b: '\b',
@@ -90,7 +115,9 @@ function singleQuotedLiteral(token: string): string | null {
     const char = token[index]!;
     if (char === "'" || char === '\n' || char === '\r' || char === '\0') return null;
     if (char !== '\\') {
-      result += char;
+      const point = token.codePointAt(index)!;
+      appendPoint(point);
+      if (point > 0xffff) index++;
       continue;
     }
     const escape = token[++index];
@@ -101,14 +128,14 @@ function singleQuotedLiteral(token: string): string | null {
       continue;
     }
     if (Object.prototype.hasOwnProperty.call(simple, escape)) {
-      result += simple[escape]!;
+      appendText(simple[escape]!);
       continue;
     }
     if (/[0-7]/.test(escape)) {
       let octal = escape;
       while (octal.length < 3 && index + 1 < token.length - 1 && /[0-7]/.test(token[index + 1]!))
         octal += token[++index]!;
-      result += String.fromCodePoint(parseInt(octal, 8));
+      appendPoint(parseInt(octal, 8));
       continue;
     }
     if (escape === 'N') {
@@ -121,11 +148,14 @@ function singleQuotedLiteral(token: string): string | null {
       if (digits.length !== count || !/^[0-9a-f]+$/i.test(digits)) return null;
       const point = parseInt(digits, 16);
       if (point > 0x10ffff) return null;
-      result += String.fromCodePoint(point);
+      appendPoint(point);
       index += count;
       continue;
     }
-    result += '\\' + escape;
+    appendPoint(0x5c);
+    const point = token.codePointAt(index)!;
+    appendPoint(point);
+    if (point > 0xffff) index++;
   }
   return result;
 }
@@ -311,7 +341,7 @@ export type CodexSourceIndex =
   | Readonly<{
       disposition: 'unsupported';
       rawSource: string;
-      reason: 'named_unicode_escape' | 'unicode_identifier_profile';
+      reason: 'named_unicode_escape' | 'unicode_identifier_profile' | 'surrogate_literal_profile';
       observationBoundary: 'source_syntax';
       execution: 'not_observed';
     }>;
@@ -326,6 +356,14 @@ export function extractCodexSourceIndex(rawSource: string): CodexSourceIndex {
       execution: 'not_observed',
     };
   } catch (error) {
+    if (error instanceof UnsupportedCodexSurrogateLiteral)
+      return {
+        disposition: 'unsupported',
+        rawSource,
+        reason: 'surrogate_literal_profile',
+        observationBoundary: 'source_syntax',
+        execution: 'not_observed',
+      };
     if (error instanceof UnsupportedCodexStringEscape)
       return {
         disposition: 'unsupported',
