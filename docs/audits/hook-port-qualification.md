@@ -212,10 +212,13 @@ hashes. Writers take an OS lock before input reads; each turn replacement is
 atomic. This is not a transactional snapshot across all turn files for readers.
 An explicitly configured `CAWS_TRANSCRIPT_DATABASE` supports OpenCode/ZCode
 SQLite projection in one read transaction, with session-qualified rows and an
-atomic JSONL projection/receipt. Empty results replace projected bytes with an
-empty file and do not reuse an old projection as a hit. Live database schemas,
-compressed transcript discovery, and native subagent-store discovery remain
-unverified; parent metadata is not a census of child sessions.
+atomically replaced JSONL projection. The caller writes the stdout receipt to a
+separate file; projection and receipt publication are not one transaction. The
+publisher does not sync the projection file or directory, so atomic replacement
+does not establish crash durability. Empty results replace projected bytes with
+an empty file and do not reuse an old projection as a hit. Live database
+schemas, compressed transcript discovery, and native subagent-store discovery
+remain unverified; parent metadata is not a census of child sessions.
 
 ### Observed artifacts
 
@@ -236,7 +239,9 @@ Scratch root remains `/private/tmp/caws-hook-qualification-20260912/`.
 - `fidelity-database-final/selection-kidwngt8/repo/.caws/sessions/{opencode,zcode}/`
   retains projections, receipts, turns and render-state. After source-session
   deletion, the projection is empty and preserved turns are explicitly stale.
-  The database byte hash remained unchanged during the read-only render.
+  The main database file's byte hash remained unchanged during the read-only
+  render. That check does not inspect SQLite WAL/SHM files or establish that the
+  read transaction has no filesystem effects.
 - `fidelity-context-final/selection-*/codex-fidelity.command.json` is the final
   Codex check after repairing direct adapter imports and the unborn-branch
   `HEAD\nunknown` capture. The fixture now records branch `main`.
