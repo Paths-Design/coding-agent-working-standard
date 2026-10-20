@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-transcript-unicode
 created_at: '2026-10-20T18:58:59.714Z'
-updated_at: '2026-10-20T18:59:12.610Z'
+updated_at: '2026-10-20T19:46:47.573Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
@@ -17,6 +17,11 @@ scope:
     - 'packages/caws-cli/src/transcripts/**'
     - 'packages/caws-cli/tests/transcripts/**/*.ts'
     - 'packages/caws-cli/tests/transcripts/unicode14/**'
+    - packages/caws-cli/tests/transcripts/codepoint-text.test.ts
+    - packages/caws-cli/tests/transcripts/codex.test.ts
+    - packages/caws-cli/tests/transcripts/lossless-json.test.ts
+    - packages/caws-cli/tests/transcripts/occurrence.test.ts
+    - packages/caws-cli/tests/transcripts/unicode-profile.test.ts
   out: []
 invariants:
   - 'Raw transcript occurrence bytes and ordinary JsonValue string custody remain unchanged; interpreted Python literal codepoints are explicit and never silently collapse during JS or UTF8 conversion.'
