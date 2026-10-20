@@ -128,6 +128,21 @@ test('current native Child receipts correlate by content, without PID filename/I
     assert.equal(observe([candidate([started(), final])]).state, 'confirmed_settled');
   }
 });
+test('SDK member counters match native u32 ranges in stop and settlement observations', () => {
+  const maximum = { ...group(), members: 0xffff_ffff, zombies: 0xffff_ffff };
+  const valid = { ...complete(), settlement: { Ok: { Exited: { observation: maximum } } } };
+  assert.equal(observe([candidate([started(), valid])]).state, 'confirmed_settled');
+  const oversized = { ...group(), members: 2 ** 32, zombies: 2 ** 32 };
+  const invalidSettlement = {
+    ...complete(),
+    settlement: { Ok: { Exited: { observation: oversized } } },
+  };
+  assert.equal(observe([candidate([started(), invalidSettlement])]).state, 'unknown');
+  for (const observation of [oversized, { ...group(), leaders: 2 ** 32 }]) {
+    const invalidStop = { ...complete(), stop: { Ok: { ExitedOnly: { observation } } } };
+    assert.equal(observe([candidate([started(), invalidStop])]).state, 'unknown');
+  }
+});
 test('prior invocation cannot qualify the next request or lend its confirmed chain', () => {
   assert.equal(observe().state, 'confirmed_settled');
   const next = expectation();

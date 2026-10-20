@@ -101,7 +101,8 @@ function group(value: unknown): Row {
   const row = fields(value, 'reason,query_errno,bytes,capacity,members,zombies,leaders');
   requireValue(int(row.reason) && int(row.query_errno), 'invalid SDK status');
   requireValue(
-    ['bytes', 'capacity', 'members', 'zombies', 'leaders'].every((k) => uint(row[k])),
+    ['bytes', 'capacity'].every((k) => uint(row[k])) &&
+      ['members', 'zombies', 'leaders'].every((k) => uint(row[k]) && row[k] <= 0xffff_ffff),
     'invalid SDK counters'
   );
   return row;
