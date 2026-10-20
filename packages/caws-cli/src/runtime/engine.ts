@@ -308,13 +308,13 @@ export async function prepareRuntimeInvocation(
       if (signal.aborted) throw signal.reason;
       dispatched = true;
       journal.append('dispatch_started');
-      const options = {
-        request,
-        selection,
-        environment: invocationGuardConfiguration(selection, environment),
-        signal,
-      };
       try {
+        const options = {
+          request,
+          selection,
+          environment: invocationGuardConfiguration(selection, environment),
+          signal,
+        };
         if (compatibilityRequired(request, selection, environment)) {
           const completed = await executeCompatibilityDispatch({
             ...options,
