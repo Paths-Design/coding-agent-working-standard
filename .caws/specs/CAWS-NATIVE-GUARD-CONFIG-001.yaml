@@ -45,9 +45,8 @@ evidence:
     commit_sha: c027afeb489e9771822928801cbd6ad5222e8f57
   - criterion_id: A2
     status: pass
-    evidence_ref: "Inspected c412 focused66pass1skip at qualified-candidate/guard-config-focused plus c027 stock/custom-runner2pass24skip. Hostile controls cover malformed UTF8, lossy prefixes, numeric tokens, source tamper, deep metadata, forged transport, customloader and explicitparser. c027 excludes customlibraries; retained runner-parser-called is called followed by LF; absent/zero entries and shipped consumer outputs. Full focused suite not repeated after narrow c027 exclusion. External artifacts inspected directly, not behaviorally rederived by CLI."
-    recorded_at: "2026-10-20T06:50:52.042Z"
+    evidence_ref: "Inspected c412 focused66pass1skip at qualified-candidate/guard-config-focused plus c027 stock/custom-runner2pass24skip. Hostile controls cover malformed UTF8, lossy prefixes, numeric tokens, source tamper, deep metadata, forged transport, customloader and explicitparser. c027 excludes customlibraries; retained runner-parser-called is called followed by LF; absent/zero entries and shipped consumer outputs. Full focused suite not repeated after narrow c027 exclusion. External artifacts inspected directly, not behaviorally rederived by CLI. Durable inspected evidence: /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-guard-config/custom-library-repair/guard-config-library-boundary/test.status.json. --verify below checks cited committed identity only; it does not rerun the command or verify external artifacts."
+    recorded_at: "2026-10-20T06:57:31.171Z"
     command: "node ../../node_modules/jest/bin/jest.js --runInBand --bail=1 --selectProjects caws-cli --runTestsByPath tests/runtime/guard-config-integration.test.js --testNamePattern 'compiled engine preloads|a custom runner retains'"
     exit_code: 0
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-guard-config/custom-library-repair/guard-config-library-boundary/test.status.json"
     commit_sha: c027afeb489e9771822928801cbd6ad5222e8f57
