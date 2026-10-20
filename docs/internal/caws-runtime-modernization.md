@@ -3371,6 +3371,36 @@ Additional bounded evidence and unresolved dependencies:
   cases, other harness adapters, persistence, complete rendering and installed
   Python retirement remain open. No parent AC is earned by test admission.
 
+- E158: Read-only investigation after `8fdfa9e1` reopens E118's retained
+  `workload.json` and `owner-stage-timing-observations.json`. Root readback
+  confirms that peer queue arrivals occur at owner elapsed8982/9039/9170ms,
+  after the hot outcome recorded by E118. Peer bridge-read intervals are
+  7877/8004/8405ms; their whole calls take15146–15574ms. The retained failed
+  workload does not demonstrate contention between peer offers and the hot
+  renderer effect, nor isolate CPU/import/Git/filesystem costs within the
+  compatibility prefix. It cannot establish that a resident launcher alone is
+  necessary or sufficient for the unchanged fairness oracle.
+
+  Current `stock-handlers.ts` admits only dangerous-command and utility stock
+  consumers; `agent-heartbeat.sh` falls through to compatibility execution. Its
+  complete406-line consumer includes leases, peer change/rate state,
+  critical-message polling, drain-five offers, dead-letter telemetry and one
+  merged context. A typed consumer can reuse canonical application operations
+  through the existing selected-handler dispatch. Importing the CLI command
+  unchanged would retain process/global assumptions, including
+  `buildLeaseContext` assigning `hook_pid: process.pid`. Any shared application
+  extraction needs explicit request context and exact offer settlement at output
+  handoff. This is a concrete production integration candidate, not an
+  implemented consumer or an attributed fairness repair.
+
+  One-shot custody permits bounded consumer replacements before shared-module
+  reuse. Reuse additionally requires request-owned ports for context Git,
+  classifier Git, utilities, compatibility handlers and containment lookup,
+  including each Stop request's actual descriptors. Neither unused ports nor an
+  unconsumed scheduler closes that contract. Qualify a complete changed consumer
+  and measure its invocation/prefix interval before selecting another unchanged
+  fairness replay; preserve the original workload and oracle.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3513,14 +3543,16 @@ not require a public pre-Ready spawn service and does not earn warm residency.
 Missing-SID/cache branches additionally need a fresh logical-session binding or
 protective refusal without foreign strikes; process identity alone does not
 establish exclusive session ownership. The held E133 probe cannot supply that
-proof. Complete resident-engine ownership and measured image/publication cost
-remain prerequisites to the unchanged fairness replay. E122 forbids a pre-Node
-queue which skips required latch/Stop semantics. Keep the original 1000-turn hot
-transcript, counts,30s request budgets and later hot Running witness
-requirements. Correct output and source-level capacity are not fairness proof.
-No blind workload repetition: the next run needs an identified owning
-implementation change and known cleanup. Overload and final-executable
-lifecycle/legacy replay require separate retained runs.
+proof. E158 distinguishes one-shot consumer integration from later shared-module
+ownership. A changed complete consumer and measured invocation/prefix costs are
+needed before another unchanged fairness replay; a resident launcher alone does
+not establish that change. E122 forbids a pre-Node queue which skips required
+latch/Stop semantics. Keep the original 1000-turn hot transcript, counts,30s
+request budgets and later hot Running witness requirements. Correct output and
+source-level capacity are not fairness proof. No blind workload repetition: the
+next run needs an identified owning implementation change and known cleanup.
+Overload and final-executable lifecycle/legacy replay require separate retained
+runs.
 
 E90 independently confirms E87's orphan absent without a root cleanup signal.
 E91/E92 retain repaired signal readiness, the complete native suite and all four
