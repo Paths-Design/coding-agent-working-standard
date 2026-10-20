@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-20T15:36:17.358Z'
+updated_at: '2026-10-20T17:09:47.283Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -39,6 +39,24 @@ scope:
   out: []
   support:
     - packages/caws-cli/reports/
+    - package.json
+    - package-lock.json
+    - docs/audits/hook-port-qualification.md
+    - docs/audits/sterling-hook-harvest.md
+    - packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts
+    - scripts/calculate-rule-tokens.mjs
+    - scripts/calculate-rule-tokens.py
+    - scripts/calculate-rule-tokens.test.mjs
+    - scripts/tsconfig.rule-tokens.json
+    - scripts/hook-harvest.mjs
+    - scripts/hook-harvest.py
+    - scripts/hook-harvest.test.mjs
+    - scripts/hook-harvest.test.py
+    - scripts/tsconfig.hook-harvest.json
+    - scripts/hook-experiments/sensitivity.mjs
+    - scripts/hook-experiments/sensitivity.py
+    - scripts/hook-experiments/sensitivity.test.mjs
+    - scripts/hook-experiments/tsconfig.sensitivity.json
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
