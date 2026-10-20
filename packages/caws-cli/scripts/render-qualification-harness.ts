@@ -362,6 +362,7 @@ export class RenderHarness {
     name: string;
     surface?: string;
     sessions?: string[];
+    stopExtensions?: readonly { handler: 'agent-heartbeat.sh'; before: 'agent-stop.sh' }[];
   }): Promise<ProjectFixture> {
     assert(/^[a-zA-Z0-9_-]+$/.test(options.name));
     const project = path.join(this.sandbox, options.name),
@@ -465,7 +466,9 @@ export class RenderHarness {
       >;
     const policy = {
       disabled: {},
-      extensions: {},
+      extensions: options.stopExtensions?.length
+        ? { stop: options.stopExtensions.map((extension) => ({ ...extension })) }
+        : {},
       handlers: { 'session-log.sh': '.caws/hooks/session-log.sh' },
       libraries: {},
     };
