@@ -208,7 +208,7 @@ _rh_truncate_complete_utf8() {
 
   local script out status
   script="$(_rh_pack_helper advisory_truncate.cjs)"
-  if [[ -n "$script" && -f "$script" && -x "$script" ]] && command -v node >/dev/null 2>&1; then
+  if [[ -n "$script" && -f "$script" && -r "$script" ]] && command -v node >/dev/null 2>&1; then
     out="$(printf '%s' "$text" | node "$script" "$max_bytes" 2>/dev/null)"
     status=$?
     if (( status == 0 )); then

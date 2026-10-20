@@ -7,7 +7,12 @@ import { truncateUtf8Prefix } from './utf8';
 
 const args = process.argv.slice(2);
 const rawLimit = args[0];
-if (args.length !== 1 || rawLimit === undefined || !/^[0-9]+$/.test(rawLimit)) {
+if (
+  args.length !== 1 ||
+  rawLimit === undefined ||
+  rawLimit.length === 0 ||
+  /[^0-9]/.test(rawLimit)
+) {
   process.exitCode = 3;
 } else {
   const limit = BigInt(rawLimit);

@@ -131,6 +131,11 @@ scenario('detached helper preserves binary output and the declared ASCII budget 
     ['１'],
     ['1.0'],
     ['1e3'],
+    [''],
+    ['1\n'],
+    ['1\r\n'],
+    ['1\u2028'],
+    ['1\u2029'],
   ]) {
     const result = detached.run(args, opaque);
     expect(result.status).toBe(3);
