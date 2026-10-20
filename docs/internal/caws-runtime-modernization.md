@@ -126,7 +126,7 @@ assignments, not authority or acceptance records.
 | Legacy writer exclusion | `render_legacy_fence`: cooperative writer bridge, native fence and legacy qualifier | Actual foreign daemon/inline fallback counterexample, then shared stable custody across cooperative legacy/native paths and generations; an absent lease or opt-in marker alone cannot establish adoption/drain |
 | Thirteen sessions / four repositories | `render_load`: actual workload and hostile oracle controls; depends on lifecycle/fence checks | Thirteen overlapping native clients, isolated semantic output, durable cross-project running overlap, owner-specific ordering, guard progress and bounded overload; sequential submissions or diagnostic logs alone cannot pass |
 | Rule-token developer utility | Separate owned lane `native-rule-tokens`, spec `CAWS-NATIVE-RULE-TOKENS-001`; parent retains integration and migration acceptance | Replace the Python counter and its CLI consumer with checked typed Node and a pinned offline encoder; retain actual differential outputs and the two declared zero-total/update-count repairs before retirement |
-| Additional peer | Chat `01a15984-840d-7301-a25a-7e681fd83b29`; proposed independent sensitivity tooling lane, plus read-only complete-engine contract investigation | Own only the reviewed tooling source/test/config/caller paths through a separate spec/lane; synthetic orchestration qualification does not retire R21 production tests. Shared engine/protocol changes require an agreed native/Node ownership contract |
+| Additional peer | Chat `01a15984-840d-7301-a25a-7e681fd83b29`; `native-sensitivity`, spec `CAWS-NATIVE-SENSITIVITY-001`, plus read-only complete-engine contract investigation | Own the five reviewed sensitivity source/test/config/caller paths; synthetic orchestration qualification does not retire R21 production tests. Shared engine/protocol changes require an agreed native/Node ownership contract |
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock. Shared-output
@@ -2765,6 +2765,28 @@ Additional bounded evidence and unresolved dependencies:
   already constructs fresh request state; an extracted entry function or idle
   daemon alone does not close the complete consumer/cleanup boundary. No shared
   engine edit or new runtime scenario follows from those source observations.
+
+- E140: Additional peer `01a15984-840d-7301-a25a-7e681fd83b29` binds the
+  independent `native-sensitivity` lane to `CAWS-NATIVE-SENSITIVITY-001` after
+  root verifies no parent scope match for its original script. Its five paths
+  cover the Python orchestrator, typed replacement/test/config and maintained
+  audit caller; Python production regression executables remain R21 obligations.
+  Its first synthetic check fails because the fixture detects a mutant substring
+  inside the unchanged control; execution stops before typing/differentials.
+  That fixture failure is not a production mutant kill. Root grounds the
+  peer's separate residency findings in the actual fixed descriptor admission,
+  WeakMap consumption/disposal and `detached:false` direct-child kill path.
+  Sequential reuse also needs fresh capabilities and settled descendants;
+  process-global descriptors cannot be renewed merely by sending fresh JSON.
+  An uncertain worker rejects new work while its native custodian retains
+  actual Child/custody; retirement must not discard unresolved ownership.
+  Parent also reads the hook-harvest candidate's actual Node18/22 report bytes,
+  original/reference command records, executable-link output, unchanged source
+  state and excluded-payload read observer. Source merge remains held on a
+  concrete inherited question: `git -C` status reads consumer configuration,
+  potentially executing a configured fsmonitor helper despite the report's
+  no-hook-execution claim. A private harmless sentinel probe is authorized;
+  no production execution or resolution follows from source suspicion alone.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
