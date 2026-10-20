@@ -1,0 +1,45 @@
+id: CAWS-NATIVE-REPLAY-001
+title: 'Replace offline replay runner and boundary oracle with typed build-selected execution'
+mode: refactor
+lifecycle_state: active
+worktree: native-replay
+created_at: '2026-10-20T17:15:26.898Z'
+updated_at: '2026-10-20T17:15:36.324Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Offline corpus replay and its boundary oracle'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/hook-experiments/replay-terminal-corpus.py'
+    - 'scripts/hook-experiments/test_replay_boundary.py'
+    - 'scripts/hook-experiments/replay-terminal-corpus.mjs'
+    - 'scripts/hook-experiments/replay-terminal-corpus.test.mjs'
+    - 'scripts/hook-experiments/replay-classifier-worker.mjs'
+    - 'scripts/hook-experiments/tsconfig.replay.json'
+  out: []
+invariants:
+  - 'Build identity and availability never confer authority; captured cwd and environment are data.'
+  - 'Selected code is operator-chosen reviewed code; capability controls are not an arbitrary JavaScript sandbox and observed admitted-build escapes must be repaired.'
+  - 'Reports contain hashes and offsets rather than raw corpus commands or reasons.'
+acceptance:
+  - id: A1
+    given: 'a captured command corpus and declared operator-chosen reviewed compiled classifier build'
+    when: 'the replay entry streams and samples it'
+    then: 'it consumes the selected actual classifier and retains full admitted source closure identity, deterministic census/sample semantics and redacted reports without executing captured commands'
+  - id: A2
+    given: 'admitted disposable classifier fixtures attempting initialization and invocation effects or failing to terminate'
+    when: 'the runner executes its supported reviewed-build profile'
+    then: 'actual direct effect controls produce explicit refusal without sentinels and deadline failures retain terminal child state and fail the replay'
+  - id: A3
+    given: 'the first-party replay runner and boundary tests'
+    when: 'typed replacements are checked against original semantics and deliberate negative controls'
+    then: 'both Python files are removed without hidden Python fallback and independent hostile oracles remain effective with explicit limits'
+observability:
+  - 'Redacted corpus digest, byte offsets, sample manifest, complete build file identities, classification/refusal rows and terminal child receipts'
+rollback:
+  - 'Revert the replacement source commit through ordinary governed Git; do not change machine installation.'
+non_functional: {}
+contracts: []

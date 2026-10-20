@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-20T17:09:47.283Z'
+updated_at: '2026-10-20T18:31:12.846Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -57,6 +57,19 @@ scope:
     - scripts/hook-experiments/sensitivity.py
     - scripts/hook-experiments/sensitivity.test.mjs
     - scripts/hook-experiments/tsconfig.sensitivity.json
+    - README.md
+    - packages/caws-cli/src/transcripts/harness-codex.ts
+    - packages/caws-cli/src/transcripts/harness-common.ts
+    - packages/caws-cli/src/transcripts/index.ts
+    - packages/caws-cli/src/transcripts/lossless-json.ts
+    - packages/caws-cli/src/transcripts/python-unicode.ts
+    - packages/caws-cli/src/transcripts/source-occurrence.ts
+    - packages/caws-cli/tests/transcripts/codex.test.ts
+    - packages/caws-cli/tests/transcripts/common.test.ts
+    - packages/caws-cli/tests/transcripts/lossless-json.test.ts
+    - packages/caws-cli/tests/transcripts/occurrence.test.ts
+    - packages/caws-cli/tests/transcripts/run.cjs
+    - packages/caws-cli/tests/transcripts/tsconfig.json
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
