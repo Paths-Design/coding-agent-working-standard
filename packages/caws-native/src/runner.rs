@@ -119,39 +119,137 @@ pub fn read_payload(deadline: Instant) -> Result<(Box<RawValue>, String), String
     read
 }
 
+#[derive(Default)]
+struct CleanupState {
+    completed: Option<std::process::ExitStatus>,
+}
+impl CleanupState {
+    fn pending(&self) -> bool {
+        self.completed.is_none()
+    }
+
+    fn finish_with<E>(
+        &mut self,
+        attempt: impl FnOnce() -> Result<std::process::ExitStatus, E>,
+    ) -> Result<std::process::ExitStatus, E> {
+        if let Some(status) = self.completed {
+            return Ok(status);
+        }
+        let status = attempt()?;
+        self.completed = Some(status);
+        Ok(status)
+    }
+
+    fn cleanup_with<E>(
+        &mut self,
+        attempt: impl FnOnce() -> Result<std::process::ExitStatus, E>,
+    ) -> Result<(), E> {
+        self.finish_with(attempt).map(|_| ())
+    }
+}
+
+#[derive(Debug)]
+enum CleanupFailure {
+    Stop(caws_native::owned_group::StopError),
+    Reap(io::Error),
+    Deadline(caws_native::owned_group::GroupStop),
+}
+impl std::fmt::Display for CleanupFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Stop(error) => write!(f, "engine cleanup: {error}"),
+            Self::Reap(error) => write!(f, "engine reap: {error}"),
+            Self::Deadline(stop) => write!(
+                f,
+                "owned engine stop returned {stop:?} but the child could not be reaped within the 500ms cleanup budget"
+            ),
+        }
+    }
+}
+
+trait CleanupOperations {
+    fn stop(
+        &mut self,
+    ) -> Result<caws_native::owned_group::GroupStop, caws_native::owned_group::StopError>;
+    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>>;
+    fn elapsed(&self) -> Duration;
+    fn pause(&mut self);
+}
+
+fn cleanup_attempt(
+    ops: &mut impl CleanupOperations,
+) -> Result<std::process::ExitStatus, CleanupFailure> {
+    // A refused stop must not reap the child that still pins group identity.
+    let stop = ops.stop().map_err(CleanupFailure::Stop)?;
+    let started = ops.elapsed();
+    loop {
+        if let Some(status) = ops.try_wait().map_err(CleanupFailure::Reap)? {
+            return Ok(status);
+        }
+        if ops.elapsed().saturating_sub(started) >= CLEANUP_BUDGET {
+            return Err(CleanupFailure::Deadline(stop));
+        }
+        ops.pause();
+    }
+}
+
+struct ChildCleanup<'a> {
+    child: &'a mut Child,
+    clock: Instant,
+}
+impl CleanupOperations for ChildCleanup<'_> {
+    fn stop(
+        &mut self,
+    ) -> Result<caws_native::owned_group::GroupStop, caws_native::owned_group::StopError> {
+        caws_native::owned_group::stop_before_reap(self.child)
+    }
+
+    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+        self.child.try_wait()
+    }
+
+    fn elapsed(&self) -> Duration {
+        self.clock.elapsed()
+    }
+
+    fn pause(&mut self) {
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
 struct OwnedGroup {
     child: Child,
-    cleanup_attempted: bool,
+    cleanup: CleanupState,
 }
 impl OwnedGroup {
-    fn finish(&mut self) -> Result<std::process::ExitStatus, String> {
-        self.cleanup_attempted = true;
-        // The direct child is deliberately NOT reaped before signaling: its PID
-        // pins the group identity, preventing a recycled PID from targeting others.
-        // SAFETY: pre_exec successfully made this child its own group leader.
-        unsafe {
-            libc::kill(-(self.child.id() as i32), libc::SIGKILL);
-        }
-        let deadline = Instant::now() + CLEANUP_BUDGET;
-        loop {
-            if let Some(status) = self
-                .child
-                .try_wait()
-                .map_err(|e| format!("engine reap: {e}"))?
-            {
-                return Ok(status);
-            }
-            if Instant::now() >= deadline {
-                return Err("owned engine was signaled but could not be reaped within the 500ms cleanup budget".into());
-            }
-            std::thread::sleep(Duration::from_millis(2));
-        }
+    fn finish(&mut self) -> Result<std::process::ExitStatus, CleanupFailure> {
+        self.cleanup
+            .finish_with(|| Self::finish_child(&mut self.child))
+    }
+
+    fn cleanup(&mut self) -> Result<(), CleanupFailure> {
+        self.cleanup
+            .cleanup_with(|| Self::finish_child(&mut self.child))
+    }
+
+    fn finish_child(child: &mut Child) -> Result<std::process::ExitStatus, CleanupFailure> {
+        cleanup_attempt(&mut ChildCleanup {
+            child,
+            clock: Instant::now(),
+        })
     }
 }
 impl Drop for OwnedGroup {
     fn drop(&mut self) {
-        if !self.cleanup_attempted {
-            let _ = self.finish();
+        if self.cleanup.pending() {
+            // One bounded best-effort attempt, including a retry after an earlier
+            // error. Failure remains unresolved; dropping this frontend cannot
+            // preserve Child ownership after exit. Durable custody needs a
+            // separate owner. Accepted stop plus leader reap is not proof that
+            // every nonleader has settled.
+            if let Err(error) = self.finish() {
+                eprintln!("owned engine cleanup unresolved during drop: {error}");
+            }
         }
     }
 }
@@ -231,7 +329,7 @@ impl Session {
         }
         let mut group = OwnedGroup {
             child,
-            cleanup_attempted: false,
+            cleanup: CleanupState::default(),
         };
         let stdin = group.child.stdin.take().ok_or("missing engine stdin")?;
         let stdout = group.child.stdout.take().ok_or("missing engine stdout")?;
@@ -488,7 +586,7 @@ impl Session {
             }
             self.pump(None, deadline)?;
         }
-        let status = self.group.finish()?;
+        let status = self.group.finish().map_err(|e| e.to_string())?;
         if !status.success() {
             return Err(format!(
                 "engine exited unsuccessfully after proposal ({status})"
@@ -498,10 +596,7 @@ impl Session {
     }
 
     pub fn cleanup(&mut self) -> Result<(), String> {
-        if !self.group.cleanup_attempted {
-            self.group.finish()?;
-        }
-        Ok(())
+        self.group.cleanup().map_err(|e| e.to_string())
     }
 }
 
@@ -614,7 +709,211 @@ pub fn write_diagnostic(stderr: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use caws_native::owned_group::{GroupObservation, GroupStop, StopError, StopStage};
+    use std::{collections::VecDeque, os::unix::process::ExitStatusExt, path::PathBuf};
+
+    // Pure operations at the same seam used by ChildCleanup. No Child, waitid,
+    // signal, real sleep, or privileged fault injection is involved.
+    struct CleanupFixture {
+        stops: VecDeque<Result<GroupStop, StopError>>,
+        waits: VecDeque<io::Result<Option<std::process::ExitStatus>>>,
+        elapsed: Duration,
+        calls: Vec<&'static str>,
+    }
+    impl CleanupFixture {
+        fn new(
+            stops: Vec<Result<GroupStop, StopError>>,
+            waits: Vec<io::Result<Option<std::process::ExitStatus>>>,
+        ) -> Self {
+            Self {
+                stops: stops.into(),
+                waits: waits.into(),
+                elapsed: Duration::ZERO,
+                calls: Vec::new(),
+            }
+        }
+    }
+    impl CleanupOperations for CleanupFixture {
+        fn stop(&mut self) -> Result<GroupStop, StopError> {
+            self.calls.push("stop");
+            self.stops.pop_front().expect("unexpected extra stop")
+        }
+
+        fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+            self.calls.push("wait");
+            self.waits.pop_front().unwrap_or(Ok(None))
+        }
+
+        fn elapsed(&self) -> Duration {
+            self.elapsed
+        }
+
+        fn pause(&mut self) {
+            self.calls.push("pause");
+            self.elapsed += Duration::from_millis(2);
+            assert!(
+                self.elapsed <= Duration::from_secs(1),
+                "injected cleanup exceeded its bound"
+            );
+        }
+    }
+
+    fn stop_refusal() -> StopError {
+        StopError {
+            stage: StopStage::ExitedGroup,
+            raw_errno: Some(libc::EIO),
+            signal_errno: Some(libc::EPERM),
+            observed_pid: Some(123),
+            observed_code: Some(libc::CLD_EXITED),
+            group: Some(GroupObservation {
+                reason: 4,
+                query_errno: libc::ENOMEM,
+                bytes: 64,
+                capacity: 64,
+                members: 2,
+                zombies: 1,
+                leaders: 1,
+            }),
+        }
+    }
+
+    #[test]
+    fn cleanup_state_failure_never_becomes_completion() {
+        let mut state = CleanupState::default();
+        let mut attempts = 0;
+        for _ in 0..2 {
+            let result: Result<(), String> = state.cleanup_with(|| {
+                attempts += 1;
+                Err("injected cleanup refusal".into())
+            });
+            assert_eq!(result, Err("injected cleanup refusal".into()));
+            assert!(
+                state.pending(),
+                "failed attempt must remain eligible for Drop cleanup"
+            );
+        }
+        assert_eq!(attempts, 2);
+    }
+
+    #[test]
+    fn cleanup_stop_refusal_preserves_all_fields_and_never_reaps() {
+        let expected = stop_refusal();
+        let mut ops =
+            CleanupFixture::new(vec![Err(expected.clone()), Err(expected.clone())], vec![]);
+        let mut state = CleanupState::default();
+        for _ in 0..2 {
+            let error = state.finish_with(|| cleanup_attempt(&mut ops)).unwrap_err();
+            assert_eq!(error.to_string(), format!("engine cleanup: {expected}"));
+            match error {
+                CleanupFailure::Stop(actual) => assert_eq!(actual, expected),
+                other => panic!("lost stop failure: {other:?}"),
+            }
+            assert!(state.pending());
+        }
+        assert_eq!(ops.calls, ["stop", "stop"]);
+        assert_eq!(ops.elapsed, Duration::ZERO);
+    }
+
+    #[test]
+    fn cleanup_reap_errors_stay_errors_on_retry() {
+        let mut ops = CleanupFixture::new(
+            vec![Ok(GroupStop::Signalled), Ok(GroupStop::Absent)],
+            vec![
+                Err(io::Error::from_raw_os_error(libc::EIO)),
+                Err(io::Error::from_raw_os_error(libc::ECHILD)),
+            ],
+        );
+        let mut state = CleanupState::default();
+        for expected in [libc::EIO, libc::ECHILD] {
+            match state
+                .cleanup_with(|| cleanup_attempt(&mut ops))
+                .unwrap_err()
+            {
+                CleanupFailure::Reap(error) => assert_eq!(error.raw_os_error(), Some(expected)),
+                other => panic!("lost reap failure: {other:?}"),
+            }
+            assert!(state.pending());
+        }
+        assert_eq!(ops.calls, ["stop", "wait", "stop", "wait"]);
+    }
+
+    #[test]
+    fn cleanup_retry_caches_actual_exit_without_second_stop_or_reap() {
+        let actual = std::process::ExitStatus::from_raw(42 << 8);
+        let mut ops = CleanupFixture::new(
+            vec![Ok(GroupStop::Signalled), Ok(GroupStop::Absent)],
+            vec![
+                Err(io::Error::from_raw_os_error(libc::EINTR)),
+                Ok(Some(actual)),
+            ],
+        );
+        let mut state = CleanupState::default();
+        assert!(matches!(
+            state.finish_with(|| cleanup_attempt(&mut ops)),
+            Err(CleanupFailure::Reap(_))
+        ));
+        assert!(state.pending());
+        let returned = state.finish_with(|| cleanup_attempt(&mut ops)).unwrap();
+        assert_eq!(returned, actual);
+        assert_eq!(returned.code(), Some(42));
+        assert!(!state.pending());
+        assert_eq!(
+            state.finish_with(|| cleanup_attempt(&mut ops)).unwrap(),
+            actual
+        );
+        state.cleanup_with(|| cleanup_attempt(&mut ops)).unwrap();
+        assert_eq!(ops.calls, ["stop", "wait", "stop", "wait"]);
+        assert!(ops.stops.is_empty());
+        assert!(ops.waits.is_empty());
+    }
+
+    #[test]
+    fn cleanup_timeout_remains_pending_at_unchanged_budget_then_can_retry() {
+        let mut ops = CleanupFixture::new(vec![Ok(GroupStop::Signalled)], vec![]);
+        let mut state = CleanupState::default();
+        assert!(matches!(
+            state.cleanup_with(|| cleanup_attempt(&mut ops)),
+            Err(CleanupFailure::Deadline(GroupStop::Signalled))
+        ));
+        assert!(state.pending());
+        assert_eq!(CLEANUP_BUDGET, Duration::from_millis(500));
+        assert_eq!(ops.elapsed, CLEANUP_BUDGET);
+        assert_eq!(ops.calls.iter().filter(|&&s| s == "stop").count(), 1);
+        assert_eq!(ops.calls.iter().filter(|&&s| s == "wait").count(), 251);
+        assert_eq!(ops.calls.iter().filter(|&&s| s == "pause").count(), 250);
+        ops.stops.push_back(Ok(GroupStop::Absent));
+        let actual = std::process::ExitStatus::from_raw(0);
+        ops.waits.push_back(Ok(Some(actual)));
+        assert_eq!(
+            state.finish_with(|| cleanup_attempt(&mut ops)).unwrap(),
+            actual
+        );
+        assert!(!state.pending());
+        assert_eq!(&ops.calls[ops.calls.len() - 2..], ["stop", "wait"]);
+    }
+
+    #[test]
+    fn cleanup_absent_and_exited_only_do_not_substitute_for_reap() {
+        let observation = GroupObservation {
+            members: 3,
+            zombies: 3,
+            leaders: 1,
+            bytes: 96,
+            capacity: 128,
+            ..GroupObservation::default()
+        };
+        for stop in [GroupStop::Absent, GroupStop::ExitedOnly { observation }] {
+            let mut ops = CleanupFixture::new(vec![Ok(stop)], vec![]);
+            let mut state = CleanupState::default();
+            match state.finish_with(|| cleanup_attempt(&mut ops)).unwrap_err() {
+                CleanupFailure::Deadline(actual) => assert_eq!(actual, stop),
+                other => panic!("stop observation lost: {other:?}"),
+            }
+            assert!(state.pending());
+            assert_eq!(ops.elapsed, CLEANUP_BUDGET);
+            assert!(ops.calls.contains(&"wait"));
+        }
+    }
 
     fn deadline() -> Instant {
         Instant::now() + Duration::from_secs(10)

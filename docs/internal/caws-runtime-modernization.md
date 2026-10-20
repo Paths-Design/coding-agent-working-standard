@@ -2682,6 +2682,28 @@ Additional bounded evidence and unresolved dependencies:
   termination, missing-session identity, complete group cleanup, installed
   harness execution or full R32 parity. R32 remains blocking.
 
+- E136: Production runner cleanup records actual child reap status instead of
+  marking an attempt complete before stopping or reaping. The mechanically
+  extracted original state reproduces false success on its second call after
+  `injected cleanup refusal`; the exact regression exits101. Both failures remain
+  errors with the repaired state and that exact check exits0. Six pure controls
+  exercise stop refusal without reap, preserved stop/io error fields, retry,
+  cached nonzero exit42 without another stop/reap, unchanged virtual500ms timeout
+  and pending Absent/ExitedOnly observations. The actual Child adapter calls
+  `stop_before_reap(&Child)`; successful status alone is cached. Drop contains one
+  bounded best-effort pending attempt and reports unresolved errors. Raw commands,
+  stdout/stderr and exits live at
+  `prefix-cohort-2026-10-20/runner-cleanup-{baseline,fixed-exact,fixed-suite}.json`
+  beneath the native qualification root; `runner-cleanup-baseline-source.rs`
+  retains the tested original state. Fixed source hash is
+  `ed03f817b929f8425e5de3a916232102a2b5e984bc1d1a42ecd4b0fda1e7ddf5`.
+  Pure injected operations exercise the actual state/attempt seam, without
+  creating children or sending signals. They do not demonstrate kernel refusal,
+  real Drop retry, complete nonleader settlement, hard syscall deadlines or
+  custody after frontend exit. A durable surviving owner and correlated engine
+  cleanup receipt remain required before R32 effects or throughput scenarios;
+  accepted SIGKILL plus leader reap does not establish full group cleanup.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
