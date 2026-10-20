@@ -66,8 +66,12 @@ evidence:
     exit_code: 0
     commit_sha: "9b2f05a91d528882736c64ce1858f21768415916"
   - criterion_id: A2
-    status: unchecked
-    recorded_at: "2026-10-20T14:58:15.662Z"
+    status: pass
+    evidence_ref: "Exact candidate9b2f05a91d528882736c64ce1858f21768415916. Inspected commands/055-parser-focused command/stdout/stderr under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest: exit0,30 checks including unresolved literals, byte digests, exclusion/symlink inventory boundaries, observed byte/membership/exclusion/HEAD/status refusal and nonauthority limits. Retained focused-parser-repaired/*/payload-read-observation.json observes Node inventory reads; Git status may read excluded TRACKED payloads, proven reachable by git-policy-combined-node18 and node22 process-filter positive control on excluded .caws/hooks/logs path. Differential056/057 retain Unicode/BOM/invalid-body/CRLF cases,19 each. Actual invalid-byte filename creation refuses EILSEQ on this Darwin host for Node and Python; decoder tested, traversal on such filename unverified. Sequential observations do not establish atomicity, ABA/inode/mode or symlink-target race exclusion; test-only payload observer does not instrument all Git/OS reads. CLI verify checks commit identity only; no recorded command rerun."
+    recorded_at: "2026-10-20T15:31:15.979Z"
+    command: "env CAWS_HARVEST_TEST_ARTIFACTS=/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest/focused-parser-repaired /Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node --test scripts/hook-harvest.test.mjs"
+    exit_code: 0
+    commit_sha: "9b2f05a91d528882736c64ce1858f21768415916"
   - criterion_id: A3
     status: fail
     evidence_ref: "Actual argv-only probe047 observes six exit disagreements in14 cases at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest/parser-order-node22/{identity.json,observations.json,cases/*/{python,node}/{command.json,stdout.bin,stderr.bin}}. Examples: --wat --help Python0/Node2; --help --c Python2/Node0; -hh Python0/Node2. Driver0 records counterexamples, not correct implementation. Workspace/source unchanged, no Git/services effects. CandidateSHA8c2ed5ffad48a7ccf5271e269d929a31ded09362bc94e457b257e296fa4d5e00 and installed argparseSHAe878677e158d0bc0fb5119e0df74d94236f3653777bc9f2ea3fee49c167fe001 retained. This refutes A3 diagnostic/help compatibility beyond earlier finite fixtures; prior pass stays in event history. CLI --verify checks commit identity only, never reruns recorded command."
