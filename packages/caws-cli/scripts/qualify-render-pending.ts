@@ -111,9 +111,8 @@ function requestId(fixture: ProjectFixture, id: string): string {
   const selection = row(row(row(fixture.image).manifest).selection);
   return protocol.renderRequestId(id, Number(selection.selectedIndex));
 }
-function operation(h: RenderHarness, id: string): Data | undefined {
-  return h
-    .operations()
+function operation(h: RenderHarness, id: string, observations = h.operations()): Data | undefined {
+  return observations
     .map((value) => {
       const body = row(value.body);
       assert.equal(
@@ -354,23 +353,30 @@ class OwnerPeer {
     assert(this.ended, 'close without required reply EOF');
     assert.equal(this.pending.length, 0, 'trailing reply fragment');
     assert.equal(this.frames.length, 1, 'owner did not return one complete reply');
-    const reply = client.decodeServiceBridgeReply(this.frames.shift()!, this.grant, this.request);
-    const outcome = row(reply.outcome);
-    assert.equal(outcome.execution, 'returned');
-    const result = row(outcome.result);
-    assert.equal(result.kind, 'daemon_response');
+    const frame = this.frames.shift()!;
+    put(path.join(this.directory, 'reply.bin'), frame);
+    const reply = client.decodeServiceBridgeReply(frame, this.grant, this.request);
+    writeJson(path.join(this.directory, 'reply.json'), reply);
+    const observations = this.h.operations();
+    writeJson(path.join(this.directory, 'operation-observations.json'), observations);
+    const id = this.request.requestId;
+    const observed = observations.find((value) => row(row(value.body).identity).requestId === id);
+    writeJson(path.join(this.directory, 'operation.json'), observed?.body ?? null);
+    const op = operation(this.h, id, observations);
+    const outcome = reply.outcome.outcome;
+    assert(outcome.admission === 'accepted', 'owner rejected renderer admission');
+    assert(outcome.execution === 'returned', 'owner did not return a completed renderer effect');
+    const result = outcome.result;
+    assert(result.kind === 'daemon_response', 'owner did not return a daemon response');
     assert.equal(result.response, 'ok');
     assert.equal(result.served, served);
     assert.equal(result.cached, false);
-    const op = operation(this.h, this.request.requestId);
     assert(op, 'reply lacks retained operation');
     assert.equal(row(op.outcome).execution, 'returned');
     assert.deepEqual(
       JSON.parse(Buffer.from(String(op.verifiedRequestBase64), 'base64').toString('utf8')),
       this.request
     );
-    writeJson(path.join(this.directory, 'reply.json'), reply);
-    writeJson(path.join(this.directory, 'operation.json'), op);
     writeJson(path.join(this.directory, 'turn.json'), assertTurn(this.session, this.checkout));
     return op;
   }
