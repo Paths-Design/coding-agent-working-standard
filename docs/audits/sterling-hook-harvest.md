@@ -47,6 +47,13 @@ profile or operating system. Help and exception wording follow the host
 language; report values, literal declaration semantics and failure exit classes
 carry the comparison contract.
 
+CLI compatibility follows the qualified installed `argparse` profile. Option
+classification precedes action execution, so an ambiguous abbreviation refuses
+even after an earlier help token. Unknown operands are deferred until actions
+finish; help can exit before that final validation. Short-option clusters are
+validated before their pending help action executes. These ordering rules are
+distinct from treating every occurrence of help as an unconditional success.
+
 Git 2.45 or later is required. The inventory disables fsmonitor, ordinary Git
 hooks, pagers, lazy object fetching, optional index writes and trace
 destinations for every Git subprocess, including admission queries. It preserves

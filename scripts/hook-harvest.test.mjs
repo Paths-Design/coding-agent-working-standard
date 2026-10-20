@@ -274,6 +274,52 @@ function fixtureCommand(base, commands, executable, argv) {
   put(path.join(base, 'commands.json'), JSON.stringify(commands, null, 2));
   return child;
 }
+
+test('CLI preserves observed argparse classification, cluster validation and deferred-extra ordering', t => {
+  const base = fixture(t);
+  /** @type {Record<string,unknown>[]} */ const commands = [];
+  const script = fileURLToPath(new URL('./hook-harvest.mjs', import.meta.url));
+  const cases = [
+    { name: 'unknown-before-help', argv: ['--wat', '--help'], exit: 0, category: 'help' },
+    { name: 'clustered-help', argv: ['-hh'], exit: 0, category: 'help' },
+    { name: 'missing-known-operand-before-help', argv: ['--consumer-root', '--help'], exit: 2, category: 'arity' },
+    { name: 'help-with-unknown-cluster-tail', argv: ['-hx', '--help'], exit: 0, category: 'help' },
+    { name: 'help-before-unknown', argv: ['--help', '--wat'], exit: 0, category: 'help' },
+    { name: 'positional-before-help', argv: ['operand', '--help'], exit: 0, category: 'help' },
+    { name: 'help-before-ambiguity', argv: ['--help', '--c'], exit: 2, category: 'ambiguity' },
+    { name: 'help-before-later-arity-error', argv: ['--help', '--consumer-root'], exit: 0, category: 'help' },
+    { name: 'help-cluster-unknown-tail-alone', argv: ['-hx'], exit: 0, category: 'help' },
+    { name: 'help-explicit-argument', argv: ['-h=wat', '--help'], exit: 2, category: 'explicit' },
+    { name: 'clustered-help-explicit-argument', argv: ['-hh=wat', '--help'], exit: 2, category: 'explicit' },
+    { name: 'separator-before-help', argv: ['--', '--help'], exit: 2, category: 'required' },
+    { name: 'help-before-separator', argv: ['--help', '--'], exit: 0, category: 'help' },
+    { name: 'valid-operands-before-unknown', argv: ['--consumer-root', base, '--caws-root', base, '--wat'], exit: 2, category: 'unknown' },
+  ];
+  // This empty owned base has no hook directories: parsing must finish first.
+  const observations = cases.map(entry => {
+    const child = fixtureCommand(base, commands, process.execPath, [script, ...entry.argv]);
+    return { name: entry.name, argv: entry.argv, expected: { exit_code: entry.exit, diagnostic_category: entry.category }, actual: { exit_code: child.status, signal: child.signal, error: child.error?.message ?? null, stdout: child.stdout ?? '', stderr: child.stderr ?? '' } };
+  });
+  put(path.join(base, 'parser-order-observation.json'), JSON.stringify({ oracle_profile: { python_version: '3.11.13', argparse_sha256: 'e878677e158d0bc0fb5119e0df74d94236f3653777bc9f2ea3fee49c167fe001', retained_reference: 'parser-order-node22/observations.json' }, candidate: { script, sha256: sha256(readFileSync(script)), node: process.version }, owned_base: base, observations, commands }, null, 2));
+  /** @type {Record<string,RegExp>} */
+  const diagnostics = { arity: /expected (?:one argument|a path)|requires? (?:an? |one )?argument/i, ambiguity: /ambiguous/i, explicit: /explicit argument|does not accept (?:an? )?argument|unexpected argument/i, required: /required/i, unknown: /unrecognized|unknown/i };
+  for (const row of observations) {
+    const detail = `${row.name}: ${JSON.stringify(row)}`;
+    assert.equal(row.actual.error, null, detail); assert.equal(row.actual.signal, null, detail);
+    assert.equal(row.actual.exit_code, row.expected.exit_code, detail);
+    assert.doesNotMatch(row.actual.stderr, /source.*real directory/i, detail);
+    if (row.expected.diagnostic_category === 'help') {
+      assert.match(row.actual.stdout, /^usage:/im, detail); assert.match(row.actual.stdout, /--consumer-root/, detail); assert.match(row.actual.stdout, /--caws-root/, detail); assert.equal(row.actual.stderr, '', detail);
+    } else {
+      assert.equal(row.actual.stdout, '', detail); assert.match(row.actual.stderr, /\S/, detail);
+      const pattern = diagnostics[row.expected.diagnostic_category]; assert.ok(pattern, detail); assert.match(row.actual.stderr, pattern, detail);
+      if (['arity', 'required'].includes(row.expected.diagnostic_category)) assert.match(row.actual.stderr, /--consumer-root/, detail);
+      if (row.expected.diagnostic_category === 'ambiguity') assert.match(row.actual.stderr, /--c\b/, detail);
+      if (row.expected.diagnostic_category === 'explicit') assert.match(row.actual.stderr, /(?:-h|--help)/, detail);
+      if (row.expected.diagnostic_category === 'unknown') assert.match(row.actual.stderr, /--wat/, detail);
+    }
+  }
+});
 /** @param {string} base @param {Record<string,unknown>[]} commands @param {string} repo @param {string[]} argv */
 function fixtureGit(base, commands, repo, argv) {
   return fixtureCommand(base, commands, 'git', ['--no-pager', '--no-optional-locks', '-C', repo, ...argv]);

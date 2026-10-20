@@ -335,25 +335,78 @@ function sortKeys(value) {
   if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).sort(([a], [b]) => codepointOrder(a, b)).map(([key, item]) => [key, sortKeys(item)]));
   return value;
 }
-/** @param {string[]} args */
-export function main(args = process.argv.slice(2)) {
-  let consumer;
-  let caws = path.dirname(path.dirname(realpathSync(fileURLToPath(import.meta.url))));
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--help' || arg === '-h') { process.stdout.write('Usage: hook-harvest.mjs --consumer-root ROOT [--caws-root ROOT]\nRead-only hook inventory; no CAWS hook execution or authority decision.\n'); return 0; }
-    const match = /^(--[^=]+)(?:=(.*))?$/s.exec(arg ?? '');
-    const choices = match ? LONG_OPTIONS.filter(option => option.startsWith(match[1] ?? '')) : [];
-    if (!match || choices.length !== 1) throw new UsageError(`unrecognized or ambiguous argument: ${arg}`);
-    if (choices[0] === '--help') {
-      if (match[2] !== undefined) throw new UsageError('--help does not accept an argument');
-      process.stdout.write('Usage: hook-harvest.mjs --consumer-root ROOT [--caws-root ROOT]\nRead-only hook inventory; no CAWS hook execution or authority decision.\n'); return 0;
+/** @typedef {{kind:'argument'|'separator',raw:string}|{kind:'option',raw:string,option:string|null,explicit:string|undefined,equals:boolean}} ArgumentToken */
+/** Classify the complete sequence before actions; ambiguity is immediate and extras are deferred.
+ * @param {string[]} args @returns {ArgumentToken[]} */
+function classifyArguments(args) {
+  let terminated = false;
+  return args.map(raw => {
+    if (terminated) return { kind: 'argument', raw };
+    if (raw === '--') { terminated = true; return { kind: 'separator', raw }; }
+    if (!isOptionToken(raw)) return { kind: 'argument', raw };
+    const separator = raw.indexOf('=');
+    const prefix = separator < 0 ? raw : raw.slice(0, separator);
+    const explicit = separator < 0 ? undefined : raw.slice(separator + 1);
+    if (prefix === '-h' || LONG_OPTIONS.includes(prefix)) return { kind: 'option', raw, option: prefix, explicit, equals: separator >= 0 };
+    const choices = raw.startsWith('--') ? LONG_OPTIONS.filter(option => option.startsWith(prefix)) : [];
+    if (choices.length > 1) throw new UsageError(`unrecognized or ambiguous argument: ${raw}`);
+    if (choices.length === 1) return { kind: 'option', raw, option: choices[0] ?? null, explicit, equals: separator >= 0 };
+    if (raw.startsWith('-h')) return { kind: 'option', raw, option: '-h', explicit: raw.slice(2), equals: false };
+    return { kind: 'option', raw, option: null, explicit: undefined, equals: false };
+  });
+}
+/** Consume actions in order, retaining argparse's required-before-extras check.
+ * @param {string[]} args
+ * @returns {{help:true}|{help:false,consumer:string,caws:string|undefined}} */
+function parseArguments(args) {
+  const tokens = classifyArguments(args);
+  /** @type {string[]} */ const extras = [];
+  /** @type {string|undefined} */ let consumer;
+  /** @type {string|undefined} */ let caws;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (!token) continue;
+    if (token.kind !== 'option' || token.option === null) { extras.push(token.raw); continue; }
+    if (token.option === '--help') {
+      if (token.explicit !== undefined) throw new UsageError('ignored explicit argument for --help');
+      return { help: true };
     }
-    const value = match[2] ?? args[++i];
-    if (value === undefined || (match[2] === undefined && isOptionToken(value))) throw new UsageError(`expected a path after ${match[1]}`);
-    if (choices[0] === '--consumer-root') consumer = value; else caws = value;
+    if (token.option === '-h') {
+      // Validate the whole registered cluster before dispatching pending help.
+      // An unknown suffix becomes an extra; '=' and prefix tails refuse first.
+      let tail = token.explicit, equals = token.equals;
+      while (tail !== undefined) {
+        if (equals || tail === '' || tail.startsWith('-')) throw new UsageError('ignored explicit argument for -h');
+        if (!tail.startsWith('h')) { extras.push(`-${tail}`); break; }
+        tail = tail.slice(1);
+        if (tail === '') tail = undefined;
+        else if (tail.startsWith('=')) { equals = true; tail = tail.slice(1); }
+        else equals = false;
+      }
+      return { help: true };
+    }
+    let value = token.explicit;
+    if (value === undefined) {
+      const next = tokens[i + 1];
+      if (!next || next.kind !== 'argument') throw new UsageError(`expected a path after ${token.raw}`);
+      value = next.raw; i++;
+    }
+    if (token.option === '--consumer-root') consumer = value;
+    else caws = value;
   }
   if (consumer === undefined) throw new UsageError('--consumer-root is required');
+  if (extras.length) throw new UsageError(`unrecognized or ambiguous argument: ${extras[0]}`);
+  return { help: false, consumer, caws };
+}
+/** @param {string[]} args */
+export function main(args = process.argv.slice(2)) {
+  const parsed = parseArguments(args);
+  if (parsed.help) {
+    process.stdout.write('Usage: hook-harvest.mjs --consumer-root ROOT [--caws-root ROOT]\nRead-only hook inventory; no CAWS hook execution or authority decision.\n');
+    return 0;
+  }
+  const consumer = parsed.consumer;
+  const caws = parsed.caws ?? path.dirname(path.dirname(realpathSync(fileURLToPath(import.meta.url))));
   const output = JSON.stringify(sortKeys(harvest(consumer, caws)), null, 2).replace(/[\u007f-\uffff]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
   process.stdout.write(`${output}\n`); return 0;
 }
