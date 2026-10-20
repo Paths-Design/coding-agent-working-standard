@@ -145,7 +145,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | substitution precedence repaired; typed execution, selected-shell state and native handoff exercised, E63/E65 | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | selected-stock root integration and public-control repair exercised, E119 | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
-| R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | typed composer consumed; independent stock Bash switch qualified; parent integration pending | Separate candidate `6d44dc9f` retains Python for selected custom compatibility. E110 distinguishes private installed Bash evidence from sealed native image, harness and retirement obligations |
+| R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | stock Bash switch integrated; parent package/Bash and image components exercised, E124 | Root merge `a92ce197` preserves the parent's reviewed library change. Optional tools and fixed CJS prefix proof are integrated at `184f4cc7`; actual sealed four/five-handler qualification remains pending. Selected custom Python compatibility and broader retirement remain separate |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence | TS transcript store | unreplaced | Atomic replacement, identity, replay custody, malformed and concurrent inputs |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization | TS normalization interfaces/common implementation | unreplaced | Lossless occurrence/provenance and explicit unavailable fields |
 | R11 | `shared/lib/harness_claude.py` | TS Claude adapter | unreplaced | Harness-specific transcript fixtures and installed render evidence |
@@ -2325,6 +2325,69 @@ Additional bounded evidence and unresolved dependencies:
   before residency or fair-capacity claims. This is a verified source dependency
   and proposed implementation contract, not executed residency evidence.
 
+- E123: Test-only `963279f9` repairs the witnessed holder-ready publication
+  race. The fixture producer exposes a private staging inode containing only
+  `{`, waits for an explicit bounded handshake, then completes/closes and
+  atomically renames it. The consumer preserves its first final read before
+  parsing, without tolerating malformed public JSON or extending its5s window.
+  `holder-atomic-focused.log` exits0; retained fixture
+  `holder-atomic-focused-fixtures/renderer-backend-44599-0` records final ENOENT
+  while staging is incomplete, then complete JSON on the same inode752825676.
+  The original two observation faults, two signal faults, quarantine, custody
+  through reap, zero pre-release reaps, one final reap and both EOF remain
+  exercised. Child44600/holder44632 are fixture-created; owned cleanup settles
+  before custody releases. The test also retains its actual worker JoinHandle
+  and control socket across unwind. Successful execution consumes that join
+  before Drop, so these artifacts do not exercise Drop's retained-join branch;
+  intentional-unwind qualification remains separate. No historical failed
+  ready-file bytes are reconstructed from the later complete file.
+  The full replay at `184f4cc7` exits0:198 library,40 binary,31 invocation and
+  3 example checks. `holder-atomic-all-native.log` SHA-256 is
+  `69829c863c7e656e2b32af2df435d590c9d52a91eec9cdbca1bc3ff1e40b8001`.
+  Its retained EOF child74699 is verified/reaped with both EOF and first
+  post-join flock0; independent writer probes retain-1/errno35 on the same
+  inode752839247 before release and during alternate-home readmission. Clippy
+  all-targets with denied warnings exits0. These are observations on this
+  candidate; E116/E117/E121's original unexplained lock failures remain open.
+
+- E124: Ordinary merge `a92ce197` integrates R08's `6d44dc9f`. The generated
+  asset check exits0 without regeneration. Shared manifest version100 and
+  combined fingerprint `d83adae9f045c6032cebcf41604ac5f6093f10a88322468a25f5178574b18109`
+  cover75 actual files, preserving parent agent-surface `9fb104ea`; copying the
+  component fingerprint would describe different bytes. A scope refusal blocks
+  the first fingerprint edit; the CLI adds the exact missing path, and all15
+  merge paths subsequently admit. Integration `184f4cc7` keeps30 mandatory
+  tools and permits only explicitly pinned optional cmp/iconv, plus the existing
+  owner-configured native helper. Declared optional failures retain full path,
+  hash, executable, custody and reconstruction checks. Missing optional tools
+  do not become ambient fallback. The fixed reviewed prefix has43 source hashes:
+  CJS `73e7e891` and stock runner `8f9fff88` participate explicitly; unreviewed
+  or missing CJS makes a valid image serial, while advertised tampering refuses
+  admission. Optional tool presence does not itself confer concurrency.
+  Build exits0,34 native image controls pass, and five focused Jest suites
+  pass152 checks with the actual reviewed foreign source fixture enabled.
+  The initial asset-suite fixtures were deleted after success; a distinct
+  two-suite10-check replay enables existing retention rather than claiming
+  deleted bytes remain inspectable. Its fixtures live under
+  `r08-parent-runtime-assets-2026-10-20/` with executed-to-retained mappings.
+  Actual private installed Bash receipt `caws-runtime-assets-giFjzm/receipts/0005`
+  exits0 and retains245 stdout bytes/SHA `aa5867880cbdb656beb8743cb46664ebf9cbb14037cb79efb51ce5334e381b19`:
+  29 emoji/116 prefix bytes,1484 bytes elided and a later advisory. Receipt0006
+  exits2 with the complete1544-byte protective JSON/SHA
+  `57f02545cd3d585cb23691810f9bf9688debc16bc354b6ac3079d4a887221dc0`.
+  Selected custom-runner Python compatibility remains exercised separately.
+  Snapshot-installer tests pass2 controls; they use synthetic private installs,
+  not this machine's selected runtime. Doctor exits0 with inherited0E/3W/4I;
+  gates exit0 over110 committed/staged paths at `184f4cc7`, excluding the dirty
+  qualifier work. No acceptance is recorded from those gates or peer feedback.
+  A release build exits0 with native SHA
+  `bceb6d6f5e0305c3350e6bb750a250448708651d85bce11f1cf09be2e942d9e9`.
+  Actual sealed consumer, required-goal refusal, optional-tool absence branches,
+  retained old full-image admission, final-binary lifecycle/legacy replay,
+  installed harnesses, Python retirement and13-session fairness remain owed.
+  Independent inspection finds no concrete counterexample within this source
+  slice; direct checks support only the boundaries described here.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2430,10 +2493,13 @@ request ownership, fresh authority and cancellation boundaries before claiming
 residency or integrating scheduler capacity; preserve the caller's PID safety
 contract and sibling isolation. R06/R08 source integration and sealed-image
 contracts remain owed. E119 integrates R06 and repairs its demonstrated public
-NO_ASK regression; R08 remains pending. E120 isolates the intentional fork;
+NO_ASK regression; E124 integrates R08 components, with actual sealed consumer
+qualification pending. E120 isolates the intentional fork;
 E121 retains further full-suite failures and stronger diagnostics without
 attributing their causes. Repair the witnessed partial holder-publication race
-and inspect actual cleanup before the next native suite replay. E122 forbids a
+and inspect actual cleanup before the next native suite replay. E123 retains
+atomic-publication controls and a full pass; qualify the separate unwind branch
+before claiming panic cleanup. E122 forbids a
 pre-Node queue which skips required latch/Stop semantics. Keep the original
 1000-turn hot transcript, counts,30s request budgets and later hot Running
 witness requirements. Correct output and source-level capacity are not fairness
