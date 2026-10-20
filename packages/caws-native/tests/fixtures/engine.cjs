@@ -4,8 +4,14 @@ const mode = process.env.CAWS_NATIVE_TEST_MODE || 'exact';
 const record = (name, value) => {
   if (process.env[name]) fs.appendFileSync(process.env[name], `${JSON.stringify(value)}\n`);
 };
+// Readers treat the final path as readiness, so publish only complete PID bytes.
+const publishPid = (file, pid) => {
+  const pending = `${file}.${process.pid}.pending`;
+  fs.writeFileSync(pending, String(pid), { flag: 'wx', mode: 0o600 });
+  fs.renameSync(pending, file);
+};
 if (process.env.CAWS_NATIVE_TEST_ENGINE_PID)
-  fs.writeFileSync(process.env.CAWS_NATIVE_TEST_ENGINE_PID, String(process.pid));
+  publishPid(process.env.CAWS_NATIVE_TEST_ENGINE_PID, process.pid);
 let request;
 let ready;
 let text = '';
@@ -83,7 +89,7 @@ function propose() {
   }
   if (mode === 'pipe-holder' || mode === 'pipe-holder-wait') {
     const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'inherit' });
-    fs.writeFileSync(process.env.CAWS_NATIVE_TEST_CHILD, String(child.pid));
+    publishPid(process.env.CAWS_NATIVE_TEST_CHILD, child.pid);
     if (mode === 'pipe-holder-wait') return setInterval(() => {}, 1000);
   }
   const proposal = {

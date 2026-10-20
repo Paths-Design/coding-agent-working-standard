@@ -602,7 +602,8 @@ import { isAdapterCoveredSurface } from './types';
 // and the kernel turn-log.v2 producer contract adopts the same unified
 // shape, so the shared pack template tree changed again after v96.
 // v98: retain per-invocation handler progress before subsequent handlers run.
-export const SHARED_PACK_VERSION = 98;
+// Cooperative renderer entrypoints include the native writer-custody bridge.
+export const SHARED_PACK_VERSION = 99;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -696,6 +697,8 @@ export const SHARED_PACK: HookPackV1 = {
       '.caws/leases/',
       '.caws/sessions/<session-id>/',
       '.caws/sessions/.caller-session.json',
+      '.caws/.render-writer-custody/',
+      '.caws/.render-writer-provisioned',
     ],
   },
   lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
@@ -838,6 +841,12 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/session-cache.sh',
       sourcePath: 'lib/session-cache.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/session-render-writer.sh',
+      sourcePath: 'lib/session-render-writer.sh',
       executable: false,
       managed: true,
     },

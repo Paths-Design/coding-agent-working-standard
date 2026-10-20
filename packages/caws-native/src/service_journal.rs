@@ -193,9 +193,24 @@ pub enum OkResponse {
     Value,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NotStartedStage {
+    Preparation,
+    Spawn,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ReturnedResult {
+    /// Internal owner result only, never a public renderer response. The owner
+    /// observed that no execution child/program was started at this stage.
+    #[serde(rename = "not_started")]
+    NotStarted {
+        stage: NotStartedStage,
+        #[serde(deserialize_with = "required_nullable")]
+        errno: Option<i32>,
+    },
     #[serde(rename = "process_exit")]
     ProcessExit {
         #[serde(deserialize_with = "required_nullable")]
@@ -215,6 +230,7 @@ pub enum ReturnedResult {
 impl ReturnedResult {
     fn valid(&self) -> bool {
         match self {
+            Self::NotStarted { errno, .. } => errno.is_none_or(|value| (1..=4095).contains(&value)),
             Self::ProcessExit { code, signal } => {
                 code.is_some() != signal.is_some()
                     && signal.is_none_or(|signal| (1..=127).contains(&signal))

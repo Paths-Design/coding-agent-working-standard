@@ -101,14 +101,20 @@ fn configuration() -> Result<WorkerConfiguration> {
 
 /// The only accepted invocation is `renderer-worker`. This entry is not a
 /// project-authority API: production admission belongs to the native owner.
-/// FD3=private control socket, FD4=readonly configuration, FD6=custody lifetime.
+/// FD3=private control socket, FD4=readonly configuration, FD6=machine custody,
+/// FD7=project writer custody inherited by the actual backend.
 pub fn run() -> std::result::Result<WorkerExit, Failure> {
     let config = configuration()?;
     descriptor(3, libc::S_IFSOCK, libc::O_RDWR)?;
     let custody = descriptor(6, libc::S_IFREG, libc::O_RDWR)?;
+    let writer = descriptor(7, libc::S_IFREG, libc::O_RDWR)?;
     if custody.uid() != unsafe { libc::geteuid() }
         || custody.mode() & 0o7777 != 0o600
         || custody.nlink() != 1
+        || writer.uid() != unsafe { libc::geteuid() }
+        || writer.mode() & 0o7777 != 0o600
+        || writer.nlink() != 1
+        || (writer.dev(), writer.ino()) == (custody.dev(), custody.ino())
     {
         return fail(FailureCode::InvalidSpec);
     }
@@ -123,6 +129,13 @@ pub fn run() -> std::result::Result<WorkerExit, Failure> {
     // SAFETY: the private CLI entry owns these distinct inherited descriptors.
     let control = unsafe { UnixStream::from_raw_fd(3) };
     let custody = unsafe { OwnedFd::from_raw_fd(6) };
+    let writer = unsafe { OwnedFd::from_raw_fd(7) };
     unsafe { libc::close(4) };
-    Ok(run_worker(config.backend, control, config.limits, custody))
+    Ok(run_worker_with_writer(
+        config.backend,
+        control,
+        config.limits,
+        custody,
+        writer,
+    ))
 }

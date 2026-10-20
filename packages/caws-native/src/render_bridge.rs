@@ -431,10 +431,10 @@ pub fn connect(preparation: Preparation, deadline: Instant) -> Result<Admission,
     {
         return Err("owner prepared grant differs from native issued expectation".into());
     }
-    let image = service_image::validate_image(root, &preparation.context, deadline)
-        .map_err(|e| e.to_string())?;
-    image
-        .revalidate(&preparation.context, deadline)
+    // Independently verify the full source/tool closure and image custody here.
+    // No work separates this admission from the deadline check; the owner
+    // revalidates again at dispatch, including after any queue wait.
+    service_image::validate_image(root, &preparation.context, deadline)
         .map_err(|e| e.to_string())?;
     check(deadline)?;
     Ok(Admission {

@@ -317,6 +317,304 @@ fn bridge_frame_missing_eof_expires_and_exact_lf_eof_succeeds_with_original_boun
 }
 
 #[test]
+fn response_channel_accepts_request_half_close_but_observes_full_disconnect() {
+    let (owner, caller) = UnixStream::pair().unwrap();
+    response_channel(&owner).unwrap();
+    caller.shutdown(std::net::Shutdown::Write).unwrap();
+    // EOF finishes the request and must not withdraw its response reader.
+    response_channel(&owner).unwrap();
+    drop(caller);
+    assert_eq!(
+        response_channel(&owner).unwrap_err(),
+        "renderer caller response channel closed"
+    );
+}
+
+#[test]
+fn worker_frame_wait_observes_caller_disconnect_without_probe_or_worker_eof() {
+    let (mut control, mut worker) = UnixStream::pair().unwrap();
+    control.set_nonblocking(true).unwrap();
+    worker.set_nonblocking(true).unwrap();
+    let (caller_watch, caller) = UnixStream::pair().unwrap();
+    caller.shutdown(std::net::Shutdown::Write).unwrap();
+    let (started_tx, started_rx) = mpsc::channel();
+    let join = thread::spawn(move || {
+        let mut first = true;
+        frame_while(&mut control, &mut Vec::new(), 128, expires(), || {
+            response_channel(&caller_watch)?;
+            if first {
+                first = false;
+                started_tx.send(()).unwrap();
+            }
+            Ok(())
+        })
+    });
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    drop(caller);
+    let result = join.join().unwrap();
+    assert_eq!(
+        result.unwrap_err(),
+        "renderer caller response channel closed"
+    );
+    // The watcher must not insert a response probe or a worker control frame.
+    let mut byte = [0];
+    assert_eq!(worker.read(&mut byte).unwrap(), 0);
+}
+
+#[test]
+fn disconnected_queued_caller_cancels_without_dispatch_and_half_close_dispatches() {
+    let scratch = Scratch::new();
+    let c = config(&scratch);
+    provision(&c, expires()).unwrap();
+    let custody = journal::Custody::acquire(&custody_path(&c), expires()).unwrap();
+    let old = request();
+    let fresh = next_request(&old, "owner-test:live-half-close");
+    let mut journal =
+        journal::Journal::open(Arc::clone(&custody), &old.project_service_key, 8, expires())
+            .unwrap();
+    let old_bytes = wire::encode_render_request(&old).unwrap();
+    journal
+        .admit(operation_identity(&old), &old_bytes, expires())
+        .unwrap();
+    let (owner, caller) = UnixStream::pair().unwrap();
+    caller.shutdown(std::net::Shutdown::Write).unwrap();
+    drop(caller);
+    let failure = begin_issued_dispatch(&mut journal, &old, &old_bytes, expires(), || {
+        response_channel(&owner).map_err(|diagnostic| PreDispatchFailure {
+            reason: journal::CancelReason::GrantWithdrawn,
+            diagnostic,
+        })
+    })
+    .unwrap_err();
+    assert_eq!(
+        failure.diagnostic,
+        "renderer caller response channel closed"
+    );
+    let cancelled = cancel_undispatched(
+        &mut journal,
+        &old.request_id,
+        failure.reason,
+        c.limits.request_ms,
+    )
+    .unwrap();
+    assert!(matches!(
+        cancelled.outcome(),
+        journal::AcceptedOutcome::CancelledBeforeDispatch {
+            reason: journal::CancelReason::GrantWithdrawn,
+            ..
+        }
+    ));
+    assert!(!journal.has_unknown(expires()).unwrap());
+    let fresh_bytes = wire::encode_render_request(&fresh).unwrap();
+    journal
+        .admit(operation_identity(&fresh), &fresh_bytes, expires())
+        .unwrap();
+    let (owner, caller) = UnixStream::pair().unwrap();
+    caller.shutdown(std::net::Shutdown::Write).unwrap();
+    let dispatch = begin_issued_dispatch(&mut journal, &fresh, &fresh_bytes, expires(), || {
+        response_channel(&owner).map_err(|diagnostic| PreDispatchFailure {
+            reason: journal::CancelReason::GrantWithdrawn,
+            diagnostic,
+        })
+    })
+    .unwrap_or_else(|failure| panic!("live response reader refused: {}", failure.diagnostic));
+    assert_eq!(dispatch.operation().identity().request_id, fresh.request_id);
+    assert!(matches!(
+        dispatch.operation().outcome(),
+        journal::AcceptedOutcome::Running { .. }
+    ));
+}
+
+#[test]
+fn known_idle_actor_releases_project_writer_custody_but_unknown_actor_retains_it() {
+    for unknown in [false, true] {
+        let scratch = Scratch::new();
+        let c = config(&scratch);
+        private_dir(&scratch.0.join(".caws"), true).unwrap();
+        private_dir(&scratch.0.join(".caws/sessions"), true).unwrap();
+        provision(&c, expires()).unwrap();
+        let custody = journal::Custody::acquire(&custody_path(&c), expires()).unwrap();
+        let writer = crate::render_writer::acquire(&c.home, &scratch.0, expires()).unwrap();
+        let journal = journal::Journal::open(
+            Arc::clone(&custody),
+            &request().project_service_key,
+            8,
+            expires(),
+        )
+        .unwrap();
+        let mut actor = Actor {
+            config: Arc::new(c),
+            custody,
+            writer_custody: Some(writer),
+            writer_intent: None,
+            journal,
+            budget: Arc::new(Mutex::new(Budget {
+                used: 0,
+                maximum: 2,
+            })),
+            process: None,
+            reserved: false,
+            unknown,
+            observations: Arc::new(ObservationLog::unavailable(Instant::now())),
+            phase: "test",
+        };
+        actor.retire();
+        let reacquire = crate::render_writer::acquire(
+            &actor.config.home,
+            &scratch.0,
+            Instant::now() + Duration::from_millis(30),
+        );
+        assert_eq!(reacquire.is_err(), unknown);
+        assert_eq!(actor.writer_custody.is_some(), unknown);
+    }
+}
+
+#[test]
+fn git_capture_diagnostic_retains_static_reason_and_numeric_query_facts_only() {
+    let scratch = Scratch::new();
+    let c = config(&scratch);
+    provision(&c, expires()).unwrap();
+    let log = ObservationLog::open(&c, Instant::now()).unwrap();
+    git_capture_failure(
+        &log,
+        "Git metadata query unavailable (status exit status: 0, stderr bytes 17)",
+    );
+    git_capture_failure(
+        &log,
+        "Git metadata query unavailable (status signal: 9 (SIGKILL), stderr bytes 0)",
+    );
+    git_capture_failure(
+        &log,
+        "Git compatibility profile does not support /caller-secret/name",
+    );
+    let bytes = fs::read_to_string(base(&c).join("observations.jsonl")).unwrap();
+    assert!(!bytes.contains("caller-secret"));
+    let records: Vec<serde_json::Value> = bytes
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        records[0]["observation"]["reason"],
+        "metadata_query_unavailable"
+    );
+    assert_eq!(records[0]["observation"]["queryExitCode"], 0);
+    assert_eq!(records[0]["observation"]["stderrBytes"], 17);
+    assert_eq!(records[1]["observation"]["querySignal"], 9);
+    assert_eq!(
+        records[2]["observation"]["reason"],
+        "executable_configuration_refused"
+    );
+    assert!(records[2]["observation"]["queryExitCode"].is_null());
+}
+
+#[test]
+fn missing_worker_exec_is_known_not_started_and_same_writer_anchor_accepts_valid_work() {
+    // Direct startup seam with a synthetic image identity. This does not claim
+    // sealed-image admission or actual renderer compatibility.
+    let scratch = Scratch::new();
+    let mut c = config(&scratch);
+    private_dir(&scratch.0.join(".caws"), true).unwrap();
+    private_dir(&scratch.0.join(".caws/sessions"), true).unwrap();
+    let output = scratch.0.join(".caws/sessions/test-session");
+    private_dir(&output, true).unwrap();
+    provision(&c, expires()).unwrap();
+    let custody = journal::Custody::acquire(&custody_path(&c), expires()).unwrap();
+    let writer = crate::render_writer::acquire(&c.home, &scratch.0, expires()).unwrap();
+    let journal = journal::Journal::open(
+        Arc::clone(&custody),
+        &request().project_service_key,
+        8,
+        expires(),
+    )
+    .unwrap();
+    let intent = crate::render_writer::begin(
+        Arc::clone(&writer),
+        &scratch.0,
+        &"a".repeat(64),
+        b"native-startup-test",
+        expires(),
+    )
+    .unwrap();
+    c.native_executable = scratch.0.join("missing-native-executable");
+    let observations = Arc::new(ObservationLog::unavailable(Instant::now()));
+    let directory = scratch.0.join("startup");
+    private_dir(&directory, true).unwrap();
+    let mut manifest = offered().prepared.manifest;
+    manifest.toolchain_tcb.tools = serde_json::from_value(serde_json::json!([
+        {"name":"python3","path":"/usr/bin/python3","sha256":"a".repeat(64)}
+    ]))
+    .unwrap();
+    let view = git::GitView {
+        git_directory: scratch.0.clone(),
+        git_work_tree: scratch.0.clone(),
+        git_original_directory: scratch.0.clone(),
+        git_common_directory: scratch.0.clone(),
+        metadata_digest: "a".repeat(64),
+        metadata_files: 0,
+        metadata_bytes: 0,
+    };
+    let failure = match spawn_worker(
+        &c,
+        WorkerCustody {
+            machine: &custody,
+            writer: &writer,
+        },
+        &manifest,
+        view,
+        directory,
+        Arc::clone(&observations),
+        expires(),
+    ) {
+        Err(failure) => failure,
+        Ok(_) => panic!("missing executable unexpectedly started"),
+    };
+    assert!(!failure.child_started);
+    assert_eq!(failure.stage, journal::NotStartedStage::Spawn);
+    assert_eq!(failure.errno, Some(libc::ENOENT));
+    let mut actor = Actor {
+        config: Arc::new(c),
+        custody,
+        writer_custody: Some(writer),
+        writer_intent: Some(intent),
+        journal,
+        budget: Arc::new(Mutex::new(Budget {
+            used: 1,
+            maximum: 1,
+        })),
+        process: None,
+        reserved: true,
+        unknown: false,
+        observations,
+        phase: "test",
+    };
+    actor.startup_failed(failure);
+    assert!(!actor.unknown);
+    assert!(!actor.reserved);
+    assert_eq!(actor.budget.lock().unwrap().used, 0);
+    assert!(actor.writer_intent.is_none() && actor.writer_custody.is_none());
+    let marker = output.join("valid-request-ran");
+    let args = vec![
+        "--home".into(),
+        scratch.0.to_str().unwrap().into(),
+        "--canonical-project".into(),
+        scratch.0.to_str().unwrap().into(),
+        "--output-directory".into(),
+        output.to_str().unwrap().into(),
+        "--session-id".into(),
+        "test-session".into(),
+        "--source-generation".into(),
+        "a".repeat(64),
+        "--timeout-ms".into(),
+        "1000".into(),
+        "--".into(),
+        "/usr/bin/touch".into(),
+        marker.to_str().unwrap().into(),
+    ];
+    assert_eq!(crate::render_writer::run(&args).unwrap(), 0);
+    assert!(marker.is_file());
+}
+
+#[test]
 fn valid_public_request_hashes_do_not_permit_changed_checkout_session_or_log_destination() {
     let mut good = request();
     let project = good.canonical_project.clone();

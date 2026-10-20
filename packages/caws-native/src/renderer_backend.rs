@@ -433,7 +433,7 @@ struct OwnedBackend {
     err: Capture,
 }
 impl OwnedBackend {
-    fn spawn(spec: &PinnedBackendSpec, lease: &Path) -> Result<Self> {
+    fn spawn(spec: &PinnedBackendSpec, lease: &Path, writer: Option<RawFd>) -> Result<Self> {
         let mut command = Command::new(&spec.python.path);
         command
             .args(["-I", "-S", "-B"])
@@ -469,12 +469,16 @@ impl OwnedBackend {
         }
         // Only an async-signal-safe group assignment is performed after fork.
         unsafe {
-            command.pre_exec(|| {
-                if libc::setpgid(0, 0) == 0 {
-                    Ok(())
-                } else {
-                    Err(io::Error::last_os_error())
+            command.pre_exec(move || {
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(io::Error::last_os_error());
                 }
+                if let Some(fd) = writer
+                    && libc::fcntl(fd, libc::F_SETFD, 0) < 0
+                {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
             });
         }
         let mut child = command.spawn().map_err(Failure::io)?;
@@ -761,6 +765,7 @@ impl Control {
 }
 struct Worker {
     control: Control,
+    writer_lifetime: Option<OwnedFd>,
     group: Option<OwnedBackend>,
     directory: Option<PrivateDirectory>,
     limits: WorkerLimits,
@@ -1072,6 +1077,7 @@ impl Worker {
         self.group = Some(OwnedBackend::spawn(
             spec,
             &spec.work_dir.join("lease.json"),
+            self.writer_lifetime.as_ref().map(AsRawFd::as_raw_fd),
         )?);
         loop {
             self.tick(expires)?;
@@ -1329,6 +1335,32 @@ pub fn run_worker(
     limits: WorkerLimits,
     custody_lifetime: OwnedFd,
 ) -> WorkerExit {
+    run_worker_inner(spec, control, limits, custody_lifetime, None)
+}
+/// The production entry requires this actual shared project-writer descriptor.
+/// The worker retains it and only its actual backend exec inherits a duplicate.
+pub fn run_worker_with_writer(
+    spec: PinnedBackendSpec,
+    control: UnixStream,
+    limits: WorkerLimits,
+    custody_lifetime: OwnedFd,
+    writer_lifetime: OwnedFd,
+) -> WorkerExit {
+    run_worker_inner(
+        spec,
+        control,
+        limits,
+        custody_lifetime,
+        Some(writer_lifetime),
+    )
+}
+fn run_worker_inner(
+    spec: PinnedBackendSpec,
+    control: UnixStream,
+    limits: WorkerLimits,
+    custody_lifetime: OwnedFd,
+    writer_lifetime: Option<OwnedFd>,
+) -> WorkerExit {
     let empty = || CleanupReceipt {
         child_pid: None,
         direct_child_reaped: false,
@@ -1347,6 +1379,11 @@ pub fn run_worker(
     if let Err(failure) = limits
         .validate()
         .and_then(|_| close_on_exec(custody_lifetime.as_raw_fd()))
+        .and_then(|_| {
+            writer_lifetime
+                .as_ref()
+                .map_or(Ok(()), |fd| close_on_exec(fd.as_raw_fd()))
+        })
         .and_then(|_| nonblocking(control.as_raw_fd()))
     {
         return WorkerExit {
@@ -1358,6 +1395,7 @@ pub fn run_worker(
         };
     }
     let mut worker = Worker {
+        writer_lifetime,
         control: Control {
             stream: control,
             pending: Vec::new(),

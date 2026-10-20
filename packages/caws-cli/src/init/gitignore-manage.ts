@@ -33,7 +33,8 @@ export const GITIGNORE_END_MARKER = '# <<< caws gitignore <<<';
 const BEGIN_MARKER_PREFIX = '# >>> caws gitignore (managed';
 
 /**
- * The ephemeral / runtime / local .caws/ paths that must never be tracked.
+ * Runtime/local .caws/ paths that must never be tracked. Replay custody and
+ * its provisioning identity are durable local state, not disposable caches.
  * Each entry names a path some CAWS code path writes:
  *   - worktrees.json / worktrees/  : worktree registry + checkouts (per-CLI)
  *   - agents.json / leases/        : per-session lease cache (agent hooks)
@@ -59,6 +60,8 @@ export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
   '.caws/claims/',
   '.caws/cache/',
   '.caws/sessions/',
+  '.caws/.render-writer-custody/',
+  '.caws/.render-writer-provisioned',
   '.caws/state/',
   '.caws/hooks/.pristine/',
   '.caws/duplication-cache.json',
@@ -72,7 +75,8 @@ export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
 export function renderManagedBlock(): string {
   return [
     GITIGNORE_BEGIN_MARKER,
-    '# Ephemeral CAWS runtime/local state — never tracked. Authority state',
+    '# CAWS runtime/local state — never tracked. Durable writer custody',
+    '# and provisioning identities must survive cache cleanup. Authority state',
     '# (.caws/specs/, .caws/policy.yaml, .caws/waivers/) is intentionally NOT',
     '# listed here so it stays versioned. Managed by `caws init`; edits inside',
     '# these markers are overwritten on the next init.',

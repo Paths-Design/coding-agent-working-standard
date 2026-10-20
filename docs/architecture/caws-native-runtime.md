@@ -235,6 +235,45 @@ serialization key, and replacement cannot write before the old writer settles.
 Host-crash child cleanup and recovery of unknown partial writes require their
 own mechanism and evidence; private IPC and normal idle exit do not prove them.
 
+Cooperative renderer writers share the anchored custody directory at the
+canonical project's `.caws/.render-writer-custody`. A private sibling
+`.render-writer-provisioned` registration pins the custody directory's device
+and inode. Exclusive registration precedes exclusive custody initialization;
+partial provisioning, an absent registered directory or a replacement directory
+refuses admission. Session-cache cleanup cannot create a new writer domain. This
+registration records provisioning, not foreign-writer adoption or drain. The
+project-wide key excludes source generation, session and machine home, so a
+replacement generation or another `CAWS_HOME` cannot create a second owner for
+the same output project while the canonical `.caws` root and provisioning
+registration remain intact. Whole-governance-root replacement remains outside
+the cooperative contract; the writer cache is separate from disposable session
+output. The native owner and the cooperative one-shot launcher retain the actual
+lifetime lock through owned child cleanup and both output EOFs; their directly
+created writer inherits the lock descriptor across exec. Each backend lifetime
+or one-shot operation also publishes a dispatch intent in the anchored journal
+before its effect. An abandoned intent recovers as unknown and refuses
+subsequent cooperative writers after the live lock is released. Timeout and
+response loss do not clear that persistent fence. The journal has an internal
+typed `not_started` result for observed preparation or spawn failures that
+create no execution child. Publishing that result releases the reservation
+without fabricating a process exit; failure to publish retains uncertainty.
+Failures after child creation require the existing cleanup and outcome rules.
+The journal has bounded retained history and refuses capacity exhaustion without
+evicting an accepted operation; this implementation supplies no reset procedure.
+
+This protocol covers adopted launch paths. Sterling's reviewed unchanged daemon
+and one-shot renderer do not acquire the fence, and its unchanged client permits
+inline rendering after a lost response. Atomic artifact replacement protects
+individual JSON files from tearing; it does not exclude concurrent writers. The
+CAWS cooperative client successor routes rendering through the native one-shot
+launcher and leaves the selected hook on refusal or uncertainty, without
+invoking the legacy fallback or spawning an unmanaged daemon. Selecting that
+successor for every foreign writer and positively draining the previous writers
+are external migration obligations. A missing lease, answering port, PID record,
+private policy declaration or installed helper does not establish that drain.
+The opt-in native owner and private qualification fixtures do not establish
+shared-output Sterling adoption or eligibility for machine cutover.
+
 | Severity | Trigger and failure                                                                                  | Cost                                                               | Resolve timing                                                                                           |
 | -------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | Critical | Stale cached claim/policy or Rust/TS authority disagreement permits a governed action                | Unauthorized mutation; later logs cannot undo it                   | Before any enforcement cutover; shared authority and freshness tests precede resident mode               |

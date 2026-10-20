@@ -11,5 +11,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 sha2 = "0.10.9"
 
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+# This release gates its runtime-detected ARM SHA-2 backend behind `asm`.
+# Keep complete byte hashing; CPUs without SHA-2 retain the software fallback.
+sha2 = { version = "0.10.9", features = ["asm"] }
+
 [build-dependencies]
 cc = "=1.8.0"

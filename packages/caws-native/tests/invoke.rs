@@ -690,6 +690,17 @@ fn stop_test_child(child: &mut std::process::Child) {
     let _ = child.wait();
 }
 
+struct PanicSafeTestChild(std::process::Child);
+impl Drop for PanicSafeTestChild {
+    fn drop(&mut self) {
+        // A retained, unreaped child pins the signal target. Observation errors
+        // do not establish either liveness or permission to signal a PID.
+        if matches!(self.0.try_wait(), Ok(None)) {
+            stop_test_child(&mut self.0);
+        }
+    }
+}
+
 fn captured(child: &mut std::process::Child) -> Output {
     let status = wait_bounded(child);
     let mut stdout = Vec::new();
@@ -1206,26 +1217,71 @@ fn ps_snapshot_requires_valid_rows_and_resolves_omitted_members_without_assuming
 }
 
 #[test]
+fn retained_test_child_is_reaped_during_panic_unwind() {
+    let fixture = Fixture::new();
+    let mut pid = None;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut child = PanicSafeTestChild(
+            Command::new(&fixture.node)
+                .args([
+                    "-e",
+                    "setTimeout(() => process.exit(0),10000); setInterval(() => {},1000)",
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        pid = Some(child.0.id());
+        assert!(child.0.try_wait().unwrap().is_none());
+        assert!(matches!(
+            single_ps_observation(child.0.id(), &query_ps(&[child.0.id()]).unwrap()).unwrap(),
+            PsObservation::Live { .. }
+        ));
+        panic!("exercise retained-child cleanup during unwind");
+    }));
+    let panic = result.expect_err("fixture did not unwind");
+    assert_eq!(
+        panic.downcast_ref::<&str>(),
+        Some(&"exercise retained-child cleanup during unwind"),
+        "fixture failed before its deliberate unwind"
+    );
+    let pid = pid.expect("fixture did not spawn its owned child");
+    assert_eq!(
+        assert_not_running_with(pid, Instant::now() + Duration::from_secs(2), |pid| {
+            query_ps(&[pid])
+        }),
+        PsObservation::Absent { pid },
+        "unwound child was not independently observed absent after reaping"
+    );
+}
+
+#[test]
 fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_processes() {
     for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
         for mode in ["input", "timeout", "pipe-holder-wait"] {
             let fixture = Fixture::new();
-            let mut unrelated = Command::new(&fixture.node)
-                .args(["-e", "setInterval(() => {},1000)"])
-                .spawn()
-                .unwrap();
-            let mut child = fixture
-                .command(
-                    if mode == "input" { "exact" } else { mode },
-                    "pre_tool_use",
-                    "5000",
-                )
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap();
-            let mut input = child.stdin.take().unwrap();
+            let mut unrelated = PanicSafeTestChild(
+                Command::new(&fixture.node)
+                    .args(["-e", "setInterval(() => {},1000)"])
+                    .spawn()
+                    .unwrap(),
+            );
+            let mut child = PanicSafeTestChild(
+                fixture
+                    .command(
+                        if mode == "input" { "exact" } else { mode },
+                        "pre_tool_use",
+                        "5000",
+                    )
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .unwrap(),
+            );
+            let mut input = child.0.stdin.take().unwrap();
             input.write_all(b"{}").unwrap();
             let mut engine_pid = None;
             let mut descendant_pid = None;
@@ -1241,8 +1297,8 @@ fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_p
             }
             let started = Instant::now();
             // SAFETY: signal only the direct native child created by this test.
-            assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
-            let output = captured(&mut child);
+            assert_eq!(unsafe { libc::kill(child.0.id() as i32, signal) }, 0);
+            let output = captured(&mut child.0);
             assert!(
                 started.elapsed() < Duration::from_millis(1500),
                 "{mode}, signal {signal}"
@@ -1258,11 +1314,11 @@ fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_p
                 "{stderr}"
             );
             assert!(
-                unrelated.try_wait().unwrap().is_none(),
+                unrelated.0.try_wait().unwrap().is_none(),
                 "foreign process terminated"
             );
-            unrelated.kill().unwrap();
-            unrelated.wait().unwrap();
+            unrelated.0.kill().unwrap();
+            unrelated.0.wait().unwrap();
             if let Some(pid) = engine_pid {
                 assert_not_running(&pid);
             }

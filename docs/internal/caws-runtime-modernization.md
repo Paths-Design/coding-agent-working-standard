@@ -106,6 +106,25 @@ checks and committed-candidate replay. Wider compatibility, legacy writer
 exclusion, uncertain-outcome recovery and multi-project workload remain open.
 No machine replacement follows from these bounded results.
 
+The next execution slice retains three separate obligations under the existing
+spec and lane. The root owns integration, Git and acceptance; GPT-6.1 Sol workers
+own the bounded implementation and qualification surfaces below. These are work
+assignments, not authority or acceptance records.
+
+| Outcome | Owner and boundary | Observable acceptance / falsifier |
+| --- | --- | --- |
+| Live cancellation and restart | `render_lifecycle`: native owner/backend and lifecycle qualifier | Real dispatched rendering, caller disconnect, owned cleanup and reopened durable state; queued cancellation must not dispatch, and uncertain dispatched work must not replay |
+| Legacy writer exclusion | `render_legacy_fence`: cooperative writer bridge, native fence and legacy qualifier | Actual foreign daemon/inline fallback counterexample, then shared stable custody across cooperative legacy/native paths and generations; an absent lease or opt-in marker alone cannot establish adoption/drain |
+| Thirteen sessions / four repositories | `render_load`: actual workload and hostile oracle controls; depends on lifecycle/fence checks | Thirteen overlapping native clients, isolated semantic output, durable cross-project running overlap, owner-specific ordering, guard progress and bounded overload; sequential submissions or diagnostic logs alone cannot pass |
+
+The reviewed legacy client falls back inline on every non-success response, and
+its unchanged daemon/renderer do not acquire the native owner lock. Shared-output
+adoption therefore requires all legitimate writer paths to cooperate and a
+positively established transition from any prior uncooperative writer. A fence
+implemented only in the new service does not establish that transition. Private
+fixtures and cooperative successor evidence cannot imply deployed Sterling
+exclusion, full A3/A8 acceptance or machine installation.
+
 Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 **packaged**, **installed**, **native-observed**, **retired**. Record exactly the
 established boundary. Existing Python consumers remain obligations until removed
@@ -144,14 +163,14 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
 | R25 | Demand-start, warm residency and idle exit | Rust service owner/retained workers + typed engine | isolated renderer profile observed, E81; complete resident engine unreplaced | One actual backend survives three native requests, then owner idle cleanup retains custody through reap/EOF. Machine-wide fair admission, heartbeat retention, drain/version and thirteen-session workload remain open |
-| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | actual renderer owner records three returned operations, E81; recovery components E70/E75 | Actual source/grant/image admission and request outcomes reach the renderer. Live cancellation, restart, lost-response unknown fencing, autonomous drain and production retention need integrated hostile qualification |
+| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | actual queued cancellation and normal retirement observed, E86; final-candidate runtime held, E87 | Actual source/grant/image admission and request outcomes reach the renderer. Post-dispatch cancellation, restart, lost-response unknown fencing, autonomous drain and production retention need integrated hostile qualification |
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
-| R28 | Performance and load qualification | Replayable TS/native workload | unreplaced | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
+| R28 | Performance and load qualification | Replayable TS/native workload | actual workload driver and hostile oracle controls implemented, E85; runtime unqualified, E87 | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | isolated actual full-chain cold/warm route observed, E81; E57 failure retained | Native image admission, actual selected handler/client, one retained backend, exact output and owned idle cleanup reach the consumer. Legacy writer exclusion, full fallback/input compatibility, source retirement, cancellation and multi-project behavior remain unqualified; no machine replacement |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | cooperative writer race observed, E84; normal/queued lifecycle observed, E86; final replay held, E87 | Native image admission, actual selected handler/client, one retained backend, exact output and owned idle cleanup reach the consumer. Unchanged legacy adoption/drain, full fallback/input compatibility, source retirement, post-dispatch cancellation and multi-project behavior remain unqualified; no machine replacement |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
@@ -1440,6 +1459,138 @@ Additional bounded evidence and unresolved dependencies:
   runtime observations were checked directly. This records review progress, not
   an acceptance verdict. `committed-offer-tests.log` additionally replays the
   final test-global binding on candidate605d11bf and exits 0 across 49 checks.
+
+- E83: The next owned dirty slice starts at `5d72cfe8` with the existing
+  `CAWS-NATIVE-RUNTIME-001` binding and three explicitly selected GPT-6.1 Sol
+  implementation workers. The actual unchanged cold/warm qualifier exits 0
+  against the first integrated release build: artifact
+  `target/qualification/render-owner-2026-10-20T00-43-16-195Z/manifest.json`
+  records `verified_slice`, no failures/gaps, backend18718 served1/2/3 and
+  confirmed inactive cleanup. This is an independently retained control, not
+  cancellation, adoption or load qualification.
+  The first actual lifecycle normal control fails despite native exit0:
+  `render-lifecycle-normal-2026-10-20T00-40-57-619Z/scenario.json` records no
+  worker/output, `git_capture` refusal and independently confirmed inactive
+  cleanup. No subsequent scenario runs. A later direct capture probe succeeds;
+  it does not attribute the original failure. The source investigation finds
+  an independent reproducible race: query pipe EOF triggers unconditional
+  group SIGKILL before observing child exit. A real helper closes its pipes,
+  delays and exits0; the original query instead reports signal9 and exits101
+  (`render-lifecycle-source-2026-10-19/git-query-pipe-eof-red.log`). The repaired
+  query waits for WNOWAIT exit under the original deadline before cleanup;
+  six selected Git checks including exit7/deadline controls and strict Clippy
+  exit0 in the adjacent green/Clippy logs. Actual hostile replay remains a
+  separate obligation.
+  Early independent read-only inspection also identifies a known-no-child
+  spawn failure being recorded as permanent unknown. The internal writer
+  result is being extended to distinguish positively established nonexecution;
+  no process exit may be fabricated and post-spawn/transport loss remains
+  uncertain. Project writer custody is being moved outside disposable session
+  history with a durable provisioning identity; source generation, machine home,
+  absent leases and cache recreation cannot authorize a second writer domain.
+  E84 retains the subsequent actual legacy workload; the thirteen-session/four-repository workload remains unqualified.
+  The proposed mixed-harness guard load exercises the compatibility chains;
+  it does not establish typed guard/PID parity or remove Python fan-out.
+
+- E84: The cooperative writer qualifier exits0 against native SHA256
+  `4a537674d19cd30c66ee90730c8160a45d616b822be25b63af9dd304fcffb4a1`.
+  `target/qualification/render-legacy-2026-10-20T01-22-41-463Z/manifest.json`
+  retains the actual unchanged one-shot writer under held custody, an actual
+  daemon reply `ok 1 15` suppressed after writing, and the actual client's
+  `actual-inline-fallback`. These are counterexamples to unchanged legacy
+  exclusion. Cooperative contenders across homes/generations refuse75; missing
+  registered custody refuses without creating a replacement, and session-cache
+  replacement preserves exclusion and the original lock inode751591069.
+  The linked `render-legacy-managed-owner-2026-10-20T01-22-49-848Z/race-result.json`
+  observes live native worker2134/backend2156, installed helper refusal75 and
+  identical before/after artifact digest
+  `9bfc8d63d195c0a8ecbc94aa919839f52cadb01ab7b9d9b2f7b73041e1089aa0`.
+  Its cleanup observes host99365/worker/backend absent, custody free and no
+  socket/workers; a later actual cooperative render exits0. All-writer Sterling
+  source adoption and positively established prior-writer drain remain external
+  dependencies. No machine installation or unchanged-writer exclusion is claimed.
+  The durable project anchor is outside disposable sessions; a provisioning
+  tombstone binds its device/inode. Its journal fails closed at256 retained
+  lifetimes; unbounded deployment and maintenance are not established.
+  Typed `not_started` records distinguish observed no-child spawn failure from
+  post-spawn uncertainty. Complete native checks at this binary's source exit0
+  (150 library,40 binary,28 integration,3 ancestor-example checks), retained in
+  `renderer-hostile-2026-10-19/native-all-tests.log`; they do not qualify live
+  cancellation or restart.
+
+- E85: The second normal lifecycle attempt reaches worker39024/backend39025,
+  then expires before render dispatch. Native exit2 and confirmed inactive
+  cleanup are retained in
+  `render-lifecycle-normal-2026-10-20T01-19-16-729Z/scenario.json`.
+  Owner Prepared occurs at14802ms; source admission/pre-spawn/prepared checks
+  consume5167/2816/2852ms. The handler execution journal records successful
+  goal/plan handlers and an incomplete selected session-log handler; no evidence
+  attributes the failure to missing leases. The separate E84 managed request
+  succeeds without an explicit lease in25845ms, limiting that hypothesis.
+  Source inspection finds consecutive full bridge validation with no intervening
+  work, and complete rereading of the110712624-byte Node executable per pass.
+  The candidate removes only the duplicate bridge pass and enables sha2's ARM
+  hardware backend with its software fallback; complete source/tool hashing and
+  owner spawn/queue/dispatch revalidation remain. Live latency improvement and
+  hostile behavior require replay under the original30000ms request budget.
+  A separate focused shell replay has13 passes and one cold recorder timeout
+  (status null at3000ms), retained in `renderer-hostile-2026-10-19/final-runtime-jest.log`;
+  the earlier14-pass run is not an explanation for that timeout.
+  The load oracle also rejects reversed served counters against durable journal
+  sequence, rather than sorting away the ordering relationship. Strict compile
+  and its hostile self-test exit0 in `render-load-source-2026-10-19/sequence-order-*`;
+  no actual load follows from those source checks.
+
+- E86: The ARM candidate reaches Prepared at4096ms and returns actual rendering
+  at12370ms in `render-lifecycle-normal-2026-10-20T01-46-51-700Z/owner-observations-final.jsonl`.
+  That attempt fails a premature oracle: `worker_cleanup` precedes worker wait
+  and Actor intent settlement. The final durable intent is returned, and cleanup
+  is confirmed inactive. The corrected oracle uses one absolute retirement
+  observation deadline for cleanup, durable Returned and independent worker/backend
+  absence; the peer wait observes its retained Child's original30000ms request
+  bound plus the existing caller-cleanup grace. It does not extend execution.
+  The replay `render-lifecycle-normal-2026-10-20T01-52-05-393Z/scenario.json`
+  exits0: actual `turn-001.json` is1793 bytes, SHA256
+  `692aa424ab5a78e60ddbd6bdbff1d6096e6ef8abc52eb733226f93a69c4692ae`;
+  first-project intent settles, worker80231/backend80248 are absent, and
+  `LEGACY-KNOWN-IDLE-CONTROL` is created while peer activity retains host77642.
+  Final host/worker/backend observations are absent, custody is free and socket/
+  workers are absent. This is a sample, not a latency distribution or attribution
+  of improvement to one of the two candidate changes independently.
+  `render-lifecycle-queued-cancel-2026-10-20T01-54-40-784Z/scenario.json` exits0:
+  invocation22991 is ActorQueued behind22100, then cancelled; the first render
+  returns normally, the cancelled caller has no dispatch/output, and no unknown
+  fence masks the negative result. Host22099/worker22799/backend22800 are absent
+  with free custody and no socket/workers. These runs retain executable and
+  compiled driver hashes; final formatted-candidate identity is reconciled before
+  relying on them for stronger claims. Live post-dispatch cancellation, host crash/
+  restart and thirteen-session/four-repository execution remain obligations.
+
+- E87: Final formatted production binary SHA256 is
+  `7ffa7a07c3e7dcdbebf99a840c954e0a4e70efd369edd8bbde17559e5237458e`;
+  the four qualification drivers compile with strict TypeScript and scoped ESLint
+  exits0 (`renderer-hostile-2026-10-19/final-formatted-{typecheck,eslint}.log`).
+  The complete native ARM check exits101:150 library and40 binary checks pass,
+  while one of28 integration checks fails because the fixture publishes an empty
+  PID file before writing its bytes (`final-arm-native-tests.log`, invoke.rs920).
+  Recorded engine83234/descendant83285 are independently observed absent.
+  The producer repair uses exclusive0600 same-directory pending files and rename;
+  a forced partial-write probe rejects direct publication and accepts the repair
+  (`atomic-pid-producer-probe.log`). It leaves cleanup assertions and budgets intact.
+  A worker's focused retry mistakenly supplies a relative artifact root, so its
+  budget home is refused and setup fails (`atomic-pid-external-signals.log`).
+  That panic loses the control Child handle and leaves Node22917 live, parent1,
+  group22771, native birth1792461887.982661, with the interval-control command.
+  Runtime scenarios are held pending authorized cleanup and independently
+  confirmed absence. Reconfirm the process instance before any cleanup decision;
+  this historical PID is not authority. The root asks the user for verified
+  cleanup or user-managed cleanup because the retained Child handle is lost.
+  Panic-safe fixture cleanup is a separate repair, not a production-signal claim.
+  The shell argv recorder uses a NUL-delimited shell builtin instead of Node
+  cold startup; unchanged3s limits and exact semantic assertions pass14 checks in
+  `render-writer-shell-recorder-jest.log`. The prior timeout remains retained.
+  Live post-dispatch cancellation/restart and actual13-session/four-repository
+  qualification are not established. No machine state is installed or upgraded.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint

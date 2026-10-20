@@ -105,6 +105,31 @@ fn bounded_read(path: &Path, limit: u64, expires: Instant) -> Result<Vec<u8>> {
 // Unavailable ownership/cleanup retains the child; no hard kernel-stall bound.
 struct QueryChild(Option<Child>);
 impl QueryChild {
+    fn exited(&self) -> Result<bool> {
+        let child = self.0.as_ref().ok_or("Git query already reaped")?;
+        let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+        // Observe this still-owned child without releasing its PID/group pin.
+        // Pipe EOF can precede exit and never authorizes killing a valid query.
+        if unsafe {
+            libc::waitid(
+                libc::P_PID,
+                child.id() as libc::id_t,
+                info.as_mut_ptr(),
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            )
+        } != 0
+        {
+            return Err(format!(
+                "Git query exit observation: {}",
+                io::Error::last_os_error()
+            ));
+        }
+        let observed = unsafe { info.assume_init().si_pid() };
+        if observed != 0 && observed != child.id() as libc::pid_t {
+            return Err("Git query child identity changed".into());
+        }
+        Ok(observed != 0)
+    }
     fn stopped(&self) -> Result<()> {
         let child = self.0.as_ref().ok_or("Git query already reaped")?;
         crate::owned_group::stop_before_reap(child)
@@ -198,7 +223,8 @@ fn query(
     let mut err = Vec::new();
     let mut out_done = false;
     let mut err_done = false;
-    while !out_done || !err_done {
+    let mut exited = false;
+    while !out_done || !err_done || !exited {
         check(expires)?;
         if !out_done {
             out_done = drain(&mut stdout, &mut out)?;
@@ -206,10 +232,12 @@ fn query(
         if !err_done {
             err_done = drain(&mut stderr, &mut err)?;
         }
-        if !out_done || !err_done {
+        exited = guard.exited()?;
+        if !out_done || !err_done || !exited {
             thread::sleep(Duration::from_millis(2));
         }
     }
+    check(expires)?;
     let status = guard.finish()?;
     if !status.success() || !err.is_empty() {
         return Err(format!(
@@ -568,6 +596,34 @@ mod tests {
         git: PinnedFile,
     }
     impl Fixture {
+        fn query_helper(body: &str) -> Self {
+            let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir);
+            let base = fs::canonicalize(parent).unwrap().join(format!(
+                "git-query-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            directory(&base).unwrap();
+            let home = base.join("home");
+            let checkout = base.join("checkout");
+            directory(&home).unwrap();
+            directory(&checkout).unwrap();
+            let path = base.join("query-helper.sh");
+            fs::write(&path, body).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            let git = PinnedFile {
+                sha256: format!("{:x}", Sha256::digest(fs::read(&path).unwrap())),
+                path,
+            };
+            Self {
+                base,
+                home,
+                checkout,
+                git,
+            }
+        }
         fn new() -> Self {
             let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
                 .map(PathBuf::from)
@@ -619,6 +675,54 @@ mod tests {
             )
             .unwrap()
         }
+    }
+
+    #[test]
+    fn query_success_waits_for_direct_child_exit_after_both_pipes_close() {
+        let f = Fixture::query_helper(
+            "#!/bin/sh\nprintf 'query-result'\nexec 1>&- 2>&-\n/bin/sleep 0.1\nexit 0\n",
+        );
+        let result = query(
+            &f.git,
+            &f.checkout,
+            &f.home,
+            &[],
+            Instant::now() + Duration::from_secs(3),
+        );
+        assert_eq!(result.unwrap(), b"query-result");
+    }
+
+    #[test]
+    fn query_pipe_eof_does_not_hide_nonzero_exit_or_cancel_the_original_deadline() {
+        let failed = Fixture::query_helper(
+            "#!/bin/sh\nprintf 'untrusted-result'\nexec 1>&- 2>&-\n/bin/sleep 0.05\nexit 7\n",
+        );
+        let reason = query(
+            &failed.git,
+            &failed.checkout,
+            &failed.home,
+            &[],
+            Instant::now() + Duration::from_secs(3),
+        )
+        .unwrap_err();
+        assert!(reason.contains("exit status: 7"), "{reason}");
+        let stalled = Fixture::query_helper(
+            "#!/bin/sh\nprintf 'incomplete-result'\nexec 1>&- 2>&-\n/bin/sleep 30\nexit 0\n",
+        );
+        let started = Instant::now();
+        let reason = query(
+            &stalled.git,
+            &stalled.checkout,
+            &stalled.home,
+            &[],
+            started + Duration::from_millis(100),
+        )
+        .unwrap_err();
+        assert_eq!(reason, "Git view deadline expired");
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "owned stalled query cleanup did not finish"
+        );
     }
     impl Drop for Fixture {
         fn drop(&mut self) {

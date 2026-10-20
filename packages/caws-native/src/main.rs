@@ -269,6 +269,16 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
 }
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "render-writer") {
+        let code = match caws_native::render_writer::run(&args[1..]) {
+            Ok(code) => code,
+            Err(error) => {
+                eprintln!("CAWS render writer unavailable: {error}");
+                75
+            }
+        };
+        std::process::exit(i32::from(code));
+    }
     if args.first().is_some_and(|arg| arg == "renderer-host") {
         let result = if args.len() == 3 && args[1] == "--config" {
             caws_native::render_owner::host(std::path::Path::new(&args[2]))

@@ -752,6 +752,53 @@ fn owner_eof_after_write_is_unknown_and_actual_owned_child_is_reaped() {
         Some(libc::SIGKILL)
     );
 }
+
+#[test]
+fn actual_backend_exec_retains_project_writer_lock_after_native_duplicate_closes() {
+    let fixture = Fixture::new("normal");
+    let writer = fixture.lifetime();
+    close_on_exec(writer.as_raw_fd()).unwrap();
+    let probe = OpenOptions::new()
+        .write(true)
+        .open(fixture.base.join("lifetime.lock"))
+        .unwrap();
+    let backend = OwnedBackend::spawn(
+        &fixture.spec,
+        &fixture.spec.work_dir.join("lease.json"),
+        Some(writer.as_raw_fd()),
+    )
+    .unwrap();
+    let expires = Instant::now() + Duration::from_secs(5);
+    let lease_path = fixture.spec.work_dir.join("lease.json");
+    let lease: Lease = loop {
+        backend.live().unwrap();
+        match fs::read(&lease_path) {
+            Ok(bytes) => break serde_json::from_slice(&bytes).unwrap(),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                assert!(
+                    Instant::now() < expires,
+                    "actual backend did not publish readiness"
+                );
+                thread::sleep(TICK);
+            }
+            Err(error) => panic!("backend lease read: {error}"),
+        }
+    };
+    assert_eq!(lease.pid, backend.pid);
+    drop(writer);
+    // Only the actual exec'd backend holds this open-file-description now.
+    assert_eq!(
+        unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+        -1
+    );
+    assert_eq!(io::Error::last_os_error().kind(), io::ErrorKind::WouldBlock);
+    // Drop owns this direct Child and performs verified group stop + wait.
+    drop(backend);
+    assert_eq!(
+        unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+        0
+    );
+}
 #[test]
 fn lost_daemon_reply_never_becomes_process_exit_success_or_automatic_retry() {
     let fixture = Fixture::new("lost");

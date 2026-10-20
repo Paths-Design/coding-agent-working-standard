@@ -40,7 +40,8 @@ const PREPARED_SCHEMA: &str = "caws.render.owner.prepared.v1";
 const TICK: Duration = Duration::from_millis(2);
 mod observations;
 use observations::{
-    Observation, ObservationLog, image_admission_failure, observation_reason, prefix_file,
+    Observation, ObservationLog, git_capture_failure, image_admission_failure, observation_reason,
+    prefix_file,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -412,8 +413,18 @@ fn frame(
     limit: usize,
     expires: Instant,
 ) -> Result<Vec<u8>> {
+    frame_while(stream, pending, limit, expires, || Ok(()))
+}
+fn frame_while(
+    stream: &mut UnixStream,
+    pending: &mut Vec<u8>,
+    limit: usize,
+    expires: Instant,
+    mut watch: impl FnMut() -> Result<()>,
+) -> Result<Vec<u8>> {
     loop {
         check(expires)?;
+        watch()?;
         if let Some(at) = pending.iter().position(|b| *b == b'\n') {
             if at + 1 > limit {
                 return Err("renderer owner frame too large".into());
@@ -439,6 +450,24 @@ fn frame(
             Err(e) => return Err(err(e)),
         }
     }
+}
+/// The request's write EOF is required framing. Only loss of the caller's
+/// response reader withdraws the request; no probe bytes are written.
+fn response_channel(stream: &UnixStream) -> Result<()> {
+    let mut state = libc::pollfd {
+        fd: stream.as_raw_fd(),
+        events: libc::POLLOUT,
+        revents: 0,
+    };
+    if unsafe { libc::poll(&mut state, 1, 0) } < 0 {
+        let failure = io::Error::last_os_error();
+        if failure.kind() != io::ErrorKind::Interrupted {
+            return Err(err(failure));
+        }
+    } else if state.revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0 {
+        return Err("renderer caller response channel closed".into());
+    }
+    Ok(())
 }
 /// The prepared connection carries exactly one bridge request and a write EOF.
 /// No request bytes are released for decode/admission/dispatch until EOF; the
@@ -658,6 +687,8 @@ impl Budget {
 struct Actor {
     config: Arc<OwnerConfig>,
     custody: Arc<journal::Custody>,
+    writer_custody: Option<Arc<journal::Custody>>,
+    writer_intent: Option<crate::render_writer::WriterIntent>,
     journal: journal::Journal,
     budget: Arc<Mutex<Budget>>,
     process: Option<BackendProcess>,
@@ -675,6 +706,7 @@ struct BackendProcess {
     view: git::GitView,
     directory: PathBuf,
     cleanup_seen: bool,
+    cleanup_exit: Option<backend::BackendExit>,
     observations: Arc<ObservationLog>,
     stderr: Option<ChildStderr>,
     stderr_nonblocking: bool,
@@ -799,16 +831,26 @@ impl BackendProcess {
         }
     }
     fn event(&mut self, expires: Instant) -> Result<backend::WorkerEvent> {
+        self.event_while(expires, None)
+    }
+    fn event_while(
+        &mut self,
+        expires: Instant,
+        caller: Option<&UnixStream>,
+    ) -> Result<backend::WorkerEvent> {
         self.drain_stderr();
-        let bytes = match frame(
+        let bytes = match frame_while(
             &mut self.control,
             &mut self.pending,
             backend::MAX_EVENT_BYTES,
             expires,
+            || caller.map(response_channel).transpose().map(|_| ()),
         ) {
             Ok(bytes) => bytes,
             Err(reason) => {
-                self.control_unavailable();
+                if caller.is_none_or(|stream| response_channel(stream).is_ok()) {
+                    self.control_unavailable();
+                }
                 return Err(reason);
             }
         };
@@ -817,8 +859,10 @@ impl BackendProcess {
             .map_err(|e| format!("worker event: {e:?}"))?
             .event;
         if let backend::WorkerEvent::Cleanup { receipt } = &event {
-            self.cleanup_seen = receipt.direct_child_reaped
-                || (self.backend_pid == 0 && receipt.child_pid.is_none());
+            self.cleanup_seen =
+                (receipt.direct_child_reaped && receipt.stdout.eof && receipt.stderr.eof)
+                    || (self.backend_pid == 0 && receipt.child_pid.is_none());
+            self.cleanup_exit = receipt.backend_exit.clone();
             self.observations.emit(Observation::WorkerCleanup {
                 native_worker_pid: self.child.as_ref().map(Child::id),
                 backend_pid: self.backend_pid,
@@ -844,7 +888,7 @@ impl BackendProcess {
     }
     /// Only the worker's observed backend cleanup permits releasing this slot.
     /// EOF/failure without cleanup quarantines the actual Child and custody.
-    fn retire(&mut self) {
+    fn retire(&mut self) -> Option<backend::BackendExit> {
         let request = backend::encode_command(backend::HostCommand::Stop);
         if let Ok(bytes) = request {
             let _ = write_all(
@@ -880,6 +924,7 @@ impl BackendProcess {
         }
         self.child.take();
         let _ = fs::remove_dir_all(&self.directory);
+        self.cleanup_exit.clone()
     }
 }
 impl Drop for BackendProcess {
@@ -897,15 +942,51 @@ fn high_duplicate(fd: RawFd) -> Result<OwnedFd> {
     }
     Ok(unsafe { OwnedFd::from_raw_fd(raw) })
 }
+struct WorkerCustody<'a> {
+    machine: &'a journal::Custody,
+    writer: &'a journal::Custody,
+}
+#[derive(Debug)]
+struct SpawnFailure {
+    reason: String,
+    child_started: bool,
+    stage: journal::NotStartedStage,
+    errno: Option<i32>,
+}
+impl From<String> for SpawnFailure {
+    fn from(reason: String) -> Self {
+        Self {
+            reason,
+            child_started: false,
+            stage: journal::NotStartedStage::Preparation,
+            errno: None,
+        }
+    }
+}
+impl From<&str> for SpawnFailure {
+    fn from(reason: &str) -> Self {
+        reason.to_owned().into()
+    }
+}
+impl SpawnFailure {
+    fn started(reason: String) -> Self {
+        Self {
+            reason,
+            child_started: true,
+            stage: journal::NotStartedStage::Spawn,
+            errno: None,
+        }
+    }
+}
 fn spawn_worker(
     c: &OwnerConfig,
-    custody: &journal::Custody,
+    custody: WorkerCustody<'_>,
     manifest: &image::PreparedImageManifest,
     view: git::GitView,
     directory: PathBuf,
     observations: Arc<ObservationLog>,
     expires: Instant,
-) -> Result<BackendProcess> {
+) -> std::result::Result<BackendProcess, SpawnFailure> {
     let root = PathBuf::from(&manifest.execution.root);
     let hooks = root.join(&manifest.execution.hooks);
     let python = manifest
@@ -973,12 +1054,15 @@ fn spawn_worker(
     host.set_nonblocking(true).map_err(err)?;
     let worker_fd = high_duplicate(worker.as_raw_fd())?;
     let config_fd = high_duplicate(file.as_raw_fd())?;
-    let lifetime = custody.duplicate_lifetime(expires).map_err(err)?;
+    let lifetime = custody.machine.duplicate_lifetime(expires).map_err(err)?;
     let lifetime_fd = high_duplicate(lifetime.as_raw_fd())?;
+    let writer_lifetime = custody.writer.duplicate_lifetime(expires).map_err(err)?;
+    let writer_lifetime_fd = high_duplicate(writer_lifetime.as_raw_fd())?;
     let descriptors = [
         (worker_fd.as_raw_fd(), 3),
         (config_fd.as_raw_fd(), 4),
         (lifetime_fd.as_raw_fd(), 6),
+        (writer_lifetime_fd.as_raw_fd(), 7),
     ];
     let mut command = Command::new(&c.native_executable);
     command
@@ -1003,7 +1087,12 @@ fn spawn_worker(
         });
     }
     check(expires)?;
-    let mut child = command.spawn().map_err(err)?;
+    let mut child = command.spawn().map_err(|failure| SpawnFailure {
+        reason: err(&failure),
+        child_started: false,
+        stage: journal::NotStartedStage::Spawn,
+        errno: failure.raw_os_error(),
+    })?;
     let stderr = child.stderr.take();
     let stderr_nonblocking = if let Some(stderr) = &stderr {
         let flags = unsafe { libc::fcntl(stderr.as_raw_fd(), libc::F_GETFL) };
@@ -1028,6 +1117,7 @@ fn spawn_worker(
         view,
         directory,
         cleanup_seen: false,
+        cleanup_exit: None,
         observations,
         stderr,
         stderr_nonblocking,
@@ -1035,7 +1125,9 @@ fn spawn_worker(
         control_unavailable_logged: false,
         retained_exit_logged: false,
     };
-    let event = process.event(until(c.limits.worker.startup_ms as u64, expires))?;
+    let event = process
+        .event(until(c.limits.worker.startup_ms as u64, expires))
+        .map_err(SpawnFailure::started)?;
     match event {
         backend::WorkerEvent::Ready {
             readiness,
@@ -1055,7 +1147,9 @@ fn spawn_worker(
             });
             Ok(process)
         }
-        _ => Err("worker did not establish owned-child readiness".into()),
+        _ => Err(SpawnFailure::started(
+            "worker did not establish owned-child readiness".into(),
+        )),
     }
 }
 
@@ -1253,6 +1347,26 @@ fn cancel_undispatched(
     }
 }
 impl Actor {
+    fn startup_failed(&mut self, failure: SpawnFailure) -> String {
+        if failure.child_started {
+            self.unknown = true;
+        } else if let Some(intent) = self.writer_intent.take()
+            && let Err(reason) = crate::render_writer::not_started(
+                intent,
+                failure.stage,
+                failure.errno,
+                Instant::now() + Duration::from_millis(self.config.limits.request_ms as u64),
+            )
+        {
+            self.unknown = true;
+            self.observations.emit(Observation::ActorError {
+                stage: "writer_not_started",
+                reason: observation_reason(&reason),
+            });
+        }
+        self.retire();
+        failure.reason
+    }
     fn stage(&mut self, stage: &'static str, invocation_id: &str) {
         self.phase = stage;
         self.observations.emit(Observation::ActorStage {
@@ -1261,8 +1375,30 @@ impl Actor {
         });
     }
     fn retire(&mut self) {
+        let mut backend_exit = None;
         if let Some(mut process) = self.process.take() {
-            process.retire();
+            backend_exit = process.retire();
+        }
+        if !self.unknown && self.writer_intent.is_some() {
+            if let Some(exit) = backend_exit {
+                let result = journal::ReturnedResult::ProcessExit {
+                    code: exit.code.and_then(|code| u8::try_from(code).ok()),
+                    signal: exit.signal.and_then(|signal| u8::try_from(signal).ok()),
+                };
+                if let Err(reason) = crate::render_writer::settle(
+                    self.writer_intent.take().expect("writer intent observed"),
+                    result,
+                    Instant::now() + Duration::from_millis(self.config.limits.request_ms as u64),
+                ) {
+                    self.unknown = true;
+                    self.observations.emit(Observation::ActorError {
+                        stage: "writer_settle",
+                        reason: observation_reason(&reason),
+                    });
+                }
+            } else {
+                self.unknown = true;
+            }
         }
         if self.reserved && !self.unknown {
             self.budget
@@ -1270,6 +1406,9 @@ impl Actor {
                 .unwrap_or_else(|e| e.into_inner())
                 .release();
             self.reserved = false;
+        }
+        if !self.unknown && self.writer_intent.is_none() && self.process.is_none() {
+            self.writer_custody.take();
         }
     }
     fn run(mut self, rx: mpsc::Receiver<Job>) {
@@ -1335,7 +1474,7 @@ impl Actor {
                 .reserve()?;
             self.reserved = true;
         }
-        self.stage("git_capture", &job.offer.invocation_id);
+        self.stage("worker_namespace", &job.offer.invocation_id);
         let workers = base(&self.config).join("workers");
         private_dir(&workers, true)?;
         let directory = workers.join(random()?);
@@ -1351,6 +1490,7 @@ impl Actor {
             .iter()
             .find(|t| t.name == "git")
             .ok_or("image Git missing")?;
+        self.stage("git_capture", &job.offer.invocation_id);
         let view = git::capture(
             &backend::PinnedFile {
                 path: git_tool.path.clone().into(),
@@ -1360,7 +1500,8 @@ impl Actor {
             &self.config.home,
             &directory.join("git"),
             job.expires,
-        )?;
+        )
+        .inspect_err(|reason| git_capture_failure(&self.observations, reason))?;
         let viable = self
             .process
             .as_mut()
@@ -1391,6 +1532,17 @@ impl Actor {
             if self.process.is_some() {
                 self.retire();
             }
+            if self.unknown {
+                return Err("renderer retirement retains an unresolved writer intent".into());
+            }
+            if self.writer_custody.is_none() {
+                self.stage("writer_custody", &job.offer.invocation_id);
+                self.writer_custody = Some(crate::render_writer::acquire(
+                    &self.config.home,
+                    Path::new(&job.offer.expected_selection.canonical_project),
+                    job.expires,
+                )?);
+            }
             if !self.reserved {
                 self.budget
                     .lock()
@@ -1406,15 +1558,43 @@ impl Actor {
                     err(failure)
                 })?;
             self.stage("worker_startup", &job.offer.invocation_id);
-            self.process = Some(spawn_worker(
+            let intent_bytes = serde_json::to_vec(&serde_json::json!({
+                "schema": "caws.render.writer.backend-intent.v1",
+                "canonicalProject": job.offer.expected_selection.canonical_project,
+                "imageDigest": admitted.image_digest(),
+                "sourceGeneration": admitted.manifest().source_generation,
+            }))
+            .map_err(err)?;
+            self.writer_intent = Some(crate::render_writer::begin(
+                Arc::clone(
+                    self.writer_custody
+                        .as_ref()
+                        .expect("writer custody acquired"),
+                ),
+                Path::new(&job.offer.expected_selection.canonical_project),
+                &admitted.manifest().source_generation,
+                &intent_bytes,
+                job.expires,
+            )?);
+            let spawned = spawn_worker(
                 &self.config,
-                &self.custody,
+                WorkerCustody {
+                    machine: &self.custody,
+                    writer: self
+                        .writer_custody
+                        .as_deref()
+                        .expect("writer custody acquired"),
+                },
                 admitted.manifest(),
                 view,
                 directory,
                 Arc::clone(&self.observations),
                 job.expires,
-            )?);
+            );
+            self.process = Some(match spawned {
+                Ok(process) => process,
+                Err(failure) => return Err(self.startup_failed(failure)),
+            });
             scratch.transferred = true;
         }
         self.stage("prepared_revalidation", &job.offer.invocation_id);
@@ -1462,7 +1642,7 @@ impl Actor {
             .request(incoming.request.arguments.clone())
             .map_err(err)?;
         wire::validate_issued_request(&incoming, &issued, &expected).map_err(err)?;
-        let result = self.execute(&expected, &job.offer, &admitted, &context, job.expires)?;
+        let result = self.execute(&expected, job, &admitted, &context)?;
         let (execution, served, cached) = match &result.outcome {
             wire::RenderOutcome::Rejected { .. } => ("rejected", None, None),
             wire::RenderOutcome::Queued => ("queued", None, None),
@@ -1497,11 +1677,13 @@ impl Actor {
     fn execute(
         &mut self,
         request: &wire::RenderRequest,
-        offer: &Offer,
+        job: &Job,
         admitted: &image::ValidatedImage,
         context: &image::AdmissionContext,
-        expires: Instant,
     ) -> Result<wire::RenderOutcomeFrame> {
+        let offer = &job.offer;
+        let caller = &job.stream;
+        let expires = job.expires;
         // These positional writes are constrained independently of client hashes.
         self.phase = "argument_binding";
         if !arguments_bound(
@@ -1554,6 +1736,10 @@ impl Actor {
         let observations = Arc::clone(&self.observations);
         let dispatch =
             match begin_issued_dispatch(&mut self.journal, request, &verified, expires, || {
+                response_channel(caller).map_err(|diagnostic| PreDispatchFailure {
+                    reason: journal::CancelReason::GrantWithdrawn,
+                    diagnostic,
+                })?;
                 admitted.revalidate(context, expires).map_err(|failure| {
                     image_admission_failure(&observations, &failure);
                     PreDispatchFailure {
@@ -1615,7 +1801,7 @@ impl Actor {
             backend_pid: self.process.as_ref().map(|p| p.backend_pid),
         });
         self.phase = "worker_render";
-        let result = self.dispatch(request, expires);
+        let result = self.dispatch(request, caller, expires);
         // Once Dispatch exists, every unobserved result retains unknown. Never
         // infer render success from worker exit or retry a potentially sent write.
         let record_deadline =
@@ -1650,11 +1836,17 @@ impl Actor {
         if operation.is_err() {
             self.unknown = true;
         }
+        if self.unknown {
+            // The durable unknown fence is retained before cleanup. Only the
+            // existing worker may stop/reap its backend; the reservation stays.
+            self.retire();
+        }
         wire::RenderOutcomeFrame::for_request(request, outcome(&operation?)?).map_err(err)
     }
     fn dispatch(
         &mut self,
         request: &wire::RenderRequest,
+        caller: &UnixStream,
         expires: Instant,
     ) -> Result<backend::DaemonResponse> {
         let process = self.process.as_mut().ok_or("backend process unavailable")?;
@@ -1665,7 +1857,7 @@ impl Actor {
         .map_err(|e| format!("worker command: {e:?}"))?;
         write_all(&process.control, &command, expires)?;
         loop {
-            match process.event(expires)? {
+            match process.event_while(expires, Some(caller))? {
                 backend::WorkerEvent::Progress { request_id, .. }
                     if request_id == request.request_id => {}
                 backend::WorkerEvent::Result {
@@ -1701,6 +1893,8 @@ impl Routing {
         let actor = Actor {
             config: Arc::clone(&self.config),
             custody: Arc::clone(&self.custody),
+            writer_custody: None,
+            writer_intent: None,
             journal,
             budget: Arc::clone(&self.budget),
             process: None,
@@ -1869,19 +2063,32 @@ pub fn host(path: &Path) -> Result<()> {
                         .route(&key, expires);
                     match sender {
                         Ok(sender) => {
-                            if sender
-                                .try_send(Job {
-                                    stream,
-                                    offer,
-                                    expires,
-                                    _permit: permit,
-                                })
-                                .is_err()
-                            {
-                                observations.emit(Observation::ActorError {
-                                    stage: "actor_queue",
-                                    reason: "queue_unavailable",
-                                });
+                            let invocation_id = offer.invocation_id.clone();
+                            match sender.try_send(Job {
+                                stream,
+                                offer,
+                                expires,
+                                _permit: permit,
+                            }) {
+                                Err(refusal) => {
+                                    let reason = match refusal {
+                                        mpsc::TrySendError::Full(_) => "queue_full",
+                                        mpsc::TrySendError::Disconnected(_) => "queue_disconnected",
+                                    };
+                                    observations.emit(Observation::ActorQueueRefused {
+                                        invocation_id: &invocation_id,
+                                        reason,
+                                    });
+                                    observations.emit(Observation::ActorError {
+                                        stage: "actor_queue",
+                                        reason: "queue_unavailable",
+                                    });
+                                }
+                                Ok(()) => {
+                                    observations.emit(Observation::ActorQueued {
+                                        invocation_id: &invocation_id,
+                                    });
+                                }
                             }
                         }
                         Err(reason) => observations.emit(Observation::ActorError {

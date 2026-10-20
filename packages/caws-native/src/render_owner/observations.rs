@@ -21,9 +21,22 @@ pub(super) enum Observation<'a> {
         operation: &'static str,
         kind: &'static str,
     },
+    GitCaptureRefused {
+        reason: &'static str,
+        query_exit_code: Option<i32>,
+        query_signal: Option<i32>,
+        stderr_bytes: Option<u64>,
+    },
     ActorStage {
         stage: &'static str,
         invocation_id: &'a str,
+    },
+    ActorQueued {
+        invocation_id: &'a str,
+    },
+    ActorQueueRefused {
+        invocation_id: &'a str,
+        reason: &'static str,
     },
     JournalRecovered {
         project_service_key: &'a str,
@@ -281,6 +294,59 @@ pub(super) fn observation_reason(reason: &str) -> &'static str {
     } else {
         "operation_refused"
     }
+}
+pub(super) fn git_capture_failure(log: &ObservationLog, diagnostic: &str) {
+    let reason = if diagnostic.starts_with("Git metadata query unavailable") {
+        "metadata_query_unavailable"
+    } else if diagnostic.starts_with("Git configuration changed") {
+        "configuration_changed"
+    } else if diagnostic.starts_with("Git metadata changed") {
+        "metadata_changed"
+    } else if diagnostic.starts_with("Git compatibility profile does not support") {
+        "executable_configuration_refused"
+    } else if diagnostic.contains("canonical") || diagnostic.contains("directory unavailable") {
+        "path_refused"
+    } else if diagnostic.contains("identity changed") {
+        "tool_identity_changed"
+    } else if diagnostic.contains("deadline") {
+        "deadline_expired"
+    } else if diagnostic.contains("limit")
+        || diagnostic.contains("bounded")
+        || diagnostic.contains("exceed")
+    {
+        "capture_bound_refused"
+    } else if diagnostic.contains("symlink") || diagnostic.contains("special file") {
+        "metadata_type_refused"
+    } else if diagnostic.contains("(os error 2)") {
+        "path_missing"
+    } else if diagnostic.contains("(os error 13)") || diagnostic.contains("(os error 1)") {
+        "path_permission_refused"
+    } else if diagnostic.contains("encoding")
+        || diagnostic.contains("framing")
+        || diagnostic.contains("representation")
+    {
+        "representation_refused"
+    } else if diagnostic.contains("already exists") {
+        "destination_exists"
+    } else {
+        "capture_io_or_operation_unavailable"
+    };
+    let query = diagnostic.strip_prefix("Git metadata query unavailable (status ");
+    let number = |prefix: &str| -> Option<i32> {
+        let text = query?.strip_prefix(prefix)?;
+        let digits: String = text.chars().take_while(char::is_ascii_digit).collect();
+        digits.parse().ok()
+    };
+    let stderr_bytes = query
+        .and_then(|text| text.split_once(", stderr bytes "))
+        .and_then(|(_, text)| text.strip_suffix(')'))
+        .and_then(|text| text.parse().ok());
+    log.emit(Observation::GitCaptureRefused {
+        reason,
+        query_exit_code: number("exit status: "),
+        query_signal: number("signal: "),
+        stderr_bytes,
+    });
 }
 pub(super) fn image_admission_failure(log: &ObservationLog, failure: &image::AdmissionError) {
     let kind = match failure.kind {
