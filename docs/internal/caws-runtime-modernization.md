@@ -4,7 +4,7 @@ authority: working
 status: active
 title: CAWS native runtime migration tracker
 owner: CAWS runtime maintainers
-updated: 2026-10-19
+updated: 2026-10-20
 audience: maintainer
 ---
 
@@ -170,11 +170,11 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | current-binary lifecycle and cooperative writer race observed, E92/E93 | Native image admission, actual selected handler/client, retained backend, partial actual output and owned cleanup reach the consumer. Unchanged legacy adoption/drain, full fallback/input compatibility, source retirement and multi-project behavior remain unqualified; no machine replacement |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | earlier-binary lifecycle and cooperative writer race observed, E92/E93 | Native image admission, actual selected handler/client, retained backend, partial actual output and owned cleanup reach the consumer. Replay on the final executable remains required. Unchanged legacy adoption/drain, full fallback/input compatibility, source retirement and multi-project behavior remain unqualified; no machine replacement |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
-| R37 | Plan snapshot producer/carrier/finalizer ownership | Native target locks and owner-partitioned tickets | native helper committed; sealed consumer source integrated; runtime qualification pending | E98 retains source/tests and explicit legacy/adoption limits. Shared producers, ownerless migration, Unicode plan names and foreign-owner target reuse remain open |
+| R37 | Plan snapshot producer/carrier/finalizer ownership | Native target locks and owner-partitioned tickets | native producer and actual selected sealed Stop observed, E105 | Destination-side custody crosses configured homes; exact bytes, owner-specific acknowledgement and rendered turns reach the consumer. Shared producers, ownerless migration, Unicode plan names and foreign-owner target reuse remain open |
 
 ## Machine-wide workload and representation boundary
 
@@ -1923,6 +1923,62 @@ Additional bounded evidence and unresolved dependencies:
   legacy adoption and permanent foreign-owner reuse remain explicit obligations.
   The review supplies counterexamples, not an acceptance verdict.
 
+- E105: Destination custody repair `5e0f687a` and case-domain repair `d9d2133d`
+  pass17 snapshot controls and the focused session-domain control; strict native
+  Clippy exits0. Seven direct CLI scenarios on native SHA
+  `d4644326955132c471099079c12192091e070ead1567096e326db7593b19dfab`
+  exit0 in `plan-snapshots-2026-10-20T07-58-11-419Z/`, retaining16 direct
+  child closes. Concurrent different-home producers return0/75; retry returns75
+  with `snapshot destination has another owner`, preserving winner bytes/inode.
+  Actual `qualify-render-plan-snapshots.js` exits0 in
+  `render-plan-snapshots-2026-10-20T07-58-35-681Z/`. Its selected Stop uses the
+  original30s budget, finalizes and acknowledges only the owned ticket, preserves
+  the other repository's same-ID ticket and legacy bytes/inodes, and renders both
+  exact semantic turns. Root independently verifies190 retained artifact hashes.
+  Snapshot and transcript copies are2040 bytes with equal SHA
+  `0c80240abb93494bf51f44b6062bfba7297a2a809f98a3b890df87b73aa9f0fe`.
+  `actual-execution-records.jsonl` records completed finalizer exit0 with native
+  preservation diagnostic, correlated to invocation `95086-1792483117563286000`
+  and native session prefix proof. All four direct children close0 without a
+  signal; cleanup is confirmed inactive, custody free and socket absent. These
+  artifacts establish this selected path, not stock shared producer adoption,
+  mixed stale-ticket recovery, deployed legacy exclusion or load qualification.
+
+- E106: Destination custody receives precise managed-ignore coverage at
+  `e6cfd05a`; its first focused Jest run fails two inherited cardinality
+  assertions. Inspection additionally exposes literal-glob probes and omission
+  of nested indexed custody in the drift observer. Repair `4b4f265a` uses concrete
+  root/nested probes and a bounded recursive Git query. CLI build and eight
+  focused checks exit0, including nested negation, root-only false coverage,
+  actual force-staged custody and trackable authority/source controls. Preserve
+  `prefix-cohort-2026-10-20/snapshot-ignore-{first,repair}-test.*`.
+  The first actual pending FIFO qualifier exits1 because its oracle reads the
+  outcome envelope at the wrong depth. Two Prepared callers share backend9319;
+  only the first operation is retained returned/served1, so two completed FIFO
+  effects are not established. Preserve `render-pending-fifo-2026-10-20T07-59-31-584Z/`.
+  Cleanup is confirmed inactive/free/socket absent. Commit `15507bee` retains
+  the typed `reply.outcome.outcome` discriminants and records raw/decoded replies
+  and operations before assertions; strict compilation exits0. Actual replay
+  remains required; no failed attempt is reclassified as success.
+
+- E107: Typed-driver replay on unchanged native `d4644326` passes actual FIFO,
+  case-alias and same-session controls. Roots are respectively
+  `render-pending-fifo-2026-10-20T08-04-19-941Z/`,
+  `render-pending-case-alias-2026-10-20T08-05-40-740Z/` and
+  `render-pending-same-session-2026-10-20T08-06-50-253Z/`.
+  FIFO retains two Prepared callers on backend85013 and returned sequence/served
+  pairs1/1 and2/2. Root verifies162 FIFO artifact hashes. Case aliases `shared-id`
+  and `SHARED-ID` share device16777231/inode752599413; the owner records a prefix
+  barrier, first-caller withdrawal, then second Prepared and one returned effect
+  with exact uppercase identity. Root verifies153 case-alias artifact hashes.
+  Each cleanup is confirmed inactive/free/socket absent. These controls enter
+  the actual owner directly and do not execute thirteen compatibility prefixes.
+  Generation, framing, reader expiry and valid-unreviewed serial controls remain
+  unexecuted. Separate inspection finds the drift check's three representative
+  probes cannot establish coverage of actual untracked custody under another
+  accepted plan directory; bounded discovery of existing unignored custody and
+  a `plans/team` negation control require implementation/execution.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2011,12 +2067,13 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-Finish the E104 destination-custody repair and E103 oracle repair, freeze and
-check the integrated candidate, then qualify the actual selected Stop path and
-the seven pending-owner scenarios, including actual case aliases. Inspect raw
-snapshots, tickets, execution records and cleanup before advancing. Replay the
-thirteen-client baseline only after these controls succeed; retain the unchanged
-30s budget and stop/inspect any failed or ambiguously cleaned scenario.
+E105/E107 establish the repaired selected Stop path and three actual owner
+controls on executable `d4644326`. Complete existing-untracked-custody drift
+coverage and the remaining generation, framing, reader-expiry and valid-custom
+serial controls. Inspect raw snapshots, tickets, execution records and cleanup
+before advancing. Replay the thirteen-client baseline only after these controls
+succeed; retain the unchanged30s budget and stop/inspect any failed or ambiguously
+cleaned scenario. Concurrent and overload modes require separate retained runs.
 
 E90 independently confirms E87's orphan absent without a root cleanup signal.
 E91/E92 retain repaired signal readiness, the complete native suite and all four
