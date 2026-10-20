@@ -2151,6 +2151,84 @@ Additional bounded evidence and unresolved dependencies:
   Killing a shared engine group for one request must not interrupt another
   request; a renderer-only or generic shared-Node change cannot earn that claim.
 
+- E116: Test-only `a6a78a3b` replaces the writer test's timing-dependent text
+  inference with direct kernel evidence. The5ms full-path acquisition still
+  refuses, accepting only exact Busy or typed-derived Deadline; independent
+  existing-only/nofollow descriptors must receive EWOULDBLOCK on the actual
+  lifetime-flock inode before release and while full-path500ms readmission
+  holds custody. Wrong-inode rejection, unchanged custody/registry/journal
+  identities and bytes, replaced session-cache inode and usable original owner
+  are asserted. Targeted execution exits0; `writer-cache-stable-lock-targeted`
+  log/receipt and fixture `caws-render-writer-19542-1792488478093653000` retain
+  both syscall results-1/errno35 on dev16777231/inode752726621; the wrong inode
+  is752726632. Every probe/duplicate/owner descriptor closes before completion;
+  no child is created. Independent inspection confirms the second probe would
+  reject returning the correct inode without acquiring its flock. This is not
+  an executed mutation campaign or recovery of E114's lost original refusal.
+
+- E117: The next parallel full run at `a6a78a3b` exits101 at a different test,
+  `stop_budget::tests::held_lock_deadline_does_not_consume_a_charge`: first
+  nonblocking flock returns-1 instead of0 after a completed charge. Its errno
+  is absent. Preserve `cold-pipeline-all-native-replay.{log,json}`, log hash
+  `ff1f78447e0a0e5f38085bb4aaef0e566707dff7df3fd42eaff5dcfcbb7089e9`.
+  Test-only `8a08d57b` retains immediate errno/FD flags/identities, raw budget
+  bytes and elapsed time before diagnostic writes; the strict flock0 and
+  original60ms/50–300ms timing/counter assertions remain. Its targeted probe
+  exits0: flock0,60.5ms Deadline, counter1 unchanged then2 after release.
+  The full instrumented replay exits0:193 library,40 binary,31 invocation and
+  3 example checks. Raw log `cold-pipeline-all-native-diagnostic.log` hashes
+  `29043fe6837a1b35cc1d5912ab945f4b870d942055d26d0e056970380e9aa69b`;
+  retained fixture `caws-stop-budget-21353-1792488965849343000` records flock0,
+  errno null,60,334,292ns Deadline and exact counter bytes. Final all-target
+  Clippy exits0. Independent source/artifact inspection confirms diagnostic
+  ordering; added I/O can change scheduling, so neither later pass identifies
+  either earlier full-run failure. Source review also identifies an intentional
+  non-exec fork inside shared libtest at `plan_snapshots/tests.rs:536`, which
+  can retain unrelated inherited CLOEXEC flock references. Its occurrence in
+  either failure is unproven. A deterministic inheritance control/isolation
+  remains an explicit test obligation, not a reason to attribute or erase the
+  failures. All these logs/receipts live under `prefix-cohort-2026-10-20/`.
+
+- E118: Actual unchanged fairness replay on native `b53d72c5`/driver `1a82043e`
+  exits1 at the same peer-before-later-hot-Running assertion. Artifacts are
+  `render-load-fairness-2026-10-20T09-37-00-274Z/`; command/exit/hash identity
+  are retained in `prefix-cohort-2026-10-20/cold-pipeline-fairness-command`.
+  The driver checks semantic output before timing:1000 hot turns and three
+  peer turns match, four operations return uncached, all13 compatibility guard
+  responses carry structured block and native exit2. These are stock guard
+  executions, not typed-classifier execution. Authorized independent readback
+  compares all1003 complete turn JSON objects and request context, all17 input/
+  journal/terminal correlations and13 refusal identities; rehashes1384 retained
+  artifacts/5,344,931B with zero mismatches. Last hot turn is1812B/SHA-256
+  `c95030b964380820c31759faf8e8057dc6d4561e3f5ca5870578f96e90674435`;
+  three1798B peer outputs, raw block stdout and per-command receipts are retained.
+  All17 delivery fields remain `not_observed`: native stdout inspection does
+  not prove platform harness consumption. Resource samples observe26 distinct
+  candidate CLI Node PIDs, no sampled host CLI or library-map parser, but35
+  Python PIDs including handler-map parsing/classification. Polling absence is
+  not universal absence; no Python retirement or controlled speedup follows.
+  All four installed agent-surface copies match9fb104ea;224 current-original/
+  fixture foreign-source custody comparisons match. The206B CLI wrapper is
+  retained at `hook-cli/caws`, SHA-256
+  `855576359bca196e557c2f259b1aaef9e12382aed88e5daf8dc5be7dbca7acc4`.
+  Cleanup is confirmed inactive/free, socket absent, no retained worker, original
+  host29784 absent/errno3. No further scenario runs after this failure.
+  The single owner clock places hot outcome8751ms before peer queue arrivals
+  8982/9039/9170ms: no peer offer contends with an active hot effect in this run.
+  Hot daemon720ms, stable Running746ms; peers report3/1/1ms. Whole peer calls
+  take15.146–15.574s; image admission3.583–3.736s, of which SyncStage takes
+  2.687–2.887s; bridge wait7.877–8.405s. SyncStage includes confinement and
+  syncing179 files,19 nested directories and root, excluding callbacks; it is
+  not isolated fsync CPU attribution. Guard calls take4.077–4.644s without
+  renderer admission. Start-to-dispatch timing includes Prepared wait, so
+  accounting must not double-count image admission as independent Node work.
+  Even eliminating syncing would leave the guard and prefix witness unmet.
+  The next cohesive dependency is an actual required-lane executor covering
+  the complete heartbeat/guard/Stop-prefix consumer path with fresh authority,
+  bounded capacity and request-owned cleanup. A resident Node launcher alone
+  leaves measured shell/CLI/Python work. No cache, durability-check removal,
+  workload inflation or weakened gate is authorized by this diagnosis.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2248,16 +2326,21 @@ the demonstrably redundant exact-empty library-map subprocess lookup, pin the
 qualification fixture's unsealed CLI identity and measure publication phases
 before choosing a caching or synchronization change. Review the changed prefix
 source explicitly; no candidate-derived automatic blessing. E113 implements
-those changes; E114's full-suite custody-test failure holds actual replay.
-Capture actual refusal and retained custody identities before resolving the
-oracle/implementation disagreement; never infer the lost original error from a
-later pass. Freeze, check and inspect the result before another original
-workload run. Keep the original
+those changes; E116/E117 retain stronger kernel/state diagnostics and a complete
+instrumented pass without erasing two unexplained earlier failures. E118's
+actual replay fails fairness and locates both publication cost and the larger
+required-lane/consumer-path dependency. Define the complete executor, native
+request ownership, fresh authority and cancellation boundaries before claiming
+residency or integrating scheduler capacity; preserve the caller's PID safety
+contract and sibling isolation. R06/R08 source integration and sealed-image
+contracts remain owed. Address the intentional shared-libtest fork's unrelated
+descriptor inheritance with a deterministic control/isolation, while preserving
+its cross-process lock assertions and all failure artifacts. Keep the original
 1000-turn hot transcript, counts,30s request budgets and later hot Running
-witness requirements. A failed scenario's correct output is not fairness proof.
-Inspect raw outcomes and known cleanup before advancing; overload and
-final-executable lifecycle/legacy replay require separate retained runs.
-R06/R08 source integration and sealed-image contracts remain owed.
+witness requirements. Correct output and source-level capacity are not fairness
+proof. No blind workload repetition: the next run needs an identified owning
+implementation change and known cleanup. Overload and final-executable
+lifecycle/legacy replay require separate retained runs.
 
 E90 independently confirms E87's orphan absent without a root cleanup signal.
 E91/E92 retain repaired signal readiness, the complete native suite and all four
