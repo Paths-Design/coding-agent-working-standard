@@ -1,7 +1,9 @@
 #![cfg(target_os = "macos")]
 //! Explicit single-scenario external observation. Only the retained original
 //! frontend Child authorizes a signal; observed PIDs never do.
-use caws_native::owned_group::stop_before_reap;
+use caws_native::owned_group::{
+    GroupSettlement, GroupStop, SettlementError, StopError, stop_before_reap,
+};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -165,6 +167,33 @@ struct Journal {
     file: File,
     prefix: Vec<u8>,
 }
+fn expected_pipe_loss(row: &Value) -> bool {
+    row["reason"] == "output_failure"
+        && row["frontend_output_errno"] == libc::EPIPE
+        && row["error"]
+            .as_str()
+            .is_some_and(|message| message.starts_with("frontend output: "))
+}
+#[test]
+fn output_close_race_does_not_admit_unrelated_transport_or_cleanup_failure() {
+    let row = json!({"reason":"output_failure","frontend_output_errno":libc::EPIPE,
+        "error":"frontend output: retained OS failure"});
+    assert!(expected_pipe_loss(&row));
+    for (key, value) in [
+        ("frontend_output_errno", json!(libc::EIO)),
+        ("frontend_output_errno", Value::Null),
+        ("reason", json!("engine_output_failure")),
+        ("error", json!("engine reap: EIO")),
+        ("error", Value::Null),
+    ] {
+        let mut changed = row.clone();
+        changed[key] = value;
+        assert!(
+            !expected_pipe_loss(&changed),
+            "unexpected failure admitted through {key}"
+        );
+    }
+}
 impl Journal {
     fn read(&mut self, root: &Path, id: &str, custodian: u32, node: u32) -> Check<Vec<Value>> {
         let length = io(self.file.metadata())?.len();
@@ -180,6 +209,10 @@ impl Journal {
                 break;
             }
             let row: Value = serde_json::from_slice(line).map_err(|e| e.to_string())?;
+            let stopped: Option<Result<GroupStop, StopError>> =
+                serde_json::from_value(row["stop"].clone()).map_err(|e| e.to_string())?;
+            let settled: Option<Result<GroupSettlement, SettlementError>> =
+                serde_json::from_value(row["settlement"].clone()).map_err(|e| e.to_string())?;
             require(
                 matches!(
                     row["state"].as_str(),
@@ -205,9 +238,9 @@ impl Journal {
                 "journal identity/sequence differs",
             )?;
             require(
-                row["error"].is_null()
-                    && row["stop"].get("Err").is_none()
-                    && row["settlement"].get("Err").is_none(),
+                (row["error"].is_null() || expected_pipe_loss(&row))
+                    && !matches!(stopped, Some(Err(_)))
+                    && !matches!(settled, Some(Err(_))),
                 "cleanup failed/unknown; stop scenario chain",
             )?;
             if let Some(old) = rows.last() {
@@ -493,7 +526,9 @@ fn original_frontend_death_before_ready_settles_same_engine() {
         };
         let group = &terminal["settlement"]["Ok"]["Exited"]["observation"];
         require(
-            terminal["reason"] == "frontend_gone"
+            (terminal["reason"] == "frontend_gone"
+                || (terminal["reason"] == "output_failure"
+                    && terminal["frontend_output_errno"] == libc::EPIPE))
                 && terminal["stdout_eof"] == true
                 && terminal["stderr_eof"] == true
                 && terminal["stdout_bytes"] == 0

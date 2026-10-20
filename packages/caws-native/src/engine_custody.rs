@@ -71,6 +71,7 @@ pub(super) struct Receipt {
     pub stdout_bytes: u64,
     pub stderr_bytes: u64,
     pub output_discarded: bool,
+    pub frontend_output_errno: Option<i32>,
     pub error: Option<String>,
 }
 impl Receipt {

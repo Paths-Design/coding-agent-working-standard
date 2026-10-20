@@ -42,6 +42,7 @@ fn complete_receipt(sequence: u64) -> Receipt {
         stdout_bytes: 17,
         stderr_bytes: 3,
         output_discarded: false,
+        frontend_output_errno: None,
         error: None,
     }
 }

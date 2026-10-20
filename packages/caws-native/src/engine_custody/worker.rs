@@ -316,6 +316,7 @@ fn receipt(config: &Configuration, state: ReceiptState, node_pid: Option<u32>) -
         stdout_bytes: 0,
         stderr_bytes: 0,
         output_discarded: false,
+        frontend_output_errno: None,
         error: None,
     }
 }
@@ -601,6 +602,7 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
         } else {
             for (fd, queue) in [(1, &mut out), (2, &mut err)] {
                 if let Err(error) = write_channel(fd, queue) {
+                    row.frontend_output_errno = error.raw_os_error();
                     discard_output = true;
                     if reason.is_none() {
                         reason = Some("output_failure".into());

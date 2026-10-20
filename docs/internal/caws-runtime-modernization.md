@@ -170,7 +170,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R17 | `shared/lib/harness_dsh.py` | TS DSH adapter | unreplaced | Surface-specific transcript and native registration fixtures |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering | TS renderer + recoverable worker | unreplaced | Complete semantic transcript fixtures, cache freshness and installed rendering |
 | R19 | Python embedded in shell helpers/dispatchers | TS modules or bounded native operations | inventoried; unreplaced | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions |
-| R20 | Python developer/harvest/qualification scripts | Typed TS tooling | one rule-token leaf accepted and landed on main; parent integration and eight other paths unreplaced | E134 retains bounded Python3.11/Unicode14 and Node18/22 differential artifacts, including failed Unicode and executable-symlink candidates. Parent bytes retain the original implementation until integration. The separately bound hook-harvest component owns its six paths; its source preparation is not qualification or parent acceptance |
+| R20 | Python developer/harvest/qualification scripts | Typed TS tooling | rule-token and sensitivity leaves accepted and landed on main; parent integration and seven original paths unreplaced | E134/E144 retain bounded reference profiles, deliberate old-bug repairs and raw failed/successful artifacts. Parent bytes retain the original implementations until integration. Hook-harvest remains held on its Git-admission and argument-parser contracts; component progress is not parent acceptance |
 | R21 | Python-owned regression tests | TS/native behavioral tests | unreplaced | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes |
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation and bounded actual-engine replay tested; separate macOS engine custodian wired and pure contracts tested, E142 | Actual custodian survival/Node settlement, complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
@@ -2871,6 +2871,28 @@ Additional bounded evidence and unresolved dependencies:
   to that lane's owner, pending canonical readback; no parent AC or installation
   follows. The hook-harvest parser's later argv discrepancies remain held in its
   separate component, alongside its intentional Git-admission repair.
+
+- E144: The committed qualifier review identifies an output-close race before
+  any live probe: frontend death between a control read and queued stderr write
+  can produce EPIPE before liveness EOF. Requiring only `frontend_gone` and
+  rejecting that expected transport error would fail legitimate cleanup.
+  Receipts retain raw `frontend_output_errno`; the oracle admits only the
+  corresponding frontend-output EPIPE and separately rejects stop/settlement
+  errors, malformed result encodings, unknown states and state regression.
+  Other transport errors and reap failures remain failures. The pure race
+  control,28 custody controls and strict binary/test Clippy exit0; raw command
+  output is `engine-custody-output-close-checks.json`. These checks do not
+  observe the live race or execute Node/kernel cleanup.
+  Root reads the closed sensitivity spec and matching `ac_recorded` events
+  9464/9465/9467, source merge `922fec1b` and closure `204a5796`. Main's four
+  surviving file hashes match candidate `70f1f496`; `git ls-tree` contains its
+  Node executable and omits the original Python script. This discharges the
+  bounded component's source landing, not parent branch integration, R21 or
+  runtime acceptance. Full raw postmerge custody remains under that peer's
+  `native-sensitivity/postmerge-readback.json`. The inherited ignored-tracker
+  precommit restaging failure reaches these commits' verification path and is
+  under source/effective-hook investigation; prior occurrence does not resolve
+  it. Explicit formatter, compiler and policy checks remain separately cited.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
