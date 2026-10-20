@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm, access, symlink, readlink } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -19,6 +20,30 @@ const EXPECTED = [
   { name: 'denial-priority', relative: 'shared/lib/run-handlers.sh', original: "block|deny) printf '3\\n' ;;", mutation: "block) printf '3\\n' ;;", test: 'test_all_surface_runners_preserve_refusals_and_record_raw_exit', assertion: 'self.assertEqual(denied.returncode, 2, denied.stderr)' },
   { name: 'cache-symlink', relative: 'shared/lib/session-cache.sh', original: 'os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW', mutation: 'os.O_RDONLY | os.O_DIRECTORY', test: 'test_recording_failure_cannot_turn_a_refusal_into_admission', assertion: 'self.assertEqual(list(outside.iterdir()), [])' },
 ];
+
+/** Produce unittest output as fixture data; this does not execute Python.
+ * @param {SensitivityCase} row
+ * @param {string} script
+ * @param {string} qualified
+ * @param {string} [source]
+ * @param {string} [terminal]
+ */
+function failureTrace(row, script, qualified, source, terminal) {
+  const method = qualified.split('.').at(-1);
+  const renderer = row.name === 'renderer-lock';
+  source ??= renderer ? "self.assertTrue(blocked_before_read, 'second renderer read inputs while first held the lock')" : row.assertion;
+  terminal ??= renderer ? 'AssertionError: False is not true : second renderer read inputs while first held the lock' : 'AssertionError';
+  return `${'='.repeat(70)}\nFAIL: ${method} (__main__.${qualified})\n${'-'.repeat(70)}\nTraceback (most recent call last):\n  File "${script}", line 42, in ${method}\n    ${source}\n${terminal}\n\n${'-'.repeat(70)}\nRan 1 test in 0.001s\n\nFAILED (failures=1)\n`;
+}
+
+const verdictScript = '/synthetic consumer/test_machine_hook_selection.py';
+/** @param {SensitivityCase} row */
+function verdictOutcome(row) {
+  const fidelity = row.test.startsWith('fidelity:');
+  const qualified = `${fidelity ? 'InstalledSessionFidelity' : 'MachineHookSelection'}.${row.test.split(':').at(-1)}`;
+  const script = fidelity ? path.join(path.dirname(verdictScript), 'test_installed_session_fidelity.py') : verdictScript;
+  return { exit_code: 1, argv: [process.execPath, script, qualified, '-v'] };
+}
 
 /** @param {string} file */
 async function exists(file) {
@@ -62,6 +87,7 @@ async function fixture(t, mode = 'matched') {
   await writeFile(path.join(repo, 'fixture-mode.json'), JSON.stringify(mode));
   const consumer = `const fs = require('node:fs');
 const path = require('node:path');
+${failureTrace.toString()}
 async function main() {
   const repo = process.cwd();
   const argv = process.argv.slice(1);
@@ -91,8 +117,8 @@ async function main() {
     if (mode === 'setup-failure') {
       process.stderr.write('ImportError: broken fixture setup\\n'); process.exitCode = 1; return;
     }
-    const assertion = mode === 'wrong-assertion' ? 'a different assertion' : row.assertion;
-    process.stderr.write('AssertionError: ' + assertion + '\\n'); process.exitCode = 1; return;
+    const assertion = mode === 'wrong-assertion' ? 'self.assertEqual(unrelated, wrong)' : undefined;
+    process.stderr.write(failureTrace(row, argv[0], argv[1], assertion)); process.exitCode = 1; return;
   }
   process.stderr.write(Buffer.concat([Buffer.from('raw stderr'), Buffer.from([0, 254, 10])]));
 }
@@ -107,6 +133,18 @@ main().catch(error => { console.error(error); process.exitCode = 1; });
 // The runner's interpreter selector executes only our JavaScript fixture files.
 const python = process.execPath;
 
+test('module import with a file URL user operand does not enter the CLI', () => {
+  const moduleURL = new URL('./sensitivity.mjs', import.meta.url).href;
+  const result = spawnSync(process.execPath, [
+    '--input-type=module', '-e',
+    'await import(process.argv[1]); process.stdout.write(JSON.stringify({imported:true}));',
+    moduleURL,
+  ], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, '{"imported":true}');
+});
+
 test('six immutable cases preserve the original mutation and assertion contracts', () => {
   assert.deepEqual(CASES, EXPECTED);
   assert.equal(Object.isFrozen(CASES), true);
@@ -115,7 +153,10 @@ test('six immutable cases preserve the original mutation and assertion contracts
 
 test('a kill requires a green control and the exact decision-bearing assertion', () => {
   const row = EXPECTED[0];
-  assert.equal(verdict(row, { exit_code: 0 }, { exit_code: 1 }, `AssertionError: ${row.assertion}`), true);
+  const outcome = verdictOutcome(row);
+  assert.equal(path.basename(outcome.argv[1]), 'test_installed_session_fidelity.py');
+  const trace = failureTrace(row, outcome.argv[1], outcome.argv[2]);
+  assert.equal(verdict(row, { exit_code: 0 }, outcome, trace), true);
   /** @type {[number | null, number | null, string][]} */
   const rejected = [
     [1, 1, `AssertionError: ${row.assertion}`],
@@ -127,8 +168,45 @@ test('a kill requires a green control and the exact decision-bearing assertion',
     [0, 1, row.assertion],
   ];
   for (const [control, outcome, stderr] of rejected) {
-    assert.equal(verdict(row, { exit_code: control }, { exit_code: outcome }, stderr), false);
+    assert.equal(verdict(row, { exit_code: control }, { ...verdictOutcome(row), exit_code: outcome }, stderr), false);
   }
+});
+
+test('failure attribution requires the selected final frame and complete matching unittest summary', () => {
+  const row = EXPECTED[3];
+  const outcome = verdictOutcome(row);
+  const valid = failureTrace(row, verdictScript, outcome.argv[2]);
+  assert.equal(verdict(row, { exit_code: 0 }, outcome, valid), true);
+  // CPython 3.9 names the class without repeating the selected method in parentheses.
+  const legacy = valid.replace(`(__main__.${outcome.argv[2]})`, '(__main__.MachineHookSelection)');
+  assert.equal(verdict(row, { exit_code: 0 }, outcome, legacy), true);
+  const unrelated = failureTrace(row, verdictScript, outcome.argv[2], 'self.assertEqual(other, wrong)');
+  for (const stderr of [
+    `AssertionError: unrelated\n${row.assertion}\n`,
+    `${row.assertion}\n${unrelated}`,
+    valid.replace(`    ${row.assertion}\nAssertionError`, `    ${row.assertion}\n  File "${verdictScript}", line 43, in ${outcome.argv[2].split('.').at(-1)}\n    self.assertEqual(other, wrong)\nAssertionError`),
+    valid.replace(`  File "${verdictScript}", line 42`, '  File "/foreign/test.py", line 42'),
+    valid.replace('FAIL:', 'ERROR:'),
+    valid.replace(`__main__.${outcome.argv[2]}`, '__main__.Foreign.test_other'),
+    valid.replace('FAILED (failures=1)', 'FAILED (failures=2)'),
+    valid.replace('FAILED (failures=1)\n', ''),
+    `${valid}\nDuring handling of the above exception, another exception occurred:\n${valid}`,
+  ]) assert.equal(verdict(row, { exit_code: 0 }, outcome, stderr), false, stderr);
+  assert.equal(verdict(row, { exit_code: 0, inconclusive: 'timeout' }, outcome, valid), false);
+  assert.equal(verdict(row, { exit_code: 0 }, { ...outcome, inconclusive: 'timeout' }, valid), false);
+});
+
+test('multiple genuine denial subtest failures match their summary count', () => {
+  const row = EXPECTED[4];
+  const outcome = verdictOutcome(row);
+  const complete = failureTrace(row, verdictScript, outcome.argv[2]);
+  const summaryAt = complete.lastIndexOf('-'.repeat(70));
+  const block = complete.slice(0, summaryAt);
+  const first = block.replace(`(__main__.${outcome.argv[2]})`, `(__main__.${outcome.argv[2]}) (surface='codex')`);
+  const second = block.replace(`(__main__.${outcome.argv[2]})`, `(__main__.${outcome.argv[2]}) (surface='claude-code')`);
+  const stderr = first + second + complete.slice(summaryAt).replace('failures=1', 'failures=2');
+  assert.equal(verdict(row, { exit_code: 0 }, outcome, stderr), true);
+  assert.equal(verdict(row, { exit_code: 0 }, outcome, stderr.replace('failures=2', 'failures=1')), false);
 });
 
 test('all six matched controls retain bytes and custody while mutant copies are cleaned', async (t) => {
@@ -307,4 +385,21 @@ test('disposable copies dereference source symlinks and normalize CRLF without c
   assert.equal(control.mutant, false);
   assert.equal(mutant.mutant, true);
   assert.equal(await exists(mutant.templates), false);
+});
+
+test('output resolves symlink ancestors before parent traversal and creates missing descendants there', async (t) => {
+  const f = await fixture(t);
+  const parent = path.join(f.root, 'real parent');
+  const target = path.join(parent, 'inside');
+  const alias = path.join(f.root, 'output alias');
+  await mkdir(target, { recursive: true });
+  await symlink(target, alias);
+  const output = `${alias}/../missing descendants/qualification`;
+  const actual = path.join(parent, 'missing descendants/qualification');
+  const result = await runSensitivity({ repo: f.repo, output, cases: ['source-digest'], python });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(await readFile(path.join(actual, 'summary.json'), 'utf8')), result.summary);
+  assert.equal(await exists(path.join(f.root, 'missing descendants')), false);
+  const control = result.summary.cases[0].control;
+  assert.equal(control.artifacts, path.join(actual, 'source-digest/control/artifacts'));
 });

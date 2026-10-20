@@ -12,14 +12,21 @@ Use `--python <executable>` to select the regression-test interpreter
 explicitly. Option digit syntax follows the Python 3.11 / Unicode 14 reference
 profile. The dated Python commands below identify historical executions. The
 Node runner retains their six mutations, matched-control requirement and
-assertion-specific verdicts. It writes raw `stdout`/`stderr`, per-attempt
-`command.json`, retained `source.original`/`source.mutant` and `summary.json`;
-timeout and startup failures also retain command receipts and cannot count as
-killed mutants. Its focused synthetic-consumer qualification establishes
-orchestration and artifact custody, not the sensitivity of the six production
-regression tests. Those Python test consumers remain migration obligations. The
-direct-child timeout boundary does not establish descendant containment or
-cleanup after orchestrator death.
+assertion-specific verdicts. Output paths follow POSIX symlinks before
+interpreting subsequent `..` components. The runner repairs the inherited
+two-substring false positive: it requires a complete selected-test CPython
+3.9/3.11 `unittest` failure report matching the invoked script, final test
+frame, decision-bearing assertion and failure count. Unrelated assertion errors
+plus echoed source text cannot count as a kill; unsupported reports remain
+unqualified. Parsing cannot authenticate a malicious consumer forging a complete
+traceback. It writes raw `stdout`/`stderr`, per-attempt `command.json`, retained
+`source.original`/`source.mutant` and `summary.json`; timeout and startup
+failures also retain command receipts and cannot count as killed mutants. Its
+focused synthetic-consumer qualification establishes orchestration and artifact
+custody, not the sensitivity of the six production regression tests. Those
+Python test consumers remain migration obligations. The direct-child timeout
+boundary does not establish descendant containment or cleanup after orchestrator
+death.
 
 ## Contract
 

@@ -2,9 +2,9 @@
 /** Matched sensitivity experiments. Python regression consumers remain an R21 obligation. */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** @typedef {{name:string,relative:string,original:string,mutation:string,test:string,assertion:string}} SensitivityCase */
@@ -57,10 +57,78 @@ const sha = value => createHash('sha256').update(value).digest('hex');
 const json = (file, value) => writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
 
 /** @typedef {{argv:string[],exit_code:number|null,stderr_path:string,artifacts:string,cwd:string,inconclusive?:string}} Attempt */
-/** @param {Readonly<SensitivityCase>} entry @param {Pick<Attempt,'exit_code'>} control @param {Pick<Attempt,'exit_code'>} outcome @param {string} stderr */
+/** Attribute only complete selected-test failures in the supported CPython unittest format.
+ * Text is not authenticated against a consumer forging a complete report.
+ * @param {Readonly<SensitivityCase>} entry
+ * @param {Pick<Attempt,'exit_code'|'inconclusive'>} control
+ * @param {Pick<Attempt,'exit_code'|'inconclusive'|'argv'>} outcome @param {string} stderr
+ */
 export function verdict(entry, control, outcome, stderr) {
-  return control.exit_code === 0 && outcome.exit_code === 1 &&
-    stderr.includes('AssertionError') && stderr.includes(entry.assertion);
+  if (control.exit_code !== 0 || outcome.exit_code !== 1 || control.inconclusive || outcome.inconclusive) return false;
+  const file = outcome.argv[1];
+  if (!file) return false;
+  const method = entry.test.replace(/^fidelity:/, '');
+  const klass = entry.test.startsWith('fidelity:') ? 'InstalledSessionFidelity' : 'MachineHookSelection';
+  if (basename(file) !== (entry.test.startsWith('fidelity:') ? 'test_installed_session_fidelity.py' : 'test_machine_hook_selection.py')) return false;
+  const report = stderr.replace(/\r\n?/g, '\n');
+  const summary = /^-{70}\nRan 1 test in [^\n]+\n\nFAILED \(failures=([1-9][0-9]*)(?:, skipped=[0-9]+)?\)\n?(?![\s\S])/m.exec(report);
+  if (!summary || /^(?:ERROR:|During handling of the above exception|The above exception was)/m.test(report)) return false;
+  const headers = [...report.matchAll(/^={70}\nFAIL: ([^\n]+)\n-{70}\n/gm)];
+  if (headers.length !== Number(summary[1])) return false;
+  const identities = [`${method} (__main__.${klass}.${method})`, `${method} (__main__.${klass})`];
+  const expectedSource = entry.name === 'renderer-lock'
+    ? "self.assertTrue(blocked_before_read, 'second renderer read inputs while first held the lock')"
+    : entry.assertion;
+  for (let index = 0; index < headers.length; index++) {
+    const header = headers[index];
+    const label = header[1];
+    if (!identities.some(identity => label === identity || (label.startsWith(identity + ' (') && label.endsWith(')')))) return false;
+    const body = report.slice(header.index + header[0].length, headers[index + 1]?.index ?? summary.index).trimEnd();
+    if (!body.startsWith('Traceback (most recent call last):\n')) return false;
+    const lines = body.split('\n');
+    let lastFrame = -1;
+    for (let line = 1; line < lines.length; line++)
+      if (/^  File "[^"\n]+", line [1-9][0-9]*, in [^\n]+$/.test(lines[line])) lastFrame = line;
+    if (lastFrame < 0) return false;
+    const frame = /^  File "([^"\n]+)", line [1-9][0-9]*, in ([^\n]+)$/.exec(lines[lastFrame]);
+    if (!frame || frame[1] !== file || frame[2] !== method) return false;
+    const source = lines[lastFrame + 1];
+    if (!source?.startsWith('    ') || !source.trimStart().startsWith(expectedSource)) return false;
+    const exception = lines.slice(lastFrame + 2).find(line => line.length && !/^[ \t]/.test(line));
+    if (!exception || !/^AssertionError(?::|$)/.test(exception)) return false;
+    if (entry.name === 'renderer-lock' && exception !== 'AssertionError: False is not true : ' + entry.assertion) return false;
+  }
+  return true;
+}
+
+/** Resolve symlinks before interpreting following '..', including missing output leaves.
+ * The supported reference profile is POSIX pathlib.resolve(strict=False).
+ * @param {string} value
+ */
+export function resolveOutput(value) {
+  /** @type {(string|{link:string})[]} */
+  const pending = (isAbsolute(value) ? value : `${process.cwd()}/${value}`).split('/');
+  const active = new Set();
+  let output = '/';
+  while (pending.length) {
+    const part = pending.shift();
+    if (part && typeof part === 'object') { active.delete(part.link); continue; }
+    if (!part || part === '.') continue;
+    if (part === '..') { output = dirname(output); continue; }
+    const candidate = join(output, part);
+    let link = false;
+    try { link = lstatSync(candidate).isSymbolicLink(); }
+    catch (error) {
+      if (!error || typeof error !== 'object' || !('code' in error) || !['ENOENT', 'ENOTDIR'].includes(String(error.code))) throw error;
+    }
+    if (!link) { output = candidate; continue; }
+    if (active.has(candidate)) throw new Error('symlink resolution loop: ' + value);
+    active.add(candidate);
+    const target = readlinkSync(candidate);
+    if (isAbsolute(target)) output = '/';
+    pending.unshift(...target.split('/'), { link: candidate });
+  }
+  return output;
 }
 
 /** Capture a regression-test attempt; timeouts are inconclusive, never kills.
@@ -110,7 +178,7 @@ export async function execute(directory, templates, test, options) {
 /** @param {{repo?:string,output:string,cases?:readonly string[],python?:string,timeoutMs?:number,onResult?:(row:unknown)=>void}} options */
 export async function runSensitivity(options) {
   const repo = realpathSync(options.repo ?? REPO);
-  const output = resolve(options.output);
+  const output = resolveOutput(options.output);
   const names = options.cases;
   if (names?.some(name => !CASES.some(entry => entry.name === name))) throw new Error('Unknown sensitivity case');
   mkdirSync(dirname(output), { recursive: true });
@@ -182,8 +250,12 @@ export function parseArguments(args) {
   return { output, python, cases };
 }
 
-// Resolve executable aliases as Python does; importing the module has no side effects.
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+// An import must not require a script path in argv (e.g. node -e with data operands).
+function isMain() {
+  try { return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+}
+if (isMain()) {
   let options;
   try {
     options = parseArguments(process.argv.slice(2));
