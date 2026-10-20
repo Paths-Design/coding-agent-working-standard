@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-TRANSCRIPT-UNICODE-001
 title: 'Historical transcript Unicode interpretation profile'
 mode: feature
-lifecycle_state: active
-worktree: native-transcript-unicode
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Checked candidate 25d114c9 preserves historical Python3.11.13/Unicode14 interpretation with immutable codepoint custody and typed source indexes. Node18/22 strict builds and74 cases pass; all1114112 codepoints,138552 canonical names,140441 name controls and280 retained comparisons match, with no incomplete allowance. Raw failures, reverse probes, provenance and exact source hashes: /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode/artifact-index.json. Independent read-only feedback grounded; component A1–A4 events9657–9660 recorded from inspected behavior; CLI re-derivation checks commit reachability only. Real turn/spill/index/cache/renderer/native-hook consumers and Python retirement remain parent-owned and unverified; JSON projection remains non-injective. No machine pointer, production consumer or cutover change.'
 created_at: '2026-10-20T18:58:59.714Z'
-updated_at: '2026-10-20T19:46:47.573Z'
+updated_at: '2026-10-20T19:49:04.324Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
