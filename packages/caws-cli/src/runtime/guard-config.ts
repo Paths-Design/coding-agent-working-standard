@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseRepoHookPolicy, type GuardConfig } from '../init/repo-hook-policy';
+import { assertMachinePath } from '../init/machine-paths';
+import type { ActiveInvocationSelection } from './selection';
 
 export type GuardConfiguration =
   | { status: 'ok'; guards: Record<string, GuardConfig> }
@@ -122,4 +125,58 @@ export function loadGuardConfigurationEnvironment(
     read('.caws/hooks/hook-policy.json'),
     read('.caws/policy.yaml')
   );
+}
+
+const STOCK_CONFIGURATION_SOURCES: Readonly<Record<string, string>> = Object.freeze({
+  'guard-config.sh': '934d60a8a56068caf2129a5705f207bf4b1203f2164dd385a057e510505cbd55',
+  'guard-config.py': '55496bed9393fd458c3fda326973067dffa309553eb915018cc462ce963ba7e0',
+});
+
+/** Indexed assignments are private transport, not a caller policy API.
+ * The explicit parser and public guard threshold overrides remain separate.
+ */
+export function clearGuardConfigurationTransport(environment: Record<string, string>): void {
+  for (const name of Object.keys(environment))
+    if (name.startsWith('CAWS_GUARD_') && name !== 'CAWS_GUARD_CONFIG_PY') delete environment[name];
+}
+
+/** Read once at dispatch for the reviewed stock loader/parser pair.
+ * Selected custom code and shell startup retain their compatibility parse.
+ */
+export function invocationGuardConfiguration(
+  selection: ActiveInvocationSelection,
+  environment: Readonly<Record<string, string>>
+): Readonly<Record<string, string>> {
+  const result = { ...environment };
+  clearGuardConfigurationTransport(result);
+  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
+  if (
+    selection.configuration !== 'system' ||
+    environment.CAWS_GUARD_CONFIG_PY ||
+    environment.CAWS_PRIOR_BASH_ENV ||
+    (environment.BASH_ENV && environment.BASH_ENV !== startup) ||
+    environment.ENV
+  )
+    return Object.freeze(result);
+  try {
+    for (const [name, expected] of Object.entries(STOCK_CONFIGURATION_SOURCES)) {
+      const selected = selection.libraries[name];
+      const file = join(selection.runtimeDirectory, 'lib', name);
+      if (
+        !selected ||
+        selected.kind !== 'shared' ||
+        selected.path !== file ||
+        selected.sha256 !== expected ||
+        selection.libraryOverrides[name]
+      )
+        return Object.freeze(result);
+      assertMachinePath(selection.runtimeDirectory, file);
+      if (createHash('sha256').update(readFileSync(file)).digest('hex') !== expected)
+        return Object.freeze(result);
+    }
+  } catch {
+    return Object.freeze(result);
+  }
+  Object.assign(result, loadGuardConfigurationEnvironment(selection.checkout));
+  return Object.freeze(result);
 }

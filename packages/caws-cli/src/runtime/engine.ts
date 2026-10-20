@@ -18,6 +18,7 @@ import {
 } from './handler-executor';
 import { handlerEligibility } from './eligibility';
 import { resolveInvocationIdentity } from './identity';
+import { clearGuardConfigurationTransport, invocationGuardConfiguration } from './guard-config';
 import { InvocationJournal } from './journal';
 import { AdvisoryDedup } from './advisory-dedup';
 import { normalizeNativeResult } from './native-response';
@@ -195,6 +196,7 @@ export async function prepareRuntimeInvocation(
   signal: AbortSignal
 ): Promise<PreparedRuntimeInvocation> {
   const environment = invocationEnvironment(request.caller);
+  clearGuardConfigurationTransport(environment);
   for (const name of [
     'CAWS_HOOK_INVOCATION_FILE',
     'CAWS_HOOK_INVOCATION_METADATA',
@@ -271,7 +273,6 @@ export async function prepareRuntimeInvocation(
     );
   const journal = new InvocationJournal(request, selection, identity.sessionId);
   const dedup = new AdvisoryDedup(home, selection.canonical, identity.sessionId, environment);
-  const options = { request, selection, environment: Object.freeze(environment), signal };
   const serviceOffer = prepareNativeRenderOffer(
     request,
     selection,
@@ -307,6 +308,12 @@ export async function prepareRuntimeInvocation(
       if (signal.aborted) throw signal.reason;
       dispatched = true;
       journal.append('dispatch_started');
+      const options = {
+        request,
+        selection,
+        environment: invocationGuardConfiguration(selection, environment),
+        signal,
+      };
       try {
         if (compatibilityRequired(request, selection, environment)) {
           const completed = await executeCompatibilityDispatch({
