@@ -158,7 +158,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R17 | `shared/lib/harness_dsh.py` | TS DSH adapter | unreplaced | Surface-specific transcript and native registration fixtures |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering | TS renderer + recoverable worker | unreplaced | Complete semantic transcript fixtures, cache freshness and installed rendering |
 | R19 | Python embedded in shell helpers/dispatchers | TS modules or bounded native operations | inventoried; unreplaced | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions |
-| R20 | Python developer/harvest/qualification scripts | Typed TS tooling | inventoried; unreplaced | Nine tracked script/experiment paths listed below; output/consumer equivalence remains unproven |
+| R20 | Python developer/harvest/qualification scripts | Typed TS tooling | separate rule-token component under review; parent integration and other leaves unreplaced | Nine tracked paths listed below. The rule-token lane retains bounded Python3.11/Unicode14 and Node18/22 differential artifacts, including failed Unicode and executable-symlink candidates. Those observations do not establish every prior interpreter profile or whole R20 retirement, E134 |
 | R21 | Python-owned regression tests | TS/native behavioral tests | unreplaced | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes |
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
@@ -2606,6 +2606,46 @@ Additional bounded evidence and unresolved dependencies:
   external Child exit, forbidden-marker absence, foreign-latch identity and a
   surviving sibling. No identity cache may choose a foreign session or authorize
   killing a shared backend. No acceptance, installation or fairness is recorded.
+
+- E133: On committed candidate `a8ca545e`, `caws doctor` exits0 with inherited
+  0E/3W/4I; `caws gates run --spec CAWS-NATIVE-RUNTIME-001` exits0 with all five
+  policy dispositions pass over118 committed/staged paths. Canonical events
+  9384–9388 bind that exact revision. Unstaged probe work is excluded; policy
+  results do not establish runtime acceptance. A Sol implementation turn stops
+  on an automated risk flag while preparing the R32 identity probe. The partial
+  source strictly compiles in TypeScript, passes rustfmt check and compiles as a
+  standalone Rust fixture, all exit0; no probe or signal executes. Independent
+  source inspection identifies a real technical hold: the fixture can reap its
+  native group leader before settling descendants, and its Drop treats an
+  unknown wait error as an exit. PID absence and pipe EOF cannot prove engine/
+  group cleanup. Consumed latch/session/generation and target correlation also
+  need stronger observations; a generic QUARANTINED reason is insufficient.
+  The case loop must stop on its first failed scenario. Preserve all three full
+  source files, exact hashes, tracked patch, baseline and compile coordinates
+  at `prefix-cohort-2026-10-20/identity-probe-held/manifest.json`. Root restores
+  only this owned uncommitted prototype byte-exact to the committed baseline;
+  no unqualified identity entrypoint is shipped. Before execution, retain a
+  non-reaped ownership anchor through group settlement and qualify a leader-exit/
+  pipe-closing-survivor negative control. Then qualify original-caller arming,
+  cache loss/contradiction, exact protective/target correlation, foreign-state
+  isolation and external waits. Missing-identity runtime reachability and
+  termination remain unverified; the source gap at E128 is not a new runtime
+  bypass demonstration. Compilation and the model's risk flag establish neither
+  safety nor a safety defect by themselves.
+
+- E134: The separately owned `native-rule-tokens` lane retains one R20 utility
+  candidate and its Python reference at
+  `~/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/`.
+  Parent reads the two37-case Node18/22 summaries and the15690-vector comparison;
+  these qualify their finite Python3.11/Unicode14 reference, not every unpinned
+  prior interpreter. The original Unicode-field mismatch and executable-symlink
+  no-op remain retained failures. Parent inspects the corrected symlink and
+  Darwin offline/no-interpreter observation records and the current source;
+  component review, exact committed candidate, authoritative component evidence
+  and parent integration remain separate. This is coordination and bounded
+  component progress, not parent A4 acceptance, installed behavior or retirement
+  of the other eight inventoried script paths. Preserve the two declared
+  zero-total/update-count repairs and explicit interpreter-profile limits.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
