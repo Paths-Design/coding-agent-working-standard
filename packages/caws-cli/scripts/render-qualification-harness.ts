@@ -6,6 +6,21 @@ import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import {
+  selectRequestChain,
+  confirmRequestChain,
+  retainRequestInstance,
+  requestCleanupObservation,
+  type RequestCoverage,
+  type ProcessRow,
+} from './render-request-topology';
+import {
+  RequestCustodyCollector,
+  decodeInvocationIdentity,
+  combinedRequestCleanup,
+  MAX_TYPED_JOURNAL,
+  type CustodyExpectation,
+} from './render-request-custody';
 
 export type Data = Record<string, unknown>;
 export type Receipt = {
@@ -20,6 +35,22 @@ export type Started = {
   done: Promise<Receipt>;
   directory: string;
   startedAt: number;
+  originalBirth?: Data;
+  invocation?: InvocationTrace;
+};
+export type InvocationTrace = {
+  coverage: RequestCoverage;
+  collector: RequestCustodyCollector;
+  session: string;
+  inputDigest: string;
+  priorNames: Set<string>;
+  expected: CustodyExpectation | null;
+  journalPrefix: Buffer;
+  journalFile: string | null;
+  journalIdentity: string | null;
+  rows: Data[];
+  reads: number;
+  errors: string[];
 };
 export type SessionFixture = {
   sessionId: string;
@@ -42,6 +73,7 @@ export type InvokeOptions = {
   input?: Data | string;
   timeoutMs?: number;
   environment?: NodeJS.ProcessEnv;
+  traceCustody?: boolean;
 };
 export function row(value: unknown): Data {
   assert(value !== null && typeof value === 'object' && !Array.isArray(value), 'expected object');
@@ -104,6 +136,7 @@ export class RenderHarness {
     label: string;
     limits?: Data;
     runtimeTemplates?: string;
+    nativeProfile?: 'debug' | 'release';
   }) {
     this.cli = fs.realpathSync(options.cli);
     this.sterling = fs.realpathSync(options.sterling);
@@ -117,9 +150,15 @@ export class RenderHarness {
     this.sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-render-qual-')));
     this.home = path.join(this.sandbox, 'machine');
     this.owner = path.join(this.home, 'state/render-service');
-    this.native = path.join(crate, 'target/release/caws-native');
-    this.observer = path.join(crate, 'target/release/examples/service-observer');
-    this.custodyObserver = path.join(crate, 'target/release/examples/service-custody-observer');
+    const nativeProfile = options.nativeProfile ?? 'release';
+    this.native = path.join(crate, 'target', nativeProfile, 'caws-native');
+    this.observer = path.join(crate, 'target', nativeProfile, 'examples/service-observer');
+    this.custodyObserver = path.join(
+      crate,
+      'target',
+      nativeProfile,
+      'examples/service-custody-observer'
+    );
     this.engine = path.join(this.cli, 'dist/runtime/engine-entry.js');
     this.cliEntry = path.join(this.cli, 'dist/index.js');
     this.hookCli = path.join(this.root, 'hook-cli/caws');
@@ -308,9 +347,27 @@ export class RenderHarness {
     args: string[],
     cwd: string,
     env = this.env,
-    input?: string
+    input?: string,
+    options: { keepInputOpen?: boolean; traceSession?: string; observeBirth?: boolean } = {}
   ): Started {
     const directory = this.commandDirectory(name, executable, args, cwd);
+    const journalDirectory = options.traceSession
+      ? path.join(options.traceSession, 'hook-invocations')
+      : null;
+    const priorNames = new Set(
+      journalDirectory && fs.existsSync(journalDirectory) ? fs.readdirSync(journalDirectory) : []
+    );
+    let temporary: string | null = null;
+    if (options.traceSession) {
+      assert(input !== undefined, 'traced invocation requires exact input bytes');
+      temporary = path.join(directory, 'tmp');
+      fs.mkdirSync(temporary, { mode: 0o700 });
+      env = { ...env, TMPDIR: temporary };
+      writeJson(path.join(directory, 'request-temporary.json'), {
+        path: temporary,
+        retained: true,
+      });
+    }
     if (input !== undefined) put(path.join(directory, 'stdin.bin'), input);
     const out = fs.openSync(path.join(directory, 'stdout.bin'), 'wx', 0o600),
       err = fs.openSync(path.join(directory, 'stderr.bin'), 'wx', 0o600);
@@ -318,11 +375,19 @@ export class RenderHarness {
     const child = spawn(executable, args, { cwd, env, stdio: ['pipe', out, err] });
     fs.closeSync(out);
     fs.closeSync(err);
+    const originalBirth =
+      options.traceSession || options.keepInputOpen || options.observeBirth
+        ? child.pid
+          ? this.observe(child.pid)
+          : { state: 'unavailable' }
+        : undefined;
+    let monitor: ReturnType<typeof setInterval> | undefined;
     const done = new Promise<Receipt>((resolve) => {
       let settled = false;
       const finish = (receipt: Receipt): void => {
         if (!settled) {
           settled = true;
+          if (monitor) clearInterval(monitor);
           writeJson(path.join(directory, 'receipt.json'), {
             ...receipt,
             startedAt,
@@ -344,18 +409,72 @@ export class RenderHarness {
         })
       );
     });
-    if (input !== undefined) child.stdin?.end(input);
-    else child.stdin?.end();
-    const started = { child, done, directory, startedAt };
+    if (!options.keepInputOpen) {
+      if (input !== undefined) child.stdin?.end(input);
+      else child.stdin?.end();
+    }
+    const started: Started = {
+      child,
+      done,
+      directory,
+      startedAt,
+      ...(originalBirth ? { originalBirth } : {}),
+    };
+    if (options.traceSession) {
+      const coverage: RequestCoverage = {
+        expected: child.pid
+          ? {
+              platform: process.platform,
+              frontendPid: child.pid,
+              frontendCommand: [executable, ...args].join(' '),
+              native: this.native,
+              node: process.execPath,
+              engine: this.engine,
+            }
+          : null,
+        originalFrontend: originalBirth,
+        confirmedChains: [],
+        witnesses: [],
+      };
+      started.invocation = {
+        coverage,
+        collector: new RequestCustodyCollector(temporary!, path.join(directory, 'native-custody')),
+        session: options.traceSession,
+        inputDigest: digest(input!),
+        priorNames,
+        expected: null,
+        journalPrefix: Buffer.alloc(0),
+        journalFile: null,
+        journalIdentity: null,
+        rows: [],
+        reads: 0,
+        errors: [],
+      };
+      writeJson(path.join(directory, 'original-frontend.json'), originalBirth);
+      const sample = (): void => {
+        try {
+          this.sampleInvocation(started);
+        } catch (error) {
+          const text = String(error);
+          if (!started.invocation!.errors.includes(text) && started.invocation!.errors.length < 16)
+            started.invocation!.errors.push(text);
+        }
+      };
+      monitor = setInterval(sample, 50);
+      sample();
+    }
     this.children.push(started);
     return started;
   }
-  startHost(): Started {
+  startHost(observeBirth = false): Started {
     return this.start(
       'owned-host',
       this.native,
       ['renderer-host', '--config', this.configPath],
-      this.sandbox
+      this.sandbox,
+      this.env,
+      undefined,
+      { observeBirth }
     );
   }
   async createProject(options: {
@@ -625,6 +744,11 @@ export class RenderHarness {
       session = this.sessions.get(fixture.project + '\0' + sessionId);
     assert(session);
     const surface = options.surface ?? 'codex';
+    if (options.traceCustody)
+      assert(
+        surface === 'codex' && (options.event ?? 'stop') === 'stop',
+        'custody trace currently qualifies only codex/stop'
+      );
     const env = {
       ...this.env,
       ...options.environment,
@@ -658,7 +782,8 @@ export class RenderHarness {
       ],
       fixture.project,
       env,
-      typeof input === 'string' ? input : JSON.stringify(input)
+      typeof input === 'string' ? input : JSON.stringify(input),
+      options.traceCustody ? { traceSession: session.session } : {}
     );
   }
   async invoke(fixture: ProjectFixture, options: InvokeOptions = {}): Promise<Receipt> {
@@ -700,6 +825,210 @@ export class RenderHarness {
       return row(JSON.parse(result.stdout));
     } catch {
       return { state: 'unavailable', stdout: result.stdout };
+    }
+  }
+  /** Retained Child plus matching birth; the observed PID never becomes a signal handle. */
+  originalChildAlive(started: Started): Data {
+    assert(started.child.pid && started.originalBirth, 'original Child birth unavailable');
+    assert.equal(started.child.exitCode, null, 'original Child exited');
+    assert.equal(started.child.signalCode, null, 'original Child already signaled');
+    const original = row(started.originalBirth);
+    assert.equal(original.state, 'observed', 'original Child birth unavailable');
+    const now = this.observe(started.child.pid);
+    assert.equal(now.state, 'observed', 'current Child birth unavailable');
+    const a = row(original.process),
+      b = row(now.process);
+    for (const key of ['pid', 'startSeconds', 'startMicros', 'group', 'parent'])
+      assert.equal(b[key], a[key], 'original Child identity changed: ' + key);
+    assert.equal(b.zombie, false, 'original Child is zombie');
+    return now;
+  }
+  private processRows(): ProcessRow[] {
+    const result = spawnSync('/bin/ps', ['-axo', 'pid=,ppid=,pgid=,state=,command='], {
+      env: { PATH: '/usr/bin:/bin' },
+      encoding: 'utf8',
+      timeout: 1000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    assert.equal(result.status, 0, 'process inventory unavailable');
+    assert.equal(result.stderr, '', 'process inventory diagnostics');
+    return result.stdout
+      .split('\n')
+      .filter((line) => line.trim())
+      .map((line) => {
+        const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
+        assert(m, 'unparsed process inventory');
+        return {
+          pid: Number(m[1]),
+          parent: Number(m[2]),
+          group: Number(m[3]),
+          state: m[4]!,
+          command: m[5]!,
+        };
+      });
+  }
+  observedGroupsAbsent(births: Data[]): Data | undefined {
+    const groups = births.map((birth) => {
+      assert.equal(birth.state, 'observed', 'group origin birth unavailable');
+      const group = row(birth.process).group;
+      assert(typeof group === 'number' && Number.isSafeInteger(group) && group > 1);
+      return group;
+    });
+    const members = this.processRows().filter((process) => groups.includes(process.group));
+    return members.length === 0 ? { groups, members, state: 'absent' } : undefined;
+  }
+  sampleInvocation(started: Started): boolean {
+    const trace = started.invocation;
+    assert(trace, 'invocation trace unavailable');
+    const chain = trace.coverage.expected
+      ? selectRequestChain(this.processRows(), trace.coverage.expected)
+      : null;
+    if (!chain) return false;
+    const before = chain.map((p) => this.observe(p.pid));
+    const after = chain.map((p) => this.observe(p.pid));
+    const confirmed = confirmRequestChain(chain, trace.coverage.originalFrontend, before, after);
+    if (!confirmed) return false;
+    const previous = trace.coverage.confirmedChains.at(-1);
+    if (JSON.stringify(previous) !== JSON.stringify(confirmed)) {
+      assert(trace.coverage.confirmedChains.length < 16, 'request topology observation bound');
+      trace.coverage.confirmedChains.push(confirmed);
+      fs.appendFileSync(
+        path.join(started.directory, 'request-topology.jsonl'),
+        JSON.stringify({ at: Date.now(), chain, before, after, confirmed }) + '\n',
+        { mode: 0o600 }
+      );
+    }
+    for (const p of confirmed) retainRequestInstance(trace.coverage, p);
+    return true;
+  }
+  /** Only complete records establish a live phase; final reads require full EOF-aligned bytes. */
+  invocationJournal(started: Started, final = false): Data[] {
+    const trace = started.invocation;
+    assert(trace, 'invocation trace unavailable');
+    const directory = path.join(trace.session, 'hook-invocations');
+    assert(started.child.pid, 'original frontend PID unavailable');
+    const names = fs
+      .readdirSync(directory)
+      .filter(
+        (name) =>
+          name.startsWith(String(started.child.pid) + '-') &&
+          name.endsWith('.jsonl') &&
+          !trace.priorNames.has(name)
+      );
+    if (!final && names.length === 0 && trace.journalFile === null) return [];
+    assert.equal(names.length, 1, 'current typed invocation journal absent/ambiguous');
+    const file = path.join(directory, names[0]!);
+    assert(
+      trace.journalFile === null || trace.journalFile === file,
+      'invocation journal path changed'
+    );
+    const fd = fs.openSync(
+      file,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+    );
+    let bytes: Buffer, meta: fs.Stats;
+    try {
+      meta = fs.fstatSync(fd);
+      assert(
+        meta.isFile() &&
+          meta.uid === process.getuid?.() &&
+          meta.nlink === 1 &&
+          (meta.mode & 0o077) === 0 &&
+          meta.size > 0 &&
+          meta.size <= MAX_TYPED_JOURNAL,
+        'unsafe/oversized invocation journal'
+      );
+      assert(
+        trace.journalIdentity === null || trace.journalIdentity === meta.dev + ':' + meta.ino,
+        'invocation journal inode changed'
+      );
+      bytes = Buffer.alloc(meta.size);
+      let offset = 0;
+      while (offset < bytes.length) {
+        const count = fs.readSync(fd, bytes, offset, bytes.length - offset, null);
+        assert(count > 0, 'invocation journal truncated during read');
+        offset += count;
+      }
+      assert(fs.fstatSync(fd).size >= meta.size, 'invocation journal shrank during read');
+    } finally {
+      fs.closeSync(fd);
+    }
+    assert(
+      bytes.subarray(0, trace.journalPrefix.length).equals(trace.journalPrefix),
+      'invocation journal prefix changed'
+    );
+    if (!bytes.equals(trace.journalPrefix)) {
+      assert(trace.reads < 128, 'invocation journal observation bound');
+      const snapshot = path.join(
+        started.directory,
+        'typed-journal-' + String(++trace.reads).padStart(3, '0') + '.jsonl'
+      );
+      put(snapshot, bytes);
+      writeJson(snapshot + '.source.json', {
+        path: file,
+        device: meta.dev,
+        inode: meta.ino,
+        bytes: bytes.length,
+        sha256: digest(bytes),
+      });
+    }
+    trace.journalFile = file;
+    trace.journalIdentity = meta.dev + ':' + meta.ino;
+    trace.journalPrefix = bytes;
+    const prefix = final ? bytes : bytes.subarray(0, bytes.lastIndexOf(10) + 1);
+    if (!final && prefix.length === 0) return [];
+    const identity = decodeInvocationIdentity(prefix, this.installed.digest, trace.inputDigest);
+    assert.equal(
+      path.basename(file),
+      identity.invocationId + '.jsonl',
+      'typed journal filename identity differs'
+    );
+    assert(
+      identity.invocationId.startsWith(String(started.child.pid) + '-'),
+      'typed journal frontend differs'
+    );
+    if (trace.expected)
+      assert.equal(identity.invocationId, trace.expected.invocationId, 'invocation ID changed');
+    trace.expected = {
+      ...identity,
+      coverage: trace.coverage,
+      node: process.execPath,
+      engine: this.engine,
+    };
+    trace.rows = prefix
+      .toString('utf8')
+      .trim()
+      .split('\n')
+      .map((line) => row(JSON.parse(line)));
+    return trace.rows;
+  }
+  requestCompletion(started: Started): Data {
+    const trace = started.invocation;
+    assert(trace, 'invocation trace unavailable');
+    try {
+      this.invocationJournal(started, true);
+      let inventory: ProcessRow[] | null = null;
+      try {
+        inventory = this.processRows();
+      } catch {
+        /* strict absence stays unknown */
+      }
+      const absence = requestCleanupObservation(trace.coverage, inventory, (pid) =>
+        this.observe(pid)
+      );
+      const custody = trace.collector.collect(trace.expected!);
+      const result = {
+        state: combinedRequestCleanup(absence, custody),
+        absence,
+        custody,
+        errors: trace.errors,
+      };
+      writeJson(path.join(started.directory, 'request-completion.json'), result);
+      return result;
+    } catch (error) {
+      const result = { state: 'unknown', error: String(error), errors: trace.errors };
+      writeJson(path.join(started.directory, 'request-completion.json'), result);
+      return result;
     }
   }
   async waitFor<T>(
@@ -991,6 +1320,12 @@ export class RenderHarness {
         }
       });
       const retainedComplete = retainedWorkers.every((worker) => worker.complete);
+      const nativeRequests: Data[] = this.children
+        .filter((child) => child.invocation)
+        .map((child) => ({
+          directory: child.directory,
+          ...this.requestCompletion(child),
+        }));
       result = {
         state:
           retainedComplete &&
@@ -999,11 +1334,13 @@ export class RenderHarness {
           custody.state === 'free' &&
           gone &&
           hostsGone &&
+          nativeRequests.every((request) => request.state === 'confirmed_inactive') &&
           children.every((child) => child.exitCode !== null || child.signalCode !== null)
             ? 'confirmed_inactive'
             : 'unknown',
         workers,
         retainedWorkers,
+        nativeRequests,
         socketExists: fs.existsSync(socket),
         custody,
         hosts,

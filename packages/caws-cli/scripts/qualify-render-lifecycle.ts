@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { committedTurnNames, readCommittedTurnFile } from './committed-turn-files';
+import { decodeRenderRequest } from '../src/runtime/service-protocol';
 import {
   createRenderHarness,
   digest,
@@ -27,9 +28,13 @@ const cli = oracleSelfTest ? '' : fs.realpathSync(process.argv[2]!);
 const sterling = oracleSelfTest ? '' : fs.realpathSync(process.argv[3]!);
 const requestedScenario = process.argv[4] ?? 'all';
 const selectedScenario = requestedScenario === 'restart' ? 'host-crash-restart' : requestedScenario;
+const nativeProfile = process.argv[5] ?? 'release';
+assert(['debug', 'release'].includes(nativeProfile), 'native profile must be debug or release');
 assert(
-  ['all', 'normal', 'queued-cancel', 'cancel', 'host-crash-restart'].includes(selectedScenario),
-  'scenario must be all, normal, queued-cancel, cancel, or restart'
+  ['all', 'normal', 'queued-cancel', 'cancel', 'host-crash-restart', 'frontend-loss'].includes(
+    selectedScenario
+  ),
+  'scenario must be all, normal, queued-cancel, cancel, restart, or explicit frontend-loss'
 );
 const results: Data[] = [];
 const summaryPath = path.resolve(
@@ -476,19 +481,30 @@ async function largeFixture(h: RenderHarness, name: string): Promise<ProjectFixt
   });
   return fixture;
 }
-async function firstActualWrite(h: RenderHarness, fixture: ProjectFixture): Promise<Data> {
+async function firstActualWrite(
+  h: RenderHarness,
+  fixture: ProjectFixture,
+  expected: { requestId: string; deadline: number } | null = null
+): Promise<Data> {
   await h.waitFor(
     () => committedTurnNames(fixture.session).length > 0,
-    25000,
+    expected ? Math.max(1, Math.min(25000, expected.deadline - Date.now())) : 25000,
     'actual renderer first turn write'
   );
   const state = outputs(h, fixture);
+  if (expected && !(Number(state.count) > 0 && Number(state.count) < fixture.turns))
+    throw new InterruptionWindowLost('partial committed output unavailable at write witness');
   assert(
     Number(state.count) > 0 && Number(state.count) < 10000,
     'actual renderer must have started but not completed all turn writes'
   );
   h.writeJson('before-interruption-outputs.json', state);
-  const dispatch = h.ownerEvents().find((event) => event.event === 'journal_dispatch');
+  const dispatch = h
+    .ownerEvents()
+    .find(
+      (event) =>
+        event.event === 'journal_dispatch' && (!expected || event.requestId === expected.requestId)
+    );
   assert(dispatch, 'actual renderer write lacks owner dispatch observation');
   h.writeJson('before-interruption-state.json', {
     operations: h.operations(),
@@ -541,6 +557,7 @@ async function scenario(label: string, run: (h: RenderHarness) => Promise<Data>)
   const h = await createRenderHarness({
     cli,
     sterling,
+    nativeProfile: nativeProfile as 'debug' | 'release',
     label: 'render-lifecycle-' + label,
     ...(label === 'host-crash-restart' ? { limits: { maxBackends: 1 } } : {}),
   });
@@ -574,7 +591,7 @@ async function scenario(label: string, run: (h: RenderHarness) => Promise<Data>)
     Object.assign(result, await run(h));
     result.state = 'passed';
   } catch (error) {
-    result.state = 'failed';
+    result.state = error instanceof InterruptionWindowLost ? 'incomplete' : 'failed';
     result.error = error instanceof Error ? error.stack : String(error);
     throw error;
   } finally {
@@ -609,6 +626,306 @@ async function scenario(label: string, run: (h: RenderHarness) => Promise<Data>)
       results,
     });
     if (finalizationFailure !== undefined && result.error === undefined) throw finalizationFailure;
+  }
+}
+
+class InterruptionWindowLost extends Error {
+  constructor(message: string) {
+    super('interruption window lost: ' + message);
+  }
+}
+/** Join the durable verified wire bytes to typed invocation and selected project/session. */
+function operationForInvocation(
+  h: RenderHarness,
+  fixture: ProjectFixture,
+  invocationId: string
+): Data | undefined {
+  const matches = h.operations().filter((operation) => {
+    const body = row(operation.body);
+    assert(
+      typeof body.verifiedRequestBase64 === 'string' && body.verifiedRequestBase64.length <= 174768,
+      'verified renderer request byte bound'
+    );
+    const bytes = Buffer.from(body.verifiedRequestBase64, 'base64');
+    assert.equal(
+      bytes.toString('base64'),
+      body.verifiedRequestBase64,
+      'noncanonical verified request bytes'
+    );
+    assert.equal(
+      digest(bytes),
+      body.verifiedRequestSha256,
+      'verified renderer request digest differs'
+    );
+    const request = decodeRenderRequest(bytes);
+    const identity = row(body.identity);
+    assert.equal(
+      identity.requestId,
+      request.requestId,
+      'durable renderer request identity differs'
+    );
+    assert.equal(identity.argumentDigest, request.argumentDigest);
+    assert.equal(identity.projectServiceKey, request.projectServiceKey);
+    assert.equal(identity.sourceGeneration, request.sourceGeneration);
+    assert.equal(identity.executionImageDigest, request.executionImage.imageDigest);
+    return (
+      request.invocationId === invocationId &&
+      request.canonicalProject === fixture.project &&
+      request.arguments[2] === fixture.sessionId &&
+      request.arguments[0] === fixture.session &&
+      request.arguments[9] === fixture.transcriptFile
+    );
+  });
+  assert(matches.length <= 1, 'multiple renderer operations for one original invocation');
+  return matches[0];
+}
+/** SIGKILL here bypasses frontend Drop/Abort; surviving custodians must perform cleanup. */
+async function frontendLost(h: RenderHarness): Promise<Data> {
+  const fixture = await largeFixture(h, 'frontend-loss');
+  const host = h.startHost(true);
+  // An inert owned sibling is only a process-isolation control, not a substitute renderer.
+  const sibling = h.start(
+    'surviving-sibling',
+    process.execPath,
+    [
+      '-e',
+      "process.stdin.resume(); process.stdin.on('end',()=>process.exit(0)); process.stdout.write('sibling-ready\\n');",
+    ],
+    h.sandbox,
+    h.env,
+    undefined,
+    { keepInputOpen: true }
+  );
+  try {
+    await h.waitFor(
+      () =>
+        fs.readFileSync(path.join(sibling.directory, 'stdout.bin'), 'utf8') === 'sibling-ready\n',
+      5000,
+      'owned sibling ready on retained input channel'
+    );
+    const siblingBefore = h.originalChildAlive(sibling);
+    const active = h.spawnInvocation(fixture, { traceCustody: true, timeoutMs: 30000 });
+    const deadline = active.startedAt + 30000;
+    const operation = await h.waitFor(
+      () => {
+        if (!h.sampleInvocation(active)) return undefined;
+        let rows: Data[];
+        try {
+          rows = h.invocationJournal(active);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+          throw error;
+        }
+        if (!rows.some((record) => record.stage === 'dispatch_started')) return undefined;
+        return operationForInvocation(h, fixture, active.invocation!.expected!.invocationId);
+      },
+      Math.max(1, deadline - Date.now()),
+      'current typed dispatch and verified owner operation'
+    );
+    const requestId = String(row(row(operation.body).identity).requestId);
+    if (outcome(operation) !== 'running')
+      throw new InterruptionWindowLost('renderer already terminal before write witness');
+    const dispatch = await firstActualWrite(h, fixture, { requestId, deadline });
+    assert(Date.now() < deadline, 'original request deadline exhausted before interruption');
+    assert(h.sampleInvocation(active), 'fresh current frontend/custodian/Node chain unavailable');
+    const frontendBefore = h.originalChildAlive(active);
+    h.originalChildAlive(host);
+    h.originalChildAlive(sibling);
+    const current = operationForInvocation(h, fixture, active.invocation!.expected!.invocationId);
+    assert(current, 'matching operation disappeared before interruption');
+    if (outcome(current) !== 'running')
+      throw new InterruptionWindowLost('renderer committed before interruption');
+    const count = committedTurnNames(fixture.session).length;
+    if (count === 0 || count >= fixture.turns)
+      throw new InterruptionWindowLost('partial committed output no longer holds');
+    const workerBefore = h.observe(Number(dispatch.nativeWorkerPid));
+    const backendBefore = h.observe(Number(dispatch.backendPid));
+    assert.equal(workerBefore.state, 'observed', 'owned renderer worker unavailable');
+    assert.equal(backendBefore.state, 'observed', 'owned backend unavailable');
+    assert.equal(row(workerBefore.process).zombie, false);
+    assert.equal(row(backendBefore.process).zombie, false);
+    h.writeJson('frontend-loss-before.json', {
+      requestId,
+      operation: current,
+      dispatch,
+      count,
+      frontendBefore,
+      siblingBefore,
+      workerBefore,
+      backendBefore,
+      coverage: active.invocation!.coverage,
+    });
+    // Every eligibility observation is distinct from the actual signal and wait receipt.
+    h.originalChildAlive(active);
+    const accepted = active.child.kill('SIGKILL');
+    h.writeJson('frontend-loss-signal.json', {
+      accepted,
+      signal: 'SIGKILL',
+      pid: active.child.pid,
+      source: 'retained original frontend Child',
+      frontendBefore,
+    });
+    assert(accepted, 'retained original frontend Child signal refused');
+    const frontendReceipt = await bounded(active.done, 10000, 'original frontend SIGKILL wait');
+    assert.equal(frontendReceipt.error, null);
+    assert.equal(frontendReceipt.signal, 'SIGKILL');
+    const nativeCleanup = await h.waitFor(
+      () => {
+        const observed = h.requestCompletion(active);
+        return observed.state === 'confirmed_inactive' ? observed : undefined;
+      },
+      10000,
+      'same Node actual reap/EOF/SDK settlement and request-group absence'
+    );
+    const settled = await h.waitFor(
+      () => {
+        const value = operationForInvocation(h, fixture, active.invocation!.expected!.invocationId);
+        assert(value, 'matching owner operation disappeared');
+        return outcome(value) === 'running' ? undefined : value;
+      },
+      10000,
+      'matching renderer operation terminal outcome'
+    );
+    if (outcome(settled) === 'returned')
+      throw new InterruptionWindowLost(
+        'renderer response won disconnect race; no unknown-fence claim'
+      );
+    assert.equal(outcome(settled), 'unknown', 'dispatched operation lacks durable unknown fence');
+    const rendererCleanup = await h.waitFor(
+      () => {
+        const receipt = h
+          .ownerEvents()
+          .find(
+            (event) =>
+              event.event === 'worker_cleanup' &&
+              event.nativeWorkerPid === dispatch.nativeWorkerPid &&
+              event.backendPid === dispatch.backendPid
+          );
+        if (!receipt) return undefined;
+        const value = row(receipt.receipt);
+        const exit = h
+          .ownerEvents()
+          .find(
+            (event) =>
+              event.event === 'worker_exit' &&
+              event.nativeWorkerPid === dispatch.nativeWorkerPid &&
+              event.backendPid === dispatch.backendPid
+          );
+        const worker = h.observe(Number(dispatch.nativeWorkerPid)),
+          backend = h.observe(Number(dispatch.backendPid));
+        const groups = h.observedGroupsAbsent([workerBefore, backendBefore]);
+        return value.directChildReaped === true &&
+          value.logsPersisted === true &&
+          value.childPid === dispatch.backendPid &&
+          value.identityVerifiedBeforeSignal === true &&
+          value.reapErrorErrno === null &&
+          value.backendExit !== null &&
+          value.deadlineExceeded === false &&
+          row(value.stdout).eof === true &&
+          row(value.stderr).eof === true &&
+          exit &&
+          worker.state === 'absent' &&
+          backend.state === 'absent' &&
+          groups
+          ? { receipt, exit, worker, backend, groups }
+          : undefined;
+      },
+      10000,
+      'owned renderer backend reap/EOF, worker actual wait and independent absence'
+    );
+    const siblingAfter = h.originalChildAlive(sibling);
+    h.writeJson('surviving-sibling-after-target-cleanup.json', {
+      before: siblingBefore,
+      after: siblingAfter,
+    });
+    h.originalChildAlive(host);
+    const operationsBefore = h.operations();
+    const dispatchesBefore = h.ownerEvents().filter((event) => event.event === 'journal_dispatch');
+    const retryStarted = h.spawnInvocation(fixture, { traceCustody: true, timeoutMs: 30000 });
+    const retry = await bounded(
+      retryStarted.done,
+      30000,
+      'one fresh request under retained unknown fence'
+    );
+    const retryJournal = h.invocationJournal(retryStarted, true);
+    const retryInvocation = retryJournal.find((record) => record.stage === 'invocation_started');
+    assert(retryInvocation, 'fresh refused request lacks current typed identity');
+    assert.equal(retryInvocation.invocation_id, retryStarted.invocation!.expected!.invocationId);
+    assert.equal(retryInvocation.dispatch_cwd, fixture.project);
+    const retryDenial = assertOwnerDenial(
+      retry,
+      retryInvocation,
+      h.ownerEvents(),
+      'unknown_fence',
+      fs.readFileSync(path.join(retry.directory, 'stdout.bin'), 'utf8'),
+      fs.readFileSync(path.join(retry.directory, 'stderr.bin'), 'utf8')
+    );
+    h.writeJson('frontend-loss-unknown-fence-admission-denial.json', {
+      retry,
+      retryInvocation,
+      retryDenial,
+      journalSource: retryStarted.invocation!.journalFile,
+    });
+    assert.deepEqual(
+      h.operations(),
+      operationsBefore,
+      'unknown fence admitted a new durable effect'
+    );
+    assert.deepEqual(
+      h.ownerEvents().filter((event) => event.event === 'journal_dispatch'),
+      dispatchesBefore,
+      'unknown fence dispatched another write'
+    );
+    const retryCleanup = await h.waitFor(
+      () => {
+        const result = h.requestCompletion(retryStarted);
+        return result.state === 'confirmed_inactive' ? result : undefined;
+      },
+      10000,
+      'fresh refused request native custody/absence'
+    );
+    assert(
+      writerOperations(fixture).some((value) => outcome(value) === 'unknown'),
+      'cooperative writer domain lost unresolved effect'
+    );
+    const hostReceipt = await bounded(
+      host.done,
+      15000,
+      'original host idle exit after frontend loss'
+    );
+    h.success(hostReceipt);
+    return {
+      requestId,
+      dispatch,
+      frontendReceipt,
+      nativeCleanup,
+      settled,
+      rendererCleanup,
+      retry,
+      retryCleanup,
+      siblingBefore,
+      siblingAfter,
+      hostReceipt,
+      established: [
+        'actual selected renderer partial write before original frontend SIGKILL',
+        'same Node custody terminal reap/EOF/SDK settlement plus request absence',
+        'surviving original renderer owners drain backend and retain unknown fence',
+        'one fresh correlated request refused without another effect',
+        'independent owned inert sibling survived target cleanup',
+      ],
+      nonclaims: [
+        'actual second frontend/surface coverage',
+        'Ready-before-dispatch loss',
+        'resident reuse',
+        '13-session fairness',
+      ],
+    };
+  } finally {
+    // Release only this owned inert control through its normal input protocol; no signal.
+    sibling.child.stdin?.end();
+    const receipt = await bounded(sibling.done, 5000, 'owned sibling normal input-release exit');
+    h.success(receipt);
+    h.writeJson('surviving-sibling-release.json', receipt);
   }
 }
 
@@ -1025,6 +1342,12 @@ async function main(): Promise<void> {
   if (oracleSelfTest) {
     testDenialOracles();
     testRenderedTurnOracle();
+    return;
+  }
+  // The additional hard-loss qualification is explicit; existing `all` keeps its prior modes.
+  if (selectedScenario === 'frontend-loss') {
+    await scenario('frontend-loss', frontendLost);
+    process.stdout.write(JSON.stringify({ state: 'passed', summaryPath, results }, null, 2) + '\n');
     return;
   }
   const scenarios = [

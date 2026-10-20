@@ -9,7 +9,7 @@ const helper =
   process.env.CAWS_COMMITTED_TURN_HELPER ??
   path.resolve(
     __dirname,
-    '../../../caws-native/target/qualification-tools/committed-turn-files.js'
+    '../../../caws-native/target/qualification-tools/scripts/committed-turn-files.js'
   );
 if (!path.isAbsolute(helper)) throw new Error('CAWS_COMMITTED_TURN_HELPER must be absolute');
 const { committedTurnNames, readCommittedTurnFile } = require(helper);

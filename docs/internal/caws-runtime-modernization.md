@@ -3401,6 +3401,38 @@ Additional bounded evidence and unresolved dependencies:
   and measure its invocation/prefix interval before selecting another unchanged
   fairness replay; preserve the original workload and oracle.
 
+- E159: The lifecycle qualifier adds an explicit `frontend-loss` scenario and
+  optional debug/release selection, preserving previous modes and default
+  release. Opt-in codex/Stop tracing retains original frontend birth, private
+  TMPDIR, request-local topology, bounded journal snapshots and native custody.
+  The scenario joins verified renderer request bytes/digest to the typed
+  invocation, requires partial committed output before signaling only the
+  original retained frontend Child, and separately demands native Node cleanup,
+  renderer worker/backend cleanup and absence, then one correlated unknown-fence
+  refusal. A retained inert sibling checks process isolation. A renderer that
+  finishes before disconnection is an incomplete interruption window; the
+  scenario stops without retrying it or silently restarting an idle host.
+
+  Root reproduces a draft oracle defect through the actual compiled journal
+  reader: a later same-session request makes the earlier request's journal
+  selection ambiguous. Selection is restricted to the retained frontend PID and
+  filename/invocation identity. The filesystem control then accepts the earlier
+  journal alongside a later request and refuses ambiguous same-frontend names
+  and changed prefix bytes. The committed-turn Jest helper default also moves to
+  the compiler's `qualification-tools/scripts/` output, avoiding stale old
+  output selection. Raw checks and the before/after counterexample live under
+  external `frontend-loss-draft/` beside E157's artifact directory.
+
+  Strict render-tool compilation exits0. An attempted broader command first
+  exits2 because it names nonexistent `scripts/committed-turn-files.test.ts`;
+  preserve that failure and distinguish its subsequently emitted JavaScript from
+  the corrected compiler invocation. The corrected topology/custody suites
+  pass100 cases; lifecycle oracle controls pass with `runtimeExecuted:false`.
+  These are qualifier/source controls. No actual frontend-loss signal or native
+  renderer scenario has executed for this candidate, and no A3/A8 acceptance,
+  lifecycle parity, fairness or cutover follows. Review and the one isolated
+  dispatched-loss scenario remain owed before relying on that behavior.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
