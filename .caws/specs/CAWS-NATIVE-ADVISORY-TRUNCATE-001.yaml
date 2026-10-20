@@ -57,3 +57,9 @@ rollback:
   - 'Revert scoped source commits; no machine installation is authorized for this slice.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Manually inspected /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-advisory-truncation/qualified-phase1/focused.status.json (25 focused checks, exit0 at5f55), actual missing/stale/build preflight raw receipts, and /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-advisory-truncation/qualified-snapshot-bats-phase/snapshot.status.json plus snapshots/*/observations/0014-refusal.json and0015-refusal.json (exit0 at6d44; bin/home/lock absent, stale bytes unchanged). Actual npm pack/unpack exit0 and tgz in qualified-installed-phase. production-source-identity.json proves unchanged production5f55..6d44. --verify below checks committed identity only; it does not execute these checks. No real global activation or Node18 execution verified."
+    recorded_at: "2026-10-20T08:30:07.160Z"
+    commit_sha: "6d44dc9f77a5bda3be81a9504b0397514af0464c"
