@@ -39,6 +39,55 @@ pub struct GroupObservation {
     pub leaders: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GroupSettlement {
+    LeaderRunning,
+    /// The SDK observed a live member before finishing validation of its fetched
+    /// snapshot. This is positive live-member evidence, not a complete census
+    /// and never permission to reap the identity anchor.
+    GroupLive {
+        observation: GroupObservation,
+    },
+    /// Fresh exited-child observations bracket a complete, validated snapshot
+    /// containing only zombies. This does not assert pipe EOF or reap the child.
+    Exited {
+        observation: GroupObservation,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettlementStage {
+    InvalidPid,
+    BeforeOwnership,
+    UnsupportedPlatform,
+    AfterOwnership,
+    Snapshot,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SettlementLeader {
+    pub pid: i32,
+    pub code: i32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SettlementError {
+    pub stage: SettlementStage,
+    pub raw_errno: Option<i32>,
+    /// The failing observation boundary, when waitid returned a witness.
+    pub observed_pid: Option<i32>,
+    pub observed_code: Option<i32>,
+    pub before: Option<SettlementLeader>,
+    pub after: Option<SettlementLeader>,
+    pub group: Option<GroupObservation>,
+}
+impl fmt::Display for SettlementError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "owned group settlement: {self:?}")
+    }
+}
+impl std::error::Error for SettlementError {}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StopError {
     pub stage: StopStage,
@@ -70,6 +119,34 @@ impl OwnedObservation {
                 libc::CLD_EXITED | libc::CLD_KILLED | libc::CLD_DUMPED
             )
     }
+
+    fn witness(self) -> SettlementLeader {
+        SettlementLeader {
+            pid: self.pid,
+            code: self.code,
+        }
+    }
+}
+
+// Shared with the EPERM stop path: settlement must not weaken that profile.
+fn complete_exited_snapshot(group: GroupObservation) -> bool {
+    group.reason == 0
+        && group.query_errno == 0
+        && group.members > 0
+        && group.members == group.zombies
+        && group.leaders == 1
+        && group.bytes > 0
+        && group.bytes < group.capacity
+}
+
+fn observed_live_member(group: GroupObservation) -> bool {
+    group.reason == 8
+        && group.query_errno == 0
+        && group.members > 0
+        && group.zombies < group.members
+        && group.leaders <= 1
+        && group.bytes > 0
+        && group.bytes < group.capacity
 }
 
 fn error(stage: StopStage, errno: Option<i32>) -> StopError {
@@ -151,15 +228,7 @@ fn stop(
         e.signal_errno = Some(signal_errno);
         e
     })?;
-    if !after.exited(pid)
-        || group.reason != 0
-        || group.query_errno != 0
-        || group.members == 0
-        || group.members != group.zombies
-        || group.leaders != 1
-        || group.bytes == 0
-        || group.bytes >= group.capacity
-    {
+    if !after.exited(pid) || !complete_exited_snapshot(group) {
         let mut e = error(StopStage::ExitedGroup, Some(signal_errno));
         e.signal_errno = Some(signal_errno);
         e.observed_pid = Some(after.pid);
@@ -168,6 +237,99 @@ fn stop(
         return Err(e);
     }
     Ok(GroupStop::ExitedOnly { observation: group })
+}
+
+fn settlement_error(
+    stage: SettlementStage,
+    before: Option<OwnedObservation>,
+    group: Option<GroupObservation>,
+) -> SettlementError {
+    SettlementError {
+        stage,
+        raw_errno: None,
+        observed_pid: None,
+        observed_code: None,
+        before: before.map(OwnedObservation::witness),
+        after: None,
+        group,
+    }
+}
+
+fn settlement_observe(
+    ops: &mut impl Operations,
+    pid: i32,
+    stage: SettlementStage,
+    before: Option<OwnedObservation>,
+    group: Option<GroupObservation>,
+) -> Result<OwnedObservation, SettlementError> {
+    let mut failure = settlement_error(stage, before, group);
+    let observed = ops.observe(pid).map_err(|errno| {
+        failure.raw_errno = Some(errno);
+        failure.clone()
+    })?;
+    if (observed.pid == 0 && observed.code == 0) || observed.exited(pid) {
+        return Ok(observed);
+    }
+    failure.observed_pid = Some(observed.pid);
+    failure.observed_code = Some(observed.code);
+    match stage {
+        SettlementStage::BeforeOwnership => failure.before = Some(observed.witness()),
+        SettlementStage::AfterOwnership => failure.after = Some(observed.witness()),
+        _ => unreachable!("only ownership stages observe children"),
+    }
+    Err(failure)
+}
+
+fn settlement(
+    ops: &mut impl Operations,
+    pid: u32,
+    own_pid: i32,
+    own_group: i32,
+    darwin: bool,
+) -> Result<GroupSettlement, SettlementError> {
+    if pid <= 1 || pid > i32::MAX as u32 || pid as i32 == own_pid || pid as i32 == own_group {
+        return Err(settlement_error(SettlementStage::InvalidPid, None, None));
+    }
+    let pid = pid as i32;
+    let before = settlement_observe(ops, pid, SettlementStage::BeforeOwnership, None, None)?;
+    if !before.exited(pid) {
+        return Ok(GroupSettlement::LeaderRunning);
+    }
+    if !darwin {
+        return Err(settlement_error(
+            SettlementStage::UnsupportedPlatform,
+            Some(before),
+            None,
+        ));
+    }
+    let group = ops.group(pid);
+    // Even a failed/partial query is followed by a fresh ownership observation;
+    // retain its raw SDK result if ownership was lost at this boundary.
+    let after = settlement_observe(
+        ops,
+        pid,
+        SettlementStage::AfterOwnership,
+        Some(before),
+        Some(group),
+    )?;
+    if !after.exited(pid) {
+        let mut failure =
+            settlement_error(SettlementStage::AfterOwnership, Some(before), Some(group));
+        failure.observed_pid = Some(after.pid);
+        failure.observed_code = Some(after.code);
+        failure.after = Some(after.witness());
+        return Err(failure);
+    }
+    if complete_exited_snapshot(group) {
+        return Ok(GroupSettlement::Exited { observation: group });
+    }
+    if observed_live_member(group) {
+        return Ok(GroupSettlement::GroupLive { observation: group });
+    }
+    let mut failure = settlement_error(SettlementStage::Snapshot, Some(before), Some(group));
+    failure.after = Some(after.witness());
+    failure.raw_errno = (group.query_errno != 0).then_some(group.query_errno);
+    Err(failure)
 }
 
 struct Native;
@@ -231,6 +393,22 @@ impl Operations for Native {
 pub fn stop_before_reap(child: &Child) -> Result<GroupStop, StopError> {
     // SAFETY: process identity getters have no preconditions.
     stop(
+        &mut Native,
+        child.id(),
+        unsafe { libc::getpid() },
+        unsafe { libc::getpgrp() },
+        cfg!(target_os = "macos"),
+    )
+}
+
+/// Observe only the actual retained Child and its private group. Never signals
+/// or reaps. Exited is independent of output EOF and preserves the leader anchor
+/// for its caller's subsequent reap. Failed/unsupported observations are unknown,
+/// never settlement. Callers must exclude concurrent reaping and retain custody.
+/// Memory/CPU work is bounded; kernel calls have no hard syscall deadline.
+pub fn settlement_before_reap(child: &Child) -> Result<GroupSettlement, SettlementError> {
+    // SAFETY: process identity getters have no preconditions.
+    settlement(
         &mut Native,
         child.id(),
         unsafe { libc::getpid() },

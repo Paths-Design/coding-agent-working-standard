@@ -52,6 +52,15 @@ context, not proof of current behavior. Preserve outstanding obligations unless
 the user supersedes them. Distinguish committed, reviewed, landed, accepted and
 installed work, and correct stale next steps before choosing another task.
 
+The next ownership boundary is a surviving native custodian that creates the
+Node engine before readiness. E135 closes the raw patch-alias admission gap;
+E136 closes false completion after a failed cleanup attempt. Neither closes
+frontend-death custody, complete group settlement, missing-session identity or
+the unchanged thirteen-session/four-repository fairness requirement. A
+post-Ready registration cannot transfer parent wait authority or protect the
+pre-Ready interval. Per-invocation custody can establish that narrower boundary
+before reuse by a resident host; it does not establish warm execution or speed.
+
 The terminal bridge at `e01a1b00` has completed committed-candidate review; E56
 retains its clean committed replay. Neither observation closes R32 or earns
 whole-runtime acceptance. E57 reproduces R33's cold-start service failure through
@@ -117,6 +126,7 @@ assignments, not authority or acceptance records.
 | Legacy writer exclusion | `render_legacy_fence`: cooperative writer bridge, native fence and legacy qualifier | Actual foreign daemon/inline fallback counterexample, then shared stable custody across cooperative legacy/native paths and generations; an absent lease or opt-in marker alone cannot establish adoption/drain |
 | Thirteen sessions / four repositories | `render_load`: actual workload and hostile oracle controls; depends on lifecycle/fence checks | Thirteen overlapping native clients, isolated semantic output, durable cross-project running overlap, owner-specific ordering, guard progress and bounded overload; sequential submissions or diagnostic logs alone cannot pass |
 | Rule-token developer utility | Separate owned lane `native-rule-tokens`, spec `CAWS-NATIVE-RULE-TOKENS-001`; parent retains integration and migration acceptance | Replace the Python counter and its CLI consumer with checked typed Node and a pinned offline encoder; retain actual differential outputs and the two declared zero-total/update-count repairs before retirement |
+| Additional peer | Chat `01a15984-840d-7301-a25a-7e681fd83b29`; proposed independent sensitivity tooling lane, plus read-only complete-engine contract investigation | Own only the reviewed tooling source/test/config/caller paths through a separate spec/lane; synthetic orchestration qualification does not retire R21 production tests. Shared engine/protocol changes require an agreed native/Node ownership contract |
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock. Shared-output
@@ -2704,6 +2714,58 @@ Additional bounded evidence and unresolved dependencies:
   cleanup receipt remain required before R32 effects or throughput scenarios;
   accepted SIGKILL plus leader reap does not establish full group cleanup.
 
+- E137: Candidate `d69f49561f647e58cb49450c0a770bbaf6dc50a0` contains the
+  separate guard (`3352b9a4`) and retryable cleanup (`d69f4956`) commits. Installed
+  CLI12.2.0-rc.2 runs `caws doctor` and the five declared gates with exit0 on the
+  exact candidate; doctor retains inherited 0E/3W/4I and gates evaluate120
+  committed/staged paths. Full command/output and basis identity reside at
+  `prefix-cohort-2026-10-20/cohort-candidate-checks-d69f4956.json`. Commit commands
+  exit0 while lint-staged emits its existing ignored `docs/internal` restaging
+  failure; this is not an all-hook-tasks-green claim. No parent acceptance is
+  recorded and the machine runtime remains unchanged. Independent source
+  inspection locates Node creation in `runner::Session::start`, before
+  `main::execute` admits a render offer after Ready. The new custodian must
+  create and retain the original Child; registering its PID or passing descriptors
+  later cannot transfer parent wait authority. Existing renderer ownership is
+  reusable prior art, not a prerequisite to private per-invocation custody.
+
+- E138: The non-reaping `owned_group::settlement_before_reap(&Child)` primitive
+  distinguishes a running leader, positive live-member observation and a complete
+  all-zombie group. Fresh exited WNOWAIT observations bracket the strict Darwin
+  SDK query; the shared complete-snapshot predicate preserves the existing EPERM
+  stop conditions. Unsupported platforms, query/credential/incomplete snapshots
+  and lost ownership stay unknown with original observations and errors retained.
+  All18 injected module checks pass, including nine existing stop controls;
+  `owned-group-settlement-pure.json` retains the actual command, raw output and
+  source identities under `prefix-cohort-2026-10-20/`. Root inspects the production
+  seam, hostile controls and raw output; strict library/binary Clippy exits0
+  (`owned-group-settlement-clippy.json`). No actual Child, SDK query, signal or reap
+  executes in these checks. The primitive has no production consumer yet and
+  does not establish full engine cleanup or custody; connecting it to the
+  custodian is the next required consumer boundary.
+
+- E139: Reorientation reads all96 retained CAWS turn records and the exact
+  current-session transcript's64 user-message records, including later latch
+  reset, cancellation/restart/legacy-writer requests and goal edits. The CAWS
+  helper elides long user text and misses later modern records; direct retained
+  transcript inspection supplies those original messages, rather than treating
+  the digest as complete. The image-fragment/null turns retain the thirteen-
+  session/four-repository obligation; they do not cancel it. The original full
+  replacement, documentation after source landing, guard strength, artifact
+  proof and cutover-after-parity requirements remain unchanged. Source artifacts
+  are `reorient-all-caws-records.txt` and `reorient-user-messages.jsonl` under
+  the same qualification root. An initial event-type filter returned no messages
+  (`reorient-user-events.jsonl`); correcting the filter to actual user
+  `response_item` records finds64, without changing the skill or transcript.
+  The user adds peer `01a15984-840d-7301-a25a-7e681fd83b29`; root verifies that
+  peer's initial human coordination instruction and retains parent single-writer
+  integration/acceptance. Its source investigation identifies process-global
+  entry streams/signals/exit state, fixed FD3/4/5 and existing direct-child
+  cancellation as barriers to concurrent warm reuse. `prepareRuntimeInvocation`
+  already constructs fresh request state; an extracted entry function or idle
+  daemon alone does not close the complete consumer/cleanup boundary. No shared
+  engine edit or new runtime scenario follows from those source observations.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2822,9 +2884,19 @@ failure. E129 qualifies committed-turn collection and stable session retention;
 E130 replays restart and E131 replays the cooperative legacy boundary on the
 same frozen native/runtime bytes. The unchanged legacy counterexample remains
 an adoption/drain obligation. E132 restores the reviewed typed stock profile
-without changing its authority predicates. The missing-SID/PID-cache latch
-branch needs an original-caller probe before a containment or required-capacity
-claim. Complete resident-engine ownership and measured image/publication cost
+without changing its authority predicates. E135 repairs raw patch-alias
+protective admission and E136 keeps failed cleanup pending. The next effect
+probe requires a custodian that creates Node before Ready, retains its actual
+Child after frontend death, observes complete group settlement before reap and
+publishes a correlated cleanup receipt. Keep original caller capture and native
+effects in the frontend; preserve Node FD3/4/5 and exclude every liveness/control
+descriptor from Node. Normal request stdin EOF is not frontend death. Unknown
+cleanup must retain custody and stop the scenario chain. This private
+per-invocation boundary does not require a public pre-Ready spawn service and
+does not earn warm residency. Missing-SID/cache branches additionally need a
+fresh logical-session binding or protective refusal without foreign strikes;
+process identity alone does not establish exclusive session ownership. The held
+E133 probe cannot supply that proof. Complete resident-engine ownership and measured image/publication cost
 remain prerequisites to the unchanged fairness replay. E122 forbids a
 pre-Node queue which skips required latch/Stop semantics. Keep the original
 1000-turn hot transcript, counts,30s request budgets and later hot Running
