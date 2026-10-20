@@ -26,7 +26,7 @@
     "docs:stage": "node scripts/stage-consumer-docs.mjs",
     "docs:clean": "node scripts/clean-staged-docs.mjs",
     "build:docs": "node scripts/build-cli.js && node scripts/generate-command-reference.mjs && node scripts/populate-doc-markers.mjs",
-    "prepack": "node scripts/clean-staged-docs.mjs && node scripts/stage-consumer-docs.mjs",
+    "prepack": "node scripts/generate-runtime-assets.mjs --check && node scripts/clean-staged-docs.mjs && node scripts/stage-consumer-docs.mjs",
     "postpack": "node scripts/clean-staged-docs.mjs",
     "dev": "node scripts/build-cli.js && node dist/index.js",
     "typecheck": "tsc -p tsconfig.vnext.test.json && tsc -p tsconfig.kernel-test.json",

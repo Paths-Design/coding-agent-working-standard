@@ -4,7 +4,31 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { installCliSnapshot } from './install-cli-snapshot.mjs';
+
+const require = createRequire(import.meta.url);
+const cliSource = fileURLToPath(new URL('../packages/caws-cli/', import.meta.url));
+function installGeneratorFixture(packageRoot) {
+  for (const relative of [
+    'scripts/generate-runtime-assets.mjs',
+    'src/runtime/advisory-truncate-entry.ts',
+    'src/runtime/utf8.ts',
+    'templates/hook-packs/shared/advisory_truncate.cjs',
+  ]) {
+    const destination = path.join(packageRoot, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(path.join(cliSource, relative), destination);
+    fs.chmodSync(destination, fs.statSync(path.join(cliSource, relative)).mode & 0o777);
+  }
+  fs.mkdirSync(path.join(packageRoot, 'node_modules'), { recursive: true });
+  fs.symlinkSync(
+    path.dirname(require.resolve('esbuild/package.json')),
+    path.join(packageRoot, 'node_modules/esbuild'),
+    'dir'
+  );
+}
 
 test('standalone activation survives source removal; failed and concurrent installs preserve it', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-cli-install-test-'));
@@ -19,7 +43,7 @@ test('standalone activation survives source removal; failed and concurrent insta
         name: '@paths.design/caws-cli',
         version: '1.0.0',
         bin: { caws: 'dist/index.js' },
-        files: ['dist'],
+        files: ['dist', 'templates/hook-packs/**'],
       })
     );
     fs.writeFileSync(
@@ -30,6 +54,7 @@ test('standalone activation survives source removal; failed and concurrent insta
       path.join(packageRoot, 'dist', 'index.js'),
       "#!/usr/bin/env node\nconsole.log(process.argv.includes('--json') ? JSON.stringify({digest: 'a'.repeat(64)}) : require('./value'));\n"
     );
+    installGeneratorFixture(packageRoot);
     const first = installCliSnapshot({ packageRoot, cawsHome, binPath });
     const invoke = () => spawnSync(binPath, ['doctor'], { encoding: 'utf8', cwd: root });
     assert.equal(invoke().stdout.trim(), 'working-v1');
@@ -73,6 +98,36 @@ test('standalone activation survives source removal; failed and concurrent insta
     fs.writeFileSync(binPath, 'user executable');
     assert.throws(() => installCliSnapshot({ packageRoot, cawsHome, binPath }), /non-symlink/);
     assert.equal(fs.readFileSync(binPath, 'utf8'), 'user executable');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('snapshot refuses missing or stale typed runtime assets before creating installation state', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-cli-install-assets-'));
+  try {
+    const packageRoot = path.join(root, 'source');
+    const cawsHome = path.join(root, 'machine');
+    const binPath = path.join(root, 'bin/caws');
+    fs.mkdirSync(packageRoot);
+    fs.writeFileSync(
+      path.join(packageRoot, 'package.json'),
+      JSON.stringify({ name: '@paths.design/caws-cli' })
+    );
+    assert.throws(
+      () => installCliSnapshot({ packageRoot, cawsHome, binPath }),
+      /generator is required/
+    );
+    assert.equal(fs.existsSync(path.dirname(binPath)), false);
+    assert.equal(fs.existsSync(cawsHome), false);
+    installGeneratorFixture(packageRoot);
+    const asset = path.join(packageRoot, 'templates/hook-packs/shared/advisory_truncate.cjs');
+    fs.appendFileSync(asset, '\n// stale source projection\n');
+    const before = fs.readFileSync(asset);
+    assert.throws(() => installCliSnapshot({ packageRoot, cawsHome, binPath }), /missing or stale/);
+    assert.deepEqual(fs.readFileSync(asset), before);
+    assert.equal(fs.existsSync(path.dirname(binPath)), false);
+    assert.equal(fs.existsSync(cawsHome), false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

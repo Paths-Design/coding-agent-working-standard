@@ -199,17 +199,17 @@ _rh_truncate_complete_utf8() {
   # Byte-exact, character-safe truncation. Bash cannot express this: substring
   # expansion indexes by CHARACTER in a UTF-8 locale, and assembling the output
   # from printf %b octal escapes re-interprets them. The cut therefore lives in
-  # the pack's shipped helper (advisory_truncate.py), alongside
-  # classify_command.py, which is already required on this path.
+  # the pack's standalone generated typed helper. It shares its algorithm with
+  # the typed composer and requires only the declared Node runtime.
   local total
   total=$(LC_ALL=C printf '%s' "$text" | wc -c | tr -d ' ')
   [[ "$total" =~ ^[0-9]+$ ]] || { printf '%s' "$text"; return 0; }
   (( total <= max_bytes )) && { printf '%s' "$text"; return 0; }
 
   local script out status
-  script="$(_rh_pack_python_helper advisory_truncate.py)"
-  if [[ -n "$script" && -f "$script" && -x "$script" ]] && command -v python3 >/dev/null 2>&1; then
-    out="$(printf '%s' "$text" | python3 "$script" "$max_bytes" 2>/dev/null)"
+  script="$(_rh_pack_helper advisory_truncate.cjs)"
+  if [[ -n "$script" && -f "$script" && -x "$script" ]] && command -v node >/dev/null 2>&1; then
+    out="$(printf '%s' "$text" | node "$script" "$max_bytes" 2>/dev/null)"
     status=$?
     if (( status == 0 )); then
       local out_bytes
@@ -239,7 +239,7 @@ _rh_truncate_complete_utf8() {
 }
 
 # Locate a shipped pack helper next to this library (lib/ -> pack root).
-_rh_pack_python_helper() {
+_rh_pack_helper() {
   local name="$1"
   local here
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
