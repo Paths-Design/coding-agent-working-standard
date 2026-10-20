@@ -52,3 +52,11 @@ non_functional:
 contracts:
   - name: 'rule-token-cli'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate 58a65d5defac4d53410b60502f26ff114d031cb8 source SHA256 97558daba7f19cf5de4564fc0db8071440e0e1b290a1b79a06d856eb40ae98f4. Inspected both differential-entry-repair-node22 and node18 raw commands/stdout/stderr/before/after bytes: 37 planned/executed each; valid nonzero parity excluding explicit A2 repairs, plus rejection and partial-write controls. commands/006-python-encoding and 007-node-encoding rank SHA d0be6a8c3dc0075995caec821aac159323b667b2c5eeae09a3b34d14f0269796 and special IDs agree; regex-vectors/comparison.json has 15690 identical token-ID arrays. Qualified Python 3.11.13/tiktoken 0.12.0/Unicode14 profile only; differing regex patterns are not universally proved equivalent. Full artifacts at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens. CLI --verify checks committed citation existence/reachability only; behavioral adjudication uses inspected raw artifacts, not rerun by this command."
+    recorded_at: "2026-10-20T12:50:10.826Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python qualify.py --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/node18/bin/node --worktree /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-rule-tokens --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/differential-entry-repair-node18"
+    exit_code: 0
+    commit_sha: "58a65d5defac4d53410b60502f26ff114d031cb8"
