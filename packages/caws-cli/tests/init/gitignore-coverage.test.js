@@ -142,6 +142,55 @@ test('nested Git negation exposes custody despite an intact root managed block',
   expect(uncovered.data.uncovered[0].source).toBe('docs/plans/.gitignore');
   expect(findings.some((f) => f.rule === 'shell.gitignore.managed_block_drift')).toBe(false);
 });
+test('existing untracked owner and lock at a non-probed plan location expose their actual nested negation', () => {
+  const root = repo(renderManagedBlock());
+  const custody = [
+    'plans/team/.caws-plan-snapshot-custody/v1/owner.json',
+    'plans/team/.caws-plan-snapshot-custody/v1/publication.lock',
+  ];
+  const source = ['plans/team/p.md', 'plans/team/.caws-plan-snapshot-custody-source/v1/owner.json'];
+  for (const name of [...custody, ...source]) {
+    fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+    fs.writeFileSync(path.join(root, name), 'owned fixture\n');
+  }
+  fs.writeFileSync(
+    path.join(root, 'plans/team/.gitignore'),
+    '!.caws-plan-snapshot-custody/\n!.caws-plan-snapshot-custody/**\n'
+  );
+  const findings = observe(root);
+  expect(findings.map((f) => f.rule)).toEqual(['shell.gitignore.ephemeral_state_untracked']);
+  const { uncovered, observations } = findings[0].data;
+  expect(uncovered.map((r) => r.path).sort()).toEqual([...custody].sort());
+  expect(uncovered.every((r) => r.source === 'plans/team/.gitignore')).toBe(true);
+  expect(uncovered.every((r) => r.pattern === '!.caws-plan-snapshot-custody/**')).toBe(true);
+  expect(observations.filter((r) => custodyProbes.includes(r.path)).map((r) => r.path)).toEqual(
+    custodyProbes
+  );
+  expect(observations.filter((r) => custodyProbes.includes(r.path)).every((r) => r.ignored)).toBe(
+    true
+  );
+  expect(observations.some((r) => source.includes(r.path))).toBe(false);
+  expect(
+    git(root, ['ls-files', '--others', '--exclude-standard', '--', ...source]).split('\n')
+  ).toEqual([...source].sort());
+});
+test('protected actual custody at a non-probed location stays clean while adjacent source files remain untracked', () => {
+  const root = repo(renderManagedBlock());
+  const custody = [
+    'plans/team/.caws-plan-snapshot-custody/v1/owner.json',
+    'plans/team/.caws-plan-snapshot-custody/v1/publication.lock',
+  ];
+  const source = ['plans/team/p.md', 'plans/team/.caws-plan-snapshot-custody-source/v1/owner.json'];
+  for (const name of [...custody, ...source]) {
+    fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+    fs.writeFileSync(path.join(root, name), 'owned fixture\n');
+  }
+  expect(git(root, ['check-ignore', '--', ...custody]).split('\n')).toEqual(custody);
+  expect(
+    git(root, ['ls-files', '--others', '--exclude-standard', '--', ...source]).split('\n')
+  ).toEqual([...source].sort());
+  expect(observe(root)).toEqual([]);
+});
 test('force-staged snapshot custody is found at arbitrary depth without classifying authority or near misses as runtime', () => {
   const root = repo(renderManagedBlock());
   const custody = [
