@@ -67,7 +67,22 @@ function lines(bytes: Buffer): Data[] {
 }
 function context(stdout: unknown): string | null {
   if (typeof stdout !== 'string' || !stdout.trim()) return null;
-  const value = row(JSON.parse(stdout));
+  const text = stdout.trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    // Plain lifecycle output is a legitimate non-advisory base. Preserve the
+    // native boundary's refusal of malformed JSON-shaped or scalar-control text.
+    if (
+      text.startsWith('{') ||
+      text.startsWith('[') ||
+      ['NaN', 'Infinity', '-Infinity'].includes(text)
+    )
+      throw new Error('Malformed JSON-looking handler output', { cause: error });
+    return null;
+  }
+  const value = row(parsed); // Successfully parsed scalar/array output is not an object envelope.
   const hook = value.hookSpecificOutput;
   if (hook === undefined) return null;
   const member = row(hook).additionalContext;
@@ -610,11 +625,15 @@ async function main(): Promise<void> {
           .map((record) => record.handler),
         ['agent-heartbeat.sh']
       );
-      assert.equal(
-        context(baseline.stdout),
-        original,
-        'baseline card must be whole and untruncated'
+      const delivered = context(baseline.stdout);
+      if (delivered === null)
+        result.evidenceGap =
+          'stock five-handler baseline omitted the heartbeat advisory; delivered UTF8 truncation is unproven';
+      assert(
+        delivered !== null,
+        'evidence gap: stock five-handler baseline omitted heartbeat context; an incompatible selected base can suppress advisories, and cut mode requires positive delivery'
       );
+      assert.equal(delivered, original, 'baseline card must be delivered whole and untruncated');
       await assertSelfStopped('baseline');
       put(path.join(h.root, 'baseline/heartbeat-stdout.bin'), String(heartbeat.stdout));
       const bullet = Buffer.from(original).indexOf(Buffer.from('•'));

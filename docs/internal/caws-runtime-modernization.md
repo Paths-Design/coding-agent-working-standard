@@ -2406,6 +2406,38 @@ Additional bounded evidence and unresolved dependencies:
   `r06-r08-image-native-2026-10-20/`; it does not promote the earlier
   source-bounded guard-disposition claim into platform refusal propagation.
 
+- E126: Qualifier `a95004ff` strict-compiles after preserving its initial
+  nullable-string compilation failure. The actual four-handler control exits0
+  on native `bceb6d6f`, with one captured caller-private grant, the reviewed
+  Session prefix, one exact1883-byte turn JSON and known cleanup. Its retained
+  root is `render-advisory-control-2026-10-20T10-53-59-696Z/` beneath
+  `packages/caws-native/target/qualification/`. Independent readback rehashes
+  all177 files/415485 bytes without mismatch, rederives the complete turn object
+  from the transcript/request and correlates the grant, journal and owned
+  cleanup. Actual stdout is the no-prior-lease systemMessage; this control does
+  not exercise truncation or a real active-to-stopped lease transition.
+  The subsequent `cut` scenario exits1 at its baseline, before any cut or
+  goal-block invocation. Preserve
+  `render-advisory-cut-2026-10-20T10-55-46-635Z/`: readback rehashes all193
+  files/444071 bytes without mismatch. Actual native child39956 exits0; all
+  five selected handlers complete0 and a real heartbeat emits the peer notice,
+  but agent-stop emits plain `stopped advisory-self`. Final native stdout is
+  exactly `{"systemMessage":"stopped advisory-self"}` plus LF; stderr explicitly
+  reports that the selected control envelope cannot carry additionalContext.
+  The qualifier first fails by parsing legitimate plaintext as JSON. Its
+  later expectation of delivered advice is also unsupported by the existing
+  Bash/typed composition and native-text contracts. Cleanup is confirmed
+  inactive, custody free, socket absent and every direct child closed; sampled
+  owner40013/worker40322/backend40323 are absent. No cause is attributed to R08's
+  truncator or native transport. Source review locates an inherited producer
+  boundary defect: agent-stop's documented lease mutation forwards a human CLI
+  receipt into hook output. The next repair redirects only that receipt to
+  diagnostics while retaining the actual lease operation, direct CLI output,
+  incompatible-base precedence and protective decisions. New stock bytes require
+  an explicit prefix-source review, pack identity and rebuilt native candidate.
+  Delivered natural UTF-8 boundary cases, required-goal refusal, final-candidate
+  lifecycle/legacy replay and the unchanged13-session fairness bar remain open.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
