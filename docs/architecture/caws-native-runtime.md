@@ -196,19 +196,22 @@ mandatory path to move with its canonical authority implementation; a reserved
 slot alone does not establish the invariant under saturation.
 
 Retained Node modules and invocation-owned descendants have different lifetimes.
-The fresh native frontend must retain the actual executor Child and private
-group; a daemon-parented compatibility guard cannot recover the caller's
-ancestry by trusting a cached PID. Every subprocess port needs the same
-request-owned execution boundary, including context Git, classifier Git,
-utilities and process lookup. Normal executor cleanup must leave an unrelated
-module worker alive. An opportunistic warm-worker borrow may fall back to the
-existing one-shot path only before any request bytes might have been delivered.
-This intermediate route preserves mandatory execution but does not establish
-bounded cold fan-out. Returning a worker to idle requires handoff settlement and
-actual resource drain; late frames, descriptors and capabilities from one
-request cannot settle another. The existing Stop render descriptors are per
-invocation and fill once; their numbers cannot stand in for a new request's
-actual descriptor transfer.
+Each invocation has a native custody owner that retains its original executor
+Child and private group from creation. On macOS the frontend retains the
+original custodian Child; the custodian creates and retains Node before Ready.
+Original caller identity, captured ancestry and native effects remain with the
+frontend. Other supported one-shot paths retain the direct owner. A
+daemon-parented compatibility guard cannot recover the caller's ancestry by
+trusting a cached PID. Every subprocess port needs the same request-owned
+execution boundary, including context Git, classifier Git, utilities and process
+lookup. Normal executor cleanup must leave an unrelated module worker alive. An
+opportunistic warm-worker borrow may fall back to the existing one-shot path
+only before any request bytes might have been delivered. This intermediate route
+preserves mandatory execution but does not establish bounded cold fan-out.
+Returning a worker to idle requires handoff settlement and actual resource
+drain; late frames, descriptors and capabilities from one request cannot settle
+another. The existing Stop render descriptors are per invocation and fill once;
+their numbers cannot stand in for a new request's actual descriptor transfer.
 
 The required machine workload includes at least thirteen simultaneous sessions
 across at least four repositories. Bound worker and cache capacity across the

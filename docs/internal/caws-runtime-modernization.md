@@ -29,11 +29,12 @@ passing unit tests, or the existence of this document.
 
 ## Ownership and execution
 
-- Bound lane owner: Codex chat `01a15107-5fd0-7872-8f9a-0bb7eb5f26ce`.
-- Incoming coordinator: Codex chat `01a15a2a-5057-75d0-a7e5-69d676673add`. The
-  user requests onboarding followed by completion of the original owner's
-  in-flight work. Registry ownership remains with the bound owner until the
-  supported handoff; no concurrent writer is admitted by this annotation.
+- Bound lane owner and cutover coordinator: Codex chat
+  `01a15a2a-5057-75d0-a7e5-69d676673add`.
+- Original coordinator: Codex chat `01a15107-5fd0-7872-8f9a-0bb7eb5f26ce`. The
+  clean `2489f014` checkpoint and all remaining obligations transfer through the
+  user-authorized claim takeover, event9542. The registry records both the
+  current owner and prior-owner audit; this annotation grants no authority.
 - Spec: `CAWS-NATIVE-RUNTIME-001`, active and bound to
   `native-runtime-modernization`.
 - Source inspection baseline: `fb788cd241424ed3977081c9ad458b6c1fec7c59`.
@@ -60,11 +61,12 @@ installed work, and correct stale next steps before choosing another task.
 The macOS invocation path includes a separate native custodian that creates the
 Node engine before readiness. E145 observes the original frontend's death,
 same-Node cleanup, actual reap, both EOFs and external process absence through
-that entry path. The next boundary is the ordinary typed-engine and renderer
-consumer: replace the fixture's obsolete direct-parent assertion with an
-independent topology observation while preserving the original caller PID. E135
-closes the raw patch-alias admission gap; E136 closes false completion after a
-failed cleanup attempt. Neither closes all frontend-death phases, complete group
+that entry path. E149 observes the repaired ordinary protocol fixture with an
+independent topology observation and the original caller PID. The next boundary
+is request-local renderer witness coverage, the terminal fixture and the actual
+typed-engine/selected-renderer consumer on the same candidate. E135 closes the
+raw patch-alias admission gap; E136 closes false completion after a failed
+cleanup attempt. Neither closes all frontend-death phases, complete group
 settlement, missing-session identity or the unchanged
 thirteen-session/four-repository fairness requirement. A post-Ready registration
 cannot transfer parent wait authority or protect the pre-Ready interval.
@@ -177,7 +179,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | unreplaced; cache interpretation-context counterexample observed, E147                                                                          | Complete semantic transcript fixtures, context-bound cache freshness and installed rendering; current installed cross-surface reach unverified                                                                                                                                                                                                                                                                                |
 | R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                         | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
-| R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity and hook-harvest leaves accepted and landed on main; parent integration and five original paths unreplaced              | E134/E144/E148 retain bounded reference profiles, deliberate old-bug repairs, exact main readback and raw failed/successful artifacts. Parent bytes retain the original implementations until integration; component progress is not parent acceptance                                                                                                                                                                        |
+| R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity and hook-harvest leaves accepted, landed and integrated; five original paths unreplaced                                 | E134/E144/E148 retain bounded reference profiles, deliberate old-bug repairs, exact main readback and raw failed/successful artifacts. E151 integrates the exact landed source and original Python deletions; component progress is not parent acceptance                                                                                                                                                                     |
 | R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | unreplaced                                                                                                                                      | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes                                                                                                                                                                                                                                                                                                |
 | R22 | Tracked installed `.caws/hooks` Python copies                                                                       | Governed self-host/runtime adoption                                        | unreplaced                                                                                                                                      | Fourteen copies identified; do not edit generated/governed installation by hand                                                                                                                                                                                                                                                                                                                                               |
 | R23 | Rust client / versioned local protocol                                                                              | `packages/caws-native` + TS protocol                                       | POSIX one-shot transport/cancellation and bounded actual-engine replay tested; macOS pre-Ready frontend-death custody observed, E145            | Ordinary typed-engine/renderer replay on this candidate, after-Ready/dispatch loss, closed-pipe nonleader settlement, descriptor leakage, resident IPC, bounded Stop recovery and installed parity remain open                                                                                                                                                                                                                |
@@ -3133,15 +3135,50 @@ Additional bounded evidence and unresolved dependencies:
   ownership transfer, parent/main integration, independent review and all A1–A8
   acceptance remain separate.
 
+- E151: User-authorized takeover records the receiving session `01a15a2a` as
+  owner of the active parent lane in `claim_taken_over`9542; root reads the
+  registry, prior-owner audit and scope admission before writing. The outgoing
+  owner freezes clean `2489f014` with no owned runtime handle outstanding. Three
+  read-only Sol investigations trace remaining residency, packaging and Python
+  consumer boundaries. The resident renderer host does not execute the typed
+  hook engine; request-owned subprocess ports, fresh Stop descriptors, policy
+  reselection and mandatory-prefix admission remain prerequisites. Installation
+  selects Python, and no typed transcript renderer or harness adapters exist in
+  this candidate. Those observations establish dependencies, not acceptance.
+  Ordinary merge `6b2bb962` incorporates main `7c6d1b00` without conflicts or
+  dirty source, including the three accepted R20 leaves and publication audit.
+  Raw command, before/after revisions and status are retained in
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/parent-integration/merge-main.json`.
+  Parent integration preserves original leaf evidence and does not repeat or
+  enlarge its runtime conclusions.
+
+  The required strict-kernel compilation is independently reproduced at exit2
+  with TS2339 on the absent `usage.required` schema property. Component
+  `CAWS-RUNTIME-TYPECHECK-001` changes only its absence assertion, candidate
+  `69e54a53`, source merge `7a45dfe6`. Strict kernel and CLI compilation exit0;
+  the focused schema suite executes39 checks at exit0. The actual transpiled
+  assertion passes the original schema and fails after an in-memory
+  `required=[input_tokens]` mutation. Committed test/schema hashes match the
+  inspected artifacts; production schema bytes are unchanged. Raw commands,
+  outputs, initial Jest working-directory failure and mutation results remain
+  under that session's `kernel-typecheck/` artifact directory. The component is
+  reopened after rejected absolute/untracked artifact citations; A1/A2 pass are
+  read back on the spec and `ac_recorded`9538/9539 before reclosure. Citation
+  verification establishes commit reachability only; behavioral adjudication
+  uses the inspected outputs. Generated receipts remain untracked. The source
+  repair and closed component are integrated here; package-wide migration
+  checks, native parity and machine cutover remain separate.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
 `packages/caws-native/target/qualification/terminal-bridge-2026-10-19/`. The
-broader `npm run typecheck` exits 2 at the unchanged
+historical broader `npm run typecheck` exits 2 at the unchanged
 `tests/kernel/telemetry-turn-log-schema.test.ts:237` access to `usage.required`;
 neither that test nor its imported schema differs from `90fac044`. This is not a
-green package-wide check or a reproduced baseline typecheck. E55 carries the
-separate large-latch producer/consumer evidence.
+green package-wide check. E151 reproduces and repairs that exact test defect;
+fresh parent compilation remains required. E55 carries the separate large-latch
+producer/consumer evidence.
 
 Reorientation against all available session turn records retains the original
 whole-application scope, the thirteen-session/four-repository requirement and
@@ -3257,22 +3294,24 @@ restores the reviewed typed stock profile without changing its authority
 predicates. E135 repairs raw patch-alias protective admission and E136 keeps
 failed cleanup pending. E142 wires that custodian and exercises pure contracts;
 E145 observes one pre-Ready frontend-death boundary with strict settlement,
-actual reap, both EOFs and correlated receipts. Repair the ordinary fixture's
-direct-parent oracle using independently observed frontend/custodian/Node
-topology, then exercise the actual typed engine and renderer on the same
-candidate. Qualify closed-pipe nonleaders and frontend loss after Ready and
-dispatch in separately retained scenarios. Keep original caller capture and
-native effects in the frontend; preserve Node FD3/4/5 and exclude every
-liveness/control descriptor from Node. Normal request stdin EOF is not frontend
-death. Unknown cleanup must retain custody and stop the scenario chain. This
-private per-invocation boundary does not require a public pre-Ready spawn
-service and does not earn warm residency. Missing-SID/cache branches
-additionally need a fresh logical-session binding or protective refusal without
-foreign strikes; process identity alone does not establish exclusive session
-ownership. The held E133 probe cannot supply that proof. Complete
-resident-engine ownership and measured image/publication cost remain
-prerequisites to the unchanged fairness replay. E122 forbids a pre-Node queue
-which skips required latch/Stop semantics. Keep the original 1000-turn hot
+actual reap, both EOFs and correlated receipts. E149 exercises the corrected
+ordinary fixture with independently observed frontend/custodian/Node topology.
+Require confirmed topology coverage for each renderer invocation, repair the
+terminal fixture and bounded pipe-join watchdog, then exercise the actual typed
+engine and renderer on the same candidate. A previous request's group cannot
+qualify a later request with missing chain evidence. Qualify closed-pipe
+nonleaders and frontend loss after Ready and dispatch in separately retained
+scenarios. Keep original caller capture and native effects in the frontend;
+preserve Node FD3/4/5 and exclude every liveness/control descriptor from Node.
+Normal request stdin EOF is not frontend death. Unknown cleanup must retain
+custody and stop the scenario chain. This private per-invocation boundary does
+not require a public pre-Ready spawn service and does not earn warm residency.
+Missing-SID/cache branches additionally need a fresh logical-session binding or
+protective refusal without foreign strikes; process identity alone does not
+establish exclusive session ownership. The held E133 probe cannot supply that
+proof. Complete resident-engine ownership and measured image/publication cost
+remain prerequisites to the unchanged fairness replay. E122 forbids a pre-Node
+queue which skips required latch/Stop semantics. Keep the original 1000-turn hot
 transcript, counts,30s request budgets and later hot Running witness
 requirements. Correct output and source-level capacity are not fairness proof.
 No blind workload repetition: the next run needs an identified owning
