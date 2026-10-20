@@ -47,6 +47,7 @@ fn fixture() -> (PreparedImageManifest, Originals) {
         runtime_files: BTreeMap::new(),
     };
     for relative in [
+        "advisory_truncate.cjs",
         "dispatch.sh",
         "handler-env.sh",
         "runtime-paths.sh",
@@ -88,6 +89,31 @@ fn reviewed_executed_prefix_has_owned_bound_identity() {
     assert_eq!(proof.proof_profile(), "codex-stop-session-prefix-v1");
 }
 #[test]
+fn optional_advisory_tools_do_not_change_reviewed_four_handler_prefix_eligibility() {
+    for names in [&[][..], &["cmp"][..], &["iconv"][..], &["cmp", "iconv"][..]] {
+        let (mut manifest, originals) = fixture();
+        for name in names {
+            manifest.toolchain_tcb.tools.push(Tool {
+                name: (*name).into(),
+                path: format!("/tools/{name}"),
+                sha256: "c".repeat(64),
+            });
+        }
+        manifest
+            .toolchain_tcb
+            .tools
+            .sort_by(|a, b| a.name.cmp(&b.name));
+        assert!(valid_tool_names(&manifest.toolchain_tcb.tools));
+        assert!(
+            matches!(
+                derive_prefix_concurrency(&manifest, &originals),
+                PrefixConcurrency::Session(_)
+            ),
+            "optional tools {names:?}"
+        );
+    }
+}
+#[test]
 fn public_profile_and_valid_legacy_toolset_cannot_activate_overlap() {
     let (mut manifest, originals) = fixture();
     manifest
@@ -109,11 +135,16 @@ fn changed_executed_source_does_not_inherit_proof_from_public_profile() {
             pins: vec![],
             runtime_files: BTreeMap::new(),
         };
+        let comment = if key.1 == "advisory_truncate.cjs" {
+            &b"\n// changed\n"[..]
+        } else {
+            &b"\n# changed\n"[..]
+        };
         changed
             .bytes
             .get_mut(key)
             .unwrap()
-            .extend_from_slice(b"\n# changed\n");
+            .extend_from_slice(comment);
         assert!(
             matches!(
                 derive_prefix_concurrency(&manifest, &changed),
@@ -123,6 +154,36 @@ fn changed_executed_source_does_not_inherit_proof_from_public_profile() {
             key.1
         );
     }
+}
+#[test]
+fn missing_advisory_helper_or_extra_heartbeat_keeps_prefix_serial() {
+    let (manifest, mut originals) = fixture();
+    assert!(
+        originals
+            .bytes
+            .remove(&("runtime".into(), "advisory_truncate.cjs".into()))
+            .is_some()
+    );
+    assert!(matches!(
+        derive_prefix_concurrency(&manifest, &originals),
+        PrefixConcurrency::Serial(SerialPrefixReason::UnreviewedPrefix)
+    ));
+
+    let (mut manifest, originals) = fixture();
+    manifest.selection.handlers.push(Handler {
+        path: "/machine/runtime/agent-heartbeat.sh".into(),
+        sha256: hash(&native_prefix_source("agent-heartbeat.sh").unwrap()),
+        entry: "agent-heartbeat.sh".into(),
+        name: "agent-heartbeat.sh".into(),
+        args: vec![],
+        tier: "stock".into(),
+        kind: "stock".into(),
+    });
+    assert_eq!(manifest.selection.handlers.len(), 5);
+    assert!(matches!(
+        derive_prefix_concurrency(&manifest, &originals),
+        PrefixConcurrency::Serial(SerialPrefixReason::UnreviewedPrefix)
+    ));
 }
 #[test]
 fn unknown_library_tier_or_handler_order_never_earns_proof() {

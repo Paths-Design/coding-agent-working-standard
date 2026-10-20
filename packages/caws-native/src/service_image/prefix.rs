@@ -110,6 +110,7 @@ pub(super) fn derive_prefix_concurrency(
                     }
             },
         )
+        && matches_source("advisory_truncate.cjs")
         && [
             "dispatch.sh",
             "handler-env.sh",

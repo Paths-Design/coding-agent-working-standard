@@ -162,6 +162,7 @@ pub const TOOLS: &[&str] = &[
     "grep", "head", "jq", "mkdir", "mktemp", "node", "pgrep", "ps", "python3", "readlink", "rm",
     "sed", "sh", "sleep", "sort", "stat", "tail", "tr", "wc",
 ];
+pub const OPTIONAL_TOOLS: &[&str] = &["cmp", "iconv"];
 pub const PLAN_TOOL: &str = "caws-native";
 mod prefix;
 use prefix::derive_prefix_concurrency;
@@ -169,10 +170,15 @@ pub use prefix::{IsolatedPrefix, PrefixConcurrency, SerialPrefixReason};
 
 fn valid_tool_names(tools: &[Tool]) -> bool {
     let mut expected: Vec<_> = TOOLS.to_vec();
+    for optional in OPTIONAL_TOOLS {
+        if tools.iter().any(|tool| tool.name == *optional) {
+            expected.push(*optional);
+        }
+    }
     if tools.iter().any(|tool| tool.name == PLAN_TOOL) {
         expected.push(PLAN_TOOL);
-        expected.sort_unstable();
     }
+    expected.sort_unstable();
     tools.iter().map(|tool| tool.name.as_str()).eq(expected)
 }
 

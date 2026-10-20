@@ -57,6 +57,8 @@ export const SERVICE_IMAGE_TOOLS = Object.freeze([
   'tr',
   'wc',
 ] as const);
+/** Optional tools are sealed only when explicitly pinned; they never relax the base set. */
+export const SERVICE_IMAGE_OPTIONAL_TOOLS = Object.freeze(['cmp', 'iconv'] as const);
 /** Optional owner-configured native helper; never resolved through caller PATH. */
 export const SERVICE_IMAGE_PLAN_TOOL = 'caws-native' as const;
 export const SERVICE_IMAGE_TEMPLATES = Object.freeze([
@@ -578,9 +580,11 @@ export function prepareSessionRenderImage(
   const templateDirectory = absolute(options.templateDirectory);
   const clientShellPath = absolute(options.clientShellPath);
   const tools = [...options.toolchain].sort((a, b) => compare(a.name, b.name));
-  const expectedTools = tools.some((pin) => pin.name === SERVICE_IMAGE_PLAN_TOOL)
-    ? [...SERVICE_IMAGE_TOOLS, SERVICE_IMAGE_PLAN_TOOL].sort(compare)
-    : SERVICE_IMAGE_TOOLS;
+  const expectedTools = [
+    ...SERVICE_IMAGE_TOOLS,
+    ...SERVICE_IMAGE_OPTIONAL_TOOLS.filter((name) => tools.some((pin) => pin.name === name)),
+    ...(tools.some((pin) => pin.name === SERVICE_IMAGE_PLAN_TOOL) ? [SERVICE_IMAGE_PLAN_TOOL] : []),
+  ].sort(compare);
   if (JSON.stringify(tools.map((tool) => tool.name)) !== JSON.stringify(expectedTools))
     fail('incomplete toolchain');
   for (const tool of tools) {

@@ -8,7 +8,11 @@ const {
   prepareNativeRenderOffer,
   resolveRenderTools,
 } = require('../../dist/runtime/service-offer');
-const { SERVICE_IMAGE_TOOLS } = require('../../dist/runtime/service-image');
+const {
+  SERVICE_IMAGE_TOOLS,
+  SERVICE_IMAGE_OPTIONAL_TOOLS,
+  SERVICE_IMAGE_PLAN_TOOL,
+} = require('../../dist/runtime/service-image');
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const hash = (value) => createHash('sha256').update(value).digest('hex');
@@ -235,6 +239,131 @@ test('tool pinning accepts real hard-link aliases while private policy refuses t
       request.caller.environment.CAWS_HOME
     )
   ).toThrow('regular-file envelope');
+});
+
+function toolResolverFixture() {
+  const bin = path.join(root, 'resolver-tools');
+  fs.mkdirSync(bin);
+  for (const name of SERVICE_IMAGE_TOOLS)
+    fs.writeFileSync(path.join(bin, name), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const native = path.join(root, 'resolver-native');
+  fs.writeFileSync(native, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  return { bin, native };
+}
+
+const resolvedOptionalSets = [[], ['cmp'], ['iconv'], ['cmp', 'iconv']].flatMap((optional) =>
+  [false, true].map((plan) => ({ optional, plan }))
+);
+test.each(resolvedOptionalSets)(
+  'resolves only explicit PATH optionals=$optional and owner plan=$plan',
+  ({ optional, plan }) => {
+    const { bin, native } = toolResolverFixture();
+    for (const name of optional)
+      fs.writeFileSync(path.join(bin, name), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const tools = resolveRenderTools(
+      { PATH: 'relative-only' + path.delimiter + bin },
+      undefined,
+      plan ? native : undefined
+    );
+    expect(tools.map((pin) => pin.name)).toEqual(
+      [...SERVICE_IMAGE_TOOLS, ...optional, ...(plan ? [SERVICE_IMAGE_PLAN_TOOL] : [])].sort()
+    );
+    for (const name of SERVICE_IMAGE_OPTIONAL_TOOLS) {
+      const pin = tools.find((tool) => tool.name === name);
+      if (optional.includes(name)) {
+        expect(pin).toEqual({
+          name,
+          path: path.join(bin, name),
+          sha256: hash(fs.readFileSync(path.join(bin, name))),
+        });
+        expect(Object.isFrozen(pin)).toBe(true);
+      } else expect(pin).toBeUndefined();
+    }
+    expect(Object.isFrozen(tools)).toBe(true);
+  }
+);
+
+test.each(['directory', 'broken symlink', 'nonexecutable'])(
+  'present unsafe optional %s cannot downgrade to omission or a later PATH candidate',
+  (mutation) => {
+    const { bin } = toolResolverFixture();
+    const optional = path.join(bin, 'cmp');
+    if (mutation === 'directory') fs.mkdirSync(optional);
+    else if (mutation === 'broken symlink') fs.symlinkSync(path.join(root, 'absent'), optional);
+    else fs.writeFileSync(optional, '#!/bin/sh\nexit 0\n', { mode: 0o600 });
+    const later = path.join(root, 'later-tools');
+    fs.mkdirSync(later);
+    fs.writeFileSync(path.join(later, 'cmp'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    expect(() => resolveRenderTools({ PATH: bin + path.delimiter + later })).toThrow(
+      mutation === 'directory'
+        ? 'regular-file envelope'
+        : mutation === 'broken symlink'
+          ? 'ENOENT'
+          : 'EACCES'
+    );
+  }
+);
+
+test('selected optional realpath failure propagates instead of becoming absence', () => {
+  const { bin } = toolResolverFixture();
+  const optional = path.join(bin, 'cmp');
+  fs.writeFileSync(optional, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const realpath = fs.realpathSync.bind(fs);
+  jest.spyOn(fs, 'realpathSync').mockImplementation((file, ...args) => {
+    if (file === optional) throw new Error('selected optional realpath failed');
+    return realpath(file, ...args);
+  });
+  expect(() => resolveRenderTools({ PATH: bin })).toThrow('selected optional realpath failed');
+});
+
+test('selected optional read failure propagates instead of becoming absence', () => {
+  const { bin } = toolResolverFixture();
+  const optional = path.join(bin, 'cmp');
+  fs.writeFileSync(optional, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const open = fs.openSync.bind(fs),
+    read = fs.readSync.bind(fs);
+  let selectedFd;
+  jest.spyOn(fs, 'openSync').mockImplementation((file, ...args) => {
+    const fd = open(file, ...args);
+    if (file === optional) selectedFd = fd;
+    return fd;
+  });
+  jest.spyOn(fs, 'readSync').mockImplementation((fd, ...args) => {
+    if (fd === selectedFd) throw new Error('selected optional read failed');
+    return read(fd, ...args);
+  });
+  expect(() => resolveRenderTools({ PATH: bin })).toThrow('selected optional read failed');
+  expect(selectedFd).toEqual(expect.any(Number));
+});
+
+test('selected optional executable recheck failure propagates instead of becoming absence', () => {
+  const { bin } = toolResolverFixture();
+  const optional = path.join(bin, 'cmp');
+  fs.writeFileSync(optional, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const access = fs.accessSync.bind(fs);
+  let observations = 0;
+  jest.spyOn(fs, 'accessSync').mockImplementation((file, ...args) => {
+    if (file === optional && ++observations === 2)
+      throw new Error('selected optional executable changed');
+    return access(file, ...args);
+  });
+  expect(() => resolveRenderTools({ PATH: bin })).toThrow('selected optional executable changed');
+  expect(observations).toBe(2);
+});
+
+test('selected optional instability during pinning propagates instead of becoming absence', () => {
+  const { bin } = toolResolverFixture();
+  const optional = path.join(bin, 'cmp');
+  fs.writeFileSync(optional, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const lstat = fs.lstatSync.bind(fs);
+  let observations = 0;
+  jest.spyOn(fs, 'lstatSync').mockImplementation((file, ...args) => {
+    const metadata = lstat(file, ...args);
+    if (file === optional && ++observations === 2) return { ...metadata, ino: metadata.ino + 1 };
+    return metadata;
+  });
+  expect(() => resolveRenderTools({ PATH: bin })).toThrow('changed during preparation');
+  expect(observations).toBe(2);
 });
 
 test.each([

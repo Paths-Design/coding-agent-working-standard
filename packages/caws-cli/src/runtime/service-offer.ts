@@ -9,6 +9,7 @@ import {
   prepareSessionRenderImage,
   SERVICE_IMAGE_PROFILE,
   SERVICE_IMAGE_TOOLS,
+  SERVICE_IMAGE_OPTIONAL_TOOLS,
   SERVICE_IMAGE_PLAN_TOOL,
   type PreparedServiceImage,
   type ServiceImageManifest,
@@ -70,11 +71,14 @@ export function resolveRenderTools(
   clientDirectory = __dirname,
   nativeExecutable?: string
 ): readonly ServiceToolPin[] {
-  const names: readonly string[] = nativeExecutable
-    ? [...SERVICE_IMAGE_TOOLS, SERVICE_IMAGE_PLAN_TOOL].sort()
-    : SERVICE_IMAGE_TOOLS;
+  const names: readonly string[] = [
+    ...SERVICE_IMAGE_TOOLS,
+    ...SERVICE_IMAGE_OPTIONAL_TOOLS,
+    ...(nativeExecutable ? [SERVICE_IMAGE_PLAN_TOOL] : []),
+  ].sort();
   return Object.freeze(
-    names.map((name): ServiceToolPin => {
+    names.flatMap((name): ServiceToolPin[] => {
+      const optional = SERVICE_IMAGE_OPTIONAL_TOOLS.some((candidate) => candidate === name);
       let file: string | undefined;
       if (name === 'node') file = process.execPath;
       else if (name === 'caws') file = path.resolve(clientDirectory, '../index.js');
@@ -87,10 +91,21 @@ export function resolveRenderTools(
           if (!path.isAbsolute(directory)) continue;
           const candidate = path.join(directory, name);
           try {
+            // An existing optional candidate has been selected. A broken link,
+            // inaccessible file or later pinning failure cannot erase it from
+            // the declared TCB by masquerading as optional absence.
+            if (optional) fs.lstatSync(candidate);
+          } catch (error) {
+            if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? ''))
+              continue;
+            throw error;
+          }
+          try {
             fs.accessSync(candidate, fs.constants.X_OK);
             file = candidate;
             break;
           } catch (error) {
+            if (optional) throw error;
             if (
               !['ENOENT', 'ENOTDIR', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')
             )
@@ -98,15 +113,20 @@ export function resolveRenderTools(
           }
         }
       }
-      if (!file) throw new Error('Required render service tool unavailable: ' + name);
+      if (!file) {
+        if (optional) return [];
+        throw new Error('Required render service tool unavailable: ' + name);
+      }
       file = fs.realpathSync(file);
       // System tools such as macOS grep/stat have legitimate hard-link aliases.
       // Pin their observed bytes and identity; private policy retains nlink=1.
-      return Object.freeze({
+      const pin = Object.freeze({
         name,
         path: file,
         sha256: sha(regular(file, 256 * 1024 * 1024, false)),
       });
+      if (name !== 'caws') fs.accessSync(file, fs.constants.X_OK);
+      return [pin];
     })
   );
 }

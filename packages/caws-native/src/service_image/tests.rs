@@ -10,6 +10,8 @@ static SERIAL: AtomicU64 = AtomicU64::new(0);
 fn tool_profile_order_matches_canonical_lexical_manifest_order() {
     assert!(TOOLS.windows(2).all(|pair| pair[0] < pair[1]));
     assert_eq!(&TOOLS[..3], &["awk", "basename", "bash"]);
+    assert_eq!(OPTIONAL_TOOLS, &["cmp", "iconv"]);
+    assert!(OPTIONAL_TOOLS.iter().all(|name| !TOOLS.contains(name)));
 }
 fn expires() -> Instant {
     Instant::now() + Duration::from_secs(5)
@@ -202,6 +204,149 @@ fn native_plan_helper_pin_is_optional_but_never_selected_by_image_or_path() {
             .kind,
         ErrorKind::UnsupportedProfile
     );
+}
+
+#[test]
+fn optional_tool_subsets_admit_without_changing_legacy_or_native_helper_requirements() {
+    for optional in [&[][..], &["cmp"][..], &["iconv"][..], &["cmp", "iconv"][..]] {
+        for with_plan in [false, true] {
+            let (mut manifest, mut context) = binding_fixture();
+            for name in optional {
+                manifest.toolchain_tcb.tools.push(Tool {
+                    name: (*name).into(),
+                    path: format!("/tools/{name}"),
+                    sha256: "c".repeat(64),
+                });
+            }
+            if with_plan {
+                manifest.toolchain_tcb.tools.push(Tool {
+                    name: PLAN_TOOL.into(),
+                    path: "/trusted/native".into(),
+                    sha256: "f".repeat(64),
+                });
+                context.native_executable = Some("/trusted/native".into());
+            }
+            manifest
+                .toolchain_tcb
+                .tools
+                .sort_by(|a, b| a.name.cmp(&b.name));
+            reseal_metadata(&mut manifest, &mut context);
+            validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+                .unwrap_or_else(|error| panic!("optional={optional:?}, plan={with_plan}: {error}"));
+        }
+    }
+}
+
+#[test]
+fn optional_tools_do_not_admit_unknown_duplicate_unsorted_or_incomplete_toolsets() {
+    let (mut manifest, context) = binding_fixture();
+    for name in ["cmp", "iconv", PLAN_TOOL] {
+        manifest.toolchain_tcb.tools.push(Tool {
+            name: name.into(),
+            path: format!("/tools/{name}"),
+            sha256: "c".repeat(64),
+        });
+    }
+    manifest
+        .toolchain_tcb
+        .tools
+        .sort_by(|a, b| a.name.cmp(&b.name));
+    let mut context = context;
+    context.native_executable = Some(format!("/tools/{PLAN_TOOL}").into());
+    let mut cases = Vec::new();
+    for name in ["Cmp", "ICONV", "cmp-extra", "iconv ", "tar"] {
+        let mut changed = manifest.clone();
+        changed.toolchain_tcb.tools.push(Tool {
+            name: name.into(),
+            path: "/tools/unknown".into(),
+            sha256: "c".repeat(64),
+        });
+        changed
+            .toolchain_tcb
+            .tools
+            .sort_by(|a, b| a.name.cmp(&b.name));
+        cases.push((format!("unknown {name:?}"), changed));
+    }
+    for name in ["awk", "cmp", "iconv", PLAN_TOOL] {
+        let mut changed = manifest.clone();
+        let duplicate = changed
+            .toolchain_tcb
+            .tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .unwrap()
+            .clone();
+        changed.toolchain_tcb.tools.push(duplicate);
+        changed
+            .toolchain_tcb
+            .tools
+            .sort_by(|a, b| a.name.cmp(&b.name));
+        cases.push((format!("duplicate {name}"), changed));
+    }
+    let mut changed = manifest.clone();
+    changed.toolchain_tcb.tools.swap(0, 1);
+    cases.push(("noncanonical order".into(), changed));
+    for name in TOOLS {
+        let mut changed = manifest.clone();
+        changed
+            .toolchain_tcb
+            .tools
+            .retain(|tool| tool.name != *name);
+        cases.push((format!("missing mandatory {name}"), changed));
+    }
+    for (label, mut changed) in cases {
+        let mut matching = context.clone();
+        reseal_metadata(&mut changed, &mut matching);
+        assert_eq!(
+            validate_binding(&changed, &matching, Path::new(&changed.execution.root))
+                .unwrap_err()
+                .kind,
+            ErrorKind::UnsupportedProfile,
+            "{label}",
+        );
+    }
+}
+
+#[test]
+fn present_optional_tools_retain_executable_fingerprint_and_custody_checks() {
+    let scratch = Scratch::new();
+    let (_, context) = binding_fixture();
+    for name in ["cmp", "iconv"] {
+        let path = scratch.0.join(name);
+        let source = b"#!/bin/sh\nexit 0\n";
+        write_mode(&path, source, 0o700);
+        let tool = Tool {
+            name: name.into(),
+            path: path.to_str().unwrap().into(),
+            sha256: hash(source),
+        };
+        let pins = vec![verify_tool(&tool, &context, expires()).unwrap()];
+        check_pins(&pins, expires()).unwrap();
+        write_mode(&path, b"#!/bin/sh\nexit 17\n", 0o700);
+        assert_eq!(
+            check_pins(&pins, expires()).unwrap_err().kind,
+            ErrorKind::Changed,
+            "{name} custody"
+        );
+        assert_eq!(
+            verify_tool(&tool, &context, expires()).err().unwrap().kind,
+            ErrorKind::Changed,
+            "{name} bytes"
+        );
+        let changed_tool = Tool {
+            sha256: hash(b"#!/bin/sh\nexit 17\n"),
+            ..tool
+        };
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            verify_tool(&changed_tool, &context, expires())
+                .err()
+                .unwrap()
+                .kind,
+            ErrorKind::UnsafePath,
+            "{name} executable"
+        );
+    }
 }
 
 #[test]

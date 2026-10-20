@@ -4,6 +4,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
   SERVICE_IMAGE_TOOLS,
+  SERVICE_IMAGE_OPTIONAL_TOOLS,
+  SERVICE_IMAGE_PLAN_TOOL,
   SERVICE_IMAGE_TEMPLATES,
   assertServiceImageEnvironment,
   quoteServiceImageLiteral,
@@ -68,6 +70,7 @@ test('declares every required current Stop tool without ambient PATH fallback', 
     'wc',
   ]);
   expect(SERVICE_IMAGE_TEMPLATES).toHaveLength(11);
+  expect([...SERVICE_IMAGE_OPTIONAL_TOOLS]).toEqual(['cmp', 'iconv']);
   expect(SERVICE_IMAGE_TEMPLATES).toContain('plan-transcript-finalize.sh');
 });
 
@@ -334,6 +337,81 @@ function expectBuilderRefusal(options, reason) {
   expect(fs.readdirSync(options.imageParent)).toEqual([]);
 }
 
+const optionalToolSets = [[], ['cmp'], ['iconv'], ['cmp', 'iconv']];
+const declaredToolSets = optionalToolSets.flatMap((optional) =>
+  [false, true].map((plan) => ({ optional, plan }))
+);
+function addFixtureToolPins(options, names) {
+  const crypto = require('node:crypto');
+  for (const name of names) {
+    const file = path.join(root, 'pinned-' + name);
+    fs.writeFileSync(file, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    options.toolchain.push({
+      name,
+      path: file,
+      sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+    });
+  }
+}
+
+test.each(declaredToolSets)(
+  'tool-name validation retains the exact base with optional=$optional plan=$plan',
+  ({ optional, plan }) => {
+    const options = builderFixture();
+    addFixtureToolPins(options, [...optional, ...(plan ? [SERVICE_IMAGE_PLAN_TOOL] : [])]);
+    options.toolchain.reverse();
+    // This deliberately incomplete foreign-source fixture reaches the profile
+    // check only after every declared tool passes name, path and pin validation.
+    expectBuilderRefusal(options, 'undeclared project library or incomplete profile');
+  }
+);
+
+test.each([
+  'duplicate base',
+  'duplicate optional',
+  'duplicate plan',
+  'unknown tool',
+  'missing base',
+])('tool-name validation rejects %s before staging', (mutation) => {
+  const options = builderFixture();
+  addFixtureToolPins(options, ['cmp', SERVICE_IMAGE_PLAN_TOOL]);
+  if (mutation === 'duplicate base')
+    options.toolchain.push({ ...options.toolchain.find((pin) => pin.name === 'awk') });
+  else if (mutation === 'duplicate optional')
+    options.toolchain.push({ ...options.toolchain.find((pin) => pin.name === 'cmp') });
+  else if (mutation === 'duplicate plan')
+    options.toolchain.push({
+      ...options.toolchain.find((pin) => pin.name === SERVICE_IMAGE_PLAN_TOOL),
+    });
+  else if (mutation === 'unknown tool')
+    options.toolchain.push({ ...options.toolchain[0], name: 'unreviewed-tool' });
+  else options.toolchain = options.toolchain.filter((pin) => pin.name !== 'awk');
+  expectBuilderRefusal(options, 'incomplete toolchain');
+});
+
+test.each([
+  ['stale', 'tool changed'],
+  ['deleted', 'ENOENT'],
+  ['symlink', 'symlink source or image'],
+  ['invalid hash', 'tool changed'],
+  ['relative path', 'noncanonical path'],
+  ['nonexecutable', 'EACCES'],
+])('declared optional tool rejects %s pins', (mutation, reason) => {
+  const options = builderFixture();
+  addFixtureToolPins(options, ['cmp']);
+  const pin = options.toolchain.find((tool) => tool.name === 'cmp');
+  if (mutation === 'stale') fs.appendFileSync(pin.path, '# changed\n');
+  else if (mutation === 'deleted') fs.unlinkSync(pin.path);
+  else if (mutation === 'symlink') {
+    const target = pin.path + '-referent';
+    fs.renameSync(pin.path, target);
+    fs.symlinkSync(target, pin.path);
+  } else if (mutation === 'invalid hash') pin.sha256 = 'not-a-digest';
+  else if (mutation === 'relative path') pin.path = 'relative-cmp';
+  else fs.chmodSync(pin.path, 0o600);
+  expectBuilderRefusal(options, reason);
+});
+
 test('real builder rejects a runtime source mutation before staging any image', () => {
   const options = builderFixture();
   fs.appendFileSync(path.join(options.selection.runtimeDirectory, 'before.sh'), '# mutated\n');
@@ -553,6 +631,39 @@ function fixturePublish(image) {
   // final paths. It exercises no native publication, grant, or admission code.
   fs.renameSync(image.stagingRoot, image.manifest.execution.root);
 }
+
+reviewedProfileTest.each(declaredToolSets)(
+  'reviewed image seals optional=$optional plan=$plan into its exact toolchain identity',
+  ({ optional, plan }) => {
+    const fixture = reviewedProfileFixture();
+    const baseline = prepareSessionRenderImage(fixture.options);
+    const extra = [...optional, ...(plan ? [SERVICE_IMAGE_PLAN_TOOL] : [])];
+    addFixtureToolPins(fixture.options, extra);
+    fixture.options.toolchain.reverse();
+    const image = prepareSessionRenderImage(fixture.options);
+    expect(image.manifest.toolchainTcb.tools.map((pin) => pin.name)).toEqual(
+      [...SERVICE_IMAGE_TOOLS, ...extra].sort()
+    );
+    for (const name of extra) {
+      const declared = fixture.options.toolchain.find((pin) => pin.name === name);
+      expect(image.manifest.toolchainTcb.tools.find((pin) => pin.name === name)).toEqual(declared);
+      expect(fs.readFileSync(path.join(image.stagingRoot, 'bin', name), 'utf8')).toContain(
+        declared.path
+      );
+    }
+    if (extra.length) {
+      expect(image.imageKey).not.toBe(baseline.imageKey);
+      expect(image.imageDigest).not.toBe(baseline.imageDigest);
+      expect(image.manifest.sourceGeneration).not.toBe(baseline.manifest.sourceGeneration);
+    } else {
+      expect(image.imageKey).toBe(baseline.imageKey);
+      expect(image.imageDigest).toBe(baseline.imageDigest);
+    }
+    fixturePublish(image);
+    expect(() => verifyPublishedServiceImage(image)).not.toThrow();
+  },
+  30000
+);
 
 reviewedProfileTest(
   'real reviewed-profile builder seals exact bytes, full chain and immutable cache identity',
