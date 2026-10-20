@@ -4,6 +4,20 @@ const path = require('node:path');
 const cp = require('node:child_process');
 const crypto = require('node:crypto');
 const { AbortController } = globalThis;
+let priorScenarioFailed = false;
+const guarded =
+  (body) =>
+  async (...args) => {
+    if (priorScenarioFailed) throw new Error('Scenario not executed: an earlier scenario failed');
+    try {
+      return await body(...args);
+    } catch (error) {
+      priorScenarioFailed = true;
+      throw error;
+    }
+  };
+const scenario = (name, body, timeout) => test(name, guarded(body), timeout);
+scenario.each = (table) => (name, body, timeout) => test.each(table)(name, guarded(body), timeout);
 const { installMachineRuntime } = require('../../dist/init/machine-adapters');
 const { prepareRuntimeInvocation } = require('../../dist/runtime/engine');
 const {
@@ -293,22 +307,26 @@ function shipped(result) {
 }
 const document = (value = guards) => ({ version: 1, surfaces: {}, guards: value });
 
-test('compiled engine preloads all four real consumers without invoking their Python config parser', async () => {
-  const f = fixture();
-  const before = { ...process.env };
-  try {
-    f.policy(null);
-    shipped(await f.run());
-    f.policy(document());
-    configured(await f.run());
-    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
-    expect(process.env).toEqual(before);
-  } finally {
-    f.close();
-  }
-}, 45000);
+scenario(
+  'compiled engine preloads all four real consumers without invoking their Python config parser',
+  async () => {
+    const f = fixture();
+    const before = { ...process.env };
+    try {
+      f.policy(null);
+      shipped(await f.run());
+      f.policy(document());
+      configured(await f.run());
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+      expect(process.env).toEqual(before);
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
 
-const nativeTest = process.env.CAWS_GUARD_CONFIG_NATIVE_BIN ? test : test.skip;
+const nativeTest = process.env.CAWS_GUARD_CONFIG_NATIVE_BIN ? scenario : test.skip;
 nativeTest(
   'supplied native client reaches typed preload and all four real shell consumers',
   () => {
@@ -326,243 +344,282 @@ nativeTest(
   45000
 );
 
-test('parallel projects with repeated session identity cannot share configuration assignments', async () => {
-  const left = fixture(),
-    right = fixture();
-  try {
-    left.policy(document());
-    const other = { ...prefix, prefix: 'other/' };
-    right.policy(
-      document({
-        'scope-guard.sh': { additional_allow_prefixes: [other] },
-        'write-allowlist.sh': { additional_allow_prefixes: [other] },
-        'god-object-check.sh': { thresholds: { loc: 1000, delta: 1000 } },
-        'loc-delta-check.sh': { thresholds: { delta: 1000 } },
-      })
-    );
-    const [a, b] = await Promise.all([left.run(), right.run()]);
-    configured(a);
-    shipped(b);
-  } finally {
-    left.close();
-    right.close();
-  }
-}, 45000);
-
-test('public threshold overrides retain precedence over typed config', async () => {
-  const f = fixture();
-  try {
-    f.policy(document());
-    const result = await f.run(
-      await f.prepare({ CAWS_GOD_OBJECT_LOC: '1000', CAWS_LOC_DELTA_WARN_THRESHOLD: '1000' })
-    );
-    expect(result.scope).toBe('');
-    expect(result.allowlist).toBe('0');
-    expect(result.god).toBe('');
-    expect(result.delta).toBe('');
-  } finally {
-    f.close();
-  }
-}, 45000);
-
-test('selected Bash startup retains its parser path and public threshold settings', async () => {
-  const f = fixture();
-  try {
-    f.policy(document());
-    const startup = path.join(f.root, 'startup.sh');
-    f.put(
-      startup,
-      'printf "startup\\n" >> "$CONSUMER_ROOT/startup-calls"\nexport CAWS_GOD_OBJECT_LOC=100 CAWS_GOD_OBJECT_DELTA=10 CAWS_LOC_DELTA_WARN_THRESHOLD=10\n'
-    );
-    const result = await f.run(await f.prepare({ BASH_ENV: startup }));
-    expect(result.scope).toContain('TEST-001');
-    expect(result.allowlist).toBe('1');
-    expect(result.god).toContain('threshold: 100');
-    expect(result.delta).toContain('threshold: 10');
-    expect(fs.readFileSync(path.join(f.root, 'startup-calls'), 'utf8')).toContain('startup\n');
-    expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
-  } finally {
-    f.close();
-  }
-}, 45000);
-
-test('inherited source sentinel cannot turn caller assignments into a trusted preload', async () => {
-  const f = fixture();
-  try {
-    f.policy(document());
-    shipped(
-      await f.run(
-        await f.prepare({
-          _CAWS_GUARD_CONFIG_SH_SOURCED: '1',
-          CAWS_GUARD_CONFIG_STATUS: 'ok',
-          CAWS_GUARD_ZONE_COUNT: '1',
-          CAWS_GUARD_ZONE_0: '/',
+scenario(
+  'parallel projects with repeated session identity cannot share configuration assignments',
+  async () => {
+    const left = fixture(),
+      right = fixture();
+    try {
+      left.policy(document());
+      const other = { ...prefix, prefix: 'other/' };
+      right.policy(
+        document({
+          'scope-guard.sh': { additional_allow_prefixes: [other] },
+          'write-allowlist.sh': { additional_allow_prefixes: [other] },
+          'god-object-check.sh': { thresholds: { loc: 1000, delta: 1000 } },
+          'loc-delta-check.sh': { thresholds: { delta: 1000 } },
         })
-      )
-    );
-    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
-  } finally {
-    f.close();
-  }
-}, 45000);
+      );
+      const [a, b] = await Promise.all([left.run(), right.run()]);
+      configured(a);
+      shipped(b);
+    } finally {
+      left.close();
+      right.close();
+    }
+  },
+  45000
+);
 
-test('strict filesystem text reads preserve legacy unavailable states and universal newlines', () => {
-  const f = fixture();
-  try {
-    const yaml = path.join(f.repo, '.caws/policy.yaml');
-    const policy = path.join(f.repo, '.caws/hooks/hook-policy.json');
-    f.policy(document());
-    fs.writeFileSync(yaml, Buffer.from([0xff]));
-    expect(loadGuardConfigurationEnvironment(f.repo)).toEqual({
-      CAWS_GUARD_ZONE_COUNT: '0',
-      CAWS_GUARD_CONFIG_STATUS: 'unavailable',
-    });
-    fs.writeFileSync(yaml, 'non_governed_zones:\n  - native/**\n');
-    fs.writeFileSync(policy, Buffer.from([0xff]));
-    expect(loadGuardConfigurationEnvironment(f.repo)).toEqual({
-      CAWS_GUARD_ZONE_COUNT: '1',
-      CAWS_GUARD_ZONE_0: 'native/',
-      CAWS_GUARD_CONFIG_STATUS: 'unavailable',
-    });
-    fs.writeFileSync(policy, '{}');
-    for (const separator of ['\r\n', '\r']) {
-      fs.writeFileSync(yaml, ['non_governed_zones:', '  - native/**', ''].join(separator));
+scenario(
+  'public threshold overrides retain precedence over typed config',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      const result = await f.run(
+        await f.prepare({ CAWS_GOD_OBJECT_LOC: '1000', CAWS_LOC_DELTA_WARN_THRESHOLD: '1000' })
+      );
+      expect(result.scope).toBe('');
+      expect(result.allowlist).toBe('0');
+      expect(result.god).toBe('');
+      expect(result.delta).toBe('');
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
+
+scenario(
+  'selected Bash startup retains its parser path and public threshold settings',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      const startup = path.join(f.root, 'startup.sh');
+      f.put(
+        startup,
+        'printf "startup\\n" >> "$CONSUMER_ROOT/startup-calls"\nexport CAWS_GOD_OBJECT_LOC=100 CAWS_GOD_OBJECT_DELTA=10 CAWS_LOC_DELTA_WARN_THRESHOLD=10\n'
+      );
+      const result = await f.run(await f.prepare({ BASH_ENV: startup }));
+      expect(result.scope).toContain('TEST-001');
+      expect(result.allowlist).toBe('1');
+      expect(result.god).toContain('threshold: 100');
+      expect(result.delta).toContain('threshold: 10');
+      expect(fs.readFileSync(path.join(f.root, 'startup-calls'), 'utf8')).toContain('startup\n');
+      expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
+
+scenario(
+  'inherited source sentinel cannot turn caller assignments into a trusted preload',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      shipped(
+        await f.run(
+          await f.prepare({
+            _CAWS_GUARD_CONFIG_SH_SOURCED: '1',
+            CAWS_GUARD_CONFIG_STATUS: 'ok',
+            CAWS_GUARD_ZONE_COUNT: '1',
+            CAWS_GUARD_ZONE_0: '/',
+          })
+        )
+      );
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
+
+scenario(
+  'strict filesystem text reads preserve legacy unavailable states and universal newlines',
+  () => {
+    const f = fixture();
+    try {
+      const yaml = path.join(f.repo, '.caws/policy.yaml');
+      const policy = path.join(f.repo, '.caws/hooks/hook-policy.json');
+      f.policy(document());
+      fs.writeFileSync(yaml, Buffer.from([0xff]));
+      expect(loadGuardConfigurationEnvironment(f.repo)).toEqual({
+        CAWS_GUARD_ZONE_COUNT: '0',
+        CAWS_GUARD_CONFIG_STATUS: 'unavailable',
+      });
+      fs.writeFileSync(yaml, 'non_governed_zones:\n  - native/**\n');
+      fs.writeFileSync(policy, Buffer.from([0xff]));
       expect(loadGuardConfigurationEnvironment(f.repo)).toEqual({
         CAWS_GUARD_ZONE_COUNT: '1',
         CAWS_GUARD_ZONE_0: 'native/',
-        CAWS_GUARD_CONFIG_STATUS: 'ok',
+        CAWS_GUARD_CONFIG_STATUS: 'unavailable',
       });
-    }
-    fs.writeFileSync(yaml, 'version: 1\n');
-    fs.writeFileSync(policy, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('{}')]));
-    expect(loadGuardConfigurationEnvironment(f.repo)).toEqual({
-      CAWS_GUARD_ZONE_COUNT: '0',
-      CAWS_GUARD_CONFIG_STATUS: 'invalid',
-    });
-  } finally {
-    f.close();
-  }
-});
-
-test('malformed UTF8 after preparation cannot introduce replacement-character prefix authority', async () => {
-  const f = fixture();
-  try {
-    f.policy(document());
-    const prepared = await f.prepare();
-    const raw = Buffer.from(
-      JSON.stringify(document()).replace(prefix.reason, prefix.reason + 'PLACEHOLDER')
-    );
-    const marker = Buffer.from('PLACEHOLDER'),
-      at = raw.indexOf(marker);
-    expect(at).toBeGreaterThan(-1);
-    fs.writeFileSync(
-      path.join(f.repo, '.caws/hooks/hook-policy.json'),
-      Buffer.concat([raw.subarray(0, at), Buffer.from([0xff]), raw.subarray(at + marker.length)])
-    );
-    shipped(await f.run(prepared));
-  } finally {
-    f.close();
-  }
-}, 45000);
-
-test('dispatch reads fresh policy and rejects forged caller transport; invalid data retains shipped behavior', async () => {
-  const f = fixture();
-  try {
-    f.policy(document());
-    const first = await f.prepare({
-      CAWS_GUARD_CONFIG_STATUS: 'ok',
-      CAWS_GUARD_ZONE_COUNT: '1',
-      CAWS_GUARD_ZONE_0: '/',
-      CAWS_GUARD_PREFIX_COUNT_SCOPE_GUARD_SH: '1',
-      CAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0: 'native/',
-    });
-    f.policy(document({ ...guards, 'unknown-guard.sh': {} }));
-    shipped(await f.run(first));
-    await expect(f.prepare()).rejects.toThrow('not a configurable guard');
-    f.policy(document());
-    configured(await f.run());
-    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
-  } finally {
-    f.close();
-  }
-}, 45000);
-
-test('explicit parser override executes despite forged inherited preload status', async () => {
-  const f = fixture();
-  try {
-    f.policy(document());
-    const parser = path.join(f.root, 'custom-parser.py');
-    f.put(
-      parser,
-      "import os\nopen(os.path.join(os.environ['CONSUMER_ROOT'],'custom-parser-called'),'a').write('called\\n')\nprint('CAWS_GUARD_CONFIG_STATUS=absent')\nprint('CAWS_GUARD_ZONE_COUNT=0')\n"
-    );
-    shipped(
-      await f.run(
-        await f.prepare({
-          CAWS_GUARD_CONFIG_PY: parser,
-          CAWS_GUARD_CONFIG_STATUS: 'ok',
+      fs.writeFileSync(policy, '{}');
+      for (const separator of ['\r\n', '\r']) {
+        fs.writeFileSync(yaml, ['non_governed_zones:', '  - native/**', ''].join(separator));
+        expect(loadGuardConfigurationEnvironment(f.repo)).toEqual({
           CAWS_GUARD_ZONE_COUNT: '1',
-          CAWS_GUARD_ZONE_0: '/',
-        })
-      )
-    );
-    expect(fs.readFileSync(path.join(f.root, 'custom-parser-called'), 'utf8')).toBe('called\n');
-  } finally {
-    f.close();
+          CAWS_GUARD_ZONE_0: 'native/',
+          CAWS_GUARD_CONFIG_STATUS: 'ok',
+        });
+      }
+      fs.writeFileSync(yaml, 'version: 1\n');
+      fs.writeFileSync(policy, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('{}')]));
+      expect(loadGuardConfigurationEnvironment(f.repo)).toEqual({
+        CAWS_GUARD_ZONE_COUNT: '0',
+        CAWS_GUARD_CONFIG_STATUS: 'invalid',
+      });
+    } finally {
+      f.close();
+    }
   }
-}, 45000);
+);
 
-test('a selected custom loader retains its own execution and ignores forged caller preload', async () => {
-  const f = fixture();
-  try {
-    f.policy(document());
-    const loader = path.join(f.repo, '.caws/hooks/custom-config.sh');
-    f.put(
-      loader,
-      `caws_guard_config_load() {
+scenario(
+  'malformed UTF8 after preparation cannot introduce replacement-character prefix authority',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      const prepared = await f.prepare();
+      const raw = Buffer.from(
+        JSON.stringify(document()).replace(prefix.reason, prefix.reason + 'PLACEHOLDER')
+      );
+      const marker = Buffer.from('PLACEHOLDER'),
+        at = raw.indexOf(marker);
+      expect(at).toBeGreaterThan(-1);
+      fs.writeFileSync(
+        path.join(f.repo, '.caws/hooks/hook-policy.json'),
+        Buffer.concat([raw.subarray(0, at), Buffer.from([0xff]), raw.subarray(at + marker.length)])
+      );
+      shipped(await f.run(prepared));
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
+
+scenario(
+  'dispatch reads fresh policy and rejects forged caller transport; invalid data retains shipped behavior',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      const first = await f.prepare({
+        CAWS_GUARD_CONFIG_STATUS: 'ok',
+        CAWS_GUARD_ZONE_COUNT: '1',
+        CAWS_GUARD_ZONE_0: '/',
+        CAWS_GUARD_PREFIX_COUNT_SCOPE_GUARD_SH: '1',
+        CAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0: 'native/',
+      });
+      f.policy(document({ ...guards, 'unknown-guard.sh': {} }));
+      shipped(await f.run(first));
+      await expect(f.prepare()).rejects.toThrow('not a configurable guard');
+      f.policy(document());
+      configured(await f.run());
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
+
+scenario(
+  'explicit parser override executes despite forged inherited preload status',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      const parser = path.join(f.root, 'custom-parser.py');
+      f.put(
+        parser,
+        "import os\nopen(os.path.join(os.environ['CONSUMER_ROOT'],'custom-parser-called'),'a').write('called\\n')\nprint('CAWS_GUARD_CONFIG_STATUS=absent')\nprint('CAWS_GUARD_ZONE_COUNT=0')\n"
+      );
+      shipped(
+        await f.run(
+          await f.prepare({
+            CAWS_GUARD_CONFIG_PY: parser,
+            CAWS_GUARD_CONFIG_STATUS: 'ok',
+            CAWS_GUARD_ZONE_COUNT: '1',
+            CAWS_GUARD_ZONE_0: '/',
+          })
+        )
+      );
+      expect(fs.readFileSync(path.join(f.root, 'custom-parser-called'), 'utf8')).toBe('called\n');
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
+
+scenario(
+  'a selected custom loader retains its own execution and ignores forged caller preload',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      const loader = path.join(f.repo, '.caws/hooks/custom-config.sh');
+      f.put(
+        loader,
+        `caws_guard_config_load() {
   printf 'called\\n' >> "$CONSUMER_ROOT/custom-loader-called"
   export CAWS_GUARD_CONFIG_STATUS=absent CAWS_GUARD_ZONE_COUNT=0
 }
 `
-    );
-    const settings = JSON.parse(fs.readFileSync(f.projectSettings));
-    settings.surfaces.codex.libraries['guard-config.sh'] = '.caws/hooks/custom-config.sh';
-    f.put(f.projectSettings, settings);
-    shipped(
-      await f.run(
-        await f.prepare({
-          CAWS_GUARD_CONFIG_STATUS: 'ok',
-          CAWS_GUARD_ZONE_COUNT: '1',
-          CAWS_GUARD_ZONE_0: '/',
-        })
-      )
-    );
-    expect(fs.readFileSync(path.join(f.root, 'custom-loader-called'), 'utf8')).toBe('called\n');
-    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
-  } finally {
-    f.close();
-  }
-}, 45000);
+      );
+      const settings = JSON.parse(fs.readFileSync(f.projectSettings));
+      settings.surfaces.codex.libraries['guard-config.sh'] = '.caws/hooks/custom-config.sh';
+      f.put(f.projectSettings, settings);
+      shipped(
+        await f.run(
+          await f.prepare({
+            CAWS_GUARD_CONFIG_STATUS: 'ok',
+            CAWS_GUARD_ZONE_COUNT: '1',
+            CAWS_GUARD_ZONE_0: '/',
+          })
+        )
+      );
+      expect(fs.readFileSync(path.join(f.root, 'custom-loader-called'), 'utf8')).toBe('called\n');
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
 
-test('stock-source tampering after preparation cannot retain typed admission', async () => {
-  const f = fixture();
-  try {
-    f.policy(document());
-    const prepared = await f.prepare();
-    fs.appendFileSync(
-      path.join(f.runtime, 'lib/guard-config.py'),
-      '\n# source changed after preparation\n'
-    );
-    await expect(f.run(prepared)).rejects.toThrow(
-      'Selected guard configuration source changed or became unavailable after selection'
-    );
-    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
-  } finally {
-    f.close();
-  }
-}, 45000);
+scenario(
+  'stock-source tampering after preparation cannot retain typed admission',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(document());
+      const prepared = await f.prepare();
+      fs.appendFileSync(
+        path.join(f.runtime, 'lib/guard-config.py'),
+        '\n# source changed after preparation\n'
+      );
+      await expect(f.run(prepared)).rejects.toThrow(
+        'Selected guard configuration source changed or became unavailable after selection'
+      );
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
 
-test.each(['na\0tive/', 'na\u0085tive/', 'na\ud800tive/'])(
+scenario.each(['na\0tive/', 'na\u0085tive/', 'na\ud800tive/'])(
   'non-native prefix transport %j cannot become a lossy stock grant',
   async (unsafe) => {
     const f = fixture();
@@ -581,7 +638,7 @@ test.each(['na\0tive/', 'na\u0085tive/', 'na\ud800tive/'])(
   45000
 );
 
-test.each(['100.0', '1e2', '100.000000000000001'])(
+scenario.each(['100.0', '1e2', '100.000000000000001'])(
   'threshold token %s cannot acquire integer authority by rounding',
   async (token) => {
     const f = fixture();
@@ -596,24 +653,28 @@ test.each(['100.0', '1e2', '100.000000000000001'])(
   45000
 );
 
-test('Python whitespace cannot supply the missing character of an authorization reason', async () => {
-  const f = fixture();
-  try {
-    f.policy(
-      document({
-        'scope-guard.sh': {
-          additional_allow_prefixes: [{ ...prefix, reason: '\u001c12345678901' }],
-        },
-      })
-    );
-    shipped(await f.run());
-    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
-  } finally {
-    f.close();
-  }
-}, 45000);
+scenario(
+  'Python whitespace cannot supply the missing character of an authorization reason',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(
+        document({
+          'scope-guard.sh': {
+            additional_allow_prefixes: [{ ...prefix, reason: '\u001c12345678901' }],
+          },
+        })
+      );
+      shipped(await f.run());
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
 
-test.each(['\u2028', '\u2029'])(
+scenario.each(['\u2028', '\u2029'])(
   'Unicode separator %j cannot shorten a scope zone or terminate its header',
   (separator) => {
     expect(parseNonGovernedZones('non_governed_zones:\n  - native/' + separator + '\n')).toEqual([
@@ -628,22 +689,28 @@ test.each(['\u2028', '\u2029'])(
   }
 );
 
-test('source indexing limits retain the selected parser rather than asserting invalid policy', async () => {
-  const f = fixture();
-  try {
-    const raw = JSON.stringify(document()).replace(
-      /}$/,
-      ',"metadata":' + '['.repeat(130) + '0' + ']'.repeat(130) + '}'
-    );
-    f.policy(raw);
-    shipped(await f.run());
-    expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
-  } finally {
-    f.close();
-  }
-}, 45000);
+scenario(
+  'source indexing limits retain the selected parser rather than asserting invalid policy',
+  async () => {
+    const f = fixture();
+    try {
+      const raw = JSON.stringify(document()).replace(
+        /}$/,
+        ',"metadata":' + '['.repeat(130) + '0' + ']'.repeat(130) + '}'
+      );
+      f.policy(document());
+      const prepared = await f.prepare();
+      f.policy(raw);
+      shipped(await f.run(prepared));
+      expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
 
-test.each(['\0/', 'native\ud800/'])(
+scenario.each(['\0/', 'native\ud800/'])(
   'unsafe prefix %j cannot hide behind source indexing limits',
   (unsafe) => {
     const raw = JSON.stringify(
@@ -657,30 +724,51 @@ test.each(['\0/', 'native\ud800/'])(
   }
 );
 
-test('stock NUL rejection prevents the absolute prefix emitted by an explicitly selected legacy parser', async () => {
-  const f = fixture();
-  try {
-    f.policy(
-      document({
-        'scope-guard.sh': { additional_allow_prefixes: [{ ...prefix, prefix: '\0/' }] },
-      })
-    );
-    const denied = await f.run();
-    shipped(denied);
-    expect(denied.assignments).toContain('CAWS_GUARD_CONFIG_STATUS=invalid\n');
-    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
-    // Explicit executable selection is a separate compatibility contract.
-    const result = await f.run(
-      await f.prepare({
-        CONFIG_PARSER_MODE: 'execute',
-        CAWS_GUARD_CONFIG_PY: path.join(f.runtime, 'lib/guard-config.py'),
-      })
-    );
-    expect(result.scope).toBe('');
-    expect(result.assignments).toContain('CAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0=/\n');
-    expect(result.allowlist).toBe('1');
-    expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
-  } finally {
-    f.close();
-  }
-}, 45000);
+scenario(
+  'stock NUL rejection prevents partial legacy transport while explicit parser selection remains observable',
+  async () => {
+    const f = fixture();
+    try {
+      f.policy(
+        document({
+          'scope-guard.sh': { additional_allow_prefixes: [{ ...prefix, prefix: '\0/' }] },
+        })
+      );
+      const denied = await f.run();
+      shipped(denied);
+      expect(denied.assignments).toContain('CAWS_GUARD_CONFIG_STATUS=invalid\n');
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+      // Explicit executable selection is a separate compatibility contract.
+      const result = await f.run(
+        await f.prepare({
+          CONFIG_PARSER_MODE: 'execute',
+          CAWS_GUARD_CONFIG_PY: path.join(f.runtime, 'lib/guard-config.py'),
+        })
+      );
+      expect(result.assignments).toContain('CAWS_GUARD_CONFIG_STATUS=ok\n');
+      expect(result.assignments).toContain('CAWS_GUARD_PREFIX_COUNT_SCOPE_GUARD_SH=1\n');
+      // The selected shell owns its legacy NUL transport. The portable typed
+      // result rejects the document before any partial assignment is exported.
+      const legacyReader = cp.spawnSync(
+        '/bin/bash',
+        ['-p', '-c', 'IFS= read -r line; printf "%s" "${line#*=}"'],
+        { input: Buffer.from('prefix=\0/\n') }
+      );
+      f.put(path.join(f.root, 'legacy-reader.json'), {
+        exitCode: legacyReader.status,
+        stdoutHex: (legacyReader.stdout || Buffer.alloc(0)).toString('hex'),
+        stderrHex: (legacyReader.stderr || Buffer.alloc(0)).toString('hex'),
+      });
+      expect(legacyReader.status).toBe(0);
+      expect(result.assignments).toContain(
+        'CAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0=' + legacyReader.stdout.toString() + '\n'
+      );
+      expect(result.assignments).not.toContain('CAWS_GUARD_CONFIG_STATUS=invalid\n');
+      expect(result.allowlist).toBe('1');
+      expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
