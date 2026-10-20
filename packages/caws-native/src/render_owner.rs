@@ -1464,12 +1464,23 @@ impl Actor {
         let context = context(&self.config, &job.offer);
         self.stage("image_admission", &job.offer.invocation_id);
         let admitted = if let Some(stage) = &job.offer.prepared.staging_root {
-            image::publish_staged_image(Path::new(stage), &context, job.expires)
-                .map_err(|failure| {
-                    image_admission_failure(&self.observations, &job.offer, &failure);
-                    err(failure)
-                })?
-                .image
+            let mut publication_observer = |publication| {
+                self.observations.emit(Observation::ImagePublicationPhase {
+                    invocation_id: &job.offer.invocation_id,
+                    publication,
+                });
+            };
+            image::publish_staged_image_observed(
+                Path::new(stage),
+                &context,
+                job.expires,
+                Some(&mut publication_observer),
+            )
+            .map_err(|failure| {
+                image_admission_failure(&self.observations, &job.offer, &failure);
+                err(failure)
+            })?
+            .image
         } else {
             image::validate_image(
                 Path::new(&job.offer.prepared.manifest.execution.root),

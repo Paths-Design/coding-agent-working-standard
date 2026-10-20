@@ -31,6 +31,11 @@ pub(super) enum Observation<'a> {
         operation: &'static str,
         kind: &'static str,
     },
+    ImagePublicationPhase {
+        invocation_id: &'a str,
+        #[serde(flatten)]
+        publication: image::PublicationEvent,
+    },
     PrefixDisposition {
         invocation_id: &'a str,
         mode: &'static str,

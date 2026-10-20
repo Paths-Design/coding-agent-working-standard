@@ -648,6 +648,241 @@ fn reuse_requires_the_same_validated_stage_manifest() {
         );
     }
 }
+
+#[test]
+fn publication_phase_wrapper_preserves_order_values_and_original_refusal() {
+    // This exercises the production measurement wrapper, not full image
+    // admission: the reviewed foreign source closure is not embedded here.
+    for final_phase in [
+        PublicationPhase::ValidatePublished,
+        PublicationPhase::ValidateExisting,
+    ] {
+        let mut events = Vec::new();
+        let mut record = |event| events.push(event);
+        let mut observer = PublicationObserver(Some(&mut record));
+        let staged = observer
+            .run(PublicationPhase::ValidateStage, || Ok(17))
+            .unwrap();
+        assert_eq!(staged, 17);
+        let error = observer
+            .run(final_phase, || -> Result<()> {
+                Err(AdmissionError {
+                    kind: ErrorKind::Changed,
+                    publication_may_have_happened: true,
+                    operation: "controlled final validation refusal",
+                    source: Some(io::Error::from_raw_os_error(libc::EIO)),
+                })
+            })
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Changed);
+        assert!(error.publication_may_have_happened);
+        assert_eq!(error.operation(), "controlled final validation refusal");
+        assert_eq!(
+            error.source.as_ref().unwrap().raw_os_error(),
+            Some(libc::EIO)
+        );
+        assert_eq!(
+            events
+                .iter()
+                .map(|e| (e.phase, e.state))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    PublicationPhase::ValidateStage,
+                    PublicationPhaseState::Started
+                ),
+                (
+                    PublicationPhase::ValidateStage,
+                    PublicationPhaseState::Completed
+                ),
+                (final_phase, PublicationPhaseState::Started),
+                (final_phase, PublicationPhaseState::Refused),
+            ]
+        );
+        assert!(events[0].elapsed_micros.is_none() && events[2].elapsed_micros.is_none());
+        assert!(events[1].elapsed_micros.is_some() && events[3].elapsed_micros.is_some());
+        assert_eq!(events[3].kind, Some(ErrorKind::Changed));
+        assert_eq!(
+            events[3].operation,
+            Some("controlled final validation refusal")
+        );
+        assert!(events[1].kind.is_none() && events[1].operation.is_none());
+        println!(
+            "publication phase wrapper: {}",
+            serde_json::to_string(&events).unwrap()
+        );
+    }
+    let mut observer = PublicationObserver(None);
+    assert_eq!(
+        observer
+            .run(PublicationPhase::ValidateStage, || Ok(23))
+            .unwrap(),
+        23
+    );
+}
+
+#[test]
+fn publication_phase_actual_entry_stops_at_header_or_stage_validation_refusal() {
+    let scratch = Scratch::new();
+    let (manifest, mut context) = binding_fixture();
+    context.home = scratch.0.clone();
+    let parent = image_parent(&context);
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&parent)
+        .unwrap();
+    let stage = parent.join(".stage-phase-control");
+    fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+    write_mode(
+        &stage.join("manifest.json"),
+        &json(&manifest).unwrap(),
+        0o400,
+    );
+    fs::set_permissions(&stage, fs::Permissions::from_mode(0o500)).unwrap();
+    let mut events = Vec::new();
+    let mut record = |event| events.push(event);
+    let error =
+        publish_staged_image_observed(&stage, &context, expires(), Some(&mut record)).unwrap_err();
+    // Synthetic metadata has a different logical root. The actual validator
+    // refuses it before original-source reads, sync, rename or final reuse.
+    assert_eq!(error.kind, ErrorKind::UnsafePath);
+    assert_eq!(
+        error.operation(),
+        "image is outside native-derived image parent"
+    );
+    assert!(!error.publication_may_have_happened);
+    assert_eq!(
+        events
+            .iter()
+            .map(|e| (e.phase, e.state))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                PublicationPhase::ReadStageManifest,
+                PublicationPhaseState::Started
+            ),
+            (
+                PublicationPhase::ReadStageManifest,
+                PublicationPhaseState::Completed
+            ),
+            (
+                PublicationPhase::ValidateStage,
+                PublicationPhaseState::Started
+            ),
+            (
+                PublicationPhase::ValidateStage,
+                PublicationPhaseState::Refused
+            ),
+        ]
+    );
+    assert_eq!(events[3].operation, Some(error.operation()));
+    assert!(stage.exists());
+    assert!(!parent.join(image_key(&manifest).unwrap()).exists());
+    println!(
+        "publication actual stage refusal: {}",
+        serde_json::to_string(&events).unwrap()
+    );
+    fs::set_permissions(
+        stage.join("manifest.json"),
+        fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    write_mode(&stage.join("manifest.json"), b"malformed", 0o400);
+    let mut events = Vec::new();
+    let mut record = |event| events.push(event);
+    let error =
+        publish_staged_image_observed(&stage, &context, expires(), Some(&mut record)).unwrap_err();
+    assert_eq!(error.operation(), "malformed staged image manifest");
+    assert_eq!(
+        events
+            .iter()
+            .map(|e| (e.phase, e.state))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                PublicationPhase::ReadStageManifest,
+                PublicationPhaseState::Started
+            ),
+            (
+                PublicationPhase::ReadStageManifest,
+                PublicationPhaseState::Refused
+            ),
+        ]
+    );
+    assert_eq!(events[1].kind, Some(error.kind));
+    println!(
+        "publication actual header refusal: {}",
+        serde_json::to_string(&events).unwrap()
+    );
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn publication_phase_real_rename_distinguishes_publish_existing_and_failure() {
+    let scratch = Scratch::new();
+    let parent = absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap();
+    let stage = scratch.0.join(".stage-phase");
+    fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+    write_mode(&stage.join("payload"), b"original staged bytes", 0o600);
+    let mut events = Vec::new();
+    let mut record = |event| events.push(event);
+    let mut observer = PublicationObserver(Some(&mut record));
+    let published = observer
+        .run_with_state(PublicationPhase::Rename, || {
+            publication_rename(parent.as_raw_fd(), ".stage-phase", "final")
+        })
+        .unwrap();
+    assert!(published);
+    fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+    write_mode(&stage.join("payload"), b"later staged bytes", 0o600);
+    let published = observer
+        .run_with_state(PublicationPhase::Rename, || {
+            publication_rename(parent.as_raw_fd(), ".stage-phase", "final")
+        })
+        .unwrap();
+    assert!(!published);
+    let error = observer
+        .run_with_state(PublicationPhase::Rename, || {
+            publication_rename(parent.as_raw_fd(), ".stage-missing", "absent")
+        })
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Io);
+    assert!(error.publication_may_have_happened);
+    assert_eq!(
+        error.source.as_ref().unwrap().raw_os_error(),
+        Some(libc::ENOENT)
+    );
+    assert_eq!(
+        fs::read(scratch.0.join("final/payload")).unwrap(),
+        b"original staged bytes"
+    );
+    assert_eq!(
+        fs::read(stage.join("payload")).unwrap(),
+        b"later staged bytes"
+    );
+    assert_eq!(
+        events.iter().map(|e| e.state).collect::<Vec<_>>(),
+        vec![
+            PublicationPhaseState::Started,
+            PublicationPhaseState::Completed,
+            PublicationPhaseState::Started,
+            PublicationPhaseState::DestinationExists,
+            PublicationPhaseState::Started,
+            PublicationPhaseState::Refused,
+        ]
+    );
+    assert!(events.iter().all(|e| e.phase == PublicationPhase::Rename));
+    assert_eq!(events[5].kind, Some(ErrorKind::Io));
+    assert_eq!(
+        events[5].operation,
+        Some("atomic no-replace image publication")
+    );
+    println!(
+        "publication actual rename outcomes: {}",
+        serde_json::to_string(&events).unwrap()
+    );
+}
 #[test]
 fn source_cache_exclusion_never_hides_unreviewed_source_or_symlink_entries() {
     let scratch = Scratch::new();

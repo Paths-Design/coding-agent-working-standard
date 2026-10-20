@@ -176,7 +176,8 @@ fn valid_tool_names(tools: &[Tool]) -> bool {
     tools.iter().map(|tool| tool.name.as_str()).eq(expected)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ErrorKind {
     Invalid,
     UnsupportedProfile,
@@ -2141,6 +2142,83 @@ pub struct PublishedImage {
     pub published: bool,
     pub retained_stage: Option<PathBuf>,
 }
+
+/// Optional, bounded publication diagnostics. These values carry no admission
+/// authority. Durations measure the operation, excluding observer callbacks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublicationPhase {
+    ReadStageManifest,
+    ValidateStage,
+    InspectDestination,
+    ValidateExisting,
+    CheckReuseCustody,
+    SyncStage,
+    CheckStageCustody,
+    Rename,
+    SyncPublishedParent,
+    ValidatePublished,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublicationPhaseState {
+    Started,
+    Completed,
+    DestinationExists,
+    Refused,
+}
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicationEvent {
+    pub phase: PublicationPhase,
+    pub state: PublicationPhaseState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub elapsed_micros: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ErrorKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation: Option<&'static str>,
+}
+struct PublicationObserver<'a>(Option<&'a mut dyn FnMut(PublicationEvent)>);
+impl PublicationObserver<'_> {
+    fn emit(&mut self, event: PublicationEvent) {
+        if let Some(observer) = &mut self.0 {
+            observer(event);
+        }
+    }
+    fn run<T>(&mut self, phase: PublicationPhase, action: impl FnOnce() -> Result<T>) -> Result<T> {
+        self.run_with_state(phase, || {
+            action().map(|value| (value, PublicationPhaseState::Completed))
+        })
+    }
+    fn run_with_state<T>(
+        &mut self,
+        phase: PublicationPhase,
+        action: impl FnOnce() -> Result<(T, PublicationPhaseState)>,
+    ) -> Result<T> {
+        self.emit(PublicationEvent {
+            phase,
+            state: PublicationPhaseState::Started,
+            elapsed_micros: None,
+            kind: None,
+            operation: None,
+        });
+        let started = Instant::now();
+        let result = action();
+        let elapsed_micros = Some(started.elapsed().as_micros().min(u128::from(u64::MAX)) as u64);
+        self.emit(PublicationEvent {
+            phase,
+            state: result
+                .as_ref()
+                .map(|(_, state)| *state)
+                .unwrap_or(PublicationPhaseState::Refused),
+            elapsed_micros,
+            kind: result.as_ref().err().map(|error| error.kind),
+            operation: result.as_ref().err().map(|error| error.operation()),
+        });
+        result.map(|(value, _)| value)
+    }
+}
 fn stage_name<'a>(stage: &'a Path, context: &AdmissionContext) -> Result<&'a str> {
     require(
         stage.parent() == Some(image_parent(context).as_path()),
@@ -2306,49 +2384,87 @@ pub fn publish_staged_image(
     context: &AdmissionContext,
     expires: Instant,
 ) -> Result<PublishedImage> {
-    deadline(expires)?;
-    let stage_component = stage_name(stage, context)?.to_owned();
-    let directory = absolute_directory(stage, Access::SealedDirectory, expires)?;
-    let (bytes, _) = read_file(
-        relative_file(&directory, "manifest.json", Access::Manifest, expires)?,
-        MAX_MANIFEST_BYTES,
-        Access::Manifest,
-        expires,
-    )?;
-    let header: PreparedImageManifest = serde_json::from_slice(&bytes)
-        .map_err(|_| fail(ErrorKind::Invalid, "malformed staged image manifest"))?;
-    let key = image_key(&header)?;
-    let final_root = image_parent(context).join(&key);
-    let staged = validate_image_at(stage, &final_root, context, expires)?;
-    let parent = absolute_directory(&image_parent(context), Access::PrivateParent, expires)?;
-    let parent_identity = PrivateParentIdentity::checked(&parent)?;
-    if existing_image_root(&parent, &key, expires)? {
-        let image = validate_image(&final_root, context, expires)?;
-        require_same_prepared_image(staged.manifest(), image.manifest())?;
-        check_named_image_custody(
-            stage,
-            &staged.root_stamp,
-            &image_parent(context),
-            &parent_identity,
-            expires,
-        )?;
+    publish_staged_image_observed(stage, context, expires, None)
+}
+
+/// Same publication contract with optional diagnostics at operation boundaries.
+/// Observer callbacks cannot return a replacement result or suppress a refusal.
+pub fn publish_staged_image_observed(
+    stage: &Path,
+    context: &AdmissionContext,
+    expires: Instant,
+    observer: Option<&mut dyn FnMut(PublicationEvent)>,
+) -> Result<PublishedImage> {
+    let mut observer = PublicationObserver(observer);
+    let (stage_component, key, final_root, _stage_header_handle) =
+        observer.run(PublicationPhase::ReadStageManifest, || {
+            deadline(expires)?;
+            let stage_component = stage_name(stage, context)?.to_owned();
+            let directory = absolute_directory(stage, Access::SealedDirectory, expires)?;
+            let (bytes, _) = read_file(
+                relative_file(&directory, "manifest.json", Access::Manifest, expires)?,
+                MAX_MANIFEST_BYTES,
+                Access::Manifest,
+                expires,
+            )?;
+            let header: PreparedImageManifest = serde_json::from_slice(&bytes)
+                .map_err(|_| fail(ErrorKind::Invalid, "malformed staged image manifest"))?;
+            let key = image_key(&header)?;
+            let final_root = image_parent(context).join(&key);
+            Ok((stage_component, key, final_root, directory))
+        })?;
+    let staged = observer.run(PublicationPhase::ValidateStage, || {
+        validate_image_at(stage, &final_root, context, expires)
+    })?;
+    let (parent, parent_identity, existing) =
+        observer.run(PublicationPhase::InspectDestination, || {
+            let parent =
+                absolute_directory(&image_parent(context), Access::PrivateParent, expires)?;
+            let parent_identity = PrivateParentIdentity::checked(&parent)?;
+            let existing = existing_image_root(&parent, &key, expires)?;
+            Ok((parent, parent_identity, existing))
+        })?;
+    if existing {
+        let image = observer.run(PublicationPhase::ValidateExisting, || {
+            let image = validate_image(&final_root, context, expires)?;
+            require_same_prepared_image(staged.manifest(), image.manifest())?;
+            Ok(image)
+        })?;
+        observer.run(PublicationPhase::CheckReuseCustody, || {
+            check_named_image_custody(
+                stage,
+                &staged.root_stamp,
+                &image_parent(context),
+                &parent_identity,
+                expires,
+            )
+        })?;
         return Ok(PublishedImage {
             image,
             published: false,
             retained_stage: Some(stage.to_owned()),
         });
     }
-    sync_image_tree(stage, staged.manifest(), expires)?;
-    let named_stage = absolute_directory(stage, Access::SealedDirectory, expires)?;
-    require(
-        Stamp::of(&checked_metadata(&named_stage, Access::SealedDirectory)?) == staged.root_stamp,
-        ErrorKind::Changed,
-        "staging inode changed before publication",
-    )?;
-    deadline(expires)?;
-    match rename_no_replace(parent.as_raw_fd(), &stage_component, &key) {
-        Ok(()) => {
-            let finish = || -> Result<ValidatedImage> {
+    observer.run(PublicationPhase::SyncStage, || {
+        sync_image_tree(stage, staged.manifest(), expires)
+    })?;
+    observer.run(PublicationPhase::CheckStageCustody, || {
+        let named_stage = absolute_directory(stage, Access::SealedDirectory, expires)?;
+        require(
+            Stamp::of(&checked_metadata(&named_stage, Access::SealedDirectory)?)
+                == staged.root_stamp,
+            ErrorKind::Changed,
+            "staging inode changed before publication",
+        )?;
+        deadline(expires)
+    })?;
+    let published = observer.run_with_state(PublicationPhase::Rename, || {
+        deadline(expires)?;
+        publication_rename(parent.as_raw_fd(), &stage_component, &key)
+    })?;
+    if published {
+        let mut finish = || -> Result<ValidatedImage> {
+            observer.run(PublicationPhase::SyncPublishedParent, || {
                 parent
                     .sync_all()
                     .map_err(|e| io_error("sync published image parent", e))?;
@@ -2360,6 +2476,9 @@ pub fn publish_staged_image(
                     ErrorKind::Changed,
                     "image parent changed during publication",
                 )?;
+                Ok(())
+            })?;
+            observer.run(PublicationPhase::ValidatePublished, || {
                 let image = validate_image(&final_root, context, expires)?;
                 require(
                     image.root_stamp.dev == staged.root_stamp.dev
@@ -2368,25 +2487,40 @@ pub fn publish_staged_image(
                     "published image inode differs from stage",
                 )?;
                 Ok(image)
-            };
-            let image = finish().map_err(|mut e| {
-                e.publication_may_have_happened = true;
-                e
-            })?;
-            Ok(PublishedImage {
-                image,
-                published: true,
-                retained_stage: None,
             })
-        }
-        Err(error) if error.raw_os_error() == Some(libc::EEXIST) => {
+        };
+        let image = finish().map_err(|mut e| {
+            e.publication_may_have_happened = true;
+            e
+        })?;
+        Ok(PublishedImage {
+            image,
+            published: true,
+            retained_stage: None,
+        })
+    } else {
+        let image = observer.run(PublicationPhase::ValidateExisting, || {
             let image = validate_image(&final_root, context, expires)?;
             require_same_prepared_image(staged.manifest(), image.manifest())?;
-            Ok(PublishedImage {
-                image,
-                published: false,
-                retained_stage: Some(stage.to_owned()),
-            })
+            Ok(image)
+        })?;
+        Ok(PublishedImage {
+            image,
+            published: false,
+            retained_stage: Some(stage.to_owned()),
+        })
+    }
+}
+
+fn publication_rename(
+    parent: RawFd,
+    stage_component: &str,
+    key: &str,
+) -> Result<(bool, PublicationPhaseState)> {
+    match rename_no_replace(parent, stage_component, key) {
+        Ok(()) => Ok((true, PublicationPhaseState::Completed)),
+        Err(error) if error.raw_os_error() == Some(libc::EEXIST) => {
+            Ok((false, PublicationPhaseState::DestinationExists))
         }
         Err(error) => {
             let mut error = io_error("atomic no-replace image publication", error);
