@@ -3433,6 +3433,39 @@ Additional bounded evidence and unresolved dependencies:
   lifecycle parity, fairness or cutover follows. Review and the one isolated
   dispatched-loss scenario remain owed before relying on that behavior.
 
+- E160: The single explicit `frontend-loss debug` attempt on `6b8d50f3` exits1
+  and records `incomplete` before any frontend signal. Native caller35768 later
+  exits2 at its30s deadline; final renderer execution is unknown. Its correlated
+  native chain35768→35789→35790 records Node exit9, both EOFs and successful SDK
+  settlement under `stop_requested`. The original host and inert sibling exit0;
+  final cleanup reports `confirmed_inactive`, socket absent and custody free.
+  This is deadline-path cleanup, not hard frontend-loss evidence.
+
+  Artifacts remain at
+  `packages/caws-native/target/qualification/render-lifecycle-frontend-loss-2026-10-20T19-27-41-287Z/`.
+  The external `frontend-loss-draft/attempt1-retained-manifest.json` hashes all
+  7975 files/46689851 bytes. Original run and sandbox remain retained. Export
+  attempts are refused before execution: the Bash write guard classifies a
+  command-metadata string as a foreign Sterling write; the worktree guard
+  classifies an external artifact copy as a copy into main. Installed guard
+  state is untouched. Inspection locates the latter's broad `packages/` match at
+  installed `worktree-guard.sh:333`; external raw export remains owed before
+  teardown, and this observation does not authorize bypassing either guard.
+
+  The qualifier accepts any matching durable operation, then calls every
+  non-Running state a lost window. Native admission first persists Queued
+  (`service_journal.rs:1395`), then `begin_next` persists Running. A valid
+  queued record therefore refutes that oracle. The failed attempt did not retain
+  its exact observed pre-interruption phase, so that race is a source
+  counterexample, not an established attribution for the run. The corrected wait
+  keeps queued work pending, accepts Running only, classifies successful daemon
+  responses as lost windows, and treats unknown, cancellation and launch/process
+  failures as explicit failed attempts. Both pre-signal checkpoints and
+  post-signal returned handling preserve that distinction. New phase snapshots
+  and signal timestamp/ original deadline make the next observation
+  attributable. Strict compilation, scoped lint and phase-oracle controls exit0;
+  no corrected actual run is implied.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under

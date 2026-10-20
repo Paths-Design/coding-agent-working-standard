@@ -634,6 +634,72 @@ class InterruptionWindowLost extends Error {
     super('interruption window lost: ' + message);
   }
 }
+function completedBeforeInterruption(operation: Data): never {
+  const result = row(row(row(operation.body).outcome).result);
+  assert.equal(
+    result.kind,
+    'daemon_response',
+    'renderer returned without a successful daemon response'
+  );
+  assert.equal(result.response, 'ok', 'renderer response was not successful');
+  assert(Number.isSafeInteger(result.served) && Number(result.served) > 0, 'invalid served count');
+  assert(
+    Number.isSafeInteger(result.elapsedMs) && Number(result.elapsedMs) >= 0,
+    'invalid renderer elapsed time'
+  );
+  assert.equal(typeof result.cached, 'boolean', 'invalid renderer cache flag');
+  throw new InterruptionWindowLost('successful renderer response won the interruption race');
+}
+/** Admission is queued before Running is durably published; only Running permits the write probe. */
+function runningOperation(operation: Data | undefined): Data | undefined {
+  if (!operation) return undefined;
+  const phase = outcome(operation);
+  if (phase === 'queued') return undefined;
+  if (phase === 'running') return operation;
+  if (phase === 'returned') return completedBeforeInterruption(operation);
+  throw new Error('renderer entered unexpected pre-interruption execution state: ' + phase);
+}
+function testInterruptionPhaseOracle(): void {
+  const operation = (execution: string, result?: Data): Data => ({
+    body: { outcome: { execution, ...(result ? { result } : {}) } },
+  });
+  assert.equal(runningOperation(undefined), undefined);
+  assert.equal(runningOperation(operation('queued')), undefined);
+  const running = operation('running');
+  assert.equal(runningOperation(running), running);
+  const success = {
+    kind: 'daemon_response',
+    response: 'ok',
+    served: 1,
+    elapsedMs: 1,
+    cached: false,
+  };
+  assert.throws(() => runningOperation(operation('returned', success)), InterruptionWindowLost);
+  for (const candidate of [
+    operation('unknown'),
+    operation('cancelled_before_dispatch'),
+    operation('invalid'),
+    operation('returned', { kind: 'not_started', stage: 'spawn', errno: 2 }),
+    operation('returned', { kind: 'process_exit', code: 1, signal: null }),
+    operation('returned', { ...success, response: 'error' }),
+    operation('returned', { ...success, served: 0 }),
+  ]) {
+    assert.throws(
+      () => runningOperation(candidate),
+      (error: unknown) => error instanceof Error && !(error instanceof InterruptionWindowLost)
+    );
+  }
+  process.stdout.write(
+    JSON.stringify({
+      state: 'passed',
+      waitingControls: 2,
+      runningControls: 1,
+      successfulCompletionWindowControl: 1,
+      rejectedFailureControls: 7,
+      runtimeExecuted: false,
+    }) + '\n'
+  );
+}
 /** Join the durable verified wire bytes to typed invocation and selected project/session. */
 function operationForInvocation(
   h: RenderHarness,
@@ -717,14 +783,24 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
           throw error;
         }
         if (!rows.some((record) => record.stage === 'dispatch_started')) return undefined;
-        return operationForInvocation(h, fixture, active.invocation!.expected!.invocationId);
+        const candidate = operationForInvocation(
+          h,
+          fixture,
+          active.invocation!.expected!.invocationId
+        );
+        if (candidate)
+          h.writeJson('pre-interruption-operation.json', {
+            phase: outcome(candidate),
+            at: Date.now(),
+            operation: candidate,
+          });
+        return runningOperation(candidate);
       },
       Math.max(1, deadline - Date.now()),
       'current typed dispatch and verified owner operation'
     );
     const requestId = String(row(row(operation.body).identity).requestId);
-    if (outcome(operation) !== 'running')
-      throw new InterruptionWindowLost('renderer already terminal before write witness');
+    assert.equal(outcome(operation), 'running');
     const dispatch = await firstActualWrite(h, fixture, { requestId, deadline });
     assert(Date.now() < deadline, 'original request deadline exhausted before interruption');
     assert(h.sampleInvocation(active), 'fresh current frontend/custodian/Node chain unavailable');
@@ -733,8 +809,12 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
     h.originalChildAlive(sibling);
     const current = operationForInvocation(h, fixture, active.invocation!.expected!.invocationId);
     assert(current, 'matching operation disappeared before interruption');
-    if (outcome(current) !== 'running')
-      throw new InterruptionWindowLost('renderer committed before interruption');
+    h.writeJson('current-pre-interruption-operation.json', {
+      phase: outcome(current),
+      at: Date.now(),
+      operation: current,
+    });
+    assert(runningOperation(current), 'renderer operation regressed to queued after Running');
     const count = committedTurnNames(fixture.session).length;
     if (count === 0 || count >= fixture.turns)
       throw new InterruptionWindowLost('partial committed output no longer holds');
@@ -757,6 +837,8 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
     });
     // Every eligibility observation is distinct from the actual signal and wait receipt.
     h.originalChildAlive(active);
+    const signalAt = Date.now();
+    assert(signalAt < deadline, 'original request deadline exhausted at signal boundary');
     const accepted = active.child.kill('SIGKILL');
     h.writeJson('frontend-loss-signal.json', {
       accepted,
@@ -764,6 +846,8 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
       pid: active.child.pid,
       source: 'retained original frontend Child',
       frontendBefore,
+      signalAt,
+      deadline,
     });
     assert(accepted, 'retained original frontend Child signal refused');
     const frontendReceipt = await bounded(active.done, 10000, 'original frontend SIGKILL wait');
@@ -786,10 +870,12 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
       10000,
       'matching renderer operation terminal outcome'
     );
-    if (outcome(settled) === 'returned')
-      throw new InterruptionWindowLost(
-        'renderer response won disconnect race; no unknown-fence claim'
-      );
+    h.writeJson('post-interruption-operation.json', {
+      phase: outcome(settled),
+      at: Date.now(),
+      operation: settled,
+    });
+    if (outcome(settled) === 'returned') completedBeforeInterruption(settled);
     assert.equal(outcome(settled), 'unknown', 'dispatched operation lacks durable unknown fence');
     const rendererCleanup = await h.waitFor(
       () => {
@@ -1342,6 +1428,7 @@ async function main(): Promise<void> {
   if (oracleSelfTest) {
     testDenialOracles();
     testRenderedTurnOracle();
+    testInterruptionPhaseOracle();
     return;
   }
   // The additional hard-loss qualification is explicit; existing `all` keeps its prior modes.
