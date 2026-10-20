@@ -242,24 +242,29 @@ export function invocationGuardConfiguration(
     )
   )
     return Object.freeze(result);
+  for (const [name, expected] of Object.entries(STOCK_CONFIGURATION_SOURCES)) {
+    const selected = selection.libraries[name];
+    const file = join(selection.runtimeDirectory, 'lib', name);
+    if (
+      !selected ||
+      selected.kind !== 'shared' ||
+      selected.path !== file ||
+      selected.sha256 !== expected ||
+      selection.libraryOverrides[name]
+    )
+      return Object.freeze(result);
+  }
   try {
     for (const [name, expected] of Object.entries(STOCK_CONFIGURATION_SOURCES)) {
-      const selected = selection.libraries[name];
       const file = join(selection.runtimeDirectory, 'lib', name);
-      if (
-        !selected ||
-        selected.kind !== 'shared' ||
-        selected.path !== file ||
-        selected.sha256 !== expected ||
-        selection.libraryOverrides[name]
-      )
-        return Object.freeze(result);
       assertMachinePath(selection.runtimeDirectory, file);
       if (createHash('sha256').update(readFileSync(file)).digest('hex') !== expected)
-        return Object.freeze(result);
+        throw new Error('Selected guard configuration source changed after selection');
     }
   } catch {
-    return Object.freeze(result);
+    throw new Error(
+      'Selected guard configuration source changed or became unavailable after selection'
+    );
   }
   const assignments = loadGuardConfigurationEnvironment(selection.checkout);
   // Reject unrepresentable stock data. Bash removing NUL could transform a

@@ -553,8 +553,10 @@ test('stock-source tampering after preparation cannot retain typed admission', a
       path.join(f.runtime, 'lib/guard-config.py'),
       '\n# source changed after preparation\n'
     );
-    shipped(await f.run(prepared));
-    expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
+    await expect(f.run(prepared)).rejects.toThrow(
+      'Selected guard configuration source changed or became unavailable after selection'
+    );
+    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
   } finally {
     f.close();
   }
