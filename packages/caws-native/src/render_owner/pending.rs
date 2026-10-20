@@ -241,7 +241,10 @@ impl PrefixIdentity {
             && self.image_digest == offer.prepared.image_digest
     }
     pub(super) fn permits_session(&self, current_session: &str, offer: &Offer) -> bool {
-        current_session != offer.session_id && self.binds(offer)
+        // Admitted session IDs are ASCII, and their directories may alias on a
+        // case-insensitive filesystem. Preserve caller spelling but serialize
+        // every case-only alias of the same session domain.
+        !current_session.eq_ignore_ascii_case(&offer.session_id) && self.binds(offer)
     }
 }
 

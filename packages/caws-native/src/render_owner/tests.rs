@@ -252,6 +252,12 @@ fn pending_prefix_domain_keeps_same_session_and_identity_barriers() {
         proof_profile: "unit-native-proof".into(),
     };
     assert!(!proof.permits_session(&first.session_id, &first));
+    let mut alias = first.clone();
+    alias.session_id = first.session_id.to_ascii_uppercase();
+    assert_ne!(first.session_id, alias.session_id);
+    assert!(!proof.permits_session(&first.session_id, &alias));
+    assert!(!proof.permits_session(&alias.session_id, &first));
+    assert_eq!(alias.session_id, first.session_id.to_ascii_uppercase());
     let mut other = first.clone();
     other.session_id = "other-session".into();
     assert!(proof.permits_session(&first.session_id, &other));

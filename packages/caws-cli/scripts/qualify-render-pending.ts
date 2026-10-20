@@ -25,7 +25,15 @@ assert(process.argv[2] && process.argv[3], 'CLI and Sterling source roots requir
 const cli = fs.realpathSync(process.argv[2]!);
 const sterling = fs.realpathSync(process.argv[3]!);
 const requested = process.argv[4] ?? 'all';
-const scenarioNames = ['fifo', 'same-session', 'generation', 'framing', 'reader-expiry', 'serial'];
+const scenarioNames = [
+  'fifo',
+  'same-session',
+  'case-alias',
+  'generation',
+  'framing',
+  'reader-expiry',
+  'serial',
+];
 assert(requested === 'all' || scenarioNames.includes(requested), 'unknown pending scenario');
 const REQUEST_MS = 30000;
 const root = path.resolve(
@@ -435,11 +443,12 @@ async function fifo({ h, fixture, open }: Context): Promise<void> {
 }
 async function sameSession(
   { h, fixture, open }: Context,
-  mode: 'session' | 'serial' = 'session'
+  mode: 'session' | 'serial' = 'session',
+  alias?: SessionFixture
 ): Promise<void> {
   const a = await open('held-first', fixture);
   await a.receivePrepared(mode);
-  const bSession = mode === 'serial' ? secondSession(h, fixture) : fixture;
+  const bSession = alias ?? (mode === 'serial' ? secondSession(h, fixture) : fixture);
   const b = await open('blocked-second', bSession);
   await h.waitFor(
     () =>
@@ -463,6 +472,39 @@ async function sameSession(
   assertNoEffect(h, fixture, a.id, fixture);
   await b.dispatch();
   await b.reply(1);
+}
+async function caseAlias(context: Context): Promise<void> {
+  const { h, fixture } = context;
+  assert.equal(process.platform, 'darwin', 'case-alias control requires the macOS host');
+  const aliasId = fixture.sessionId.toUpperCase();
+  assert.notEqual(aliasId, fixture.sessionId);
+  const aliasPath = path.join(path.dirname(fixture.session), aliasId);
+  // Metadata lookup establishes an existing alias; never create a second path
+  // or rewrite metadata to manufacture a case-insensitive session domain.
+  const original = fs.statSync(fixture.session),
+    alias = fs.statSync(aliasPath);
+  assert(original.isDirectory() && alias.isDirectory(), 'session paths must be directories');
+  assert.equal(alias.dev, original.dev, 'session alias crosses devices');
+  assert.equal(alias.ino, original.ino, 'host does not alias these case-only session paths');
+  h.writeJson('case-alias-identity.json', {
+    platform: process.platform,
+    original: {
+      sessionId: fixture.sessionId,
+      path: fixture.session,
+      device: original.dev,
+      inode: original.ino,
+    },
+    alias: { sessionId: aliasId, path: aliasPath, device: alias.dev, inode: alias.ino },
+  });
+  // reply() verifies the rendered context retains this exact caller identity,
+  // while sameSession() requires zero B bytes before A's withdrawal.
+  await sameSession(context, 'session', {
+    sessionId: aliasId,
+    session: aliasPath,
+    transcriptFile: fixture.transcriptFile,
+    label: fixture.label,
+    turns: fixture.turns,
+  });
 }
 async function generation({ h, fixture, open }: Context): Promise<void> {
   const a = await open('old-generation', fixture);
@@ -659,6 +701,7 @@ async function runCase(name: string): Promise<void> {
     };
     if (name === 'fifo') await fifo(context);
     else if (name === 'same-session') await sameSession(context);
+    else if (name === 'case-alias') await caseAlias(context);
     else if (name === 'generation') await generation(context);
     else if (name === 'framing') await framing(context);
     else if (name === 'reader-expiry') await expiry(context);
