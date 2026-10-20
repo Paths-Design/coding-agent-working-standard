@@ -1,6 +1,7 @@
 //! Native transport support components. These modules do not confer project authority.
 
 pub mod owned_group;
+pub mod plan_snapshots;
 pub mod process_comm_macos;
 pub mod render_owner;
 pub mod render_writer;

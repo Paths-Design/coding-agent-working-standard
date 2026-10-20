@@ -269,6 +269,15 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
 }
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "plan-snapshots") {
+        match caws_native::plan_snapshots::run(&args[1..]) {
+            Ok(code) => std::process::exit(i32::from(code)),
+            Err(error) => {
+                eprintln!("CAWS plan snapshot unavailable: {error}");
+                std::process::exit(75);
+            }
+        }
+    }
     if args.first().is_some_and(|arg| arg == "render-writer") {
         let code = match caws_native::render_writer::run(&args[1..]) {
             Ok(code) => code,
