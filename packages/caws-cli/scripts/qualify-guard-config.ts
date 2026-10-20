@@ -5,10 +5,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createRequire } from 'node:module';
 
-const [cliArg, rootArg, nativeArg] = process.argv.slice(2);
+const [cliArg, rootArg, nativeArg, phase] = process.argv.slice(2);
 assert(
-  cliArg && rootArg && nativeArg && process.argv.length === 5,
-  'Usage: qualify-guard-config <absolute-cli-root> <new-absolute-artifact-root> <absolute-native-binary>'
+  cliArg &&
+    rootArg &&
+    nativeArg &&
+    (process.argv.length === 5 || (process.argv.length === 6 && phase === '--native-only')),
+  'Usage: qualify-guard-config <absolute-cli-root> <new-absolute-artifact-root> <absolute-native-binary> [--native-only]'
 );
 for (const value of [cliArg, rootArg, nativeArg])
   assert(path.isAbsolute(value), 'absolute paths required');
@@ -35,6 +38,7 @@ const args = [
   '--runTestsByPath',
   'tests/runtime/guard-config-integration.test.js',
 ];
+if (phase === '--native-only') args.push('--testNamePattern', 'supplied native client reaches');
 const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: cli, encoding: 'utf8' });
 assert.equal(revision.status, 0, revision.stderr);
 const dirty = spawnSync('git', ['status', '--porcelain=v1'], { cwd: cli, encoding: 'utf8' });
