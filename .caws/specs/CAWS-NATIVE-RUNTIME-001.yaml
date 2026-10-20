@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-20T18:31:12.846Z'
+updated_at: '2026-10-20T18:36:50.010Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -70,6 +70,7 @@ scope:
     - packages/caws-cli/tests/transcripts/occurrence.test.ts
     - packages/caws-cli/tests/transcripts/run.cjs
     - packages/caws-cli/tests/transcripts/tsconfig.json
+    - packages/caws-cli/tests/transcripts/foundation.test.js
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
