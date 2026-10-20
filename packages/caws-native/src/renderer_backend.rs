@@ -1426,7 +1426,11 @@ fn run_worker_inner(
             }
             match worker.control.next()? {
                 None => thread::sleep(TICK),
-                Some(HostCommand::Stop) => return fail(FailureCode::HostStopped),
+                // Explicit retirement between commands is a normal lifecycle
+                // transition. Stop observed by Control::watch during startup
+                // or a render remains a failure (and preserves post-write
+                // uncertainty); only this idle command boundary is successful.
+                Some(HostCommand::Stop) => return Ok(()),
                 Some(HostCommand::Render {
                     request_id,
                     arguments,

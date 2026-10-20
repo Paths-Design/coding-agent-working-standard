@@ -715,6 +715,131 @@ fn owned_daemon_returns_real_response_reuses_instance_preserves_cr_and_drains_fl
     );
 }
 #[test]
+fn explicit_idle_stop_before_render_is_clean_and_has_no_render_effect() {
+    let fixture = Fixture::new("normal");
+    let (mut host, mut reader, join) = fixture.launch();
+    let pid = ready(&mut reader);
+    host.write_all(&encode_command(HostCommand::Stop).unwrap())
+        .unwrap();
+    // Cleanup must be the next event: Failed/Progress/Result are all defects.
+    let receipt = match event(&mut reader) {
+        WorkerEvent::Cleanup { receipt } => receipt,
+        other => panic!("idle Stop must only clean up: {other:?}"),
+    };
+    let exit = join.join().unwrap();
+    assert!(exit.failure.is_none());
+    assert!(exit.last_request_id.is_none() && exit.last_result.is_none());
+    assert!(exit.last_reply_bytes.is_empty());
+    assert_eq!(receipt.child_pid, Some(pid));
+    assert!(receipt.direct_child_reaped && receipt.identity_verified_before_signal);
+    assert!(receipt.stdout.eof && receipt.stderr.eof && receipt.logs_persisted);
+    assert!(!receipt.deadline_exceeded);
+    assert!(!fixture.spec.work_dir.join("observed.json").exists());
+    let mut trailing = Vec::new();
+    assert_eq!(reader.read_until(b'\n', &mut trailing).unwrap(), 0);
+}
+
+#[test]
+fn explicit_idle_stop_after_returned_preserves_result_without_another_render() {
+    let fixture = Fixture::new("normal");
+    let (mut host, mut reader, join) = fixture.launch();
+    let pid = ready(&mut reader);
+    let arguments = std::array::from_fn(|index| format!("argument-{index}"));
+    send(&mut host, arguments.clone());
+    assert!(matches!(event(&mut reader), WorkerEvent::Progress { .. }));
+    match event(&mut reader) {
+        WorkerEvent::Result {
+            result: RequestResult::Returned { response },
+            reply_bytes,
+            ..
+        } => {
+            assert_eq!(response.served, 1);
+            assert_eq!(reply_bytes, b"ok 1 0\n");
+        }
+        other => panic!("expected completed render before Stop: {other:?}"),
+    }
+    let observed = fs::read(fixture.spec.work_dir.join("observed.json")).unwrap();
+    let lease = fs::read(fixture.spec.work_dir.join("lease.json")).unwrap();
+    host.write_all(&encode_command(HostCommand::Stop).unwrap())
+        .unwrap();
+    let receipt = match event(&mut reader) {
+        WorkerEvent::Cleanup { receipt } => receipt,
+        other => panic!("completed render Stop must only clean up: {other:?}"),
+    };
+    let exit = join.join().unwrap();
+    assert!(exit.failure.is_none());
+    assert!(matches!(
+        exit.last_result,
+        Some(RequestResult::Returned { response }) if response.served == 1
+    ));
+    assert_eq!(exit.last_reply_bytes, b"ok 1 0\n");
+    assert_eq!(receipt.child_pid, Some(pid));
+    assert!(receipt.direct_child_reaped && receipt.identity_verified_before_signal);
+    assert!(receipt.stdout.eof && receipt.stderr.eof && receipt.logs_persisted);
+    assert!(!receipt.deadline_exceeded);
+    assert_eq!(
+        fs::read(fixture.spec.work_dir.join("observed.json")).unwrap(),
+        observed
+    );
+    assert_eq!(
+        fs::read(fixture.spec.work_dir.join("lease.json")).unwrap(),
+        lease
+    );
+    assert_eq!(
+        serde_json::from_slice::<Vec<String>>(&observed).unwrap(),
+        arguments
+    );
+    let mut trailing = Vec::new();
+    assert_eq!(reader.read_until(b'\n', &mut trailing).unwrap(), 0);
+}
+
+#[test]
+fn explicit_stop_after_write_progress_remains_unknown_and_failed() {
+    let fixture = Fixture::new("stall");
+    let (mut host, mut reader, join) = fixture.launch();
+    let pid = ready(&mut reader);
+    send(&mut host, std::array::from_fn(|_| String::new()));
+    match event(&mut reader) {
+        WorkerEvent::Progress { phase, .. } => assert_eq!(phase, "write_attempted"),
+        other => panic!("expected actual write boundary: {other:?}"),
+    }
+    host.write_all(&encode_command(HostCommand::Stop).unwrap())
+        .unwrap();
+    match event(&mut reader) {
+        WorkerEvent::Result {
+            result: RequestResult::Unknown { failure },
+            reply_bytes,
+            ..
+        } => {
+            assert_eq!(failure.code, FailureCode::HostStopped);
+            assert!(reply_bytes.is_empty());
+        }
+        other => panic!("in-flight Stop must retain uncertainty: {other:?}"),
+    }
+    assert!(matches!(
+        event(&mut reader),
+        WorkerEvent::Failed { failure } if failure.code == FailureCode::HostStopped
+    ));
+    let receipt = match event(&mut reader) {
+        WorkerEvent::Cleanup { receipt } => receipt,
+        other => panic!("expected owned cleanup after failure: {other:?}"),
+    };
+    let exit = join.join().unwrap();
+    assert_eq!(exit.failure.unwrap().code, FailureCode::HostStopped);
+    assert!(matches!(
+        exit.last_result,
+        Some(RequestResult::Unknown { failure }) if failure.code == FailureCode::HostStopped
+    ));
+    assert!(exit.last_reply_bytes.is_empty());
+    assert_eq!(receipt.child_pid, Some(pid));
+    assert!(receipt.direct_child_reaped && receipt.identity_verified_before_signal);
+    assert!(receipt.stdout.eof && receipt.stderr.eof && receipt.logs_persisted);
+    assert!(!receipt.deadline_exceeded);
+    let mut trailing = Vec::new();
+    assert_eq!(reader.read_until(b'\n', &mut trailing).unwrap(), 0);
+}
+
+#[test]
 fn owner_eof_after_write_is_unknown_and_actual_owned_child_is_reaped() {
     let fixture = Fixture::new("stall");
     let (mut host, mut reader, join) = fixture.launch();
