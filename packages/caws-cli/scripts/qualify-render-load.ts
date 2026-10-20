@@ -925,7 +925,7 @@ async function workload(harness: RenderHarness, mode: WorkloadMode): Promise<Dat
           ? 'cold fresh setup without thirteen-renderer warmup'
           : 'after qualified thirteen-renderer burst',
       guardRoute:
-        'actual native invocation through the selected compatibility guard chain; CAWS_TRAP_KILL=0; no typed fastpath or interpreter fan-out removal claim',
+        'actual native invocation through the selected compatibility guard chain; candidate CLI selected by fixture PATH; CAWS_TRAP_KILL=0; exact-empty library-map lookup skips Python; no typed guard fastpath or Python retirement claim',
       idleMs: Number(row(harness.ownerConfig.limits).idleMs),
     };
     slowPhase = { hot: hotJob, peers: peerJobs, guards: guardJobs, details: slowDetails };
@@ -957,6 +957,24 @@ async function workload(harness: RenderHarness, mode: WorkloadMode): Promise<Dat
       const stdout = fs.readFileSync(path.join(guard.receipt!.directory, 'stdout.bin'), 'utf8');
       guardRefusal(stdout);
     }
+    // Retain independent semantic diagnostics even when a subsequent timing
+    // assertion rejects the workload. Correct output cannot qualify fairness.
+    const outputs: Data[] = [];
+    slowDetails.outputs = outputs;
+    for (const subject of [hot, ...peers]) outputs.push(semanticOutput(harness, subject));
+    if (mode === 'fairness') {
+      const finalOperations = operations(harness.owner).map(decodeOperation);
+      slowDetails.finalOperations = finalOperations;
+      assert.equal(
+        finalOperations.length,
+        4,
+        'fairness phase requires exactly four renderer operations'
+      );
+      for (const project of projects)
+        projectDispatchOrder(
+          finalOperations.filter((operation) => operation.project === project.project)
+        );
+    }
     const slowAnalysis = inspectSamples(samples.slice(hotStart));
     slowDetails.analysis = slowAnalysis;
     const intervals = slowAnalysis.observedRunningIntervals as Interval[];
@@ -981,22 +999,6 @@ async function workload(harness: RenderHarness, mode: WorkloadMode): Promise<Dat
       guardJobs.every((job) => job.endedAt! < hotInterval.last),
       'all thirteen mixed-harness guard refusals must complete before a later hot running witness'
     );
-    const outputs: Data[] = [];
-    slowDetails.outputs = outputs;
-    for (const subject of [hot, ...peers]) outputs.push(semanticOutput(harness, subject));
-    if (mode === 'fairness') {
-      const finalOperations = operations(harness.owner).map(decodeOperation);
-      slowDetails.finalOperations = finalOperations;
-      assert.equal(
-        finalOperations.length,
-        4,
-        'fairness phase requires exactly four renderer operations'
-      );
-      for (const project of projects)
-        projectDispatchOrder(
-          finalOperations.filter((operation) => operation.project === project.project)
-        );
-    }
     assert.equal(samplingErrors.length, 0, 'sampling uncertainty: ' + samplingErrors.join('; '));
     result.allSamplesAnalysis = inspectSamples(samples);
     slowDetails.state = 'observed';

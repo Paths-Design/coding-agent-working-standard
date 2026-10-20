@@ -85,6 +85,7 @@ export class RenderHarness {
   readonly native: string;
   readonly engine: string;
   readonly cliEntry: string;
+  readonly hookCli: string;
   readonly observer: string;
   readonly custodyObserver: string;
   readonly configPath: string;
@@ -121,11 +122,21 @@ export class RenderHarness {
     this.custodyObserver = path.join(crate, 'target/release/examples/service-custody-observer');
     this.engine = path.join(this.cli, 'dist/runtime/engine-entry.js');
     this.cliEntry = path.join(this.cli, 'dist/index.js');
+    this.hookCli = path.join(this.root, 'hook-cli/caws');
     this.configPath = path.join(this.owner, 'config.json');
     for (const directory of [this.home, path.join(this.root, 'tmp')])
       fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    // Unsealed hooks also invoke `caws` (notably heartbeat). Bind that name to
+    // this candidate, rather than silently measuring the host's installed CLI.
+    // POSIX sh avoids inheriting the handlers' Bash startup hook recursively.
+    const quote = (value: string): string => "'" + value.replace(/'/g, "'\\''") + "'";
+    put(
+      this.hookCli,
+      '#!/bin/sh\nexec ' + quote(process.execPath) + ' ' + quote(this.cliEntry) + ' "$@"\n'
+    );
+    fs.chmodSync(this.hookCli, 0o700);
     this.env = {
-      PATH: process.env.PATH ?? '/usr/bin:/bin',
+      PATH: path.dirname(this.hookCli) + path.delimiter + (process.env.PATH ?? '/usr/bin:/bin'),
       HOME: this.home,
       CAWS_HOME: this.home,
       TMPDIR: path.join(this.root, 'tmp'),
@@ -205,12 +216,21 @@ export class RenderHarness {
       config: this.ownerConfig,
       tools: this.tools,
       installed: this.installed,
+      unsealedHookCli: {
+        mechanism: 'PATH',
+        name: 'caws',
+        path: this.env.PATH,
+        wrapper: this.hookCli,
+        sealedDispatchUsesItsOwnImageCli: true,
+      },
       executables: [
         this.native,
         this.observer,
         this.custodyObserver,
         this.engine,
         this.cliEntry,
+        process.execPath,
+        this.hookCli,
       ].map((file) => ({ path: file, sha256: digest(fs.readFileSync(file)) })),
     });
     this.success(
