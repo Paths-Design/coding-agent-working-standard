@@ -22,12 +22,26 @@ scope:
   out: []
 invariants:
   - 'Inventory is comparison evidence only, never authority, effective registration, execution, authorship or a cross-repository atomic snapshot; no CAWS hook execution or payload contents in report.'
-  - 'Preserve supported Python reference JSON semantic values, byte digests, deterministic ordering, literal declarations, excluded subtrees and stable-read refusals; no new runtime dependency or package changes.'
+  - 'Preserve admitted reference report data and serialization except exactly two appended admission/exclusion limits; retain byte digests, deterministic ordering, literal declarations, inventory exclusions and stable-read refusals; no new runtime dependency or package changes.'
+  - 'Git admission requires trusted executables, Git 2.45 or later and stable configuration/attributes/index; suppress fsmonitor, ordinary hooks, pager, tracing, optional index writes and lazy fetch, and refuse effective nonempty/valueless clean/process drivers, every indexed gitlink and unsupported inherited GIT_* overrides. This is not hostile-repository sandboxing or configuration/index TOCTOU resistance.'
 acceptance:
   - id: A1
-    given: 'retained Python reference and immutable disposable consumer/source repositories'
-    when: 'typed Node18 and Node22 harvest CLI reads the same trees'
-    then: 'parsed JSON values, byte lengths and hashes, tracked state, exclusions, categories and literal dispatcher declarations match the reference and no CAWS hooks execute or source files change.'
+    given: >-
+      retained Python reference, immutable disposable repositories and owned
+      execution-positive hostile controls; admitted repositories use trusted
+      Node/Git executables, Git 2.45 or later and stable configuration, attributes
+      and index inputs
+    when: >-
+      typed Node18 and Node22 harvest CLIs inspect the same admitted trees or refuse
+      unsupported executable-filter, indexed-submodule and inherited-Git-override
+      inputs
+    then: >-
+      report data, byte lengths/hashes, tracked state, exclusions, categories,
+      literal declarations and serialization match the reference except exactly two
+      appended limits declaring the admitted Git profile and
+      inventory-versus-Git-read boundary; no configured programs execute during
+      admitted harvest, unsafe inputs refuse before their configured effects, and
+      source/control bytes stay unchanged
   - id: A2
     given: 'malformed literal declarations, symlinks, generated files, Unicode and changing source/HEAD/status'
     when: 'focused hostile fixtures execute'
@@ -40,12 +54,8 @@ non_functional: {}
 contracts: []
 evidence:
   - criterion_id: A1
-    status: fail
-    evidence_ref: "Actual private fsmonitor contract counterexample: direct git status exit0 creates owned sentinel1line; retained Python harvest exit0 and candidate Node harvest exit0 each create3 monitor-executed lines from configured consumer/.caws/hooks/monitor.sh. core.hooksPath was /dev/null, so that does not prevent execution. SourceSHA38630bde0d4307223c9e57ee25e22b2a98d8648da8620f34bb052556d6c57725 unchanged. Raw commands/stdout/stderr/before-after sentinel bytes/monitor+Gitconfig identities at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest/fsmonitor-contract-probe. Driver exit0 confirms the counterexample, not correct behavior. This refutes A1 no-CAWS-hook-execution guarantee for inherited Git config despite matching reference reports. Prior pass was finite-fixture evidence; no source repair applied, merge held. CLI --verify checks committed identity only; scenario command is recorded, never rerun."
-    recorded_at: "2026-10-20T13:58:44.037Z"
-    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python probe-fsmonitor.py --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --node /Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node --candidate /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-hook-harvest/scripts/hook-harvest.mjs --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest/fsmonitor-contract-probe"
-    exit_code: 0
-    commit_sha: "51d0b6acfa6a6a2210f83f56c3d38dda3a56f5e3"
+    status: unchecked
+    recorded_at: "2026-10-20T14:57:50.795Z"
   - criterion_id: A2
     status: pass
     evidence_ref: "Inspected commands022-focused-payload-read-observation exit0 (18 named tests), exact testSHA3922a7e50de59cb8f319565eae686f311388e76f3db41b9f1bcb09735c7cbb49. Actual passthrough payload-read observation at focused-payload-read-observation/caws-harvest-DBcUcj/payload-read-observation.json lists ONLY custom.sh/U+E000.sh/U+10000.sh; exact complete path assertion excludes 14 generated/cache/symlink paths and aliases. Reader calls real FS; source payload reads use that alias. Malformed syntax/Unicode/BOM/invalid body-byte controls, deterministic queued-directory link replacement and separate changed byte/membership/exclusion/HEAD/status refusals exercised with stable control. Stable selected fixtures only; metadata access allowed; no ABA/inode/mode/atomic/no-follow race claim. Host and Python003 reject invalid filename bytes EILSEQ; decoder checked, actual invalid-name traversal unverified. Full raw artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest. CLI --verify checks committed citation identity/reachability only; command recorded, never re-executed; behavioral adjudication uses independently inspected raw artifacts."
