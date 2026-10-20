@@ -6,7 +6,7 @@
 // later write leases/, events.jsonl, caches. Without ignore rules these land
 // untracked-but-not-ignored, inviting accidental commits via the very
 // `git add .caws/` the init "Next:" hint suggests. This module writes a fenced,
-// version-marked block listing the EPHEMERAL .caws/ paths so they are ignored,
+// version-marked block listing runtime/local paths so they are ignored,
 // while AUTHORITY state (.caws/specs/, .caws/policy.yaml, .caws/waivers/) is
 // never matched and stays tracked.
 //
@@ -23,7 +23,8 @@ import * as path from 'path';
  * guard-strike file that lands in a tracked `tmp/`;
  * CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001). */
 // v3: session bridge claims are operational state, not source artifacts.
-export const GITIGNORE_BLOCK_VERSION = 3;
+// v4: snapshot publication locks and owner records are durable local custody.
+export const GITIGNORE_BLOCK_VERSION = 4;
 
 export const GITIGNORE_BEGIN_MARKER = `# >>> caws gitignore (managed, v${GITIGNORE_BLOCK_VERSION}) >>>`;
 export const GITIGNORE_END_MARKER = '# <<< caws gitignore <<<';
@@ -33,8 +34,9 @@ export const GITIGNORE_END_MARKER = '# <<< caws gitignore <<<';
 const BEGIN_MARKER_PREFIX = '# >>> caws gitignore (managed';
 
 /**
- * Runtime/local .caws/ paths that must never be tracked. Replay custody and
- * its provisioning identity are durable local state, not disposable caches.
+ * Runtime/local paths that must never be tracked. Replay custody, its
+ * provisioning identity, and plan snapshot custody are durable local state,
+ * not disposable caches.
  * Each entry names a path some CAWS code path writes:
  *   - worktrees.json / worktrees/  : worktree registry + checkouts (per-CLI)
  *   - agents.json / leases/        : per-session lease cache (agent hooks)
@@ -42,6 +44,7 @@ const BEGIN_MARKER_PREFIX = '# >>> caws gitignore (managed';
  *   - cache/ sessions/ state/      : runtime caches
  *   - duplication-cache.json       : god-object/duplication scan cache
  *   - tmp/guard-strikes-*.json     : scope-guard strike-state (defense-in-depth)
+ *   - .caws-plan-snapshot-custody/ at every depth: publication locks and owner records
  * AUTHORITY state (specs/, policy.yaml, waivers/) is intentionally ABSENT so it
  * stays tracked. Mirrors the canonical CAWS repo .gitignore classification.
  *
@@ -62,6 +65,7 @@ export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
   '.caws/sessions/',
   '.caws/.render-writer-custody/',
   '.caws/.render-writer-provisioned',
+  '**/.caws-plan-snapshot-custody/',
   '.caws/state/',
   '.caws/hooks/.pristine/',
   '.caws/duplication-cache.json',
@@ -75,8 +79,8 @@ export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
 export function renderManagedBlock(): string {
   return [
     GITIGNORE_BEGIN_MARKER,
-    '# CAWS runtime/local state — never tracked. Durable writer custody',
-    '# and provisioning identities must survive cache cleanup. Authority state',
+    '# CAWS runtime/local state — never tracked. Durable writer and snapshot',
+    '# custody and provisioning identities must survive cache cleanup. Authority state',
     '# (.caws/specs/, .caws/policy.yaml, .caws/waivers/) is intentionally NOT',
     '# listed here so it stays versioned. Managed by `caws init`; edits inside',
     '# these markers are overwritten on the next init.',
