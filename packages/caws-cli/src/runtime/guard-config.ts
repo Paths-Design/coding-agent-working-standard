@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { TextDecoder } from 'node:util';
 import { parseRepoHookPolicy, type GuardConfig } from '../init/repo-hook-policy';
 import { assertMachinePath } from '../init/machine-paths';
 import type { ActiveInvocationSelection } from './selection';
+import { parseJsonSource, objectMemberSource } from './json-custody';
 
 export type GuardConfiguration =
   | { status: 'ok'; guards: Record<string, GuardConfig> }
-  | { status: 'absent' | 'invalid'; guards: Record<string, never> };
+  | { status: 'absent' | 'invalid' | 'unsupported'; guards: Record<string, never> };
 
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -21,10 +23,45 @@ export function parseGuardConfiguration(text: string | null): GuardConfiguration
   } catch {
     return { status: 'invalid', guards: {} };
   }
+  try {
+    // Python's parser admits int thresholds, not floats that round to an int.
+    const guardSource = objectMemberSource(parseJsonSource(text), 'guards');
+    if (guardSource?.root.kind === 'object') {
+      for (const guard of guardSource.root.entries.values()) {
+        if (guard.kind !== 'object') continue;
+        const thresholds = guard.entries.get('thresholds');
+        if (thresholds?.kind !== 'object') continue;
+        for (const value of thresholds.entries.values()) {
+          if (
+            value.kind === 'number' &&
+            !/^-?(?:0|[1-9][0-9]*)$/.test(text.slice(value.start, value.end))
+          )
+            return { status: 'invalid', guards: {} };
+        }
+      }
+    }
+  } catch {
+    // Indexing has a smaller resource envelope than the selected Python parser.
+    // An unindexed document cannot establish a typed verdict about that parser.
+    return { status: 'unsupported', guards: {} };
+  }
   if (!object(document)) return { status: 'invalid', guards: {} };
   let guards = document.guards;
   if (guards === null) guards = undefined;
   if (object(guards)) {
+    for (const entry of Object.values(guards)) {
+      if (!object(entry) || !Array.isArray(entry.additional_allow_prefixes)) continue;
+      for (const prefix of entry.additional_allow_prefixes) {
+        if (
+          object(prefix) &&
+          typeof prefix.reason === 'string' &&
+          Array.from(
+            prefix.reason.replace(/^[\s\u001c-\u001f\u0085]+|[\s\u001c-\u001f\u0085]+$/g, '')
+          ).length < 12
+        )
+          return { status: 'invalid', guards: {} };
+      }
+    }
     guards = Object.fromEntries(
       Object.entries(guards).map(([name, entry]) => {
         if (!object(entry)) return [name, entry];
@@ -52,21 +89,21 @@ export function parseNonGovernedZones(text: string | null): string[] {
   const zones: string[] = [];
   let inside = false;
   for (const line of text.split('\n')) {
-    if (/^non_governed_zones:[ \t]*$/.test(line)) {
+    if (/^non_governed_zones:[ \t]*(?![\s\S])/.test(line)) {
       inside = true;
       continue;
     }
     if (inside && /^[^ \t#-]/.test(line)) inside = false;
     if (!inside) continue;
-    const match = /^[ \t]+-[ \t]+(.*)$/.exec(line);
+    const match = /^[ \t]+-[ \t]+([\s\S]*)/.exec(line);
     if (!match) continue;
-    let zone = (match[1] ?? '').replace(/[ \t]+#.*$/, '');
+    let zone = (match[1] ?? '').replace(/[ \t]+#[\s\S]*$/, '');
     if (!zone) continue;
     for (const quote of ['"', "'"]) {
       if (zone.endsWith(quote)) zone = zone.slice(0, -1);
       if (zone.startsWith(quote)) zone = zone.slice(1);
     }
-    zone = zone.replace(/\/\*\*?$/, '');
+    zone = zone.replace(/\/\*\*?(?![\s\S])/, '');
     if (zone) zones.push(zone.endsWith('/') ? zone : `${zone}/`);
   }
   return zones;
@@ -114,17 +151,38 @@ export function serializeGuardEnvironment(environment: Readonly<Record<string, s
 export function loadGuardConfigurationEnvironment(
   projectDirectory: string
 ): Record<string, string> {
-  const read = (relative: string): string | null => {
+  const read = (
+    relative: string
+  ): { status: 'ok'; text: string } | { status: 'absent' | 'encoding' } => {
+    let bytes: Buffer;
     try {
-      return readFileSync(join(projectDirectory, relative), 'utf8');
+      bytes = readFileSync(join(projectDirectory, relative));
     } catch {
-      return null;
+      return { status: 'absent' };
+    }
+    try {
+      return {
+        status: 'ok',
+        text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+          .decode(bytes)
+          .replace(/\r\n?/g, '\n'),
+      };
+    } catch {
+      return { status: 'encoding' };
     }
   };
-  return guardConfigurationEnvironment(
-    read('.caws/hooks/hook-policy.json'),
-    read('.caws/policy.yaml')
+  // The shell parser emits YAML zones before reading guard JSON. Preserve both
+  // that partial diagnostic transport and Python text-mode newline handling.
+  const yaml = read('.caws/policy.yaml');
+  if (yaml.status === 'encoding')
+    return { CAWS_GUARD_ZONE_COUNT: '0', CAWS_GUARD_CONFIG_STATUS: 'unavailable' };
+  const policy = read('.caws/hooks/hook-policy.json');
+  const result = guardConfigurationEnvironment(
+    policy.status === 'ok' ? policy.text : null,
+    yaml.status === 'ok' ? yaml.text : null
   );
+  if (policy.status === 'encoding') result.CAWS_GUARD_CONFIG_STATUS = 'unavailable';
+  return result;
 }
 
 const STOCK_CONFIGURATION_SOURCES: Readonly<Record<string, string>> = Object.freeze({
@@ -155,7 +213,11 @@ export function invocationGuardConfiguration(
     environment.CAWS_GUARD_CONFIG_PY ||
     environment.CAWS_PRIOR_BASH_ENV ||
     (environment.BASH_ENV && environment.BASH_ENV !== startup) ||
-    environment.ENV
+    environment.ENV ||
+    Object.entries(environment).some(
+      ([name, value]) =>
+        value && (name.startsWith('BASH_FUNC_') || name === '_CAWS_GUARD_CONFIG_SH_SOURCED')
+    )
   )
     return Object.freeze(result);
   try {
@@ -177,6 +239,19 @@ export function invocationGuardConfiguration(
   } catch {
     return Object.freeze(result);
   }
-  Object.assign(result, loadGuardConfigurationEnvironment(selection.checkout));
+  const assignments = loadGuardConfigurationEnvironment(selection.checkout);
+  // A direct native environment cannot reproduce Bash's NUL removal, Python's
+  // extra whitespace rejection, or unencodable Python text. Keep those values
+  // on the selected parser path rather than granting a changed prefix.
+  if (
+    assignments.CAWS_GUARD_CONFIG_STATUS === 'unsupported' ||
+    Object.values(assignments).some(
+      (value) =>
+        /[\0\u001c-\u001f\u0085]/.test(value) ||
+        Buffer.from(value, 'utf8').toString('utf8') !== value
+    )
+  )
+    return Object.freeze(result);
+  Object.assign(result, assignments);
   return Object.freeze(result);
 }
