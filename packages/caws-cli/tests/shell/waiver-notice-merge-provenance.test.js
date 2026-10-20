@@ -589,4 +589,43 @@ describe('scope matcher merge provenance', () => {
     expect(fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8')).toBe(eventsBefore);
     expect(fs.existsSync(wtPath)).toBe(true);
   });
+
+  test.each(['oversized lane', 'oversized alternative'])(
+    '%s refuses structurally and retains only independently matching hints',
+    (label) => {
+      const oversized = '[' + 'a'.repeat(65536);
+      const options = {
+        scopeIn: label === 'oversized lane' ? ['work.txt', oversized] : ['work.txt'],
+        otherLane: 'MATCHER-OVERSIZED-002',
+        otherScopeIn: label === 'oversized lane' ? ['src/**/*.ts'] : [oversized],
+      };
+      const { repo, caws, wtPath } = buildLane(
+        'wnmp-oversized-',
+        'wt-oversized',
+        'MATCHER-OVERSIZED-001',
+        ['src/direct.ts'],
+        options
+      );
+      const refsBefore = git(repo, 'show-ref');
+      const registryBefore = fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8');
+      const eventsBefore = fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8');
+      const result = runMerge(repo, 'wt-oversized', { dryRun: true, showData: true });
+      const payload = JSON.parse(result.all.slice(result.all.indexOf('\n{\n') + 1));
+      expect(result.code).toBe(1);
+      expect(payload.can_proceed).toBe(false);
+      expect(result.all).toContain('outside spec scope: src/direct.ts');
+      expect(payload.next_commands[0]).toBe(
+        'caws specs amend-scope MATCHER-OVERSIZED-001 --add-support src/direct.ts'
+      );
+      if (label === 'oversized lane') {
+        expect(result.all).toContain('active specs already admit the path: MATCHER-OVERSIZED-002');
+      } else {
+        expect(result.all).not.toContain('active specs already admit the path:');
+      }
+      expect(git(repo, 'show-ref')).toBe(refsBefore);
+      expect(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8')).toBe(registryBefore);
+      expect(fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8')).toBe(eventsBefore);
+      expect(fs.existsSync(wtPath)).toBe(true);
+    }
+  );
 });

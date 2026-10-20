@@ -136,7 +136,14 @@ function normalizeRel(p: string): string {
  * review; plain entries retain exact-or-descendant boundary matching.
  */
 export function scopeEntryMatches(entry: string, target: string): boolean {
-  return matchGlob(normalizeRel(target), [normalizeRel(entry)]) !== null;
+  try {
+    return matchGlob(normalizeRel(target), [normalizeRel(entry)]) !== null;
+  } catch (error) {
+    // A parser-refused pattern cannot establish a claimant. Preserve the
+    // caller's structured unbound/foreign result rather than leaking a crash.
+    if (error instanceof SyntaxError) return false;
+    throw error;
+  }
 }
 
 /**

@@ -320,4 +320,40 @@ describe('scope matcher review provenance', () => {
     );
     expect(eventCount(root)).toBe(eventsBefore);
   });
+
+  test('oversized-only scope remains foreign while a separately bound valid owner admits the path', () => {
+    const root = mkRepo();
+    const oversized = '[' + 'a'.repeat(65536);
+    writeSpec(root, 'WREV-OVERSIZED-001', { scope: { in: [oversized] } });
+    writeSpec(root, 'WREV-VALID-002', { scope: { in: ['src/**/*.ts'] } });
+    execFileSync('git', ['-C', root, 'checkout', '--quiet', '-b', 'wt-oversized']);
+    addCommit(root, 'short path under hostile scope', { 'src/direct.ts': 'witness\n' });
+    execFileSync('git', ['-C', root, 'checkout', '--quiet', 'main']);
+    writeRegistry(root, {
+      'wt-oversized': {
+        specId: 'WREV-OVERSIZED-001',
+        branch: 'wt-oversized',
+        baseBranch: 'main',
+      },
+      'wt-valid': {
+        specId: 'WREV-VALID-002',
+        branch: 'wt-oversized',
+        baseBranch: 'main',
+      },
+    });
+    const registryBefore = fs.readFileSync(path.join(cawsDir(root), 'worktrees.json'), 'utf8');
+    const eventsBefore = eventCount(root);
+    const refused = review(root, 'wt-oversized');
+    expect(refused.code).toBe(0);
+    expect(refused.out.join('\n')).toContain('OUT-OF-SCOPE src/direct.ts');
+    expect(refused.out.join('\n')).toContain('outside spec scope: src/direct.ts');
+    const admitted = review(root, 'wt-valid');
+    expect(admitted.code).toBe(0);
+    expect(admitted.out.join('\n')).toContain('in-scope   src/direct.ts');
+    expect(admitted.out.join('\n')).not.toContain('outside spec scope:');
+    expect(fs.readFileSync(path.join(cawsDir(root), 'worktrees.json'), 'utf8')).toBe(
+      registryBefore
+    );
+    expect(eventCount(root)).toBe(eventsBefore);
+  });
 });

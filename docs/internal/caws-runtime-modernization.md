@@ -3599,6 +3599,20 @@ Additional bounded evidence and unresolved dependencies:
   input validation; universal normalization equivalence is not claimed. No gate
   floor, installed guard or scope authority is weakened.
 
+  A fresh review identifies schema-valid65537-unit patterns reaching
+  picomatch's65536-unit parser bound. Root's live built-code probe reproduces
+  SyntaxError in both binding and raw kernel. The two boolean adapters treat
+  parser SyntaxError as non-match, preserving structured unbound/foreign
+  decisions; unexpected infrastructure errors continue to propagate. Five actual
+  resolver/review/merge controls fail on compiled `91612c9e`, pass after repair,
+  and preserve independent valid-owner selection and hints. Complete three
+  affected suites pass167 checks with no skips; build and lint exit0.
+  `scope-matcher/oversized-checks.json` and raw channels retain the compiled
+  baseline hashes, red/green commands and source hashes. Raw kernel handling and
+  unbounded schema input are not qualified by these adapters; the parent retains
+  their actual scope-enforcement error-path investigation. No erroring pattern
+  itself confers a claim or provenance admission.
+
 - E165: Root accepts the remaining R18 writer obligation from the Unicode peer
   after inspecting actual `render_session` artifacts and current source.
   `session_log_renderer.py:1802-1872` permits a turn/index publication after a

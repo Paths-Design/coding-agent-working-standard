@@ -2129,7 +2129,14 @@ function normalizeRel(p: string): string {
 }
 
 function scopeEntryMatches(entry: string, target: string): boolean {
-  return matchGlob(normalizeRel(target), [normalizeRel(entry)]) !== null;
+  try {
+    return matchGlob(normalizeRel(target), [normalizeRel(entry)]) !== null;
+  } catch (error) {
+    // A parser-refused pattern cannot admit provenance or suggest an owner.
+    // Other failures remain explicit infrastructure errors.
+    if (error instanceof SyntaxError) return false;
+    throw error;
+  }
 }
 
 /** One lane commit touching paths outside the lane's scope. */

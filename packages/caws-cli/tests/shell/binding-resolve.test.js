@@ -2344,4 +2344,38 @@ describe('scope matcher consumer semantics', () => {
     );
     expect(resolve([owner, other], 'docs/direct.md').binding.kind).toBe('unbound');
   });
+
+  test('oversized scope entry claims no worktree while a valid second owner remains selectable', () => {
+    const oversized = '[' + 'a'.repeat(65536);
+    const invalid = spec('MATCHER-OVERSIZED-001', [oversized]);
+    const valid = spec('MATCHER-VALID-002', ['src/**/*.ts']);
+    const refused = resolve([invalid], 'src/direct.ts');
+    expect(refused.binding.kind).toBe('unbound');
+    expect(refused.source).toBe('none');
+    const selected = resolve([invalid, valid], 'src/direct.ts');
+    expect(selected.binding.kind).toBe('bound');
+    expect(selected.binding.spec.id).toBe(valid.id);
+    expect(selected.worktreeName).toBe(valid.worktree);
+    expect(selected.source).toBe('target_scope_in_claim');
+  });
+
+  test('oversized entry grants no multi-bridge claim and preserves an independently valid bridge', () => {
+    const oversized = '[' + 'a'.repeat(65536);
+    const invalid = spec('MATCHER-OVERSIZED-001', [oversized]);
+    const unrelated = spec('MATCHER-OTHER-002', ['docs']);
+    const valid = spec('MATCHER-VALID-003', ['src/**/*.ts']);
+    const bridges = {
+      [invalid.id]: { session_id: 'matcher-session' },
+      [unrelated.id]: { session_id: 'matcher-session' },
+      [valid.id]: { session_id: 'matcher-session' },
+    };
+    const options = { bridges, registry: {} };
+    const refused = resolve([invalid, unrelated], 'src/direct.ts', options);
+    expect(refused.binding.kind).toBe('unbound');
+    expect(refused.source).toBe('none');
+    const selected = resolve([invalid, unrelated, valid], 'src/direct.ts', options);
+    expect(selected.binding.kind).toBe('bridged');
+    expect(selected.binding.spec.id).toBe(valid.id);
+    expect(selected.source).toBe('bridge_claim');
+  });
 });
