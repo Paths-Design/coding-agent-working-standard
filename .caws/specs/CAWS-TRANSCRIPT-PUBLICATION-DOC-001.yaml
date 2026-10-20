@@ -1,0 +1,29 @@
+id: CAWS-TRANSCRIPT-PUBLICATION-DOC-001
+title: 'Bound transcript publication and database evidence claims'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-20T15:21:58.583Z'
+updated_at: '2026-10-20T15:21:58.583Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Transcript qualification documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/audits/hook-port-qualification.md'
+  out: []
+invariants:
+  - 'Documentation separates projection replacement, receipt publication, crash durability and observed database effects.'
+acceptance:
+  - id: A1
+    given: 'the current transcript-store publisher and session-log caller'
+    when: 'qualification documentation describes SQLite projection'
+    then: 'it states atomic projection replacement separately from receipt publication and limits the database hash observation without claiming crash durability or zero WAL/SHM effects.'
+observability:
+  - 'Source coordinates and documentation-check outputs retained in the external qualification artifact directory.'
+rollback:
+  - 'Restore the prior paragraph through a governed documentation change if contradicted by the actual publisher contract.'
+non_functional: {}
+contracts: []
