@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-TRANSCRIPT-FOUNDATION-001
 title: 'Preserve lossless transcript occurrences and typed Codex normalization'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-transcript-foundation
 created_at: '2026-10-20T17:20:43.531Z'
-updated_at: '2026-10-20T17:20:43.531Z'
+updated_at: '2026-10-20T17:21:03.201Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
