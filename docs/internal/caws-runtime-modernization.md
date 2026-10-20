@@ -1616,6 +1616,23 @@ Additional bounded evidence and unresolved dependencies:
   These source/proof repairs do not establish post-dispatch cleanup, restart,
   final-candidate legacy execution or thirteen-session capacity.
 
+- E89: The refusal/root-setup repairs are committed at
+  `3c8709bd0cca5da8d2c1c1b1aa15e761b49f5a2b`. Its release build exits0 and
+  produces native SHA256
+  `afce042a3224e5f35bd0c37c585dc0ef162527905430a56c65bcc48b0ec0383b`;
+  `renderer-hostile-2026-10-19/refusal-proof-committed-release.log` retains the
+  build output. `candidate-source-and-hold.json` captures the source revision,
+  clean worktree, executable hash and a fresh native observation of the same
+  live orphan birth1792461887.982661. Cleanup authorization remains pending.
+  Both staged source evaluations pass the five declared CAWS gates; doctor
+  exits0 with0 errors/3 warnings. These are source/governance checks, not AC
+  acceptance or runtime qualification. Normal/queued E86 and cooperative E84
+  receipts retain their earlier executable identities; none is relabelled as
+  an execution of this final binary. The complete native suite, panic-unwind
+  regression, dispatched cancellation/restart, final cooperative legacy replay
+  and all three thirteen-session load modes require execution after the hold.
+  No AC pass, merge or machine installation is recorded for this slice.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
