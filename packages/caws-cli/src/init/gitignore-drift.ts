@@ -8,13 +8,22 @@ import { storeDiagnostic } from '../store/repo-root';
 import { EPHEMERAL_CAWS_ENTRIES, computeGitignore } from './gitignore-manage';
 
 export const GITIGNORE_DRIFT_RULE = 'shell.gitignore.ephemeral_state_untracked';
+const SNAPSHOT_CUSTODY_DIRECTORY = '.caws-plan-snapshot-custody';
+const SNAPSHOT_CUSTODY_RULE = `**/${SNAPSHOT_CUSTODY_DIRECTORY}/`;
+const SNAPSHOT_CUSTODY_PROBES = [
+  `${SNAPSHOT_CUSTODY_DIRECTORY}/v1/__caws_ignore_probe__`,
+  `.caws/plans/${SNAPSHOT_CUSTODY_DIRECTORY}/v1/__caws_ignore_probe__`,
+  `docs/plans/${SNAPSHOT_CUSTODY_DIRECTORY}/v1/__caws_ignore_probe__`,
+];
 function ephemeral(name: string): boolean {
   return EPHEMERAL_CAWS_ENTRIES.some((entry) =>
-    entry.endsWith('/')
-      ? name.startsWith(entry)
-      : entry.includes('*')
-        ? name.startsWith('tmp/guard-strikes-') && name.endsWith('.json')
-        : name === entry
+    entry === SNAPSHOT_CUSTODY_RULE
+      ? name.split('/').slice(0, -1).includes(SNAPSHOT_CUSTODY_DIRECTORY)
+      : entry.endsWith('/')
+        ? name.startsWith(entry)
+        : entry.includes('*')
+          ? name.startsWith('tmp/guard-strikes-') && name.endsWith('.json')
+          : name === entry
   );
 }
 export function inspectGitignoreCoverage(repoRoot: string, cawsDir: string): DoctorFinding[] {
@@ -32,10 +41,14 @@ export function inspectGitignoreCoverage(repoRoot: string, cawsDir: string): Doc
     /* absent */
   }
   const { outcome } = computeGitignore(existing);
-  const probes = EPHEMERAL_CAWS_ENTRIES.map((entry) =>
-    entry.endsWith('/')
-      ? entry + '__caws_ignore_probe__'
-      : entry.replace('*', '__caws_ignore_probe__')
+  const probes = EPHEMERAL_CAWS_ENTRIES.flatMap((entry) =>
+    entry === SNAPSHOT_CUSTODY_RULE
+      ? SNAPSHOT_CUSTODY_PROBES
+      : [
+          entry.endsWith('/')
+            ? entry + '__caws_ignore_probe__'
+            : entry.replace('*', '__caws_ignore_probe__'),
+        ]
   );
   const authority = [
     '.caws/specs/__caws_ignore_probe__.yaml',
@@ -79,7 +92,15 @@ export function inspectGitignoreCoverage(repoRoot: string, cawsDir: string): Doc
       storeDiagnostic(rule, message, { severity, subject: '.gitignore', data }) as DoctorFinding
     );
   try {
-    const tracked = git(['ls-files', '-z', '--cached', '--', '.caws/', 'tmp/'])
+    const tracked = git([
+      'ls-files',
+      '-z',
+      '--cached',
+      '--',
+      '.caws/',
+      'tmp/',
+      `:(glob)**/${SNAPSHOT_CUSTODY_DIRECTORY}/**`,
+    ])
       .split('\0')
       .filter((n) => n && ephemeral(n));
     const fields = git(
