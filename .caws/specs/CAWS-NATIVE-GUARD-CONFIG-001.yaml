@@ -38,11 +38,10 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Inspected two native invoke exits0 with pinned78f binary at c027afeb; raw assignments native/ thresholds100/10, four real consumers before/after, no stock parser witness, input-matched invocation journals through local adapter_finished. Private extension fixture; controlled scope refusal; no harness delivery/tool-withholding/whole-runtime claim. External artifact inspected directly; CLI verify only accepts repo-relative paths."
-    recorded_at: "2026-10-20T06:50:50.494Z"
+    evidence_ref: "Inspected two native invoke exits0 with pinned78f binary at c027afeb; raw assignments native/ thresholds100/10, four real consumers before/after, no stock parser witness, input-matched invocation journals through local adapter_finished. Private extension fixture; controlled scope refusal; no harness delivery/tool-withholding/whole-runtime claim. External artifact inspected directly; CLI verify only accepts repo-relative paths. Durable inspected evidence: /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-guard-config/custom-library-repair/guard-config-library-native/evidence-observation.json. --verify below checks cited committed identity only; it does not rerun the command or verify external artifacts."
+    recorded_at: "2026-10-20T06:57:29.697Z"
     command: node packages/caws-native/target/qualification-tools/qualify-guard-config.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-guard-config-work/packages/caws-cli /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-guard-config-work/packages/caws-native/target/qualification/guard-config-library-native /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-guard-config-work/packages/caws-native/target/qualification/guard-config-native-executable/caws-native --native-only
     exit_code: 0
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-guard-config/custom-library-repair/guard-config-library-native/evidence-observation.json"
     commit_sha: c027afeb489e9771822928801cbd6ad5222e8f57
   - criterion_id: A2
     status: pass
