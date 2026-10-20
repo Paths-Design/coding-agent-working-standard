@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-GUARD-CONFIG-001
 title: 'Integrate typed guard configuration at qualified native shell consumers'
 mode: refactor
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded selected-stock guard configuration completed, source consolidated only in caws/native-guard-config. Raw build/focused/customrunner/native request results inspected and retained externally; current A1/A2 refs identify those artifacts and their limits. Commit-only rederivation verifies identity, not behavioral proof. Combined source gates dec55-to-4f exit0. Custom/explicit and unsupported compatibility parsing remains. Parent integration, machine install, harness delivery, withholding, containment, Python retirement and cutover remain unverified.'
 created_at: '2026-10-20T05:24:25.239Z'
-updated_at: '2026-10-20T06:57:09.918Z'
+updated_at: '2026-10-20T06:57:52.770Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
