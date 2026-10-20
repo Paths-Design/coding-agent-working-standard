@@ -18,6 +18,14 @@ const DIGIT = '[' + [
   '30-39','660-669','6f0-6f9','7c0-7c9','966-96f','9e6-9ef','a66-a6f','ae6-aef','b66-b6f','be6-bef','c66-c6f','ce6-cef','d66-d6f','de6-def','e50-e59','ed0-ed9','f20-f29','1040-1049','1090-1099','17e0-17e9','1810-1819','1946-194f','19d0-19d9','1a80-1a89','1a90-1a99','1b50-1b59','1bb0-1bb9','1c40-1c49','1c50-1c59','a620-a629','a8d0-a8d9','a900-a909','a9d0-a9d9','a9f0-a9f9','aa50-aa59','abf0-abf9','ff10-ff19','104a0-104a9','10d30-10d39','11066-1106f','110f0-110f9','11136-1113f','111d0-111d9','112f0-112f9','11450-11459','114d0-114d9','11650-11659','116c0-116c9','11730-11739','118e0-118e9','11950-11959','11c50-11c59','11d50-11d59','11da0-11da9','16a60-16a69','16ac0-16ac9','16b50-16b59','1d7ce-1d7ff','1e140-1e149','1e2f0-1e2f9','1e950-1e959','1fbf0-1fbf9',
 ].map(range => range.split('-').map(hex => `\\u{${hex}}`).join('-')).join('') + ']';
 const NEGATIVE_NUMBER = new RegExp(`^-${DIGIT}+\\n?(?![\\s\\S])|^-${DIGIT}*\\.${DIGIT}+\\n?(?![\\s\\S])`, 'u');
+const LONG_OPTIONS = ['--consumer-root', '--caws-root', '--help'];
+/** Match argparse's recognition order before its negative-number and ASCII-space value exceptions. @param {string} value */
+export function isOptionToken(value) {
+  if (!value.startsWith('-') || value === '-') return false;
+  const prefix = value.split('=', 1)[0] ?? '';
+  if (value.startsWith('-h') || (value.startsWith('--') && LONG_OPTIONS.some(option => option.startsWith(prefix)))) return true;
+  return !NEGATIVE_NUMBER.test(value) && !value.includes(' ');
+}
 /** @param {string} value */
 const strip = value => value.replace(STRIP, '');
 /** Python orders Unicode code points, rather than UTF-16 code units. @param {string} a @param {string} b */
@@ -236,14 +244,14 @@ export function main(args = process.argv.slice(2)) {
     const arg = args[i];
     if (arg === '--help' || arg === '-h') { process.stdout.write('Usage: hook-harvest.mjs --consumer-root ROOT [--caws-root ROOT]\nRead-only hook inventory; no CAWS hook execution or authority decision.\n'); return 0; }
     const match = /^(--[^=]+)(?:=(.*))?$/s.exec(arg ?? '');
-    const choices = match ? ['--consumer-root', '--caws-root', '--help'].filter(option => option.startsWith(match[1] ?? '')) : [];
+    const choices = match ? LONG_OPTIONS.filter(option => option.startsWith(match[1] ?? '')) : [];
     if (!match || choices.length !== 1) throw new UsageError(`unrecognized or ambiguous argument: ${arg}`);
     if (choices[0] === '--help') {
       if (match[2] !== undefined) throw new UsageError('--help does not accept an argument');
       process.stdout.write('Usage: hook-harvest.mjs --consumer-root ROOT [--caws-root ROOT]\nRead-only hook inventory; no CAWS hook execution or authority decision.\n'); return 0;
     }
     const value = match[2] ?? args[++i];
-    if (value === undefined || (match[2] === undefined && value !== '-' && value.startsWith('-') && !NEGATIVE_NUMBER.test(value))) throw new UsageError(`expected a path after ${match[1]}`);
+    if (value === undefined || (match[2] === undefined && isOptionToken(value))) throw new UsageError(`expected a path after ${match[1]}`);
     if (choices[0] === '--consumer-root') consumer = value; else caws = value;
   }
   if (consumer === undefined) throw new UsageError('--consumer-root is required');

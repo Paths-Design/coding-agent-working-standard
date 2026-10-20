@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, 
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { category, codepointOrder, compare, declarations, filesystemName, inventory, literalWords, normalizeStamp, resolveRoot, sha256, snapshot } from './hook-harvest.mjs';
+import { category, codepointOrder, compare, declarations, filesystemName, inventory, isOptionToken, literalWords, normalizeStamp, resolveRoot, sha256, snapshot } from './hook-harvest.mjs';
 
 /** @param {import('node:test').TestContext} t */
 function fixture(t) {
@@ -84,6 +84,11 @@ test('inventory excludes every cache basename, generated suffix, link kind and n
 });
 
 test('code point ordering distinguishes BMP and astral paths', () => assert.deepEqual(['𐀀', '\ue000', 'a'].sort(codepointOrder), ['a', '\ue000', '𐀀']));
+
+test('option recognition precedes the ASCII-space value exception', () => {
+  for (const value of ['-my repo', '--unknown repo', '-', '-1', '-١', 'plain']) assert.equal(isOptionToken(value), false, value);
+  for (const value of ['-h repo', '--consumer-root=some repo', '--consumer=some repo', '--', '-unknown', '-h']) assert.equal(isOptionToken(value), true, value);
+});
 
 test('filesystem decoding preserves invalid bytes and reports the host filename boundary', t => {
   const root = fixture(t);
@@ -171,6 +176,12 @@ test('actual Node-only direct/symlink CLI reports semantic bytes, tracking and n
   }
   assert.deepEqual(reports[0], reports[1]);
   assert.equal(readFileSync(path.join(left, 'guard.sh'), 'utf8'), 'touch MUST-NOT-EXIST\n');
+  symlinkSync(consumer, path.join(base, '-my repo'));
+  const space = spawnSync(process.execPath, [script, '--consumer-root', '-my repo', '--caws-root', caws], { cwd: base, encoding: 'utf8', env: { ...process.env, PATH: binary } });
+  assert.equal(space.status, 0, space.stderr); assert.deepEqual(JSON.parse(space.stdout), reports[0]);
+  put(path.join(base, 'dash-space-stdout.json'), space.stdout); put(path.join(base, 'dash-space-stderr.log'), space.stderr);
+  const optionLookalike = spawnSync(process.execPath, [script, '--consumer-root', '-h repo', '--caws-root', caws], { cwd: base, encoding: 'utf8' });
+  assert.equal(optionLookalike.status, 2); assert.match(optionLookalike.stderr, /expected a path after/);
   // This CLI has no positional operands: retained argparse reference refuses even a final separator.
   const separator = spawnSync(process.execPath, [script, '--consumer-root', consumer, '--caws-root', caws, '--'], { encoding: 'utf8' });
   assert.equal(separator.status, 2); assert.match(separator.stderr, /unrecognized or ambiguous argument: --/);
