@@ -602,11 +602,14 @@ mod tests {
     }
     impl Fixture {
         fn new() -> Self {
+            Self::at(std::env::temp_dir())
+        }
+        fn at(parent: PathBuf) -> Self {
             let nonce = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let root = std::env::temp_dir()
+            let root = parent
                 .canonicalize()
                 .unwrap()
                 .join(format!("caws-render-writer-{}-{nonce}", std::process::id()));
@@ -787,24 +790,276 @@ mod tests {
     }
     #[test]
     fn disposable_session_cache_replacement_cannot_partition_live_writer_custody() {
-        let fixture = Fixture::new();
+        fn describe(value: fs::Metadata) -> serde_json::Value {
+            json!({
+                "device": value.dev(), "inode": value.ino(), "mode": value.mode(),
+                "uid": value.uid(), "links": value.nlink(), "bytes": value.len(),
+                "mtime": value.mtime(), "mtimeNs": value.mtime_nsec(),
+                "ctime": value.ctime(), "ctimeNs": value.ctime_nsec(),
+            })
+        }
+        fn identity(file: &File) -> (u64, u64) {
+            let metadata = file.metadata().unwrap();
+            (metadata.dev(), metadata.ino())
+        }
+        // Both real probes and the wrong-inode control pass through this
+        // identity oracle. Opening an existing name creates a separate open
+        // file description; dup of the held flock would not test exclusion.
+        fn open_same_lock(path: &Path, expected: (u64, u64)) -> Result<File, (u64, u64)> {
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+                .open(path)
+                .unwrap();
+            let metadata = file.metadata().unwrap();
+            assert!(metadata.is_file());
+            assert_eq!(metadata.uid(), unsafe { libc::geteuid() });
+            assert_eq!(metadata.mode() & 0o7777, 0o600);
+            assert_eq!(metadata.nlink(), 1);
+            assert_eq!(metadata.len(), 0);
+            let actual = (metadata.dev(), metadata.ino());
+            if actual != expected {
+                return Err(actual);
+            }
+            Ok(file)
+        }
+        fn snapshot(fixture: &Fixture, anchor: &Path, held: &File) -> serde_json::Value {
+            let key = project_key(&fixture.project).unwrap();
+            let service = anchor.join("operations/services").join(key);
+            let mut stable = serde_json::Map::new();
+            for (name, path) in [
+                ("custody", anchor.to_path_buf()),
+                ("operations", anchor.join("operations")),
+                ("services", anchor.join("operations/services")),
+                ("journalDirectory", service.clone()),
+                (
+                    "marker",
+                    fixture.project.join(".caws/.render-writer-provisioned"),
+                ),
+                ("registry", anchor.join(".service-root.json")),
+                ("namedLock", anchor.join(".service-owner.lock")),
+                ("journalConfig", service.join(".journal.json")),
+                ("journalLock", service.join(".journal.lock")),
+            ] {
+                let metadata = fs::symlink_metadata(&path).unwrap();
+                let contents = if metadata.is_dir() {
+                    let mut entries: Vec<_> = fs::read_dir(&path)
+                        .unwrap()
+                        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+                        .collect();
+                    entries.sort();
+                    json!({"entries": entries})
+                } else {
+                    json!({"bytes": fs::read(&path).unwrap()})
+                };
+                stable.insert(
+                    name.into(),
+                    json!({
+                        "device": metadata.dev(), "inode": metadata.ino(),
+                        "mode": metadata.mode(), "uid": metadata.uid(),
+                        "links": metadata.nlink(), "contents": contents,
+                    }),
+                );
+            }
+            let governance = fs::symlink_metadata(fixture.project.join(".caws")).unwrap();
+            // Replacing a child legitimately changes parent timestamps, link
+            // count and directory size; its identity and authority must survive.
+            stable.insert(
+                "governance".into(),
+                json!({
+                    "device": governance.dev(), "inode": governance.ino(),
+                    "mode": governance.mode(), "uid": governance.uid(),
+                }),
+            );
+            json!({
+                "stable": stable,
+                "governanceMetadata": describe(governance),
+                "sessions": describe(fs::symlink_metadata(fixture.project.join(".caws/sessions")).unwrap()),
+                "heldLock": describe(held.metadata().unwrap()),
+                "heldFd": held.as_raw_fd(),
+            })
+        }
+        // Retain this fresh fixture even on assertion unwind. It holds paths
+        // only; every custody and probe descriptor retains ordinary RAII.
+        let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let fixture = std::mem::ManuallyDrop::new(Fixture::at(parent));
         let expires = || Instant::now() + Duration::from_millis(500);
         let custody = acquire(&fixture.home, &fixture.project, expires()).unwrap();
+        let held = File::from(custody.duplicate_lifetime(expires()).unwrap());
+        let original_identity = identity(&held);
+        let anchor = fixture.project.join(".caws/.render-writer-custody");
+        let lock_path = anchor.join(".service-owner.lock");
+        let diagnostic_path = fixture.root.join("stable-lock-exclusion.json");
+        let persist = |diagnostic: &serde_json::Value| {
+            fs::write(
+                &diagnostic_path,
+                serde_json::to_vec_pretty(diagnostic).unwrap(),
+            )
+            .unwrap();
+            eprintln!(
+                "writer stable-lock checkpoint: {}; refusal={}; originalProbe={}; readmittedProbe={}",
+                diagnostic_path.display(),
+                diagnostic["acceptedRefusal"],
+                diagnostic["originalHeldProbe"],
+                diagnostic["readmittedHeldProbe"],
+            );
+        };
+        let before = snapshot(&fixture, &anchor, &held);
+        let mut diagnostic = json!({
+            "schema": "caws.render.writer.stable-lock-exclusion.v1",
+            "fixture": fixture.root, "deadlineMs": 5, "readmissionDeadlineMs": 500,
+            "before": before, "originalIdentity": original_identity,
+            "originalCustody": format!("{custody:?}"), "childProcesses": 0,
+        });
+        persist(&diagnostic);
         let sessions = fixture.project.join(".caws/sessions");
         fs::rename(&sessions, fixture.project.join(".caws/sessions-removed")).unwrap();
         fs::create_dir(&sessions).unwrap();
-        assert!(
-            acquire(
-                &fixture.home,
-                &fixture.project,
-                Instant::now() + Duration::from_millis(5)
-            )
-            .unwrap_err()
-            .contains("another machine owner")
+        let after_replacement = snapshot(&fixture, &anchor, &held);
+        let started = Instant::now();
+        let result = acquire(
+            &fixture.home,
+            &fixture.project,
+            Instant::now() + Duration::from_millis(5),
         );
+        let elapsed = started.elapsed();
+        diagnostic["acquireElapsedNs"] = json!(elapsed.as_nanos().to_string());
+        diagnostic["acquireResult"] = json!(format!("{result:?}"));
+        diagnostic["afterReplacement"] = after_replacement;
+        diagnostic["afterAcquire"] = snapshot(&fixture, &anchor, &held);
+        persist(&diagnostic);
+        let refusal = result.unwrap_err();
+        // JournalError's constructor is private. Derive Deadline through its
+        // public typed API; Busy is the exact Display of custody::owner_lock's
+        // closed operation string, not a substring or arbitrary failure.
+        let deadline = Custody::acquire(&anchor, Instant::now()).unwrap_err();
+        assert_eq!(deadline.kind, crate::service_journal::ErrorKind::Deadline);
+        let deadline_text = deadline.to_string();
+        let busy_text = "service journal unavailable: another machine owner retains custody";
+        diagnostic["acceptedRefusal"] = json!(refusal);
+        diagnostic["acceptedRefusalKind"] = json!(if refusal == busy_text {
+            "Busy"
+        } else if refusal == deadline_text {
+            "Deadline"
+        } else {
+            "Unrecognized"
+        });
+        persist(&diagnostic);
+        assert!(
+            refusal == busy_text || refusal == deadline_text,
+            "actual refusal: {refusal}; retained diagnostic: {}",
+            diagnostic_path.display(),
+        );
+        assert_ne!(
+            diagnostic["before"]["sessions"]["inode"],
+            diagnostic["afterReplacement"]["sessions"]["inode"]
+        );
+        assert_eq!(
+            diagnostic["before"]["stable"],
+            diagnostic["afterReplacement"]["stable"]
+        );
+        assert_eq!(
+            diagnostic["before"]["stable"],
+            diagnostic["afterAcquire"]["stable"]
+        );
+
+        let wrong_path = fixture.root.join("unrelated-lock");
+        let wrong = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&wrong_path)
+            .unwrap();
+        let wrong_identity = identity(&wrong);
+        let rejected_identity = open_same_lock(&wrong_path, original_identity).unwrap_err();
+        diagnostic["wrongInodeControl"] = json!({
+            "metadata": describe(wrong.metadata().unwrap()),
+            "rejectedIdentity": rejected_identity, "expectedIdentity": original_identity,
+        });
+        persist(&diagnostic);
+        assert_ne!(wrong_identity, original_identity);
+        assert_eq!(rejected_identity, wrong_identity);
+        drop(wrong);
+
+        let probe = open_same_lock(&lock_path, original_identity).unwrap();
+        let first_result = unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        let first_errno = if first_result == -1 {
+            io::Error::last_os_error().raw_os_error()
+        } else {
+            None
+        };
+        diagnostic["originalHeldProbe"] = json!({
+            "metadata": describe(probe.metadata().unwrap()), "fd": probe.as_raw_fd(),
+            "flockResult": first_result, "errno": first_errno,
+        });
+        persist(&diagnostic);
+        assert_eq!(first_result, -1);
+        assert_eq!(first_errno, Some(libc::EWOULDBLOCK));
+        assert_eq!(
+            custody.service_keys(1, expires()).unwrap(),
+            vec![project_key(&fixture.project).unwrap()]
+        );
+        let journal = Journal::open(
+            Arc::clone(&custody),
+            &project_key(&fixture.project).unwrap(),
+            MAX_RETAINED_RECORDS,
+            expires(),
+        )
+        .unwrap();
+        assert!(!journal.has_unknown(expires()).unwrap());
+        assert!(journal.queued_request_ids(expires()).unwrap().is_empty());
+        drop(journal);
+        diagnostic["originalOwnerStillUsable"] = json!(true);
+        diagnostic["afterOriginalUse"] = snapshot(&fixture, &anchor, &held);
+        persist(&diagnostic);
+        assert_eq!(
+            diagnostic["before"]["stable"],
+            diagnostic["afterOriginalUse"]["stable"]
+        );
+        drop(probe);
+        drop(held);
         drop(custody);
         let next = acquire(&fixture.home, &fixture.project, expires()).unwrap();
+        let next_held = File::from(next.duplicate_lifetime(expires()).unwrap());
+        diagnostic["readmitted"] = snapshot(&fixture, &anchor, &next_held);
+        diagnostic["readmittedIdentity"] = json!(identity(&next_held));
+        persist(&diagnostic);
+        assert_eq!(identity(&next_held), original_identity);
+        assert_eq!(
+            diagnostic["before"]["stable"],
+            diagnostic["readmitted"]["stable"]
+        );
+        // A successful reopen with the right inode is insufficient: the new
+        // full-path capability must actually retain its lifetime kernel lock.
+        let next_probe = open_same_lock(&lock_path, identity(&next_held)).unwrap();
+        let next_result =
+            unsafe { libc::flock(next_probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        let next_errno = if next_result == -1 {
+            io::Error::last_os_error().raw_os_error()
+        } else {
+            None
+        };
+        diagnostic["readmittedHeldProbe"] = json!({
+            "metadata": describe(next_probe.metadata().unwrap()), "fd": next_probe.as_raw_fd(),
+            "flockResult": next_result, "errno": next_errno,
+        });
+        persist(&diagnostic);
+        assert_eq!(next_result, -1);
+        assert_eq!(next_errno, Some(libc::EWOULDBLOCK));
+        drop(next_probe);
+        drop(next_held);
         drop(next);
+        fs::write(
+            fixture.root.join("stable-lock-completion.json"),
+            br#"{"state":"recognized_refusal_kernel_exclusion_and_locked_readmission","childProcesses":0,"allProbeDescriptorsClosed":true,"allLifetimeDuplicatesClosed":true,"originalCustodyDropped":true,"readmittedCustodyDropped":true}"#,
+        )
+        .unwrap();
+        eprintln!("writer stable-lock completed diagnostic: {diagnostic}");
     }
     #[test]
     fn settled_actual_result_allows_next_generation_without_deleting_history() {
