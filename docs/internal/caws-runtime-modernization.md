@@ -3576,6 +3576,29 @@ Additional bounded evidence and unresolved dependencies:
   runtime retirement, fairness or installation follows. R20 retains three
   original developer scripts; R21 retains all13 pytest modules plus conftest.
 
+- E164: Scope glob disagreement reaches the binding and landing consumers:
+  `shell/binding/resolve-binding.ts` and `store/worktrees-writer.ts` translated
+  stars with a separate regex, while kernel admission uses `matchGlob`.
+  Direct-child globstar, braces/brackets and hidden paths were omitted; a single
+  star incorrectly crossed separators. Root accepts repair ownership after
+  inspecting both implementations, kernel scope and the claimant contract. Both
+  wrappers delegate to the exported kernel matcher, retaining their established
+  argument normalization and support-versus-claim boundaries.
+
+  New tests execute actual worktree/bridge selection, ambiguity, review path
+  verdicts, merge dry-run admission/refusal and alternative-lane hints. On the
+  original built production,17 fail and6 pass for the expected semantic
+  differences. After repair all23 pass; complete three suites plus the
+  transcript bridge pass163 checks, full typechecking and scoped lint exit0.
+  Dry-run tests require unchanged refs, registry and event bytes. External
+  `scope-matcher/baseline-checks.json`, `repaired-checks.json` and adjacent raw
+  channels retain commands, failures, outputs and source hashes. The red run's
+  139 unrelated skipped cases reflect its explicit name filter; the complete run
+  has no skipped cases. These checks establish source consumers, not an updated
+  installed CLI. Existing relative-path normalization differs from raw kernel
+  input validation; universal normalization equivalence is not claimed. No gate
+  floor, installed guard or scope authority is weakened.
+
 - E165: Root accepts the remaining R18 writer obligation from the Unicode peer
   after inspecting actual `render_session` artifacts and current source.
   `session_log_renderer.py:1802-1872` permits a turn/index publication after a

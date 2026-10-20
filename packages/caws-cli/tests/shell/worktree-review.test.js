@@ -285,3 +285,39 @@ describe('WORKTREE-REVIEW-SURFACE-001', () => {
     expect(text).toContain('(no commits to verify)');
   });
 });
+
+describe('scope matcher review provenance', () => {
+  test.each([
+    ['globstar direct child', { in: ['src/**/*.ts'] }, 'src/direct.ts', true],
+    ['brace alternatives', { in: ['docs/{api,agents}/cli.md'] }, 'docs/api/cli.md', true],
+    ['bracket alternatives', { in: ['src/[abc]/x.ts'] }, 'src/a/x.ts', true],
+    ['support globstar', { in: ['src'], support: ['docs/**/*.md'] }, 'docs/direct.md', true],
+    ['single star boundary', { in: ['packages/*'] }, 'packages/a/b.ts', false],
+  ])('%s reports the exact lane path verdict', (_label, scope, file, admitted) => {
+    const root = mkRepo();
+    writeSpec(root, 'WREV-MATCHER-001', { scope });
+    execFileSync('git', ['-C', root, 'checkout', '--quiet', '-b', 'wt-matcher']);
+    addCommit(root, 'matcher semantic witness', { [file]: 'matcher witness\n' });
+    execFileSync('git', ['-C', root, 'checkout', '--quiet', 'main']);
+    writeRegistry(root, {
+      'wt-matcher': { specId: 'WREV-MATCHER-001', branch: 'wt-matcher', baseBranch: 'main' },
+    });
+    const registryBefore = fs.readFileSync(path.join(cawsDir(root), 'worktrees.json'), 'utf8');
+    const eventsBefore = eventCount(root);
+    const result = review(root, 'wt-matcher');
+    const text = result.out.join('\n');
+    expect(result.code).toBe(0);
+    expect(text).toContain('matcher semantic witness');
+    if (admitted) {
+      expect(text).toContain(`in-scope   ${file}`);
+      expect(text).not.toContain('outside spec scope:');
+    } else {
+      expect(text).toContain(`OUT-OF-SCOPE ${file}`);
+      expect(text).toContain(`outside spec scope: ${file}`);
+    }
+    expect(fs.readFileSync(path.join(cawsDir(root), 'worktrees.json'), 'utf8')).toBe(
+      registryBefore
+    );
+    expect(eventCount(root)).toBe(eventsBefore);
+  });
+});

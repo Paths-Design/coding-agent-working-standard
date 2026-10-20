@@ -25,7 +25,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { resolveGitBinary } from '../../store/git-binary';
 
-import { deriveBindingState, type Spec } from '../../kernel';
+import { deriveBindingState, matchGlob, type Spec } from '../../kernel';
 
 import { realpathSafe } from '../../store/repo-root';
 
@@ -131,31 +131,12 @@ function normalizeRel(p: string): string {
 }
 
 /**
- * Anchored glob match supporting `*` (any run of non-separator or separator
- * chars within a segment-agnostic match) and `?` (single char). A bare
- * directory entry (no glob meta) matches the entry itself OR any descendant
- * (prefix match on a path boundary) — mirroring how scope.in directory
- * entries admit files beneath them. No dependency on minimatch.
+ * Apply the kernel's scope.in matcher after this binding surface's existing
+ * relative-path normalization. Glob semantics are shared with admission and
+ * review; plain entries retain exact-or-descendant boundary matching.
  */
 export function scopeEntryMatches(entry: string, target: string): boolean {
-  const e = normalizeRel(entry);
-  const t = normalizeRel(target);
-  if (e === t) return true;
-  if (!/[*?]/.test(e)) {
-    // Directory/prefix entry: admit descendants on a path boundary.
-    return t.startsWith(e + '/');
-  }
-  // Glob entry: translate to an anchored RegExp. `*` → [^/]-agnostic any,
-  // `?` → single char. Escape all other regex meta.
-  const rx = e
-    .split('')
-    .map((ch) => {
-      if (ch === '*') return '.*';
-      if (ch === '?') return '.';
-      return ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    })
-    .join('');
-  return new RegExp(`^${rx}$`).test(t);
+  return matchGlob(normalizeRel(target), [normalizeRel(entry)]) !== null;
 }
 
 /**
