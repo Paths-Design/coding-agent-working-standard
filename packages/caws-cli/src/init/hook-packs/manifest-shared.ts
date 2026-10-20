@@ -603,7 +603,9 @@ import { isAdapterCoveredSurface } from './types';
 // shape, so the shared pack template tree changed again after v96.
 // v98: retain per-invocation handler progress before subsequent handlers run.
 // Cooperative renderer entrypoints include the native writer-custody bridge.
-export const SHARED_PACK_VERSION = 100;
+// v101: agent-stop routes the CLI's operational receipt to diagnostics while
+// preserving its lease mutation. Lifecycle text must not displace advice.
+export const SHARED_PACK_VERSION = 101;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

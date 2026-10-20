@@ -2,7 +2,7 @@
   "profile": "codex-stop-session-prefix-v1",
   "sources": {
     "advisory_truncate.cjs": "73e7e8914d4ee62d82adf89c359ed34c87a1150be41afda9ab4438e2985a53d6",
-    "agent-stop.sh": "968266333b33095e444969041e7cf61e38bc2b8121be0d0f36319962b1bcdfdf",
+    "agent-stop.sh": "c94358159f8fd77585bcb8c3679cd81c8d3d5dba0ff0970c50bf91a0f5f5eaa5",
     "dispatch.sh": "5f8a185f8b63e601aa29af3431d0ddafedb9a44f45d6a2d9279d32410fc2150f",
     "goal-ac-gate.sh": "ef16f932c95c0d8e32a070ddd5b3309705d720f0d1e6ff96c51781671f100402",
     "handler-env.sh": "901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7",
