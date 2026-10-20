@@ -1,0 +1,43 @@
+id: CAWS-NATIVE-QWEN-ADAPTER-001
+title: 'Historical Qwen transcript row adapter'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-20T23:49:29.988Z'
+updated_at: '2026-10-20T23:49:29.988Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Qwen transcript matcher normalization and occurrence provenance'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/harness-qwen.ts'
+    - 'packages/caws-cli/tests/transcripts/qwen.test.ts'
+  out: []
+invariants:
+  - 'Raw occurrence custody and numeric JsonValue values remain intact; matching and source labels confer no execution or authority.'
+  - 'Preserve nonempty parts admission even when normalization emits no events; registry order and production cache writer package adoption stay parent-owned.'
+acceptance:
+  - id: A1
+    given: 'historical Qwen rows and hostile malformed shapes'
+    when: 'the typed matcher and adapter run'
+    then: 'matching empty-emission ownership errors ordered user assistant and result events tool mappings IDs and numeric values match the independently inspected Python3.11.13 profile'
+  - id: A2
+    given: 'Unicode14 whitespace and decimal filters plus raw complete or partial occurrences'
+    when: 'Qwen normalization executes on Node18 and22 without Python'
+    then: 'context injection distinctions original text source bytes member paths and immutable envelopes remain explicit with no committed tentative input'
+  - id: A3
+    given: 'committed component and retained independent reference fixtures'
+    when: 'focused compilation semantic tests targeted fault controls and policy gates execute'
+    then: 'source identity and concrete runtime artifacts support the bounded adapter contract while registry renderer cache writer native installation and cutover remain explicitly unverified'
+observability:
+  - 'External raw fixtures projections errors profile identities source hashes commands exit status and occurrence envelopes are retained.'
+rollback:
+  - 'Revert the component source commit; no production consumer or installed runtime is modified.'
+non_functional:
+  security:
+    - 'Never evaluate transcript content execute tools or derive filesystem authority from adapter matching.'
+contracts:
+  - name: 'historical-qwen-transcript'
+    type: behavior
