@@ -3539,6 +3539,17 @@ Additional bounded evidence and unresolved dependencies:
   and retained cleanup receipts establish this sampled interruption, not an
   exhaustive race proof. No parent AC is recorded from this scenario alone.
 
+  Independent read-only inspection raises a future-oracle counterexample:
+  accepting any Unknown writer record could borrow an unrelated record. The
+  qualifier requires one original Running intent, unchanged operation membership
+  and identical body/verified request bytes except the recovered Unknown
+  outcome. Six hostile controls reject missing, extra, unrecovered,
+  foreign-identity and changed-request records. The strengthened predicate also
+  exits0 on this run's retained before/final snapshots; it does not rerun native
+  execution. Strict compilation, lint and all oracle controls exit0. Exact
+  commands/output and source hash are in external
+  `frontend-loss-draft/writer-identity-checks.json`.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under

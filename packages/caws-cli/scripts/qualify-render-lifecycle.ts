@@ -19,7 +19,8 @@ import {
   type Started,
 } from './render-qualification-harness';
 
-const oracleSelfTest = process.argv[2] === '--oracle-self-test';
+const writerRecoverySelfTest = process.argv[2] === '--writer-recovery-self-test';
+const oracleSelfTest = process.argv[2] === '--oracle-self-test' || writerRecoverySelfTest;
 assert(
   oracleSelfTest || (process.argv[2] && process.argv[3]),
   'CLI and Sterling source roots required'
@@ -564,6 +565,72 @@ function writerOperations(fixture: ProjectFixture): Data[] {
     .filter((name) => /(?:^|\/)\w{64}\.json$/.test(name))
     .map((name) => readJson(path.join(base, name)));
 }
+
+/** This fresh fixture has one writer intent; an unrelated Unknown cannot prove its recovery. */
+function assertWriterRecovery(before: Data[], after: Data[]): void {
+  assert.equal(before.length, 1, 'expected one original writer intent');
+  assert.equal(after.length, 1, 'writer recovery changed operation membership');
+  assert.equal(outcome(before[0]!), 'running', 'original writer intent was not Running');
+  assert.equal(
+    outcome(after[0]!),
+    'unknown',
+    'original writer intent was not recovered to Unknown'
+  );
+  const original = row(before[0]!.body);
+  assert.deepEqual(
+    { ...row(after[0]!.body), outcome: original.outcome },
+    original,
+    'writer recovery changed original identity or verified request bytes'
+  );
+}
+
+function testWriterRecoveryOracle(retainedRoot?: string): void {
+  const original: Data = {
+    body: {
+      identity: { requestId: 'original' },
+      verifiedRequestBase64: 'YQ==',
+      verifiedRequestSha256: digest(Buffer.from('a')),
+      outcome: { execution: 'running' },
+    },
+  };
+  const recovered: Data = { body: { ...row(original.body), outcome: { execution: 'unknown' } } };
+  assertWriterRecovery([original], [recovered]);
+  const hostile = [
+    () => assertWriterRecovery([], [recovered]),
+    () => assertWriterRecovery([original], []),
+    () => assertWriterRecovery([original], [recovered, recovered]),
+    () => assertWriterRecovery([original], [original]),
+    () =>
+      assertWriterRecovery(
+        [original],
+        [{ body: { ...row(recovered.body), identity: { requestId: 'foreign' } } }]
+      ),
+    () =>
+      assertWriterRecovery(
+        [original],
+        [{ body: { ...row(recovered.body), verifiedRequestBase64: 'Yg==' } }]
+      ),
+  ];
+  hostile.forEach((control) => assert.throws(control));
+  if (retainedRoot) {
+    const before = JSON.parse(
+      fs.readFileSync(path.join(retainedRoot, 'writer-operations-before-recovery.json'), 'utf8')
+    ) as Data[];
+    const after = JSON.parse(
+      fs.readFileSync(path.join(retainedRoot, 'writer-operations-final.json'), 'utf8')
+    ) as Data[];
+    assertWriterRecovery(before, after);
+  }
+  process.stdout.write(
+    JSON.stringify({
+      state: 'passed',
+      validControls: 1,
+      rejectedHostileControls: hostile.length,
+      retainedRoot: retainedRoot ?? null,
+      runtimeExecuted: false,
+    }) + '\n'
+  );
+}
 async function scenario(label: string, run: (h: RenderHarness) => Promise<Data>): Promise<void> {
   const h = await createRenderHarness({
     cli,
@@ -987,7 +1054,8 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
       10000,
       'fresh refused request native custody/absence'
     );
-    h.writeJson('writer-operations-before-recovery.json', writerOperations(fixture));
+    const writerBeforeRecovery = writerOperations(fixture);
+    h.writeJson('writer-operations-before-recovery.json', writerBeforeRecovery);
     const hostReceipt = await bounded(
       host.done,
       15000,
@@ -999,10 +1067,7 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
     const legacy = legacyBlocked(h, fixture);
     const writerFinal = writerOperations(fixture);
     h.writeJson('writer-operations-final.json', writerFinal);
-    assert(
-      writerFinal.some((value) => outcome(value) === 'unknown'),
-      'cooperative writer recovery lacks its durable unknown fence'
-    );
+    assertWriterRecovery(writerBeforeRecovery, writerFinal);
     return {
       requestId,
       dispatch,
@@ -1450,10 +1515,15 @@ async function normal(h: RenderHarness): Promise<Data> {
 }
 
 async function main(): Promise<void> {
+  if (writerRecoverySelfTest) {
+    testWriterRecoveryOracle(process.argv[3]);
+    return;
+  }
   if (oracleSelfTest) {
     testDenialOracles();
     testRenderedTurnOracle();
     testInterruptionPhaseOracle();
+    testWriterRecoveryOracle();
     return;
   }
   // The additional hard-loss qualification is explicit; existing `all` keeps its prior modes.
