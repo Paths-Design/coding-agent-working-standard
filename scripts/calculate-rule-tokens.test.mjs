@@ -99,6 +99,29 @@ test('executable entry point runs with only Node available on PATH', t => {
   assert.equal(result.stderr, '');
 });
 
+test('symlinked executable counts and updates instead of silently succeeding', t => {
+  const dir = fixture(t);
+  const link = join(dir, 'count.mjs');
+  symlinkSync(cli, link);
+  writeFileSync(join(dir, 'a.mdc'), '---\ntitle: test\n---\nhello world');
+  const result = spawnSync(link, ['--rules-dir', dir, '--update'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  assert.match(result.stdout, /a\.mdc\s+2 tokens/);
+  assert.match(result.stdout, /Updated 1 rule file\(s\)/);
+  assert.equal(readFileSync(join(dir, 'a.mdc'), 'utf8'), '---\ntitle: test\nruleTokenCount: 2\n---\nhello world');
+});
+
+test('import with a nonexistent unrelated argv path does not execute the CLI or throw', t => {
+  const dir = fixture(t);
+  const moduleUrl = new URL('./calculate-rule-tokens.mjs', import.meta.url).href;
+  const source = `await import(${JSON.stringify(moduleUrl)}); console.log('imported');`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', source, '--', join(dir, 'not-an-entry')], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, 'imported\n');
+  assert.equal(result.stderr, '');
+});
+
 test('nonrecursive glob includes hidden rules, sorts by Unicode code points and uses character widths', t => {
   const dir = fixture(t);
   mkdirSync(join(dir, 'nested'));

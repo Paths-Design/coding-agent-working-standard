@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Count Cursor rule tokens with the bundled, pinned GPT-4 cl100k_base encoding.
 // Usage: node scripts/calculate-rule-tokens.mjs [--update] [--rule FILE]
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { isAbsolute, basename, sep, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { Tiktoken } from 'tiktoken/lite';
 
 const require = createRequire(import.meta.url);
@@ -199,7 +199,18 @@ export function main(argv, print = console.log) {
   return 0;
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+function isEntrypoint() {
+  if (!process.argv[1]) return false;
+  const invoked = resolve(process.argv[1]);
+  const current = fileURLToPath(import.meta.url);
+  if (invoked === current) return true;
+  // Node resolves an ESM entry's symlink by default, while argv retains it.
+  // Importing from `node -e ... unrelated-argument` must remain harmless.
+  try { return realpathSync(invoked) === realpathSync(current); }
+  catch { return false; }
+}
+
+if (isEntrypoint()) {
   try { process.exitCode = main(process.argv.slice(2)); }
   catch (error) { console.error(error); process.exitCode = 1; }
 }
