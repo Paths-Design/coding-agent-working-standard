@@ -69,3 +69,10 @@ evidence:
     command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/node18/bin/node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/node-only-control.mjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/compiled/src/transcripts"
     exit_code: 0
     commit_sha: cdd74dcd7d2c3d4cd3784e18460244ac190a7145
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Standalone strict Node18/22 and Node-only controls all exit0; empty PATH with zero intercepted process launches. All12 committed source files rehashed against Git objects. Existing build config/consumers unchanged; native admission/cutover unverified. Evidence root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation; artifact-index.json; candidate-identity.json; raw commands/070-corrective-committed-strict22. --verify checks commit reachability only; recorded command is not executed by CAWS."
+    recorded_at: "2026-10-20T18:18:15.143Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/typescript/bin/tsc -p packages/caws-cli/tests/transcripts/tsconfig.json --outDir /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/compiled"
+    exit_code: 0
+    commit_sha: cdd74dcd7d2c3d4cd3784e18460244ac190a7145
