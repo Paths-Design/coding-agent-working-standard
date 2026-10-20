@@ -33,6 +33,7 @@ scope:
 invariants:
   - 'The authoritative UTF8 algorithm is src/runtime/utf8.ts; the shipped CJS is a deterministic declared generated projection.'
   - 'Helper failure or invalid output omits an advisory and never alters hard refusal precedence or bounded composition.'
+  - 'The old callable Python helper remains a compatibility asset until admitted custom consumers are inventoried and qualified; the switched stock path has no Python fallback.'
 acceptance:
   - id: A1
     given: 'authoritative typed sources and tracked generated runtime helper'
