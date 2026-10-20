@@ -881,6 +881,88 @@ _wait_for_sentinel_stamp() {
 _write_env() { jq -nc --arg s "$1" --arg f "$2" '{tool_name:"Write",tool_input:{file_path:$f},session_id:$s}'; }
 _edit_env() { jq -nc --arg s "$1" --arg f "$2" '{tool_name:"Edit",tool_input:{file_path:$f,old_string:"a",new_string:"b"},session_id:$s}'; }
 
+# The raw payload identifies the tool even when dispatch exports a normalized
+# name. Every probe disables signaling and excludes live process names.
+_run_file_tool_admission() {
+  run env CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
+    CAWS_TRAP_KILL=0 CAWS_AGENT_PROCESS_NAMES="caws-private-no-process-match" \
+    HOOK_TOOL_NAME="${2:-}" HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c 'cd "$1" && printf "%s" "$2" | bash "$3/block-dangerous.sh"' \
+    file-tool-admission "$CAWS_TEST_REPO" "$1" "$CAWS_TEST_HOOKS_DIR"
+}
+
+_patch_env() {
+  jq -nc --arg s "$1" --arg kind "$2" \
+    '{tool_name:"apply_patch",tool_input:{command:("*** Begin Patch\n*** " + $kind + " File: src/probe.txt\n" + (if $kind == "Add" then "+probe\n" elif $kind == "Update" then "@@\n-before\n+after\n" else "" end) + "*** End Patch")},session_id:$s}'
+}
+
+@test "file-tool admission: armed trap denies Add Delete Update apply_patch payloads" {
+  local sid="trap-patch-$$" sentinel kind normalized
+  sentinel="$(_sentinel_for "$sid")"
+  _run_file_tool_admission "$(_cmd_envelope_sid "$sid" 'sudo rm -rf /private/tmp/trap-arm-probe')"
+  assert_output --partial '"decision": "block"'
+  local strikes=0
+  for kind in Add Delete Update; do
+    normalized=Edit
+    [[ "$kind" != Add ]] || normalized=Write
+    _run_file_tool_admission "$(_patch_env "$sid" "$kind")" "$normalized"
+    assert_success
+    assert_output --partial '"decision": "block"'
+    assert_output --partial 'file mutations are refused'
+    assert_output --partial 'attempt to apply_patch'
+    strikes=$((strikes + 1))
+    [ "$(jq -r '.trap_strikes' "$sentinel")" = "$strikes" ]
+  done
+}
+
+@test "file-tool admission: all existing file-tool names deny with forged Read metadata" {
+  local sid="trap-file-names-$$" sentinel tool envelope
+  sentinel="$(_sentinel_for "$sid")"
+  _run_file_tool_admission "$(_cmd_envelope_sid "$sid" 'sudo rm -rf /private/tmp/trap-arm-probe')"
+  assert_output --partial '"decision": "block"'
+  local strikes=0
+  for tool in Write Edit NotebookEdit MultiEdit apply_patch; do
+    envelope="$(jq -nc --arg s "$sid" --arg t "$tool" '{tool_name:$t,tool_input:{file_path:"src/probe.txt"},session_id:$s}')"
+    [[ "$tool" != apply_patch ]] || envelope="$(_patch_env "$sid" Update)"
+    _run_file_tool_admission "$envelope" Read
+    assert_success
+    assert_output --partial '"decision": "block"'
+    assert_output --partial "attempt to $tool"
+    strikes=$((strikes + 1))
+    [ "$(jq -r '.trap_strikes' "$sentinel")" = "$strikes" ]
+  done
+}
+
+@test "file-tool admission: unlatched file tools pass without arming a latch" {
+  local sid="trap-file-unlatched-$$" tool envelope
+  for tool in Write Edit NotebookEdit MultiEdit apply_patch; do
+    envelope="$(jq -nc --arg s "$sid" --arg t "$tool" '{tool_name:$t,tool_input:{file_path:"src/probe.txt"},session_id:$s}')"
+    [[ "$tool" != apply_patch ]] || envelope="$(_patch_env "$sid" Add)"
+    _run_file_tool_admission "$envelope" Read
+    assert_success
+    assert_output ''
+    refute _latch_exists_for "$sid"
+  done
+}
+
+@test "file-tool admission: read and Bash read-only reset exceptions preserve armed latch" {
+  local sid="trap-file-exceptions-$$" sentinel envelope command
+  sentinel="$(_sentinel_for "$sid")"
+  _run_file_tool_admission "$(_cmd_envelope_sid "$sid" 'sudo rm -rf /private/tmp/trap-arm-probe')"
+  assert_output --partial '"decision": "block"'
+  envelope="$(jq -nc --arg s "$sid" '{tool_name:"Read",tool_input:{file_path:"src/probe.txt"},session_id:$s}')"
+  _run_file_tool_admission "$envelope" Write
+  assert_success
+  assert_output ''
+  for command in 'git status' 'bash .caws/hooks/reset-danger-latch.sh --session fixture --reason human'; do
+    _run_file_tool_admission "$(_cmd_envelope_sid "$sid" "$command")" Read
+    assert_success
+    assert_output ''
+  done
+  [ -f "$sentinel" ]
+  [ "$(jq -r '.trap_strikes // 0' "$sentinel")" = 0 ]
+}
+
 @test "trap: file tools are denied while quarantined, striking each attempt (WRITE-EDIT A1)" {
   local sid="trap-we-a1-$$"
   local sentinel; sentinel="$(_sentinel_for "$sid")"

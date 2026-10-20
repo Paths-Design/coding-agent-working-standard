@@ -158,7 +158,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R17 | `shared/lib/harness_dsh.py` | TS DSH adapter | unreplaced | Surface-specific transcript and native registration fixtures |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering | TS renderer + recoverable worker | unreplaced | Complete semantic transcript fixtures, cache freshness and installed rendering |
 | R19 | Python embedded in shell helpers/dispatchers | TS modules or bounded native operations | inventoried; unreplaced | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions |
-| R20 | Python developer/harvest/qualification scripts | Typed TS tooling | separate rule-token component under review; parent integration and other leaves unreplaced | Nine tracked paths listed below. The rule-token lane retains bounded Python3.11/Unicode14 and Node18/22 differential artifacts, including failed Unicode and executable-symlink candidates. Those observations do not establish every prior interpreter profile or whole R20 retirement, E134 |
+| R20 | Python developer/harvest/qualification scripts | Typed TS tooling | one rule-token leaf accepted and landed on main; parent integration and eight other paths unreplaced | E134 retains bounded Python3.11/Unicode14 and Node18/22 differential artifacts, including failed Unicode and executable-symlink candidates. Parent bytes retain the original implementation until integration. The separately bound hook-harvest component owns its six paths; its source preparation is not qualification or parent acceptance |
 | R21 | Python-owned regression tests | TS/native behavioral tests | unreplaced | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes |
 | R22 | Tracked installed `.caws/hooks` Python copies | Governed self-host/runtime adoption | unreplaced | Fourteen copies identified; do not edit generated/governed installation by hand |
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
@@ -2633,19 +2633,54 @@ Additional bounded evidence and unresolved dependencies:
   bypass demonstration. Compilation and the model's risk flag establish neither
   safety nor a safety defect by themselves.
 
-- E134: The separately owned `native-rule-tokens` lane retains one R20 utility
+- E134: The separately owned `native-rule-tokens` component retains one R20 utility
   candidate and its Python reference at
   `~/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/`.
   Parent reads the two37-case Node18/22 summaries and the15690-vector comparison;
   these qualify their finite Python3.11/Unicode14 reference, not every unpinned
   prior interpreter. The original Unicode-field mismatch and executable-symlink
   no-op remain retained failures. Parent inspects the corrected symlink and
-  Darwin offline/no-interpreter observation records and the current source;
-  component review, exact committed candidate, authoritative component evidence
-  and parent integration remain separate. This is coordination and bounded
-  component progress, not parent A4 acceptance, installed behavior or retirement
-  of the other eight inventoried script paths. Preserve the two declared
-  zero-total/update-count repairs and explicit interpreter-profile limits.
+  Darwin offline/no-interpreter observation records and exact committed bytes.
+  Qualified candidate `58a65d5defac4d53410b60502f26ff114d031cb8` lands through
+  merge `7ad9e509d1c0640ba667697e48d60c8e1e705f34` and closure
+  `801f817cd7dfad0a674772db9f0b57258610250b`. Parent reads the closed component's
+  A1/A2/A3 evidence and matching `ac_recorded` events 9400–9402, checks candidate
+  ancestry and all five surviving files against main, and observes old Python
+  absent on main but present in this parent lane. Exact readback is
+  `prefix-cohort-2026-10-20/r20-main-landing-readback.json` under the native
+  qualification root. Source landing and component acceptance do not establish
+  parent integration, A4, installed behavior or retirement of the other eight
+  inventoried paths. Preserve the two declared zero-total/update-count repairs
+  and explicit interpreter-profile limits. The independent
+  `CAWS-NATIVE-HOOK-HARVEST-001` lane owns only its original pair, replacement
+  pair, strict checkJs config and maintained audit reproduction; parent does not
+  edit those six paths. Its original four Python checks pass, while replacement
+  qualification and committed-candidate review remain separate obligations.
+
+- E135: The actual Codex parser normalizes raw `apply_patch` to Write/Edit while
+  forwarding the original payload to the selected guard. On the unchanged guard,
+  a private armed latch allows the raw alias silently with zero strikes. The
+  repaired guard recognizes the alias from the payload; actual Add/Delete/Update
+  replays emit `decision: block` and each fresh latch changes strikes 0→1.
+  Inputs, stdout/stderr, before/after latch bytes and command metadata reside at
+  `target/qualification/file-tool-admission-78f37cc9a4d54a5484af375613cbc23e/`
+  beneath `packages/caws-native/`; the incomplete initial fixture remains at
+  `file-tool-admission-385022ffd5134c11869f1a4ec5f557cb/`. All probes explicitly
+  disable signals and exclude live process names. Four new Bats controls cover
+  patch variants, forged Read metadata, unlatched silence and read/reset-command
+  admission; four existing preservation checks pass. Reset admission does not
+  execute the reset. The reviewed guard hash is
+  `636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5`;
+  typed stock admission pins those bytes. Shared pack102 and its deliberately
+  recomputed fingerprint carry the template repair. The stale fingerprint control
+  exits1 before the baseline update; CLI build and 39 stock plus14 fingerprint
+  checks exit0. Raw commands/exits and 39 retained stock fixtures reside under
+  `prefix-cohort-2026-10-20/file-tool-integration-*.json` and
+  `file-tool-stock-fixtures/`; an earlier green run omitted fixture retention and
+  remains separately recorded as unretained. These observations establish
+  protective file-tool admission in copied fixtures, not original-caller
+  termination, missing-session identity, complete group cleanup, installed
+  harness execution or full R32 parity. R32 remains blocking.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint

@@ -605,7 +605,8 @@ import { isAdapterCoveredSurface } from './types';
 // Cooperative renderer entrypoints include the native writer-custody bridge.
 // v101: agent-stop routes the CLI's operational receipt to diagnostics while
 // preserving its lease mutation. Lifecycle text must not displace advice.
-export const SHARED_PACK_VERSION = 101;
+// v102: raw Codex apply_patch requests enter armed file-tool quarantine checks.
+export const SHARED_PACK_VERSION = 102;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
