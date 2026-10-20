@@ -19,6 +19,13 @@ import {
   type ProcessRow,
   type RequestCoverage,
 } from './render-request-topology';
+import {
+  RequestCustodyCollector,
+  combinedRequestCleanup,
+  decodeInvocationIdentity,
+  MAX_TYPED_JOURNAL,
+  type CustodyExpectation,
+} from './render-request-custody';
 
 type Data = Record<string, unknown>;
 type CommandReceipt = {
@@ -71,6 +78,13 @@ const requests: Data[] = [];
 const processes = new Map<number, Instance>();
 const requestProcesses = new Map<number, Instance>();
 const requestCoverage = new Map<string, RequestCoverage>();
+const requestCustodies = new Map<
+  string,
+  {
+    collector: RequestCustodyCollector;
+    expected: CustodyExpectation | null;
+  }
+>();
 const backendPids = new Set<number>();
 const manifest: Data = {
   schema: 'caws.qualification.render-owner.v1',
@@ -512,10 +526,22 @@ async function invoke(
   input: string
 ): Promise<CommandReceipt> {
   const directory = nextCommand('native-stop', native, args, project);
+  // Retained through service idle: persistent children may inherit this path.
+  const temporary = path.join(directory, 'tmp');
+  fs.mkdirSync(temporary, { mode: 0o700 });
+  requestCustodies.set(directory, {
+    collector: new RequestCustodyCollector(temporary, path.join(directory, 'native-custody')),
+    expected: null,
+  });
+  json(path.join(directory, 'request-temporary.json'), { path: temporary, retained: true });
   put(path.join(directory, 'stdin.bin'), input);
   const out = fs.openSync(path.join(directory, 'stdout.bin'), 'wx', 0o600),
     err = fs.openSync(path.join(directory, 'stderr.bin'), 'wx', 0o600);
-  const child = spawn(native, args, { cwd: project, env, stdio: ['pipe', out, err] });
+  const child = spawn(native, args, {
+    cwd: project,
+    env: { ...env, TMPDIR: temporary },
+    stdio: ['pipe', out, err],
+  });
   fs.closeSync(out);
   fs.closeSync(err);
   const originalFrontend = child.pid ? observe(child.pid) : { state: 'unavailable' };
@@ -630,6 +656,12 @@ async function awaitCleanup(): Promise<Data> {
       directory,
       ...requestCleanupObservation(coverage, processRows(), observe),
     }));
+    const nativeCustody = [...requestCustodies].map(([directory, entry]) => ({
+      directory,
+      observation: entry.expected
+        ? entry.collector.collect(entry.expected)
+        : { state: 'unknown', error: 'typed invocation identity unavailable' },
+    }));
     result = {
       state:
         !unknown &&
@@ -637,11 +669,13 @@ async function awaitCleanup(): Promise<Data> {
         workers.length === 0 &&
         !fs.existsSync(nativeSocket) &&
         lockFree &&
-        requestCleanups.every((request) => request.state === 'confirmed_inactive')
+        requestCleanups.every((request) => request.state === 'confirmed_inactive') &&
+        nativeCustody.every((entry) => entry.observation.state === 'confirmed_settled')
           ? 'confirmed_inactive'
           : 'unknown',
       observations,
       requestCleanups,
+      nativeCustody,
       active,
       workers,
       custodyObservation,
@@ -1195,6 +1229,69 @@ async function main(): Promise<void> {
     requests.push(requestResult);
     persist();
     success(status);
+    const invocationFiles = list(path.join(session, 'hook-invocations')).filter(
+      (name) => !before.has(name)
+    );
+    assert.equal(
+      invocationFiles.length,
+      1,
+      'one native request must produce one invocation journal'
+    );
+    const journalFile = path.join(session, 'hook-invocations', invocationFiles[0]!);
+    const journalFd = fs.openSync(
+      journalFile,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+    );
+    let journalBytes: Buffer;
+    try {
+      const stat = fs.fstatSync(journalFd);
+      assert(
+        stat.isFile() &&
+          stat.uid === process.getuid?.() &&
+          stat.nlink === 1 &&
+          stat.size > 0 &&
+          stat.size <= MAX_TYPED_JOURNAL,
+        'unsafe/oversized typed invocation journal'
+      );
+      journalBytes = Buffer.alloc(stat.size);
+      let offset = 0;
+      while (offset < journalBytes.length) {
+        const count = fs.readSync(
+          journalFd,
+          journalBytes,
+          offset,
+          journalBytes.length - offset,
+          null
+        );
+        assert(count > 0, 'typed invocation journal truncated during read');
+        offset += count;
+      }
+      const afterStat = fs.fstatSync(journalFd);
+      assert.equal(afterStat.size, stat.size, 'typed invocation journal changed during read');
+      json(path.join(directory, 'invocation-journal-source.json'), {
+        path: journalFile,
+        device: stat.dev,
+        inode: stat.ino,
+        bytes: journalBytes.length,
+        sha256: digest(journalBytes),
+      });
+    } finally {
+      fs.closeSync(journalFd);
+    }
+    put(path.join(directory, 'invocation-journal.jsonl'), journalBytes);
+    const identity = decodeInvocationIdentity(journalBytes, installed.digest, digest(input));
+    const journal = journalBytes
+      .toString('utf8')
+      .trim()
+      .split('\n')
+      .map((line) => row(JSON.parse(line)));
+    const custody = requestCustodies.get(status.directory);
+    const coverage = requestCoverage.get(status.directory);
+    assert(custody && coverage, 'current request custody/coverage record missing');
+    custody.expected = { ...identity, coverage, node: process.execPath, engine };
+    const nativeCustody = custody.collector.collect(custody.expected);
+    requestResult.nativeCustody = nativeCustody;
+    json(path.join(directory, 'native-custody.json'), requestResult.nativeCustody);
     const until = Date.now() + 1000;
     let backend = backendLease();
     while ((!backend || backend.lease.served !== ordinal) && Date.now() < until) {
@@ -1261,8 +1358,6 @@ async function main(): Promise<void> {
     );
     requestResult.ownerObservations = ownerEvents;
     const processInventory = processRows();
-    const coverage = requestCoverage.get(status.directory);
-    assert(coverage, 'current native request coverage record missing');
     const requestCleanup = requestCleanupObservation(coverage, processInventory, observe);
     requestResult.requestCleanup = requestCleanup;
     json(path.join(directory, 'request-cleanup.json'), requestCleanup);
@@ -1274,25 +1369,16 @@ async function main(): Promise<void> {
       'confirmed_inactive',
       'current native request cleanup unconfirmed'
     );
+    assert.equal(
+      combinedRequestCleanup(requestCleanup, nativeCustody),
+      'confirmed_inactive',
+      'current native request receipt/absence correlation unconfirmed'
+    );
     json(path.join(directory, 'daemon-live.json'), requestResult.daemon);
     captureWorkers();
     const leaseAfter = read(leaseFile);
     assert.equal(leaseAfter.status, 'stopped', 'stock agent-stop failed to stop the actual lease');
     json(path.join(directory, 'lease-after.json'), leaseAfter);
-    const invocationFiles = list(path.join(session, 'hook-invocations')).filter(
-      (name) => !before.has(name)
-    );
-    assert.equal(
-      invocationFiles.length,
-      1,
-      'one native request must produce one invocation journal'
-    );
-    const journalFile = path.join(session, 'hook-invocations', invocationFiles[0]!);
-    const journal = fs
-      .readFileSync(journalFile, 'utf8')
-      .trim()
-      .split('\n')
-      .map((line) => row(JSON.parse(line)));
     const completed = journal.find((item) => item.stage === 'compatibility_dispatch_completed');
     assert(
       completed && typeof completed.execution_records_base64 === 'string',

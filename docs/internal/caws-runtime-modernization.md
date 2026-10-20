@@ -3253,6 +3253,43 @@ Additional bounded evidence and unresolved dependencies:
   complete parity, production latch, renderer, fairness or speed result follows
   from these checks; parent A1–A8 acceptance remains open.
 
+- E155: The renderer qualifier joins its current birth-confirmed frontend,
+  custodian and Node chain with native configuration and custody receipts. Each
+  invocation receives a dedicated retained private TMPDIR. Its independent typed
+  journal binds invocation ID, runtime digest and exact input digest; matching
+  configuration binds selected Node/engine paths. Native receipt PIDs, monotonic
+  journal state, actual reap, both EOFs and strict SDK terminal settlement must
+  agree. Request-local process/group absence remains a separate required
+  observation. Discovery names and mtimes confer no ownership, and no PID
+  discovered by the qualifier gains signal authority.
+
+  Strict compilation and56 focused parser/file cases exit0. Controls reject a
+  prior invocation, mismatched identity/selection/PIDs, missing chain, partial
+  or rewritten journals, regressing counters/EOF, post-terminal records, missing
+  reap and incomplete/live SDK settlement. Actual private-file controls inspect
+  snapshot bytes/hash/inode and reject links, wrong modes, replacement inodes
+  and oversized files. Leading UTF-8 BOM refusal is aligned with native JSON
+  decoding; the preceding55-case pass is retained separately. Raw commands,
+  source hashes, compiler output and final `helper-tests-bom.stdout` live under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/request-custody/`.
+
+  Reusing the runtime JSON parser changes TypeScript's emitted directory root.
+  The render-build command declares that root and its four consumers select
+  `qualification-tools/scripts/qualify-render-*.js`; compilation and actual
+  emitted entrypoint identities are checked. The CLI and native debug build
+  exit0. Native SHA256
+  `0bf590321e05f26d339e756ab711bbeb13f8f10b25766c09370f62cca3b7fd0f` differs
+  from E153's build artifact. Its ordinary protocol control exits0: original
+  Child1442 exits7, both EOFs are true, all73 input bytes are written, and
+  exact16-byte Unicode/NUL stdout is retained. Preparation commands, executable
+  hashes and raw scenario files live under the external
+  `selected-renderer-preparation/` directory adjacent to `request-custody/`. A
+  combined sibling-read/external-receipt-write command is refused before
+  execution; no Sterling file changes. The earlier read-only comparison matches
+  all28 reviewed source pins. These controls qualify observation mechanics and
+  preparation, not an actual selected-renderer run, installation, complete
+  runtime parity, production containment or resident fairness.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3382,16 +3419,16 @@ actual reap, both EOFs and correlated receipts. E149 exercises the corrected
 ordinary fixture with independently observed frontend/custodian/Node topology.
 E152 repairs request-local renderer coverage with pure counterexamples. E153
 exercises the corrected terminal fixture and bounded pipe collector on the same
-native executable. Finish committed-candidate review, correlate selected
-source-chain observations with native custody receipts, then exercise the actual
-typed engine and renderer on the same candidate. A previous request's group
-cannot qualify a later request with missing chain evidence. Qualify closed-pipe
-nonleaders and frontend loss after Ready and dispatch in separately retained
-scenarios. Keep original caller capture and native effects in the frontend;
-preserve Node FD3/4/5 and exclude every liveness/control descriptor from Node.
-Normal request stdin EOF is not frontend death. Unknown cleanup must retain
-custody and stop the scenario chain. This private per-invocation boundary does
-not require a public pre-Ready spawn service and does not earn warm residency.
+native executable. E155 adds custody-receipt correlation and focused hostile
+controls. Review that committed candidate and exercise the actual typed engine
+and renderer on the same candidate. A previous request's group cannot qualify a
+later request with missing chain evidence. Qualify closed-pipe nonleaders and
+frontend loss after Ready and dispatch in separately retained scenarios. Keep
+original caller capture and native effects in the frontend; preserve Node
+FD3/4/5 and exclude every liveness/control descriptor from Node. Normal request
+stdin EOF is not frontend death. Unknown cleanup must retain custody and stop
+the scenario chain. This private per-invocation boundary does not require a
+public pre-Ready spawn service and does not earn warm residency.
 Missing-SID/cache branches additionally need a fresh logical-session binding or
 protective refusal without foreign strikes; process identity alone does not
 establish exclusive session ownership. The held E133 probe cannot supply that
