@@ -671,48 +671,259 @@ mod tests {
     }
     #[test]
     fn actual_lock_refuses_peer_then_readmits_without_reset_and_isolates_projects() {
-        let fixture = Fixture::new();
+        // Opt-in retention survives assertion unwind; capabilities and probe
+        // descriptors keep ordinary RAII on both the retained and default path.
+        struct EvidenceFixture {
+            fixture: std::mem::ManuallyDrop<Fixture>,
+            retain: bool,
+        }
+        impl std::ops::Deref for EvidenceFixture {
+            type Target = Fixture;
+            fn deref(&self) -> &Fixture {
+                &self.fixture
+            }
+        }
+        impl Drop for EvidenceFixture {
+            fn drop(&mut self) {
+                if !self.retain {
+                    unsafe { std::mem::ManuallyDrop::drop(&mut self.fixture) };
+                }
+            }
+        }
+        fn identity(file: &File) -> (u64, u64) {
+            let metadata = file.metadata().unwrap();
+            (metadata.dev(), metadata.ino())
+        }
+        fn same_identity(file: &File, expected: (u64, u64)) -> Result<(), (u64, u64)> {
+            let actual = identity(file);
+            if actual == expected {
+                Ok(())
+            } else {
+                Err(actual)
+            }
+        }
+        fn describe(metadata: &fs::Metadata) -> serde_json::Value {
+            json!({
+                "device": metadata.dev(), "inode": metadata.ino(),
+                "mode": metadata.mode(), "uid": metadata.uid(),
+                "links": metadata.nlink(), "bytes": metadata.len(),
+            })
+        }
+        fn entries(directory: &Path) -> Vec<String> {
+            let mut names: Vec<_> = fs::read_dir(directory)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+                .collect();
+            names.sort();
+            names
+        }
+        fn snapshot(fixture: &Fixture, alternate_home: &Path) -> serde_json::Value {
+            let anchor = fixture.project.join(".caws/.render-writer-custody");
+            let service = anchor
+                .join("operations/services")
+                .join(project_key(&fixture.project).unwrap());
+            let mut stable = serde_json::Map::new();
+            for (name, path) in [
+                ("custody", anchor.clone()),
+                ("operations", anchor.join("operations")),
+                ("services", anchor.join("operations/services")),
+                ("journalDirectory", service.clone()),
+                (
+                    "marker",
+                    fixture.project.join(".caws/.render-writer-provisioned"),
+                ),
+                ("registry", anchor.join(".service-root.json")),
+                ("namedLock", anchor.join(".service-owner.lock")),
+                ("journalConfig", service.join(".journal.json")),
+                ("journalLock", service.join(".journal.lock")),
+            ] {
+                let metadata = fs::symlink_metadata(&path).unwrap();
+                let contents = if metadata.is_dir() {
+                    json!({"entries": entries(&path)})
+                } else {
+                    json!({"bytes": fs::read(&path).unwrap()})
+                };
+                stable.insert(
+                    name.into(),
+                    json!({"metadata": describe(&metadata), "contents": contents}),
+                );
+            }
+            json!({
+                "stable": stable,
+                "homeEntries": entries(&fixture.home),
+                "alternateHomeEntries": entries(alternate_home),
+            })
+        }
+        let artifact_parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT");
+        let fixture = EvidenceFixture {
+            retain: artifact_parent.is_some(),
+            fixture: std::mem::ManuallyDrop::new(Fixture::at(
+                artifact_parent
+                    .map(PathBuf::from)
+                    .unwrap_or_else(std::env::temp_dir),
+            )),
+        };
         let expires = || Instant::now() + Duration::from_millis(500);
-        let first = acquire(&fixture.home, &fixture.project, expires()).unwrap();
-        let directory = fixture.project.join(".caws/.render-writer-custody");
-        let before = fs::metadata(directory.join(".service-owner.lock"))
-            .unwrap()
-            .ino();
-        assert!(
-            acquire(
-                &fixture.home,
-                &fixture.project,
-                Instant::now() + Duration::from_millis(5)
-            )
-            .unwrap_err()
-            .contains("another machine owner")
-        );
         let alternate_home = fixture.root.join("alternate-home");
         fs::create_dir(&alternate_home).unwrap();
         fs::set_permissions(&alternate_home, fs::Permissions::from_mode(0o700)).unwrap();
-        assert!(
-            acquire(
-                &alternate_home,
-                &fixture.project,
-                Instant::now() + Duration::from_millis(5)
+        let first = acquire(&fixture.home, &fixture.project, expires()).unwrap();
+        let held = File::from(first.duplicate_lifetime(expires()).unwrap());
+        let original_identity = identity(&held);
+        let anchor = fixture.project.join(".caws/.render-writer-custody");
+        let lock_path = anchor.join(".service-owner.lock");
+        let diagnostic_path = fixture.root.join("cross-home-lock-exclusion.json");
+        let persist = |diagnostic: &serde_json::Value| {
+            fs::write(
+                &diagnostic_path,
+                serde_json::to_vec_pretty(diagnostic).unwrap(),
             )
-            .unwrap_err()
-            .contains("another machine owner")
-        );
+            .unwrap();
+            eprintln!(
+                "writer cross-home checkpoint: {}",
+                diagnostic_path.display()
+            );
+        };
+        let before = snapshot(&fixture, &alternate_home);
+        let mut diagnostic = json!({
+            "schema": "caws.render.writer.cross-home-lock-exclusion.v1",
+            "fixture": fixture.root, "deadlineMs": 5, "readmissionDeadlineMs": 500,
+            "originalIdentity": original_identity, "originalHeld": describe(&held.metadata().unwrap()),
+            "originalCustody": format!("{first:?}"), "before": before,
+            "childProcesses": 0,
+        });
+        persist(&diagnostic);
+        // acquire exposes String errors. Derive the sole accepted Deadline
+        // spelling through the public typed API; arbitrary failures do not pass.
+        let deadline = Custody::acquire(&anchor, Instant::now()).unwrap_err();
+        diagnostic["deadlineControl"] = json!({
+            "kind": format!("{:?}", deadline.kind), "error": deadline.to_string(),
+        });
+        persist(&diagnostic);
+        assert_eq!(deadline.kind, crate::service_journal::ErrorKind::Deadline);
+        let deadline_text = deadline.to_string();
+        let busy_text = "service journal unavailable: another machine owner retains custody";
+        for (name, home) in [
+            ("sameHome", &fixture.home),
+            ("alternateHome", &alternate_home),
+        ] {
+            let started = Instant::now();
+            let result = acquire(home, &fixture.project, started + Duration::from_millis(5));
+            let elapsed = started.elapsed();
+            diagnostic[name] = json!({
+                "home": home, "elapsedNs": elapsed.as_nanos().to_string(),
+                "result": format!("{result:?}"),
+                "error": result.as_ref().err(),
+            });
+            // Preserve the actual result and elapsed before further observation
+            // or assertions can fail. Diagnostic I/O follows the 5ms attempt.
+            persist(&diagnostic);
+            diagnostic[name]["after"] = snapshot(&fixture, &alternate_home);
+            persist(&diagnostic);
+            let refusal = result.unwrap_err();
+            assert!(
+                refusal == busy_text || refusal == deadline_text,
+                "{name} actual refusal: {refusal}; retained diagnostic: {}",
+                diagnostic_path.display(),
+            );
+            assert_eq!(diagnostic["before"], diagnostic[name]["after"]);
+        }
+        let wrong_path = fixture.root.join("unrelated-lock");
+        let wrong = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&wrong_path)
+            .unwrap();
+        let wrong_identity = identity(&wrong);
+        let wrong_result = same_identity(&wrong, original_identity);
+        diagnostic["wrongInodeControl"] = json!({
+            "metadata": describe(&wrong.metadata().unwrap()),
+            "identityCheck": format!("{wrong_result:?}"), "expectedIdentity": original_identity,
+        });
+        persist(&diagnostic);
+        assert_ne!(wrong_identity, original_identity);
+        assert_eq!(wrong_result, Err(wrong_identity));
+        drop(wrong);
+        let probe = |diagnostic: &mut serde_json::Value, name: &str, expected: (u64, u64)| {
+            // Existing-only fresh open: dup would share the held flock's open
+            // description and could not independently demonstrate exclusion.
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+                .open(&lock_path)
+                .unwrap();
+            let metadata = file.metadata().unwrap();
+            let identity_check = same_identity(&file, expected);
+            diagnostic[name] = json!({
+                "metadata": describe(&metadata), "fd": file.as_raw_fd(),
+                "identityCheck": format!("{identity_check:?}"), "expectedIdentity": expected,
+            });
+            persist(diagnostic);
+            assert_eq!(identity_check, Ok(()));
+            assert!(metadata.is_file());
+            assert_eq!(metadata.uid(), unsafe { libc::geteuid() });
+            assert_eq!(metadata.mode() & 0o7777, 0o600);
+            assert_eq!(metadata.nlink(), 1);
+            assert_eq!(metadata.len(), 0);
+            let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+            let errno = if result == -1 {
+                io::Error::last_os_error().raw_os_error()
+            } else {
+                None
+            };
+            diagnostic[name]["flockResult"] = json!(result);
+            diagnostic[name]["errno"] = json!(errno);
+            persist(diagnostic);
+            assert_eq!(result, -1, "{name}: {}", diagnostic_path.display());
+            assert_eq!(errno, Some(libc::EWOULDBLOCK));
+            file
+        };
+        let original_probe = probe(&mut diagnostic, "originalHeldProbe", original_identity);
         let other = fixture.root.join("other-project");
         fs::create_dir(&other).unwrap();
         fs::create_dir(other.join(".caws")).unwrap();
-        let separate = acquire(&fixture.home, &other, expires()).unwrap();
+        let separate_result = acquire(&fixture.home, &other, expires());
+        diagnostic["otherProjectAcquire"] = json!({"result": format!("{separate_result:?}")});
+        persist(&diagnostic);
+        let separate = separate_result.unwrap();
+        let separate_held = File::from(separate.duplicate_lifetime(expires()).unwrap());
+        diagnostic["otherProjectHeldIdentity"] = json!(identity(&separate_held));
+        diagnostic["afterOtherProject"] = snapshot(&fixture, &alternate_home);
+        persist(&diagnostic);
+        assert_ne!(identity(&separate_held), original_identity);
+        assert_eq!(diagnostic["before"], diagnostic["afterOtherProject"]);
+        drop(separate_held);
         drop(separate);
+        drop(original_probe);
+        drop(held);
         drop(first);
-        let next = acquire(&alternate_home, &fixture.project, expires()).unwrap();
-        assert_eq!(
-            fs::metadata(directory.join(".service-owner.lock"))
-                .unwrap()
-                .ino(),
-            before
-        );
+        let next_result = acquire(&alternate_home, &fixture.project, expires());
+        diagnostic["readmissionResult"] = json!(format!("{next_result:?}"));
+        persist(&diagnostic);
+        let next = next_result.unwrap();
+        let next_held = File::from(next.duplicate_lifetime(expires()).unwrap());
+        diagnostic["readmittedIdentity"] = json!(identity(&next_held));
+        diagnostic["readmitted"] = snapshot(&fixture, &alternate_home);
+        persist(&diagnostic);
+        assert_eq!(identity(&next_held), original_identity);
+        assert_eq!(diagnostic["before"], diagnostic["readmitted"]);
+        // Readmission must actually hold the kernel lock, not merely return a
+        // capability which names the old inode after dropping its owner flock.
+        let next_probe = probe(&mut diagnostic, "readmittedHeldProbe", original_identity);
+        drop(next_probe);
+        drop(next_held);
         drop(next);
+        diagnostic["completion"] = json!({
+            "state": "both_homes_refused_kernel_exclusion_independent_project_locked_readmission",
+            "allProbeDescriptorsClosed": true, "allLifetimeDuplicatesClosed": true,
+            "originalCustodyDropped": true, "otherProjectCustodyDropped": true,
+            "readmittedCustodyDropped": true, "childProcesses": 0,
+        });
+        persist(&diagnostic);
     }
     #[test]
     fn preexisting_empty_or_partially_missing_anchor_is_never_reinitialized() {

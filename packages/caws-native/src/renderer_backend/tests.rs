@@ -136,6 +136,7 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Fixture {
     base: PathBuf,
     spec: PinnedBackendSpec,
+    retained: bool,
 }
 impl Fixture {
     fn new(mode: &str) -> Self {
@@ -226,7 +227,11 @@ while True:
             cache_megabytes: 1,
             git_view: None,
         };
-        Self { base, spec }
+        Self {
+            base,
+            spec,
+            retained: false,
+        }
     }
     fn lifetime(&self) -> OwnedFd {
         let file = OpenOptions::new()
@@ -268,7 +273,7 @@ while True:
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        if std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT").is_none() {
+        if !self.retained && std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT").is_none() {
             let _ = fs::remove_dir_all(&self.base);
         } else {
             eprintln!(
@@ -949,27 +954,97 @@ fn explicit_stop_after_write_progress_remains_unknown_and_failed() {
 
 #[test]
 fn owner_eof_after_write_is_unknown_and_actual_owned_child_is_reaped() {
-    let fixture = Fixture::new("stall");
+    fn identity(probe: &File, path: &Path) -> serde_json::Value {
+        let held = probe.metadata();
+        let named = fs::symlink_metadata(path);
+        let fd_flags = unsafe { libc::fcntl(probe.as_raw_fd(), libc::F_GETFD) };
+        let fd_errno = (fd_flags < 0).then(|| io::Error::last_os_error().raw_os_error());
+        let status_flags = unsafe { libc::fcntl(probe.as_raw_fd(), libc::F_GETFL) };
+        let status_errno = (status_flags < 0).then(|| io::Error::last_os_error().raw_os_error());
+        let describe = |meta: &fs::Metadata| {
+            serde_json::json!({
+                "device": meta.dev(), "inode": meta.ino(), "mode": meta.mode(),
+                "uid": meta.uid(), "links": meta.nlink(), "bytes": meta.len(),
+                "mtime": meta.mtime(), "mtimeNanos": meta.mtime_nsec(),
+                "ctime": meta.ctime(), "ctimeNanos": meta.ctime_nsec()
+            })
+        };
+        serde_json::json!({
+            "fd": probe.as_raw_fd(), "namedPath": path,
+            "fdFlags": fd_flags, "fdFlagsErrno": fd_errno,
+            "statusFlags": status_flags, "statusFlagsErrno": status_errno,
+            "held": held.as_ref().ok().map(describe),
+            "heldMetadataErrno": held.as_ref().err().and_then(io::Error::raw_os_error),
+            "named": named.as_ref().ok().map(describe),
+            "namedMetadataErrno": named.as_ref().err().and_then(io::Error::raw_os_error)
+        })
+    }
+    fn retain(fixture: &Fixture, name: &str, value: &serde_json::Value) {
+        eprintln!("owner EOF diagnostic {name}: {value}");
+        write_stop_case_evidence(fixture, name, value);
+    }
+    let mut fixture = Fixture::new("stall");
+    fixture.retained = true;
+    retain(
+        &fixture,
+        "test-case.json",
+        &serde_json::json!({
+            "schema": "caws.renderer.worker.owner-eof-test-case.v1",
+            "test": "renderer_backend::tests::owner_eof_after_write_is_unknown_and_actual_owned_child_is_reaped",
+            "fixtureMode": "stall", "fixtureBase": fixture.base,
+            "workerDirectory": fixture.spec.work_dir, "testProcessPid": std::process::id(),
+            "state": "before_launch"
+        }),
+    );
     let (mut host, mut reader, join) = fixture.launch();
     let pid = ready(&mut reader);
-    let probe = OpenOptions::new()
-        .write(true)
-        .open(fixture.base.join("lifetime.lock"))
-        .unwrap();
-    assert_eq!(
-        unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
-        -1
+    let lock_path = fixture.base.join("lifetime.lock");
+    let probe = OpenOptions::new().write(true).open(&lock_path).unwrap();
+    let initial_flock = unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    let initial_error = (initial_flock < 0).then(io::Error::last_os_error);
+    retain(
+        &fixture,
+        "before-owner-eof.json",
+        &serde_json::json!({
+            "caseIdentity": fixture.base.join("test-case.json"), "backendChildPid": pid,
+            "initialFlockResult": initial_flock,
+            "initialFlockErrno": initial_error.as_ref().and_then(io::Error::raw_os_error),
+            "probe": identity(&probe, &lock_path), "state": "ready_before_render_and_owner_close"
+        }),
     );
-    assert_eq!(io::Error::last_os_error().kind(), io::ErrorKind::WouldBlock);
+    assert_eq!(initial_flock, -1);
+    assert_eq!(initial_error.unwrap().kind(), io::ErrorKind::WouldBlock);
     send(&mut host, std::array::from_fn(|_| String::new()));
-    assert!(matches!(event(&mut reader), WorkerEvent::Progress { .. }));
+    let progress = event(&mut reader);
+    assert!(matches!(progress, WorkerEvent::Progress { .. }));
     drop(reader);
     drop(host);
     let exit = join.join().unwrap();
-    assert_eq!(
-        unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
-        0
+    // Capture the original first post-join syscall and errno before any
+    // diagnostic metadata/read/write can overwrite errno or permit a retry.
+    let post_join_flock = unsafe { libc::flock(probe.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    let post_join_error = (post_join_flock < 0).then(io::Error::last_os_error);
+    let raw_exit = fixture.spec.work_dir.join("worker-exit.json");
+    let raw_bytes = fs::read(&raw_exit);
+    retain(
+        &fixture,
+        "after-join.json",
+        &serde_json::json!({
+            "caseIdentity": fixture.base.join("test-case.json"),
+            "beforeOwnerEof": fixture.base.join("before-owner-eof.json"),
+            "backendChildPid": pid, "workerDirectory": fixture.spec.work_dir,
+            "observedProgress": progress, "returnedWorkerExit": exit,
+            "rawWorkerExit": raw_exit,
+            "rawWorkerExitSha256": raw_bytes.as_ref().ok().map(|bytes| format!("{:x}",Sha256::digest(bytes))),
+            "rawWorkerExitReadErrno": raw_bytes.as_ref().err().and_then(io::Error::raw_os_error),
+            "postJoinFlockResult": post_join_flock,
+            "postJoinFlockErrno": post_join_error.as_ref().and_then(io::Error::raw_os_error),
+            "postJoinFlockErrorKind": post_join_error.as_ref().map(|e| format!("{:?}",e.kind())),
+            "postJoinFlockError": post_join_error.as_ref().map(ToString::to_string),
+            "probe": identity(&probe, &lock_path), "state": "before_strict_post_join_flock_assertion"
+        }),
     );
+    assert_eq!(post_join_flock, 0);
     assert!(matches!(
         exit.last_result,
         Some(RequestResult::Unknown { .. })
@@ -983,6 +1058,15 @@ fn owner_eof_after_write_is_unknown_and_actual_owned_child_is_reaped() {
     assert_eq!(
         exit.cleanup.backend_exit.unwrap().signal,
         Some(libc::SIGKILL)
+    );
+    retain(
+        &fixture,
+        "test-settled.json",
+        &serde_json::json!({
+            "caseIdentity": fixture.base.join("test-case.json"),
+            "afterJoin": fixture.base.join("after-join.json"), "backendChildPid": pid,
+            "state": "all_original_assertions_passed"
+        }),
     );
 }
 
