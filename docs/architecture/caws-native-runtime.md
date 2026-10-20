@@ -187,6 +187,29 @@ Per-request cancellation prevents request-owned children from mutating state
 after completion. Disconnected or crashed requests have an explicit uncertain
 terminal outcome; reconnection does not manufacture exactly-once execution.
 
+Mandatory safety execution precedes discretionary admission. The current
+one-shot frontend captures ancestry before Node, but latch/strike/escalation and
+required Stop decisions execute after dispatch. A Busy result before that
+dispatch cannot substitute for termination of the verified latched caller or
+evaluation of the goal guard. A general queue before Node requires that complete
+mandatory path to move with its canonical authority implementation; a reserved
+slot alone does not establish the invariant under saturation.
+
+Retained Node modules and invocation-owned descendants have different lifetimes.
+The fresh native frontend must retain the actual executor Child and private
+group; a daemon-parented compatibility guard cannot recover the caller's
+ancestry by trusting a cached PID. Every subprocess port needs the same
+request-owned execution boundary, including context Git, classifier Git,
+utilities and process lookup. Normal executor cleanup must leave an unrelated
+module worker alive. An opportunistic warm-worker borrow may fall back to the
+existing one-shot path only before any request bytes might have been delivered.
+This intermediate route preserves mandatory execution but does not establish
+bounded cold fan-out. Returning a worker to idle requires handoff settlement and
+actual resource drain; late frames, descriptors and capabilities from one
+request cannot settle another. The existing Stop render descriptors are per
+invocation and fill once; their numbers cannot stand in for a new request's
+actual descriptor transfer.
+
 The required machine workload includes at least thirteen simultaneous sessions
 across at least four repositories. Bound worker and cache capacity across the
 machine and admit work fairly by canonical project and session. Serialize only

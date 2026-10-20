@@ -143,7 +143,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer | one-shot journal/composer/local ACK integrated; resident open | E33 retains actual input/handler/index/native-output artifacts; crash persistence, production message settlement and resident admission remain open |
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy | TS native-response adapter, Rust exact delivery | selected production refusal and native Stop fixture exercised | E33 nonlatching refusal; E34 real native budget with fixture context. Complete event/harness/Stop producer behavior remains unqualified |
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | substitution precedence repaired; typed execution, selected-shell state and native handoff exercised, E63/E65 | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open |
-| R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | independent selected-stock candidate; root integration pending | The separate owner reports isolated invocation qualification at `4f1e40f2`; E100 distinguishes its retained evidence from parent acceptance. Custom/explicit parser compatibility and Python retirement remain separate |
+| R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | selected-stock root integration and public-control repair exercised, E119 | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | typed composer consumed; independent stock Bash switch qualified; parent integration pending | Separate candidate `6d44dc9f` retains Python for selected custom compatibility. E110 distinguishes private installed Bash evidence from sealed native image, harness and retirement obligations |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence | TS transcript store | unreplaced | Atomic replacement, identity, replay custody, malformed and concurrent inputs |
@@ -2229,6 +2229,102 @@ Additional bounded evidence and unresolved dependencies:
   leaves measured shell/CLI/Python work. No cache, durability-check removal,
   workload inflation or weakened gate is authorized by this diagnosis.
 
+- E119: Ordinary merge `9051cfc4` integrates R06's `4f1e40f2` component.
+  Build exits0 and four focused suites pass90 checks with one native skip;
+  `prefix-cohort-2026-10-20/r06-parent-{build,focused}.log` retain raw output.
+  The first native qualifier compile command exits127 because a worktree-local
+  TypeScript executable is absent; no scenario starts. The corrected dependency
+  path runs the actual native client `b53d72c5` and passes the four-consumer case
+  in `r06-parent-native-2026-10-20/`. These checks miss a public-control defect:
+  independent review identifies clearing of `CAWS_GUARD_NO_ASK` alongside private
+  assignments. The retained unit negative exits1; the actual Claude/shared-emitter
+  worktree guard also returns0/ask with NO_ASK=1 in
+  `r06-no-ask-shared-emitter-baseline-2026-10-20/`. Earlier fixture attempts
+  incorrectly assumed an unborn branch was a resolved HEAD or that Codex's
+  emitter returned ask; their failed controls remain preserved and do not
+  establish this regression. Repair `900f0516` clears only status and indexed
+  zone/prefix/threshold transport. Repaired build exits0; four suites pass92
+  checks with one native skip (`r06-no-ask-repaired-focused.log`). The compiled
+  native replay passes two cases and retains command, source/module hashes,
+  stdout/stderr and fixture state in `r06-public-controls-native-2026-10-20/`.
+  Its `guard-config-a1Rjtj/ask-incapable-result.json` records actual guard
+  status2, empty stdout, explicit hard-block stderr and retained NO_ASK=1;
+  forged zone authority is absent. The ask-capable control returns0/ask, so an
+  unrelated infrastructure block cannot satisfy the oracle. Both fixture process
+  snapshots have no matching processes. The wrapper captures guard disposition
+  and finishes successfully: this proves transport and the actual consumer,
+  not native refusal propagation, real kernel scope authority or platform
+  consumption. Selected custom parsers, other Python consumers, machine
+  installation and parent acceptance remain separate. Review feedback is
+  independently grounded at the actual public-control and consumer coordinates.
+
+- E120: Test-only `29844146` isolates the intentional raw fork behind an exact
+  `current_exe` exec before fixture creation. The initial compile fails for a
+  missing RawFd import; `fork-isolation-focused.*` preserves it without claiming
+  test execution. The corrected focused command exits0 and retains the complete
+  fixture plus file hashes in `fork-isolation-corrected-focused.{json,log}`.
+  Outer39174 retains CLOEXEC FD200/dev16777231/inode752781159; helper39428
+  observes both fcntl and fstat EBADF before fixture/fork. Inner fork39478 exits0
+  after the original30ms contention denial,2s pipe/poll and post-exit
+  reacquisition controls. Original helper cleanup records ExitedOnly followed
+  by reap/exit0. This proves the fixture's exec boundary, not the cause of any
+  earlier lock failure or complete suite isolation. Unavailable cleanup retains
+  the original Child and an unknown receipt; the5s observation is not an
+  unconditional cleanup wall-clock bound.
+
+- E121: The parallel full replay after isolation exits101 with191 library
+  passes and two failures (`fork-isolated-all-native.log`, SHA-256
+  `353e9a1867fe6e88187c770e751c64188a232299a33903b138d396b1a4cea4b2`).
+  A second cross-home5ms writer attempt loses its expected Busy text, and the
+  owner-EOF test's first post-join flock returns-1. Neither original actual
+  error/errno is retained. The backend's raw worker receipt nevertheless records
+  original child7915 identity-verified group SIGKILL, reap, both pipe EOF and
+  persisted logs. Independent current observation reports PID7915 absent and a
+  fresh nofollow lock probe succeeds on the original retained inode752786754
+  (`renderer-eof-current-cleanup.json`); it cannot recover historical errno or
+  prove universal descendant absence. Test-only `c63647cd` preserves both5ms
+  outcomes, exact Busy/typed Deadline matching, immutable custody records and
+  fresh independent kernel exclusion on the held inode before release and
+  during full alternate-home readmission. EOF instrumentation captures the
+  unchanged first post-join syscall/errno, FD/name identity and actual WorkerExit
+  before its strict0 assertion. A first writer-only focused run passes but omits
+  the artifact-root environment and deletes its fixture; its log is evidence
+  only of that execution. The corrected retained two-case command exits0
+  (`lock-diagnostics-retained-focused.log`): kernel probes return-1/errno35
+  on inode752809557 before release and while readmitted; EOF child43209 is
+  verified/reaped and its first post-join probe returns0. The subsequent full
+  diagnostic replay exits101 with192 passes at a different fixture defect:
+  cleanup-fault readiness reads an existing but empty holder JSON file at
+  `renderer_backend/tests.rs:529`. The producer writes that public path directly;
+  file existence is not complete publication. Its retained worker receipt
+  records original child58290 verified/reaped and both EOF after unwind; the
+  injected cleanup deadline is exceeded. Keep this failure and repair atomic
+  fixture publication before another suite replay. No original lock failure is
+  attributed or erased, and no post-failure load scenario executes.
+
+- E122: Required-path source inspection rejects a general pre-Node capacity
+  queue on the present contract. `main.rs` captures ancestry then starts Node;
+  fresh latch/strike/escalation occurs only after dispatch through selected
+  `block-dangerous.sh`. `stock-handlers.ts` deliberately falls back for latches
+  and catastrophic deny. A pre-start Busy/expiry would emit a PreToolUse block
+  without the required containment effect, or release an undispatched Stop
+  without its goal guard. Reserved capacity alone cannot prove safety under
+  saturation. R06 does not replace that consumer: E118 positively observes
+  Python command classification, while the typed dangerous core supports only
+  bounded allow/advisory cases; Claude retains full compatibility normalization.
+  Retained modules must remain distinct from invocation-owned process groups.
+  A future warm worker must consume fresh authority through the canonical TS
+  implementation while a fresh native frontend retains actual caller ancestry,
+  executor Child/group, output/effects and settlement. Every subprocess port,
+  including Git/context/classifier/utilities/containment lookup, needs that
+  ownership boundary. Opportunistic warm reuse with unchanged one-shot fallback
+  only before any request delivery is an intermediate route, not a global cold
+  fan-out cap. Stop reuse additionally requires a real per-request FD3/4/5
+  carrier. Cancellation, late frames, uncertain delivery, saturation with a
+  sacrificial latched caller and a surviving sibling must falsify this design
+  before residency or fair-capacity claims. This is a verified source dependency
+  and proposed implementation contract, not executed residency evidence.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2333,9 +2429,12 @@ required-lane/consumer-path dependency. Define the complete executor, native
 request ownership, fresh authority and cancellation boundaries before claiming
 residency or integrating scheduler capacity; preserve the caller's PID safety
 contract and sibling isolation. R06/R08 source integration and sealed-image
-contracts remain owed. Address the intentional shared-libtest fork's unrelated
-descriptor inheritance with a deterministic control/isolation, while preserving
-its cross-process lock assertions and all failure artifacts. Keep the original
+contracts remain owed. E119 integrates R06 and repairs its demonstrated public
+NO_ASK regression; R08 remains pending. E120 isolates the intentional fork;
+E121 retains further full-suite failures and stronger diagnostics without
+attributing their causes. Repair the witnessed partial holder-publication race
+and inspect actual cleanup before the next native suite replay. E122 forbids a
+pre-Node queue which skips required latch/Stop semantics. Keep the original
 1000-turn hot transcript, counts,30s request budgets and later hot Running
 witness requirements. Correct output and source-level capacity are not fairness
 proof. No blind workload repetition: the next run needs an identified owning
