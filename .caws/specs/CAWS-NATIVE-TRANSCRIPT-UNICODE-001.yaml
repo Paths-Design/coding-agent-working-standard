@@ -1,0 +1,50 @@
+id: CAWS-NATIVE-TRANSCRIPT-UNICODE-001
+title: 'Historical transcript Unicode interpretation profile'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-20T18:58:59.714Z'
+updated_at: '2026-10-20T18:58:59.714Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Lossless transcript codec and optional Codex source-index interpretation'
+    - 'Pinned Unicode14 profile data and codepoint text contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/**'
+    - 'packages/caws-cli/tests/transcripts/**/*.ts'
+    - 'packages/caws-cli/tests/transcripts/unicode14/**'
+  out: []
+invariants:
+  - 'Raw transcript occurrence bytes and ordinary JsonValue string custody remain unchanged; interpreted Python literal codepoints are explicit and never silently collapse during JS or UTF8 conversion.'
+  - 'Historical Python3.11.13/Unicode14 is explicit interpretation identity; source indexes remain source_syntax/not_observed and confer no execution or authority.'
+  - 'Parent package, runner, renderer, registry, cache, persistence, ledger and acceptance stay outside this component.'
+acceptance:
+  - id: A1
+    given: 'Python single-quoted source literal escapes including adjacent surrogates'
+    when: 'native decoding indexing and explicit serialization run'
+    then: 'immutable codepoint vectors preserve length slice ordering equality and reject lossy JS/strict UTF8 conversion while ordinary JSON custody remains unchanged'
+  - id: A2
+    given: 'pinned Unicode14 canonical aliases algorithmic names printability and word/digit data'
+    when: 'native helpers execute without Python on Node18 and22'
+    then: 'reference classifications and literal-name admission match the declared profile including named-sequence unknown-name and post14 negative controls with provenance fingerprints'
+  - id: A3
+    given: 'retained five incomplete Unicode fixtures and codepoint-aware negative observers'
+    when: 'actual native codec common and Codex adapter projections run against the pinned reference'
+    then: 'retained cases reach historical parity and regression counterexamples reject collapsed or misclassified output without claiming renderer or persistence parity'
+  - id: A4
+    given: 'committed candidate owned data and public API changes'
+    when: 'focused checks mutation controls no-Python runtime controls and policy gates execute'
+    then: 'concrete raw artifacts and source identities support the bounded contract and independent review findings are grounded'
+observability:
+  - 'External raw reference/native outputs include codepoint vectors profile/data hashes runtime versions commands exit status and unsupported conversion dispositions.'
+rollback:
+  - 'Revert this component source commit; no machine pointer or production consumer is changed.'
+non_functional:
+  security:
+    - 'Never evaluate source code or execute indexed actions; refuse lossy conversion and preserve original occurrence bytes.'
+contracts:
+  - name: 'historical-transcript-unicode'
+    type: behavior
