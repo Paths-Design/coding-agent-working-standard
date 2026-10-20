@@ -342,7 +342,14 @@ function oracleControls(): void {
   ] as const) {
     assert.throws(() => orderedTurnFiles(names, turns), refusal);
   }
+  const subject: SemanticSubject = {
+    project: { project: '/fixture/control', name: 'control' },
+    session: { sessionId: 'shared-id', label: 'control' },
+  };
   const semantic = {
+    turn: 101,
+    context: { session_id: 'shared-id', project: 'control', cwd: '/fixture/control' },
+    env: { cwd: '/fixture/control' },
     user: 'control user 101',
     status: 'ok',
     timeline: [
@@ -350,14 +357,14 @@ function oracleControls(): void {
       { kind: 'reasoning', text: 'control assistant 101' },
     ],
   };
-  assert.equal(semanticTurn(semantic, 'control', 101), undefined);
+  assert.equal(semanticTurn(semantic, subject, 101), undefined);
   assert.throws(
-    () => semanticTurn({ ...semantic, user: 'control user 1000' }, 'control', 101),
+    () => semanticTurn({ ...semantic, user: 'control user 1000' }, subject, 101),
     /project\/session user isolation/,
     'numeric sorting must not mask a mismatched turn payload'
   );
   assert.throws(
-    () => semanticTurn({ ...semantic, timeline: [semantic.timeline[0]] }, 'control', 101),
+    () => semanticTurn({ ...semantic, timeline: [semantic.timeline[0]] }, subject, 101),
     /tool\/assistant ordering/
   );
   assert.throws(
@@ -367,11 +374,40 @@ function oracleControls(): void {
           ...semantic,
           timeline: [{ ...semantic.timeline[0], output: 'other result' }, semantic.timeline[1]],
         },
-        'control',
+        subject,
         101
       ),
     /tool output identity/
   );
+  for (const tool of [
+    { ...semantic.timeline[0], output: 'control result 1010' },
+    { ...semantic.timeline[0], output: 'other result', metadata: 'control result 101' },
+  ]) {
+    assert.throws(
+      () => semanticTurn({ ...semantic, timeline: [tool, semantic.timeline[1]] }, subject, 101),
+      /tool output identity/,
+      'prefix collisions and unrelated metadata cannot establish exact tool output'
+    );
+  }
+  for (const [changed, refusal] of [
+    [{ ...semantic, turn: 102 }, /semantic turn number/],
+    [{ ...semantic, turn: '101' }, /semantic turn number/],
+    [
+      { ...semantic, context: { ...semantic.context, session_id: 'other-id' } },
+      /context session isolation/,
+    ],
+    [
+      { ...semantic, context: { ...semantic.context, project: 'other-project' } },
+      /context project isolation/,
+    ],
+    [
+      { ...semantic, context: { ...semantic.context, cwd: '/fixture/other' } },
+      /context cwd isolation/,
+    ],
+    [{ ...semantic, env: { cwd: '/fixture/other' } }, /environment cwd isolation/],
+  ] as const) {
+    assert.throws(() => semanticTurn(changed, subject, 101), refusal);
+  }
 }
 
 function guardRefusal(stdout: string): Data {
@@ -391,6 +427,10 @@ function queueCapacityRefusal(events: readonly Data[], invocationId: string): Da
 }
 
 type Subject = { project: ProjectFixture; session: SessionFixture };
+type SemanticSubject = {
+  project: Pick<ProjectFixture, 'project' | 'name'>;
+  session: Pick<SessionFixture, 'sessionId' | 'label'>;
+};
 type Timed = { subject: Subject; started: Started; endedAt?: number; receipt?: Receipt };
 const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -426,7 +466,16 @@ function orderedTurnFiles(names: readonly string[], turns: number): string[] {
   return ordered.map((entry) => entry.file);
 }
 
-function semanticTurn(turn: Data, label: string, number: number): void {
+function semanticTurn(turn: Data, subject: SemanticSubject, number: number): void {
+  const { project, session } = subject,
+    label = session.label,
+    context = row(turn.context, 'semantic turn context'),
+    env = row(turn.env, 'semantic turn environment');
+  assert.equal(turn.turn, number, 'semantic turn number');
+  assert.equal(context.session_id, session.sessionId, 'context session isolation');
+  assert.equal(context.project, project.name, 'context project isolation');
+  assert.equal(context.cwd, project.project, 'context cwd isolation');
+  assert.equal(env.cwd, project.project, 'environment cwd isolation');
   assert.equal(turn.user, label + ' user ' + number, 'project/session user isolation');
   assert.equal(turn.status, 'ok');
   assert(Array.isArray(turn.timeline));
@@ -438,10 +487,7 @@ function semanticTurn(turn: Data, label: string, number: number): void {
     (item) => item.kind === 'reasoning' && item.text === label + ' assistant ' + number
   );
   assert(call >= 0 && reply > call, 'tool/assistant ordering: ' + label);
-  assert(
-    JSON.stringify(timeline[call]).includes(label + ' result ' + number),
-    'tool output identity'
-  );
+  assert.equal(timeline[call]!.output, label + ' result ' + number, 'tool output identity');
 }
 
 function semanticOutput(harness: RenderHarness, subject: Subject): Data {
@@ -454,7 +500,7 @@ function semanticOutput(harness: RenderHarness, subject: Subject): Data {
     session.turns
   );
   const output = names.map((file, index) => {
-    semanticTurn(read(file), session.label, index + 1);
+    semanticTurn(read(file), subject, index + 1);
     return {
       name: path.basename(file),
       sha256: hash(fs.readFileSync(file)),
