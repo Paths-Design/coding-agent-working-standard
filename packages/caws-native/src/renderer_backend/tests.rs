@@ -714,13 +714,98 @@ fn owned_daemon_returns_real_response_reuses_instance_preserves_cr_and_drains_fl
         MAX_CAPTURE as u64
     );
 }
+fn write_stop_case_evidence(fixture: &Fixture, name: &str, value: &serde_json::Value) {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o400)
+        .open(fixture.base.join(name))
+        .unwrap();
+    file.write_all(&serde_json::to_vec_pretty(value).unwrap())
+        .unwrap();
+    file.sync_all().unwrap();
+}
+
+fn identify_stop_case(fixture: &Fixture, test: &str, mode: &str, boundary: &str) {
+    write_stop_case_evidence(
+        fixture,
+        "test-case.json",
+        &serde_json::json!({
+            "schema": "caws.renderer.worker.stop-test-case.v1",
+            "test": format!("renderer_backend::tests::{test}"),
+            "fixtureMode": mode,
+            "expectedStopBoundary": boundary,
+            "testProcessPid": std::process::id(),
+            "fixtureBase": fixture.base,
+            "workerDirectory": fixture.spec.work_dir,
+            "state": "before_launch"
+        }),
+    );
+}
+
+fn send_case_stop(fixture: &Fixture, host: &mut UnixStream, pid: u32, boundary: &str) {
+    let command = encode_command(HostCommand::Stop).unwrap();
+    // These are the actual bytes sent next, retained before the action.
+    let mut raw = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o400)
+        .open(fixture.base.join("stop-command.jsonl"))
+        .unwrap();
+    raw.write_all(&command).unwrap();
+    raw.sync_all().unwrap();
+    write_stop_case_evidence(
+        fixture,
+        "stop-action.json",
+        &serde_json::json!({
+            "schema": "caws.renderer.worker.stop-test-action.v1",
+            "caseIdentity": fixture.base.join("test-case.json"),
+            "backendChildPid": pid,
+            "stopBoundary": boundary,
+            "rawCommand": fixture.base.join("stop-command.jsonl"),
+            "state": "before_stop_write"
+        }),
+    );
+    host.write_all(&command).unwrap();
+}
+
+fn settle_stop_case(fixture: &Fixture, pid: u32, exit: &WorkerExit, receipt: &CleanupReceipt) {
+    let raw_exit = fixture.spec.work_dir.join("worker-exit.json");
+    let bytes = fs::read(&raw_exit).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+        serde_json::to_value(exit).unwrap(),
+        "retained raw worker exit differs from the joined worker result"
+    );
+    write_stop_case_evidence(
+        fixture,
+        "test-settled.json",
+        &serde_json::json!({
+            "schema": "caws.renderer.worker.stop-test-settled.v1",
+            "caseIdentity": fixture.base.join("test-case.json"),
+            "backendChildPid": pid,
+            "workerDirectory": fixture.spec.work_dir,
+            "rawWorkerExit": raw_exit,
+            "rawWorkerExitSha256": format!("{:x}", Sha256::digest(&bytes)),
+            "workerExit": exit,
+            "observedCleanupEventReceipt": receipt,
+            "state": "all_case_assertions_passed"
+        }),
+    );
+}
+
 #[test]
 fn explicit_idle_stop_before_render_is_clean_and_has_no_render_effect() {
     let fixture = Fixture::new("normal");
+    identify_stop_case(
+        &fixture,
+        "explicit_idle_stop_before_render_is_clean_and_has_no_render_effect",
+        "normal",
+        "ready_before_any_render",
+    );
     let (mut host, mut reader, join) = fixture.launch();
     let pid = ready(&mut reader);
-    host.write_all(&encode_command(HostCommand::Stop).unwrap())
-        .unwrap();
+    send_case_stop(&fixture, &mut host, pid, "ready_before_any_render");
     // Cleanup must be the next event: Failed/Progress/Result are all defects.
     let receipt = match event(&mut reader) {
         WorkerEvent::Cleanup { receipt } => receipt,
@@ -737,11 +822,18 @@ fn explicit_idle_stop_before_render_is_clean_and_has_no_render_effect() {
     assert!(!fixture.spec.work_dir.join("observed.json").exists());
     let mut trailing = Vec::new();
     assert_eq!(reader.read_until(b'\n', &mut trailing).unwrap(), 0);
+    settle_stop_case(&fixture, pid, &exit, &receipt);
 }
 
 #[test]
 fn explicit_idle_stop_after_returned_preserves_result_without_another_render() {
     let fixture = Fixture::new("normal");
+    identify_stop_case(
+        &fixture,
+        "explicit_idle_stop_after_returned_preserves_result_without_another_render",
+        "normal",
+        "after_returned_before_next_render",
+    );
     let (mut host, mut reader, join) = fixture.launch();
     let pid = ready(&mut reader);
     let arguments = std::array::from_fn(|index| format!("argument-{index}"));
@@ -760,8 +852,12 @@ fn explicit_idle_stop_after_returned_preserves_result_without_another_render() {
     }
     let observed = fs::read(fixture.spec.work_dir.join("observed.json")).unwrap();
     let lease = fs::read(fixture.spec.work_dir.join("lease.json")).unwrap();
-    host.write_all(&encode_command(HostCommand::Stop).unwrap())
-        .unwrap();
+    send_case_stop(
+        &fixture,
+        &mut host,
+        pid,
+        "after_returned_before_next_render",
+    );
     let receipt = match event(&mut reader) {
         WorkerEvent::Cleanup { receipt } => receipt,
         other => panic!("completed render Stop must only clean up: {other:?}"),
@@ -769,7 +865,7 @@ fn explicit_idle_stop_after_returned_preserves_result_without_another_render() {
     let exit = join.join().unwrap();
     assert!(exit.failure.is_none());
     assert!(matches!(
-        exit.last_result,
+        &exit.last_result,
         Some(RequestResult::Returned { response }) if response.served == 1
     ));
     assert_eq!(exit.last_reply_bytes, b"ok 1 0\n");
@@ -791,11 +887,18 @@ fn explicit_idle_stop_after_returned_preserves_result_without_another_render() {
     );
     let mut trailing = Vec::new();
     assert_eq!(reader.read_until(b'\n', &mut trailing).unwrap(), 0);
+    settle_stop_case(&fixture, pid, &exit, &receipt);
 }
 
 #[test]
 fn explicit_stop_after_write_progress_remains_unknown_and_failed() {
     let fixture = Fixture::new("stall");
+    identify_stop_case(
+        &fixture,
+        "explicit_stop_after_write_progress_remains_unknown_and_failed",
+        "stall",
+        "after_write_attempted_before_reply",
+    );
     let (mut host, mut reader, join) = fixture.launch();
     let pid = ready(&mut reader);
     send(&mut host, std::array::from_fn(|_| String::new()));
@@ -803,8 +906,12 @@ fn explicit_stop_after_write_progress_remains_unknown_and_failed() {
         WorkerEvent::Progress { phase, .. } => assert_eq!(phase, "write_attempted"),
         other => panic!("expected actual write boundary: {other:?}"),
     }
-    host.write_all(&encode_command(HostCommand::Stop).unwrap())
-        .unwrap();
+    send_case_stop(
+        &fixture,
+        &mut host,
+        pid,
+        "after_write_attempted_before_reply",
+    );
     match event(&mut reader) {
         WorkerEvent::Result {
             result: RequestResult::Unknown { failure },
@@ -827,7 +934,7 @@ fn explicit_stop_after_write_progress_remains_unknown_and_failed() {
     let exit = join.join().unwrap();
     assert_eq!(exit.failure.unwrap().code, FailureCode::HostStopped);
     assert!(matches!(
-        exit.last_result,
+        &exit.last_result,
         Some(RequestResult::Unknown { failure }) if failure.code == FailureCode::HostStopped
     ));
     assert!(exit.last_reply_bytes.is_empty());
@@ -837,6 +944,7 @@ fn explicit_stop_after_write_progress_remains_unknown_and_failed() {
     assert!(!receipt.deadline_exceeded);
     let mut trailing = Vec::new();
     assert_eq!(reader.read_until(b'\n', &mut trailing).unwrap(), 0);
+    settle_stop_case(&fixture, pid, &exit, &receipt);
 }
 
 #[test]
