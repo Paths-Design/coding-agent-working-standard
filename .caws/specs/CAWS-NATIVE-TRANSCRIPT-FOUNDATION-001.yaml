@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-TRANSCRIPT-FOUNDATION-001
 title: 'Preserve lossless transcript occurrences and typed Codex normalization'
 mode: refactor
-lifecycle_state: active
-worktree: native-transcript-foundation
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Accepted standalone foundation at cdd74dcd: 52 focused cases and 276 admitted Python comparison checks per Node18/22, retained raw artifacts and failed controls at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/artifact-index.json. Four named unsupported classes remain five incomplete cases; source integer custody intentionally exceeds the qualified Python digit cap. No stock build/renderer/cache/registry/other-harness/native admission or R10-R18 retirement is inferred. A1-A4 dual-write events9588-9591; CLI verify checked commit reachability only, commands inspected separately.'
 created_at: '2026-10-20T17:20:43.531Z'
-updated_at: '2026-10-20T17:21:03.201Z'
+updated_at: '2026-10-20T18:22:09.580Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
