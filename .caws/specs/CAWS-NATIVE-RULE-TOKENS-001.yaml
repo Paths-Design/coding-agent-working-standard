@@ -25,9 +25,14 @@ invariants:
   - 'Existing selection, Unicode, formatting, and update semantics are preserved except zero totals and inaccurate update totals.'
 acceptance:
   - id: A1
-    given: 'retained original Python source and a pinned tiktoken reference'
-    when: 'both counters process qualified nonzero fixtures'
-    then: 'exact counts, stdout, selected files and updated bytes agree including Unicode and formatting edge cases'
+    given: >-
+      retained original source, Python 3.11.13 with tiktoken 0.12.0 and Unicode 14
+      metadata semantics, and npm tiktoken 1.0.22 bundled encoding
+    when: 'both counters process qualified nonzero fixtures including unseen Unicode and regex boundaries'
+    then: >-
+      exact counts, stdout, selected files and updated bytes agree; all 100256
+      mergeable ranks and special IDs match while differing regex patterns remain an
+      explicitly bounded qualification
   - id: A2
     given: 'empty bodies or rules without valid frontmatter'
     when: 'the Node utility reports or updates them'
