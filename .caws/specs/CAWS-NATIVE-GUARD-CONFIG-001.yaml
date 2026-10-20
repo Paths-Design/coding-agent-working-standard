@@ -2,6 +2,7 @@ id: CAWS-NATIVE-GUARD-CONFIG-001
 title: 'Integrate typed guard configuration at qualified native shell consumers'
 mode: refactor
 lifecycle_state: active
+worktree: native-guard-config-work
 created_at: '2026-10-20T05:24:25.239Z'
 updated_at: '2026-10-20T05:24:30.372Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
