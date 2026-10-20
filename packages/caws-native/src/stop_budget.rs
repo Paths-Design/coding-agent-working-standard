@@ -676,6 +676,7 @@ mod tests {
     struct Fixture {
         root: std::path::PathBuf,
         home: std::path::PathBuf,
+        retained: bool,
     }
     impl Fixture {
         fn new() -> Self {
@@ -691,7 +692,26 @@ mod tests {
             let home = root.join("home");
             fs::create_dir(&home).unwrap();
             fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
-            Self { root, home }
+            Self {
+                root,
+                home,
+                retained: false,
+            }
+        }
+        fn retain_for_diagnostic(mut self) -> Self {
+            if let Some(parent) = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT") {
+                let parent = fs::canonicalize(parent).unwrap();
+                let root = parent.join(self.root.file_name().unwrap());
+                fs::rename(&self.root, &root).unwrap();
+                self.root = root;
+                self.home = self.root.join("home");
+            }
+            self.retained = true;
+            eprintln!(
+                "Stop budget diagnostic fixture retained: {}",
+                self.root.display()
+            );
+            self
         }
         fn budget(&self, session: &str) -> StopBudget {
             StopBudget::open(
@@ -727,7 +747,9 @@ mod tests {
     }
     impl Drop for Fixture {
         fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
+            if !self.retained {
+                let _ = fs::remove_dir_all(&self.root);
+            }
         }
     }
     fn soon() -> Instant {
@@ -1196,31 +1218,115 @@ mod tests {
 
     #[test]
     fn held_lock_deadline_does_not_consume_a_charge() {
-        let fixture = Fixture::new();
+        fn path_snapshot(path: &Path) -> serde_json::Value {
+            let bytes = fs::read(path);
+            let meta = fs::symlink_metadata(path);
+            serde_json::json!({
+                "path": path,
+                "rawBytes": bytes.as_ref().ok(),
+                "readErrno": bytes.as_ref().err().and_then(io::Error::raw_os_error),
+                "named": meta.as_ref().ok().map(|m| serde_json::json!({
+                    "device": m.dev(), "inode": m.ino(), "mode": m.mode(),
+                    "uid": m.uid(), "links": m.nlink(), "bytes": m.len(),
+                    "mtime": m.mtime(), "mtimeNanos": m.mtime_nsec(),
+                    "ctime": m.ctime(), "ctimeNanos": m.ctime_nsec()
+                })),
+                "metadataErrno": meta.as_ref().err().and_then(io::Error::raw_os_error)
+            })
+        }
+        fn fd_snapshot(file: RawFd) -> serde_json::Value {
+            let meta = metadata(file);
+            let fd_flags = unsafe { libc::fcntl(file, libc::F_GETFD) };
+            let fd_errno = (fd_flags < 0).then(|| io::Error::last_os_error().raw_os_error());
+            let status_flags = unsafe { libc::fcntl(file, libc::F_GETFL) };
+            let status_errno =
+                (status_flags < 0).then(|| io::Error::last_os_error().raw_os_error());
+            serde_json::json!({
+                "fd": file,
+                "fdFlags": fd_flags, "fdFlagsErrno": fd_errno,
+                "statusFlags": status_flags, "statusFlagsErrno": status_errno,
+                "held": meta.as_ref().ok().map(|m| serde_json::json!({
+                    "device": m.st_dev, "inode": m.st_ino, "mode": m.st_mode,
+                    "uid": m.st_uid, "links": m.st_nlink, "bytes": m.st_size
+                })),
+                "metadataError": meta.as_ref().err().map(ToString::to_string)
+            })
+        }
+        fn retain(fixture: &Fixture, name: &str, value: &serde_json::Value) {
+            let bytes = serde_json::to_vec_pretty(value).unwrap();
+            fs::write(fixture.root.join(name), &bytes).unwrap();
+            eprintln!(
+                "held_lock_deadline diagnostic {}: {}",
+                name,
+                String::from_utf8(bytes).unwrap()
+            );
+        }
+        let fixture = Fixture::new().retain_for_diagnostic();
         let budget = fixture.budget("lock");
+        let before_charge = path_snapshot(&fixture.counter("lock"));
+        retain(&fixture, "before-charge.json", &before_charge);
         budget.charge(soon()).unwrap();
+        let after_charge = path_snapshot(&fixture.counter("lock"));
+        retain(&fixture, "after-charge.json", &after_charge);
+        let lock_path = fixture.directory("lock").join(".stop-undeliverable.lock");
         let lock = fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .open(fixture.directory("lock").join(".stop-undeliverable.lock"))
+            .open(&lock_path)
             .unwrap();
-        assert_eq!(
-            unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
-            0
+        let before_flock = serde_json::json!({
+            "namedLock": path_snapshot(&lock_path),
+            "heldLock": fd_snapshot(lock.as_raw_fd()),
+            "budgetDirectory": fd_snapshot(budget.directory.as_raw_fd())
+        });
+        let first_flock = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        let first_flock_error = (first_flock < 0).then(io::Error::last_os_error);
+        retain(
+            &fixture,
+            "first-flock.json",
+            &serde_json::json!({
+                "test": "stop_budget::tests::held_lock_deadline_does_not_consume_a_charge",
+                "processPid": std::process::id(), "fixture": fixture.root,
+                "beforeCharge": before_charge, "afterCharge": after_charge,
+                "beforeFlock": before_flock,
+                "firstFlockResult": first_flock,
+                "firstFlockErrno": first_flock_error.as_ref().and_then(io::Error::raw_os_error),
+                "firstFlockErrorKind": first_flock_error.as_ref().map(|e| format!("{:?}",e.kind())),
+                "firstFlockError": first_flock_error.as_ref().map(ToString::to_string),
+                "afterFlock": {"namedLock": path_snapshot(&lock_path), "heldLock": fd_snapshot(lock.as_raw_fd())}
+            }),
         );
+        assert_eq!(first_flock, 0);
         let started = Instant::now();
-        kind(
-            budget.charge(started + Duration::from_millis(60)),
-            UnavailableKind::Deadline,
+        let blocked_charge = budget.charge(started + Duration::from_millis(60));
+        let elapsed = started.elapsed();
+        retain(
+            &fixture,
+            "blocked-charge.json",
+            &serde_json::json!({
+                "elapsedNanos": elapsed.as_nanos().to_string(),
+                "result": format!("{blocked_charge:?}"),
+                "counter": path_snapshot(&fixture.counter("lock")),
+                "namedLock": path_snapshot(&lock_path), "heldLock": fd_snapshot(lock.as_raw_fd())
+            }),
         );
-        assert!(started.elapsed() >= Duration::from_millis(50));
-        assert!(started.elapsed() < Duration::from_millis(300));
+        kind(blocked_charge, UnavailableKind::Deadline);
+        assert!(elapsed >= Duration::from_millis(50));
+        assert!(elapsed < Duration::from_millis(300));
         assert_eq!(fixture.count("lock"), 1);
         drop(lock);
         budget.charge(soon()).unwrap();
         assert_eq!(fixture.count("lock"), 2);
         kind(budget.reset(Instant::now()), UnavailableKind::Deadline);
         assert_eq!(fixture.count("lock"), 2);
+        retain(
+            &fixture,
+            "settled.json",
+            &serde_json::json!({
+                "state": "all_original_assertions_passed",
+                "counter": path_snapshot(&fixture.counter("lock")), "namedLock": path_snapshot(&lock_path)
+            }),
+        );
     }
 
     #[test]
