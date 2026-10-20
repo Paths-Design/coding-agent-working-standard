@@ -25,6 +25,9 @@ pub(super) enum Observation<'a> {
         host_pid: u32,
     },
     ImageAdmissionRefused {
+        invocation_id: &'a str,
+        canonical_project: &'a str,
+        image_key: &'a str,
         operation: &'static str,
         kind: &'static str,
     },
@@ -361,7 +364,11 @@ pub(super) fn git_capture_failure(log: &ObservationLog, diagnostic: &str) {
         stderr_bytes,
     });
 }
-pub(super) fn image_admission_failure(log: &ObservationLog, failure: &image::AdmissionError) {
+pub(super) fn image_admission_failure(
+    log: &ObservationLog,
+    offer: &Offer,
+    failure: &image::AdmissionError,
+) {
     let kind = match failure.kind {
         image::ErrorKind::Invalid => "invalid",
         image::ErrorKind::UnsupportedProfile => "unsupported_profile",
@@ -371,6 +378,9 @@ pub(super) fn image_admission_failure(log: &ObservationLog, failure: &image::Adm
         image::ErrorKind::Io => "io",
     };
     log.emit(Observation::ImageAdmissionRefused {
+        invocation_id: &offer.invocation_id,
+        canonical_project: &offer.expected_selection.canonical_project,
+        image_key: &offer.prepared.image_key,
         operation: failure.operation(),
         kind,
     });

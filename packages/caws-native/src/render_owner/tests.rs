@@ -848,6 +848,66 @@ fn admission_denials_bind_invocation_and_actual_unknown_or_capacity_branch() {
 }
 
 #[test]
+fn image_admission_diagnostics_correlate_each_offer_and_keep_static_failure_facts() {
+    let scratch = Scratch::new();
+    let c = config(&scratch);
+    provision(&c, expires()).unwrap();
+    let log = ObservationLog::open(&c, Instant::now()).unwrap();
+    let mut first = offered();
+    first
+        .caller_environment
+        .insert("SECRET".into(), "unreported-caller-value".into());
+    let mut second = first.clone();
+    second.invocation_id = "other-invocation".into();
+    second.expected_selection.canonical_project = "/other-project".into();
+    second.prepared.image_key = "9".repeat(64);
+    let failure_context = context(&c, &first);
+    let mut failure = image::validate_image(
+        Path::new("/unreported-source-path"),
+        &failure_context,
+        Instant::now() - Duration::from_millis(1),
+    )
+    .unwrap_err();
+    assert_eq!(failure.operation(), "deadline expired");
+    let kinds = [
+        (image::ErrorKind::Invalid, "invalid"),
+        (image::ErrorKind::UnsupportedProfile, "unsupported_profile"),
+        (image::ErrorKind::UnsafePath, "unsafe_path"),
+        (image::ErrorKind::Changed, "changed"),
+        (image::ErrorKind::Deadline, "deadline"),
+        (image::ErrorKind::Io, "io"),
+    ];
+    let mut expected = Vec::new();
+    for offer in [&first, &second] {
+        for (kind, label) in kinds {
+            failure.kind = kind;
+            image_admission_failure(&log, offer, &failure);
+            expected.push(serde_json::json!({
+                "event": "image_admission_refused",
+                "invocationId": offer.invocation_id,
+                "canonicalProject": offer.expected_selection.canonical_project,
+                "imageKey": offer.prepared.image_key,
+                "operation": "deadline expired",
+                "kind": label,
+            }));
+        }
+    }
+    let bytes = fs::read(base(&c).join("observations.jsonl")).unwrap();
+    let records: Vec<serde_json::Value> = bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            serde_json::from_slice::<serde_json::Value>(line).unwrap()["observation"].clone()
+        })
+        .collect();
+    assert_eq!(records, expected);
+    let text = String::from_utf8(bytes).unwrap();
+    assert!(!text.contains("SECRET"));
+    assert!(!text.contains("unreported-caller-value"));
+    assert!(!text.contains("unreported-source-path"));
+}
+
+#[test]
 fn diagnostic_log_appends_private_bounded_records_and_refuses_identity_replacement() {
     let scratch = Scratch::new();
     let c = config(&scratch);

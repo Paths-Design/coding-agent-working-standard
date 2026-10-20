@@ -1490,7 +1490,7 @@ impl Actor {
         let admitted = if let Some(stage) = &job.offer.prepared.staging_root {
             image::publish_staged_image(Path::new(stage), &context, job.expires)
                 .map_err(|failure| {
-                    image_admission_failure(&self.observations, &failure);
+                    image_admission_failure(&self.observations, &job.offer, &failure);
                     err(failure)
                 })?
                 .image
@@ -1501,7 +1501,7 @@ impl Actor {
                 job.expires,
             )
             .map_err(|failure| {
-                image_admission_failure(&self.observations, &failure);
+                image_admission_failure(&self.observations, &job.offer, &failure);
                 err(failure)
             })?
         };
@@ -1510,6 +1510,7 @@ impl Actor {
         {
             return Err("admitted renderer image differs from offer".into());
         }
+        self.stage("image_admission_complete", &job.offer.invocation_id);
         if !self.reserved {
             self.reserve_backend(&job.offer.invocation_id)?;
         }
@@ -1589,7 +1590,7 @@ impl Actor {
             admitted
                 .revalidate(&context, job.expires)
                 .map_err(|failure| {
-                    image_admission_failure(&self.observations, &failure);
+                    image_admission_failure(&self.observations, &job.offer, &failure);
                     err(failure)
                 })?;
             self.stage("worker_startup", &job.offer.invocation_id);
@@ -1636,7 +1637,7 @@ impl Actor {
         admitted
             .revalidate(&context, job.expires)
             .map_err(|failure| {
-                image_admission_failure(&self.observations, &failure);
+                image_admission_failure(&self.observations, &job.offer, &failure);
                 err(failure)
             })?;
         self.stage("grant_issue", &job.offer.invocation_id);
@@ -1671,6 +1672,7 @@ impl Actor {
             wire::MAX_SERVICE_BRIDGE_REQUEST_BYTES,
             job.expires,
         )?;
+        self.stage("bridge_received", &job.offer.invocation_id);
         self.phase = "bridge_validation";
         let incoming = wire::decode_service_bridge_request(&incoming, &issued).map_err(err)?;
         let expected = issued
@@ -1732,11 +1734,15 @@ impl Actor {
                 "renderer arguments do not match issued checkout/session/log directory",
             );
         }
-        self.phase = "dispatch_source_revalidation";
+        self.stage("dispatch_source_revalidation", &offer.invocation_id);
         admitted.revalidate(context, expires).map_err(|failure| {
-            image_admission_failure(&self.observations, &failure);
+            image_admission_failure(&self.observations, offer, &failure);
             err(failure)
         })?;
+        self.stage(
+            "dispatch_source_revalidation_complete",
+            &offer.invocation_id,
+        );
         let verified = wire::encode_render_request(request).map_err(err)?;
         let identity = journal::Identity {
             request_id: request.request_id.clone(),
@@ -1775,8 +1781,12 @@ impl Actor {
                     reason: journal::CancelReason::GrantWithdrawn,
                     diagnostic,
                 })?;
+                observations.emit(Observation::ActorStage {
+                    stage: "pre_dispatch_source_revalidation",
+                    invocation_id: &request.invocation_id,
+                });
                 admitted.revalidate(context, expires).map_err(|failure| {
-                    image_admission_failure(&observations, &failure);
+                    image_admission_failure(&observations, offer, &failure);
                     PreDispatchFailure {
                         reason: if failure.kind == image::ErrorKind::Changed {
                             journal::CancelReason::SourceRetired
@@ -1785,7 +1795,12 @@ impl Actor {
                         },
                         diagnostic: err(failure),
                     }
-                })
+                })?;
+                observations.emit(Observation::ActorStage {
+                    stage: "pre_dispatch_source_revalidation_complete",
+                    invocation_id: &request.invocation_id,
+                });
+                Ok(())
             }) {
                 Ok(dispatch) => dispatch,
                 Err(failure) => {
