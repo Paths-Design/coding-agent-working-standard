@@ -24,6 +24,12 @@ export function installCliSnapshot({ packageRoot, cawsHome, binPath }) {
   binPath = path.resolve(binPath);
   const metadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   if (metadata.name !== '@paths.design/caws-cli') throw new Error('Expected the CAWS CLI package');
+  // Packing below disables lifecycle scripts. Reject equally stale source and
+  // package projections before staging, locking or changing the active command.
+  const runtimeGenerator = path.join(packageRoot, 'scripts', 'generate-runtime-assets.mjs');
+  if (!fs.statSync(runtimeGenerator, { throwIfNoEntry: false })?.isFile())
+    throw new Error('Source runtime asset generator is required before CLI snapshot installation');
+  run(process.execPath, [runtimeGenerator, '--check'], packageRoot);
   const previous = fs.lstatSync(binPath, { throwIfNoEntry: false });
   if (previous && !previous.isSymbolicLink())
     throw new Error(`Refusing to replace non-symlink ${binPath}`);

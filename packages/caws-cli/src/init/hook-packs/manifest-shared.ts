@@ -603,7 +603,7 @@ import { isAdapterCoveredSurface } from './types';
 // shape, so the shared pack template tree changed again after v96.
 // v98: retain per-invocation handler progress before subsequent handlers run.
 // Cooperative renderer entrypoints include the native writer-custody bridge.
-export const SHARED_PACK_VERSION = 99;
+export const SHARED_PACK_VERSION = 100;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -1049,6 +1049,14 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    {
+      destPath: '.caws/hooks/advisory_truncate.cjs',
+      sourcePath: 'advisory_truncate.cjs',
+      executable: true,
+      managed: true,
+    },
+    // Callable compatibility asset for admitted custom runners. Stock advisory
+    // composition uses the generated CJS and does not fall back to this file.
     {
       destPath: '.caws/hooks/advisory_truncate.py',
       sourcePath: 'advisory_truncate.py',
