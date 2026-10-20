@@ -129,6 +129,36 @@ async function bounded<T>(promise: Promise<T>, label: string, maximum = 12000): 
     clearTimeout(timer);
   }
 }
+async function retainManagedFailure(
+  action: () => Promise<void>,
+  observeCleanup: () => Promise<Row>,
+  retain: (failure: Row) => void
+): Promise<void> {
+  try {
+    await action();
+  } catch (original) {
+    const describe = (error: unknown): string =>
+      error instanceof Error ? (error.stack ?? String(error)) : String(error);
+    let cleanup: Row;
+    try {
+      cleanup = await observeCleanup();
+    } catch (error) {
+      cleanup = { state: 'unknown', error: describe(error) };
+    }
+    try {
+      retain({
+        state: 'failed',
+        error: describe(original),
+        cleanup,
+        cleanupMethod: 'observation of autonomous retirement; no stop or signal requested',
+        nonclaim: 'external all-writer adoption and prior-writer drain',
+      });
+    } catch (error) {
+      process.stderr.write('Failure artifact could not be retained: ' + describe(error) + '\n');
+    }
+    throw original;
+  }
+}
 const generation = sha('reviewed-private-legacy-source-generation');
 function writerArgs(
   timeout: number,
@@ -182,129 +212,144 @@ async function managedOwnerRace(): Promise<void> {
   });
   manifest.managedOwnerArtifactRoot = harness.root;
   persist();
-  const fixture = await harness.createProject({
-    name: 'managed-vs-cooperative-legacy',
-    sessions: ['same-output-session'],
-  });
-  harness.startHost();
-  harness.success(
-    await bounded(harness.invoke(fixture), 'actual managed renderer invocation', 40000)
+  let cleanupObservation: Promise<Row> | undefined;
+  // Share one observation attempt with the failure path, including rejection;
+  // an uncertain first result must not restart the twenty-second budget.
+  const observeCleanup = (): Promise<Row> => (cleanupObservation ??= harness.cleanup(20000));
+  await retainManagedFailure(
+    async () => {
+      const fixture = await harness.createProject({
+        name: 'managed-vs-cooperative-legacy',
+        sessions: ['same-output-session'],
+      });
+      harness.startHost();
+      harness.success(
+        await bounded(harness.invoke(fixture), 'actual managed renderer invocation', 40000)
+      );
+      const created = harness
+        .ownerEvents()
+        .find((event) => event.event === 'worker_created' && typeof event.backendPid === 'number');
+      assert(created, 'actual managed backend was not observed');
+      const live = harness.observe(Number(created.backendPid));
+      assert.equal(live.state, 'observed', 'managed backend not live before cooperative contender');
+      harness.writeJson('managed-backend-before-contender.json', live);
+      const python = harness.tools.find((tool) => tool.name === 'python3');
+      assert(python);
+      const alternateHome = path.join(harness.sandbox, 'alternate-machine');
+      fs.mkdirSync(alternateHome, { mode: 0o700 });
+      const fields = [
+        fixture.session,
+        fixture.project,
+        fixture.sessionId,
+        'started',
+        'model',
+        'branch',
+        'head',
+        '0',
+        'start',
+        fixture.transcriptFile,
+        '',
+        '',
+      ];
+      const sourceHelper = path.join(
+        harness.home,
+        'lib/runtimes',
+        harness.installed.digest,
+        'lib/session-render-writer.sh'
+      );
+      const templateHelper = path.join(
+        cli,
+        'templates/hook-packs/shared/lib/session-render-writer.sh'
+      );
+      const installedHelperBytes = fs.readFileSync(sourceHelper);
+      assert.equal(
+        sha(installedHelperBytes),
+        sha(fs.readFileSync(templateHelper)),
+        'installed cooperative helper differs'
+      );
+      harness.writeJson('installed-cooperative-helper-custody.json', {
+        installedPath: sourceHelper,
+        templatePath: templateHelper,
+        sha256: sha(installedHelperBytes),
+        bytes: installedHelperBytes.length,
+      });
+      const args = [
+        '-c',
+        'source "$1"\nshift\nif slrd_try_render "$@"; then printf cooperative-rendered; else touch UNFENCED-FALLBACK; fi',
+        'managed-race',
+        sourceHelper,
+        path.join(fixture.project, '.caws/hooks'),
+        path.join(fixture.project, 'not-custody.json'),
+        ...fields,
+      ];
+      const env = {
+        ...harness.env,
+        CAWS_HOME: alternateHome,
+        CAWS_ROOT: fixture.project,
+        CAWS_RENDER_WRITER_NATIVE: harness.native,
+        CAWS_RENDER_WRITER_PYTHON: python.path,
+        CAWS_RENDER_WRITER_GENERATION: sha('cooperative-other-home-generation'),
+        CAWS_RENDER_WRITER_TIMEOUT_MS: '50',
+      };
+      const before = fs.readFileSync(path.join(fixture.session, 'turn-001.json'));
+      const refusal = harness.run(
+        'actual-managed-backend-refuses-adopted-legacy',
+        '/bin/bash',
+        args,
+        fixture.project,
+        env
+      );
+      assert.equal(refusal.code, 75, 'cooperative foreign renderer overlapped a managed backend');
+      assert.match(
+        fs.readFileSync(path.join(refusal.directory, 'stderr.bin'), 'utf8'),
+        /another machine owner retains custody/
+      );
+      assert(!fs.existsSync(path.join(fixture.project, 'UNFENCED-FALLBACK')));
+      assert.equal(
+        sha(fs.readFileSync(path.join(fixture.session, 'turn-001.json'))),
+        sha(before),
+        'refused contender changed managed artifacts'
+      );
+      harness.writeJson('refused-contender-artifact-identity.json', {
+        before: sha(before),
+        after: sha(fs.readFileSync(path.join(fixture.session, 'turn-001.json'))),
+      });
+      const cleanup = await observeCleanup();
+      assert.equal(cleanup.state, 'confirmed_inactive');
+      const after = harness.run(
+        'adopted-legacy-after-managed-cleanup',
+        '/bin/bash',
+        args,
+        fixture.project,
+        {
+          ...env,
+          CAWS_RENDER_WRITER_TIMEOUT_MS: '3000',
+          CAWS_RENDER_WRITER_GENERATION: sha('after-managed-generation'),
+        }
+      );
+      harness.success(after);
+      assert.equal(
+        fs.readFileSync(path.join(after.directory, 'stdout.bin'), 'utf8'),
+        'cooperative-rendered'
+      );
+      assert.match(
+        fs.readFileSync(path.join(fixture.session, 'turn-001.json'), 'utf8'),
+        new RegExp(fixture.label + ' user 1')
+      );
+      harness.writeJson('race-result.json', {
+        state: 'passed',
+        managedBackend: created,
+        cooperativeRefusal: refusal,
+        cleanup,
+        cooperativeAfterCleanup: after,
+        nonclaim: 'external all-writer adoption and prior-writer drain',
+      });
+    },
+    // Existing cleanup observes exact owned processes, pipe EOF and custody;
+    // no PID or lease is converted into permission to stop a process.
+    observeCleanup,
+    (failure) => harness.writeJson('race-result.json', failure)
   );
-  const created = harness
-    .ownerEvents()
-    .find((event) => event.event === 'worker_created' && typeof event.backendPid === 'number');
-  assert(created, 'actual managed backend was not observed');
-  const live = harness.observe(Number(created.backendPid));
-  assert.equal(live.state, 'observed', 'managed backend not live before cooperative contender');
-  harness.writeJson('managed-backend-before-contender.json', live);
-  const python = harness.tools.find((tool) => tool.name === 'python3');
-  assert(python);
-  const alternateHome = path.join(harness.sandbox, 'alternate-machine');
-  fs.mkdirSync(alternateHome, { mode: 0o700 });
-  const fields = [
-    fixture.session,
-    fixture.project,
-    fixture.sessionId,
-    'started',
-    'model',
-    'branch',
-    'head',
-    '0',
-    'start',
-    fixture.transcriptFile,
-    '',
-    '',
-  ];
-  const sourceHelper = path.join(
-    harness.home,
-    'lib/runtimes',
-    harness.installed.digest,
-    'lib/session-render-writer.sh'
-  );
-  const templateHelper = path.join(cli, 'templates/hook-packs/shared/lib/session-render-writer.sh');
-  const installedHelperBytes = fs.readFileSync(sourceHelper);
-  assert.equal(
-    sha(installedHelperBytes),
-    sha(fs.readFileSync(templateHelper)),
-    'installed cooperative helper differs'
-  );
-  harness.writeJson('installed-cooperative-helper-custody.json', {
-    installedPath: sourceHelper,
-    templatePath: templateHelper,
-    sha256: sha(installedHelperBytes),
-    bytes: installedHelperBytes.length,
-  });
-  const args = [
-    '-c',
-    'source "$1"\nshift\nif slrd_try_render "$@"; then printf cooperative-rendered; else touch UNFENCED-FALLBACK; fi',
-    'managed-race',
-    sourceHelper,
-    path.join(fixture.project, '.caws/hooks'),
-    path.join(fixture.project, 'not-custody.json'),
-    ...fields,
-  ];
-  const env = {
-    ...harness.env,
-    CAWS_HOME: alternateHome,
-    CAWS_ROOT: fixture.project,
-    CAWS_RENDER_WRITER_NATIVE: harness.native,
-    CAWS_RENDER_WRITER_PYTHON: python.path,
-    CAWS_RENDER_WRITER_GENERATION: sha('cooperative-other-home-generation'),
-    CAWS_RENDER_WRITER_TIMEOUT_MS: '50',
-  };
-  const before = fs.readFileSync(path.join(fixture.session, 'turn-001.json'));
-  const refusal = harness.run(
-    'actual-managed-backend-refuses-adopted-legacy',
-    '/bin/bash',
-    args,
-    fixture.project,
-    env
-  );
-  assert.equal(refusal.code, 75, 'cooperative foreign renderer overlapped a managed backend');
-  assert.match(
-    fs.readFileSync(path.join(refusal.directory, 'stderr.bin'), 'utf8'),
-    /another machine owner retains custody/
-  );
-  assert(!fs.existsSync(path.join(fixture.project, 'UNFENCED-FALLBACK')));
-  assert.equal(
-    sha(fs.readFileSync(path.join(fixture.session, 'turn-001.json'))),
-    sha(before),
-    'refused contender changed managed artifacts'
-  );
-  harness.writeJson('refused-contender-artifact-identity.json', {
-    before: sha(before),
-    after: sha(fs.readFileSync(path.join(fixture.session, 'turn-001.json'))),
-  });
-  const cleanup = await harness.cleanup(20000);
-  assert.equal(cleanup.state, 'confirmed_inactive');
-  const after = harness.run(
-    'adopted-legacy-after-managed-cleanup',
-    '/bin/bash',
-    args,
-    fixture.project,
-    {
-      ...env,
-      CAWS_RENDER_WRITER_TIMEOUT_MS: '3000',
-      CAWS_RENDER_WRITER_GENERATION: sha('after-managed-generation'),
-    }
-  );
-  harness.success(after);
-  assert.equal(
-    fs.readFileSync(path.join(after.directory, 'stdout.bin'), 'utf8'),
-    'cooperative-rendered'
-  );
-  assert.match(
-    fs.readFileSync(path.join(fixture.session, 'turn-001.json'), 'utf8'),
-    new RegExp(fixture.label + ' user 1')
-  );
-  harness.writeJson('race-result.json', {
-    state: 'passed',
-    managedBackend: created,
-    cooperativeRefusal: refusal,
-    cleanup,
-    cooperativeAfterCleanup: after,
-    nonclaim: 'external all-writer adoption and prior-writer drain',
-  });
 }
 async function main(): Promise<void> {
   fs.mkdirSync(output, { recursive: true, mode: 0o700 });
