@@ -116,6 +116,7 @@ assignments, not authority or acceptance records.
 | Live cancellation and restart | `render_lifecycle`: native owner/backend and lifecycle qualifier | Real dispatched rendering, caller disconnect, owned cleanup and reopened durable state; queued cancellation must not dispatch, and uncertain dispatched work must not replay |
 | Legacy writer exclusion | `render_legacy_fence`: cooperative writer bridge, native fence and legacy qualifier | Actual foreign daemon/inline fallback counterexample, then shared stable custody across cooperative legacy/native paths and generations; an absent lease or opt-in marker alone cannot establish adoption/drain |
 | Thirteen sessions / four repositories | `render_load`: actual workload and hostile oracle controls; depends on lifecycle/fence checks | Thirteen overlapping native clients, isolated semantic output, durable cross-project running overlap, owner-specific ordering, guard progress and bounded overload; sequential submissions or diagnostic logs alone cannot pass |
+| Rule-token developer utility | Separate owned lane `native-rule-tokens`, spec `CAWS-NATIVE-RULE-TOKENS-001`; parent retains integration and migration acceptance | Replace the Python counter and its CLI consumer with checked typed Node and a pinned offline encoder; retain actual differential outputs and the two declared zero-total/update-count repairs before retirement |
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock. Shared-output
@@ -145,7 +146,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | substitution precedence repaired; typed execution, selected-shell state and native handoff exercised, E63/E65 | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | selected-stock root integration and public-control repair exercised, E119 | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
-| R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | stock Bash switch integrated; parent package/Bash and image components exercised, E124 | Root merge `a92ce197` preserves the parent's reviewed library change. Optional tools and fixed CJS prefix proof are integrated at `184f4cc7`; actual sealed four/five-handler qualification remains pending. Selected custom Python compatibility and broader retirement remain separate |
+| R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127 | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence | TS transcript store | unreplaced | Atomic replacement, identity, replay custody, malformed and concurrent inputs |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization | TS normalization interfaces/common implementation | unreplaced | Lossless occurrence/provenance and explicit unavailable fields |
 | R11 | `shared/lib/harness_claude.py` | TS Claude adapter | unreplaced | Harness-specific transcript fixtures and installed render evidence |
@@ -2438,6 +2439,82 @@ Additional bounded evidence and unresolved dependencies:
   Delivered natural UTF-8 boundary cases, required-goal refusal, final-candidate
   lifecycle/legacy replay and the unchanged13-session fairness bar remain open.
 
+- E127: `56a92d25` preserves the positive-delivery requirement while correcting
+  plaintext extraction; its compiled extractor rejects nine malformed controls
+  and still identifies E126's missing final context. The initial VM probe fails
+  on a missing CommonJS binding; its correction is retained separately in
+  `r08-qualifier-context-{regression,corrected-regression}.log`.
+  Producer repair `39c76f51` changes only agent-stop's receipt channel, preserving
+  its real CLI call, error suppression and best-effort behavior. Direct CLI
+  human/JSON output and incompatible-base precedence remain unchanged. Shared
+  pack101 has75-file fingerprint
+  `f363028001052353a5d27dca57417f4fa637f084c742dffda95132cfab4c3344`.
+  Explicit review updates only agent-stop in the fixed prefix table to source
+  `c94358159f8fd77585bcb8c3679cd81c8d3d5dba0ff0970c50bf91a0f5f5eaa5`;
+  it does not infer concurrency permission from a new package hash. The private
+  old-source component control exits1 on the intended nonempty-stdout assertion,
+  retaining actual source/receipts in `stop-producer-negative-2026-10-20/`.
+  The repaired four focused suites exit0 and retain four real-CLI fixtures in
+  `stop-producer-components-2026-10-20/`: self stopped, peers unchanged, receipt
+  diagnostics, unchanged direct CLI output, missing/error best effort, exact
+  natural advice and earlier real goal refusal. Native image checks34 and CLI
+  and release builds exit0. These logs live in the E118 prefix-cohort directory.
+  Release native SHA-256 is
+  `43e4b13161c63c5751303783a3e564f7d8dd8171ce19b7305344169d3f0acb44`.
+  Actual native control root `render-advisory-control-2026-10-20T11-18-01-578Z/`
+  passes with empty stdout, receipt stderr and Session proof. Actual cut root
+  `render-advisory-cut-2026-10-20T11-19-27-611Z/` passes three native invocations:
+  whole natural card, budget608 with116 bytes retained/1738 elided, and adjacent
+  budget616 with120 retained/1634 elided including the complete three-byte bullet.
+  Each captures one actual grant, completes all five selected handlers, stops its
+  real lease and renders the expected turn. The five-handler extension stays
+  serial. Root and independent readback rehash the control177 files/415931 bytes
+  and cut334 files/782538 bytes without mismatch. Required-goal root
+  `render-advisory-goal-block-2026-10-20T11-20-38-698Z/` passes: native28139 exits2,
+  only the goal guard runs, full protective output survives budget1 and no render
+  dispatch/outcome/turn appears. Its211 files/416336 bytes rehash without mismatch.
+  All three roots report known inactive cleanup, free custody and absent sockets.
+  Goal refusal also emits an unused-relay EOF diagnostic; its broader lifecycle
+  cause remains unqualified. Independent review grounds the producer boundary
+  and raw outputs; neither review nor these local native outputs establish
+  platform delivery. In particular, the heartbeat's PreToolUse envelope in this
+  Stop extension may be unsupported by a real Stop consumer. Missing optional
+  tools, old full-image admission, Python retirement, installation and fairness
+  remain separate obligations. No acceptance is recorded.
+
+- E128: Strict compilation of the lifecycle/legacy drivers exits0. On E127's
+  native43e4b131, separate `normal`, `queued-cancel` and `cancel` runs exit0.
+  Roots are `render-lifecycle-normal-2026-10-20T11-23-27-376Z/`,
+  `render-lifecycle-queued-cancel-2026-10-20T11-25-40-365Z/` and
+  `render-lifecycle-cancel-2026-10-20T11-26-47-499Z/`. Normal caller63282 writes
+  the expected turn; idle project custody releases while a peer keeps host63281
+  active. Queued caller81644 is actor-admitted while81471 is occupied, then
+  cancels without dispatch or an Unknown fence. Dispatched caller88434 exits2
+  after actual turn publication; request `e7a114e06cccfc4db589797ee1a8d9e6bbb9d933465d4331ea130f0bacc92a81`
+  retains an accepted Unknown outcome. Its cooperative legacy probe exits75 and
+  `MUST-NOT-REPLAY` remains absent. Owned cleanup records known inactivity in
+  each case. These are isolated runtime observations, not deployed exclusion or
+  lifecycle closure. The first restart attempt exits1 before deliberate host
+  crash: the generic recursive collector stats transient
+  `turn-039.json.tmp.94517` after rename and receives ENOENT. Preserve
+  `render-lifecycle-host-crash-restart-2026-10-20T11-28-01-779Z/` and
+  `stop-producer-lifecycle-restart-command.log`. Cleanup confirms host94210,
+  worker94510 and backend94517 absent, free custody and no socket; no legacy
+  replay follows the failure. Repair committed-turn collection before its next
+  replay; stable artifact catalogs must retain strict failure behavior.
+  A separate source audit identifies the connected missing-identity latch gap:
+  with payload/environment SID absent and no own PID-cache record, the selected
+  Write/Edit guard resolves unknown and skips latch lookup/strike/escalation at
+  `shared/block-dangerous.sh:561`. No fresh runtime counterexample has executed.
+  Current stock surface source9fb104ea also differs from the typed stock
+  profile's f8d154f1, so native containment cannot be inferred from shell
+  termination. Preserve real caller/PID safety; do not refresh that profile
+  without its own source review and original-caller/foreign-cache/sibling tests.
+  Parent scope releases broad root `scripts/` and retains its two installer
+  files through CLI amendment. The separately owned rule-token lane carries
+  one R20 leaf plus its exact source/test/config/dependency paths; parent retains
+  the remaining R20 inventory and full migration acceptance.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2541,16 +2618,22 @@ actual replay fails fairness and locates both publication cost and the larger
 required-lane/consumer-path dependency. Define the complete executor, native
 request ownership, fresh authority and cancellation boundaries before claiming
 residency or integrating scheduler capacity; preserve the caller's PID safety
-contract and sibling isolation. R06/R08 source integration and sealed-image
-contracts remain owed. E119 integrates R06 and repairs its demonstrated public
-NO_ASK regression; E124 integrates R08 components, with actual sealed consumer
-qualification pending. E120 isolates the intentional fork;
+contract and sibling isolation. R06/R08 source integration retains per-consumer
+proof obligations. E119 integrates R06 and repairs its demonstrated public
+NO_ASK regression; E124 integrates R08 components and E127 exercises their actual
+local native consumer after repairing stop-receipt displacement. E120 isolates the intentional fork;
 E121 retains further full-suite failures and stronger diagnostics without
 attributing their causes. E123 repairs partial holder publication and retains
 actual cleanup plus a full pass. E125 exercises the separate retained-join
-unwind branch; injected-quarantine unwind remains unqualified. Execute R08's
-actual sealed four-handler control, natural advisory boundary cases and
-required-goal block before broadening its image/consumer claim. E122 forbids a
+unwind branch; injected-quarantine unwind remains unqualified. E126 preserves
+the failed advisory baseline; E127 observes exact local native boundary cuts and
+required-goal output, with platform consumption explicitly unverified. E128
+replays three lifecycle modes on the final executable and preserves a pre-crash
+collector failure. Qualify the committed-turn collector and stable journal/marker
+retention, then replay restart and legacy exclusion separately after known
+cleanup. The missing-SID/PID-cache latch branch and current stock profile
+mismatch need an original-caller probe before a containment or required-capacity
+claim. E122 forbids a
 pre-Node queue which skips required latch/Stop semantics. Keep the original
 1000-turn hot transcript, counts,30s request budgets and later hot Running
 witness requirements. Correct output and source-level capacity are not fairness
