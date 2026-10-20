@@ -152,7 +152,9 @@ module.exports = function runtimeAssetFixture() {
           fs.cpSync(root, retainedRoot, {
             recursive: true,
             dereference: false,
-            filter: (source) => path.basename(source) !== 'node_modules',
+            // The root-level directory is the generator fixture's esbuild
+            // dependency. Installed generation dependencies are runtime evidence.
+            filter: (source) => source !== path.join(root, 'node_modules'),
           });
           const mapping = { executedRoot: root, retainedRoot, nonclaims };
           fs.writeFileSync(
