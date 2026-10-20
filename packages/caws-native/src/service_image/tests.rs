@@ -367,6 +367,256 @@ fn nofollow_component_walk_and_private_sealed_modes_are_enforced() {
     );
 }
 #[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn named_image_custody_allows_concurrent_sibling_stage_publication() {
+    let scratch = Scratch::new();
+    let root = scratch.0.join("admitted-image");
+    fs::DirBuilder::new().mode(0o500).create(&root).unwrap();
+    let parent = absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap();
+    let immutable_parent_stamp = Stamp::of(&parent.metadata().unwrap());
+    let parent_identity = PrivateParentIdentity::checked(&parent).unwrap();
+    let root_stamp = Stamp::of(&fs::metadata(&root).unwrap());
+    let writer_path = scratch.0.clone();
+    // The join fixes the interleaving: a separate caller publishes another
+    // sealed image after custody capture and before the production end check.
+    std::thread::spawn(move || {
+        let stage = writer_path.join(".stage-sibling");
+        fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+        write_mode(&stage.join("payload"), b"independent image", 0o555);
+        fs::set_permissions(&stage, fs::Permissions::from_mode(0o500)).unwrap();
+        let parent = absolute_directory(&writer_path, Access::PrivateParent, expires()).unwrap();
+        rename_no_replace(parent.as_raw_fd(), ".stage-sibling", "sibling-image").unwrap();
+    })
+    .join()
+    .unwrap();
+    assert_ne!(
+        Stamp::of(&parent.metadata().unwrap()),
+        immutable_parent_stamp
+    );
+    assert_eq!(
+        fs::read(scratch.0.join("sibling-image/payload")).unwrap(),
+        b"independent image"
+    );
+    assert!(!scratch.0.join(".stage-sibling").exists());
+    check_named_image_custody(&root, &root_stamp, &scratch.0, &parent_identity, expires()).unwrap();
+    assert_eq!(
+        PrivateParentIdentity::checked(&parent).unwrap(),
+        parent_identity
+    );
+}
+
+#[test]
+fn named_image_custody_refuses_replaced_symlink_or_nonprivate_parent() {
+    let scratch = Scratch::new();
+    let parent_path = scratch.0.join("parent");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&parent_path)
+        .unwrap();
+    let root = parent_path.join("image");
+    fs::DirBuilder::new().mode(0o500).create(&root).unwrap();
+    let parent = absolute_directory(&parent_path, Access::PrivateParent, expires()).unwrap();
+    let identity = PrivateParentIdentity::checked(&parent).unwrap();
+    let stamp = Stamp::of(&fs::metadata(&root).unwrap());
+    for field in ["dev", "ino", "uid", "mode"] {
+        let mut wrong_identity = identity.clone();
+        match field {
+            "dev" => wrong_identity.dev ^= 1,
+            "ino" => wrong_identity.ino ^= 1,
+            // This checks the identity comparison, not a privileged chown.
+            "uid" => wrong_identity.uid ^= 1,
+            "mode" => wrong_identity.mode ^= 0o010,
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            check_named_image_custody(&root, &stamp, &parent_path, &wrong_identity, expires())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Changed,
+            "identity field {field} must remain pinned"
+        );
+    }
+    fs::set_permissions(&parent_path, fs::Permissions::from_mode(0o750)).unwrap();
+    assert_eq!(
+        check_named_image_custody(&root, &stamp, &parent_path, &identity, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    fs::set_permissions(&parent_path, fs::Permissions::from_mode(0o700)).unwrap();
+    let moved = scratch.0.join("moved-parent");
+    fs::rename(&parent_path, &moved).unwrap();
+    symlink(&moved, &parent_path).unwrap();
+    assert!(check_named_image_custody(&root, &stamp, &parent_path, &identity, expires()).is_err());
+    fs::remove_file(&parent_path).unwrap();
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&parent_path)
+        .unwrap();
+    // Keep the original root coordinate readable to isolate the named-parent
+    // identity check from the independently immutable root check.
+    assert_eq!(
+        check_named_image_custody(
+            &moved.join("image"),
+            &stamp,
+            &parent_path,
+            &identity,
+            expires()
+        )
+        .unwrap_err()
+        .kind,
+        ErrorKind::Changed
+    );
+}
+
+#[test]
+fn retained_stage_custody_refuses_replacement_or_new_child_after_validation() {
+    for replace in [false, true] {
+        let scratch = Scratch::new();
+        let stage = scratch.0.join(".stage-validated");
+        fs::DirBuilder::new().mode(0o500).create(&stage).unwrap();
+        let held_stage = absolute_directory(&stage, Access::SealedDirectory, expires()).unwrap();
+        let stamp = Stamp::of(&held_stage.metadata().unwrap());
+        let identity = PrivateParentIdentity::checked(
+            &absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap(),
+        )
+        .unwrap();
+        check_named_image_custody(&stage, &stamp, &scratch.0, &identity, expires()).unwrap();
+        if replace {
+            fs::rename(&stage, scratch.0.join("retired-stage")).unwrap();
+            fs::DirBuilder::new().mode(0o500).create(&stage).unwrap();
+            assert_ne!(
+                held_stage.metadata().unwrap().ino(),
+                fs::metadata(&stage).unwrap().ino()
+            );
+        } else {
+            fs::set_permissions(&stage, fs::Permissions::from_mode(0o700)).unwrap();
+            write_mode(&stage.join("unvalidated-child"), b"unadmitted", 0o555);
+            fs::set_permissions(&stage, fs::Permissions::from_mode(0o500)).unwrap();
+        }
+        assert_eq!(
+            check_named_image_custody(&stage, &stamp, &scratch.0, &identity, expires())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Changed
+        );
+    }
+}
+
+#[test]
+fn mutable_parent_identity_does_not_relax_immutable_file_or_manifest_pins() {
+    for (name, access, mode) in [
+        ("execution", Access::SealedFile, 0o555),
+        ("manifest.json", Access::Manifest, 0o400),
+    ] {
+        let scratch = Scratch::new();
+        let file = scratch.0.join(name);
+        write_mode(&file, b"original bytes", mode);
+        let held = absolute_file(&file, access, expires()).unwrap();
+        let (_, stamp) = read_file(held.try_clone().unwrap(), 100, access, expires()).unwrap();
+        let pin = Pin {
+            path: file.clone(),
+            stamp,
+            access,
+        };
+        check_pins(std::slice::from_ref(&pin), expires()).unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        write_mode(&file, b"tampered image contents", mode);
+        assert_eq!(
+            check_pins(std::slice::from_ref(&pin), expires())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Changed
+        );
+        fs::remove_file(&file).unwrap();
+        write_mode(&file, b"original bytes", mode);
+        assert_ne!(
+            held.metadata().unwrap().ino(),
+            fs::metadata(&file).unwrap().ino()
+        );
+        assert_eq!(
+            check_pins(&[pin], expires()).unwrap_err().kind,
+            ErrorKind::Changed
+        );
+    }
+}
+
+#[test]
+fn existing_destination_probe_only_admits_safe_sealed_directory_or_confirmed_absence() {
+    let scratch = Scratch::new();
+    let parent = absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap();
+    let key = "a".repeat(64);
+    let target = scratch.0.join(&key);
+    assert!(!existing_image_root(&parent, &key, expires()).unwrap());
+    assert_eq!(
+        existing_image_root(&parent, "../escape", expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    fs::DirBuilder::new().mode(0o500).create(&target).unwrap();
+    assert!(existing_image_root(&parent, &key, expires()).unwrap());
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(
+        existing_image_root(&parent, &key, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    fs::remove_dir(&target).unwrap();
+    write_mode(&target, b"wrong object", 0o400);
+    assert_eq!(
+        existing_image_root(&parent, &key, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    fs::remove_file(&target).unwrap();
+    symlink(scratch.0.join("missing-target"), &target).unwrap();
+    assert_eq!(
+        existing_image_root(&parent, &key, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    assert_eq!(
+        existing_image_root(&parent, &key, Instant::now() - Duration::from_secs(1))
+            .unwrap_err()
+            .kind,
+        ErrorKind::Deadline
+    );
+    fs::remove_file(&target).unwrap();
+    fs::set_permissions(&scratch.0, fs::Permissions::from_mode(0o750)).unwrap();
+    assert_eq!(
+        existing_image_root(&parent, &key, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+}
+
+#[test]
+fn reuse_requires_the_same_validated_stage_manifest() {
+    let (stage, _) = binding_fixture();
+    require_same_prepared_image(&stage, &stage).unwrap();
+    for change in ["generation", "source", "execution", "selection"] {
+        let mut final_image = stage.clone();
+        match change {
+            "generation" => final_image.source_generation = "0".repeat(64),
+            "source" => final_image.original_closure[0].sha256 = "0".repeat(64),
+            "execution" => final_image.execution.root.push_str("-replacement"),
+            "selection" => final_image.selection.selected_index += 1,
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            require_same_prepared_image(&stage, &final_image)
+                .unwrap_err()
+                .kind,
+            ErrorKind::Changed
+        );
+    }
+}
+#[test]
 fn source_cache_exclusion_never_hides_unreviewed_source_or_symlink_entries() {
     let scratch = Scratch::new();
     write_mode(&scratch.0.join("module.py"), b"source", 0o644);

@@ -740,6 +740,49 @@ impl Stamp {
         }
     }
 }
+/// A private image parent is a mutable namespace: other valid callers may add
+/// stages or publish sibling images during admission. Its custody is its named
+/// directory identity and access profile, not its child count or timestamps.
+/// Immutable image roots, files, policy and sources continue to use full Stamp.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PrivateParentIdentity {
+    dev: u64,
+    ino: u64,
+    uid: u32,
+    mode: u32,
+}
+impl PrivateParentIdentity {
+    fn checked(file: &File) -> Result<Self> {
+        let metadata = checked_metadata(file, Access::PrivateParent)?;
+        Ok(Self {
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+            uid: metadata.uid(),
+            mode: metadata.mode(),
+        })
+    }
+}
+fn check_named_image_custody(
+    root: &Path,
+    root_stamp: &Stamp,
+    parent: &Path,
+    parent_identity: &PrivateParentIdentity,
+    expires: Instant,
+) -> Result<()> {
+    require(
+        Stamp::of(&checked_metadata(
+            &absolute_directory(root, Access::SealedDirectory, expires)?,
+            Access::SealedDirectory,
+        )?) == *root_stamp
+            && PrivateParentIdentity::checked(&absolute_directory(
+                parent,
+                Access::PrivateParent,
+                expires,
+            )?)? == *parent_identity,
+        ErrorKind::Changed,
+        "named image custody changed",
+    )
+}
 #[derive(Clone, Copy)]
 enum Access {
     Source,
@@ -1541,7 +1584,7 @@ fn validate_image_at(
     deadline(expires)?;
     // Native-derived private parent is checked before opening the supplied child.
     let parent = absolute_directory(&image_parent(context), Access::PrivateParent, expires)?;
-    let parent_stamp = Stamp::of(&checked_metadata(&parent, Access::PrivateParent)?);
+    let parent_identity = PrivateParentIdentity::checked(&parent)?;
     require(
         root.parent() == Some(image_parent(context).as_path()),
         ErrorKind::UnsafePath,
@@ -1648,17 +1691,12 @@ fn validate_image_at(
         access: Access::OperatorPolicy,
     });
     check_pins(&originals.pins, expires)?;
-    require(
-        Stamp::of(&checked_metadata(
-            &absolute_directory(root, Access::SealedDirectory, expires)?,
-            Access::SealedDirectory,
-        )?) == root_stamp
-            && Stamp::of(&checked_metadata(
-                &absolute_directory(&image_parent(context), Access::PrivateParent, expires)?,
-                Access::PrivateParent,
-            )?) == parent_stamp,
-        ErrorKind::Changed,
-        "named image custody changed",
+    check_named_image_custody(
+        root,
+        &root_stamp,
+        &image_parent(context),
+        &parent_identity,
+        expires,
     )?;
     deadline(expires)?;
     Ok(ValidatedImage {
@@ -2064,6 +2102,57 @@ fn stage_name<'a>(stage: &'a Path, context: &AdmissionContext) -> Result<&'a str
     )?;
     Ok(name)
 }
+/// Only a confirmed missing directory entry permits publication. Existing
+/// entries must be safe sealed directories before the full final validator is
+/// called; a symlink, wrong mode, or metadata error is never treated as absence.
+fn existing_image_root(parent: &File, name: &str, expires: Instant) -> Result<bool> {
+    deadline(expires)?;
+    require(
+        digest(name),
+        ErrorKind::UnsafePath,
+        "existing image name is not a derived key",
+    )?;
+    checked_metadata(parent, Access::PrivateParent)?;
+    let encoded = CString::new(name).expect("digest has no NUL");
+    let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+    if unsafe {
+        libc::fstatat(
+            parent.as_raw_fd(),
+            encoded.as_ptr(),
+            stat.as_mut_ptr(),
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    } != 0
+    {
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ENOENT) {
+            deadline(expires)?;
+            return Ok(false);
+        }
+        return Err(io_error("existing image metadata", error));
+    }
+    require(
+        unsafe { stat.assume_init() }.st_mode & libc::S_IFMT == libc::S_IFDIR,
+        ErrorKind::UnsafePath,
+        "existing image is not a directory",
+    )?;
+    checked_metadata(
+        &component(parent.as_raw_fd(), name, true)?,
+        Access::SealedDirectory,
+    )?;
+    deadline(expires)?;
+    Ok(true)
+}
+fn require_same_prepared_image(
+    stage: &PreparedImageManifest,
+    final_image: &PreparedImageManifest,
+) -> Result<()> {
+    require(
+        stage == final_image,
+        ErrorKind::Changed,
+        "existing image differs from validated stage",
+    )
+}
 fn rename_no_replace(parent: RawFd, stage: &str, destination: &str) -> std::io::Result<()> {
     let stage = CString::new(stage)
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "NUL staging name"))?;
@@ -2170,9 +2259,25 @@ pub fn publish_staged_image(
     let key = image_key(&header)?;
     let final_root = image_parent(context).join(&key);
     let staged = validate_image_at(stage, &final_root, context, expires)?;
-    sync_image_tree(stage, staged.manifest(), expires)?;
     let parent = absolute_directory(&image_parent(context), Access::PrivateParent, expires)?;
-    let parent_metadata = checked_metadata(&parent, Access::PrivateParent)?;
+    let parent_identity = PrivateParentIdentity::checked(&parent)?;
+    if existing_image_root(&parent, &key, expires)? {
+        let image = validate_image(&final_root, context, expires)?;
+        require_same_prepared_image(staged.manifest(), image.manifest())?;
+        check_named_image_custody(
+            stage,
+            &staged.root_stamp,
+            &image_parent(context),
+            &parent_identity,
+            expires,
+        )?;
+        return Ok(PublishedImage {
+            image,
+            published: false,
+            retained_stage: Some(stage.to_owned()),
+        });
+    }
+    sync_image_tree(stage, staged.manifest(), expires)?;
     let named_stage = absolute_directory(stage, Access::SealedDirectory, expires)?;
     require(
         Stamp::of(&checked_metadata(&named_stage, Access::SealedDirectory)?) == staged.root_stamp,
@@ -2189,10 +2294,8 @@ pub fn publish_staged_image(
                 deadline(expires)?;
                 let current_parent =
                     absolute_directory(&image_parent(context), Access::PrivateParent, expires)?;
-                let current = checked_metadata(&current_parent, Access::PrivateParent)?;
                 require(
-                    (current.dev(), current.ino())
-                        == (parent_metadata.dev(), parent_metadata.ino()),
+                    PrivateParentIdentity::checked(&current_parent)? == parent_identity,
                     ErrorKind::Changed,
                     "image parent changed during publication",
                 )?;
@@ -2217,6 +2320,7 @@ pub fn publish_staged_image(
         }
         Err(error) if error.raw_os_error() == Some(libc::EEXIST) => {
             let image = validate_image(&final_root, context, expires)?;
+            require_same_prepared_image(staged.manifest(), image.manifest())?;
             Ok(PublishedImage {
                 image,
                 published: false,
