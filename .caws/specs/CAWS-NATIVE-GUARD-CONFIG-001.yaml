@@ -1,11 +1,9 @@
 id: CAWS-NATIVE-GUARD-CONFIG-001
 title: 'Integrate typed guard configuration at qualified native shell consumers'
 mode: refactor
-lifecycle_state: closed
-resolution: completed
-closure_notes: 'Bounded selected-stock guard configuration transport completed on consolidated caws/native-guard-config source; A1/A2 recorded/read back events9322/9323. Strict build, focused66 cases at c412, custom-library repair2 targetedcases and two real native one-shots at c027; combined dec55-to-4f gates0. Durable raw evidence under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-guard-config. Custom/explicit and unsupported compatibility parser paths remain. No parent integration, machine install, harness delivery, tool withholding, containment, Python retirement, whole-runtime parity or cutover established.'
+lifecycle_state: active
 created_at: '2026-10-20T05:24:25.239Z'
-updated_at: '2026-10-20T06:56:48.756Z'
+updated_at: '2026-10-20T06:57:09.918Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
