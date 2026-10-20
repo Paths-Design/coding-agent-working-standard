@@ -53,3 +53,10 @@ evidence:
     command: "env CAWS_HARVEST_TEST_ARTIFACTS=/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest/focused-payload-read-observation node --test scripts/hook-harvest.test.mjs"
     exit_code: 0
     commit_sha: "51d0b6acfa6a6a2210f83f56c3d38dda3a56f5e3"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Final actual CLI differentials commands018/019 exit0 with Node22.19 and Node18.0: direct/default-root and executable-symlink requests produce correct reports with PATH containing only Node/Git. Inspected source built-in imports and only git subprocess; no Python fallback. commands022 focused exit0 and023 strict checkJs exit0 at exact current test/config bytes. Maintained audit reproduction points to node utility/test/checkJs; dated historical facts preserved. Dependency-free source, no package/lock changes; no OS-level interpreter denial or every-branch/other-OS/native installation claim. Retained002/005/007 failures and015 actual oldPython0/Node2 dash-space defect plus repaired0/0 and registered-option-lookalike2/2. Full raw artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest. CLI --verify checks committed citation identity/reachability only; command recorded, never re-executed; behavioral adjudication uses independently inspected raw artifacts."
+    recorded_at: "2026-10-20T13:49:34.235Z"
+    command: node node_modules/typescript/bin/tsc --project scripts/tsconfig.hook-harvest.json
+    exit_code: 0
+    commit_sha: "51d0b6acfa6a6a2210f83f56c3d38dda3a56f5e3"
