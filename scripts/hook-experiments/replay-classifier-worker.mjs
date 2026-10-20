@@ -6,7 +6,7 @@
 import vm from 'node:vm';
 import { writeSync } from 'node:fs';
 import path from 'node:path';
-import { readFile, lstat, realpath, readdir } from 'node:fs/promises';
+import { readFile, lstat, realpath, readdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { TextDecoder } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +37,82 @@ function progress(phase) {
 const digest = value => createHash('sha256').update(value).digest('hex');
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** @param {boolean} initialization @returns {Record<string,unknown>} */
+function protocolFailure(initialization) {
+  return { status: 'error', phase: initialization ? 'initialization' : 'invocation_or_serialization',
+    error_type: 'ProtocolError', context_probes: [] };
+}
+const PHASES = ['initialization', 'invocation', 'serialization', 'invocation_or_serialization'];
+const OPERATIONS = ['file write', 'filesystem access', 'process spawn', 'network', 'process exit',
+  'process signal', 'asynchronous execution', 'output', 'code generation'];
+const REASON_CODES = ['external_import', 'missing_relative_import', 'non_string_import',
+  'unsupported_builtin_or_external', 'classifier_export', 'offline_absolute_path',
+  'asynchronous_classifier', 'classification_shape', 'classification_size', 'dynamic_import',
+  'relative_import_escape', 'missing_factory', 'build_admission'];
+const SOURCES = ['unknown', 'regex', 'legacy_family', 'rm_classifier', 'find_delete',
+  'commit_deletions', 'capability', 'classifier_error', 'sidecar_error'];
+const PROBES = ['git', 'read', 'isFile', 'realpath', 'consumeFile'];
+/** Only host-parsed JSON enters this boundary. Never forward mutable VM metadata.
+ * Arbitrary selected error codes, copied reasons, probes and extra keys are rejected.
+ * The raw classifier reason exists only long enough for this host to hash it.
+ * @param {unknown} value @param {boolean} [initialization]
+ * @returns {Record<string,unknown>}
+ */
+function projectResult(value, initialization = false) {
+  const failed = () => protocolFailure(initialization);
+  if (!object(value) || typeof value.status !== 'string') return failed();
+  const status = value.status;
+  /** @type {Record<string,string[]>} */
+  const fields = {
+    ready: ['phase'],
+    classified: ['decision', 'source', 'enforcement', 'reason'],
+    execution_attempt_refused: ['phase', 'operation'],
+    unsupported_build: ['phase', 'reason_code'],
+    timeout: ['phase'],
+    error: ['phase', 'error_type'],
+  };
+  if (!Object.hasOwn(fields, status) || (status === 'ready' && !initialization) ||
+      (status === 'classified' && initialization)) return failed();
+  const allowed = new Set(['status', 'context_probes', ...(fields[status] ?? [])]);
+  if (Object.keys(value).some(key => !allowed.has(key))) return failed();
+  const probes = value.context_probes ?? [];
+  if (!Array.isArray(probes) || probes.length > 5 ||
+      probes.some(probe => typeof probe !== 'string' || !PROBES.includes(probe)) ||
+      new Set(probes).size !== probes.length) return failed();
+  /** @type {Record<string,unknown>} */
+  const result = { status };
+  if (!initialization) result.context_probes = probes;
+  if (status === 'ready') {
+    if (value.phase !== undefined && value.phase !== 'initialization') return failed();
+    result.phase = 'initialization';
+    return result;
+  }
+  if (status === 'classified') {
+    if (typeof value.decision !== 'string' || !['allow', 'ask', 'deny'].includes(value.decision) ||
+        typeof value.source !== 'string' || !SOURCES.includes(value.source) ||
+        typeof value.enforcement !== 'string' || !['pass', 'advisory', 'confirm', 'block'].includes(value.enforcement) ||
+        typeof value.reason !== 'string' || value.reason.length > 65536) return failed();
+    result.decision = value.decision; result.source = value.source;
+    result.enforcement = value.enforcement; result.reason_sha256 = digest(value.reason);
+    return result;
+  }
+  const phase = value.phase;
+  if ((phase !== undefined && (typeof phase !== 'string' || !PHASES.includes(phase))) ||
+      (initialization && phase !== undefined && phase !== 'initialization')) return failed();
+  result.phase = initialization ? 'initialization' : phase ?? 'invocation_or_serialization';
+  if (status === 'execution_attempt_refused') {
+    if (typeof value.operation !== 'string' || !OPERATIONS.includes(value.operation)) return failed();
+    result.operation = value.operation;
+  } else if (status === 'unsupported_build') {
+    if (typeof value.reason_code !== 'string' || !REASON_CODES.includes(value.reason_code)) return failed();
+    result.reason_code = value.reason_code;
+  } else if (status === 'error') {
+    if (typeof value.error_type !== 'string' || !['ProtocolError', 'ClassifierError'].includes(value.error_type)) return failed();
+    result.error_type = value.error_type;
+  }
+  return result;
+}
 
 /**
  * The sole host callback is captured privately before selected code loads.
@@ -259,7 +335,7 @@ function initializeRealm(config) {
 }
 
 /** @param {string} snapshot @param {string} manifestPath
- * @returns {Promise<(command:string)=>Record<string,unknown>>}
+ * @returns {Promise<{initialization:Record<string,unknown>,invoke:(command:string)=>Record<string,unknown>}>}
  */
 async function engine(snapshot, manifestPath) {
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -320,7 +396,8 @@ async function engine(snapshot, manifestPath) {
     dynamicIds: Object.entries(sources).filter(([, source]) => /\bimport\s*\(/.test(source)).map(([id]) => id) };
   new vm.Script('(' + initializeRealm.toString() + ')(' + JSON.stringify(config) + ')')
     .runInContext(context, { timeout: 250 });
-  let initTimeout = false;
+  /** @type {Record<string,unknown>} */
+  let initialization = protocolFailure(true);
   try {
     for (const [id, source] of Object.entries(sources)) {
       const body = id.endsWith('.json')
@@ -329,17 +406,19 @@ async function engine(snapshot, manifestPath) {
       new vm.Script('globalThis.__factories[' + JSON.stringify(id) + '] = function(exports, require, module, __filename, __dirname) {\n' + body + '\n};',
         { filename: '/' + id }).runInContext(context, { timeout: 250 });
     }
-    new vm.Script('globalThis.__initializeJSON()').runInContext(context, { timeout: 250 });
-    new vm.Script('globalThis.__settleInitializationJSON()').runInContext(context, { timeout: 250 });
+    const initialized = new vm.Script('globalThis.__initializeJSON()').runInContext(context, { timeout: 250 });
+    const settled = new vm.Script('globalThis.__settleInitializationJSON()').runInContext(context, { timeout: 250 });
+    const encoded = typeof settled === 'string' ? settled : initialized;
+    if (typeof encoded === 'string' && encoded.length <= 4096) initialization = projectResult(JSON.parse(encoded), true);
   } catch (error) {
-    if (vmTimeout(error)) initTimeout = true;
-    else throw new Error('unsupported module source');
+    if (vmTimeout(error)) initialization = { status: 'timeout', phase: 'initialization' };
+    else initialization = { status: 'unsupported_build', phase: 'initialization', reason_code: 'build_admission' };
   }
   progress('realm_initialization_finished');
   /** @param {string} command */
-  return command => {
+  const invoke = command => {
     const invocationDeadline = Date.now() + 250;
-    if (initTimeout) return { status: 'timeout', phase: 'initialization' };
+    if (initialization.status !== 'ready') return initialization;
     try {
       let encoded = new vm.Script('globalThis.__invokeJSON(' + JSON.stringify(command) + ')')
         .runInContext(context, { timeout: Math.max(1, invocationDeadline - Date.now()) });
@@ -348,8 +427,7 @@ async function engine(snapshot, manifestPath) {
       if (typeof post === 'string' && post) encoded = post;
       if (typeof encoded !== 'string' || encoded.length > 131072) return { status: 'error', error_type: 'ProtocolError' };
       const result = JSON.parse(encoded);
-      if (!object(result)) return { status: 'error', error_type: 'ProtocolError' };
-      return result;
+      return projectResult(result);
     } catch (error) {
       // An afterEvaluate microtask can throw after the invocation's own catch.
       // Read the VM-owned fault record without transporting the thrown object.
@@ -357,13 +435,14 @@ async function engine(snapshot, manifestPath) {
         const pending = new vm.Script('globalThis.__postInvocationJSON()').runInContext(context, { timeout: 10 });
         if (typeof pending === 'string' && pending) {
           const fault = JSON.parse(pending);
-          if (object(fault)) return fault;
+          return projectResult(fault);
         }
       } catch {}
       return vmTimeout(error) ? { status: 'timeout', phase: 'invocation_or_serialization' } :
         { status: 'error', phase: 'invocation_or_serialization', error_type: 'ProtocolError' };
     }
   };
+  return { initialization, invoke };
 }
 
 async function main() {
@@ -372,11 +451,25 @@ async function main() {
   const snapshot = args[args.indexOf('--snapshot') + 1];
   const manifest = args[args.indexOf('--manifest') + 1];
   if (!args.includes('--snapshot') || !args.includes('--manifest') || !snapshot || !manifest) throw new Error('worker arguments');
-  /** @type {(command:string)=>Record<string,unknown>} */
-  let invoke;
-  try { invoke = await engine(snapshot, manifest); }
+  const receiptIndex = args.indexOf('--initialization-receipt');
+  const initializationReceipt = receiptIndex < 0 ? undefined : args[receiptIndex + 1];
+  if (receiptIndex >= 0 && !initializationReceipt) throw new Error('initialization receipt argument');
+  /** @type {{initialization:Record<string,unknown>,invoke:(command:string)=>Record<string,unknown>}} */
+  let loaded;
+  try { loaded = await engine(snapshot, manifest); }
   catch {
-    invoke = () => ({ status: 'unsupported_build', phase: 'initialization', reason_code: 'build_admission' });
+    const initialization = { status: 'unsupported_build', phase: 'initialization', reason_code: 'build_admission' };
+    loaded = { initialization, invoke: () => initialization };
+  }
+  const { initialization, invoke } = loaded;
+  if (initializationReceipt) {
+    // Exclusive, bounded host receipt; no dummy classification manufactures readiness.
+    /** @type {Record<string,unknown>} */
+    const receipt = { schema: 'caws.replay_initialization.v1', pid: process.pid };
+    for (const key of ['status', 'phase', 'operation', 'reason_code', 'error_type']) {
+      if (Object.hasOwn(initialization, key)) receipt[key] = initialization[key];
+    }
+    await writeFile(initializationReceipt, JSON.stringify(receipt) + '\n', { flag: 'wx', mode: 0o600 });
   }
   let outputBytes = 0;
   let firstInvocation = true, firstResult = true;
@@ -409,12 +502,10 @@ async function main() {
       let result;
       try { result = invoke(item.command); }
       finally { if (observeInvocation) progress('first_invocation_finished'); }
-      const reason = result.reason;
-      delete result.reason;
+      // invoke returns only host-projected fields or fixed host diagnostics.
       row = { ...result, command_sha256: item.command_sha256, offset: item.offset,
         elapsed_ns: Number(process.hrtime.bigint() - started), context_probes: result.context_probes ?? [],
-        decision_authority: Array.isArray(result.context_probes) && result.context_probes.length ? 'context_missing' : 'text_only',
-        ...(typeof reason === 'string' ? { reason_sha256: digest(reason) } : {}) };
+        decision_authority: Array.isArray(result.context_probes) && result.context_probes.length ? 'context_missing' : 'text_only' };
     } catch {
       process.exitCode = 1;
       row = { status: 'error', error_type: 'InputError', elapsed_ns: Number(process.hrtime.bigint() - started) };

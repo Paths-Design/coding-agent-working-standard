@@ -3,8 +3,8 @@
  * Offline corpus replay for operator-chosen reviewed CommonJS builds.
  * Build identity is provenance, never evidence that a build was reviewed.
  */
-import { createReadStream } from 'node:fs';
-import { mkdir, readdir, lstat, realpath, readFile, writeFile, chmod, mkdtemp, rm } from 'node:fs/promises';
+import { createReadStream, constants } from 'node:fs';
+import { mkdir, readdir, lstat, realpath, readFile, writeFile, chmod, mkdtemp, rm, open } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -221,6 +221,54 @@ function parseRows(bytes, items) {
   return rows;
 }
 
+/** Read only a small regular receipt after the actual child terminates.
+ * Validate every persisted field independently of transport completion.
+ * @param {string} file @param {number | undefined} pid
+ * @returns {Promise<Record<string,unknown> | null>}
+ */
+async function readInitialization(file, pid) {
+  try {
+    const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile() || stat.size > 4096) return null;
+      const bytes = Buffer.alloc(4097);
+      const read = await handle.read(bytes, 0, bytes.length, 0);
+      if (read.bytesRead > 4096) return null;
+      const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, read.bytesRead)));
+      if (!object(value) || value.schema !== 'caws.replay_initialization.v1' || value.pid !== pid ||
+          !Number.isSafeInteger(pid) || value.phase !== 'initialization' || typeof value.status !== 'string')
+        return null;
+      /** @type {Record<string,string[]>} */
+      const fields = {
+        ready: [], execution_attempt_refused: ['operation'], unsupported_build: ['reason_code'],
+        timeout: [], error: ['error_type'],
+      };
+      if (!Object.hasOwn(fields, value.status)) return null;
+      const allowed = new Set(['schema', 'pid', 'status', 'phase', ...(fields[value.status] ?? [])]);
+      if (Object.keys(value).some(key => !allowed.has(key))) return null;
+      /** @type {Record<string,unknown>} */
+      const result = { schema: 'caws.replay_initialization.v1', pid, status: value.status, phase: 'initialization' };
+      if (value.status === 'execution_attempt_refused') {
+        if (typeof value.operation !== 'string' || !['file write', 'filesystem access', 'process spawn', 'network',
+          'process exit', 'process signal', 'asynchronous execution', 'output', 'code generation'].includes(value.operation))
+          return null;
+        result.operation = value.operation;
+      } else if (value.status === 'unsupported_build') {
+        if (typeof value.reason_code !== 'string' || !['external_import', 'missing_relative_import', 'non_string_import',
+          'unsupported_builtin_or_external', 'classifier_export', 'offline_absolute_path', 'asynchronous_classifier',
+          'classification_shape', 'classification_size', 'dynamic_import', 'relative_import_escape',
+          'missing_factory', 'build_admission'].includes(value.reason_code)) return null;
+        result.reason_code = value.reason_code;
+      } else if (value.status === 'error') {
+        if (typeof value.error_type !== 'string' || !['ProtocolError', 'ClassifierError'].includes(value.error_type)) return null;
+        result.error_type = value.error_type;
+      }
+      return result;
+    } finally { await handle.close(); }
+  } catch { return null; }
+}
+
 /** @param {{directory:string,snapshot:string,manifest:string,items:Item[],timeoutMs:number,wire?:Buffer}} options */
 async function runWorker({ directory, snapshot, manifest, items, timeoutMs, wire }) {
   const runStarted = process.hrtime.bigint();
@@ -228,7 +276,9 @@ async function runWorker({ directory, snapshot, manifest, items, timeoutMs, wire
   const runner = path.join(path.dirname(manifest), 'worker-runner.mjs');
   if ((await lstat(runner)).isSymbolicLink() || sha(await readFile(runner)) !== sha(await readFile(WORKER)))
     throw new Error('worker capability source mismatch');
-  const argv = [process.execPath, runner, '--snapshot', snapshot, '--manifest', manifest];
+  const initializationReceipt = path.join(directory, 'initialization-receipt.json');
+  const argv = [process.execPath, runner, '--snapshot', snapshot, '--manifest', manifest,
+    '--initialization-receipt', initializationReceipt];
   const input = wire ?? Buffer.from(items.map(item => JSON.stringify(item)).join('\n') + (items.length ? '\n' : ''));
   if (input.length > MAX_WIRE) throw new Error('worker input bound');
   const spawnCallElapsedMs = elapsedMs();
@@ -290,7 +340,11 @@ async function runWorker({ directory, snapshot, manifest, items, timeoutMs, wire
   let rows = [];
   let protocolError = false;
   try { rows = parseRows(stdout, items); } catch { protocolError = true; }
+  const initialization = await readInitialization(initializationReceipt, child.pid);
+  const initializationStatus = initialization?.status ?? 'unavailable';
   const state = { schema: 'caws.replay_worker_state.v1', argv, pid: child.pid ?? null,
+    completion_scope: 'transport_only', initialization_status: initializationStatus,
+    initialization_receipt_valid: initialization !== null, initialization,
     timeout_ms: timeoutMs, spawn_call_elapsed_ms: spawnCallElapsedMs,
     spawn_observed_elapsed_ms: spawnObservedElapsedMs, exit_observed_elapsed_ms: exitObservedElapsedMs,
     close_observed_elapsed_ms: closeObservedElapsedMs,
@@ -355,6 +409,7 @@ export async function runReplay(options) {
     classifier: absolute(options.classifier), classifier_sha256: manifest.files.find(file => file.path === manifest.entry)?.sha256,
     build_root: manifest.build_root, build_sha256: manifest.build_sha256,
     worker_argv: execution.state.argv, worker_exit_code: execution.state.exit_code, returned: execution.rows.length,
+    initialization_status: execution.state.initialization_status, initialization: execution.state.initialization,
     status_counts: statuses, decision_counts: decisions,
     context_missing: execution.rows.filter(row => row.decision_authority === 'context_missing').length,
     latency_ms: { p50: percentile(.5), p95: percentile(.95), max: percentile(1) }, commands_executed: 0,
@@ -369,7 +424,8 @@ export async function runReplay(options) {
       'Read-only snapshot modes preserve custody, not OS immutability against another same-user process.',
       'Whole admitted JS/JSON build-root snapshot is attributed, including unused admitted files.'] };
   await json(path.join(output, 'replay.json'), report);
-  return { report, exitCode: execution.state.complete && execution.rows.every(row => row.status === 'classified') ? 0 : 1 };
+  return { report, exitCode: execution.state.complete && execution.state.initialization_status === 'ready' &&
+    execution.rows.every(row => row.status === 'classified') ? 0 : 1 };
 }
 
 /** @typedef {{corpus?:string,classifier?:string,buildRoot?:string,output?:string,perStratum:number,workerTimeoutMs:number,worker:boolean,receipt?:string,snapshot?:string,manifest?:string}} Arguments */
@@ -449,7 +505,7 @@ async function main() {
       items, wire, timeoutMs: options.workerTimeoutMs });
     if (options.receipt) await json(options.receipt, result.state);
     process.stdout.write(result.stdout);
-    process.exitCode = result.state.complete ? 0 : 1;
+    process.exitCode = result.state.complete && result.state.initialization_status === 'ready' ? 0 : 1;
   } finally {
     // Snapshot files are read-only; directories must be writable for cleanup.
     /** @param {string} directory */

@@ -150,6 +150,179 @@ async function positiveEffect(f, sentinel, expected) {
   assert.equal(absent, true);
 }
 
+/** Initialization is a child observation even when no corpus item is selected.
+ * @param {string} output @param {string} status
+ */
+async function initialization(output, status) {
+  const state = await terminal(output);
+  const receipt = await readJson(path.join(output, 'initialization-receipt.json'));
+  assert.equal(receipt.schema, 'caws.replay_initialization.v1');
+  assert.equal(receipt.pid, state.pid);
+  assert.equal(receipt.phase, 'initialization');
+  assert.equal(receipt.status, status);
+  assert.equal(state.completion_scope, 'transport_only');
+  assert.equal(state.initialization_receipt_valid, true);
+  assert.equal(state.initialization_status, status);
+  assert.deepEqual(state.initialization, receipt);
+  const report = await readJson(path.join(output, 'replay.json'));
+  assert.equal(report.initialization_status, status);
+  assert.deepEqual(report.initialization, receipt);
+  return { state, receipt, report };
+}
+
+/** @param {string} output @param {string} marker */
+async function redactedArtifacts(output, marker) {
+  for (const name of [...RETAINED, 'initialization-receipt.json']) {
+    const bytes = await readFile(path.join(output, name));
+    assert.equal(bytes.includes(Buffer.from(marker)), false, 'private corpus marker leaked into ' + name);
+  }
+}
+
+const ZERO_ITEM_CORPORA = [
+  { name: 'empty', corpus: '', malformed: 0 },
+  { name: 'all malformed', corpus: 'not JSON\n{"command":7}\n', malformed: 2 },
+];
+
+for (const { name, corpus, malformed } of ZERO_ITEM_CORPORA) {
+  test(`${name} corpus succeeds only after an observed ready initialization`, async t => {
+    const f = await fixture(t);
+    await writeFile(f.classifier, returned(ALLOW));
+    await writeFile(f.corpus, corpus);
+    const result = await runReplay({ ...f, workerTimeoutMs: ORDINARY_WORKER_WATCHDOG_MS });
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.report.records, 0);
+    assert.equal(result.report.malformed, malformed);
+    assert.equal(result.report.sampled, 0);
+    assert.equal(result.report.returned, 0);
+    assert.deepEqual(await classifications(f.output), []);
+    const { state } = await initialization(f.output, 'ready');
+    assert.equal(state.rows_expected, 0);
+    assert.equal(state.rows_returned, 0);
+  });
+}
+
+for (const { name, corpus, malformed } of ZERO_ITEM_CORPORA) {
+  test(`${name} corpus cannot hide a refused initialization file write`, async t => {
+    const f = await fixture(t);
+    const sentinel = path.join(f.root, 'empty-initialization-effect');
+    const source = `require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'bootstrap effect');\n` + returned(ALLOW);
+    await writeFile(f.classifier, source);
+    await positiveEffect(f, sentinel, 'bootstrap effect');
+    await writeFile(f.corpus, corpus);
+    const result = await runReplay({ ...f, workerTimeoutMs: ORDINARY_WORKER_WATCHDOG_MS });
+    assert.equal(result.exitCode, 1);
+    assert.equal(await exists(sentinel), false);
+    assert.equal(result.report.records, 0);
+    assert.equal(result.report.malformed, malformed);
+    assert.equal(result.report.sampled, 0);
+    assert.deepEqual(await classifications(f.output), []);
+    const { state, receipt } = await initialization(f.output, 'execution_attempt_refused');
+    assert.equal(receipt.operation, 'file write');
+    assert.equal(state.rows_expected, 0);
+    assert.equal(state.rows_returned, 0);
+  });
+}
+
+for (const [name, source] of [
+  ['unsupported import', 'require("node:inspector");\n' + returned(ALLOW)],
+  ['missing classifier export', 'exports.unrelated = true;\n'],
+]) {
+  test(`empty corpus cannot hide ${name} during initialization`, async t => {
+    const f = await fixture(t);
+    await writeFile(f.classifier, source);
+    await writeFile(f.corpus, '');
+    const result = await runReplay({ ...f, workerTimeoutMs: ORDINARY_WORKER_WATCHDOG_MS });
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.report.sampled, 0);
+    assert.deepEqual(await classifications(f.output), []);
+    const { state } = await initialization(f.output, 'unsupported_build');
+    assert.equal(state.rows_expected, 0);
+    assert.equal(state.rows_returned, 0);
+  });
+}
+
+test('empty corpus observes an initialization VM timeout independently of item rows', async t => {
+  const f = await fixture(t);
+  await writeFile(f.classifier, 'for (;;) {}\n' + returned(ALLOW));
+  await writeFile(f.corpus, '');
+  const result = await runReplay({ ...f, workerTimeoutMs: ORDINARY_WORKER_WATCHDOG_MS });
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.report.sampled, 0);
+  assert.deepEqual(await classifications(f.output), []);
+  const { state } = await initialization(f.output, 'timeout');
+  assert.equal(state.rows_expected, 0);
+  assert.equal(state.rows_returned, 0);
+  assert.equal(state.timed_out, false, 'outer startup kill is not an observed initialization VM timeout');
+});
+
+for (const ready of [true, false]) {
+  test(`public worker with zero items ${ready ? 'accepts ready initialization' : 'fails refused initialization'}`, async t => {
+    const f = await fixture(t);
+    const source = ready ? returned(ALLOW) : 'console.log("private bootstrap output");\n' + returned(ALLOW);
+    await writeFile(f.classifier, source);
+    const receipt = path.join(f.root, 'empty-worker-state.json');
+    const result = await capture([RUNNER, '--worker', '--classifier', f.classifier, '--build-root', f.buildRoot,
+      '--worker-timeout-ms', String(ORDINARY_WORKER_WATCHDOG_MS), '--receipt', receipt], '', f.root,
+    ORDINARY_WORKER_WATCHDOG_MS + 6000);
+    await writeFile(path.join(f.root, 'empty-worker.stdout'), result.stdout);
+    await writeFile(path.join(f.root, 'empty-worker.stderr'), result.stderr);
+    assert.equal(result.timedOut, false);
+    assert.equal(result.code, ready ? 0 : 1);
+    assert.equal(result.stdout.length, 0, 'bootstrap outcomes do not invent corpus rows');
+    assert.equal(result.stderr.includes(Buffer.from('private bootstrap output')), false);
+    const state = await readJson(receipt);
+    assert.ok(Number.isSafeInteger(state.pid) && state.pid > 0);
+    assert.equal(state.terminal_observed, true);
+    assert.equal(state.stdout_eof, true);
+    assert.equal(state.stderr_eof, true);
+    assert.equal(state.stdio_forced_closed, false);
+    assert.equal(state.timed_out, false);
+    assert.equal(state.exit_code, 0, 'private protocol transport completes even for semantic initialization refusal');
+    assert.equal(state.signal, null);
+    assert.equal(state.complete, true);
+    assert.equal(state.completion_scope, 'transport_only');
+    assert.equal(state.rows_expected, 0);
+    assert.equal(state.rows_returned, 0);
+    assert.equal(state.initialization_receipt_valid, true);
+    assert.equal(state.initialization_status, ready ? 'ready' : 'execution_attempt_refused');
+    assert.equal(state.initialization.pid, state.pid);
+    assert.equal(state.initialization.phase, 'initialization');
+    assert.equal(state.initialization.status, state.initialization_status);
+    if (!ready) assert.equal(state.initialization.operation, 'output');
+  });
+}
+
+for (const [name, body] of [
+  ['mutated Unsupported code', "try { require('node:inspector'); } catch (error) { error.code = command; throw error; }"],
+  ['new Unsupported constructor', "try { require('node:inspector'); } catch (error) { throw new error.constructor(command); }"],
+  ['overridden VM transport metadata', `globalThis.__postInvocationJSON = function () {
+  return JSON.stringify({status:'unsupported_build', phase:'invocation', reason_code:'unsupported_builtin_or_external',
+    source:command, context_probes:[command], private_detail:command});
+};
+return ${JSON.stringify(ALLOW)};`],
+]) {
+  test(`${name} cannot publish private corpus bytes as worker metadata`, async t => {
+    const f = await fixture(t);
+    const marker = 'PRIVATE_REPLAY_COMMAND_METADATA_9fc4c1';
+    const result = await replayFixture(f, classifierSource(body), marker);
+    assert.equal((await readFile(f.corpus)).includes(Buffer.from(marker)), true, 'the private marker must actually be in the input');
+    assert.equal(result.exitCode, 1);
+    const { state } = await initialization(f.output, 'ready');
+    assert.equal(state.rows_expected, 1);
+    assert.equal(state.rows_returned, 1, 'an admitted child must return a row; preflight rejection is not metadata normalization evidence');
+    const rows = await classifications(f.output);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].command_sha256, sha(marker));
+    assert.notEqual(rows[0].status, 'classified');
+    assert.equal(rows[0].reason, undefined);
+    assert.equal(rows[0].private_detail, undefined);
+    assert.ok(Object.keys(rows[0]).every(key => ['status', 'phase', 'operation', 'reason_code', 'error_type',
+      'decision', 'source', 'enforcement', 'context_probes', 'reason_sha256', 'command_sha256', 'offset',
+      'elapsed_ns', 'decision_authority'].includes(key)), 'output fields belong to the declared safe protocol');
+    await redactedArtifacts(f.output, marker);
+  });
+}
+
 test('CLI requires an explicit reviewed build and a positive integer sample bound', () => {
   const parsed = parseArguments(['--corpus', '/fixture/corpus', '--classifier', '/fixture/build/index.js', '--build-root', '/fixture/build', '--output', '/fixture/output']);
   assert.equal(Reflect.get(parsed ?? {}, 'perStratum'), 24);
