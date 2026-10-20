@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-HOOK-HARVEST-001
 title: 'Replace read-only hook harvest Python with typed Node tooling'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-hook-harvest
 created_at: '2026-10-20T12:58:50.021Z'
-updated_at: '2026-10-20T12:58:50.021Z'
+updated_at: '2026-10-20T12:58:51.652Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
