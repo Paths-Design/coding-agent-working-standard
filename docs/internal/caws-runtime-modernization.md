@@ -29,7 +29,11 @@ passing unit tests, or the existence of this document.
 
 ## Ownership and execution
 
-- Goal owner: Codex chat `01a15107-5fd0-7872-8f9a-0bb7eb5f26ce`.
+- Bound lane owner: Codex chat `01a15107-5fd0-7872-8f9a-0bb7eb5f26ce`.
+- Incoming coordinator: Codex chat `01a15a2a-5057-75d0-a7e5-69d676673add`. The
+  user requests onboarding followed by completion of the original owner's
+  in-flight work. Registry ownership remains with the bound owner until the
+  supported handoff; no concurrent writer is admitted by this annotation.
 - Spec: `CAWS-NATIVE-RUNTIME-001`, active and bound to
   `native-runtime-modernization`.
 - Source inspection baseline: `fb788cd241424ed3977081c9ad458b6c1fec7c59`.
@@ -171,9 +175,9 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode adapter                                                        | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
 | R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
 | R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
-| R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | unreplaced                                                                                                                                      | Complete semantic transcript fixtures, cache freshness and installed rendering                                                                                                                                                                                                                                                                                                                                                |
+| R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | unreplaced; cache interpretation-context counterexample observed, E147                                                                          | Complete semantic transcript fixtures, context-bound cache freshness and installed rendering; current installed cross-surface reach unverified                                                                                                                                                                                                                                                                                |
 | R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                         | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
-| R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token and sensitivity leaves accepted and landed on main; parent integration and seven original paths unreplaced                           | E134/E144 retain bounded reference profiles, deliberate old-bug repairs and raw failed/successful artifacts. Parent bytes retain the original implementations until integration. Hook-harvest remains held on its Git-admission and argument-parser contracts; component progress is not parent acceptance                                                                                                                    |
+| R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity and hook-harvest leaves accepted and landed on main; parent integration and five original paths unreplaced              | E134/E144/E148 retain bounded reference profiles, deliberate old-bug repairs, exact main readback and raw failed/successful artifacts. Parent bytes retain the original implementations until integration; component progress is not parent acceptance                                                                                                                                                                        |
 | R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | unreplaced                                                                                                                                      | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes                                                                                                                                                                                                                                                                                                |
 | R22 | Tracked installed `.caws/hooks` Python copies                                                                       | Governed self-host/runtime adoption                                        | unreplaced                                                                                                                                      | Fourteen copies identified; do not edit generated/governed installation by hand                                                                                                                                                                                                                                                                                                                                               |
 | R23 | Rust client / versioned local protocol                                                                              | `packages/caws-native` + TS protocol                                       | POSIX one-shot transport/cancellation and bounded actual-engine replay tested; macOS pre-Ready frontend-death custody observed, E145            | Ordinary typed-engine/renderer replay on this candidate, after-Ready/dispatch loss, closed-pipe nonleader settlement, descriptor leakage, resident IPC, bounded Stop recovery and installed parity remain open                                                                                                                                                                                                                |
@@ -3000,13 +3004,134 @@ Additional bounded evidence and unresolved dependencies:
   `package-lock.json` and archived legacy registry bytes; neither is part of
   this owned change. The remaining generic false-success risk remains an
   installation and candidate-verification obligation, not dismissed by baseline
-  attribution. Peer transcript-cache diagnostics remain unexecuted after the
-  installed shell guard attributes an interpreter read/exec path to writes into
-  Homebrew. Raw refusal is peer `01a15984`'s
+  attribution. The first transcript-cache wrapper is refused before execution:
+  the installed shell guard attributes an interpreter read/exec path to writes
+  into Homebrew. Raw refusal is peer `01a15984`'s
   `native-transcript-cache/blocked-launch.json`. Root retains that R19
   recognizer dependency; no guard bypass, reprieve or installed-runtime edit is
-  authorized by the proposed diagnostic. A revised direct launch requires
-  source/effect/explicit-destination adjudication first.
+  authorized by that diagnostic. E147 retains the separately adjudicated direct
+  launch and its bounded counterexample.
+
+- E147: Reorientation reads the complete available CAWS history and the actual
+  Codex user messages omitted by its narrow turn digest, including the reset,
+  renderer, live cancellation/restart, legacy-writer
+  and13-session/four-repository instructions. None is canceled by later peer
+  coordination. Fresh CAWS reads retain the active parent binding and original
+  lane owner. Source inspection identifies stale ordinary engine, terminal
+  fixture and renderer qualifier topology assumptions (`engine.cjs:111/129`,
+  `terminal-engine.cjs:22`, `qualify-render-owner.ts:328–330`). Node's parent is
+  the custodian, while the request's caller remains the original frontend. One
+  proposal fixture would select the custodian as the protected native self if
+  only the first assertion were relaxed. The required correction is an
+  independent original-Child PID observation plus the precise named
+  frontend/custodian/Node chain; retain existing refusal, ancestry and
+  group-witness assertions. Two bounded Sol assignments return patches for the
+  ordinary fixture/invoke evidence and renderer qualifier respectively; root
+  owns application, checks and Git. Terminal-fixture follow-through remains a
+  separate named dependency. The revised cache diagnostic uses the original
+  explicitly named interpreter, `-I -B -S`, a stripped environment/private Git
+  configuration, trace suppression and private output destinations through the
+  normal guard. It exits0 with `counterexample_observed: true`. Root reads the
+  complete `native-transcript-cache/001-surface-context/observation.json` under
+  peer `01a15984`'s retained artifact root: identical185-byte transcript/hash,
+  unchanged renderer/harness snapshots and eight loaded snapshot origins; all
+  seven controls pass. Cached/fresh events match on cold and repeated Claude
+  parses. After the surface changes to OpenCode, cached `source_harness` remains
+  `claude` while fresh is `opencode`, with all other event fields equal; a fresh
+  cache fixes that divergence. This is an R18 renderer interpretation-context
+  defect with normalization dependencies, not R08 truncation or proof that the
+  installed daemon actually shares caches across surfaces. The observer's exit0
+  reports the counterexample, not migration success. R18's replacement must bind
+  every interpretation input or partition owners positively. No native render,
+  installed cross-surface reach, concurrent mutation or repair is established.
+
+- E148: Root verifies hook-harvest candidate `9b2f05a9` against raw Node18/22
+  argument and Git-effect controls, including actual positive sentinel/trace
+  bytes followed by absent effects or pre-effect refusals. It independently
+  compares every semantic differential report's full JSON after removing exactly
+  the two declared limit additions; all compared values match retained Python.
+  Latest component A1/A2/A3 match `ac_recorded`9498/9499/9500. Ordinary governed
+  merge `ddab8705` and closure `b84a595d` are on main; the canonical spec is
+  closed completed, with `spec_closed`9515 naming that merge. Root compares all
+  four surviving main files byte-for-byte with the candidate and confirms both
+  original Python paths absent in `git ls-tree`. Raw postmerge custody is peer
+  `01a157bd`'s `native-hook-harvest/postmerge-readback.json`. This is the third
+  landed R20 leaf; five of the nine original developer-tool paths remain. Parent
+  branch integration is not performed by source landing. Stable trusted
+  Git>=2.45 inputs, finite argv coverage and the explicit admission/exclusion
+  limits remain; no sandbox, atomicity, transient-write, native or installation
+  claim follows. Root also reads the closed documentation component, matching
+  event9497 and closure9501/merge `d0e5647a`; main audit SHA256 `86594bf5…beef8`
+  matches its source-bound candidate. Projection replacement, separate receipt
+  publication and unobserved WAL/SHM/crash durability remain distinct. Tracker
+  repair candidate `75888f38` receives fresh read-only Sol inspection against
+  the actual retained bytes; no coordinate-bound concern changes the bounded
+  repair. Its real commit hook completes modification application; all three
+  committed/index/worktree byte identities match, focused checks exit0, and five
+  policy gates pass over128 named committed paths. Doctor retains 0E/3W/4I. Full
+  raw candidate/commit output is
+  `prefix-cohort-2026-10-20/tracker-format-committed-candidate.json`.
+
+- E149: The in-flight topology patches preserve the original frontend's request
+  PID and record the actual retained frontend Child before input delivery. The
+  ordinary fixture requires the named macOS custodian and selected Node in
+  distinct groups from one bounded `/bin/ps` snapshot. Canonical descriptor
+  range32..1048576 mirrors native admission. Its native-self proposal uses the
+  original caller PID. Two initial boundary controls compare a command field to
+  a complete ps row and fail; root corrects that oracle to compare command bytes
+  and separately retain the complete row. All32 pure controls then exit0. The
+  initial explicit rustfmt edition2021 is rejected on existing2024 let chains;
+  package edition2024 formatting/check exits0. Failures remain in
+  `prefix-cohort-2026-10-20/topology-checkpoint-command.json`. Actual ordinary
+  invocation exits0 at the test runner, without changing its 2000ms budget.
+  Retained scenario
+  `target/qualification/topology-ordinary-live/caws-native-99644-0/` under
+  `packages/caws-native` contains `call-1/original-child.json` PID99814,
+  `topology.jsonl` frontend99814→custodian138→Node143 and groups98373/138/143.
+  Snapshot query exits0 without diagnostics. Native output is the expected exit7
+  with stdout hex `6e61746976650ae99baa006578616374` and stderr
+  `diagnostic\nexact\n`, retained in `call-1/`; elapsed604ms. Subsequent
+  `after-exact.stdout` is a successful raw `/bin/ps` query with no matching PID
+  or Node-group member. Actual native debug hash remains `0107f86d…295d`. Root's
+  first readback assumes `call-0` and fails ENOENT; discovery of the actual sole
+  call directory supplies the cited readback rather than repeating runtime. The
+  renderer qualifier selects a named chain from one inventory, reobserves
+  precise birth/ancestry/group values before and after, and retains the witness
+  and original frontend observation. Strict TypeScript compile exits0 and39 pure
+  topology controls exit0. These are trusted-fixture ps argv observations, not
+  kernel executable identity or argv-spoof defense. The group-witness set
+  remains cumulative. Independent source inspection identifies a consequential
+  gap: a prior request's confirmed group can satisfy the nonempty-set check
+  while a later request never confirms its chain, leaving that later group's
+  cleanup unobserved. Incoming coordinator explicitly accepts the request-local
+  witness repair and two-invocation missing-chain/live-group falsifier before
+  any renderer scenario. Source chain evidence is not independently correlated
+  with the original custodian Child receipt's Node PID. No actual renderer
+  qualifier executes on this patch. Ordinary protocol-fixture success does not
+  establish production typed-engine or renderer parity. Live
+  held-self/hostile/terminal replay, bounded pipe-join watchdog qualification
+  and committed-candidate topology review remain accepted work of incoming
+  coordinator `01a15a2a`, alongside full parent obligations.
+
+- E150: Root inspects the completed harmless replay diagnostic under peer
+  `01a15984`'s `native-replay-boundary/001-import-observation/`. Worker/outer
+  exit0 records a counterexample: `import-effect.txt` contains
+  `import executed\n`, while later invocation and captured-command sentinels
+  remain absent and the worker row reports `execution_attempt_refused`,
+  operation `file write`. Original and executed replay snapshot hashes match
+  `6a62c0fc…60d0`; metadata Git observation exits0 with bounded timing and
+  retained raw streams. The initialized classifier executes before the existing
+  audit boundary. This is one controlled private initialization effect, not
+  historical command execution, an arbitrary-module sandbox audit or R21
+  replacement. Stock fresh-process parsing and the selected fixed Codex renderer
+  profile do not establish the cross-surface reuse needed to reach E147's cache
+  defect in ordinary execution. Both observations remain requirements for
+  explicit typed interpretation and selected-classifier custody contracts.
+  Incoming coordinator accepts the full remaining goal and the named unfinished
+  topology checks. The bound owner freezes after the source checkpoint, retains
+  raw artifacts and does not start another lane or scenario. Supported registry
+  ownership transfer, parent/main integration, independent review and all A1–A8
+  acceptance remain separate.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint

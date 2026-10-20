@@ -105,6 +105,8 @@ impl Fixture {
                 configuration,
             ])
             .env("CAWS_NATIVE_TEST_MODE", mode)
+            .env("CAWS_NATIVE_TEST_NATIVE", env!("CARGO_BIN_EXE_caws-native"))
+            .env("CAWS_NATIVE_TEST_TOPOLOGY", self.dir.join("topology.jsonl"))
             .env("CAWS_NATIVE_TEST_BUDGET_HOME", self.dir.join("budget-home"))
             .env("CAWS_NATIVE_TEST_EVENTS", self.dir.join("events.jsonl"))
             .env("CAWS_NATIVE_TEST_RECEIPT", self.dir.join("requests.jsonl"))
@@ -117,6 +119,16 @@ impl Fixture {
             // Native execution uses the absolute Node path; no Python or shell is available.
             .env("PATH", "");
         command
+    }
+    fn original_frontend(&self) -> serde_json::Value {
+        let calls: Vec<_> = fs::read_dir(&self.dir)
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with("call-"))
+            .collect();
+        assert_eq!(calls.len(), 1, "expected one independently recorded call");
+        serde_json::from_slice(&fs::read(calls[0].path().join("original-child.json")).unwrap())
+            .unwrap()
     }
     fn requests(&self) -> Vec<serde_json::Value> {
         fs::read_to_string(self.dir.join("requests.jsonl"))
@@ -169,6 +181,18 @@ fn execute(mut command: Command, input: Vec<u8>) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
+    if let Some(directory) = &evidence {
+        // Record the actual retained frontend Child before sending any request input.
+        fs::write(
+            directory.join("original-child.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "pid": child.id(),
+                "source": "retained original Child",
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
     let mut stdin = child.stdin.take().unwrap();
     let writer = thread::spawn(move || {
         let _ = stdin.write_all(&input);
@@ -235,6 +259,41 @@ fn exact_native_result_and_original_payload_are_delivered_without_path_interpret
     let requests = fixture.requests();
     assert_eq!(requests.len(), 1);
     let request = &requests[0];
+    let original = fixture.original_frontend();
+    assert_eq!(original["source"], "retained original Child");
+    assert_eq!(request["caller"]["processId"], original["pid"]);
+    let topologies: Vec<serde_json::Value> = fs::read_to_string(fixture.dir.join("topology.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(topologies.len(), 1);
+    let topology = &topologies[0];
+    assert_eq!(topology["frontend"]["pid"], original["pid"]);
+    let engine_pid: u32 = fs::read_to_string(fixture.dir.join("engine"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(topology["node"]["pid"], engine_pid);
+    assert_eq!(topology["node"]["group"], engine_pid);
+    if cfg!(target_os = "macos") {
+        assert_eq!(topology["kind"], "custodied");
+        assert_eq!(topology["custodian"]["parent"], original["pid"]);
+        assert_eq!(topology["custodian"]["group"], topology["custodian"]["pid"]);
+        let frontend_group = topology["frontend"]["group"].as_u64().unwrap();
+        assert!(frontend_group > 0);
+        assert_ne!(
+            topology["frontend"]["group"],
+            topology["custodian"]["group"]
+        );
+        assert_ne!(topology["frontend"]["group"], topology["node"]["group"]);
+        assert_eq!(topology["node"]["parent"], topology["custodian"]["pid"]);
+        assert_ne!(topology["custodian"]["pid"], original["pid"]);
+    } else {
+        assert_eq!(topology["kind"], "direct");
+        assert_eq!(topology["custodian"], serde_json::Value::Null);
+        assert_eq!(topology["node"]["parent"], original["pid"]);
+    }
     assert_eq!(request["schema"], "caws.runtime.request.v1");
     assert_eq!(request["runtimeDigest"], "a".repeat(64));
     assert_eq!(request["surface"], "codex");
@@ -1525,6 +1584,7 @@ fn caller_death_cancels_and_cleans_owned_engine_group() {
     let mut parent = Command::new(&fixture.node)
         .args(["-e", script])
         .env("NATIVE", env!("CARGO_BIN_EXE_caws-native"))
+        .env("CAWS_NATIVE_TEST_NATIVE", env!("CARGO_BIN_EXE_caws-native"))
         .env("ENGINE", engine)
         .env("NATIVE_PID", fixture.dir.join("native"))
         .env("CAWS_NATIVE_TEST_ENGINE_PID", fixture.dir.join("engine"))

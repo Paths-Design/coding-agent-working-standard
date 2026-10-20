@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
+const { observeTopology } = require('./engine-topology.cjs');
 const mode = process.env.CAWS_NATIVE_TEST_MODE || 'exact';
 const record = (name, value) => {
   if (process.env[name]) fs.appendFileSync(process.env[name], `${JSON.stringify(value)}\n`);
@@ -108,7 +109,7 @@ function propose() {
   if (mode === 'proposal-held-native-self')
     proposal.containment = {
       schema: 'caws.containment.intent.v1',
-      pid: process.ppid,
+      pid: request.caller.processId,
       startEpoch: '1',
       comm: '/fixture/not-a-target',
       sessionId: ready.sessionId,
@@ -126,8 +127,18 @@ function propose() {
 function accept(frame) {
   if (!request) {
     request = frame;
-    if (request.caller.processId !== process.ppid)
-      throw new Error('caller processId is not native parent PID');
+    const topology = observeTopology({
+      platform: process.platform,
+      frontendPid: request.caller.processId,
+      nodePid: process.pid,
+      nodeParentPid: process.ppid,
+      native: process.env.CAWS_NATIVE_TEST_NATIVE,
+      node: process.execPath,
+      engine: __filename,
+    });
+    if (!request.id.startsWith(`${topology.frontend.pid}-`))
+      throw new Error('request identity differs from original frontend');
+    record('CAWS_NATIVE_TEST_TOPOLOGY', topology);
     record('CAWS_NATIVE_TEST_RECEIPT', request);
     if (mode === 'pre-ready-failure') return failure('fixture configuration failure');
     ready = {

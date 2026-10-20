@@ -10,17 +10,15 @@ import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { spawn, spawnSync } from 'node:child_process';
+import {
+  selectRequestChain,
+  confirmRequestChain,
+  type ProcessInstance as Instance,
+  type ProcessRow,
+  type RequestExpectation,
+} from './render-request-topology';
 
 type Data = Record<string, unknown>;
-type Instance = {
-  pid: number;
-  parent: number;
-  group: number;
-  startSeconds: string;
-  startMicros: string;
-  zombie: boolean;
-};
-type ProcessRow = { pid: number; parent: number; group: number; state: string; command: string };
 type CommandReceipt = {
   code: number | null;
   signal: NodeJS.Signals | null;
@@ -300,9 +298,10 @@ function captureWorkers(): void {
     }
   }
 }
-function sample(nativePid?: number): void {
+function sample(request?: { expected: RequestExpectation; originalFrontend: Data }): void {
   captureWorkers();
   const rows = processRows(),
+    nativePid = request?.expected.frontendPid,
     requestTree = new Set<number>(nativePid ? [nativePid] : []);
   for (let pass = 0; pass < 6; pass++) {
     for (const p of rows)
@@ -322,16 +321,28 @@ function sample(nativePid?: number): void {
         (known) => known.pid === p.parent && !requestProcesses.has(known.pid)
       )
   );
-  for (const p of retained) {
-    remember(p, requestTree.has(p.pid));
-    // The native argv also names --engine, but belongs to the qualifier's
-    // inherited group. Only the actual direct engine child leads its new group.
-    if (nativePid && p.parent === nativePid && p.pid === p.group && p.command.includes(engine))
-      requestGroups.add(p.group);
+  for (const p of retained) remember(p, requestTree.has(p.pid));
+  let requestWitness: Data | undefined;
+  if (request) {
+    const chain = selectRequestChain(rows, request.expected);
+    const before = chain?.map((p) => observe(p.pid)) ?? [];
+    const after = chain?.map((p) => observe(p.pid)) ?? [];
+    const confirmed = chain
+      ? confirmRequestChain(chain, request.originalFrontend, before, after)
+      : null;
+    requestWitness = { ...request, chain, before, after, confirmed };
+    if (chain && confirmed) {
+      // This grants observation only. Cleanup stays with actual Child owners.
+      requestGroups.add(chain[chain.length - 1]!.group);
+      for (const p of confirmed) {
+        processes.set(p.pid, p);
+        requestProcesses.set(p.pid, p);
+      }
+    }
   }
   fs.appendFileSync(
     path.join(root, 'process-inventory.jsonl'),
-    JSON.stringify({ at: Date.now(), rows: retained }) + '\n',
+    JSON.stringify({ at: Date.now(), rows: retained, requestWitness }) + '\n',
     { mode: 0o600 }
   );
 }
@@ -493,10 +504,27 @@ async function invoke(
   const child = spawn(native, args, { cwd: project, env, stdio: ['pipe', out, err] });
   fs.closeSync(out);
   fs.closeSync(err);
+  const originalFrontend = child.pid ? observe(child.pid) : { state: 'unavailable' };
+  json(path.join(directory, 'original-frontend.json'), originalFrontend);
+  if (originalFrontend.state !== 'observed')
+    gaps.push('original native request identity unavailable: ' + directory);
+  const request = child.pid
+    ? {
+        expected: {
+          platform: process.platform,
+          frontendPid: child.pid,
+          frontendCommand: [native, ...args].join(' '),
+          native,
+          node: process.execPath,
+          engine,
+        },
+        originalFrontend,
+      }
+    : undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const watchRequest = (): void => {
     try {
-      sample(child.pid);
+      sample(request);
     } catch (error) {
       if (!gaps.includes(String(error))) gaps.push(String(error));
     }
