@@ -62,12 +62,14 @@ The macOS invocation path includes a separate native custodian that creates the
 Node engine before readiness. E145 observes the original frontend's death,
 same-Node cleanup, actual reap, both EOFs and external process absence through
 that entry path. E149 observes the repaired ordinary protocol fixture with an
-independent topology observation and the original caller PID. The next boundary
-is request-local renderer witness coverage, the terminal fixture and the actual
-typed-engine/selected-renderer consumer on the same candidate. E135 closes the
-raw patch-alias admission gap; E136 closes false completion after a failed
-cleanup attempt. Neither closes all frontend-death phases, complete group
-settlement, missing-session identity or the unchanged
+independent topology observation and the original caller PID. E152/E155
+establish request-local renderer coverage and custody correlation; E153
+exercises the terminal fixture, and E156 observes the actual
+typed-engine/selected-renderer consumer. The next boundary is frontend loss
+after Ready and actual dispatch, with separate native and renderer cleanup
+evidence. E135 closes the raw patch-alias admission gap; E136 closes false
+completion after a failed cleanup attempt. Neither closes all frontend-death
+phases, complete group settlement, missing-session identity or the unchanged
 thirteen-session/four-repository fairness requirement. A post-Ready registration
 cannot transfer parent wait authority or protect the pre-Ready interval.
 Per-invocation custody can establish that narrower boundary before reuse by a
@@ -169,9 +171,9 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                          | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                              |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                              | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | TS transcript store                                                        | unreplaced                                                                                                                                      | Atomic replacement, identity, replay custody, malformed and concurrent inputs                                                                                                                                                                                                                                                                                                                                        |
-| R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | unreplaced                                                                                                                                      | Lossless occurrence/provenance and explicit unavailable fields                                                                                                                                                                                                                                                                                                                                                       |
+| R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | bounded lossless/common foundation landed and integrated, E157; production consumer unreplaced                                                  | Occurrence custody and normalization have focused evidence; Unicode compatibility gaps, complete historical projections and production renderer integration remain open                                                                                                                                                                                                                                              |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | unreplaced                                                                                                                                      | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                   |
-| R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | unreplaced                                                                                                                                      | Compaction, tool/agent identities, raw occurrence and native lifecycle fixtures                                                                                                                                                                                                                                                                                                                                      |
+| R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                    | Explicit source/surface/cache-generation/ordered-adapter context and tentative transaction refusal are exercised; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                |
 | R13 | `shared/lib/harness_qwen.py`                                                                                        | TS Qwen adapter                                                            | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                         |
 | R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                         |
 | R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode adapter                                                        | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                         |
@@ -3328,6 +3330,46 @@ Additional bounded evidence and unresolved dependencies:
   does not establish full Python retirement, production latch parity,
   frontend-death phases, cancellation/restart, legacy-writer exclusion, complete
   resident-engine integration, fairness, latency improvement or machine cutover.
+
+- E157: Parent merge `3b2f22ca99bd5cd2dd594d187d4903b706f476ec` integrates the
+  twelve transcript-foundation source/test files from component candidate
+  `cdd74dcd7d2c3d4cd3784e18460244ac190a7145`, landed through `e180a1bd`. The
+  bounded API retains lossless numeric lexemes, ordered source occurrences,
+  explicit interpretation context and clone-owned tentative transactions. Its
+  standalone strict compilation and52 Node cases exit0 on Node18.0 and22.19.
+  This is foundation evidence, not a production renderer/cache consumer.
+
+  Ordinary package Jest selection reaches a new bridge that compiles into a
+  unique temporary directory, discovers compiled test files, and requires both a
+  positive test count and positive passed count. Compiler/test children have
+  separate30s deadlines with direct-child SIGKILL; error, signal, null/nonzero
+  status and cleanup failure remain failures.
+  `npm test -- --runInBand --runTestsByPath tests/transcripts/foundation.test.js`
+  exits0 through build, selected Jest and package cleanup on Node22.19. Package
+  `npm run typecheck` includes the standalone strict config with `--noEmit` and
+  exits0; scoped ESLint exits0. The Node child cases are not additional Jest
+  coverage.
+
+  External controls execute the actual bridge callback and loader against real
+  compiled fixtures. Fifteen controls exit0: semantic success, compiler and
+  assertion failure, later-load failure, future-file discovery, no compiled
+  tests, zero tests, all skipped, injected signal/spawn/null/nonzero results,
+  cleanup-only and combined failures, and an actual hung child killed at30s.
+  Recorded temporary outputs are absent afterward. The first driver attempt
+  fails because its fixture omits `esModuleInterop`; its raw failure is retained
+  separately. Node18.0 directly executes the actual bridge callback, compiler
+  and52 cases successfully. Its ordinary Jest launch fails during configuration
+  loading before the bridge; installed Jest dependencies declare Node>=18.14.
+  This does not establish ordinary Jest compatibility on18.0.
+
+  Raw commands, stdout/stderr, controls, source hashes and execution metadata
+  live under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/transcript-integration/`.
+  The foundation retains five explicitly incomplete reference cases across four
+  Unicode classes: non-Latin1 Python repr, named Unicode literal escapes,
+  non-ASCII code identifiers and adjacent Python surrogate codepoints. Those
+  cases, other harness adapters, persistence, complete rendering and installed
+  Python retirement remain open. No parent AC is earned by test admission.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
