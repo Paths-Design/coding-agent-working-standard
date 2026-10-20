@@ -37,3 +37,9 @@ contracts:
   - name: 'turn-log-usage-optionality'
     type: contract-test
     path: 'packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate 69e54a53 exact bytes: strict kernel and CLI compilation exit0; focused schema suite39pass. Raw strict-kernel.json, strict-cli.json, focused-schema-package-cwd.json and committed-identity.json are inspected under /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/kernel-typecheck with identical ignored repo copies at tmp/01a15a2a/runtime-typecheck/. Generated logs stay untracked, so artifact_path verification is not applicable. Behavioral verdict derives from inspected executed outputs; this verification rechecks citation reachability only."
+    recorded_at: "2026-10-20T17:05:41.575Z"
+    commit_sha: "69e54a53a6637ef16f71443061dd01ec20d544a9"
