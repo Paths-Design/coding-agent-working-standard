@@ -23,6 +23,7 @@ scope:
 invariants:
   - 'Token counts use pinned bundled cl100k_base encoding without Python, network fetch, or estimates.'
   - 'Existing selection, Unicode, formatting, and update semantics are preserved except zero totals and inaccurate update totals.'
+  - 'The supported compatibility profile is the inspected Python 3.11.13 and tiktoken 0.12.0 baseline with Unicode 14 metadata; unpinned caller interpreter profiles are not inferred from this qualification.'
 acceptance:
   - id: A1
     given: >-
