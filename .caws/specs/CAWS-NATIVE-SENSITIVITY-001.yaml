@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-SENSITIVITY-001
+title: 'Replace sensitivity experiment orchestration with typed Node'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-20T13:44:03.394Z'
+updated_at: '2026-10-20T13:44:03.394Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Developer sensitivity experiment orchestration and its maintained caller references'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/hook-experiments/sensitivity.py'
+    - 'scripts/hook-experiments/sensitivity.mjs'
+    - 'scripts/hook-experiments/sensitivity.test.mjs'
+    - 'scripts/hook-experiments/tsconfig.sensitivity.json'
+    - 'docs/audits/hook-port-qualification.md'
+  out: []
+invariants:
+  - 'A mutant counts as killed only after a matched green control and the declared decision-bearing assertion; runtime or setup failure confers no sensitivity evidence.'
+  - 'Keep the six source anchors, source hashes, raw subprocess output and command identities; fixture qualification never establishes production mutant sensitivity or R21 retirement.'
+acceptance:
+  - id: A1
+    given: 'the six declared experiment cases and harmless independent synthetic test consumers'
+    when: 'old and typed orchestrators run matched scenarios'
+    then: 'selection, source mutations, hashes, raw outputs and kill verdicts agree within the declared reference profile.'
+  - id: A2
+    given: 'bad controls, setup failures, wrong assertions and timeouts'
+    when: 'the typed orchestrator evaluates outcomes'
+    then: 'no inconclusive failure counts as a killed mutant and command/output artifacts identify the actual attempt.'
+  - id: A3
+    given: 'the committed typed candidate and maintained caller scan'
+    when: 'focused tests and strict checking qualify the component'
+    then: 'the Python orchestrator is retired with original bytes retained externally and Python regression consumers remain explicitly separate obligations.'
+observability:
+  - 'Retained per-attempt argv/cwd/exit/output files and per-case source digests plus caws.hook_sensitivity.v1 summary.'
+rollback:
+  - 'Restore retained Python orchestrator and maintained reproduction commands through a governed source change if bounded qualification fails.'
+non_functional: {}
+contracts: []
