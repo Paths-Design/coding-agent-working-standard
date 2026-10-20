@@ -49,3 +49,11 @@ non_functional:
 contracts:
   - name: 'historical-transcript-unicode'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Actual /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode/runtime-observations.json plus commands020/021/040: pair[55357,56832], length2, slicing/order/equality/immutability, explicit JS-collapse and UTF8 surrogate refusals, raw/JsonValue custody regression checks. JSON projection is non-injective; no persistence claim. External artifacts root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode. CLI --verify re-derives commit reachability ONLY; recorded command is not executed. Absolute artifact citation was correctly refused in041; artifacts inspected directly, no verifier content claim."
+    recorded_at: "2026-10-20T19:43:46.963Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode/runtime-observer.mjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-unicode/compiled/src/transcripts"
+    exit_code: 0
+    commit_sha: "25d114c9fbf5ebc3dbf47badaedaa69177777437"
