@@ -15,7 +15,11 @@ const HANDLERS: Readonly<Record<string, string>> = {
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
 };
 const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
-  'agent-surface.sh': ['f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a'],
+  'agent-surface.sh': [
+    'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
+    // Exact '{}' bypasses only the empty override-map lookup; source tiers stay ordered.
+    '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
+  ],
   'parse-input.sh': [
     'd1823c3913094d20059823b1215ea5b173515912545eea09f8dfbcbb9c03ca30',
     '04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61',
