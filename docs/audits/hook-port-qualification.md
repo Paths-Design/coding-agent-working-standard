@@ -6,6 +6,21 @@ decisions were approved by the user in the conversation and in
 qualification. Global installation and fresh native harness adoption are
 separate follow-on work, not established by this report.
 
+The maintained sensitivity runner is
+`node scripts/hook-experiments/sensitivity.mjs --output <scratch> [--case <name>]`.
+Use `--python <executable>` to select the regression-test interpreter
+explicitly. Option digit syntax follows the Python 3.11 / Unicode 14 reference
+profile. The dated Python commands below identify historical executions. The
+Node runner retains their six mutations, matched-control requirement and
+assertion-specific verdicts. It writes raw `stdout`/`stderr`, per-attempt
+`command.json`, retained `source.original`/`source.mutant` and `summary.json`;
+timeout and startup failures also retain command receipts and cannot count as
+killed mutants. Its focused synthetic-consumer qualification establishes
+orchestration and artifact custody, not the sensitivity of the six production
+regression tests. Those Python test consumers remain migration obligations. The
+direct-child timeout boundary does not establish descendant containment or
+cleanup after orchestrator death.
+
 ## Contract
 
 - Hook selection, handler return, adapter delivery, and native tool execution
