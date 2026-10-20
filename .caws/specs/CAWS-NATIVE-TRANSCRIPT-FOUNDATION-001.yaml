@@ -55,3 +55,10 @@ evidence:
     command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/compare.py 063-reference-boundaries 074-corrective-committed-differential22 075-corrective-committed-differential18"
     exit_code: 0
     commit_sha: cdd74dcd7d2c3d4cd3784e18460244ac190a7145
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "52 actual hostile cases per Node18/22; sensitivity.json and decimal-sensitivity.json retain failed mutations. 068-old-candidate-rejected exits1 for timestamp/patchlength/command-codepoint counterexamples; 007 false exit0 and 049/052 failures retained. Evidence root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation; artifact-index.json; candidate-identity.json; raw commands/072-corrective-committed-focused18. --verify checks commit reachability only; recorded command is not executed by CAWS."
+    recorded_at: "2026-10-20T18:18:11.205Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/node18/bin/node /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-transcript-foundation/packages/caws-cli/tests/transcripts/run.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-foundation/compiled/tests/transcripts"
+    exit_code: 0
+    commit_sha: cdd74dcd7d2c3d4cd3784e18460244ac190a7145
