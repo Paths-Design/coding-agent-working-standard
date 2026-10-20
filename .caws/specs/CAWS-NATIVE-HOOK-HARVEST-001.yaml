@@ -59,8 +59,12 @@ non_functional: {}
 contracts: []
 evidence:
   - criterion_id: A1
-    status: unchecked
-    recorded_at: "2026-10-20T14:57:50.795Z"
+    status: pass
+    evidence_ref: "Exact candidate9b2f05a91d528882736c64ce1858f21768415916 utilitySHA78c148e07afe63a7680a6c43589ef2df8213e3f944eb9a37de9ef9680bf42e83. Inspected /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest/commands/056-combined-differential-node22 and 057-combined-differential-node18 command/stdout/stderr: each exit0,19 finite cases, full data/expected serialization equal retained Python except exactly2 declared limits; counts caws-only1 consumer-only1 different2 identical13 version-stamp-only1. Inspected git-policy-combined-node22 and git-policy-combined-node18 summary/cases/controls:9 cases each, real trace/filter/submodule-monitor/local-fetch-helper positive effects followed by disabled effects or pre-effect refusals; full source+Git manifests unchanged. Focused055 top-level fsmonitor/clean-filter positive effects distinguish inert fixtures; fsmonitor-floor-node18 observation and command063 exit0: direct Git marker monitor executed, candidate marker absent, unchanged manifests. Earlier A1 fsmonitor fail remains historical. Stable admitted configuration/attributes/index, trusted executables and Git>=2.45 only; conservative unused-filter/unrelated-gitlink refusals explicit. No sandbox, concurrent replacement, transient-write or universal effect proof. CLI verify checks commit identity only and never executes recorded command."
+    recorded_at: "2026-10-20T15:30:56.956Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python qualify.py --node /Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node --python /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-rule-tokens/oracle-venv/bin/python --worktree /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/native-hook-harvest --output /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-hook-harvest/differential-node22-parser-repaired"
+    exit_code: 0
+    commit_sha: "9b2f05a91d528882736c64ce1858f21768415916"
   - criterion_id: A2
     status: unchecked
     recorded_at: "2026-10-20T14:58:15.662Z"
