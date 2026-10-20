@@ -266,14 +266,153 @@ function testDenialOracles(): void {
 function outcome(operation: Data): string {
   return String(row(row(operation.body).outcome).execution);
 }
-function outputs(fixture: ProjectFixture): Data {
+function assertRenderedTurn(
+  value: Data,
+  fixture: Pick<ProjectFixture, 'project' | 'name' | 'sessionId' | 'label' | 'turns'>
+): void {
+  const turn = Number(value.turn);
+  assert(Number.isSafeInteger(value.turn) && turn > 0 && turn <= fixture.turns);
+  assert.equal(value.schema_version, 2);
+  assert.equal(value.status, 'ok');
+  assert.equal(value.ended_by, null);
+  assert.equal(value.user, `${fixture.label} user ${turn}`);
+  const context = row(value.context);
+  assert.equal(context.session_id, fixture.sessionId);
+  assert.equal(context.project, fixture.name);
+  assert.equal(context.cwd, fixture.project);
+  assert.equal(context.model, 'owner-fixture-model');
+  assert.equal(row(value.env).cwd, fixture.project);
+  assert.equal(row(value.env).model, 'owner-fixture-model');
+  const timestamp = new Date(Date.UTC(2026, 9, 1, 12, 0, turn)).toISOString();
+  for (const key of ['ts_start', 'ts_end', 'user_ts']) assert.equal(value[key], timestamp);
+  assert(Array.isArray(value.timeline) && value.timeline.length === 2);
+  const tool = row(value.timeline[0]);
+  assert.equal(tool.kind, 'tool_call');
+  assert.equal(tool.name, 'exec_command');
+  assert.equal(tool.source_harness, 'codex');
+  assert.equal(tool.id, `${fixture.label}-call-${turn}`);
+  assert.equal(tool.ts, timestamp);
+  assert.equal(tool.result_ts, timestamp);
+  assert.deepEqual(tool.input, { cmd: 'touch MUST-NOT-EXECUTE' });
+  const output = `${fixture.label} result ${turn}`;
+  assert.equal(tool.output, output);
+  assert.equal(tool.output_length, output.length);
+  for (const key of ['output_truncated', 'output_cut', 'is_error']) assert.equal(tool[key], false);
+  const assistant = row(value.timeline[1]);
+  assert.equal(assistant.kind, 'reasoning');
+  assert.equal(assistant.text, `${fixture.label} assistant ${turn}`);
+  assert.equal(assistant.ts, timestamp);
+}
+
+function testRenderedTurnOracle(): void {
+  const fixture = {
+    project: '/private/fixture',
+    name: 'project',
+    sessionId: 'session',
+    label: 'project:session',
+    turns: 1,
+  };
+  const timestamp = '2026-10-01T12:00:01.000Z';
+  const valid: Data = {
+    schema_version: 2,
+    turn: 1,
+    status: 'ok',
+    ended_by: null,
+    user: 'project:session user 1',
+    ts_start: timestamp,
+    ts_end: timestamp,
+    user_ts: timestamp,
+    context: {
+      session_id: 'session',
+      project: 'project',
+      cwd: fixture.project,
+      model: 'owner-fixture-model',
+    },
+    env: { cwd: fixture.project, model: 'owner-fixture-model' },
+    timeline: [
+      {
+        kind: 'tool_call',
+        name: 'exec_command',
+        source_harness: 'codex',
+        id: 'project:session-call-1',
+        ts: timestamp,
+        result_ts: timestamp,
+        input: { cmd: 'touch MUST-NOT-EXECUTE' },
+        output: 'project:session result 1',
+        output_length: 24,
+        output_truncated: false,
+        output_cut: false,
+        is_error: false,
+      },
+      { kind: 'reasoning', text: 'project:session assistant 1', ts: timestamp },
+    ],
+  };
+  assertRenderedTurn(valid, fixture);
+  const corruptions: Array<(value: Data) => void> = [
+    (value) => {
+      value.user = 'another session';
+    },
+    (value) => {
+      value.status = 'failed';
+    },
+    (value) => {
+      row(value.context).cwd = '/different/project';
+    },
+    (value) => {
+      value.turn = 2;
+    },
+    (value) => {
+      value.user_ts = '2026-10-01T12:00:00.000Z';
+    },
+    (value) => {
+      row((value.timeline as Data[])[0]).input = { cmd: 'different' };
+    },
+    (value) => {
+      row((value.timeline as Data[])[0]).output = 'different';
+    },
+    (value) => {
+      row((value.timeline as Data[])[1]).text = 'different';
+    },
+  ];
+  for (const corrupt of corruptions) {
+    const value = structuredClone(valid);
+    corrupt(value);
+    assert.throws(() => assertRenderedTurn(value, fixture));
+  }
+  process.stdout.write(
+    JSON.stringify({
+      state: 'passed',
+      validTurnControls: 1,
+      rejectedTurnControls: corruptions.length,
+      runtimeExecuted: false,
+    }) + '\n'
+  );
+}
+
+function outputs(h: RenderHarness, fixture: ProjectFixture): Data {
   const names = files(fixture.session).filter((name) => /^turn-\d+\.json$/.test(name));
+  const retained = path.join(h.root, 'retained-turn-bytes', fixture.name, fixture.sessionId);
+  fs.mkdirSync(retained, { recursive: true, mode: 0o700 });
   return {
     directory: fixture.session,
+    sourceTranscript: {
+      path: fixture.transcriptFile,
+      sha256: digest(fs.readFileSync(fixture.transcriptFile)),
+    },
     count: names.length,
     members: names.map((name) => {
-      const bytes = fs.readFileSync(path.join(fixture.session, name));
-      return { name, bytes: bytes.length, sha256: digest(bytes) };
+      const originalPath = path.join(fixture.session, name);
+      const bytes = fs.readFileSync(originalPath),
+        sha256 = digest(bytes);
+      const retainedPath = path.join(retained, sha256 + '.json');
+      if (!fs.existsSync(retainedPath))
+        fs.writeFileSync(retainedPath, bytes, { mode: 0o600, flag: 'wx' });
+      assert.deepEqual(fs.readFileSync(retainedPath), bytes, 'retained turn bytes differ');
+      const value = row(JSON.parse(bytes.toString('utf8')));
+      assertRenderedTurn(value, fixture);
+      assert.equal(name, 'turn-' + String(value.turn).padStart(3, '0') + '.json');
+      assert(!fs.existsSync(path.join(fixture.project, 'MUST-NOT-EXECUTE')));
+      return { name, originalPath, retainedPath, bytes: bytes.length, sha256, semantics: 'passed' };
     }),
   };
 }
@@ -331,7 +470,7 @@ async function firstActualWrite(h: RenderHarness, fixture: ProjectFixture): Prom
     25000,
     'actual renderer first turn write'
   );
-  const state = outputs(fixture);
+  const state = outputs(h, fixture);
   assert(
     Number(state.count) > 0 && Number(state.count) < 10000,
     'actual renderer must have started but not completed all turn writes'
@@ -500,7 +639,7 @@ async function cancelled(h: RenderHarness): Promise<Data> {
     1,
     'unknown request was blindly replayed'
   );
-  h.writeJson('after-interruption-outputs.json', outputs(fixture));
+  h.writeJson('after-interruption-outputs.json', outputs(h, fixture));
   const hostReceipt = await bounded(host.done, 15000, 'idle host exit after cancellation');
   const legacy = legacyBlocked(h, fixture);
   h.writeJson('writer-operations-final.json', writerOperations(fixture));
@@ -582,7 +721,11 @@ async function queuedCancelled(h: RenderHarness): Promise<Data> {
     'queue cancellation proof is masked by unknown first effect'
   );
   assert.equal(h.ownerEvents().filter((event) => event.event === 'journal_dispatch').length, 1);
-  assert.equal(outputs(fixture).count, 1, 'successful first render did not retain its actual turn');
+  assert.equal(
+    outputs(h, fixture).count,
+    1,
+    'successful first render did not retain its actual turn'
+  );
   assert.equal(
     files(path.join(fixture.project, '.caws/sessions/queued')).filter((name) =>
       /^turn-\d+\.json$/.test(name)
@@ -595,7 +738,7 @@ async function queuedCancelled(h: RenderHarness): Promise<Data> {
   assert.equal(intents.length, 1);
   assert.equal(outcome(intents[0]!), 'returned', 'queued cancellation poisoned writer domain');
   h.writeJson('writer-operations-final.json', intents);
-  h.writeJson('after-queue-cancellation-outputs.json', outputs(fixture));
+  h.writeJson('after-queue-cancellation-outputs.json', outputs(h, fixture));
   return {
     prepared,
     admission,
@@ -675,11 +818,11 @@ async function crashed(h: RenderHarness): Promise<Data> {
     'unknown reservation released the configured single backend slot after restart'
   );
   assert.equal(
-    outputs(capacityControl).count,
+    outputs(h, capacityControl).count,
     0,
     'a fresh project bypassed the unknown global reservation'
   );
-  h.writeJson('after-interruption-outputs.json', outputs(fixture));
+  h.writeJson('after-interruption-outputs.json', outputs(h, fixture));
   const replacementReceipt = await bounded(replacement.done, 15000, 'restarted idle host exit');
   const legacy = legacyBlocked(h, fixture);
   h.writeJson('writer-operations-final.json', writerOperations(fixture));
@@ -712,7 +855,7 @@ async function normal(h: RenderHarness): Promise<Data> {
   const callerReceipt = await h.invoke(fixture);
   h.success(callerReceipt);
   assert.equal(
-    outputs(fixture).count,
+    outputs(h, fixture).count,
     1,
     'actual normal renderer did not produce exactly one turn'
   );
@@ -836,7 +979,7 @@ async function normal(h: RenderHarness): Promise<Data> {
   h.success(hostReceipt);
   h.writeJson('writer-operations-final.json', writerOperations(fixture));
   assert(writerOperations(fixture).every((operation) => outcome(operation) === 'returned'));
-  h.writeJson('normal-outputs.json', outputs(fixture));
+  h.writeJson('normal-outputs.json', outputs(h, fixture));
   return {
     callerReceipt,
     hostReceipt,
@@ -852,6 +995,7 @@ async function normal(h: RenderHarness): Promise<Data> {
 async function main(): Promise<void> {
   if (oracleSelfTest) {
     testDenialOracles();
+    testRenderedTurnOracle();
     return;
   }
   const scenarios = [
