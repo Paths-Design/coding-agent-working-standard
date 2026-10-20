@@ -61,3 +61,10 @@ evidence:
     command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/run-tests-no-process.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/final22/tests/transcripts"
     exit_code: 0
     commit_sha: "172242eaa14ebdd9e82fbc97ebeac384b90f1689"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "candidate-identity.json matches10committed/checked filehashes and25compiledJSfiles acrossNode18/22.010/011compile013/01495cases017compare018correctlint019generator020doctor021fivegates all0; doctor0E3W4I. SevenClaude plus eightmeaningfulHTML targetedfaults detected, weakrecursiveprobe retained/replaced, no fullmutation score. Exactconsumer exclusions index.ts1-24/registry81-96 grounded; production/package/cache/writer/installed/cutover remainparent-owned. External artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter. CLI --verify checks commit reachability ONLY; command is recorded, not executed. Direct raw behavior and source identity were inspected independently; no artifact-content rederivation claim."
+    recorded_at: "2026-10-20T23:37:42.759Z"
+    command: caws gates run --spec CAWS-NATIVE-CLAUDE-ADAPTER-001
+    exit_code: 0
+    commit_sha: "172242eaa14ebdd9e82fbc97ebeac384b90f1689"
