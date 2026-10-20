@@ -1,3 +1,7 @@
+use std::os::{
+    fd::{AsRawFd, FromRawFd, OwnedFd},
+    unix::process::ExitStatusExt,
+};
 use std::{
     fs,
     io::{Read, Write},
@@ -1289,6 +1293,94 @@ fn retained_test_child_is_reaped_during_panic_unwind() {
     );
 }
 
+fn prefilled_input() -> (Option<OwnedFd>, fs::File, usize) {
+    let mut fds = [-1; 2];
+    // SAFETY: fds has capacity for both fresh pipe descriptors.
+    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+    // SAFETY: each fresh descriptor is transferred to one owner.
+    let reader = unsafe { OwnedFd::from_raw_fd(fds[0]) };
+    let mut writer = unsafe { fs::File::from_raw_fd(fds[1]) };
+    // The only child-side read slot is mapped stdin; the writer belongs to
+    // this caller and must not leak through exec as an extra open endpoint.
+    for fd in [reader.as_raw_fd(), writer.as_raw_fd()] {
+        assert_eq!(
+            unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) },
+            0
+        );
+    }
+    // Only the writer is nonblocking; the native reader configures itself.
+    let flags = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) };
+    assert!(flags >= 0);
+    assert_eq!(
+        unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) },
+        0
+    );
+    writer.write_all(b"{}").unwrap();
+    let mut size = 2;
+    loop {
+        match writer.write(&[b' '; 4096]) {
+            Ok(0) => panic!("pipe accepted no bytes without reporting backpressure"),
+            Ok(count) => {
+                size += count;
+                assert!(size < 1_048_576, "pipe filled beyond native input budget");
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(error) => panic!("pipe prefill failed: {error}"),
+        }
+    }
+    // A PIPE_BUF-sized write can report EAGAIN with a smaller free tail.
+    // Exhaust that tail too, so the later one-byte write needs a real read.
+    loop {
+        match writer.write(b" ") {
+            Ok(1) => {
+                size += 1;
+                assert!(size < 1_048_576, "pipe filled beyond native input budget");
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+            other => panic!("pipe tail prefill failed: {other:?}"),
+        }
+    }
+    (Some(reader), writer, size)
+}
+
+fn wait_for_input_consumption(
+    writer: &mut fs::File,
+    deadline: Instant,
+    mut check_reader: impl FnMut(),
+) -> Result<(), &'static str> {
+    loop {
+        check_reader();
+        match writer.write(b" ") {
+            Ok(1) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            other => panic!("input consumption probe failed: {other:?}"),
+        }
+        if Instant::now() >= deadline {
+            return Err("prefilled pipe has not been consumed");
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn input_readiness_requires_consumption_of_a_prefilled_pipe() {
+    let (reader, mut writer, size) = prefilled_input();
+    assert!(size > 2);
+    assert_eq!(
+        wait_for_input_consumption(&mut writer, Instant::now(), || {}),
+        Err("prefilled pipe has not been consumed")
+    );
+    let mut reader = fs::File::from(reader.unwrap());
+    let mut consumed = [0; 4096];
+    reader.read_exact(&mut consumed).unwrap();
+    assert_eq!(&consumed[..2], b"{}");
+    assert!(consumed[2..].iter().all(|byte| *byte == b' '));
+    assert_eq!(
+        wait_for_input_consumption(&mut writer, Instant::now(), || {}),
+        Ok(())
+    );
+}
+
 #[test]
 fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_processes() {
     for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
@@ -1300,6 +1392,13 @@ fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_p
                     .spawn()
                     .unwrap(),
             );
+            // Fill before the native reader exists: later write acceptance
+            // proves consumption, not an arbitrary amount of startup time.
+            let mut prepared_input = (mode == "input").then(prefilled_input);
+            let stdin = prepared_input
+                .as_mut()
+                .map(|(reader, _, _)| Stdio::from(reader.take().unwrap()))
+                .unwrap_or_else(Stdio::piped);
             let mut child = PanicSafeTestChild(
                 fixture
                     .command(
@@ -1307,20 +1406,43 @@ fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_p
                         "pre_tool_use",
                         "5000",
                     )
-                    .stdin(Stdio::piped())
+                    .stdin(stdin)
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()
                     .unwrap(),
             );
-            let mut input = child.0.stdin.take().unwrap();
-            input.write_all(b"{}").unwrap();
+            fs::write(
+                fixture.dir.join("case.json"),
+                serde_json::to_vec(&serde_json::json!({
+                    "mode": mode, "signal": signal, "native_pid": child.0.id(),
+                    "unrelated_pid": unrelated.0.id(),
+                    "prefilled_bytes": prepared_input.as_ref().map(|(_, _, size)| size),
+                }))
+                .unwrap(),
+            )
+            .unwrap();
             let mut engine_pid = None;
             let mut descendant_pid = None;
             if mode == "input" {
-                // The native process is waiting for the still-open original stdin.
-                thread::sleep(Duration::from_millis(100));
+                let (_, writer, _) = prepared_input.as_mut().unwrap();
+                wait_for_input_consumption(writer, Instant::now() + Duration::from_secs(3), || {
+                    assert!(
+                        child.0.try_wait().unwrap().is_none(),
+                        "native exited before reading input"
+                    );
+                })
+                .expect("native did not consume prefilled stdin");
+                // main installs cancellation before runner::read_payload can
+                // consume stdin; this writer remains open during cancellation.
+                fs::write(
+                    fixture.dir.join("input-consumed"),
+                    b"read_payload reached after handler installation\n",
+                )
+                .unwrap();
             } else {
+                let mut input = child.0.stdin.take().unwrap();
+                input.write_all(b"{}").unwrap();
                 drop(input);
                 engine_pid = Some(wait_for_file(&fixture.dir.join("engine")));
                 if mode == "pipe-holder-wait" {
@@ -1331,6 +1453,12 @@ fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_p
             // SAFETY: signal only the direct native child created by this test.
             assert_eq!(unsafe { libc::kill(child.0.id() as i32, signal) }, 0);
             let output = captured(&mut child.0);
+            fs::write(fixture.dir.join("stdout.bin"), &output.stdout).unwrap();
+            fs::write(fixture.dir.join("stderr.bin"), &output.stderr).unwrap();
+            fs::write(fixture.dir.join("status.json"), serde_json::to_vec(&serde_json::json!({
+                "exit_code": output.status.code(), "signal": output.status.signal(),
+                "raw_status": output.status.into_raw(), "elapsed_ms": started.elapsed().as_millis(),
+            })).unwrap()).unwrap();
             assert!(
                 started.elapsed() < Duration::from_millis(1500),
                 "{mode}, signal {signal}"
@@ -1351,11 +1479,29 @@ fn external_signals_cancel_input_engine_and_held_pipes_without_killing_foreign_p
             );
             unrelated.0.kill().unwrap();
             unrelated.0.wait().unwrap();
+            for (name, pid) in [("native", child.0.id()), ("unrelated", unrelated.0.id())] {
+                assert_not_running_retained_with(
+                    pid,
+                    Instant::now() + Duration::from_secs(2),
+                    &fixture.dir.join(format!("{name}-cleanup.jsonl")),
+                    |pid| query_ps(&[pid]),
+                );
+            }
             if let Some(pid) = engine_pid {
-                assert_not_running(&pid);
+                assert_not_running_retained_with(
+                    pid.parse().unwrap(),
+                    Instant::now() + Duration::from_secs(2),
+                    &fixture.dir.join("engine-cleanup.jsonl"),
+                    |pid| query_ps(&[pid]),
+                );
             }
             if let Some(pid) = descendant_pid {
-                assert_not_running(&pid);
+                assert_not_running_retained_with(
+                    pid.parse().unwrap(),
+                    Instant::now() + Duration::from_secs(2),
+                    &fixture.dir.join("descendant-cleanup.jsonl"),
+                    |pid| query_ps(&[pid]),
+                );
             }
             if mode == "input" {
                 assert!(!fixture.dir.join("engine").exists());
