@@ -2388,6 +2388,24 @@ Additional bounded evidence and unresolved dependencies:
   Independent inspection finds no concrete counterexample within this source
   slice; direct checks support only the boundaries described here.
 
+- E125: Test-only `b391829f` adds the separate intentional-unwind control.
+  `unwind-focused.log` exits0 after the exact expected panic is caught; no
+  synthetic cleanup receipt substitutes for execution. The retained fixture
+  `unwind-focused-fixtures/renderer-backend-17660-0` records ReleaseProbe owning
+  its actual worker JoinHandle before unwind, original child17707, the actual
+  Drop-joined exit and worker exit with identical SHA-256
+  `3dbde8b40d818115ced8867881e05f1731e502b753ed903c4c1f48fa9534e915`.
+  Both reap observations retain custody, verified owned SIGKILL/reap completes,
+  both pipes reach EOF, logs persist and the first fresh nofollow lock probe
+  after catch succeeds with no errno. Settled evidence follows all assertions.
+  Independent inspection grounds the exact previously unexercised Drop branch.
+  This covers readiness-before-render unwind, not unwind during injected
+  quarantine failure or installed renderer parity. A separate actual R06 replay
+  on release native `bceb6d6f` passes both selected-consumer cases, retaining
+  command/module identities and raw private fixtures in
+  `r06-r08-image-native-2026-10-20/`; it does not promote the earlier
+  source-bounded guard-disposition claim into platform refusal propagation.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2496,10 +2514,11 @@ contracts remain owed. E119 integrates R06 and repairs its demonstrated public
 NO_ASK regression; E124 integrates R08 components, with actual sealed consumer
 qualification pending. E120 isolates the intentional fork;
 E121 retains further full-suite failures and stronger diagnostics without
-attributing their causes. Repair the witnessed partial holder-publication race
-and inspect actual cleanup before the next native suite replay. E123 retains
-atomic-publication controls and a full pass; qualify the separate unwind branch
-before claiming panic cleanup. E122 forbids a
+attributing their causes. E123 repairs partial holder publication and retains
+actual cleanup plus a full pass. E125 exercises the separate retained-join
+unwind branch; injected-quarantine unwind remains unqualified. Execute R08's
+actual sealed four-handler control, natural advisory boundary cases and
+required-goal block before broadening its image/consumer claim. E122 forbids a
 pre-Node queue which skips required latch/Stop semantics. Keep the original
 1000-turn hot transcript, counts,30s request budgets and later hot Running
 witness requirements. Correct output and source-level capacity are not fairness
