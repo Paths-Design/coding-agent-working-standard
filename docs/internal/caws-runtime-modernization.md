@@ -2085,6 +2085,72 @@ Additional bounded evidence and unresolved dependencies:
   are the next bounded changes. No budget, transcript size or workload count
   changes, caching, guard relaxation or machine activation follows.
 
+- E113: `f7a5af50` skips only the Python map lookup for literal
+  `CAWS_MACHINE_LIBRARIES='{}'`. Other values retain the parser and all existing
+  policy/user/adapter/shared resolution tiers. Six source-unit Bats controls
+  exit0; malformed/nonobject and missing-Python refusals, quoted overrides and
+  per-call freshness are observed. The installed-pack-in-source-mode control
+  exits1 deliberately. Raw output, statuses, parser witnesses and177 hashed
+  fixture files live in `prefix-cohort-2026-10-20/agent-surface-source-unit*`.
+  The committed test differs from the executed test only by its retention
+  comment; the production template and manually reviewed prefix entry both
+  hash `9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32`.
+  `49dbef03` adds typed publication phase diagnostics without caching or removed
+  checks; three focused early-refusal/real-rename/error-preservation controls
+  exit0. `image-publication-phases.log` SHA-256 is
+  `92d7cf80dfb3be9ae33b37eaa07f57fe71b24fbb006e8eba7d0e82daea70625f`.
+  Successful full-image publication/reuse phases require actual replay.
+  Callback logging adds synchronous I/O; operation durations exclude it while
+  the overall admission deadline includes it. `0ca4df4f` selects the candidate
+  CLI through an artifact-retained POSIX-sh PATH wrapper and records Node/entry
+  hashes. Sealed dispatch uses its own pinned image adapter. This establishes
+  default fixture selection in source, not observed exec for arbitrary override
+  environments. Semantic diagnostics precede the unchanged fairness gates.
+  Independent read-only reviews inspect the committed Bash/TS and native
+  changes and find no applicable counterexample; their source conclusions do
+  not establish runtime execution or performance.
+
+- E114: Candidate `0ca4df4f` CLI/release/seven strict qualifier build exits0;
+  native SHA-256 is
+  `b53d72c5208ff1fa6c75fd122b3393c81dfa449c44c08c2f7d8e0bec74459ce0`,
+  load driver `1a82043e7d7ef18db6e411ef306d6f5e0da75c93e07f9979b73d1f54e6c391e2`.
+  Full `cargo test --all-targets -- --nocapture` exits101:192 library checks
+  pass and `render_writer::tests::disposable_session_cache_replacement_cannot_partition_live_writer_custody`
+  fails because its5ms acquisition refusal lacks the asserted owner text. The
+  original assertion discards actual error text; the original cause is unknown.
+  Binary/invocation/example groups do not execute in this attempt. Preserve
+  `cold-pipeline-all-native.{log,json}` and its full log SHA-256
+  `041e37a4c9f90a73111d9fb9461e2629196d6376da558c670d51e90685c72158`.
+  Strict all-target Clippy exits0. Doctor exits0 with inherited0E/3W/4I; five
+  policy gates exit0 on the92 committed/staged paths against the declared Git
+  branch basis. Their raw logs/receipts share the `cold-pipeline-` prefix.
+  Policy success does not erase the native failure. Hold actual workload replay
+  for a test-only actual-refusal/custody-state probe with unchanged deadline and
+  strict oracle; a later observation cannot retroactively identify that lost
+  original error. No final-executable lifecycle, fairness, overload or installed
+  parity result follows from this build.
+
+- E115: Source tracing at `0ca4df4f` establishes a larger open dependency:
+  `runner.rs:178–228` starts Node for each request; `engine-entry.ts` prepares
+  one invocation before Ready and destroys its input at settlement. Render
+  offers resolve/hash tools and prepare images before owner contact
+  (`service-offer.ts:196–208`). `FairWorkScheduler` appears only at its class
+  definition in production source; its required/render reservations have no
+  consumer. Renderer owner capacity therefore does not establish R25/R31's
+  complete resident engine or required enforcement lane. The fairness gate
+  launches peers/guards after the same hot operation becomes Running and
+  requires completion before its later Running sample. Cold consumer cost
+  exceeding that remaining interval can fail this gate without a renderer
+  queue starving guards; guards do not enter that owner. Preserve the gate's
+  failure and workload. Join complete caller/engine/handler latency with the
+  measured publication phases before selecting the next implementation.
+  A resident pool must retain code loading and owned workers, not cached
+  authority or shared caller identity. Per-request project/selection/source
+  freshness, caller environment, native ancestor/process-instance capture,
+  cancellation, containment handoff and unknown outcomes remain requirements.
+  Killing a shared engine group for one request must not interrupt another
+  request; a renderer-only or generic shared-Node change cannot earn that claim.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2181,8 +2247,12 @@ fairness run with correct semantic output but no required overlap. Remove only
 the demonstrably redundant exact-empty library-map subprocess lookup, pin the
 qualification fixture's unsealed CLI identity and measure publication phases
 before choosing a caching or synchronization change. Review the changed prefix
-source explicitly; no candidate-derived automatic blessing. Freeze, check and
-inspect these changes before another original workload run. Keep the original
+source explicitly; no candidate-derived automatic blessing. E113 implements
+those changes; E114's full-suite custody-test failure holds actual replay.
+Capture actual refusal and retained custody identities before resolving the
+oracle/implementation disagreement; never infer the lost original error from a
+later pass. Freeze, check and inspect the result before another original
+workload run. Keep the original
 1000-turn hot transcript, counts,30s request budgets and later hot Running
 witness requirements. A failed scenario's correct output is not fairness proof.
 Inspect raw outcomes and known cleanup before advancing; overload and
