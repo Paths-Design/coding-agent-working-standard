@@ -10,6 +10,9 @@
 //! Same-UID hostile mutation remains outside the cooperative boundary. Named
 //! directory/file pins and nofollow I/O refuse observed replacement. Deadlines
 //! bound cooperative work, not an uninterruptible kernel syscall.
+//! Destination custody lives beside the actual destination under
+//! `.caws-plan-snapshot-custody/v1/`, independently of the configurable machine
+//! home. Machine homes partition pending work, never destination ownership.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -33,6 +36,7 @@ pub const MAX_TRANSCRIPT_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_PENDING_TICKETS: usize = 128;
 const MAX_RECORD_BYTES: usize = 16 * 1024;
 const SCHEMA: &str = "caws.plan.snapshot.v1";
+const TARGET_CUSTODY: &str = ".caws-plan-snapshot-custody";
 static TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone)]
@@ -713,7 +717,6 @@ struct Namespace {
     home: PinnedDirectory,
     owner: PinnedDirectory,
     pending: PinnedDirectory,
-    targets: PinnedDirectory,
 }
 fn namespace(context: &Context, owner: &Owner, expires: Instant) -> Result<Namespace> {
     let home = PinnedDirectory::open(context.home.clone(), true, expires)?;
@@ -723,13 +726,6 @@ fn namespace(context: &Context, owner: &Owner, expires: Instant) -> Result<Names
         file = child_directory(&file, name, true)?;
         path.push(name);
     }
-    let targets_file = child_directory(&file, "targets", true)?;
-    let targets = PinnedDirectory {
-        identity: DirectoryIdentity::of(&targets_file)?,
-        file: targets_file,
-        path: path.join("targets"),
-        private: true,
-    };
     let owners = child_directory(&file, "owners", true)?;
     let key = owner.key()?;
     let owner_file = child_directory(&owners, &key, true)?;
@@ -751,7 +747,6 @@ fn namespace(context: &Context, owner: &Owner, expires: Instant) -> Result<Names
         home,
         owner,
         pending,
-        targets,
     })
 }
 fn lock_target(
@@ -760,7 +755,6 @@ fn lock_target(
     expires: Instant,
 ) -> Result<(PinnedDirectory, File)> {
     namespace.home.check(expires)?;
-    namespace.targets.check(expires)?;
     let parent = PinnedDirectory::open(
         snapshot
             .parent()
@@ -785,14 +779,21 @@ fn lock_target(
         parent.identity.ino,
         name.to_ascii_lowercase(),
     ))?);
-    let file = child_directory(&namespace.targets.file, &key, true)?;
+    // All callers naming this physical destination parent converge here even
+    // when their valid machine homes differ. The stable anchor is not a cache
+    // that can be reset or relocated to obtain a fresh ownership claim.
+    let anchor = child_directory(&parent.file, TARGET_CUSTODY, true)?;
+    let version = child_directory(&anchor, "v1", true)?;
+    let file = child_directory(&version, &key, true)?;
     let target = PinnedDirectory {
         identity: DirectoryIdentity::of(&file)?,
         file,
-        path: namespace.targets.path.join(key),
+        path: parent.path.join(TARGET_CUSTODY).join("v1").join(key),
         private: true,
     };
+    parent.check(expires)?;
     let lock = stable_lock(&target, expires)?;
+    parent.check(expires)?;
     Ok((target, lock))
 }
 fn stable_lock(target: &PinnedDirectory, expires: Instant) -> Result<File> {

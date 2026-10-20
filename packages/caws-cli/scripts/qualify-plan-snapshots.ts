@@ -95,9 +95,10 @@ fs.mkdirSync(root, { mode: 0o700 });
 const sandbox = path.join(root, 'sandbox');
 directory(sandbox);
 const home = path.join(sandbox, 'machine');
+const otherHome = path.join(sandbox, 'other-machine');
 const user = path.join(sandbox, 'user');
 const templates = path.join(sandbox, 'git-templates');
-for (const item of [home, user, templates]) directory(item);
+for (const item of [home, otherHome, user, templates]) directory(item);
 const projects = [path.join(sandbox, 'project-a'), path.join(sandbox, 'project-b')] as const;
 for (const project of projects) {
   directory(project);
@@ -275,28 +276,33 @@ function stdout(receipt: Receipt): Data {
 function stderr(receipt: Receipt): string {
   return fs.readFileSync(path.join(receipt.directory, 'stderr.bin'), 'utf8');
 }
-function requestArgs(request: Request): string[] {
+function requestArgs(request: Request, machineHome = home): string[] {
   return [
     'plan-snapshots',
     '--home',
-    home,
+    machineHome,
     '--checkout',
     request.canonicalProject,
     '--legacy-user-home',
     user,
   ];
 }
-function launch(label: string, request: Request): Started {
+function launch(label: string, request: Request, machineHome = home): Started {
   return start(
     label,
     native,
-    requestArgs(request),
+    requestArgs(request, machineHome),
     request.canonicalProject,
     Buffer.from(JSON.stringify(request))
   );
 }
-async function invoke(label: string, request: Request, code = 0): Promise<Receipt> {
-  const receipt = await closed(launch(label, request));
+async function invoke(
+  label: string,
+  request: Request,
+  code = 0,
+  machineHome = home
+): Promise<Receipt> {
+  const receipt = await closed(launch(label, request, machineHome));
   expectReceipt(receipt, code);
   return receipt;
 }
@@ -357,8 +363,8 @@ function allFiles(directoryPath: string): string[] {
   visit(directoryPath);
   return result;
 }
-function tickets(request: Request): string[] {
-  return allFiles(path.join(home, 'state/plan-snapshots/v1/owners')).filter((file) => {
+function tickets(request: Request, machineHome = home): string[] {
+  return allFiles(path.join(machineHome, 'state/plan-snapshots/v1/owners')).filter((file) => {
     if (path.extname(file) !== '.json' || path.basename(path.dirname(file)) !== 'pending')
       return false;
     const ticket = object(JSON.parse(fs.readFileSync(file, 'utf8'))),
@@ -372,7 +378,7 @@ function tickets(request: Request): string[] {
   });
 }
 function claims(destination: string): string[] {
-  return allFiles(path.join(home, 'state/plan-snapshots/v1/targets')).filter(
+  return allFiles(path.join(path.dirname(destination), '.caws-plan-snapshot-custody/v1')).filter(
     (file) =>
       path.basename(file) === 'owner.json' &&
       object(JSON.parse(fs.readFileSync(file, 'utf8'))).snapshot === destination
@@ -422,7 +428,13 @@ function checkpoint(label: string): string {
       entries.push(row);
     }
   }
-  for (const fixtureRoot of [home, user, ...projects, path.join(sandbox, 'transcripts')]) {
+  for (const fixtureRoot of [
+    home,
+    otherHome,
+    user,
+    ...projects,
+    path.join(sandbox, 'transcripts'),
+  ]) {
     if (fs.existsSync(fixtureRoot)) visit(fixtureRoot);
   }
   json(path.join(destination, 'inventory.json'), entries);
@@ -594,6 +606,68 @@ async function main(): Promise<void> {
     assert.equal(claims(snapshot(alias)).length, 0);
     result.established =
       'source/destination alias refused with original inode and bytes intact and no claim or ticket';
+  });
+  const homeARequest = fixture(projects[1], 'home-a-owner', 'shared-target-different-homes');
+  const homeBRequest: Request = {
+    ...homeARequest,
+    sessionId: 'home-b-owner',
+    transcriptPath: path.join(sandbox, 'transcripts/different-home-owner-b.jsonl'),
+  };
+  put(
+    homeBRequest.transcriptPath,
+    JSON.stringify({
+      sessionId: homeBRequest.sessionId,
+      phase: 'different-home competing producer',
+    }) + '\n'
+  );
+  await scenario('different-homes-one-destination-custody', async (result) => {
+    const contexts = [
+      { request: homeARequest, home },
+      { request: homeBRequest, home: otherHome },
+    ];
+    const started = contexts.map((context, index) =>
+      launch('different-home-produce-' + index, context.request, context.home)
+    );
+    const settled = await Promise.allSettled(started.map(closed));
+    const receipts: Receipt[] = [];
+    for (const item of settled) {
+      assert.equal(item.status, 'fulfilled');
+      if (item.status === 'fulfilled') receipts.push(item.value);
+    }
+    assert.deepEqual(
+      receipts.map((receipt) => receipt.code).sort(),
+      [0, 75],
+      'different homes must share one target custody winner'
+    );
+    for (const receipt of receipts) expectReceipt(receipt, receipt.code === 0 ? 0 : 75);
+    const winnerIndex = receipts.findIndex((receipt) => receipt.code === 0);
+    assert(winnerIndex === 0 || winnerIndex === 1);
+    const winner = contexts[winnerIndex]!,
+      loser = contexts[1 - winnerIndex]!;
+    assert.equal(stdout(receipts[winnerIndex]!).produced, 1);
+    assert.match(
+      stderr(receipts[1 - winnerIndex]!),
+      /snapshot destination has another owner; explicit maintenance required/
+    );
+    equalSnapshot(winner.request);
+    assert.equal(tickets(winner.request, winner.home).length, 1);
+    assert.equal(tickets(loser.request, loser.home).length, 0);
+    assert.equal(claims(snapshot(winner.request)).length, 1);
+    const identity = fs.lstatSync(snapshot(winner.request), { bigint: true }),
+      bytes = fs.readFileSync(snapshot(winner.request));
+    const losingRetry = await invoke('different-home-loser-retry', loser.request, 75, loser.home);
+    assert.match(
+      stderr(losingRetry),
+      /snapshot destination has another owner; explicit maintenance required/
+    );
+    sameIdentity(identity, fs.lstatSync(snapshot(winner.request), { bigint: true }));
+    assert.deepEqual(fs.readFileSync(snapshot(winner.request)), bytes);
+    assert.equal(tickets(loser.request, loser.home).length, 0);
+    assert.equal(tickets(winner.request, winner.home).length, 1);
+    result.winner = { ...winner, receipt: receipts[winnerIndex] };
+    result.loser = { ...loser, receipt: receipts[1 - winnerIndex], retry: losingRetry };
+    result.established =
+      'different explicit machine homes contend on one destination-anchored custody claim; foreign loser preserves winner bytes/inode and gains no pending ticket';
   });
   assert(
     children.every((child) => child.receipt.closeConfirmed && !child.receipt.timedOut),

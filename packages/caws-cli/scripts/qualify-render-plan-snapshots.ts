@@ -194,12 +194,6 @@ function retain(h: RenderHarness, label: string, fixtureRoots: readonly string[]
 function invocationEvidence(h: RenderHarness, fixture: ProjectFixture, receipt: Receipt): Data {
   assert(typeof receipt.pid === 'number' && receipt.pid > 0);
   const command = readJson(path.join(receipt.directory, 'command.json'));
-  assert.equal(command.cwd, fixture.project);
-  assert(Array.isArray(command.args));
-  const args = command.args as unknown[];
-  assert.equal(args[args.indexOf('--timeout-ms') + 1], String(NATIVE_STOP_MS));
-  assert.equal(args[args.indexOf('--event') + 1], 'stop');
-  assert.equal(args[args.indexOf('--surface') + 1], 'codex');
   const directory = path.join(fixture.session, 'hook-invocations');
   const names = files(directory).filter(
     (name) => name.startsWith(String(receipt.pid) + '-') && name.endsWith('.jsonl')
@@ -207,7 +201,22 @@ function invocationEvidence(h: RenderHarness, fixture: ProjectFixture, receipt: 
   assert.equal(names.length, 1, 'caller must have exactly one correlated invocation journal');
   const journalPath = path.join(directory, names[0]!);
   const journalBytes = fs.readFileSync(journalPath);
+  put(path.join(h.root, 'actual-invocation.jsonl'), journalBytes);
   const journal = jsonLines(journalBytes.toString('utf8'));
+  const compatibility = journal.filter(
+    (event) => event.stage === 'compatibility_dispatch_completed'
+  );
+  const encodedExecution = compatibility[0]?.execution_records_base64;
+  const executionBytes =
+    typeof encodedExecution === 'string' ? Buffer.from(encodedExecution, 'base64') : null;
+  if (executionBytes !== null)
+    put(path.join(h.root, 'actual-execution-records.jsonl'), executionBytes);
+  assert.equal(command.cwd, fixture.project);
+  assert(Array.isArray(command.args));
+  const args = command.args as unknown[];
+  assert.equal(args[args.indexOf('--timeout-ms') + 1], String(NATIVE_STOP_MS));
+  assert.equal(args[args.indexOf('--event') + 1], 'stop');
+  assert.equal(args[args.indexOf('--surface') + 1], 'codex');
   const starts = journal.filter((event) => event.stage === 'invocation_started');
   assert.equal(starts.length, 1);
   const start = starts[0]!;
@@ -232,44 +241,38 @@ function invocationEvidence(h: RenderHarness, fixture: ProjectFixture, receipt: 
   const planHandler = row(selected.handlers[1]);
   assert.equal(planHandler.entry, 'plan-transcript-finalize.sh');
   assert.equal(planHandler.kind, 'stock');
-  const completed = journal.filter(
-    (event) =>
-      event.stage === 'handler_completed' && event.handler === 'plan-transcript-finalize.sh'
-  );
-  assert.equal(completed.length, 1, 'actual selected plan handler did not complete');
-  assert.equal(completed[0]!.handler_index, 1);
-  assert.equal(completed[0]!.exit_code, 0);
-  assert.equal(completed[0]!.source_sha256, planHandler.sha256);
-  assert.equal(completed[0]!.resolved_session_id, fixture.sessionId);
-  assert(
-    String(completed[0]!.stderr).includes(legacyDiagnostic),
-    'handler progress lacks native preservation diagnostic'
-  );
-  const compatibility = journal.filter(
-    (event) => event.stage === 'compatibility_dispatch_completed'
+  assert(Array.isArray(start.selected_handlers));
+  assert.equal(start.selected_handlers.length, selected.handlers.length);
+  assert.deepEqual(
+    row(start.selected_handlers[1]),
+    planHandler,
+    'invocation selected plan source differs from admitted selection'
   );
   assert.equal(compatibility.length, 1);
   assert.equal(compatibility[0]!.exit_code, 0);
-  const encodedExecution = compatibility[0]!.execution_records_base64;
   assert(typeof encodedExecution === 'string');
-  const executionBytes = Buffer.from(encodedExecution, 'base64');
+  assert(executionBytes !== null);
   const execution = jsonLines(executionBytes.toString('utf8'));
+  assert.equal(execution.length, selected.handlers.length);
+  assert.deepEqual(
+    execution.map((record) => record.handler),
+    selected.handlers.map((handler) => row(handler).entry)
+  );
   const finalizer = execution.filter(
     (event) => event.handler === 'plan-transcript-finalize.sh' && event.status === 'completed'
   );
   assert.equal(finalizer.length, 1);
   assert.equal(finalizer[0]!.exit_code, 0);
+  assert.equal(finalizer[0]!.path, planHandler.path);
   assert.equal(finalizer[0]!.session_id, fixture.sessionId);
   assert.equal(finalizer[0]!.hook_event, 'Stop');
   assert(String(finalizer[0]!.stderr).includes(legacyDiagnostic));
-  put(path.join(h.root, 'actual-invocation.jsonl'), journalBytes);
-  put(path.join(h.root, 'actual-execution-records.jsonl'), executionBytes);
   return {
     command,
     journalPath,
     invocationId: id,
     prefix: prefix[0],
-    completed: completed[0],
+    selectedPlanHandler: start.selected_handlers[1],
     executionFinalizer: finalizer[0],
     journalSha256: digest(journalBytes),
     executionSha256: digest(executionBytes),
@@ -316,6 +319,7 @@ async function main(): Promise<void> {
   });
   persist();
   let failure: unknown;
+  let checkpointRoots: string[] = [];
   try {
     const primary = await h.createProject({ name: 'plan-primary', sessions: ['shared-id'] });
     const other = await h.createProject({ name: 'plan-other', sessions: ['shared-id'] });
@@ -323,6 +327,16 @@ async function main(): Promise<void> {
     assert.equal(primary.sessionId, other.sessionId);
     const ownRequest = request(primary),
       otherRequest = request(other);
+    checkpointRoots = [
+      path.join(h.home, 'state/plan-snapshots'),
+      path.join(h.home, '.codex'),
+      path.join(primary.project, '.caws/plans'),
+      path.join(other.project, '.caws/plans'),
+      primary.transcriptFile,
+      other.transcriptFile,
+      primary.session,
+      other.session,
+    ];
     manifest.projects = { primary, other };
     manifest.requests = { primary: ownRequest, other: otherRequest };
     persist();
@@ -395,16 +409,6 @@ async function main(): Promise<void> {
       list: sourceIdentity(legacyList),
       snapshot: sourceIdentity(legacySnapshot),
     };
-    const checkpointRoots = [
-      path.join(h.home, 'state/plan-snapshots'),
-      path.join(h.home, '.codex'),
-      path.join(primary.project, '.caws/plans'),
-      path.join(other.project, '.caws/plans'),
-      primary.transcriptFile,
-      other.transcriptFile,
-      primary.session,
-      other.session,
-    ];
     manifest.before = retain(h, 'before-actual-stop', checkpointRoots);
     persist();
     frozenNative();
@@ -419,6 +423,8 @@ async function main(): Promise<void> {
     const started = observeClose(h.spawnInvocation(primary, { timeoutMs: NATIVE_STOP_MS }));
     children.push(started);
     const receipt = await bounded(started.closed, STOP_CLOSE_OBSERVATION_MS, 'actual native Stop');
+    manifest.caller = receipt;
+    manifest.invocation = invocationEvidence(h, primary, receipt);
     h.success(receipt);
     assert.equal(receipt.signal, null);
     assert.equal(started.stdinError, null);
@@ -461,14 +467,12 @@ async function main(): Promise<void> {
       0,
       'other repository was unexpectedly rendered'
     );
-    manifest.caller = receipt;
-    manifest.invocation = invocationEvidence(h, primary, receipt);
     manifest.after = retain(h, 'after-actual-stop', checkpointRoots);
     frozenNative();
     manifest.established = [
       'native CLI producer retained initial snapshot and pending provenance',
       'actual admitted sealed Stop finalized exact current transcript bytes and acknowledged only its own ticket',
-      'correlated native session prefix proof and completed plan handler in both invocation and execution records',
+      'correlated native session prefix proof, invocation selected source identity, and actual completed plan handler execution record',
       'other repository same-ID ticket and snapshot unchanged',
       'legacy ownerless carrier/snapshot preserved with actual prefixed Stop diagnostic',
       'actual renderer retained both expected Codex turn semantics',
@@ -477,6 +481,18 @@ async function main(): Promise<void> {
   } catch (error) {
     failure = error;
     manifest.error = errorText(error);
+    try {
+      manifest.failureBeforeCleanup = retain(h, 'failure-before-cleanup', checkpointRoots);
+      const observations = path.join(h.owner, 'observations.jsonl');
+      if (fs.existsSync(observations))
+        put(
+          path.join(h.root, 'owner-observations-before-cleanup.jsonl'),
+          fs.readFileSync(observations)
+        );
+      persist();
+    } catch (retentionError) {
+      manifest.failureRetentionError = errorText(retentionError);
+    }
   } finally {
     try {
       manifest.cleanup = await h.cleanup(20000);

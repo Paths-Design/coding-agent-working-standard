@@ -772,9 +772,7 @@ fn transcript_destination_alias_refuses_before_claim_or_ticket_and_preserves_ide
     );
     assert_eq!(fs::read(&destination).unwrap(), bytes);
     assert!(fixture.pending(&request).is_empty());
-    let owner = validate_request(&fixture.context, &request, expires()).unwrap();
-    let ns = namespace(&fixture.context, &owner, expires()).unwrap();
-    assert_eq!(fs::read_dir(&ns.targets.path).unwrap().count(), 0);
+    assert!(!destination.parent().unwrap().join(TARGET_CUSTODY).exists());
     // A distinct transcript can establish this destination only after explicit
     // removal of the preexisting ownerless snapshot.
     let mut distinct = request.clone();
@@ -828,9 +826,107 @@ fn ownerless_existing_snapshot_in_legacy_list_is_never_claimed_or_overwritten() 
     assert_eq!(fs::read(&destination).unwrap(), b"legacy snapshot bytes\n");
     assert_eq!(fs::read(&pending).unwrap(), carrier.as_bytes());
     assert!(fixture.pending(&request).is_empty());
-    let owner = validate_request(&fixture.context, &request, expires()).unwrap();
-    let ns = namespace(&fixture.context, &owner, expires()).unwrap();
-    for entry in fs::read_dir(&ns.targets.path).unwrap() {
+    for entry in fs::read_dir(
+        destination
+            .parent()
+            .unwrap()
+            .join(TARGET_CUSTODY)
+            .join("v1"),
+    )
+    .unwrap()
+    {
         assert!(!entry.unwrap().path().join("owner.json").exists());
     }
+}
+
+#[test]
+fn different_machine_homes_compete_for_one_destination_custody_and_loser_preserves_it() {
+    let fixture = Fixture::new();
+    let first = fixture.request("project-a", "owner-a", "one-target");
+    let mut second = first.clone();
+    second.session_id = "owner-b".into();
+    second.transcript_path = fixture.root.join("owner-b-transcript.jsonl");
+    write(&second.transcript_path, b"foreign owner transcript\n");
+    let mut other_context = fixture.context.clone();
+    other_context.home = fixture.root.join("other-machine");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&other_context.home)
+        .unwrap();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+    let a_context = fixture.context.clone();
+    let a_request = first.clone();
+    let a_barrier = barrier.clone();
+    let a = std::thread::spawn(move || {
+        a_barrier.wait();
+        execute(&a_context, &a_request, expires())
+    });
+    let b_context = other_context.clone();
+    let b_request = second.clone();
+    let b_barrier = barrier.clone();
+    let b = std::thread::spawn(move || {
+        b_barrier.wait();
+        execute(&b_context, &b_request, expires())
+    });
+    barrier.wait();
+    let results = [a.join().unwrap(), b.join().unwrap()];
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| result
+                .as_ref()
+                .is_err_and(|error| error.kind == ErrorKind::OwnerConflict))
+            .count(),
+        1
+    );
+    let (winner, loser, loser_context) = if results[0].is_ok() {
+        (&first, &second, &other_context)
+    } else {
+        (&second, &first, &fixture.context)
+    };
+    let destination = Fixture::snapshot(&first);
+    let before = fs::metadata(&destination).unwrap();
+    let bytes = fs::read(&destination).unwrap();
+    assert_eq!(bytes, fs::read(&winner.transcript_path).unwrap());
+    assert_eq!(
+        execute(loser_context, loser, expires()).unwrap_err().kind,
+        ErrorKind::OwnerConflict
+    );
+    let after = fs::metadata(&destination).unwrap();
+    assert_eq!((before.dev(), before.ino()), (after.dev(), after.ino()));
+    assert_eq!(fs::read(&destination).unwrap(), bytes);
+    let owner = validate_request(loser_context, loser, expires()).unwrap();
+    let ns = namespace(loser_context, &owner, expires()).unwrap();
+    assert!(
+        ticket_names(&ns.pending.file, expires())
+            .unwrap()
+            .is_empty()
+    );
+    for context in [&fixture.context, &other_context] {
+        assert!(
+            !context
+                .home
+                .join("state/plan-snapshots/v1/targets")
+                .exists()
+        );
+    }
+    let anchors = fs::read_dir(
+        destination
+            .parent()
+            .unwrap()
+            .join(TARGET_CUSTODY)
+            .join("v1"),
+    )
+    .unwrap()
+    .collect::<std::io::Result<Vec<_>>>()
+    .unwrap();
+    assert_eq!(anchors.len(), 1);
+    let claim: Claim = read_record(
+        &directory(&anchors[0].path(), true, expires()).unwrap(),
+        "owner.json",
+        expires(),
+    )
+    .unwrap();
+    assert_eq!(claim.owner.session_id, winner.session_id);
 }
