@@ -145,7 +145,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification | Typed TS classifier | substitution precedence repaired; typed execution, selected-shell state and native handoff exercised, E63/E65 | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open |
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration | TS configuration module | independent selected-stock candidate; root integration pending | The separate owner reports isolated invocation qualification at `4f1e40f2`; E100 distinguishes its retained evidence from parent acceptance. Custom/explicit parser compatibility and Python retirement remain separate |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies | Typed TS guard utilities + bounded Git port | component and isolated native cwd repair exercised, E61; full consumer retirement open | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier |
-| R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | typed composer consumes the replacement; shared shell replacement pending | `composer.ts` imports `truncateUtf8Prefix` and calls it in `cutCard`; the shared runner retains the Python helper. An independent packaging/consumer slice owns the remaining switch, E100 |
+| R08 | `shared/advisory_truncate.py`: UTF-8 byte budget | TS byte truncation module | typed composer consumed; independent stock Bash switch qualified; parent integration pending | Separate candidate `6d44dc9f` retains Python for selected custom compatibility. E110 distinguishes private installed Bash evidence from sealed native image, harness and retirement obligations |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence | TS transcript store | unreplaced | Atomic replacement, identity, replay custody, malformed and concurrent inputs |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization | TS normalization interfaces/common implementation | unreplaced | Lossless occurrence/provenance and explicit unavailable fields |
 | R11 | `shared/lib/harness_claude.py` | TS Claude adapter | unreplaced | Harness-specific transcript fixtures and installed render evidence |
@@ -1979,6 +1979,112 @@ Additional bounded evidence and unresolved dependencies:
   accepted plan directory; bounded discovery of existing unignored custody and
   a `plans/team` negation control require implementation/execution.
 
+- E108: Existing-untracked custody discovery `ad993637` passes10 focused checks.
+  Retained compiled-SUT probe
+  `drift-existing-custody-2026-10-20/run-2026-10-20T08-17-50-534Z/`
+  returns no findings for protected owner/lock files, then exactly those two
+  `plans/team/.caws-plan-snapshot-custody/v1/` files uncovered by the deeper
+  `.gitignore` line2 negation. All three representative probes remain protected;
+  adjacent source and near-miss paths remain ordinary untracked files. Fourteen
+  external Git children close with expected0/1 and no signal. Preserve the first
+  probe's exit128 from invalid multi-path `check-ignore --quiet`; no SUT result
+  is inferred from that failure. Native `d4644326` also passes generation,
+  framing, reader-expiry and valid-unreviewed serial controls in roots ending
+  `08-12-06-360Z`, `08-18-42-073Z`, `08-19-11-905Z`, `08-20-19-636Z`.
+  Root verifies158/155/154/154 artifact hashes respectively. Generation retains
+  its old child/private Git view until withdrawal and cleanup before replacement;
+  surplus framing withdraws without an effect; reader expiry retains demand
+  beyond idle eligibility and reports `deadline_expired`; valid changed stock
+  prefix images receive `serial/unreviewed_prefix`, not rejection or overlap.
+  All four cleanup receipts are confirmed inactive/free/socket absent.
+
+- E109: Actual thirteen-native-client/four-repository baseline on that executable
+  exits1 in `render-load-baseline-2026-10-20T08-21-28-290Z/`. All13 clients
+  exit0, all13 retained1814-byte turns have isolated expected values, all13 durable
+  operations return and project-local sequence equals daemon served count.
+  Thirteen live client birth identities and maximum overlap13 are observed;
+  latency ranges17439–19484ms under the unchanged30000ms budget. These bounded
+  results do not make the qualifier pass: its cross-project Running-overlap
+  assertion fails.695 samples observe at most one Running project. Independent
+  source/event-order inspection establishes genuinely disjoint Running windows
+  in this trace, not merely missed sub-millisecond samples. Actual daemon work
+  reports1–5ms. Independent actor threads exist; revalidation and synchronous
+  host-wide diagnostic writes stagger transitions, without establishing a
+  structural global serialization defect. Four expected idle retirements also
+  emit `worker_failure/host_stopped`, which would fail the next lifecycle gate.
+  Fix that producer taxonomy without filtering failures. Preserve baseline FAIL;
+  expose the already-planned unchanged1000-turn slow/fairness phase separately
+  to require other-repository and guard completion before a later hot Running
+  witness. No workload inflation, artificial delay or blind baseline retry.
+  Cleanup is confirmed inactive/free/socket absent. Concurrent/overload modes
+  and final-executable lifecycle replay remain unexecuted.
+
+- E110: Independent R08 owner reports component closure and retained clean
+  candidate `6d44dc9f77a5bda3be81a9504b0397514af0464c`, based on R06 `4f1e40f2`.
+  Its private npm-package/installed Bash cases, selected custom compatibility,
+  synthetic installer and bounded BATS outputs live under the E100 external
+  artifact root's `native-advisory-truncation/`. Production bytes match its
+  tested `5f55cba3`; later commits change retention/instrumentation only. Root
+  receives these as attributed reports; parent integration/acceptance remains
+  separate. Native-image integration requires independent review of the stock
+  runner/helper prefix fingerprints and pinned validation tools: source review
+  identifies `cmp` absent from the sealed image's PATH/tool set although the
+  switched runner requires it for literal-prefix validation. Installed Bash
+  evidence does not qualify that image. Python custom compatibility, native
+  harness/PID parity, Node18 execution, arbitrary custom consumers, first-party
+  Python retirement and full A1–A8 remain open. No machine activation occurs.
+
+- E111: Explicit idle Stop exits cleanly at `da0bab98`; active-render Stop keeps
+  its failure/uncertainty boundary. The first full Cargo attempt exits101 because
+  the supplied retained-fixture parent does not exist (50 constructor failures),
+  preserved in `prefix-cohort-2026-10-20/idle-stop-all-native.log`. A distinct
+  replay with that parent created exits0:190 library,40 binary,31 invocation and
+  3 example checks; the untruncated replay log SHA-256 is
+  `453086d9cf2df835ced2836d0890849ccc1272aecbc689ac42553b374589c2a4`.
+  Test-only `a0665f21` adds prelaunch case identity, actual Stop bytes/PID and
+  settlement after raw WorkerExit equality. Its focused three-case command
+  exits0; `idle-stop-bound-tests.log` SHA-256 is
+  `64ad7a3a685ceee934d2bdcc99c046a1f77f87936cd917f1c69e727fcf150837`.
+  Under `idle-stop-bound-fixtures/renderer-backend-13861-{0,1,2}`, raw exits
+  retain respectively Returned/clean, no-render/clean and Unknown/HostStopped.
+  Created children13862/13864/13866 are reaped with both pipes EOF; separate
+  SDK queries return absent/errno3 for each in `idle-stop-bound-sdk-absence.json`.
+  Independent read-only inspection finds no settlement-before-assertions or
+  Unknown-erasure counterexample. These are fixture observations; final native
+  lifecycle replay and whole-session/PID containment parity remain owed.
+
+- E112: `9de47e53` exposes the original fairness phase separately without
+  relaxing baseline/concurrent gates. Actual `fairness` on native SHA-256
+  `85ccd528d2798394e90270b4dd235d4ff7ca536278fd514500eada8825390d86`
+  and driver `764c78e0de3c443ab9de0374d4c45bede124f9ebb8eb5998e84070f39eaaf620`
+  exits1 at the peer-before-later-hot-Running assertion. Raw evidence is
+  `render-load-fairness-2026-10-20T08-42-11-817Z/`; the command/exit are retained
+  separately in `prefix-cohort-2026-10-20/fairness-actual-command.{json,log}`.
+  Root rehashes all1379 artifact-manifest members with zero mismatches. The hot
+  backend returns1000 turns in759ms; stable Running ends08:42:26.463UTC, guards
+  close08:42:31.301–32.769 and peers08:42:39.108–39.737. All finish after hot;
+  neither independent enforcement capacity nor cross-project Running overlap
+  qualifies. The Sol investigator independently validates1003 semantic outputs,
+  four uncached Returned operations and13 scoped block responses with exit2.
+  Those semantic checks occur after the failing assertion in the driver, so
+  this separate artifact inspection does not change the scenario verdict.
+  The retained last hot turn is1812B, SHA-256
+  `479fba618a465b466e92df6d15c42f70953d8d4b16aa3b8e11c0fce792eac8c8`;
+  three1798B peer turn files and raw guard stdout/receipts are retained too.
+  Cleanup is confirmed inactive/free, socket absent, original instances absent;
+  no worker failure/actor error/cleanup deadline appears after the idle repair.
+  Native image admission consumes3333–3695ms; peer Prepared-to-bridge consumes
+  5934–6332ms. Codex heartbeat consumes2302–2521ms, cwd634–889ms and danger
+  1982–2100ms. These are distinct measured buckets, not additive attribution
+  of every nested stage. Cold publication includes source/tool checks and tree
+  syncing; internal costs are unmeasured. Process samples show31 library-map
+  Python children despite all four selected override maps being empty. Guard
+  heartbeats also invoke PATH-resolved host `caws`; its bytes are not retained,
+  so whole-guard timings cannot qualify the candidate CLI identity. Exact-empty
+  lookup removal, explicit fixture CLI selection and publication phase timings
+  are the next bounded changes. No budget, transcript size or workload count
+  changes, caching, guard relaxation or machine activation follows.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -2067,13 +2173,21 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-E105/E107 establish the repaired selected Stop path and three actual owner
-controls on executable `d4644326`. Complete existing-untracked-custody drift
-coverage and the remaining generation, framing, reader-expiry and valid-custom
-serial controls. Inspect raw snapshots, tickets, execution records and cleanup
-before advancing. Replay the thirteen-client baseline only after these controls
-succeed; retain the unchanged30s budget and stop/inspect any failed or ambiguously
-cleaned scenario. Concurrent and overload modes require separate retained runs.
+E105/E107/E108 establish the repaired selected Stop path, seven actual owner
+controls and existing-untracked-custody observation on executable `d4644326`.
+E109 retains the failed real Running-overlap baseline alongside13 completed
+native clients. E111 repairs idle Stop and E112 retains a separate failed
+fairness run with correct semantic output but no required overlap. Remove only
+the demonstrably redundant exact-empty library-map subprocess lookup, pin the
+qualification fixture's unsealed CLI identity and measure publication phases
+before choosing a caching or synchronization change. Review the changed prefix
+source explicitly; no candidate-derived automatic blessing. Freeze, check and
+inspect these changes before another original workload run. Keep the original
+1000-turn hot transcript, counts,30s request budgets and later hot Running
+witness requirements. A failed scenario's correct output is not fairness proof.
+Inspect raw outcomes and known cleanup before advancing; overload and
+final-executable lifecycle/legacy replay require separate retained runs.
+R06/R08 source integration and sealed-image contracts remain owed.
 
 E90 independently confirms E87's orphan absent without a root cleanup signal.
 E91/E92 retain repaired signal readiness, the complete native suite and all four
