@@ -3230,6 +3230,29 @@ Additional bounded evidence and unresolved dependencies:
   helper, full production latch/PID policy, missing-session/reset behavior,
   renderer custody correlation, residency, fairness or installation.
 
+- E154: Committed parent `36c1cd1bca6321e0ec3593a17e73172a2cb4844b` passes
+  strict CLI/runtime and kernel-test compilation through the workspace
+  TypeScript installation. Each compiler exits0 without diagnostics. Initial
+  attempts use the nonexistent package-local compiler path and exit1 before
+  compilation; those launch failures are retained separately. Compilation
+  establishes type compatibility after integration of E151's schema assertion
+  repair, not runtime behavior. Doctor exits0 with0E/3W/4I; its installed-pack
+  lag and ambiguous body-drift findings remain dependencies of the eventual
+  selected baseline review and adoption. The five policy gates pass against134
+  committed branch paths, with merge base `7c6d1b00` and observed main
+  `c6791c70`. Exact commands, revisions, raw stdout/stderr, statuses and gate
+  change basis live under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/parent-integrated-checks/`.
+
+  Direct source inspection confirms that continuation and final cleanup both
+  consume request-local coverage. The collector controls do not execute the
+  complete watchdog failure-to-cleanup branch. Original-Child receipt
+  correlation remains required before using the topology qualifier as integrated
+  renderer-cleanup evidence. The installed Codex registration selects Python
+  `caws-hook`, with45s pre-tool and60s post-tool limits. No installation,
+  complete parity, production latch, renderer, fairness or speed result follows
+  from these checks; parent A1–A8 acceptance remains open.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3238,7 +3261,7 @@ historical broader `npm run typecheck` exits 2 at the unchanged
 `tests/kernel/telemetry-turn-log-schema.test.ts:237` access to `usage.required`;
 neither that test nor its imported schema differs from `90fac044`. This is not a
 green package-wide check. E151 reproduces and repairs that exact test defect;
-fresh parent compilation remains required. E55 carries the separate large-latch
+E154 observes fresh parent compilation. E55 carries the separate large-latch
 producer/consumer evidence.
 
 Reorientation against all available session turn records retains the original
