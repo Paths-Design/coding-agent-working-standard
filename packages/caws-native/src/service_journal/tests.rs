@@ -631,6 +631,83 @@ fn uncertain_finish_reopens_unknown_or_actual_returned_never_queued() {
     }
 }
 #[test]
+fn failed_unknown_publication_reopens_fenced_with_original_identity_bytes_and_capacity() {
+    for offset in [1, 2] {
+        let fixture = Fixture::new();
+        let mut journal = fixture.open(1);
+        let accepted = admitted(&mut journal, 1);
+        let permit = begin(&mut journal);
+        journal.fail_sync = Some(journal.sync_count + offset);
+        let failure = journal.unknown(&permit, soon()).unwrap_err();
+        assert_eq!(failure.kind, ErrorKind::Io);
+        assert_eq!(failure.publication_may_have_happened, offset == 2);
+        let retained: serde_json::Value =
+            serde_json::from_slice(&fs::read(fixture.record(1)).unwrap()).unwrap();
+        assert_eq!(
+            retained["body"]["outcome"]["execution"],
+            if offset == 1 { "running" } else { "unknown" }
+        );
+        error(
+            journal.lookup(&identity(1).request_id, soon()),
+            ErrorKind::Poisoned,
+        );
+        error(
+            journal.begin_next(&"a".repeat(64), &"b".repeat(64), soon()),
+            ErrorKind::Poisoned,
+        );
+        error(
+            journal.admit(identity(2), b"{}", soon()),
+            ErrorKind::Poisoned,
+        );
+        drop(journal);
+
+        let mut reopened = fixture.open(1);
+        let operation = reopened
+            .lookup(&identity(1).request_id, soon())
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            operation.outcome(),
+            AcceptedOutcome::Unknown { .. }
+        ));
+        assert_eq!(operation.identity(), accepted.identity());
+        assert_eq!(operation.sequence(), accepted.sequence());
+        assert_eq!(operation.verified_request().unwrap(), br#"{"args":[]}"#);
+        match reopened
+            .admit(identity(1), br#"{"args":[]}"#, soon())
+            .unwrap()
+        {
+            Admission::Accepted {
+                operation: duplicate,
+                duplicate: true,
+            } => {
+                assert_eq!(*duplicate, operation);
+            }
+            other => panic!("uncertain effect was not deduplicated: {other:?}"),
+        }
+        error(
+            reopened.begin_next(&"a".repeat(64), &"b".repeat(64), soon()),
+            ErrorKind::Fenced,
+        );
+        rejected(
+            reopened.admit(identity(2), b"{}", soon()).unwrap(),
+            "capacity exhausted",
+        );
+        assert!(!fixture.record(2).exists());
+        drop(reopened);
+        let reopened = fixture.open(1);
+        assert_eq!(
+            reopened
+                .lookup(&identity(1).request_id, soon())
+                .unwrap()
+                .unwrap(),
+            operation,
+            "recovery must retain the same durable Unknown without replay"
+        );
+    }
+}
+
+#[test]
 fn rejected_inputs_capacity_and_sequence_overflow_create_no_false_acceptance() {
     let fixture = Fixture::new();
     let mut journal = fixture.open(2);

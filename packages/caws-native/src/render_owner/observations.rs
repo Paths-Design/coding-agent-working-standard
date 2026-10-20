@@ -31,6 +31,14 @@ pub(super) enum Observation<'a> {
         operation: &'static str,
         kind: &'static str,
     },
+    PrefixDisposition {
+        invocation_id: &'a str,
+        mode: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        proof_profile: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<&'static str>,
+    },
     GitCaptureRefused {
         reason: &'static str,
         query_exit_code: Option<i32>,
@@ -80,6 +88,14 @@ pub(super) enum Observation<'a> {
         session_id: &'a str,
         selected_index: u16,
         backend_pid: u32,
+    },
+    PreparedWithdrawn {
+        invocation_id: &'a str,
+        reason: &'static str,
+    },
+    QueuedOfferWithdrawn {
+        invocation_id: &'a str,
+        reason: &'static str,
     },
     JournalDispatch {
         request_id: &'a str,
@@ -383,6 +399,29 @@ pub(super) fn image_admission_failure(
         image_key: &offer.prepared.image_key,
         operation: failure.operation(),
         kind,
+    });
+}
+pub(super) fn prefix_disposition(
+    log: &ObservationLog,
+    offer: &Offer,
+    disposition: &image::PrefixConcurrency,
+) {
+    let (mode, proof_profile, reason) = match disposition {
+        image::PrefixConcurrency::Session(proof) => ("session", Some(proof.proof_profile()), None),
+        image::PrefixConcurrency::Serial(reason) => (
+            "serial",
+            None,
+            Some(match reason {
+                image::SerialPrefixReason::LegacyHelper => "legacy_helper",
+                image::SerialPrefixReason::UnreviewedPrefix => "unreviewed_prefix",
+            }),
+        ),
+    };
+    log.emit(Observation::PrefixDisposition {
+        invocation_id: &offer.invocation_id,
+        mode,
+        proof_profile,
+        reason,
     });
 }
 pub(super) fn prefix_file(path: &Path) -> Option<String> {

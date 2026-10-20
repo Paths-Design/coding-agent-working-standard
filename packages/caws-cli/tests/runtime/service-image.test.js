@@ -67,7 +67,8 @@ test('declares every required current Stop tool without ambient PATH fallback', 
     'tr',
     'wc',
   ]);
-  expect(SERVICE_IMAGE_TEMPLATES).toHaveLength(10);
+  expect(SERVICE_IMAGE_TEMPLATES).toHaveLength(11);
+  expect(SERVICE_IMAGE_TEMPLATES).toContain('plan-transcript-finalize.sh');
 });
 
 test.each([

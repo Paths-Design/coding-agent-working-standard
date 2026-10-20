@@ -11,7 +11,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     os::{
@@ -653,18 +653,9 @@ fn validate_prepared(offer: &Offer, prepared: &OwnerPrepared) -> Result<()> {
     grant.validate().map_err(err)
 }
 
-struct ConnectionPermit(Arc<AtomicUsize>);
-impl Drop for ConnectionPermit {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::AcqRel);
-    }
-}
-struct Job {
-    stream: UnixStream,
-    offer: Offer,
-    expires: Instant,
-    _permit: ConnectionPermit,
-}
+mod pending;
+use pending::*;
+
 struct Budget {
     used: usize,
     maximum: usize,
@@ -1172,6 +1163,7 @@ fn context(c: &OwnerConfig, offer: &Offer) -> image::AdmissionContext {
         client_root: c.client_root.clone(),
         template_root: c.template_root.clone(),
         client_shell_source: c.client_shell_source.clone(),
+        native_executable: Some(c.native_executable.clone()),
         expected_selection: offer.expected_selection.clone(),
         expected_image_digest: offer.prepared.image_digest.clone(),
         expected_policy_sha256: offer.policy_sha256.clone(),
@@ -1457,27 +1449,11 @@ impl Actor {
             self.writer_custody.take();
         }
     }
-    fn run(mut self, rx: mpsc::Receiver<Job>) {
-        loop {
-            match rx.recv_timeout(Duration::from_millis(self.config.limits.idle_ms as u64)) {
-                Ok(mut job) => {
-                    if let Err(reason) = self.serve(&mut job) {
-                        self.observations.emit(Observation::ActorError {
-                            stage: self.phase,
-                            reason: observation_reason(&reason),
-                        });
-                    }
-                    self.stage("finish", &job.offer.invocation_id);
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => self.retire(),
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    self.retire();
-                    return;
-                }
-            }
-        }
-    }
-    fn serve(&mut self, job: &mut Job) -> Result<()> {
+    fn prepare_job(
+        &mut self,
+        job: &mut Job,
+        cohort: Option<&PreparedState>,
+    ) -> Result<Option<PreparedState>> {
         self.phase = "offer_validation";
         check(job.expires)?;
         validate_offer(&job.offer)?;
@@ -1511,6 +1487,20 @@ impl Actor {
             return Err("admitted renderer image differs from offer".into());
         }
         self.stage("image_admission_complete", &job.offer.invocation_id);
+        let disposition = admitted.prefix_concurrency();
+        observations::prefix_disposition(&self.observations, &job.offer, &disposition);
+        let isolation = PrefixIdentity::from_concurrency(disposition);
+        if isolation
+            .as_ref()
+            .is_some_and(|proof| !proof.binds(&job.offer))
+        {
+            return Err("native prefix proof differs from admitted offer".into());
+        }
+        if let Some(held) = cohort
+            && (isolation.is_none() || isolation != held.isolation)
+        {
+            return Ok(None);
+        }
         if !self.reserved {
             self.reserve_backend(&job.offer.invocation_id)?;
         }
@@ -1549,13 +1539,15 @@ impl Actor {
             .transpose()?
             .unwrap_or(false);
         let reuse = viable
-            && self.process.as_ref().is_some_and(|p| {
-                p.image_digest == job.offer.prepared.image_digest
-                    && p.view.metadata_digest == view.metadata_digest
-                    && p.view.git_work_tree == view.git_work_tree
-                    && p.view.git_original_directory == view.git_original_directory
-                    && p.view.git_common_directory == view.git_common_directory
+            && self.process.as_ref().is_some_and(|process| {
+                BackendCohort::of(process).compatible(&job.offer.prepared.image_digest, &view)
             });
+        if let Some(held) = cohort
+            && (!reuse
+                || self.process.as_ref().map(BackendCohort::of).as_ref() != Some(&held.cohort))
+        {
+            return Ok(None);
+        }
         if reuse {
             let process = self.process.as_ref().expect("reuse requires owned worker");
             self.observations.emit(Observation::BackendReused {
@@ -1666,20 +1658,43 @@ impl Actor {
             selected_index: job.offer.expected_selection.selected_index,
             backend_pid: process.backend_pid,
         });
+        let cohort = BackendCohort::of(process);
         self.stage("bridge_read", &job.offer.invocation_id);
-        let incoming = bridge_frame_eof(
-            &mut job.stream,
-            wire::MAX_SERVICE_BRIDGE_REQUEST_BYTES,
-            job.expires,
-        )?;
-        self.stage("bridge_received", &job.offer.invocation_id);
+        job.reader_start
+            .take()
+            .ok_or("renderer bridge reader already started")?
+            .try_send(())
+            .map_err(|_| "renderer bridge reader unavailable")?;
+        Ok(Some(PreparedState {
+            admitted,
+            context,
+            issued,
+            cohort,
+            isolation,
+        }))
+    }
+    fn finish_prepared(&mut self, pending: &PendingJob, incoming: Vec<u8>) -> Result<()> {
+        let job = &pending.job;
+        let PreparedState {
+            admitted,
+            context,
+            issued,
+            cohort,
+            ..
+        } = &pending.state;
+        self.check_unknown_fence(&job.offer.invocation_id, job.expires)?;
+        check(job.expires)?;
+        if self.process.as_ref().map(BackendCohort::of).as_ref() != Some(cohort) {
+            return Err("prepared backend cohort differs from owned generation".into());
+        }
+        self.stage("bridge_dequeued", &job.offer.invocation_id);
         self.phase = "bridge_validation";
-        let incoming = wire::decode_service_bridge_request(&incoming, &issued).map_err(err)?;
+        let incoming = wire::decode_service_bridge_request(&incoming, issued).map_err(err)?;
         let expected = issued
             .request(incoming.request.arguments.clone())
             .map_err(err)?;
-        wire::validate_issued_request(&incoming, &issued, &expected).map_err(err)?;
-        let result = self.execute(&expected, job, &admitted, &context)?;
+        wire::validate_issued_request(&incoming, issued, &expected).map_err(err)?;
+        let result = self.execute(&expected, job, admitted, context)?;
         let (execution, served, cached) = match &result.outcome {
             wire::RenderOutcome::Rejected { .. } => ("rejected", None, None),
             wire::RenderOutcome::Queued => ("queued", None, None),
@@ -1704,7 +1719,7 @@ impl Actor {
             cached,
         });
         self.phase = "bridge_reply_write";
-        let bytes = wire::encode_service_bridge_reply(&issued, &expected, &result).map_err(err)?;
+        let bytes = wire::encode_service_bridge_reply(issued, &expected, &result).map_err(err)?;
         write_all(&job.stream, &bytes, job.expires)?;
         job.stream
             .shutdown(std::net::Shutdown::Write)
@@ -1886,11 +1901,10 @@ impl Actor {
         if operation.is_err() {
             self.unknown = true;
         }
-        if self.unknown {
-            // The durable unknown fence is retained before cleanup. Only the
-            // existing worker may stop/reap its backend; the reservation stays.
-            self.retire();
-        }
+        // The actor withdraws all prepared grants before quarantine cleanup.
+        // Dispatch already retained Running. Failed outcome publication may
+        // leave that record, publish its replacement, or poison this handle;
+        // none permits this owner to issue another effect.
         wire::RenderOutcomeFrame::for_request(request, outcome(&operation?)?).map_err(err)
     }
     fn dispatch(
@@ -1922,7 +1936,7 @@ impl Actor {
 }
 
 struct Routing {
-    actors: BTreeMap<String, SyncSender<Job>>,
+    actors: BTreeMap<String, ProjectRoute>,
     joins: Vec<thread::JoinHandle<()>>,
     config: Arc<OwnerConfig>,
     custody: Arc<journal::Custody>,
@@ -1935,11 +1949,18 @@ impl Routing {
         key: String,
         journal: journal::Journal,
         unknown: bool,
-    ) -> Result<SyncSender<Job>> {
+    ) -> Result<ProjectRoute> {
         if self.actors.len() >= self.config.limits.max_projects as usize {
             return Err("renderer project capacity exhausted".into());
         }
         let (tx, rx) = mpsc::sync_channel(self.config.limits.max_queue_per_project as usize);
+        let route = ProjectRoute {
+            sender: tx,
+            capacity: Arc::new(ProjectCapacity {
+                used: AtomicUsize::new(0),
+                maximum: 1 + self.config.limits.max_queue_per_project as usize,
+            }),
+        };
         let actor = Actor {
             config: Arc::clone(&self.config),
             custody: Arc::clone(&self.custody),
@@ -1954,10 +1975,10 @@ impl Routing {
             phase: "waiting",
         };
         self.joins.push(thread::spawn(move || actor.run(rx)));
-        self.actors.insert(key, tx.clone());
-        Ok(tx)
+        self.actors.insert(key, route.clone());
+        Ok(route)
     }
-    fn route(&mut self, key: &str, expires: Instant) -> Result<SyncSender<Job>> {
+    fn route(&mut self, key: &str, expires: Instant) -> Result<ProjectRoute> {
         if let Some(sender) = self.actors.get(key) {
             return Ok(sender.clone());
         }
@@ -2067,7 +2088,7 @@ pub fn host(path: &Path) -> Result<()> {
                     continue;
                 }
                 active.fetch_add(1, Ordering::AcqRel);
-                let permit = ConnectionPermit(Arc::clone(&active));
+                let permit = Arc::new(ConnectionPermit(Arc::clone(&active)));
                 let routing = Arc::clone(&routing);
                 let c = Arc::clone(&c);
                 let observations = Arc::clone(&observations);
@@ -2114,11 +2135,30 @@ pub fn host(path: &Path) -> Result<()> {
                     match sender {
                         Ok(sender) => {
                             let invocation_id = offer.invocation_id.clone();
-                            match sender.try_send(Job {
-                                stream,
+                            let project_permit = match sender.capacity.acquire() {
+                                Ok(permit) => permit,
+                                Err(_) => {
+                                    observations.emit(Observation::ActorQueueRefused {
+                                        invocation_id: &invocation_id,
+                                        reason: "queue_full",
+                                    });
+                                    return;
+                                }
+                            };
+                            let owner_stream = match stream.try_clone() {
+                                Ok(stream) => stream,
+                                Err(_) => return,
+                            };
+                            let (start_tx, start_rx) = mpsc::sync_channel(1);
+                            let (bridge_tx, bridge_rx) = mpsc::sync_channel(1);
+                            match sender.sender.try_send(Job {
+                                stream: owner_stream,
                                 offer,
                                 expires,
-                                _permit: permit,
+                                reader_start: Some(start_tx),
+                                bridge: bridge_rx,
+                                _permit: Arc::clone(&permit),
+                                _project_permit: Arc::clone(&project_permit),
                             }) {
                                 Err(refusal) => {
                                     let reason = match refusal {
@@ -2138,8 +2178,20 @@ pub fn host(path: &Path) -> Result<()> {
                                     observations.emit(Observation::ActorQueued {
                                         invocation_id: &invocation_id,
                                     });
+                                    read_prepared_bridge(
+                                        &mut stream,
+                                        start_rx,
+                                        bridge_tx,
+                                        expires,
+                                        &observations,
+                                        &invocation_id,
+                                    );
                                 }
                             }
+                            // Both actor and reader must terminate before these
+                            // exact connection/project admission slots are free.
+                            drop(stream);
+                            drop((permit, project_permit));
                         }
                         Err(reason) => observations.emit(Observation::ActorError {
                             stage: "project_route",

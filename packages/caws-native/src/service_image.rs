@@ -162,6 +162,19 @@ pub const TOOLS: &[&str] = &[
     "grep", "head", "jq", "mkdir", "mktemp", "node", "pgrep", "ps", "python3", "readlink", "rm",
     "sed", "sh", "sleep", "sort", "stat", "tail", "tr", "wc",
 ];
+pub const PLAN_TOOL: &str = "caws-native";
+mod prefix;
+use prefix::derive_prefix_concurrency;
+pub use prefix::{IsolatedPrefix, PrefixConcurrency, SerialPrefixReason};
+
+fn valid_tool_names(tools: &[Tool]) -> bool {
+    let mut expected: Vec<_> = TOOLS.to_vec();
+    if tools.iter().any(|tool| tool.name == PLAN_TOOL) {
+        expected.push(PLAN_TOOL);
+        expected.sort_unstable();
+    }
+    tools.iter().map(|tool| tool.name.as_str()).eq(expected)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
@@ -395,6 +408,7 @@ pub struct AdmissionContext {
     pub client_root: PathBuf,
     pub template_root: PathBuf,
     pub client_shell_source: PathBuf,
+    pub native_executable: Option<PathBuf>,
     pub expected_selection: Selection,
     pub expected_image_digest: String,
     pub expected_policy_sha256: String,
@@ -653,13 +667,7 @@ fn validate_binding(
     )?;
     validate_foreign_profile(&manifest.original_closure)?;
     require(
-        manifest.toolchain_tcb.tools.len() == TOOLS.len()
-            && manifest
-                .toolchain_tcb
-                .tools
-                .iter()
-                .map(|t| t.name.as_str())
-                .eq(TOOLS.iter().copied())
+        valid_tool_names(&manifest.toolchain_tcb.tools)
             && manifest
                 .toolchain_tcb
                 .tools
@@ -671,6 +679,13 @@ fn validate_binding(
         "unsupported toolchain declaration",
     )?;
     for tool in &manifest.toolchain_tcb.tools {
+        if tool.name == PLAN_TOOL {
+            require(
+                context.native_executable.as_deref() == Some(Path::new(&tool.path)),
+                ErrorKind::UnsupportedProfile,
+                "plan helper is not the configured native executable",
+            )?;
+        }
         if tool.name == "caws" {
             require(
                 context
@@ -1128,8 +1143,13 @@ pub struct ValidatedImage {
     root_stamp: Stamp,
     policy_stamp: Stamp,
     _root_handle: File,
+    prefix_concurrency: PrefixConcurrency,
 }
+
 impl ValidatedImage {
+    pub fn prefix_concurrency(&self) -> PrefixConcurrency {
+        self.prefix_concurrency.clone()
+    }
     pub fn manifest(&self) -> &PreparedImageManifest {
         &self.manifest
     }
@@ -1483,6 +1503,13 @@ fn read_originals(
 }
 fn verify_tool(tool: &Tool, context: &AdmissionContext, expires: Instant) -> Result<Pin> {
     deadline(expires)?;
+    if tool.name == PLAN_TOOL {
+        require(
+            context.native_executable.as_deref() == Some(Path::new(&tool.path)),
+            ErrorKind::UnsupportedProfile,
+            "plan helper is not the configured native executable",
+        )?;
+    }
     if tool.name == "caws" {
         require(
             context
@@ -1699,6 +1726,7 @@ fn validate_image_at(
         expires,
     )?;
     deadline(expires)?;
+    let prefix_concurrency = derive_prefix_concurrency(&manifest, &originals);
     Ok(ValidatedImage {
         manifest,
         image_digest: context.expected_image_digest.clone(),
@@ -1706,6 +1734,7 @@ fn validate_image_at(
         root_stamp,
         policy_stamp,
         _root_handle: directory,
+        prefix_concurrency,
     })
 }
 
@@ -1751,6 +1780,12 @@ const TEMPLATES: &[(&str, &str)] = &[
     (
         "parse-input.sh",
         include_str!("../../caws-cli/templates/hook-packs/runtime/service-image/parse-input.sh"),
+    ),
+    (
+        "plan-transcript-finalize.sh",
+        include_str!(
+            "../../caws-cli/templates/hook-packs/runtime/service-image/plan-transcript-finalize.sh"
+        ),
     ),
     (
         "tool.sh",
@@ -1980,6 +2015,32 @@ fn execution_bytes(
     let run_handlers =
         transformed_run_handlers(originals.get("runtime", "lib/run-handlers.sh")?, manifest)?;
     files.insert("runtime/lib/run-handlers.sh".into(), run_handlers);
+    if let Some(native) = manifest
+        .toolchain_tcb
+        .tools
+        .iter()
+        .find(|tool| tool.name == PLAN_TOOL)
+    {
+        let home = Path::new(&manifest.execution.root)
+            .ancestors()
+            .nth(5)
+            .and_then(Path::to_str)
+            .ok_or_else(|| fail(ErrorKind::Invalid, "image home missing"))?;
+        files.insert(
+            "runtime/plan-transcript-finalize.sh".into(),
+            expand(
+                template("plan-transcript-finalize.sh")?,
+                &[
+                    (
+                        "__CAWS_IMAGE_PLAN_PROJECT__",
+                        quoted(&manifest.selection.canonical_project),
+                    ),
+                    ("__CAWS_IMAGE_PLAN_NATIVE__", quoted(&native.path)),
+                    ("__CAWS_IMAGE_PLAN_HOME__", quoted(home)),
+                ],
+            )?,
+        );
+    }
     let node = &manifest
         .toolchain_tcb
         .tools

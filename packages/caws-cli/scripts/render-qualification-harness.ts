@@ -97,7 +97,13 @@ export class RenderHarness {
   private readonly children: Started[] = [];
   private readonly api: ReturnType<typeof loadApi>;
 
-  constructor(options: { cli: string; sterling: string; label: string; limits?: Data }) {
+  constructor(options: {
+    cli: string;
+    sterling: string;
+    label: string;
+    limits?: Data;
+    runtimeTemplates?: string;
+  }) {
     this.cli = fs.realpathSync(options.cli);
     this.sterling = fs.realpathSync(options.sterling);
     const crate = path.resolve(this.cli, '../caws-native');
@@ -131,11 +137,14 @@ export class RenderHarness {
     this.api = loadApi(this.cli);
     this.tools = this.api.resolveRenderTools(
       this.env as Record<string, string>,
-      path.join(this.cli, 'dist/runtime')
+      path.join(this.cli, 'dist/runtime'),
+      this.native
     );
     this.installed = this.api.installMachineRuntime({
       home: this.home,
-      templatesRoot: path.join(this.cli, 'templates/hook-packs'),
+      templatesRoot: options.runtimeTemplates
+        ? fs.realpathSync(options.runtimeTemplates)
+        : path.join(this.cli, 'templates/hook-packs'),
     });
     const installedWriter = path.join(
       this.home,

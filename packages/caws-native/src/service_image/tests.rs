@@ -57,7 +57,7 @@ fn write_mode(path: &Path, bytes: &[u8], mode: u32) {
 
 // Synthetic metadata exercises individual validation stages, not filesystem
 // admission. No foreign source bytes or synthetic admitted backend are used.
-fn binding_fixture() -> (PreparedImageManifest, AdmissionContext) {
+pub(super) fn binding_fixture() -> (PreparedImageManifest, AdmissionContext) {
     let canonical_project = "/project".to_owned();
     let runtime_digest = "a".repeat(64);
     let selection = Selection {
@@ -148,6 +148,7 @@ fn binding_fixture() -> (PreparedImageManifest, AdmissionContext) {
         client_root: PathBuf::from("/cli"),
         template_root: PathBuf::from("/templates/service-image"),
         client_shell_source: PathBuf::from("/templates/session-render-service-client.sh"),
+        native_executable: None,
         expected_selection: selection,
         expected_image_digest: "d".repeat(64),
         expected_policy_sha256: "e".repeat(64),
@@ -170,6 +171,37 @@ fn reseal_metadata(manifest: &mut PreparedImageManifest, context: &mut Admission
         .unwrap()
         .into();
     context.expected_image_digest = hash(&json(manifest).unwrap());
+}
+
+#[test]
+fn native_plan_helper_pin_is_optional_but_never_selected_by_image_or_path() {
+    let (mut manifest, mut context) = binding_fixture();
+    validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap();
+    manifest.toolchain_tcb.tools.push(Tool {
+        name: PLAN_TOOL.into(),
+        path: "/trusted/native".into(),
+        sha256: "f".repeat(64),
+    });
+    manifest
+        .toolchain_tcb
+        .tools
+        .sort_by(|a, b| a.name.cmp(&b.name));
+    reseal_metadata(&mut manifest, &mut context);
+    assert_eq!(
+        validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsupportedProfile
+    );
+    context.native_executable = Some("/trusted/native".into());
+    validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap();
+    context.native_executable = Some("/other/native".into());
+    assert_eq!(
+        validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsupportedProfile
+    );
 }
 
 #[test]

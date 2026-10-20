@@ -83,6 +83,331 @@ fn offered() -> Offer {
         "invocationId":"owner-test:prepared","callerEnvironment":{},"remainingBudgetMs":10000})).unwrap()
 }
 
+fn pending_job_fixture(
+    invocation: &str,
+) -> (
+    Job,
+    UnixStream,
+    SyncSender<Result<Vec<u8>>>,
+    mpsc::Receiver<()>,
+) {
+    let (owner, caller) = UnixStream::pair().unwrap();
+    owner.set_nonblocking(true).unwrap();
+    let (start_tx, start_rx) = mpsc::sync_channel(1);
+    let (bridge_tx, bridge_rx) = mpsc::sync_channel(1);
+    let mut offer = offered();
+    offer.invocation_id = invocation.into();
+    let capacity = Arc::new(ProjectCapacity {
+        used: AtomicUsize::new(0),
+        maximum: 1,
+    });
+    (
+        Job {
+            stream: owner,
+            offer,
+            expires: expires(),
+            reader_start: Some(start_tx),
+            bridge: bridge_rx,
+            _permit: Arc::new(ConnectionPermit(Arc::new(AtomicUsize::new(1)))),
+            _project_permit: capacity.acquire().unwrap(),
+        },
+        caller,
+        bridge_tx,
+        start_rx,
+    )
+}
+
+#[test]
+fn pending_capacity_covers_active_plus_queue_and_both_shared_lifetimes() {
+    let capacity = Arc::new(ProjectCapacity {
+        used: AtomicUsize::new(0),
+        maximum: 1 + 2,
+    });
+    let active = capacity.acquire().unwrap();
+    let queued = capacity.acquire().unwrap();
+    let prepared = capacity.acquire().unwrap();
+    assert!(
+        capacity.acquire().is_err(),
+        "drained offers must not mint slots"
+    );
+    let reader = Arc::clone(&prepared);
+    drop(prepared);
+    assert_eq!(capacity.used.load(Ordering::Acquire), 3);
+    assert!(
+        capacity.acquire().is_err(),
+        "a retained reader still occupies its slot"
+    );
+    drop(reader);
+    let replacement = capacity.acquire().unwrap();
+    assert_eq!(capacity.used.load(Ordering::Acquire), 3);
+    drop((active, queued, replacement));
+    assert_eq!(capacity.used.load(Ordering::Acquire), 0);
+}
+
+#[test]
+fn pending_bridge_readiness_cannot_bypass_fifo_and_expired_head_is_withdrawn() {
+    let (first, first_caller, first_result, _first_start) = pending_job_fixture("first");
+    let (second, second_caller, second_result, _second_start) = pending_job_fixture("second");
+    let mut jobs = VecDeque::from([first, second]);
+    second_result.try_send(Ok(b"second\n".to_vec())).unwrap();
+    assert!(
+        bridge_head(jobs.iter()).is_none(),
+        "later readiness bypassed the head"
+    );
+    first_result.try_send(Ok(b"first\n".to_vec())).unwrap();
+    assert_eq!(bridge_head(jobs.iter()).unwrap().unwrap(), b"first\n");
+    jobs.pop_front();
+    assert_eq!(bridge_head(jobs.iter()).unwrap().unwrap(), b"second\n");
+    jobs.pop_front();
+    assert!(bridge_head(jobs.iter()).is_none());
+    drop((first_caller, second_caller));
+
+    let (mut expired, caller, result, _start) = pending_job_fixture("expired");
+    expired.expires = Instant::now() - Duration::from_millis(1);
+    result.try_send(Ok(b"already-complete\n".to_vec())).unwrap();
+    assert!(
+        bridge_arrival(&expired)
+            .unwrap()
+            .unwrap_err()
+            .contains("deadline")
+    );
+    assert_eq!(
+        expired.bridge.try_recv().unwrap().unwrap(),
+        b"already-complete\n"
+    );
+    drop(caller);
+}
+
+#[test]
+fn pending_reader_requires_activation_and_job_withdrawal_wakes_it_without_freeing_live_slots() {
+    let (mut job, _caller, result, start) = pending_job_fixture("reader-withdrawal");
+    let global = Arc::clone(&job._permit.0);
+    let project = Arc::clone(&job._project_permit.0);
+    let reader_global = Arc::clone(&job._permit);
+    let reader_project = Arc::clone(&job._project_permit);
+    let mut reader = job.stream.try_clone().unwrap();
+    let deadline = job.expires;
+    let (returned_tx, returned_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let join = thread::spawn(move || {
+        read_prepared_bridge(
+            &mut reader,
+            start,
+            result,
+            deadline,
+            &ObservationLog::unavailable(Instant::now()),
+            "reader-withdrawal",
+        );
+        returned_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+        drop((reader_global, reader_project));
+    });
+    job.reader_start.take().unwrap().send(()).unwrap();
+    drop(job);
+    returned_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert_eq!(global.load(Ordering::Acquire), 1);
+    assert_eq!(project.used.load(Ordering::Acquire), 1);
+    assert!(project.acquire().is_err());
+    release_tx.send(()).unwrap();
+    join.join().unwrap();
+    assert_eq!(global.load(Ordering::Acquire), 0);
+    assert_eq!(project.used.load(Ordering::Acquire), 0);
+
+    let (job, caller, result, start) = pending_job_fixture("never-activated");
+    let mut reader = job.stream.try_clone().unwrap();
+    write_all(&caller, b"unreleased\n", expires()).unwrap();
+    let mut job = job;
+    drop(job.reader_start.take());
+    read_prepared_bridge(
+        &mut reader,
+        start,
+        result,
+        job.expires,
+        &ObservationLog::unavailable(Instant::now()),
+        "never-activated",
+    );
+    assert_eq!(
+        job.bridge.try_recv().unwrap().unwrap_err(),
+        "renderer prepared grant withdrawn"
+    );
+    let mut available: libc::c_int = -1;
+    assert_eq!(
+        unsafe { libc::ioctl(reader.as_raw_fd(), libc::FIONREAD, &mut available) },
+        0
+    );
+    assert_eq!(
+        available,
+        b"unreleased\n".len() as i32,
+        "unissued grant consumed bridge input"
+    );
+}
+
+#[test]
+fn pending_prefix_domain_keeps_same_session_and_identity_barriers() {
+    let first = offered();
+    let proof = PrefixIdentity {
+        canonical_project: first.expected_selection.canonical_project.clone(),
+        source_generation: first.prepared.manifest.source_generation.clone(),
+        image_digest: first.prepared.image_digest.clone(),
+        proof_profile: "unit-native-proof".into(),
+    };
+    assert!(!proof.permits_session(&first.session_id, &first));
+    let mut other = first.clone();
+    other.session_id = "other-session".into();
+    assert!(proof.permits_session(&first.session_id, &other));
+    for mutate in [
+        |offer: &mut Offer| offer.expected_selection.canonical_project = "/other".into(),
+        |offer: &mut Offer| offer.prepared.manifest.source_generation = "0".repeat(64),
+        |offer: &mut Offer| offer.prepared.image_digest = "0".repeat(64),
+    ] {
+        let mut changed = other.clone();
+        mutate(&mut changed);
+        assert!(!proof.permits_session(&first.session_id, &changed));
+    }
+}
+
+#[test]
+fn pending_backend_cohort_compares_full_view_and_generation_not_just_pid() {
+    let view = git::GitView {
+        git_directory: "/private/old/git".into(),
+        git_work_tree: "/checkout".into(),
+        git_original_directory: "/checkout/.git".into(),
+        git_common_directory: "/common/.git".into(),
+        metadata_digest: "a".repeat(64),
+        metadata_files: 4,
+        metadata_bytes: 100,
+    };
+    let cohort = BackendCohort {
+        directory: "/private/old".into(),
+        backend_pid: 123,
+        image_digest: "b".repeat(64),
+        git_directory: view.git_directory.clone(),
+        git_work_tree: view.git_work_tree.clone(),
+        git_original_directory: view.git_original_directory.clone(),
+        git_common_directory: view.git_common_directory.clone(),
+        metadata_digest: view.metadata_digest.clone(),
+        metadata_files: view.metadata_files,
+        metadata_bytes: view.metadata_bytes,
+    };
+    assert!(cohort.compatible(&cohort.image_digest, &view));
+    // A fresh capture has another private directory; its logical view must match.
+    let mut fresh_capture = view.clone();
+    fresh_capture.git_directory = "/private/capture/git".into();
+    assert!(cohort.compatible(&cohort.image_digest, &fresh_capture));
+    assert!(!cohort.compatible(&"0".repeat(64), &view));
+    for mutate in [
+        |view: &mut git::GitView| view.git_work_tree = "/wrong-checkout".into(),
+        |view: &mut git::GitView| view.git_original_directory = "/wrong-original".into(),
+        |view: &mut git::GitView| view.git_common_directory = "/wrong-common".into(),
+        |view: &mut git::GitView| view.metadata_digest = "0".repeat(64),
+        |view: &mut git::GitView| view.metadata_files += 1,
+        |view: &mut git::GitView| view.metadata_bytes += 1,
+    ] {
+        let mut changed = view.clone();
+        mutate(&mut changed);
+        assert!(!cohort.compatible(&cohort.image_digest, &changed));
+    }
+    let mut replacement = cohort.clone();
+    replacement.directory = "/private/replacement".into();
+    assert_ne!(
+        cohort, replacement,
+        "same PID cannot borrow another generation"
+    );
+    let mut replacement = cohort.clone();
+    replacement.git_directory = "/private/replacement/git".into();
+    assert_ne!(cohort, replacement);
+}
+
+#[test]
+fn pending_unknown_withdraws_waiting_and_bounded_inbox_without_releasing_fence_or_capacity() {
+    let scratch = Scratch::new();
+    let c = config(&scratch);
+    provision(&c, expires()).unwrap();
+    let custody = journal::Custody::acquire(&custody_path(&c), expires()).unwrap();
+    let request = request();
+    let bytes = wire::encode_render_request(&request).unwrap();
+    let mut journal = journal::Journal::open(
+        Arc::clone(&custody),
+        &request.project_service_key,
+        8,
+        expires(),
+    )
+    .unwrap();
+    journal
+        .admit(operation_identity(&request), &bytes, expires())
+        .unwrap();
+    let dispatch = journal
+        .begin_next(
+            &request.source_generation,
+            &request.execution_image.image_digest,
+            expires(),
+        )
+        .unwrap()
+        .unwrap();
+    journal.unknown(&dispatch, expires()).unwrap();
+    let observations = Arc::new(ObservationLog::open(&c, Instant::now()).unwrap());
+    let log_path = base(&c).join("observations.jsonl");
+    let actor = Actor {
+        config: Arc::new(c),
+        custody,
+        writer_custody: None,
+        writer_intent: None,
+        journal,
+        budget: Arc::new(Mutex::new(Budget {
+            used: 1,
+            maximum: 1,
+        })),
+        process: None,
+        reserved: true,
+        unknown: true,
+        observations,
+        phase: "test",
+    };
+    let (waiting, mut waiting_caller, _waiting_result, _waiting_start) =
+        pending_job_fixture("waiting");
+    let (first, mut first_caller, _first_result, _first_start) =
+        pending_job_fixture("queued-first");
+    let (second, mut second_caller, _second_result, _second_start) =
+        pending_job_fixture("queued-second");
+    let (sender, inbox) = mpsc::sync_channel(2);
+    assert!(sender.try_send(first).is_ok());
+    assert!(sender.try_send(second).is_ok());
+    let mut waiting = Some(waiting);
+    actor.withdraw_for_unknown(&mut VecDeque::new(), &mut waiting, &inbox);
+    assert!(waiting.is_none());
+    assert!(matches!(inbox.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    let mut byte = [0];
+    for caller in [&mut waiting_caller, &mut first_caller, &mut second_caller] {
+        assert_eq!(
+            caller.read(&mut byte).unwrap(),
+            0,
+            "withdrawn offer retained its connection"
+        );
+    }
+    assert!(actor.unknown);
+    assert!(actor.reserved);
+    assert_eq!(actor.budget.lock().unwrap().used, 1);
+    assert!(matches!(
+        actor
+            .journal
+            .lookup(&request.request_id, expires())
+            .unwrap()
+            .unwrap()
+            .outcome(),
+        journal::AcceptedOutcome::Unknown { .. }
+    ));
+    let records: Vec<serde_json::Value> = fs::read_to_string(log_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap()["observation"].clone())
+        .collect();
+    assert_eq!(records, serde_json::json!([
+        {"event":"queued_offer_withdrawn","invocationId":"waiting","reason":"unknown_fence"},
+        {"event":"queued_offer_withdrawn","invocationId":"queued-first","reason":"unknown_fence"},
+        {"event":"queued_offer_withdrawn","invocationId":"queued-second","reason":"unknown_fence"}
+    ]).as_array().unwrap().clone());
+}
+
 #[test]
 fn prepared_grant_is_bound_to_separate_selection_image_logical_lease_and_actual_view() {
     // This exercises the frontend correlation boundary with synthetic data, not

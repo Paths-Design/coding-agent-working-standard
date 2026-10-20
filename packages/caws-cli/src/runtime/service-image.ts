@@ -57,6 +57,8 @@ export const SERVICE_IMAGE_TOOLS = Object.freeze([
   'tr',
   'wc',
 ] as const);
+/** Optional owner-configured native helper; never resolved through caller PATH. */
+export const SERVICE_IMAGE_PLAN_TOOL = 'caws-native' as const;
 export const SERVICE_IMAGE_TEMPLATES = Object.freeze([
   'caws.sh',
   'codex-parser-runtime.sh',
@@ -67,6 +69,7 @@ export const SERVICE_IMAGE_TEMPLATES = Object.freeze([
   'handler-routes.sh',
   'libraries.sh',
   'parse-input.sh',
+  'plan-transcript-finalize.sh',
   'tool.sh',
 ] as const);
 
@@ -575,7 +578,10 @@ export function prepareSessionRenderImage(
   const templateDirectory = absolute(options.templateDirectory);
   const clientShellPath = absolute(options.clientShellPath);
   const tools = [...options.toolchain].sort((a, b) => compare(a.name, b.name));
-  if (JSON.stringify(tools.map((tool) => tool.name)) !== JSON.stringify(SERVICE_IMAGE_TOOLS))
+  const expectedTools = tools.some((pin) => pin.name === SERVICE_IMAGE_PLAN_TOOL)
+    ? [...SERVICE_IMAGE_TOOLS, SERVICE_IMAGE_PLAN_TOOL].sort(compare)
+    : SERVICE_IMAGE_TOOLS;
+  if (JSON.stringify(tools.map((tool) => tool.name)) !== JSON.stringify(expectedTools))
     fail('incomplete toolchain');
   for (const tool of tools) {
     absolute(tool.path);
@@ -774,6 +780,19 @@ export function prepareSessionRenderImage(
       })
     ) + runner;
   files.set('runtime/lib/run-handlers.sh', Buffer.from(runner));
+  const planNative = tools.find((pin) => pin.name === SERVICE_IMAGE_PLAN_TOOL);
+  if (planNative) {
+    // The original handler retains its selection/provenance identity. Only the
+    // executed sealed-image bytes use the owner-partitioned native consumer.
+    files.set(
+      'runtime/plan-transcript-finalize.sh',
+      render('plan-transcript-finalize.sh', {
+        __CAWS_IMAGE_PLAN_PROJECT__: literal(selection.canonicalProject),
+        __CAWS_IMAGE_PLAN_NATIVE__: literal(planNative.path),
+        __CAWS_IMAGE_PLAN_HOME__: literal(path.resolve(root, '../../../../..')),
+      })
+    );
+  }
   const parserRelative = 'surfaces/codex/lib/parse-input.sh';
   const parser = text(captured.get('runtime:' + parserRelative) ?? fail('missing Codex parser'));
   files.set(

@@ -881,7 +881,11 @@ async function main(): Promise<void> {
     TZ: 'UTC',
   };
   json(path.join(root, 'environment.json'), env);
-  const tools = resolveRenderTools(env as Record<string, string>, path.join(cli, 'dist/runtime'));
+  const tools = resolveRenderTools(
+    env as Record<string, string>,
+    path.join(cli, 'dist/runtime'),
+    native
+  );
   json(path.join(root, 'tools.json'), tools);
   const git = tools.find((tool) => tool.name === 'git')!.path;
   const gitEnv = {

@@ -365,6 +365,11 @@ test('explicit declaration emits an offer with an independently selected full or
   writePolicy(file, policy);
   const bin = path.join(root, 'fixture-tools');
   fs.mkdirSync(bin);
+  const native = path.join(root, 'fixture-native');
+  fs.writeFileSync(native, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  writePolicy(path.join(request.caller.environment.CAWS_HOME, 'state/render-service/config.json'), {
+    nativeExecutable: native,
+  });
   for (const name of SERVICE_IMAGE_TOOLS)
     fs.writeFileSync(path.join(bin, name), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
   const prepared = protocolFixture().offer.prepared;
@@ -393,6 +398,11 @@ test('explicit declaration emits an offer with an independently selected full or
     selection: selected,
     selectedIndex: 1,
     environment: request.caller.environment,
+  });
+  expect(build.mock.calls[0][0].toolchain.find((pin) => pin.name === 'caws-native')).toEqual({
+    name: 'caws-native',
+    path: native,
+    sha256: hash(fs.readFileSync(native)),
   });
   expect(offered.prepared).toBe(prepared);
   expect(offered.expectedSelection.selectedIndex).toBe(1);

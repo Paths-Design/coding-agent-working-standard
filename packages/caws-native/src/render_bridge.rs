@@ -367,6 +367,7 @@ pub fn prepare_offer(
         client_root,
         template_root,
         client_shell_source,
+        native_executable: Some(native),
         expected_selection: selection.clone(),
         expected_image_digest: offer.prepared.image_digest.clone(),
         expected_policy_sha256: offer.policy_sha256.clone(),

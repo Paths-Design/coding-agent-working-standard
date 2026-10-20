@@ -9,6 +9,7 @@ import {
   prepareSessionRenderImage,
   SERVICE_IMAGE_PROFILE,
   SERVICE_IMAGE_TOOLS,
+  SERVICE_IMAGE_PLAN_TOOL,
   type PreparedServiceImage,
   type ServiceImageManifest,
   type ServiceToolPin,
@@ -66,14 +67,22 @@ function regular(file: string, maximum: number, requireSingleLink = true): Buffe
 
 export function resolveRenderTools(
   environment: Readonly<Record<string, string>>,
-  clientDirectory = __dirname
+  clientDirectory = __dirname,
+  nativeExecutable?: string
 ): readonly ServiceToolPin[] {
+  const names: readonly string[] = nativeExecutable
+    ? [...SERVICE_IMAGE_TOOLS, SERVICE_IMAGE_PLAN_TOOL].sort()
+    : SERVICE_IMAGE_TOOLS;
   return Object.freeze(
-    SERVICE_IMAGE_TOOLS.map((name): ServiceToolPin => {
+    names.map((name): ServiceToolPin => {
       let file: string | undefined;
       if (name === 'node') file = process.execPath;
       else if (name === 'caws') file = path.resolve(clientDirectory, '../index.js');
-      else {
+      else if (name === SERVICE_IMAGE_PLAN_TOOL) {
+        if (!nativeExecutable || !path.isAbsolute(nativeExecutable))
+          throw new Error('Native plan helper requires explicit owner configuration');
+        file = nativeExecutable;
+      } else {
         for (const directory of (environment.PATH ?? '').split(path.delimiter)) {
           if (!path.isAbsolute(directory)) continue;
           const candidate = path.join(directory, name);
@@ -171,12 +180,25 @@ export function prepareNativeRenderOffer(
   privateDirectory(home, imageParent);
   const clientDirectory = fs.realpathSync(__dirname);
   const packageRoot = path.resolve(clientDirectory, '../..');
+  // This private config is subsequently checked by the native client against
+  // its own executable. A caller PATH entry cannot select the helper.
+  const ownerFile = path.join(home, 'state/render-service/config.json');
+  assertMachinePath(home, ownerFile);
+  const ownerStat = fs.lstatSync(ownerFile);
+  if (ownerStat.uid !== process.getuid?.() || (ownerStat.mode & 0o7777) !== 0o600)
+    throw new Error('Render owner configuration is not private');
+  const owner: unknown = JSON.parse(regular(ownerFile, 65536).toString('utf8'));
+  if (!owner || typeof owner !== 'object' || Array.isArray(owner))
+    throw new Error('Invalid render owner configuration');
+  const nativeExecutable = (owner as Record<string, unknown>).nativeExecutable;
+  if (typeof nativeExecutable !== 'string' || !path.isAbsolute(nativeExecutable))
+    throw new Error('Render owner has no explicit native executable');
   const prepared = prepareSessionRenderImage({
     selection,
     selectedIndex,
     imageParent,
     environment: request.caller.environment,
-    toolchain: resolveRenderTools(environment, clientDirectory),
+    toolchain: resolveRenderTools(environment, clientDirectory, nativeExecutable),
     clientDirectory,
     templateDirectory: path.join(packageRoot, 'templates/hook-packs/runtime/service-image'),
     clientShellPath: path.join(
