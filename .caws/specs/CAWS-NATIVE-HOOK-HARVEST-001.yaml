@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-HOOK-HARVEST-001
 title: 'Replace read-only hook harvest Python with typed Node tooling'
 mode: refactor
-lifecycle_state: active
-worktree: native-hook-harvest
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded hook-harvest component completed at 9b2f05a91d528882736c64ce1858f21768415916 with A1-A3 pass read back as ac_recorded9498-9500, final Sol committed review grounded against source/raw controls, and goal-owner exact-candidate merge release. Node18/22 finite differential, Git-positive effects/refusals, Node-only execution and strict checkJs retained outside lane. Trusted stable Git>=2.45 profile only, exactly two report limit additions; no sandbox/atomic/TOCTOU/universal argv or invalid-filename traversal proof. Prior fsmonitor/parser failures retained. Parent R20 integration/full migration and installation remain open.'
 created_at: '2026-10-20T12:58:50.021Z'
-updated_at: '2026-10-20T12:58:51.652Z'
+updated_at: '2026-10-20T16:39:40.288Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
