@@ -42,3 +42,9 @@ rollback:
   - 'Restore retained Python orchestrator and maintained reproduction commands through a governed source change if bounded qualification fails.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Bounded component at 70f1f496: inspected retained artifacts under /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/native-sensitivity/final-unittest-python311-node22, final-unittest-python311-node18 and final-unittest-python39-node22. Four conventional six-case matrices agree on selected mutations, hashes, verdicts and channels after only elapsed-line normalization; raw bytes retained. A2 separately records the intentional inherited false-positive repair. Commit verification checks source identity only and does not rerun scenarios."
+    recorded_at: "2026-10-20T14:55:11.066Z"
+    commit_sha: "70f1f49679dca4d9977e98c8721f761002cc1d12"
