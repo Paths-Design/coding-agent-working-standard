@@ -484,7 +484,7 @@ async function largeFixture(h: RenderHarness, name: string): Promise<ProjectFixt
 async function firstActualWrite(
   h: RenderHarness,
   fixture: ProjectFixture,
-  expected: { requestId: string; deadline: number } | null = null
+  expected: { requestId: string; invocationId: string; deadline: number } | null = null
 ): Promise<Data> {
   await h.waitFor(
     () => committedTurnNames(fixture.session).length > 0,
@@ -492,6 +492,17 @@ async function firstActualWrite(
     'actual renderer first turn write'
   );
   const state = outputs(h, fixture);
+  if (expected) {
+    const current = operationForInvocation(h, fixture, expected.invocationId);
+    assert(current, 'matched operation absent at committed-write witness');
+    assert.equal(row(row(current.body).identity).requestId, expected.requestId);
+    h.writeJson('write-witness-operation.json', {
+      phase: outcome(current),
+      at: Date.now(),
+      operation: current,
+    });
+    assert(runningOperation(current), 'renderer regressed to queued at committed-write witness');
+  }
   if (expected && !(Number(state.count) > 0 && Number(state.count) < fixture.turns))
     throw new InterruptionWindowLost('partial committed output unavailable at write witness');
   assert(
@@ -801,7 +812,11 @@ async function frontendLost(h: RenderHarness): Promise<Data> {
     );
     const requestId = String(row(row(operation.body).identity).requestId);
     assert.equal(outcome(operation), 'running');
-    const dispatch = await firstActualWrite(h, fixture, { requestId, deadline });
+    const dispatch = await firstActualWrite(h, fixture, {
+      requestId,
+      invocationId: active.invocation!.expected!.invocationId,
+      deadline,
+    });
     assert(Date.now() < deadline, 'original request deadline exhausted before interruption');
     assert(h.sampleInvocation(active), 'fresh current frontend/custodian/Node chain unavailable');
     const frontendBefore = h.originalChildAlive(active);
