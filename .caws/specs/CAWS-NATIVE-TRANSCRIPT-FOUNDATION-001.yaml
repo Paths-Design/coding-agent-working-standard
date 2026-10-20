@@ -1,0 +1,48 @@
+id: CAWS-NATIVE-TRANSCRIPT-FOUNDATION-001
+title: 'Preserve lossless transcript occurrences and typed Codex normalization'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-20T17:20:43.531Z'
+updated_at: '2026-10-20T17:20:43.531Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Lossless transcript value and occurrence contracts, common adapter helpers and Codex row normalization'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/'
+    - 'packages/caws-cli/tests/transcripts/'
+  out: []
+invariants:
+  - 'This foundation emits evidence projections only; it grants no authority, source admission, process rights or native/runtime installation. Parent owns stock renderer consumption, all remaining harness ports and full R10-R18/A4 retirement.'
+  - 'Preserve original bytes and source occurrence independently from interpreted values and emitted events. Never silently round numeric values, collapse repeated occurrences, reinterpret source syntax as execution, invent agent identity or discard explicit incomplete evidence.'
+  - 'Adapter-owned functional state is bound to explicit surface/cache-generation presence and ordered adapter revisions. No implicit environment surface, shared global dedupe, silent cross-context state reuse, mutable caller-state advancement or invented compaction/rewind semantics.'
+  - 'Only new transcripts source/tests/standalone strict config are owned; existing hook JSON grammar, build configs, Python templates, parent lane/ledger, session-log consumers and dependencies remain untouched.'
+acceptance:
+  - id: A1
+    given: 'retained exact canonical Python common/Codex sources and a declared interpreter profile'
+    when: 'typed modules and Python reference normalize the same finite synthetic rows on Node18 and Node22'
+    then: 'complete interpreted events/state and Python structured-output strings match the reference for every admitted case, exact raw source and numeric tokens remain retained, and any unsupported case remains explicit incomplete evidence rather than a parity pass'
+  - id: A2
+    given: 'unsafe integers, nonfinite and float formatting, raw tool source, duplicate occurrences, Unicode and interleaved tool/result/developer rows'
+    when: 'hostile fixture and failure-sensitivity controls execute'
+    then: 'distinct numeric IDs do not alias, tool inputs and identity/provenance fields remain lossless, original multiplicity and pending state semantics survive, syntax indexes are nonexecution evidence and malformed/unavailable input cannot silently produce a successful projection'
+  - id: A3
+    given: 'explicit absent/present surface and cache generation, independent streams, adapter-owned state and tentative/throwing steps'
+    when: 'contexts change or normalization fails'
+    then: 'incompatible state reuse is refused explicitly, caller inputs and prior state remain unchanged, and no full file-cache, selective usage aggregation, rewind or cross-harness implementation is inferred'
+  - id: A4
+    given: 'committed dependency-free new TypeScript source and focused tests'
+    when: 'standalone strict compilation and a Node-only execution control run'
+    then: 'implemented common/Codex modules execute without Python or production consumer/config changes, all evidence identifies tested bytes and both positive/failure artifacts, and component closure does not mark R10-R18 retired'
+observability:
+  - 'Retain exact source snapshots/hashes, interpreter and Node profiles, original fixture bytes, old/new event/state outputs and errors, raw commands/stdout/stderr and mutation/failure-sensitivity controls outside the worktree.'
+rollback:
+  - 'Revert the component with a normal corrective commit while retaining original evidence; no installed runtime, stock consumer or existing parser grammar changes require rollback.'
+non_functional: {}
+contracts:
+  - name: 'typed-transcript-foundation'
+    type: api
+    path: 'packages/caws-cli/src/transcripts/index.ts'
