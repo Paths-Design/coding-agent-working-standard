@@ -322,6 +322,56 @@ function oracleControls(): void {
     /daemon dispatch order must match durable admission sequence/,
     'sorted served counters must not hide reversed per-project dispatch'
   );
+  const thousand = Array.from(
+    { length: 1000 },
+    (_, index) => 'turn-' + String(index + 1).padStart(3, '0') + '.json'
+  );
+  assert.deepEqual(
+    orderedTurnFiles([...thousand].sort(), 1000),
+    thousand,
+    'numeric ordering must preserve the 999/1000 filename boundary'
+  );
+  for (const [names, turns, refusal] of [
+    [['turn-001.json', 'turn-001.json'], 2, /duplicate semantic turn/],
+    [['turn-001.json', 'turn-003.json'], 3, /semantic turn count/],
+    [['turn-001.json', 'turn-003.json'], 2, /semantic turn out of range/],
+    [['turn-000.json'], 1, /semantic turn out of range/],
+    [['turn-9007199254740992.json'], 1, /semantic turn out of range/],
+    [['turn-invalid.json'], 1, /invalid semantic turn filename/],
+    [['turn-1.json'], 1, /noncanonical semantic turn filename/],
+  ] as const) {
+    assert.throws(() => orderedTurnFiles(names, turns), refusal);
+  }
+  const semantic = {
+    user: 'control user 101',
+    status: 'ok',
+    timeline: [
+      { kind: 'tool_call', name: 'exec_command', output: 'control result 101' },
+      { kind: 'reasoning', text: 'control assistant 101' },
+    ],
+  };
+  assert.equal(semanticTurn(semantic, 'control', 101), undefined);
+  assert.throws(
+    () => semanticTurn({ ...semantic, user: 'control user 1000' }, 'control', 101),
+    /project\/session user isolation/,
+    'numeric sorting must not mask a mismatched turn payload'
+  );
+  assert.throws(
+    () => semanticTurn({ ...semantic, timeline: [semantic.timeline[0]] }, 'control', 101),
+    /tool\/assistant ordering/
+  );
+  assert.throws(
+    () =>
+      semanticTurn(
+        {
+          ...semantic,
+          timeline: [{ ...semantic.timeline[0], output: 'other result' }, semantic.timeline[1]],
+        },
+        'control',
+        101
+      ),
+    /tool output identity/
+  );
 }
 
 function guardRefusal(stdout: string): Data {
@@ -344,32 +394,67 @@ type Subject = { project: ProjectFixture; session: SessionFixture };
 type Timed = { subject: Subject; started: Started; endedAt?: number; receipt?: Receipt };
 const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+function orderedTurnFiles(names: readonly string[], turns: number): string[] {
+  assert(Number.isSafeInteger(turns) && turns > 0, 'invalid expected semantic turn count');
+  const seen = new Set<number>();
+  const ordered = names
+    .map((file) => {
+      const name = path.basename(file),
+        match = /^turn-(\d+)\.json$/.exec(name);
+      assert(match, 'invalid semantic turn filename: ' + name);
+      const number = Number(match[1]);
+      assert(
+        Number.isSafeInteger(number) && number >= 1 && number <= turns,
+        'semantic turn out of range: ' + name
+      );
+      assert.equal(
+        name,
+        'turn-' + String(number).padStart(3, '0') + '.json',
+        'noncanonical semantic turn filename'
+      );
+      assert(!seen.has(number), 'duplicate semantic turn: ' + number);
+      seen.add(number);
+      return { file, number };
+    })
+    .sort((a, b) => a.number - b.number);
+  assert.equal(ordered.length, turns, 'semantic turn count');
+  assert.deepEqual(
+    ordered.map((entry) => entry.number),
+    Array.from({ length: turns }, (_, index) => index + 1),
+    'semantic turns must be contiguous'
+  );
+  return ordered.map((entry) => entry.file);
+}
+
+function semanticTurn(turn: Data, label: string, number: number): void {
+  assert.equal(turn.user, label + ' user ' + number, 'project/session user isolation');
+  assert.equal(turn.status, 'ok');
+  assert(Array.isArray(turn.timeline));
+  const timeline = turn.timeline.map((item) => row(item));
+  const call = timeline.findIndex(
+    (item) => item.kind === 'tool_call' && item.name === 'exec_command'
+  );
+  const reply = timeline.findIndex(
+    (item) => item.kind === 'reasoning' && item.text === label + ' assistant ' + number
+  );
+  assert(call >= 0 && reply > call, 'tool/assistant ordering: ' + label);
+  assert(
+    JSON.stringify(timeline[call]).includes(label + ' result ' + number),
+    'tool output identity'
+  );
+}
+
 function semanticOutput(harness: RenderHarness, subject: Subject): Data {
   const { session, project } = subject;
-  const names = files(session.session).filter((file) => /\/turn-\d+\.json$/.test(file));
-  assert.equal(names.length, session.turns, 'semantic turn count: ' + session.label);
+  const names = orderedTurnFiles(
+    files(session.session).filter((file) => {
+      const name = path.basename(file);
+      return /^turn-.*\.json$/.test(name) && !/^turn-\d+\.payloads\.json$/.test(name);
+    }),
+    session.turns
+  );
   const output = names.map((file, index) => {
-    const turn = read(file);
-    assert.equal(
-      turn.user,
-      session.label + ' user ' + (index + 1),
-      'project/session user isolation'
-    );
-    assert.equal(turn.status, 'ok');
-    assert(Array.isArray(turn.timeline));
-    const timeline = turn.timeline.map((item) => row(item));
-    const call = timeline.findIndex(
-      (item) => item.kind === 'tool_call' && item.name === 'exec_command'
-    );
-    const reply = timeline.findIndex(
-      (item) =>
-        item.kind === 'reasoning' && item.text === session.label + ' assistant ' + (index + 1)
-    );
-    assert(call >= 0 && reply > call, 'tool/assistant ordering: ' + session.label);
-    assert(
-      JSON.stringify(timeline[call]).includes(session.label + ' result ' + (index + 1)),
-      'tool output identity'
-    );
+    semanticTurn(read(file), session.label, index + 1);
     return {
       name: path.basename(file),
       sha256: hash(fs.readFileSync(file)),
