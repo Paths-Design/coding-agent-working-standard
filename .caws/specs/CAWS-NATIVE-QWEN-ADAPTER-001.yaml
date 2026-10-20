@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-QWEN-ADAPTER-001
 title: 'Historical Qwen transcript row adapter'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-qwen-adapter
 created_at: '2026-10-20T23:49:29.988Z'
-updated_at: '2026-10-20T23:49:29.988Z'
+updated_at: '2026-10-20T23:49:51.050Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
