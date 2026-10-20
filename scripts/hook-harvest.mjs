@@ -169,8 +169,104 @@ export function compare(left, right) {
     return { path: name, category: category(name), status, consumer_bytes: a?.length ?? null, caws_bytes: b?.length ?? null, consumer_sha256: a === undefined ? null : sha256(a), caws_sha256: b === undefined ? null : sha256(b) };
   });
 }
-/** @param {string} root @param {...string} args */
-export const git = (root, ...args) => new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(execFileSync('git', ['-C', root, ...args], { maxBuffer: 1024 * 1024 * 1024 })).replace(/\r\n|\r/g, '\n');
+const ALLOWED_GIT_ENVIRONMENT = new Set(['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM']);
+/** Remove trace destinations before Git initializes, and refuse inherited command/config overrides.
+ * @param {{[key:string]:string|undefined}} environment */
+export function gitEnvironment(environment = process.env) {
+  const result = { ...environment };
+  for (const key of Object.keys(result)) {
+    if (key.startsWith('GIT_TRACE')) delete result[key];
+    else if (key.startsWith('GIT_') && !ALLOWED_GIT_ENVIRONMENT.has(key)) throw new Error('Unsupported inherited Git environment variable');
+  }
+  result.GIT_TRACE2 = '0';
+  result.GIT_TRACE2_EVENT = '0';
+  result.GIT_TRACE2_PERF = '0';
+  return result;
+}
+/** @param {string} output */
+export function assertGitVersion(output) {
+  const match = /^git version ([0-9]+)\.([0-9]+)(?:\.[0-9]+)?(?:[-.][0-9A-Za-z][0-9A-Za-z.+-]*| \([^\r\n]*\))?\r?\n?$/.exec(output);
+  const major = Number(match?.[1]), minor = Number(match?.[2]);
+  if (!match || !Number.isSafeInteger(major) || !Number.isSafeInteger(minor)) throw new Error('Cannot establish Git version');
+  if (major < 2 || (major === 2 && minor < 45)) throw new Error('Git 2.45 or later is required');
+}
+/** Keep framing, configuration values and filenames as bytes.
+ * @param {Buffer} raw @returns {Buffer[]} */
+function nulRecords(raw) {
+  if (!Buffer.isBuffer(raw) || (raw.length && raw[raw.length - 1] !== 0)) throw new Error('Malformed Git NUL output');
+  /** @type {Buffer[]} */ const records = [];
+  for (let start = 0; start < raw.length;) {
+    const end = raw.indexOf(0, start);
+    if (end === start) throw new Error('Malformed Git NUL output');
+    records.push(raw.subarray(start, end));
+    start = end + 1;
+  }
+  return records;
+}
+/** Inspect effective filter values, preserving case-sensitive subsection identities.
+ * Values are not decoded, normalized or included in diagnostics.
+ * @param {Buffer} raw */
+export function assertGitConfig(raw) {
+  /** @type {Map<string, Buffer|null>} */ const filters = new Map();
+  for (const record of nulRecords(raw)) {
+    const separator = record.indexOf(10);
+    const key = record.subarray(0, separator < 0 ? record.length : separator).toString('latin1');
+    const match = /^([A-Za-z0-9.-]+?)\.(?:([^\n]*)\.)?([A-Za-z][A-Za-z0-9-]*)$/.exec(key);
+    if (!match) throw new Error('Malformed Git configuration output');
+    const section = (match[1] ?? '').toLowerCase(), subsection = match[2], variable = (match[3] ?? '').toLowerCase();
+    if (section === 'filter' && subsection !== undefined && (variable === 'clean' || variable === 'process')) {
+      filters.set(`${subsection}.${variable}`, separator < 0 ? null : record.subarray(separator + 1));
+    }
+  }
+  for (const value of filters.values()) {
+    if (value === null || value.length !== 0) throw new Error('Executable Git clean/process filters are not admitted');
+  }
+}
+/** Inspect the whole index; paths may contain arbitrary non-NUL bytes.
+ * @param {Buffer} raw */
+export function assertNoGitlinks(raw) {
+  for (const record of nulRecords(raw)) {
+    const separator = record.indexOf(9);
+    if (separator < 0 || separator === record.length - 1) throw new Error('Malformed Git index output');
+    const header = record.subarray(0, separator).toString('latin1');
+    const match = /^(100644|100755|120000|160000) ([0-9a-f]{40}|[0-9a-f]{64}) ([0-3])$/.exec(header);
+    if (!match) throw new Error('Malformed Git index output');
+    if (match[1] === '160000') throw new Error('Indexed Git submodules are not admitted');
+  }
+}
+/** @param {Buffer} raw */
+const decodeGit = raw => new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(raw).replace(/\r\n|\r/g, '\n');
+/** One policy prefix for every Git subprocess. The version probe omits the
+ * newer no-lazy-fetch flag so an older installation can report its version.
+ * @param {string} root @param {string[]} args
+ * @param {{[key:string]:string|undefined}} environment @param {boolean} lazyFetchGuard */
+function spawnGit(root, args, environment, lazyFetchGuard) {
+  const prefix = ['--no-pager', '--no-optional-locks', ...(lazyFetchGuard ? ['--no-lazy-fetch'] : []), '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null'];
+  try {
+    return execFileSync('git', [...prefix, '-C', root, ...args], {
+      env: environment, maxBuffer: 1024 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch {
+    // Git's own config errors can include configuration values.
+    throw new Error('Git inspection failed');
+  }
+}
+/** Recheck admission on each call rather than caching past environment checks.
+ * @param {string} root @param {...string} args */
+function gitBytes(root, ...args) {
+  const environment = gitEnvironment();
+  assertGitVersion(decodeGit(spawnGit(root, ['--version'], environment, false)));
+  return spawnGit(root, args, environment, true);
+}
+/** Retain the original report decoder and universal-newline semantics.
+ * @param {string} root @param {...string} args */
+export const git = (root, ...args) => decodeGit(gitBytes(root, ...args));
+/** Admission assumes stable configuration, attributes and index inputs.
+ * @param {string} root */
+function preflightGit(root) {
+  assertGitConfig(gitBytes(root, 'config', '--null', '--list', '--includes'));
+  assertNoGitlinks(gitBytes(root, 'ls-files', '--stage', '-z'));
+}
 /** @param {Inventory} a @param {Inventory} b */
 function sameInventory(a, b) {
   return a.files.size === b.files.size && [...a.files].every(([key, bytes]) => b.files.get(key)?.equals(bytes)) && JSON.stringify(a.excluded) === JSON.stringify(b.excluded);
@@ -221,6 +317,9 @@ export function harvest(consumerRoot, cawsRoot) {
     try { valid = statSync(root).isDirectory() && !lstatSync(root).isSymbolicLink(); } catch { /* diagnostics below */ }
     if (!valid) throw new UsageError(`hook source must be a real directory: ${root}`);
   }
+  // Admit both repositories before either snapshot can invoke status.
+  preflightGit(consumer);
+  preflightGit(caws);
   const left = snapshot(consumer, leftRoot), right = snapshot(caws, rightRoot);
   const tracked = new Set(git(consumer, 'ls-files', '-z', '--', '.caws/hooks').split('\0'));
   const rows = compare(left.files, right.files).map(row => ({ ...row, consumer_tracked: tracked.has(`.caws/hooks/${row.path}`) }));
@@ -228,7 +327,7 @@ export function harvest(consumerRoot, cawsRoot) {
   for (const row of rows) counts[row.status] = (counts[row.status] ?? 0) + 1;
   /** @param {Map<string,Buffer>} files */
   const dispatchers = files => Object.fromEntries([...files].sort(([a], [b]) => codepointOrder(a, b)).filter(([name]) => name.startsWith('dispatch/') && name.endsWith('.sh')).map(([name, bytes]) => [name, declarations(bytes)]));
-  return { schema: 'caws.consumer_hook_harvest.v1', limits: ['Byte differences do not establish missing capabilities or edit authorship.', 'Declarations do not establish effective native registration or execution.', 'No hooks executed and no payload text copied.', 'Excluded subtrees are not recursively inventoried.', 'Sequential stable reads are not a cross-repository atomic snapshot.'], consumer: left.metadata, caws: right.metadata, counts, files: rows, dispatchers: { consumer: dispatchers(left.files), caws: dispatchers(right.files) } };
+  return { schema: 'caws.consumer_hook_harvest.v1', limits: ['Byte differences do not establish missing capabilities or edit authorship.', 'Declarations do not establish effective native registration or execution.', 'No hooks executed and no payload text copied.', 'Excluded subtrees are not recursively inventoried.', 'Sequential stable reads are not a cross-repository atomic snapshot.', 'Git admission requires Git 2.45 or later, stable configuration and index inputs, no executable clean/process filters and no indexed submodules.', 'Inventory exclusions do not prohibit Git status from reading excluded tracked files.'], consumer: left.metadata, caws: right.metadata, counts, files: rows, dispatchers: { consumer: dispatchers(left.files), caws: dispatchers(right.files) } };
 }
 /** Sort report keys and preserve Python's ASCII JSON encoding. @param {unknown} value @returns {unknown} */
 function sortKeys(value) {

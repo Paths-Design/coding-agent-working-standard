@@ -47,6 +47,31 @@ profile or operating system. Help and exception wording follow the host
 language; report values, literal declaration semantics and failure exit classes
 carry the comparison contract.
 
+Git 2.45 or later is required. The inventory disables fsmonitor, ordinary Git
+hooks, pagers, lazy object fetching, optional index writes and trace
+destinations for every Git subprocess, including admission queries. It preserves
+effective system, global, local and worktree configuration and includes, then
+refuses any effective nonempty or valueless `filter.<driver>.clean` or
+`filter.<driver>.process` setting. This conservative admission also refuses an
+unused executable filter. Any indexed submodule, including one outside the hook
+subtree, refuses admission; the utility does not suppress submodule status and
+report the resulting incomplete view. These refusals intentionally repair the
+Python reference's ability to execute consumer-configured programs during an
+inventory.
+
+The child environment preserves `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` and
+`GIT_CONFIG_NOSYSTEM` so the admission query and status examine the same
+effective configuration. Inherited trace settings are disabled. Other inherited
+`GIT_*` variables refuse admission, including repository, index, object,
+configuration injection and pathspec overrides. Diagnostics do not copy
+arbitrary Git configuration values into the report.
+
+This profile assumes trusted Node/Git executables and stable configuration,
+attributes and index inputs throughout the invocation. A preflight query does
+not prevent concurrent replacement after admission and does not sandbox an
+arbitrary hostile Git repository. Inventory exclusions govern the Node payload
+traversal and report; Git status can read excluded tracked files internally.
+
 From the CAWS checkout, with the consumer root supplied explicitly:
 
 ```sh

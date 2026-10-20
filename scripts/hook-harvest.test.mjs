@@ -2,11 +2,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { category, codepointOrder, compare, declarations, filesystemName, inventory, isOptionToken, literalWords, normalizeStamp, resolveRoot, sha256, snapshot } from './hook-harvest.mjs';
+import { assertGitConfig, assertGitVersion, assertNoGitlinks, category, codepointOrder, compare, declarations, filesystemName, gitEnvironment, inventory, isOptionToken, literalWords, normalizeStamp, resolveRoot, sha256, snapshot } from './hook-harvest.mjs';
 
 /** @param {import('node:test').TestContext} t */
 function fixture(t) {
@@ -19,6 +19,69 @@ function fixture(t) {
 }
 /** @param {string} file @param {string | Buffer} value */
 function put(file, value) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, value); }
+
+/** Fixture repositories never inherit host Git configuration or Git environment overrides. */
+function fixtureEnvironment() {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  return { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' };
+}
+
+test('Git environment disables trace destinations, preserves allowed configuration and rejects present overrides', () => {
+  const original = { PATH: '/fixture/bin', HOME: '/fixture/home', ordinary: 'retained', GIT_CONFIG_GLOBAL: '/fixture/global', GIT_CONFIG_SYSTEM: '', GIT_CONFIG_NOSYSTEM: '1', GIT_TRACE: '/fixture/trace', GIT_TRACE_PACKET: '', GIT_TRACE2: '/fixture/trace2', GIT_TRACE2_EVENT: '/fixture/events', GIT_TRACE2_PERF: '/fixture/perf', GIT_TRACE_FUTURE_DESTINATION: '/fixture/future' };
+  const before = { ...original }, result = gitEnvironment(original);
+  assert.deepEqual(result, { PATH: '/fixture/bin', HOME: '/fixture/home', ordinary: 'retained', GIT_CONFIG_GLOBAL: '/fixture/global', GIT_CONFIG_SYSTEM: '', GIT_CONFIG_NOSYSTEM: '1', GIT_TRACE2: '0', GIT_TRACE2_EVENT: '0', GIT_TRACE2_PERF: '0' });
+  assert.notEqual(result, original); assert.deepEqual(original, before);
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS', 'GIT_OPTIONAL_LOCKS', 'GIT_EXEC_PATH', 'GIT_SSH_COMMAND', 'GIT_FUTURE_OVERRIDE']) {
+    for (const value of ['', '/fixture/value']) {
+      const input = { ordinary: 'retained', [key]: value };
+      assert.throws(() => gitEnvironment(input), Error, `${key}=${JSON.stringify(value)}`);
+      assert.deepEqual(input, { ordinary: 'retained', [key]: value });
+    }
+  }
+});
+
+test('Git version admission enforces the 2.45 floor and refuses unparseable output', () => {
+  for (const output of ['git version 2.45.0\n', 'git version 2.54.0 (Apple Git-157)\n', 'git version 3.0.0\n']) assert.doesNotThrow(() => assertGitVersion(output), output);
+  for (const output of ['git version 2.44.99\n', 'git version 1.99.99\n', '', '2.50.1\n', 'git version surprise\n']) assert.throws(() => assertGitVersion(output), Error, JSON.stringify(output));
+});
+
+test('Git config accepts unrelated valueless, multiline and numeric or dotted sections without changing bytes', () => {
+  const raw = Buffer.from('ordinary.flag\0ordinary.value\none\n\rtwo\0filter.fixture.smudge\ncat\0filter.fixture.clean\n\0filter.fixture.process\n\0' + '123.flag\nnumeric\0-section.flag\nhyphen\0a.b.flag\ndotted\0');
+  const before = Buffer.from(raw);
+  assert.doesNotThrow(() => assertGitConfig(raw)); assert.deepEqual(raw, before);
+  assert.doesNotThrow(() => assertGitConfig(Buffer.alloc(0)));
+});
+
+test('Git config refuses executable or valueless clean/process values including unused drivers', () => {
+  for (const raw of ['filter.unused.clean\ncat\0', 'filter.unused.process\nowned-program\n--argument\rvalue\0', 'filter.unused.clean\0', 'filter.unused.process\0', 'ordinary.value\nsafe\nvalue\0filter.unused.clean\ncat\0']) assert.throws(() => assertGitConfig(Buffer.from(raw)), Error, JSON.stringify(raw));
+});
+
+test('Git config uses the last exact driver value without merging case-sensitive names', () => {
+  assert.doesNotThrow(() => assertGitConfig(Buffer.from('filter.fixture.clean\ncat\0filter.fixture.clean\n\0filter.fixture.process\0filter.fixture.process\n\0')));
+  for (const raw of ['filter.fixture.clean\n\0filter.fixture.clean\ncat\0', 'filter.fixture.process\n\0filter.fixture.process\0', 'filter.case.clean\ncat\0filter.Case.clean\n\0', 'filter.case.process\ncat\0filter.Case.process\n\0']) assert.throws(() => assertGitConfig(Buffer.from(raw)), Error, JSON.stringify(raw));
+});
+
+test('Git config refuses malformed NUL framing and keys', () => {
+  for (const raw of ['ordinary.key\nvalue', '\0', '\nvalue\0', 'ordinary.1variable\nvalue\0', 'ordinary.key\nvalue\0\0']) assert.throws(() => assertGitConfig(Buffer.from(raw)), Error, JSON.stringify(raw));
+});
+
+test('whole-index admission accepts file/conflict stages with raw filename bytes', () => {
+  const object = 'a'.repeat(40), rawName = Buffer.from([255, 9, 10, 13, 120]);
+  const raw = Buffer.concat([Buffer.from(`100644 ${object} 0\tordinary file\0`), Buffer.from(`100755 ${object} 1\tconflict\0`), Buffer.from(`100644 ${object} 2\tconflict\0`), Buffer.from(`120000 ${'b'.repeat(64)} 3\t`), rawName, Buffer.from([0])]);
+  const before = Buffer.from(raw);
+  assert.doesNotThrow(() => assertNoGitlinks(raw)); assert.deepEqual(raw, before);
+  assert.doesNotThrow(() => assertNoGitlinks(Buffer.alloc(0)));
+});
+
+test('whole-index admission refuses every gitlink stage including excluded or unrelated paths', () => {
+  const ordinary = `100644 ${'a'.repeat(40)} 0\t.caws/hooks/guard.sh\0`;
+  for (const stage of [0, 1, 2, 3]) for (const name of ['unrelated/module', '.caws/hooks/state/module']) assert.throws(() => assertNoGitlinks(Buffer.from(`${ordinary}160000 ${'b'.repeat(40)} ${stage}\t${name}\0`)), Error, `${stage}: ${name}`);
+});
+
+test('whole-index admission refuses malformed headers, object IDs and record framing', () => {
+  const object = 'a'.repeat(40);
+  for (const raw of [`100644 ${object} 0\tunterminated`, `100644 ${object} 0 filename\0`, `999999 ${object} 0\tfilename\0`, `100644 ${'z'.repeat(40)} 0\tfilename\0`, `100644 abc 0\tfilename\0`, `100644 ${object} 4\tfilename\0`, `100644 ${object} 0\t\0`, '\0', `100644 ${object} 0\tfilename\0\0`]) assert.throws(() => assertNoGitlinks(Buffer.from(raw)), Error, JSON.stringify(raw));
+});
 
 test('comparison retains empty files, all statuses, lengths, raw hashes and category precedence', () => {
   const left = new Map(Object.entries({ same: Buffer.from('x'), stamp: Buffer.from('# hook_pack_version: 67\nexit 2\n'), body: Buffer.from('# hook_pack_version: 67\nexit 0\n'), empty: Buffer.alloc(0), added: Buffer.from('new'), prose: Buffer.from('version 67') }));
@@ -149,28 +212,38 @@ for (const changed of ['bytes', 'membership', 'excluded', 'head', 'status', 'sta
 
 test('actual Node-only direct/symlink CLI reports semantic bytes, tracking and no CAWS hook execution', t => {
   const base = fixture(t), consumer = path.join(base, 'consumer'), caws = path.join(base, 'caws');
+  const gitEnv = fixtureEnvironment();
   for (const repo of [consumer, caws]) {
     mkdirSync(repo);
-    execFileSync('git', ['-c', 'init.templateDir=', 'init', '--quiet', repo]);
-    execFileSync('git', ['-C', repo, 'config', 'core.hooksPath', '/dev/null']);
-    execFileSync('git', ['-C', repo, 'config', 'core.fsmonitor', 'false']);
+    execFileSync('git', ['-c', 'init.templateDir=', 'init', '--quiet', repo], { env: gitEnv, timeout: 10_000 });
+    execFileSync('git', ['-C', repo, 'config', 'core.hooksPath', '/dev/null'], { env: gitEnv, timeout: 10_000 });
+    execFileSync('git', ['-C', repo, 'config', 'core.fsmonitor', 'false'], { env: gitEnv, timeout: 10_000 });
   }
   const left = path.join(consumer, '.caws/hooks'), right = path.join(caws, 'packages/caws-cli/templates/hook-packs/shared');
   put(path.join(left, 'guard.sh'), 'touch MUST-NOT-EXIST\n'); put(path.join(right, 'guard.sh'), 'touch MUST-NOT-EXIST\n');
   put(path.join(left, 'dispatch/pre.sh'), 'HANDLERS=(\nguard.sh#comment\n)\n'); put(path.join(right, 'dispatch/pre.sh'), 'HANDLERS=(\nguard.sh#comment\n)\n');
   for (const [repo, rel] of [[consumer, '.caws/hooks'], [caws, 'packages']]) {
-    execFileSync('git', ['-C', repo ?? '', 'add', rel ?? '']);
-    execFileSync('git', ['-C', repo ?? '', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'fixture']);
+    execFileSync('git', ['-C', repo ?? '', 'add', rel ?? ''], { env: gitEnv, timeout: 10_000 });
+    execFileSync('git', ['-C', repo ?? '', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'fixture'], { env: gitEnv, timeout: 10_000 });
   }
-  const binary = path.join(base, 'bin'); mkdirSync(binary); symlinkSync(process.execPath, path.join(binary, 'node')); symlinkSync(execFileSync('which', ['git'], { encoding: 'utf8' }).trim(), path.join(binary, 'git'));
+  const binary = path.join(base, 'bin'); mkdirSync(binary); symlinkSync(process.execPath, path.join(binary, 'node')); symlinkSync(execFileSync('which', ['git'], { encoding: 'utf8', env: gitEnv, timeout: 10_000 }).trim(), path.join(binary, 'git'));
   const script = fileURLToPath(new URL('./hook-harvest.mjs', import.meta.url)), link = path.join(base, 'harvest-link.mjs'); symlinkSync(script, link);
   const reports = [];
   for (const [label, entry] of [['direct', script], ['symlink', link]]) {
-    const child = spawnSync(entry ?? '', ['--consumer-root', consumer, '--caws-root', caws], { cwd: base, env: { ...process.env, PATH: binary }, encoding: 'utf8' });
+    const child = spawnSync(entry ?? '', ['--consumer-root', consumer, '--caws-root', caws], { cwd: base, env: { ...gitEnv, PATH: binary }, encoding: 'utf8', timeout: 10_000 });
     put(path.join(base, `${label}-stdout.json`), child.stdout ?? ''); put(path.join(base, `${label}-stderr.log`), child.stderr ?? '');
     put(path.join(base, `${label}-command.json`), JSON.stringify({ executable: entry, argv: ['--consumer-root', consumer, '--caws-root', caws], status: child.status, signal: child.signal, error: child.error?.message, PATH: binary }, null, 2));
     assert.equal(child.status, 0, child.stderr); assert.equal(child.stderr, '');
     const report = JSON.parse(child.stdout); reports.push(report);
+    assert.deepEqual(report.limits, [
+      'Byte differences do not establish missing capabilities or edit authorship.',
+      'Declarations do not establish effective native registration or execution.',
+      'No hooks executed and no payload text copied.',
+      'Excluded subtrees are not recursively inventoried.',
+      'Sequential stable reads are not a cross-repository atomic snapshot.',
+      'Git admission requires Git 2.45 or later, stable configuration and index inputs, no executable clean/process filters and no indexed submodules.',
+      'Inventory exclusions do not prohibit Git status from reading excluded tracked files.',
+    ]);
     assert.equal(report.files.find((/** @type {{path:string}} */ row) => row.path === 'guard.sh').consumer_tracked, true);
     assert.equal(report.files.find((/** @type {{path:string}} */ row) => row.path === 'guard.sh').consumer_sha256, sha256(Buffer.from('touch MUST-NOT-EXIST\n')));
     assert.deepEqual(report.dispatchers.consumer['dispatch/pre.sh'].declared, [{ entry: 'guard.sh', line: 2 }]);
@@ -180,13 +253,111 @@ test('actual Node-only direct/symlink CLI reports semantic bytes, tracking and n
   assert.deepEqual(reports[0], reports[1]);
   assert.equal(readFileSync(path.join(left, 'guard.sh'), 'utf8'), 'touch MUST-NOT-EXIST\n');
   symlinkSync(consumer, path.join(base, '-my repo'));
-  const space = spawnSync(process.execPath, [script, '--consumer-root', '-my repo', '--caws-root', caws], { cwd: base, encoding: 'utf8', env: { ...process.env, PATH: binary } });
+  const space = spawnSync(process.execPath, [script, '--consumer-root', '-my repo', '--caws-root', caws], { cwd: base, encoding: 'utf8', env: { ...gitEnv, PATH: binary }, timeout: 10_000 });
   assert.equal(space.status, 0, space.stderr); assert.deepEqual(JSON.parse(space.stdout), reports[0]);
   put(path.join(base, 'dash-space-stdout.json'), space.stdout); put(path.join(base, 'dash-space-stderr.log'), space.stderr);
-  const optionLookalike = spawnSync(process.execPath, [script, '--consumer-root', '-h repo', '--caws-root', caws], { cwd: base, encoding: 'utf8' });
+  const optionLookalike = spawnSync(process.execPath, [script, '--consumer-root', '-h repo', '--caws-root', caws], { cwd: base, encoding: 'utf8', env: gitEnv, timeout: 10_000 });
   assert.equal(optionLookalike.status, 2); assert.match(optionLookalike.stderr, /expected a path after/);
   // This CLI has no positional operands: retained argparse reference refuses even a final separator.
-  const separator = spawnSync(process.execPath, [script, '--consumer-root', consumer, '--caws-root', caws, '--'], { encoding: 'utf8' });
+  const separator = spawnSync(process.execPath, [script, '--consumer-root', consumer, '--caws-root', caws, '--'], { encoding: 'utf8', env: gitEnv, timeout: 10_000 });
   assert.equal(separator.status, 2); assert.match(separator.stderr, /unrecognized or ambiguous argument: --/);
-  const missing = spawnSync(process.execPath, [script], { encoding: 'utf8' }); assert.equal(missing.status, 2); assert.match(missing.stderr, /consumer-root is required/);
+  const missing = spawnSync(process.execPath, [script], { encoding: 'utf8', env: gitEnv, timeout: 10_000 }); assert.equal(missing.status, 2); assert.match(missing.stderr, /consumer-root is required/);
+});
+
+/** Retain commands before assertions so failed controls remain inspectable.
+ * @param {string} base @param {Record<string,unknown>[]} commands
+ * @param {string} executable @param {string[]} argv */
+function fixtureCommand(base, commands, executable, argv) {
+  const env = fixtureEnvironment();
+  const child = spawnSync(executable, argv, { cwd: base, env, encoding: 'utf8', timeout: 10_000 });
+  commands.push({ executable, argv: [...argv], cwd: base, timeout_ms: 10_000, git_environment: Object.fromEntries(Object.entries(env).filter(([key]) => key.startsWith('GIT_'))), status: child.status, signal: child.signal, error: child.error?.message ?? null, stdout: child.stdout ?? '', stderr: child.stderr ?? '' });
+  put(path.join(base, 'commands.json'), JSON.stringify(commands, null, 2));
+  return child;
+}
+/** @param {string} base @param {Record<string,unknown>[]} commands @param {string} repo @param {string[]} argv */
+function fixtureGit(base, commands, repo, argv) {
+  return fixtureCommand(base, commands, 'git', ['--no-pager', '--no-optional-locks', '-C', repo, ...argv]);
+}
+/** @param {string} base @param {Record<string,unknown>[]} commands */
+function privateRepositories(base, commands) {
+  const consumer = path.join(base, 'consumer'), caws = path.join(base, 'caws');
+  const left = path.join(consumer, '.caws/hooks'), right = path.join(caws, 'packages/caws-cli/templates/hook-packs/shared');
+  for (const [repo, hooks] of [[consumer, left], [caws, right]]) {
+    mkdirSync(repo, { recursive: true });
+    for (const argv of [['-c', 'init.templateDir=', 'init', '--quiet', '.'], ['config', 'core.hooksPath', '/dev/null'], ['config', 'core.fsmonitor', 'false'], ['config', 'user.name', 'Fixture'], ['config', 'user.email', 'fixture@example.invalid']]) {
+      const result = fixtureGit(base, commands, repo, argv); assert.equal(result.status, 0, result.stderr);
+    }
+    put(path.join(hooks, 'guard.sh'), 'canonical\n');
+    for (const argv of [['add', '--', '.'], ['commit', '--quiet', '-m', 'fixture']]) {
+      const result = fixtureGit(base, commands, repo, argv); assert.equal(result.status, 0, result.stderr);
+    }
+  }
+  return { consumer, caws, left, right };
+}
+/** @param {string} file */
+function optionalText(file) { return existsSync(file) ? readFileSync(file, 'utf8') : null; }
+/** @param {string} repo @param {string} hooks */
+function repositoryIdentity(repo, hooks) {
+  const files = inventory(hooks);
+  return { root: repo, hooks_root: hooks, source: [...files.files].map(([name, bytes]) => ({ path: name, bytes: bytes.length, sha256: sha256(bytes) })), excluded: files.excluded, index_sha256: sha256(readFileSync(path.join(repo, '.git/index'))), config_sha256: sha256(readFileSync(path.join(repo, '.git/config'))), head_sha256: sha256(readFileSync(path.join(repo, '.git/HEAD'))), head_log_sha256: sha256(readFileSync(path.join(repo, '.git/logs/HEAD'))), attributes: optionalText(path.join(repo, '.gitattributes')) };
+}
+/** @param {string} value */
+function shellWord(value) { return `'${value.replaceAll("'", "'\\''")}'`; }
+
+test('real Git fsmonitor executes despite hooksPath null while harvest suppresses it without changing inputs', t => {
+  const base = fixture(t);
+  /** @type {Record<string,unknown>[]} */ const commands = [];
+  const { consumer, caws, left, right } = privateRepositories(base, commands);
+  const marker = path.join(base, 'fsmonitor.marker'), monitor = path.join(base, 'owned-fsmonitor.sh');
+  put(monitor, `#!/bin/sh\nprintf 'called\\n' >> ${shellWord(marker)}\nprintf 'fixture-token\\000'\n`);
+  chmodSync(monitor, 0o755);
+  for (const argv of [['config', 'core.fsmonitor', monitor], ['config', 'core.fsmonitorHookVersion', '2']]) {
+    const result = fixtureGit(base, commands, consumer, argv); assert.equal(result.status, 0, result.stderr);
+  }
+  const beforePositive = { marker: optionalText(marker), consumer: repositoryIdentity(consumer, left), caws: repositoryIdentity(caws, right) };
+  const positive = fixtureGit(base, commands, consumer, ['status', '--porcelain=v1', '--untracked-files=no']);
+  const positiveMarker = optionalText(marker); rmSync(marker, { force: true });
+  const beforeHarvest = { marker: optionalText(marker), consumer: repositoryIdentity(consumer, left), caws: repositoryIdentity(caws, right) };
+  const script = fileURLToPath(new URL('./hook-harvest.mjs', import.meta.url));
+  const harvested = fixtureCommand(base, commands, process.execPath, [script, '--consumer-root', consumer, '--caws-root', caws]);
+  const afterHarvest = { marker: optionalText(marker), consumer: repositoryIdentity(consumer, left), caws: repositoryIdentity(caws, right) };
+  put(path.join(base, 'fsmonitor-observation.json'), JSON.stringify({ script, script_sha256: sha256(readFileSync(script)), monitor, monitor_sha256: sha256(readFileSync(monitor)), marker, beforePositive, positiveMarker, beforeHarvest, afterHarvest, commands }, null, 2));
+  assert.equal(beforePositive.marker, null); assert.equal(positive.status, 0, positive.stderr); assert.equal(positive.stdout, '');
+  assert.equal(typeof positiveMarker, 'string'); assert.match(positiveMarker ?? '', /^(?:called\n)+$/);
+  assert.equal(harvested.status, 0, harvested.stderr); assert.equal(harvested.stderr, '');
+  assert.deepEqual(JSON.parse(harvested.stdout).counts, { identical: 1 }); assert.equal(JSON.parse(harvested.stdout).consumer.status, '');
+  assert.deepEqual(afterHarvest, beforeHarvest);
+});
+
+test('real clean filter canonicalizes a changed tracked hook and harvest refuses before executing it', t => {
+  const base = fixture(t);
+  /** @type {Record<string,unknown>[]} */ const commands = [];
+  const { consumer, caws, left, right } = privateRepositories(base, commands);
+  const marker = path.join(base, 'clean.marker'), cleaner = path.join(base, 'owned-clean.mjs');
+  put(path.join(consumer, '.gitattributes'), '.caws/hooks/guard.sh filter=owned\n');
+  for (const argv of [['add', '--', '.gitattributes'], ['commit', '--quiet', '-m', 'fixture attributes']]) {
+    const result = fixtureGit(base, commands, consumer, argv); assert.equal(result.status, 0, result.stderr);
+  }
+  put(cleaner, `import { appendFileSync, readFileSync } from 'node:fs';\nreadFileSync(0);\nappendFileSync(${JSON.stringify(marker)}, 'clean-called\\n');\nprocess.stdout.write('canonical\\n');\n`);
+  for (const argv of [['config', 'filter.owned.clean', `${shellWord(process.execPath)} ${shellWord(cleaner)}`], ['config', 'filter.owned.required', 'true']]) {
+    const result = fixtureGit(base, commands, consumer, argv); assert.equal(result.status, 0, result.stderr);
+  }
+  // A size mismatch can report modified without conversion. Same-size bytes and
+  // an explicitly changed mtime force the content comparison that runs the filter.
+  const changed = 'different\n', changedFile = path.join(left, 'guard.sh'); put(changedFile, changed);
+  const changedStat = statSync(changedFile);
+  utimesSync(changedFile, changedStat.atime, new Date(changedStat.mtimeMs + 2000));
+  const beforePositive = { marker: optionalText(marker), consumer: repositoryIdentity(consumer, left), caws: repositoryIdentity(caws, right) };
+  const positive = fixtureGit(base, commands, consumer, ['status', '--porcelain=v1', '--untracked-files=no']);
+  const positiveMarker = optionalText(marker); rmSync(marker, { force: true });
+  const beforeHarvest = { marker: optionalText(marker), consumer: repositoryIdentity(consumer, left), caws: repositoryIdentity(caws, right) };
+  const script = fileURLToPath(new URL('./hook-harvest.mjs', import.meta.url));
+  const harvested = fixtureCommand(base, commands, process.execPath, [script, '--consumer-root', consumer, '--caws-root', caws]);
+  const afterHarvest = { marker: optionalText(marker), consumer: repositoryIdentity(consumer, left), caws: repositoryIdentity(caws, right) };
+  put(path.join(base, 'clean-filter-observation.json'), JSON.stringify({ script, script_sha256: sha256(readFileSync(script)), cleaner, cleaner_sha256: sha256(readFileSync(cleaner)), marker, canonical_bytes: 'canonical\n', changed_bytes: changed, changed_mtime_ms: statSync(changedFile).mtimeMs, beforePositive, positiveMarker, beforeHarvest, afterHarvest, commands }, null, 2));
+  assert.equal(beforePositive.marker, null); assert.equal(positive.status, 0, positive.stderr); assert.equal(positive.stdout, '');
+  assert.equal(typeof positiveMarker, 'string'); assert.match(positiveMarker ?? '', /^(?:clean-called\n)+$/);
+  assert.equal(Buffer.byteLength(changed), Buffer.byteLength('canonical\n')); assert.notEqual(changed, 'canonical\n'); assert.equal(readFileSync(changedFile, 'utf8'), changed);
+  assert.equal(harvested.status, 1, harvested.stderr); assert.equal(harvested.stdout, ''); assert.match(harvested.stderr, /filters/);
+  assert.deepEqual(afterHarvest, beforeHarvest);
 });
