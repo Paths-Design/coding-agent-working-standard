@@ -242,6 +242,18 @@ printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalCont
     native,
     projectSettings: path.join(home, 'state/projects', key + '.json'),
     close() {
+      const observation = cp.spawnSync('/bin/ps', ['-axo', 'pid=,ppid=,lstart=,args='], {
+        encoding: 'utf8',
+      });
+      const rows = (observation.stdout || '')
+        .split('\n')
+        .filter((line) => line.includes(root + '/'));
+      put(path.join(root, 'close-observation.json'), {
+        command: ['/bin/ps', '-axo', 'pid=,ppid=,lstart=,args='],
+        exitCode: observation.status,
+        error: observation.error ? String(observation.error) : null,
+        matchingFixtureProcesses: rows,
+      });
       if (retained) {
         fs.mkdirSync(retained, { recursive: true });
         const destination = path.join(retained, path.basename(root));
@@ -251,6 +263,13 @@ printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalCont
         });
         fs.cpSync(root, destination, { recursive: true });
       }
+      // Retain uncertain live state. This fixture has no authority to signal a
+      // process merely because its command names the fixture directory.
+      if (observation.status !== 0 || rows.length)
+        throw new Error(
+          'Fixture cleanup is uncertain; inspect retained close-observation.json and live root ' +
+            root
+        );
       fs.rmSync(root, { recursive: true, force: true });
     },
   };
@@ -541,7 +560,7 @@ test('stock-source tampering after preparation cannot retain typed admission', a
 }, 45000);
 
 test.each(['na\0tive/', 'na\u0085tive/', 'na\ud800tive/'])(
-  'non-native prefix transport %j retains the selected parser',
+  'non-native prefix transport %j cannot become a lossy stock grant',
   async (unsafe) => {
     const f = fixture();
     try {
@@ -551,7 +570,7 @@ test.each(['na\0tive/', 'na\u0085tive/', 'na\ud800tive/'])(
         })
       );
       shipped(await f.run());
-      expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
     } finally {
       f.close();
     }
@@ -621,27 +640,30 @@ test('source indexing limits retain the selected parser rather than asserting in
   }
 }, 45000);
 
-test.each(['native\0/', 'native\u0085/', 'native\ud800/'])(
-  'fallback %j executes the real Python parser and retains its shell transport',
-  async (unsafe) => {
-    const f = fixture();
-    try {
-      f.policy(
-        document({
-          'scope-guard.sh': { additional_allow_prefixes: [{ ...prefix, prefix: unsafe }] },
-        })
-      );
-      const result = await f.run(await f.prepare({ CONFIG_PARSER_MODE: 'execute' }));
-      if (unsafe.includes('\0')) {
-        expect(result.scope).toBe('');
-        expect(result.allowlist).toBe('1');
-        expect(result.god).toBe('');
-        expect(result.delta).toBe('');
-      } else shipped(result);
-      expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
-    } finally {
-      f.close();
-    }
-  },
-  45000
-);
+test('stock NUL rejection prevents the absolute prefix emitted by an explicitly selected legacy parser', async () => {
+  const f = fixture();
+  try {
+    f.policy(
+      document({
+        'scope-guard.sh': { additional_allow_prefixes: [{ ...prefix, prefix: '\0/' }] },
+      })
+    );
+    const denied = await f.run();
+    shipped(denied);
+    expect(denied.assignments).toContain('CAWS_GUARD_CONFIG_STATUS=invalid\n');
+    expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+    // Explicit executable selection is a separate compatibility contract.
+    const result = await f.run(
+      await f.prepare({
+        CONFIG_PARSER_MODE: 'execute',
+        CAWS_GUARD_CONFIG_PY: path.join(f.runtime, 'lib/guard-config.py'),
+      })
+    );
+    expect(result.scope).toBe('');
+    expect(result.assignments).toContain('CAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0=/\n');
+    expect(result.allowlist).toBe('1');
+    expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
+  } finally {
+    f.close();
+  }
+}, 45000);

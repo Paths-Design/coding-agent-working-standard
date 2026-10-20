@@ -23,6 +23,22 @@ export function parseGuardConfiguration(text: string | null): GuardConfiguration
   } catch {
     return { status: 'invalid', guards: {} };
   }
+  // Unrelated metadata must not route unsafe guard data back through lossy
+  // compatibility transport when source indexing exceeds its envelope.
+  if (object(document) && object(document.guards)) {
+    for (const entry of Object.values(document.guards)) {
+      if (!object(entry) || !Array.isArray(entry.additional_allow_prefixes)) continue;
+      for (const prefix of entry.additional_allow_prefixes) {
+        if (
+          object(prefix) &&
+          typeof prefix.prefix === 'string' &&
+          (/[\0\u001c-\u001f\u0085]/.test(prefix.prefix) ||
+            Buffer.from(prefix.prefix, 'utf8').toString('utf8') !== prefix.prefix)
+        )
+          return { status: 'invalid', guards: {} };
+      }
+    }
+  }
   try {
     // Python's parser admits int thresholds, not floats that round to an int.
     const guardSource = objectMemberSource(parseJsonSource(text), 'guards');
@@ -52,6 +68,12 @@ export function parseGuardConfiguration(text: string | null): GuardConfiguration
     for (const entry of Object.values(guards)) {
       if (!object(entry) || !Array.isArray(entry.additional_allow_prefixes)) continue;
       for (const prefix of entry.additional_allow_prefixes) {
+        if (
+          object(prefix) &&
+          typeof prefix.prefix === 'string' &&
+          /[\u001c-\u001f\u0085]/.test(prefix.prefix)
+        )
+          return { status: 'invalid', guards: {} };
         if (
           object(prefix) &&
           typeof prefix.reason === 'string' &&
@@ -240,18 +262,19 @@ export function invocationGuardConfiguration(
     return Object.freeze(result);
   }
   const assignments = loadGuardConfigurationEnvironment(selection.checkout);
-  // A direct native environment cannot reproduce Bash's NUL removal, Python's
-  // extra whitespace rejection, or unencodable Python text. Keep those values
-  // on the selected parser path rather than granting a changed prefix.
+  // Reject unrepresentable stock data. Bash removing NUL could transform a
+  // repo-relative prefix into an absolute grant; compatibility cannot license it.
   if (
-    assignments.CAWS_GUARD_CONFIG_STATUS === 'unsupported' ||
     Object.values(assignments).some(
-      (value) =>
-        /[\0\u001c-\u001f\u0085]/.test(value) ||
-        Buffer.from(value, 'utf8').toString('utf8') !== value
+      (value) => value.includes('\0') || Buffer.from(value, 'utf8').toString('utf8') !== value
     )
   )
-    return Object.freeze(result);
+    return Object.freeze({
+      ...result,
+      CAWS_GUARD_CONFIG_STATUS: 'invalid',
+      CAWS_GUARD_ZONE_COUNT: '0',
+    });
+  if (assignments.CAWS_GUARD_CONFIG_STATUS === 'unsupported') return Object.freeze(result);
   Object.assign(result, assignments);
   return Object.freeze(result);
 }
