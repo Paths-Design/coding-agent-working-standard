@@ -213,11 +213,18 @@ const STOCK_CONFIGURATION_SOURCES: Readonly<Record<string, string>> = Object.fre
 });
 
 /** Indexed assignments are private transport, not a caller policy API.
- * The explicit parser and public guard threshold overrides remain separate.
+ * Public controls, including ask incapability and parser selection, are not
+ * configuration assignments and must survive this boundary.
  */
 export function clearGuardConfigurationTransport(environment: Record<string, string>): void {
   for (const name of Object.keys(environment))
-    if (name.startsWith('CAWS_GUARD_') && name !== 'CAWS_GUARD_CONFIG_PY') delete environment[name];
+    if (
+      name === 'CAWS_GUARD_CONFIG_STATUS' ||
+      name.startsWith('CAWS_GUARD_ZONE_') ||
+      name.startsWith('CAWS_GUARD_PREFIX_') ||
+      name.startsWith('CAWS_GUARD_THRESHOLD_')
+    )
+      delete environment[name];
 }
 
 /** Read once at dispatch for the reviewed stock loader/parser pair.

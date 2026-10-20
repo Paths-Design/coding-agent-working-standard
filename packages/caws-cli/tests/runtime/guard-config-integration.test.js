@@ -34,7 +34,7 @@ const guards = {
   'god-object-check.sh': { thresholds: { loc: 100, delta: 10 } },
   'loc-delta-check.sh': { thresholds: { delta: 10 } },
 };
-function fixture() {
+function fixture(surface = 'codex') {
   const retained = process.env.CAWS_GUARD_CONFIG_ARTIFACT_ROOT;
   if (retained && !path.isAbsolute(retained)) throw new Error('Artifact root must be absolute');
   // A retained directory inside .caws changes canonical-root discovery. Execute
@@ -102,17 +102,21 @@ for name in scope-guard god-object-check loc-delta-check; do
 done
 bash -c 'source "$1/lib/write-allowlist.sh"; caws_is_write_allowlisted "$2" "$CAWS_PROJECT_DIR"' _ "$pack" "$CAWS_PROJECT_DIR/native/core.rs"
 printf '%s' "$?" > "$CONSUMER_ROOT/write-allowlist.status"
+if [[ "\${CONFIG_ASK_CONSUMER:-0}" == 1 ]]; then
+  printf '%s' "$input" | bash "$pack/worktree-write-guard.sh" > "$CONSUMER_ROOT/worktree-write-guard.stdout" 2> "$CONSUMER_ROOT/worktree-write-guard.stderr"
+  printf '%s' "$?" > "$CONSUMER_ROOT/worktree-write-guard.status"
+fi
 printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"four consumers completed"}}'
 `,
     0o755
   );
-  put(path.join(home, 'surfaces/codex/settings.json'), { version: 1, enabled: true });
+  put(path.join(home, 'surfaces', surface, 'settings.json'), { version: 1, enabled: true });
   const key = crypto.createHash('sha256').update(repo).digest('hex');
   put(path.join(home, 'state/projects', key + '.json'), {
     version: 1,
     root: repo,
     surfaces: {
-      codex: {
+      [surface]: {
         disabled: {
           pre_tool_use: [
             ...new Set(
@@ -149,7 +153,7 @@ printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalCont
       schema: 'caws.runtime.request.v1',
       id: 'config-' + ++counter,
       runtimeDigest: installed.digest,
-      surface: 'codex',
+      surface,
       event: 'pre_tool_use',
       configuration: 'system',
       caller: { processId: process.pid, cwd: repo, environment: { ...environment, ...extra } },
@@ -210,7 +214,7 @@ printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalCont
       '--node',
       process.execPath,
       '--surface',
-      'codex',
+      surface,
       '--event',
       'pre_tool_use',
       '--runtime-digest',
@@ -337,6 +341,79 @@ nativeTest(
       f.policy(document());
       configured(f.native());
       expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+    } finally {
+      f.close();
+    }
+  },
+  45000
+);
+
+scenario(
+  'public ask incapability survives transport clearing and hard-blocks the actual worktree guard',
+  async () => {
+    const f = fixture('claude-code');
+    try {
+      f.policy(null);
+      for (const args of [
+        ['add', 'native/core.rs'],
+        [
+          '-c',
+          'user.name=Fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '-qm',
+          'fixture',
+        ],
+      ]) {
+        const git = cp.spawnSync('git', args, { cwd: f.repo, env: f.environment });
+        expect(git.status).toBe(0);
+      }
+      const branch = cp
+        .execFileSync('git', ['branch', '--show-current'], {
+          cwd: f.repo,
+          encoding: 'utf8',
+        })
+        .trim();
+      const other = path.join(f.repo, '.caws/worktrees/other');
+      fs.mkdirSync(other, { recursive: true });
+      f.put(path.join(f.repo, '.caws/worktrees.json'), {
+        other: { specId: 'OTHER-001', baseBranch: branch, path: other },
+      });
+      // The same actual guard must reach its ask-capable disposition first;
+      // an unrelated fail-closed error cannot masquerade as NO_ASK enforcement.
+      const run = async (extra) =>
+        process.env.CAWS_GUARD_CONFIG_NATIVE_BIN ? f.native(extra) : f.run(await f.prepare(extra));
+      await run({ CONFIG_ASK_CONSUMER: '1' });
+      const read = (name) => fs.readFileSync(path.join(f.root, name), 'utf8');
+      const ask = {
+        status: read('worktree-write-guard.status'),
+        stdout: read('worktree-write-guard.stdout'),
+        stderr: read('worktree-write-guard.stderr'),
+      };
+      f.put(path.join(f.root, 'ask-capable-control.json'), ask);
+      expect(ask.status).toBe('0');
+      expect(ask.stdout).toContain('"permissionDecision": "ask"');
+      const result = await run({
+        CONFIG_ASK_CONSUMER: '1',
+        CAWS_GUARD_NO_ASK: '1',
+        CAWS_GUARD_CONFIG_STATUS: 'ok',
+        CAWS_GUARD_ZONE_COUNT: '1',
+        CAWS_GUARD_ZONE_0: '/',
+      });
+      const blocked = {
+        status: read('worktree-write-guard.status'),
+        stdout: read('worktree-write-guard.stdout'),
+        stderr: read('worktree-write-guard.stderr'),
+        assignments: result.assignments,
+      };
+      f.put(path.join(f.root, 'ask-incapable-result.json'), blocked);
+      expect(blocked.status).toBe('2');
+      expect(blocked.stdout).not.toContain('permissionDecision');
+      expect(blocked.stderr).toContain('CAWS_GUARD_NO_ASK=1');
+      expect(blocked.assignments).toContain('CAWS_GUARD_NO_ASK=1\n');
+      expect(blocked.assignments).toContain('CAWS_GUARD_CONFIG_STATUS=absent\n');
+      expect(blocked.assignments).not.toContain('CAWS_GUARD_ZONE_0=/');
     } finally {
       f.close();
     }

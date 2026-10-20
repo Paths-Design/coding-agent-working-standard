@@ -38,7 +38,8 @@ const args = [
   '--runTestsByPath',
   'tests/runtime/guard-config-integration.test.js',
 ];
-if (phase === '--native-only') args.push('--testNamePattern', 'supplied native client reaches');
+if (phase === '--native-only')
+  args.push('--testNamePattern', 'supplied native client reaches|public ask incapability survives');
 const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: cli, encoding: 'utf8' });
 assert.equal(revision.status, 0, revision.stderr);
 const dirty = spawnSync('git', ['status', '--porcelain=v1'], { cwd: cli, encoding: 'utf8' });
