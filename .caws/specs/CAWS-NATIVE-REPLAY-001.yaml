@@ -43,3 +43,9 @@ rollback:
   - 'Revert the replacement source commit through ordinary governed Git; do not change machine installation.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Scoped adjudication at 3175d87115b89414cbd1e3f4407b0379e625a25b. Raw retained checks under /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/native-replay: 043-precedence-node18 and 044-precedence-node22 command.json/stdout.bin (55/55 each, exit0, same source hashes); 044 fixtures/replay-test-WAwqaH/output has actual selected classifier allow/unknown and deny/rm_classifier rows, ready PID82455, terminal+both EOF, no captured command effect; context probes explicitly mark context_missing. 050-final-custody/readback.json binds committed bytes and unchanged 13 source/13 emitted build identities to baseline-receipts.json and 003 build exit0. 048-final-sampling/output and 049-final-differential/differential.json: exact60 occurrence manifest/semantic rows excluding elapsed and13 stable fields match preserved Python synthetic static-classifier reference over150 valid/3 malformed/30strata. Metadata controls retain returned safe ProtocolError/hash with private input marker absent. Limits: supported reviewed-build profile, not historical labels, full actual-corpus accuracy, OS sandbox or native runtime. --verify checks commit reachability only; runtime assertions adjudicated from inspected artifacts."
+    recorded_at: "2026-10-20T19:36:57.032Z"
+    commit_sha: "3175d87115b89414cbd1e3f4407b0379e625a25b"
