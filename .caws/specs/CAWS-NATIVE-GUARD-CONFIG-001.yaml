@@ -1,0 +1,37 @@
+id: CAWS-NATIVE-GUARD-CONFIG-001
+title: 'Integrate typed guard configuration at qualified native shell consumers'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-20T05:24:25.239Z'
+updated_at: '2026-10-20T05:24:25.239Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'native invocation guard configuration and actual shell consumers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/guard-config.ts'
+    - 'packages/caws-cli/tests/runtime/guard-config-integration.test.js'
+    - 'packages/caws-cli/scripts/qualify-guard-config.ts'
+  out: []
+invariants:
+  - 'Typed preloading applies only to exact stock loader semantics; custom libraries and explicit parser selection retain compatibility.'
+  - 'Invalid or unavailable configuration retains shipped enforcement and never grants an authored subset.'
+acceptance:
+  - id: A1
+    given: 'qualified stock loader and valid repository guard policy'
+    when: 'native typed invocation reaches real shell consumers'
+    then: 'exact configured prefixes and thresholds are observed without Python guard configuration parsing'
+  - id: A2
+    given: 'malformed configuration or explicit parser override or custom loader'
+    when: 'invocation loads guard policy'
+    then: 'invalid data applies no entries and explicit or custom semantics are not bypassed'
+observability:
+  - 'Retained native invocation inputs outputs assignment tables interpreter trap and command receipts in ignored qualification artifacts.'
+rollback:
+  - 'Revert the scoped source commit; machine installation remains unchanged.'
+non_functional: {}
+contracts: []
