@@ -1775,6 +1775,53 @@ Additional bounded evidence and unresolved dependencies:
   `render-load-source-2026-10-19/exact-timeline/checks.json`. The failed baseline
   retains its earlier oracle identity and is not relabelled by this strengthening.
 
+- E96: Parent-custody/reuse repair `bed92155` and correlated observations
+  `9252b617` retain the full stage/final validators, exact manifest equality,
+  immutable pins and immediate source checks. The private parent uses device/
+  inode/owner/exact0700 identity; sibling namespace fields may change. Reuse
+  rechecks the retained stage's named root and parent before returning its
+  informational path. That path is not durable deletion authority. Root-run21
+  image controls and5 owner/framing checks exit0, including actual sibling
+  publication, unsafe/replaced parent/stage refusal and immutable-pin mutation.
+  Full native158 library/40 binary/31 invoke/3 example checks and all-target
+  Clippy exit0 with untruncated logs in
+  `image-custody-repair-2026-10-20/`. Independent native observations record all27
+  retained signal-case PIDs absent; the root signals none during this probe.
+  Release/strict-qualification build exits0 and produces native SHA256
+  `78f05998ed9709b26272da422d969abcb3eaaef5f829a493a35b2cb34c5d4f3d`.
+  The actual replay `render-load-baseline-2026-10-20T06-11-05-150Z/`
+  exits1:13 queued,12 Prepared,8 daemon responses and8 retained1814-byte turns,
+  with5 deadline failures. No image-admission refusal or EOF diagnostic recurs
+  in this sample; removal of the earlier custody refusals does not establish
+  successful13-session qualification. Cleanup is confirmed inactive/free with
+  no socket. The adjacent `-timing-investigation.json` binds13 receipts and
+  journals to owner stages and8 output hashes, with0 original-artifact mismatches.
+  First-cohort Prepared→bridge arrival spans10820–11129ms; second-cohort spans
+  4344–4650ms. Late callers reach Prepared at26.3–27.3s and then expire waiting
+  for the bridge; one expires queued. No concurrent/overload mode is run.
+
+- E97: Source-grounded scheduling dependency: `Actor::serve` retains project
+  serialization while compatibility dispatch runs before the selected render
+  bridge. Splitting that wait requires a FIFO pending queue, one compatible
+  backend-generation cohort, a same-session/incompatible-offer barrier, shared
+  admission permits held by actor and reader until both finish, and pending
+  demand preventing idle retirement. Preserve the literal existing project
+  bound of one active plus `max_queue_per_project` waiting and the existing
+  connection-reader threads; no additional per-request thread or unbounded
+  completion map. Journal acceptance remains after complete argument-bearing
+  bridge bytes; FIFO bridge arrivals cannot reorder effects. Cancellation before
+  those bytes proves no render Dispatch, not zero compatibility-prefix writes.
+  Before enabling prefix overlap, resolve actual prefix ownership. The stock
+  plan snapshot producer appends only destination paths to one HOME/vendor
+  `.pending-plan-snapshots` list; finalization copies the current transcript to
+  all destinations and unlinks the list. Serial execution alone cannot assign
+  those ownerless entries to the current session. Codex's stock PostToolUse
+  matcher does not reach the producer's exact ExitPlanMode gate, but the selected
+  Stop consumer can encounter a preexisting list. Preserve/diagnose unowned
+  legacy records rather than guessing provenance. Other prefix state ownership
+  and native-derived overlap eligibility require inspection. Implementation and
+  acceptance of this split are not inferred from these design constraints.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -1867,10 +1914,13 @@ E90 independently confirms E87's orphan absent without a root cleanup signal.
 E91/E92 retain repaired signal readiness, the complete native suite and all four
 lifecycle modes against the reproduced binary. Preserve those identities and
 their explicit nonclaims. E93 observes cooperative legacy replay. E94 strengthens
-the load oracles and releases the resource hold. E95's actual baseline fails;
-finish the typed parent-custody/safe image-reuse and correlated-observation repairs,
-verify hostile paths, and replay `baseline` before authorizing `concurrent` and
-`overload` in separate retained runs. Stop on a failed
+the load oracles and releases the resource hold. E96 tests the custody/reuse
+repair but its actual baseline fails5 deadlines. E97 records the next dependency:
+establish prefix-state ownership and native-derived eligibility before overlapping
+Prepared callers, implement the bounded cohort/permit split, verify hostile
+paths, and replay `baseline` before authorizing `concurrent` and `overload` in
+separate retained runs. Replay lifecycle/legacy on the final frozen binary;
+E92/E93 remain evidence for their original executable identity. Stop on a failed
 scenario or live/ambiguous cleanup, inspect its artifacts, and preserve the
 original request budgets. Correlated denial witnesses are required; an unrelated
 timeout, exit0, empty output or absent turn file cannot qualify an unknown fence
