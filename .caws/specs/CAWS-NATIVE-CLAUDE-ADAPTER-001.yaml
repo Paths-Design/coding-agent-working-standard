@@ -46,3 +46,11 @@ non_functional:
 contracts:
   - name: 'historical-claude-transcript'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "commands001/015/016/017:215 exact typed comparisons perNode18/22,zero mismatches, ordered events/exception classes, bool/integer/float custody,lineage; final-runtime18/22 raw bytes/member paths/frozen values. Root95 focused cases include12Claude semantics; finite declared profile, no registry/writer claim. External artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter. CLI --verify checks commit reachability ONLY; command is recorded, not executed. Direct raw behavior and source identity were inspected independently; no artifact-content rederivation claim."
+    recorded_at: "2026-10-20T23:36:56.291Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/candidate.mjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/final22/src/transcripts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/fixtures.jsonl /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/final-runtime22.json"
+    exit_code: 0
+    commit_sha: "172242eaa14ebdd9e82fbc97ebeac384b90f1689"
