@@ -29,6 +29,7 @@ type Operation = {
   body: Data;
 };
 type Interval = { id: string; key: string; first: number; last: number };
+type WorkloadMode = 'baseline' | 'concurrent' | 'fairness';
 
 function row(value: unknown, label = 'object'): Data {
   assert(value !== null && typeof value === 'object' && !Array.isArray(value), label);
@@ -627,7 +628,7 @@ function invocation(subject: Subject): { id: string; file: string; records: Data
   return { id: start.invocation_id, file, records };
 }
 
-async function workload(harness: RenderHarness, baselineOnly = false): Promise<Data> {
+async function workload(harness: RenderHarness, mode: WorkloadMode): Promise<Data> {
   const subjects: Subject[] = [],
     projects: ProjectFixture[] = [];
   for (let projectIndex = 0; projectIndex < 4; projectIndex++) {
@@ -766,109 +767,134 @@ async function workload(harness: RenderHarness, baselineOnly = false): Promise<D
   const result: Data = {
     subjects: subjects.map((subject) => ({ project: subject.project.project, ...subject.session })),
   };
+  let slowPhase: { hot: Timed; peers: Timed[]; guards: Timed[]; details: Data } | undefined;
+  const retainSlowPhase = (): void => {
+    if (!slowPhase) return;
+    const observed = (job: Timed): Data => ({
+      project: job.subject.project.project,
+      sessionId: job.subject.session.sessionId,
+      pid: job.started.child.pid,
+      start: job.started.startedAt,
+      end: job.endedAt,
+      receipt: job.receipt,
+    });
+    slowPhase.details.hot = observed(slowPhase.hot);
+    slowPhase.details.peers = slowPhase.peers.map(observed);
+    slowPhase.details.guards = slowPhase.guards.map((job, index) => ({
+      ...observed(job),
+      surface: index % 2 === 0 ? 'codex' : 'claude-code',
+    }));
+    result.slowWork = slowPhase.details;
+  };
   try {
     for (const subject of subjects) register(harness, subject);
     monitor = setInterval(sample, 25);
     sample();
-    // Every native client is started before awaiting any response. Durable
-    // running-state overlap separately falsifies a merely sequential workload.
-    const burst = subjects.map((subject) => begin(subject));
-    lastResources = 0;
-    sample();
-    const clientIdentities = burst.map((job) => ({
-      project: job.subject.project.project,
-      sessionId: job.subject.session.sessionId,
-      pid: job.started.child.pid,
-      observation: job.started.child.pid
-        ? harness.observe(job.started.child.pid)
-        : { state: 'not_spawned' },
-    }));
-    harness.writeJson('native-client-identities.json', clientIdentities);
-    for (const witness of clientIdentities) {
-      assert.equal(
-        witness.observation.state,
-        'observed',
-        'native client kernel birth identity unavailable'
-      );
-      const observed = row(witness.observation.process);
-      assert.equal(observed.pid, witness.pid);
-      assert.equal(observed.zombie, false);
-      assert(
-        typeof observed.startSeconds === 'string' && typeof observed.startMicros === 'string',
-        'native client birth coordinates'
-      );
-    }
-    await finish(burst);
-    sample();
-    result.concurrentBurst = burst.map((job) => ({
-      project: job.subject.project.project,
-      sessionId: job.subject.session.sessionId,
-      start: job.started.startedAt,
-      end: job.endedAt,
-      receipt: job.receipt,
-    }));
-    result.perProjectLatency = projects.map((project) => ({
-      project: project.project,
-      distribution: distribution(
-        burst
-          .filter((job) => job.subject.project === project)
-          .map((job) => job.endedAt! - job.started.startedAt)
-      ),
-    }));
-    result.perSessionLatency = burst.map((job) => ({
-      project: job.subject.project.project,
-      sessionId: job.subject.session.sessionId,
-      latencyMs: job.endedAt! - job.started.startedAt,
-    }));
-    result.maximumNativeClientOverlap = maximumOverlap(
-      burst.map((job) => ({ start: job.started.startedAt, end: job.endedAt! }))
-    );
-    assert.equal(result.maximumNativeClientOverlap, 13, 'thirteen native clients did not overlap');
-    result.observedNativeClientOverlap = Math.max(
-      ...processSamples.map((sample) => Number(sample.nativeClientCount))
-    );
-    assert.equal(
-      result.observedNativeClientOverlap,
-      13,
-      'thirteen live native client processes were not independently observed'
-    );
-    for (const job of burst) harness.success(job.receipt!);
-    for (const subject of subjects)
-      assert.equal(
-        read(
-          path.join(subject.project.project, '.caws/leases', subject.session.sessionId + '.json')
-        ).status,
-        'stopped',
-        'actual stock Stop lease transition isolated by project/session'
-      );
-    const burstAnalysis = inspectSamples(samples);
-    result.concurrentAnalysis = burstAnalysis;
-    assert(
-      Number(burstAnalysis.observedConcurrentProjects) >= 2,
-      'independent actual render overlap not observed'
-    );
-    result.semanticOutputs = subjects.map((subject) => semanticOutput(harness, subject));
-    const first = operations(harness.owner).map(decodeOperation);
-    assert.equal(first.length, 13, 'missing/duplicate owner operations');
-    for (const project of projects) {
-      const owned = first.filter((operation) => operation.project === project.project);
-      projectDispatchOrder(owned);
-    }
-    assert.equal(samplingErrors.length, 0, 'sampling uncertainty: ' + samplingErrors.join('; '));
-    assert(
-      !harness
-        .ownerEvents()
-        .some((event) =>
-          [
-            'worker_failure',
-            'worker_cleanup_deadline',
-            'worker_control_unavailable',
-            'actor_error',
-          ].includes(String(event.event))
+    if (mode !== 'fairness') {
+      // Every native client is started before awaiting any response. Durable
+      // running-state overlap separately falsifies a merely sequential workload.
+      const burst = subjects.map((subject) => begin(subject));
+      lastResources = 0;
+      sample();
+      const clientIdentities = burst.map((job) => ({
+        project: job.subject.project.project,
+        sessionId: job.subject.session.sessionId,
+        pid: job.started.child.pid,
+        observation: job.started.child.pid
+          ? harness.observe(job.started.child.pid)
+          : { state: 'not_spawned' },
+      }));
+      harness.writeJson('native-client-identities.json', clientIdentities);
+      for (const witness of clientIdentities) {
+        assert.equal(
+          witness.observation.state,
+          'observed',
+          'native client kernel birth identity unavailable'
+        );
+        const observed = row(witness.observation.process);
+        assert.equal(observed.pid, witness.pid);
+        assert.equal(observed.zombie, false);
+        assert(
+          typeof observed.startSeconds === 'string' && typeof observed.startMicros === 'string',
+          'native client birth coordinates'
+        );
+      }
+      await finish(burst);
+      sample();
+      result.concurrentBurst = burst.map((job) => ({
+        project: job.subject.project.project,
+        sessionId: job.subject.session.sessionId,
+        start: job.started.startedAt,
+        end: job.endedAt,
+        receipt: job.receipt,
+      }));
+      result.perProjectLatency = projects.map((project) => ({
+        project: project.project,
+        distribution: distribution(
+          burst
+            .filter((job) => job.subject.project === project)
+            .map((job) => job.endedAt! - job.started.startedAt)
         ),
-      'baseline owner lifecycle uncertainty; preserve and stop before further scenario'
-    );
-    if (baselineOnly) return result;
+      }));
+      result.perSessionLatency = burst.map((job) => ({
+        project: job.subject.project.project,
+        sessionId: job.subject.session.sessionId,
+        latencyMs: job.endedAt! - job.started.startedAt,
+      }));
+      result.maximumNativeClientOverlap = maximumOverlap(
+        burst.map((job) => ({ start: job.started.startedAt, end: job.endedAt! }))
+      );
+      assert.equal(
+        result.maximumNativeClientOverlap,
+        13,
+        'thirteen native clients did not overlap'
+      );
+      result.observedNativeClientOverlap = Math.max(
+        ...processSamples.map((sample) => Number(sample.nativeClientCount))
+      );
+      assert.equal(
+        result.observedNativeClientOverlap,
+        13,
+        'thirteen live native client processes were not independently observed'
+      );
+      for (const job of burst) harness.success(job.receipt!);
+      for (const subject of subjects)
+        assert.equal(
+          read(
+            path.join(subject.project.project, '.caws/leases', subject.session.sessionId + '.json')
+          ).status,
+          'stopped',
+          'actual stock Stop lease transition isolated by project/session'
+        );
+      const burstAnalysis = inspectSamples(samples);
+      result.concurrentAnalysis = burstAnalysis;
+      assert(
+        Number(burstAnalysis.observedConcurrentProjects) >= 2,
+        'independent actual render overlap not observed'
+      );
+      result.semanticOutputs = subjects.map((subject) => semanticOutput(harness, subject));
+      const first = operations(harness.owner).map(decodeOperation);
+      assert.equal(first.length, 13, 'missing/duplicate owner operations');
+      for (const project of projects) {
+        const owned = first.filter((operation) => operation.project === project.project);
+        projectDispatchOrder(owned);
+      }
+      assert.equal(samplingErrors.length, 0, 'sampling uncertainty: ' + samplingErrors.join('; '));
+      assert(
+        !harness
+          .ownerEvents()
+          .some((event) =>
+            [
+              'worker_failure',
+              'worker_cleanup_deadline',
+              'worker_control_unavailable',
+              'actor_error',
+            ].includes(String(event.event))
+          ),
+        'baseline owner lifecycle uncertainty; preserve and stop before further scenario'
+      );
+      if (mode === 'baseline') return result;
+    }
     // A genuine regular transcript supplies bounded slow work without replacing
     // the reviewed interpreter, daemon, renderer, or a production scheduler.
     const hot = {
@@ -890,7 +916,21 @@ async function workload(harness: RenderHarness, baselineOnly = false): Promise<D
     for (const peer of peers) register(harness, peer);
     const hotJob = begin(hot),
       hotStart = samples.length;
-    await harness.waitFor(
+    const peerJobs: Timed[] = [],
+      guardJobs: Timed[] = [];
+    const slowDetails: Data = {
+      state: 'waiting_for_hot_dispatch',
+      setup:
+        mode === 'fairness'
+          ? 'cold fresh setup without thirteen-renderer warmup'
+          : 'after qualified thirteen-renderer burst',
+      guardRoute:
+        'actual native invocation through the selected compatibility guard chain; CAWS_TRAP_KILL=0; no typed fastpath or interpreter fan-out removal claim',
+      idleMs: Number(row(harness.ownerConfig.limits).idleMs),
+    };
+    slowPhase = { hot: hotJob, peers: peerJobs, guards: guardJobs, details: slowDetails };
+    retainSlowPhase();
+    slowDetails.initialHotRunning = await harness.waitFor(
       () =>
         operations(harness.owner)
           .map(decodeOperation)
@@ -901,10 +941,14 @@ async function workload(harness: RenderHarness, baselineOnly = false): Promise<D
       30000,
       'actual slow renderer durable dispatch'
     );
-    const guardJobs = subjects.map((subject, index) => begin(subject, true, index));
-    const peerJobs = peers.map((subject) => begin(subject));
+    slowDetails.state = 'launching_guards_and_peers';
+    for (const [index, subject] of subjects.entries()) guardJobs.push(begin(subject, true, index));
+    for (const subject of peers) peerJobs.push(begin(subject));
+    retainSlowPhase();
     await finish([...guardJobs, ...peerJobs, hotJob]);
     sample();
+    slowDetails.state = 'native_calls_closed';
+    retainSlowPhase();
     harness.success(hotJob.receipt!);
     for (const peer of peerJobs) harness.success(peer.receipt!);
     for (const guard of guardJobs) {
@@ -914,12 +958,15 @@ async function workload(harness: RenderHarness, baselineOnly = false): Promise<D
       guardRefusal(stdout);
     }
     const slowAnalysis = inspectSamples(samples.slice(hotStart));
+    slowDetails.analysis = slowAnalysis;
     const intervals = slowAnalysis.observedRunningIntervals as Interval[];
     const hotOperation = operations(harness.owner)
       .map(decodeOperation)
       .find((operation) => operation.session === hot.session.sessionId);
+    slowDetails.hotOperation = hotOperation;
     assert(hotOperation);
     const hotInterval = intervals.find((interval) => interval.id === hotOperation.id);
+    slowDetails.hotInterval = hotInterval;
     assert(hotInterval, 'slow running interval unavailable');
     const idleMs = Number(row(harness.ownerConfig.limits).idleMs);
     assert(
@@ -934,33 +981,29 @@ async function workload(harness: RenderHarness, baselineOnly = false): Promise<D
       guardJobs.every((job) => job.endedAt! < hotInterval.last),
       'all thirteen mixed-harness guard refusals must complete before a later hot running witness'
     );
-    result.slowWork = {
-      analysis: slowAnalysis,
-      hot: { start: hotJob.started.startedAt, end: hotJob.endedAt, receipt: hotJob.receipt },
-      guardRoute:
-        'actual native invocation through the selected compatibility guard chain; CAWS_TRAP_KILL=0; no typed fastpath or interpreter fan-out removal claim',
-      peers: peerJobs.map((job) => ({
-        start: job.started.startedAt,
-        end: job.endedAt,
-        receipt: job.receipt,
-      })),
-      guards: guardJobs.map((job, index) => ({
-        surface: index % 2 === 0 ? 'codex' : 'claude-code',
-        start: job.started.startedAt,
-        end: job.endedAt,
-        receipt: job.receipt,
-      })),
-      idleMs,
-      outputs: [
-        semanticOutput(harness, hot),
-        ...peers.map((subject) => semanticOutput(harness, subject)),
-      ],
-    };
+    const outputs: Data[] = [];
+    slowDetails.outputs = outputs;
+    for (const subject of [hot, ...peers]) outputs.push(semanticOutput(harness, subject));
+    if (mode === 'fairness') {
+      const finalOperations = operations(harness.owner).map(decodeOperation);
+      slowDetails.finalOperations = finalOperations;
+      assert.equal(
+        finalOperations.length,
+        4,
+        'fairness phase requires exactly four renderer operations'
+      );
+      for (const project of projects)
+        projectDispatchOrder(
+          finalOperations.filter((operation) => operation.project === project.project)
+        );
+    }
     assert.equal(samplingErrors.length, 0, 'sampling uncertainty: ' + samplingErrors.join('; '));
     result.allSamplesAnalysis = inspectSamples(samples);
+    slowDetails.state = 'observed';
     return result;
   } finally {
     if (monitor) clearInterval(monitor);
+    retainSlowPhase();
     const objects: Data = {};
     for (const [key, value] of sampleObjects) objects[key] = value;
     harness.writeJson('journal-sample-objects.json', objects);
@@ -1180,10 +1223,13 @@ async function overloadWorkload(harness: RenderHarness): Promise<Data> {
 async function main(): Promise<void> {
   assert(
     process.argv[2] && process.argv[3],
-    'Usage: qualify-render-load.js <built-cli-root> <sterling-root> [baseline|concurrent|overload]'
+    'Usage: qualify-render-load.js <built-cli-root> <sterling-root> [baseline|concurrent|fairness|overload]'
   );
   const mode = process.argv[4] ?? 'concurrent';
-  assert(['baseline', 'concurrent', 'overload'].includes(mode), 'unknown load mode');
+  assert(
+    mode === 'baseline' || mode === 'concurrent' || mode === 'fairness' || mode === 'overload',
+    'unknown load mode'
+  );
   oracleControls();
   const harness = await createRenderHarness({
     cli: process.argv[2],
@@ -1198,9 +1244,18 @@ async function main(): Promise<void> {
     mode,
     declaredWorkload: {
       repositories: 4,
-      concurrentRendererSessions: mode === 'overload' ? 16 : 13,
+      concurrentRendererSessions: mode === 'fairness' ? 4 : mode === 'overload' ? 16 : 13,
       rendererSurface: 'codex',
-      additionalGuardSurfaces: mode === 'concurrent' ? ['codex', 'claude-code'] : [],
+      additionalGuardSurfaces:
+        mode === 'concurrent' || mode === 'fairness' ? ['codex', 'claude-code'] : [],
+      ...(mode === 'fairness'
+        ? {
+            mixedHarnessGuardRequests: 13,
+            hotTranscriptTurns: 1000,
+            peerRenderers: 3,
+            setup: 'cold fresh setup without thirteen-renderer warmup',
+          }
+        : {}),
       normalNativeDeadlineMs: 30000,
       qualificationObservationDeadlineMs: 40000,
     },
@@ -1217,6 +1272,9 @@ async function main(): Promise<void> {
       'heartbeat expiry',
       ...(mode !== 'overload' ? ['bounded overload until separate overload scenario'] : []),
       ...(mode === 'baseline' ? ['slow writer fairness/required capacity/idle retention'] : []),
+      ...(mode === 'fairness'
+        ? ['thirteen-renderer burst completion or overlap', 'warm-baseline parity']
+        : []),
       'global fairness beyond this declared workload',
       '100ms warm latency target',
     ],
@@ -1224,9 +1282,7 @@ async function main(): Promise<void> {
   harness.writeJson('manifest.json', manifest);
   try {
     manifest.workload =
-      mode === 'overload'
-        ? await overloadWorkload(harness)
-        : await workload(harness, mode === 'baseline');
+      mode === 'overload' ? await overloadWorkload(harness) : await workload(harness, mode);
     manifest.state = 'observed';
   } catch (error) {
     manifest.state = 'failed';
