@@ -163,14 +163,14 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R23 | Rust client / versioned local protocol | `packages/caws-native` + TS protocol | POSIX one-shot transport/cancellation, incremental delimiter scanning and bounded actual-engine replay tested, E64/E65 | Signal/parent/output cancellation and bounded cleanup/delivery checked; complete typed-engine integration, resident IPC, bounded Stop recovery and installed parity remain open |
 | R24 | One-shot typed engine | `packages/caws-cli/src/runtime` | opt-in prototype; isolated nonlatching Codex branch exercised | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified |
 | R25 | Demand-start, warm residency and idle exit | Rust service owner/retained workers + typed engine | isolated renderer profile observed, E81; complete resident engine unreplaced | One actual backend survives three native requests, then owner idle cleanup retains custody through reap/EOF. Machine-wide fair admission, heartbeat retention, drain/version and thirteen-session workload remain open |
-| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | actual queued cancellation and normal retirement observed, E86; final-candidate runtime held, E87 | Actual source/grant/image admission and request outcomes reach the renderer. Post-dispatch cancellation, restart, lost-response unknown fencing, autonomous drain and production retention need integrated hostile qualification |
+| R26 | Persistent request outcomes / deferred queue | Rust durable journal + typed TS outcomes and bounded scheduler | normal/queued/dispatched cancellation and host-crash restart observed, E92 | Actual source/grant/image admission, retained partial writes, correlated unknown/capacity denials and owned cleanup reach the renderer. Fatal worker loss, generation replacement, autonomous drain and production retention remain unqualified |
 | R27 | Package/install/upgrade/rollback and trust | Existing TS init/store adapters + native artifact distribution | unreplaced | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust |
-| R28 | Performance and load qualification | Replayable TS/native workload | actual workload driver and hostile oracle controls implemented, E85; runtime unqualified, E87 | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
+| R28 | Performance and load qualification | Replayable TS/native workload | workload and exact semantic/ordering hostile controls tested, E91/E94; runtime unqualified | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target |
 | R29 | SOLID boundaries and existing CLI integration | Shared typed kernel/store adapters | implementing | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests |
 | R30 | Stop infrastructure budget persistence | Rust project/session budget library | library and native protocol-fixture consumption exercised | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified |
 | R31 | Machine-wide fair admission and owner-specific ordering | TS bounded scheduler | component tested; not integrated | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation | Typed containment boundary plus native process operations | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement |
-| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | cooperative writer race observed, E84; normal/queued lifecycle observed, E86; final replay held, E87 | Native image admission, actual selected handler/client, one retained backend, exact output and owned idle cleanup reach the consumer. Unchanged legacy adoption/drain, full fallback/input compatibility, source retirement, post-dispatch cancellation and multi-project behavior remain unqualified; no machine replacement |
+| R33 | Persistent extension-service lifetime, including Sterling's renderer override | Explicit service ownership and startup coordination | current-binary lifecycle and cooperative writer race observed, E92/E93 | Native image admission, actual selected handler/client, retained backend, partial actual output and owned cleanup reach the consumer. Unchanged legacy adoption/drain, full fallback/input compatibility, source retirement and multi-project behavior remain unqualified; no machine replacement |
 | R34 | Exact extension payload values across native wire, event enrichment and selected consumer | Rust raw JSON transport + typed source-span forwarding/comparison | integer regression repaired in isolated producer/consumer scenarios | E35 demonstrates old candidate rounding despite exit 0; E37 retains exact nested integers, consumer context and native refusal/control outputs. Decimal/exponent/Python normalization and all-harness parity remain unqualified |
 | R35 | Complete input normalization for project policy/override handlers | Selected full compatibility dispatcher until typed normalization qualifies | conservative routing implemented; Python dispatcher retained | E37 observes Codex original tool name, file-path list, integer custody and refusal channels at the actual selected extension. R19 remains a prerequisite to replacing this compatibility path |
 | R36 | Native wire control-field representation | Typed source-token validation plus decoded numeric bounds | fractional-token decoder gap repaired; IPC authentication remains separate | E40 rejects rounded fractional PID/deadline tokens and retains canonical bounds; this does not establish the agent termination target |
@@ -1633,6 +1633,148 @@ Additional bounded evidence and unresolved dependencies:
   and all three thirteen-session load modes require execution after the hold.
   No AC pass, merge or machine installation is recorded for this slice.
 
+- E90: Independent native observation of E87's fixture orphan returns
+  `{"errno":3,"reason":"No such process (os error 3)","state":"absent"}`
+  with exit0; `renderer-hostile-2026-10-19/orphan-absence-continuation.json`
+  retains the command, source revision and observation. The root sends no
+  cleanup signal and makes no claim about how it exited. This clears the
+  execution hold without treating the historical PID as signal authority.
+  The exact panic-unwind regression exits0 and independently observes its
+  deliberately unwound child absent. The external-signal regression exits101
+  at invoke.rs1338: its first input/SIGTERM case observes signal termination
+  (`status.code() == None`) instead of the asserted cancellation exit2.
+  `lifecycle-continuation-20261019-01/` retains these attempts. The scenario
+  chain stops for cleanup verification and readiness/handler diagnosis;
+  complete native, lifecycle, legacy and load qualification are not inferred.
+
+- E91: The signal test's fixed100ms input delay is replaced with a pipe filled
+  before the native reader exists. A one-byte write must remain blocked until
+  consumption; the negative control rejects no-reader readiness and accepts
+  readiness after an asserted4096-byte read. Source order installs cancellation
+  before `runner::read_payload`; this witnesses handler readiness without a
+  startup-delay assumption. The repaired nine signal/mode cases exit0 with
+  cancellation exit2 and5–13ms observed cancellation. Each retains case identity,
+  raw status/stdout/stderr and cleanup queries; independent native SDK checks
+  observe all27 recorded processes absent with `ESRCH` in
+  `lifecycle-continuation-20261019-01/external-signals-repaired-sdk-cleanup.json`.
+  The unrelated controls remain live until explicitly stopped through their
+  retained Child handles. The first failed case lacks retained PIDs; its exact
+  independent absence cannot be reconstructed, although the source's retained
+  Child unwind cleanup and exited test support that cleanup path. Final fixture
+  CLOEXEC changes and the complete native suite require their own replay.
+  Load oracle source at `9e3f24d6` sorts numeric turn indices and checks exact
+  contiguous output; lexical order incorrectly places turn1000 before turn101.
+  `render-load-source-2026-10-19/numeric-turn-order-2026-10-20T05-15-00.493702+00-00/`
+  retains strict compile/lint/pure-check exits0 and two compiled mutations exiting1
+  for lexical order and an ignored user-content assertion. This is oracle
+  evidence, not execution of the thirteen-session workload.
+
+- E92: The final fixture at `01d4726d` is exercised by
+  `cargo test --all-targets -- --nocapture --test-threads=1`, exit0:
+  151 library/40 binary/31 invoke/3 ancestor-example checks. The retained
+  returned log is explicitly truncated; per-target summaries and exit metadata
+  remain in `lifecycle-continuation-20261019-01/full-native-{returned-output.log,exit.json}`.
+  The final nine-case signal SDK artifact again observes27 processes absent.
+  All-target Clippy and `npm run qualify:native:render-build` exit0; the release
+  rebuild reproduces E89's `afce042a…0383b` binary. The failure-retaining legacy
+  helper is committed at `dec55fdd`; its actual-source pure checks preserve
+  the original error through unknown/rejected cleanup and memoize one nominal
+  cleanup observation. That window is not a strict wall-clock bound because
+  individual observer commands have their own bounds.
+  The direct default-all lifecycle command exits0 at `dec55fdd`:
+  `render-lifecycle-normal-2026-10-20T05-25-19-064Z/`,
+  `render-lifecycle-queued-cancel-2026-10-20T05-25-49-768Z/`,
+  `render-lifecycle-cancel-2026-10-20T05-26-07-814Z/`, and
+  `render-lifecycle-host-crash-restart-2026-10-20T05-26-26-284Z/` retain
+  scenario/command/cleanup records. Cancel invocation
+  `77400-1792473980631460000` receives the actual `unknown_fence` denial;
+  restart's distinct-project invocation `91114-1792473999171770000` receives
+  `backend_capacity_exhausted` with used1/maximum1. Both retain exact original
+  invocation identity, empty stdout and the expected pre-dispatch diagnostic;
+  unrelated timeouts cannot qualify these observations. Actual writes precede
+  interruption: cancel31→1353 turns and crash45→101 turns are retained under
+  each scenario's `retained-turn-bytes/` with original hash/size mappings.
+  All four record `confirmed_inactive`, free custody and absent sockets with
+  independent host/worker/backend observations. Crash retains one historical
+  worker directory with a complete reap/EOF receipt; directory retention is
+  not a live worker. No fatal-worker-loss, generation-replacement, power-cut,
+  deployed Sterling adoption or complete A3/A8 claim follows. The separate
+  legacy replay and thirteen-session modes require execution.
+
+- E93: The direct cooperative legacy replay exits0 against the same
+  `afce042a…0383b` executable and compiled driver
+  `8f264177…afec`: `render-legacy-2026-10-20T05-30-35-135Z/manifest.json`.
+  Actual unchanged one-shot and daemon writers bypass held native custody;
+  the real response-loss client prints `actual-inline-fallback`. These are
+  retained counterexamples, not evidence of unchanged-writer exclusion.
+  `render-legacy-managed-owner-2026-10-20T05-30-41-910Z/race-result.json`
+  observes native worker33600/backend33616 live, then the installed cooperative
+  helper refuses75 across another home/generation. Refused output SHA256 is
+  unchanged before/after:
+  `1b76c440f32a57201d7af9da6278ac281cd3035a3b4c0009fdf9abe26bb00c0b`.
+  Independent cleanup observes host31532/worker33600/backend33616 absent,
+  free custody and no socket/workers; the same helper subsequently exits0
+  and prints `cooperative-rendered`. No all-writer Sterling adoption or
+  positively established prior-writer drain follows.
+  Independent review finds a separate load-oracle false positive:
+  substring-matching tool-result text admits turn10's output as turn1 or
+  matching text in unrelated metadata. Exact result and project/session
+  context assertions are required before the actual thirteen-session run.
+
+- E94: Exact tool-result and turn/context isolation assertions are committed
+  at `29701e0`; strict compile, scoped lint, pure hostile controls and retained
+  normal-output replay exit0. Six isolated mutations fail for the expected
+  omitted assertion in
+  `render-load-source-2026-10-19/semantic-isolation-2026-10-20T05-33-27.818709+00-00/`.
+  Lifecycle's durable byte-copy and exact semantic assertions are committed
+  at `c5fca80a`; strict compile/lint and1 valid/8 corrupt turn controls pass.
+  This new helper's compiled identity is distinct from E92's actual run.
+  E92's separately retained1532 snapshot members (overlapping before/after
+  copies, not1532 distinct turns) all match source-transcript semantics and
+  recorded hash/size; `lifecycle-all-turn-semantics.json` retains the six
+  snapshot verdicts and each snapshot retains per-file checks.
+  A separate lane's nested-base registration blocks one root commit; supported
+  untrack/rebinding resolves that refusal without a hook bypass. A separate
+  fixture recursion incident holds the load launch before execution. The
+  root's independent successful process-table collection inspects900 rows
+  and finds0 matching original fixture-namespace processes, retained in
+  `lifecycle-continuation-20261019-01/pre-load-resource-observation.json`.
+  This is current namespace absence, not historical process-instance proof
+  or an uncontended-machine claim. The root sends no cleanup signal.
+
+- E95: Actual `baseline` exits1 at
+  `render-load-baseline-2026-10-20T05-44-21-134Z/manifest.json`, using E94's
+  load source/compiled driver and E89's binary. Thirteen live native clients
+  overlap across four private independent repositories. Seven requests produce
+  actual daemon responses and seven retained turn files; five callers return
+  advisory0 with owner EOF and no output, and one exits2 at the original
+  deadline. PID94624's receipt spans30021ms; its owner queue interval is24311ms.
+  It reaches Prepared at26385ms and fails source revalidation before renderer
+  journal admission/Dispatch. The native fallback's uncertain message covers
+  possible compatibility-prefix effects; it does not establish a renderer
+  `Unknown` outcome for this caller. Cleanup is `confirmed_inactive`, all
+  recorded host/worker/backend observations absent, custody free and no socket.
+  `render-load-baseline-2026-10-20T05-44-21-134Z-timing-investigation.json`
+  retains all13 receipts, line-indexed journals/stages, seven output identities,
+  resource samples and original artifact rehashes (0 mismatches). Recorded daemon
+  work is1–49ms; preceding complete compatibility dispatches are11520/6277ms.
+  These distinguish the long queue/admission/prefix path from short renderer
+  work without attributing CPU/disk contention. Five uncorrelated owner events
+  report `named image custody changed`; no exact caller/event bijection exists.
+  Source inspection finds mutable service-images parent namespace timestamps/
+  size/link count compared as immutable custody while sibling staging/publication
+  legitimately changes them. A typed parent-identity repair preserves device/
+  inode/owner/private mode and nofollow checks; immutable image/source/tool
+  checks remain strict. A safe reuse optimization retains full stage validation
+  and full final validation while avoiding unused staged-tree fsync/rename.
+  Both require focused controls and actual replay before efficacy is claimed.
+  Invocation-correlated failure/stage observations are a separate assigned repair.
+  No workload or deadline is relaxed; concurrent/overload modes are unexecuted.
+  Load's exact two-entry timeline, tool ID/input/output and foreign-entry controls
+  are committed at `b97772fa`; strict compile/lint/self-check exit0 in
+  `render-load-source-2026-10-19/exact-timeline/checks.json`. The failed baseline
+  retains its earlier oracle identity and is not relabelled by this strengthening.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -1721,15 +1863,14 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-The active execution hold is E87's orphaned private fixture control. Historical
-PID22917 is not a signal target without fresh instance verification and the
-requested cleanup authorization. Confirm its absence independently after
-authorized or user-managed cleanup before starting another runtime scenario.
-Then rebuild the committed candidate and qualification drivers. Use an absolute
-`CAWS_NATIVE_TEST_ARTIFACT_ROOT` for the repaired signal/unwind checks and complete
-native suite; qualify all four lifecycle modes against the same binary, then
-replay cooperative legacy execution and the load driver's `baseline`,
-`concurrent` and `overload` modes in separate retained runs. Stop on a failed
+E90 independently confirms E87's orphan absent without a root cleanup signal.
+E91/E92 retain repaired signal readiness, the complete native suite and all four
+lifecycle modes against the reproduced binary. Preserve those identities and
+their explicit nonclaims. E93 observes cooperative legacy replay. E94 strengthens
+the load oracles and releases the resource hold. E95's actual baseline fails;
+finish the typed parent-custody/safe image-reuse and correlated-observation repairs,
+verify hostile paths, and replay `baseline` before authorizing `concurrent` and
+`overload` in separate retained runs. Stop on a failed
 scenario or live/ambiguous cleanup, inspect its artifacts, and preserve the
 original request budgets. Correlated denial witnesses are required; an unrelated
 timeout, exit0, empty output or absent turn file cannot qualify an unknown fence
