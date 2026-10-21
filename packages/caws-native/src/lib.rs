@@ -10,4 +10,6 @@ pub mod service_git_view;
 pub mod service_image;
 pub mod service_journal;
 pub mod service_protocol;
+pub mod session_cache;
+pub mod session_cache_wire;
 pub mod stop_budget;

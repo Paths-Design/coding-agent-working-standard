@@ -323,6 +323,37 @@ fn refresh_accepts_correlated_monotonic_records_from_readonly_journal() {
 }
 
 #[test]
+fn pre_creation_diagnostic_requires_complete_correlated_no_child_receipt() {
+    let mut fixture = JournalFixture::new();
+    assert_eq!(fixture.owner.pre_creation_failure().unwrap(), None);
+    fixture.append(&no_child_receipt(1));
+    assert_eq!(
+        fixture.owner.pre_creation_failure().unwrap(),
+        Some("node spawn refused".into())
+    );
+    let mut pending = JournalFixture::new();
+    let mut row = started_receipt(1);
+    row.error = Some("not a no-child failure".into());
+    pending.append(&row);
+    assert_eq!(pending.owner.pre_creation_failure().unwrap(), None);
+    let mut foreign = JournalFixture::new();
+    let mut row = no_child_receipt(1);
+    row.invocation_id = "foreign".into();
+    foreign.append(&row);
+    assert!(foreign.owner.pre_creation_failure().is_err());
+    let mut torn = JournalFixture::new();
+    torn.writer
+        .write_all(&serde_json::to_vec(&no_child_receipt(1)).unwrap())
+        .unwrap();
+    assert_eq!(torn.owner.pre_creation_failure().unwrap(), None);
+    torn.writer.write_all(b"\n").unwrap();
+    assert_eq!(
+        torn.owner.pre_creation_failure().unwrap(),
+        Some("node spawn refused".into())
+    );
+}
+
+#[test]
 fn refresh_does_not_accept_a_torn_final_complete_record() {
     let mut fixture = JournalFixture::new();
     fixture.append(&started_receipt(1));

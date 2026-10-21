@@ -493,6 +493,19 @@ impl Owner {
         }
         Ok(())
     }
+    /// Preserve a known spawn failure independently of successful cleanup.
+    /// A validated NoChild receipt is diagnostic evidence, never signal authority.
+    pub fn pre_creation_failure(&mut self) -> Result<Option<String>, String> {
+        self.refresh()?;
+        Ok(self
+            .latest
+            .as_ref()
+            .filter(|receipt| receipt.state == ReceiptState::NoChild && receipt.terminal())
+            .and_then(|receipt| receipt.error.as_deref())
+            .filter(|message| !message.is_empty())
+            .map(|message| message.chars().take(1024).collect()))
+    }
+
     pub fn exit_observed(&mut self) -> Result<bool, String> {
         self.refresh()?;
         if self.latest.as_ref().is_some_and(Receipt::terminal) {

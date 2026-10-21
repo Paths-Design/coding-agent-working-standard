@@ -51,6 +51,7 @@ pub struct Request {
     surface: String,
     event: String,
     configuration: String,
+    session_cache: &'static str,
     caller: Caller,
     deadline_epoch_ms: u64,
     payload: Box<RawValue>,
@@ -58,6 +59,26 @@ pub struct Request {
 }
 
 impl Request {
+    pub fn session_cache_owner<'a>(
+        &'a self,
+        ready: &'a Ready,
+        dispatched: bool,
+    ) -> Result<caws_native::session_cache_wire::Owner<'a>, String> {
+        use caws_native::session_cache_wire::{Invocation, Owner};
+        Owner::new(Invocation {
+            id: &self.id,
+            runtime_digest: &self.runtime_digest,
+            original_payload: &self.payload,
+            surface: &self.surface,
+            event: &self.event,
+            configuration: &self.configuration,
+            ready_active: ready.active,
+            ready_project_digest: ready.project_digest.as_deref(),
+            dispatched,
+            advertised_capability: Some(self.session_cache),
+        })
+        .map_err(|error| error.to_string())
+    }
     pub fn caller_environment(&self) -> &BTreeMap<String, String> {
         &self.caller.environment
     }
@@ -87,6 +108,7 @@ impl Request {
             surface: config.surface.clone(),
             event: config.event.clone(),
             configuration: config.configuration.clone(),
+            session_cache: caws_native::session_cache_wire::CAPABILITY,
             caller: Caller::capture()?,
             deadline_epoch_ms: deadline as u64,
             payload,
@@ -152,6 +174,7 @@ pub struct Ready {
 
 pub enum EngineFrame {
     Ready(Ready),
+    SessionCacheRequest(Vec<u8>),
     Proposal {
         token: String,
         result: NativeResult,
@@ -254,6 +277,13 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    if header.schema == caws_native::session_cache_wire::REQUEST_SCHEMA {
+        if bytes.len() > caws_native::session_cache_wire::MAX_REQUEST_BYTES {
+            return Err("session cache request exceeds frame budget".into());
+        }
+        // Phase and all fields are validated by the single-use native owner.
+        return Ok(EngineFrame::SessionCacheRequest(bytes.to_vec()));
+    }
     if header.schema == "caws.runtime.proposal.v2" {
         let proposal: ProposalWire =
             serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
@@ -424,6 +454,7 @@ mod tests {
             surface: "codex".into(),
             event: "pre_tool_use".into(),
             configuration: "system".into(),
+            session_cache: caws_native::session_cache_wire::CAPABILITY,
             caller: Caller {
                 cwd: "/fixture".into(),
                 environment: BTreeMap::new(),

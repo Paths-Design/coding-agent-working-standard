@@ -33,6 +33,15 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('preserves an explicit native cache capability and rejects unsupported spellings', () => {
+    expect(decode().sessionCache).toBeUndefined();
+    expect(decode({ sessionCache: 'caws.runtime.session-cache.v1' }).sessionCache).toBe(
+      'caws.runtime.session-cache.v1'
+    );
+    for (const sessionCache of [null, false, true, '', 'caws.runtime.session-cache.v2', {}])
+      expect(() => decode({ sessionCache })).toThrow(/session cache capability/);
+  });
+
   test('rejects fractional or exponent control tokens even when JavaScript rounds to a valid integer', () => {
     for (const token of ['123.00000000000000001', '2147483647.00000001', '1.23e2', '123.0', '-0']) {
       const frame = JSON.stringify(request()).replace('"processId":123', '"processId":' + token);

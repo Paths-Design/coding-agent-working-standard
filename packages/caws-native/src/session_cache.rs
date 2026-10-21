@@ -1,0 +1,545 @@
+//! Directory-relative publication for the admitted session-cache prefix.
+//! The selected engine resolves the canonical Git root; the native exchange
+//! binds it to readiness. This operation does not independently resolve Git or authority.
+//! An unavailable result is diagnostic only; it must not change a guard decision.
+
+#[cfg(test)]
+use serde_json::Value;
+use serde_json::json;
+use std::{
+    ffi::{CStr, CString},
+    fs::File,
+    io::{self, Read, Write},
+    os::{
+        fd::{AsRawFd, FromRawFd},
+        unix::ffi::OsStrExt,
+    },
+    path::Path,
+    sync::atomic::{AtomicU64, Ordering},
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
+
+const ENVELOPE: &CStr = c".session-envelope.json";
+const POINTER: &CStr = c".caller-session.json";
+static TEMPORARY: AtomicU64 = AtomicU64::new(0);
+pub const MAX_EXISTING_BYTES: usize = 65_536;
+
+/// `canonical_root` is an already independently verified physical Git root.
+/// SID/event are the original supplied payload fields, never resolved fallback
+/// identity or values recovered from old HOOK_* environment/cache state.
+pub struct CaptureInput<'a> {
+    pub canonical_root: &'a Path,
+    pub supplied_session_id: Option<&'a str>,
+    pub supplied_hook_event: Option<&'a str>,
+}
+
+/// Exact contents read through the retained session directory capability.
+/// Missing is only an actual ENOENT; read errors never become fresh capture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExistingEnvelope<'a> {
+    Missing,
+    Bytes(&'a [u8]),
+}
+
+/// The caller owns old-JSON interpretation. This is diagnostic only and must
+/// not become a protective refusal. Native publishes neither file on failure.
+#[derive(Debug)]
+pub struct DecodeDiagnostic(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CaptureDecision {
+    Capture(Option<Vec<u16>>),
+    Decline,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeclineReason {
+    DecoderDeclined,
+    ExistingTooLarge,
+    UnsupportedExistingFile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkipReason {
+    MissingSession,
+    UnsafeSession,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureOutcome {
+    Skipped(SkipReason),
+    Declined(DeclineReason),
+    Captured,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    Root,
+    Governance,
+    Sessions,
+    Session,
+    Clock,
+    ExistingEnvelope,
+    Decision,
+    Envelope,
+    Pointer,
+}
+#[derive(Debug)]
+pub enum FailureKind {
+    Io(io::Error),
+    Deadline,
+    DecodeDiagnostic(String),
+}
+#[derive(Debug)]
+pub struct CaptureFailure {
+    pub stage: Stage,
+    /// Publication is envelope then pointer, not an all-or-nothing pair.
+    pub envelope_published: bool,
+    pub kind: FailureKind,
+}
+impl std::fmt::Display for CaptureFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "session cache unavailable at {:?}; envelope_published={}: {:?}",
+            self.stage, self.envelope_published, self.kind
+        )
+    }
+}
+impl std::error::Error for CaptureFailure {}
+
+#[derive(Debug, Clone, Copy)]
+enum Point {
+    SessionOpened,
+    EnvelopeStaged,
+    EnvelopePublished,
+    PointerStaged,
+}
+trait Port {
+    fn point(&mut self, _point: Point) -> io::Result<()> {
+        Ok(())
+    }
+    fn write(&mut self, file: &mut File, bytes: &[u8]) -> io::Result<usize> {
+        file.write(bytes)
+    }
+}
+struct NativePort;
+impl Port for NativePort {}
+
+fn check(expires: Instant) -> Result<(), FailureKind> {
+    if Instant::now() >= expires {
+        Err(FailureKind::Deadline)
+    } else {
+        Ok(())
+    }
+}
+fn name(value: &str) -> io::Result<CString> {
+    CString::new(value).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "NUL filename"))
+}
+fn opened(raw: libc::c_int) -> io::Result<File> {
+    if raw < 0 {
+        Err(io::Error::last_os_error())
+    }
+    // SAFETY: successful open transfers this newly owned descriptor.
+    else {
+        Ok(unsafe { File::from_raw_fd(raw) })
+    }
+}
+fn directory_at(parent: &File, component: &CStr, create: bool) -> io::Result<File> {
+    if create && unsafe { libc::mkdirat(parent.as_raw_fd(), component.as_ptr(), 0o700) } != 0 {
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::EEXIST) {
+            return Err(error);
+        }
+    }
+    opened(unsafe {
+        libc::openat(
+            parent.as_raw_fd(),
+            component.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    })
+}
+fn timestamp() -> io::Result<String> {
+    let seconds: libc::time_t = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(io::Error::other)?
+        .as_secs()
+        .try_into()
+        .map_err(io::Error::other)?;
+    let mut utc = std::mem::MaybeUninit::<libc::tm>::zeroed();
+    if unsafe { libc::gmtime_r(&seconds, utc.as_mut_ptr()) }.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let mut output = [0u8; 64];
+    let count = unsafe {
+        libc::strftime(
+            output.as_mut_ptr().cast(),
+            output.len(),
+            c"%Y-%m-%dT%H:%M:%SZ".as_ptr(),
+            utc.as_ptr(),
+        )
+    };
+    if count == 0 {
+        return Err(io::Error::other("UTC timestamp unavailable"));
+    }
+    String::from_utf8(output[..count].to_vec()).map_err(io::Error::other)
+}
+
+/// No fsync promise, PID effects or implicit governance creation. Existing
+/// directories/files are not rejected by unrelated snapshot owner/mode/nlink
+/// policies: the selected Python writer has no such policies.
+/// The decoder receives the exact old bytes or Missing while all opened
+/// directory FDs remain live. It selects a preserved creation string as UTF-16
+/// units, or None to use native now (malformed old JSON can select None).
+/// Native serializes lone surrogates as \uXXXX; no Rust old-JSON parser runs.
+/// An empty returned string also selects now, matching the old writer rule.
+pub fn capture_with_decision(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    decide: impl FnOnce(ExistingEnvelope<'_>) -> Result<CaptureDecision, DecodeDiagnostic>,
+) -> Result<CaptureOutcome, CaptureFailure> {
+    capture_operation_decision(input, expires, timestamp, &mut NativePort, decide)
+}
+
+fn capture_operation_decision(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    clock: impl FnOnce() -> io::Result<String>,
+    port: &mut impl Port,
+    decide: impl FnOnce(ExistingEnvelope<'_>) -> Result<CaptureDecision, DecodeDiagnostic>,
+) -> Result<CaptureOutcome, CaptureFailure> {
+    let sid = match input.supplied_session_id {
+        Some(value) if !value.is_empty() && value != "unknown" => value,
+        _ => return Ok(CaptureOutcome::Skipped(SkipReason::MissingSession)),
+    };
+    if sid == "."
+        || sid == ".."
+        || !sid
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_.@:-".contains(&b))
+    {
+        return Ok(CaptureOutcome::Skipped(SkipReason::UnsafeSession));
+    }
+    let mut stage = Stage::Root;
+    let mut envelope_published = false;
+    let result = (|| -> Result<CaptureOutcome, FailureKind> {
+        check(expires)?;
+        if !input.canonical_root.is_absolute() {
+            return Err(FailureKind::Io(io::Error::other(
+                "physical absolute root required",
+            )));
+        }
+        let root_name = CString::new(input.canonical_root.as_os_str().as_bytes())
+            .map_err(io::Error::other)
+            .map_err(FailureKind::Io)?;
+        let root = opened(unsafe {
+            libc::open(
+                root_name.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        })
+        .map_err(FailureKind::Io)?;
+        stage = Stage::Governance;
+        let caws = directory_at(&root, c".caws", false).map_err(FailureKind::Io)?;
+        check(expires)?;
+        stage = Stage::Sessions;
+        let sessions = directory_at(&caws, c"sessions", true).map_err(FailureKind::Io)?;
+        stage = Stage::Session;
+        let session = directory_at(&sessions, &name(sid).map_err(FailureKind::Io)?, true)
+            .map_err(FailureKind::Io)?;
+        port.point(Point::SessionOpened).map_err(FailureKind::Io)?;
+        stage = Stage::Clock;
+        let now = clock().map_err(FailureKind::Io)?;
+        stage = Stage::ExistingEnvelope;
+        let previous = match previous_bytes(&session, expires)? {
+            Previous::Declined(reason) => return Ok(CaptureOutcome::Declined(reason)),
+            Previous::Bytes(bytes) => Some(bytes),
+            Previous::Missing => None,
+        };
+        stage = Stage::Decision;
+        let created = match decide(match previous.as_deref() {
+            Some(bytes) => ExistingEnvelope::Bytes(bytes),
+            None => ExistingEnvelope::Missing,
+        })
+        .map_err(|error| FailureKind::DecodeDiagnostic(error.0))?
+        {
+            CaptureDecision::Capture(created) => created,
+            CaptureDecision::Decline => {
+                return Ok(CaptureOutcome::Declined(DeclineReason::DecoderDeclined));
+            }
+        };
+        check(expires)?;
+        let root_text = input
+            .canonical_root
+            .to_str()
+            .ok_or_else(|| FailureKind::Io(io::Error::other("root must be UTF-8")))?;
+        let event = input
+            .supplied_hook_event
+            .filter(|s| !s.is_empty())
+            .unwrap_or("unknown");
+        let mut envelope = serde_json::to_vec(&json!({
+            "session_id": sid, "repo_root": root_text,
+            "last_seen_at": now, "hook_event": event, "platform": "codex"
+        }))
+        .map_err(|e| FailureKind::Io(io::Error::other(e)))?;
+        // Fixed native-owned schema, with only the selected creation value
+        // serialized from UTF-16 units. No caller JSON bytes are spliced in.
+        envelope.pop();
+        envelope.extend_from_slice(b",\"created_at\":");
+        append_utf16_string(
+            &mut envelope,
+            created
+                .as_deref()
+                .filter(|v| !v.is_empty())
+                .unwrap_or(&now.encode_utf16().collect::<Vec<_>>()),
+        );
+        envelope.push(b'}');
+        envelope.push(b'\n');
+        stage = Stage::Envelope;
+        atomic_json(
+            &session,
+            ENVELOPE,
+            &envelope,
+            expires,
+            Point::EnvelopeStaged,
+            port,
+        )?;
+        envelope_published = true;
+        port.point(Point::EnvelopePublished)
+            .map_err(FailureKind::Io)?;
+        stage = Stage::Pointer;
+        let mut pointer = serde_json::to_vec(&json!({
+            "session_id": sid, "repo_root": root_text, "last_seen_at": now
+        }))
+        .map_err(|e| FailureKind::Io(io::Error::other(e)))?;
+        pointer.push(b'\n');
+        atomic_json(
+            &sessions,
+            POINTER,
+            &pointer,
+            expires,
+            Point::PointerStaged,
+            port,
+        )?;
+        Ok(CaptureOutcome::Captured)
+    })();
+    result.map_err(|kind| CaptureFailure {
+        stage,
+        envelope_published,
+        kind,
+    })
+}
+
+enum Previous {
+    Missing,
+    Bytes(Vec<u8>),
+    Declined(DeclineReason),
+}
+
+fn previous_bytes(session: &File, expires: Instant) -> Result<Previous, FailureKind> {
+    check(expires)?;
+    let mut old = match opened(unsafe {
+        libc::openat(
+            session.as_raw_fd(),
+            ENVELOPE.as_ptr(),
+            libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+        )
+    }) {
+        Ok(file) => file,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Previous::Missing),
+        Err(e) => return Err(FailureKind::Io(e)),
+    };
+    // Python can block on a special file. Preserve it and report unsupported;
+    // do not let a provenance cache stall a protective guard indefinitely.
+    let metadata = old.metadata().map_err(FailureKind::Io)?;
+    if !metadata.is_file() {
+        return Ok(Previous::Declined(DeclineReason::UnsupportedExistingFile));
+    }
+    if metadata.len() > MAX_EXISTING_BYTES as u64 {
+        return Ok(Previous::Declined(DeclineReason::ExistingTooLarge));
+    }
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 8192];
+    loop {
+        check(expires)?;
+        let remaining = (MAX_EXISTING_BYTES + 1 - bytes.len()).min(chunk.len());
+        match old.read(&mut chunk[..remaining]) {
+            Ok(0) => break,
+            Ok(n) => {
+                bytes.extend_from_slice(&chunk[..n]);
+                if bytes.len() > MAX_EXISTING_BYTES {
+                    return Ok(Previous::Declined(DeclineReason::ExistingTooLarge));
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(FailureKind::Io(e)),
+        }
+    }
+    Ok(Previous::Bytes(bytes))
+}
+
+fn append_utf16_string(output: &mut Vec<u8>, units: &[u16]) {
+    const HEX: &[u8] = b"0123456789abcdef";
+    output.push(b'"');
+    for &unit in units {
+        output.extend_from_slice(&[
+            b'\\',
+            b'u',
+            HEX[(unit >> 12) as usize],
+            HEX[((unit >> 8) & 15) as usize],
+            HEX[((unit >> 4) & 15) as usize],
+            HEX[(unit & 15) as usize],
+        ]);
+    }
+    output.push(b'"');
+}
+
+/// Finite operation-test adapter. Production old-JSON interpretation belongs
+/// to the selected engine and is not supplied by this test helper.
+#[cfg(test)]
+fn finite_serde_decision(
+    sid: &str,
+    old: ExistingEnvelope<'_>,
+) -> Result<Option<Vec<u16>>, DecodeDiagnostic> {
+    let ExistingEnvelope::Bytes(bytes) = old else {
+        return Ok(None);
+    };
+    let value: Value =
+        serde_json::from_slice(bytes).map_err(|e| DecodeDiagnostic(e.to_string()))?;
+    if value.get("session_id").and_then(Value::as_str) != Some(sid) {
+        return Ok(None);
+    }
+    Ok(value
+        .get("created_at")
+        .and_then(Value::as_str)
+        .filter(|v| !v.is_empty())
+        .map(|v| v.encode_utf16().collect()))
+}
+
+#[cfg(test)]
+fn capture(input: &CaptureInput<'_>, expires: Instant) -> Result<CaptureOutcome, CaptureFailure> {
+    capture_with(input, expires, timestamp, &mut NativePort)
+}
+
+#[cfg(test)]
+fn capture_with(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    clock: impl FnOnce() -> io::Result<String>,
+    port: &mut impl Port,
+) -> Result<CaptureOutcome, CaptureFailure> {
+    capture_operation(input, expires, clock, port, |old| {
+        finite_serde_decision(input.supplied_session_id.unwrap_or(""), old)
+    })
+}
+
+/// Compatibility adapter for the retained 23 module checks only.
+#[cfg(test)]
+fn capture_operation(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    clock: impl FnOnce() -> io::Result<String>,
+    port: &mut impl Port,
+    decide: impl FnOnce(ExistingEnvelope<'_>) -> Result<Option<Vec<u16>>, DecodeDiagnostic>,
+) -> Result<CaptureOutcome, CaptureFailure> {
+    capture_operation_decision(input, expires, clock, port, |old| {
+        decide(old).map(CaptureDecision::Capture)
+    })
+}
+
+#[cfg(test)]
+fn capture_legacy_decision(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    decide: impl FnOnce(ExistingEnvelope<'_>) -> Result<Option<Vec<u16>>, DecodeDiagnostic>,
+) -> Result<CaptureOutcome, CaptureFailure> {
+    capture_with_decision(input, expires, |old| {
+        decide(old).map(CaptureDecision::Capture)
+    })
+}
+
+struct Temporary<'a> {
+    parent: &'a File,
+    name: CString,
+    file: File,
+    renamed: bool,
+}
+impl Drop for Temporary<'_> {
+    fn drop(&mut self) {
+        if !self.renamed {
+            unsafe {
+                libc::unlinkat(self.parent.as_raw_fd(), self.name.as_ptr(), 0);
+            }
+        }
+    }
+}
+fn atomic_json(
+    parent: &File,
+    target: &CStr,
+    bytes: &[u8],
+    expires: Instant,
+    point: Point,
+    port: &mut impl Port,
+) -> Result<(), FailureKind> {
+    check(expires)?;
+    let mut temporary = None;
+    for _ in 0..16 {
+        let temporary_name = name(&format!(
+            "tmp-{}.{}.{}",
+            target.to_string_lossy(),
+            std::process::id(),
+            TEMPORARY.fetch_add(1, Ordering::Relaxed)
+        ))
+        .map_err(FailureKind::Io)?;
+        match opened(unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                temporary_name.as_ptr(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                0o600,
+            )
+        }) {
+            Ok(file) => {
+                temporary = Some(Temporary {
+                    parent,
+                    name: temporary_name,
+                    file,
+                    renamed: false,
+                });
+                break;
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(FailureKind::Io(e)),
+        }
+    }
+    let mut temporary =
+        temporary.ok_or_else(|| FailureKind::Io(io::Error::other("temporary collision limit")))?;
+    let mut offset = 0;
+    while offset < bytes.len() {
+        check(expires)?;
+        match port.write(&mut temporary.file, &bytes[offset..]) {
+            Ok(0) => return Err(FailureKind::Io(io::ErrorKind::WriteZero.into())),
+            Ok(n) if n <= bytes.len() - offset => offset += n,
+            Ok(_) => return Err(FailureKind::Io(io::Error::other("invalid write count"))),
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(FailureKind::Io(e)),
+        }
+    }
+    port.point(point).map_err(FailureKind::Io)?;
+    check(expires)?;
+    if unsafe {
+        libc::renameat(
+            parent.as_raw_fd(),
+            temporary.name.as_ptr(),
+            parent.as_raw_fd(),
+            target.as_ptr(),
+        )
+    } != 0
+    {
+        return Err(FailureKind::Io(io::Error::last_os_error()));
+    }
+    temporary.renamed = true;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

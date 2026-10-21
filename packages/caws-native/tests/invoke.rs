@@ -15,6 +15,8 @@ use std::{
 
 #[path = "invoke/collector.rs"]
 mod collector;
+#[path = "invoke/session_cache.rs"]
+mod session_cache_tests;
 use collector::{PipeCapture, cleanup_execute_child, collection_outcome, set_nonblocking};
 
 static SERIAL: AtomicU64 = AtomicU64::new(0);
@@ -153,7 +155,11 @@ impl Drop for Fixture {
     }
 }
 
-fn execute(mut command: Command, input: Vec<u8>) -> Output {
+fn execute(command: Command, input: Vec<u8>) -> Output {
+    execute_observed(command, input, |_| {})
+}
+
+fn execute_observed(mut command: Command, input: Vec<u8>, spawned: impl FnOnce(u32)) -> Output {
     let evidence = command
         .get_envs()
         .find(|(key, _)| *key == "CAWS_NATIVE_TEST_RECEIPT")
@@ -179,12 +185,15 @@ fn execute(mut command: Command, input: Vec<u8>) -> Output {
         )
         .unwrap();
     }
-    let mut child = command
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut child = PanicSafeTestChild(
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    spawned(child.id());
     if let Some(directory) = &evidence {
         // Record the actual retained frontend Child before sending any request input.
         fs::write(
@@ -782,14 +791,30 @@ fn timeout_covers_silent_engine_closed_output_and_blocked_input_write() {
                 "block"
             );
         }
+        let direct_closed_output = if mode == "closed-pipes" {
+            let rows: Vec<serde_json::Value> =
+                fs::read_to_string(fixture.dir.join("topology.jsonl"))
+                    .unwrap()
+                    .lines()
+                    .map(|line| serde_json::from_str(line).unwrap())
+                    .collect();
+            assert_eq!(rows.len(), 1);
+            let kind = rows[0]["kind"].as_str().unwrap();
+            assert!(["direct", "custodied"].contains(&kind));
+            // The custodian retains its frontend output pipe while it owns a
+            // live Node; closing Node's output alone does not close that pipe.
+            kind == "direct"
+        } else {
+            false
+        };
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains(if mode == "closed-pipes" {
+            stderr.contains(if direct_closed_output {
                 "stream closed"
             } else {
                 "deadline expired"
             }),
-            "{stderr}"
+            "{mode}: {stderr}"
         );
     }
 }
@@ -837,9 +862,23 @@ fn missing_node_is_configuration_failure_before_dispatch() {
     let mut args = args;
     args[4] = "/definitely/missing/caws-node".into();
     replaced.args(args);
+    // Preserve private receipt/fixture selection when changing only Node.
+    for (name, value) in command.get_envs() {
+        if let Some(value) = value {
+            replaced.env(name, value);
+        } else {
+            replaced.env_remove(name);
+        }
+    }
     let output = execute(replaced, b"{}".to_vec());
     failure(&output, 2, "configuration");
-    assert!(String::from_utf8_lossy(&output.stderr).contains("engine spawn"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("engine spawn"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!fixture.dir.join("events.jsonl").exists());
+    assert!(!fixture.dir.join("engine").exists());
 }
 
 #[test]
@@ -971,12 +1010,23 @@ fn stop_test_child(child: &mut std::process::Child) {
 }
 
 struct PanicSafeTestChild(std::process::Child);
+impl std::ops::Deref for PanicSafeTestChild {
+    type Target = std::process::Child;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for PanicSafeTestChild {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 impl Drop for PanicSafeTestChild {
     fn drop(&mut self) {
         // A retained, unreaped child pins the signal target. Observation errors
         // do not establish either liveness or permission to signal a PID.
         if matches!(self.0.try_wait(), Ok(None)) {
-            stop_test_child(&mut self.0);
+            let _ = cleanup_execute_child(&mut self.0);
         }
     }
 }

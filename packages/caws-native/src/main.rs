@@ -77,14 +77,59 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             &service_dispatch.unwrap_or_else(|| protocol::dispatch(&request)),
             deadline,
         )?;
-        match protocol::validate_frame(&session.frame(deadline)?, &request)? {
-            protocol::EngineFrame::Proposal {
-                token,
-                result,
-                containment,
-            } => Ok((token, result, containment)),
-            protocol::EngineFrame::Failure(message) => Err(message),
-            protocol::EngineFrame::Ready(_) => Err("unexpected ready after dispatch grant".into()),
+        let mut cache_attempted = false;
+        loop {
+            match protocol::validate_frame(&session.frame(deadline)?, &request)? {
+                protocol::EngineFrame::SessionCacheRequest(frame) => {
+                    if cache_attempted {
+                        return Err("session cache exchange already attempted".into());
+                    }
+                    cache_attempted = true;
+                    let context = ready.as_ref().ok_or("missing cache readiness")?;
+                    let mut owner = request.session_cache_owner(context, dispatched)?;
+                    let admitted = owner.admit(&frame).map_err(|error| error.to_string())?;
+                    session.credit_session_cache_control(frame.len() + 1)?;
+                    let mut exchange_failure = None;
+                    let mut decision_bytes = None;
+                    let execution = admitted.execute(deadline, |previous| {
+                        let exchange = (|| {
+                            session.send(previous, deadline)?;
+                            let decision = session.frame(deadline)?;
+                            decision_bytes = Some(decision.len() + 1);
+                            Ok(decision)
+                        })();
+                        exchange.map_err(|error| {
+                            exchange_failure = Some(error);
+                            caws_native::session_cache_wire::WireError(
+                                "session cache transport failed",
+                            )
+                        })
+                    });
+                    if let Some(error) = execution.exchange_error {
+                        return Err(exchange_failure.unwrap_or_else(|| error.to_string()));
+                    }
+                    if let Some(bytes) = decision_bytes {
+                        // The operation accepted the decision schema and correlation.
+                        session.credit_session_cache_control(bytes)?;
+                    }
+                    session.send(
+                        &execution
+                            .result
+                            .encode()
+                            .map_err(|error| error.to_string())?,
+                        deadline,
+                    )?;
+                }
+                protocol::EngineFrame::Proposal {
+                    token,
+                    result,
+                    containment,
+                } => break Ok((token, result, containment)),
+                protocol::EngineFrame::Failure(message) => break Err(message),
+                protocol::EngineFrame::Ready(_) => {
+                    break Err("unexpected ready after dispatch grant".into());
+                }
+            }
         }
     })();
     let (token, result, containment) = match proposal {

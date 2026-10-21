@@ -260,6 +260,13 @@ enum EngineOwner {
     Custodied(Box<crate::engine_custody::Owner>),
 }
 impl EngineOwner {
+    fn pre_creation_failure(&mut self) -> Result<Option<String>, String> {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Custodied(owner) => owner.pre_creation_failure(),
+            Self::Direct(_) => Ok(None),
+        }
+    }
     fn exit_observed(&mut self) -> Result<bool, String> {
         match self {
             #[cfg(target_os = "macos")]
@@ -315,6 +322,7 @@ pub struct Session {
     examined_bytes: usize,
     diagnostics: Vec<u8>,
     stdout_bytes: usize,
+    cache_control_credit: usize,
     out_done: bool,
     err_done: bool,
     terminal_containment: bool,
@@ -430,6 +438,7 @@ impl Session {
             examined_bytes: 0,
             diagnostics: Vec::new(),
             stdout_bytes: 0,
+            cache_control_credit: 0,
             out_done: false,
             err_done: false,
             terminal_containment: false,
@@ -567,7 +576,7 @@ impl Session {
             let before = self.buffered.len();
             self.out_done = read_chunk(self.stdout.as_raw_fd(), &mut self.buffered, MAX_FRAME)?;
             self.stdout_bytes += self.buffered.len() - before;
-            if self.stdout_bytes > MAX_FRAME + 16_384 {
+            if self.stdout_bytes > MAX_FRAME + 16_384 + self.cache_control_credit {
                 return Err("engine stream exceeded total byte budget".into());
             }
         }
@@ -589,6 +598,20 @@ impl Session {
         while offset < bytes.len() {
             offset += self.pump(Some(&bytes[offset..]), deadline)?;
         }
+        Ok(())
+    }
+
+    /// Credit only exact, already validated one-shot cache control bytes.
+    /// The ordinary proposal frame and unclassified output budgets do not grow.
+    pub fn credit_session_cache_control(&mut self, bytes: usize) -> Result<(), String> {
+        let credit = self
+            .cache_control_credit
+            .checked_add(bytes)
+            .ok_or("cache control credit overflow")?;
+        if credit > caws_native::session_cache_wire::MAX_EXTRA_ENGINE_STDOUT_BYTES {
+            return Err("cache control credit exceeds one exchange".into());
+        }
+        self.cache_control_credit = credit;
         Ok(())
     }
 
@@ -633,7 +656,12 @@ impl Session {
                 return Ok(bytes);
             }
             if self.out_done {
-                return Err("engine stream closed before a complete frame".into());
+                let mut message = "engine stream closed before a complete frame".to_owned();
+                if let Some(cause) = self.group.pre_creation_failure()? {
+                    message.push_str("; ");
+                    message.push_str(&cause);
+                }
+                return Err(message);
             }
             self.pump(None, deadline)?;
         }
@@ -1087,6 +1115,72 @@ mod tests {
     fn real_pipe_rejects_bytes_past_the_existing_frame_budget() {
         let mut session = session("/dev/stdin");
         let expires = deadline();
+        let wire = vec![b'x'; MAX_FRAME + 1];
+        let outcome = session
+            .send(&wire, expires)
+            .and_then(|()| session.frame(expires).map(|_| ()));
+        assert_eq!(
+            outcome.unwrap_err(),
+            format!("pipe exceeded {MAX_FRAME} byte budget")
+        );
+    }
+
+    #[test]
+    fn validated_control_credit_preserves_a_full_later_proposal_and_has_a_fixed_cap() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        let mut control = vec![b'c'; 90_000];
+        control.push(b'\n');
+        session.send(&control, expires).unwrap();
+        assert_eq!(
+            session.frame(expires).unwrap(),
+            control[..control.len() - 1]
+        );
+        session.credit_session_cache_control(control.len()).unwrap();
+        let mut proposal = vec![b'p'; MAX_FRAME - 1];
+        proposal.push(b'\n');
+        session.send(&proposal, expires).unwrap();
+        assert_eq!(
+            session.frame(expires).unwrap(),
+            proposal[..proposal.len() - 1]
+        );
+        let remaining =
+            caws_native::session_cache_wire::MAX_EXTRA_ENGINE_STDOUT_BYTES - control.len();
+        session.credit_session_cache_control(remaining).unwrap();
+        assert_eq!(
+            session.credit_session_cache_control(1).unwrap_err(),
+            "cache control credit exceeds one exchange"
+        );
+    }
+
+    #[test]
+    fn uncredited_output_still_exhausts_the_original_total_budget() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        let mut control = vec![b'c'; 90_000];
+        control.push(b'\n');
+        session.send(&control, expires).unwrap();
+        assert_eq!(session.frame(expires).unwrap().len(), 90_000);
+        let mut proposal = vec![b'p'; MAX_FRAME - 1];
+        proposal.push(b'\n');
+        let outcome = session
+            .send(&proposal, expires)
+            .and_then(|()| session.frame(expires).map(|_| ()));
+        assert_eq!(
+            outcome.unwrap_err(),
+            "engine stream exceeded total byte budget"
+        );
+    }
+
+    #[test]
+    fn cache_credit_does_not_enlarge_the_individual_frame_limit() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        session
+            .credit_session_cache_control(
+                caws_native::session_cache_wire::MAX_EXTRA_ENGINE_STDOUT_BYTES,
+            )
+            .unwrap();
         let wire = vec![b'x'; MAX_FRAME + 1];
         let outcome = session
             .send(&wire, expires)
