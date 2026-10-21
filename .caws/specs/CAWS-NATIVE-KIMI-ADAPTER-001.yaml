@@ -42,3 +42,11 @@ non_functional:
 contracts:
   - name: 'historical-kimi-transcript'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "900 independent Python3.11.13 fixtures; Node18/22 typed projections/errors/clone observations equal. /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-kimi-adapter/kimi-worker/differential/comparison18/stdout.bin and comparison22/stdout.bin; root013 rederived raw artifacts."
+    recorded_at: "2026-10-21T01:56:25.120Z"
+    command: "driver.cjs + compare.cjs on frozen reference/run-20261021T010201Z-c35d5ff0"
+    exit_code: 0
+    commit_sha: "346d50441c006e88affee2f86408ca9ca36ffd74"
