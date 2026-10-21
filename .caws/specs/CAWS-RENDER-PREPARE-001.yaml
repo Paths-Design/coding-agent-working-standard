@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: render-prepare
 created_at: '2026-10-21T16:42:37.786Z'
-updated_at: '2026-10-21T16:42:48.279Z'
+updated_at: '2026-10-21T18:54:41.145Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
@@ -26,6 +26,13 @@ scope:
     - 'packages/caws-cli/tests/transcripts/render-artifacts.test.ts'
     - 'packages/caws-cli/tests/transcripts/render-prepare.test.ts'
     - 'packages/caws-cli/tests/transcripts/occurrence.test.ts'
+    - packages/caws-cli/src/transcripts/transcript-json-profile.ts
+    - packages/caws-cli/src/transcripts/harness-common.ts
+    - packages/caws-cli/src/transcripts/harness-codex.ts
+    - packages/caws-cli/src/transcripts/harness-claude.ts
+    - packages/caws-cli/src/transcripts/registry.ts
+    - packages/caws-cli/tests/transcripts/transcript-json-profile.test.ts
+    - packages/caws-cli/tests/transcripts/registry.test.ts
   out: []
 invariants:
   - 'prepareSessionArtifacts(input, owned read observations, prior checkpoint) returns ready, retain, empty, or failed with checkpoint; it never publishes or declares current.'
