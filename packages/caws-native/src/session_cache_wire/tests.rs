@@ -88,6 +88,43 @@ fn read(path: &Path) -> Value {
 fn expires() -> Instant {
     Instant::now() + Duration::from_secs(5)
 }
+
+#[test]
+fn cancellation_after_valid_decision_is_fatal_not_a_replay_grant() {
+    for action in ["capture", "decline"] {
+        let f = Fixture::new();
+        f.seed("s", b"old envelope");
+        fs::write(f.pointer(), b"old pointer").unwrap();
+        let cancelled = std::cell::Cell::new(false);
+        let mut calls = 0;
+        let execution = f.admit(&raw(r#"{"session_id":"s"}"#)).execute_checked(
+            expires(),
+            || {
+                if cancelled.get() {
+                    Err("native caller exited".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |_| {
+                calls += 1;
+                cancelled.set(true);
+                Ok(bytes(&decision(action, Value::Null)))
+            },
+        );
+        assert_eq!(calls, 1);
+        assert_eq!(
+            execution.cancellation_error.as_deref(),
+            Some("native caller exited")
+        );
+        assert!(execution.exchange_error.is_none());
+        assert_eq!(execution.result.status(), Status::Unavailable);
+        assert!(!execution.result.fallback_safe());
+        assert!(!execution.result.envelope_published());
+        assert_eq!(fs::read(f.envelope("s")).unwrap(), b"old envelope");
+        assert_eq!(fs::read(f.pointer()).unwrap(), b"old pointer");
+    }
+}
 fn decision(action: &str, units: Value) -> Value {
     json!({"schema":DECISION_SCHEMA,"id":ID,"runtimeDigest":DIGEST,"token":TOKEN,"action":action,"createdUnits":units})
 }

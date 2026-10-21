@@ -232,6 +232,9 @@ pub struct Execution {
     /// Invalid/lost decision exchange is separately visible to root; it must not
     /// replay or convert this into a compatibility request. Root owns cleanup.
     pub exchange_error: Option<WireError>,
+    /// Cancellation is an invocation failure, never a diagnostic-only cache
+    /// miss or a grant to replay compatibility dispatch.
+    pub cancellation_error: Option<String>,
 }
 impl Admitted {
     pub fn correlation(&self) -> &Correlation {
@@ -245,9 +248,25 @@ impl Admitted {
         expires: Instant,
         exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
     ) -> Execution {
+        self.execute_checked(expires, || Ok(()), exchange)
+    }
+
+    pub fn execute_checked(
+        self,
+        expires: Instant,
+        mut checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
+    ) -> Execution {
         let result = |status, published, diagnostic| {
             make_result(&self.correlation, status, published, diagnostic)
         };
+        if let Err(error) = checkpoint() {
+            return Execution {
+                result: result(Status::Unavailable, false, Some(error.clone())),
+                exchange_error: None,
+                cancellation_error: Some(error),
+            };
+        }
         if Instant::now() >= expires {
             return Execution {
                 result: result(
@@ -256,6 +275,7 @@ impl Admitted {
                     Some("cache deadline expired".into()),
                 ),
                 exchange_error: None,
+                cancellation_error: None,
             };
         }
         let sid = match &self.sid {
@@ -263,6 +283,7 @@ impl Admitted {
                 return Execution {
                     result: result(Status::Skipped, false, None),
                     exchange_error: None,
+                    cancellation_error: None,
                 };
             }
             RawSid::Unsupported => {
@@ -273,6 +294,7 @@ impl Admitted {
                         Some("original payload session-id profile unsupported".into()),
                     ),
                     exchange_error: None,
+                    cancellation_error: None,
                 };
             }
             RawSid::Safe(sid) => sid,
@@ -283,22 +305,30 @@ impl Admitted {
             supplied_hook_event: Some("PreToolUse"),
         };
         let mut exchange_error = None;
-        let captured = session_cache::capture_with_decision(&input, expires, |old| {
-            let decided = (|| {
-                let previous = encode_previous(&self.correlation, old)?;
-                let response = exchange(&previous)?;
-                decode_decision(&response, &self.correlation)
-            })();
-            match decided {
-                Ok(value) => Ok(value),
-                Err(error) => {
-                    exchange_error = Some(error);
-                    Err(DecodeDiagnostic(
-                        "session-cache decision exchange unavailable".into(),
-                    ))
+        let captured =
+            session_cache::capture_with_decision_checked(&input, expires, &mut checkpoint, |old| {
+                let decided = (|| {
+                    let previous = encode_previous(&self.correlation, old)?;
+                    let response = exchange(&previous)?;
+                    decode_decision(&response, &self.correlation)
+                })();
+                match decided {
+                    Ok(value) => Ok(value),
+                    Err(error) => {
+                        exchange_error = Some(error);
+                        Err(DecodeDiagnostic(
+                            "session-cache decision exchange unavailable".into(),
+                        ))
+                    }
                 }
-            }
-        });
+            });
+        let cancellation_error = match &captured {
+            Err(session_cache::CaptureFailure {
+                kind: session_cache::FailureKind::Cancelled(error),
+                ..
+            }) => Some(error.clone()),
+            _ => None,
+        };
         let frame = match captured {
             Ok(CaptureOutcome::Captured) => result(Status::Captured, true, None),
             Ok(CaptureOutcome::Skipped(_)) => result(Status::Skipped, false, None),
@@ -325,6 +355,7 @@ impl Admitted {
         Execution {
             result: frame,
             exchange_error,
+            cancellation_error,
         }
     }
 }

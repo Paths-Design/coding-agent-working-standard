@@ -91,20 +91,24 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                     session.credit_session_cache_control(frame.len() + 1)?;
                     let mut exchange_failure = None;
                     let mut decision_bytes = None;
-                    let execution = admitted.execute(deadline, |previous| {
-                        let exchange = (|| {
-                            session.send(previous, deadline)?;
-                            let decision = session.frame(deadline)?;
-                            decision_bytes = Some(decision.len() + 1);
-                            Ok(decision)
-                        })();
-                        exchange.map_err(|error| {
-                            exchange_failure = Some(error);
-                            caws_native::session_cache_wire::WireError(
-                                "session cache transport failed",
-                            )
-                        })
-                    });
+                    let execution =
+                        admitted.execute_checked(deadline, cancellation::check, |previous| {
+                            let exchange = (|| {
+                                session.send(previous, deadline)?;
+                                let decision = session.frame(deadline)?;
+                                decision_bytes = Some(decision.len() + 1);
+                                Ok(decision)
+                            })();
+                            exchange.map_err(|error| {
+                                exchange_failure = Some(error);
+                                caws_native::session_cache_wire::WireError(
+                                    "session cache transport failed",
+                                )
+                            })
+                        });
+                    if let Some(error) = execution.cancellation_error {
+                        return Err(error);
+                    }
                     if let Some(error) = execution.exchange_error {
                         return Err(exchange_failure.unwrap_or_else(|| error.to_string()));
                     }

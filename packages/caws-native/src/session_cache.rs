@@ -24,7 +24,7 @@ const POINTER: &CStr = c".caller-session.json";
 static TEMPORARY: AtomicU64 = AtomicU64::new(0);
 pub const MAX_EXISTING_BYTES: usize = 65_536;
 
-/// `canonical_root` is an already independently verified physical Git root.
+/// `canonical_root` is the selected engine's verified physical Git root.
 /// SID/event are the original supplied payload fields, never resolved fallback
 /// identity or values recovered from old HOOK_* environment/cache state.
 pub struct CaptureInput<'a> {
@@ -86,6 +86,7 @@ pub enum Stage {
 pub enum FailureKind {
     Io(io::Error),
     Deadline,
+    Cancelled(String),
     DecodeDiagnostic(String),
 }
 #[derive(Debug)]
@@ -106,7 +107,7 @@ impl std::fmt::Display for CaptureFailure {
 }
 impl std::error::Error for CaptureFailure {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Point {
     SessionOpened,
     EnvelopeStaged,
@@ -124,7 +125,11 @@ trait Port {
 struct NativePort;
 impl Port for NativePort {}
 
-fn check(expires: Instant) -> Result<(), FailureKind> {
+fn check(
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), FailureKind> {
+    checkpoint().map_err(FailureKind::Cancelled)?;
     if Instant::now() >= expires {
         Err(FailureKind::Deadline)
     } else {
@@ -200,11 +205,41 @@ pub fn capture_with_decision(
     capture_operation_decision(input, expires, timestamp, &mut NativePort, decide)
 }
 
+/// The invocation owner supplies its existing cancellation observation. Checks
+/// bound publication; a cancellation racing the final check and rename is not
+/// an atomic cancellation guarantee. Blocking filesystem calls are unchanged.
+pub fn capture_with_decision_checked(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    mut checkpoint: impl FnMut() -> Result<(), String>,
+    decide: impl FnOnce(ExistingEnvelope<'_>) -> Result<CaptureDecision, DecodeDiagnostic>,
+) -> Result<CaptureOutcome, CaptureFailure> {
+    capture_operation_decision_checked(
+        input,
+        expires,
+        timestamp,
+        &mut NativePort,
+        &mut checkpoint,
+        decide,
+    )
+}
+
 fn capture_operation_decision(
     input: &CaptureInput<'_>,
     expires: Instant,
     clock: impl FnOnce() -> io::Result<String>,
     port: &mut impl Port,
+    decide: impl FnOnce(ExistingEnvelope<'_>) -> Result<CaptureDecision, DecodeDiagnostic>,
+) -> Result<CaptureOutcome, CaptureFailure> {
+    capture_operation_decision_checked(input, expires, clock, port, &mut || Ok(()), decide)
+}
+
+fn capture_operation_decision_checked(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    clock: impl FnOnce() -> io::Result<String>,
+    port: &mut impl Port,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
     decide: impl FnOnce(ExistingEnvelope<'_>) -> Result<CaptureDecision, DecodeDiagnostic>,
 ) -> Result<CaptureOutcome, CaptureFailure> {
     let sid = match input.supplied_session_id {
@@ -222,7 +257,7 @@ fn capture_operation_decision(
     let mut stage = Stage::Root;
     let mut envelope_published = false;
     let result = (|| -> Result<CaptureOutcome, FailureKind> {
-        check(expires)?;
+        check(expires, checkpoint)?;
         if !input.canonical_root.is_absolute() {
             return Err(FailureKind::Io(io::Error::other(
                 "physical absolute root required",
@@ -240,34 +275,35 @@ fn capture_operation_decision(
         .map_err(FailureKind::Io)?;
         stage = Stage::Governance;
         let caws = directory_at(&root, c".caws", false).map_err(FailureKind::Io)?;
-        check(expires)?;
+        check(expires, checkpoint)?;
         stage = Stage::Sessions;
         let sessions = directory_at(&caws, c"sessions", true).map_err(FailureKind::Io)?;
         stage = Stage::Session;
+        check(expires, checkpoint)?;
         let session = directory_at(&sessions, &name(sid).map_err(FailureKind::Io)?, true)
             .map_err(FailureKind::Io)?;
         port.point(Point::SessionOpened).map_err(FailureKind::Io)?;
         stage = Stage::Clock;
         let now = clock().map_err(FailureKind::Io)?;
         stage = Stage::ExistingEnvelope;
-        let previous = match previous_bytes(&session, expires)? {
+        let previous = match previous_bytes(&session, expires, checkpoint)? {
             Previous::Declined(reason) => return Ok(CaptureOutcome::Declined(reason)),
             Previous::Bytes(bytes) => Some(bytes),
             Previous::Missing => None,
         };
         stage = Stage::Decision;
-        let created = match decide(match previous.as_deref() {
+        let decision = decide(match previous.as_deref() {
             Some(bytes) => ExistingEnvelope::Bytes(bytes),
             None => ExistingEnvelope::Missing,
         })
-        .map_err(|error| FailureKind::DecodeDiagnostic(error.0))?
-        {
+        .map_err(|error| FailureKind::DecodeDiagnostic(error.0))?;
+        check(expires, checkpoint)?;
+        let created = match decision {
             CaptureDecision::Capture(created) => created,
             CaptureDecision::Decline => {
                 return Ok(CaptureOutcome::Declined(DeclineReason::DecoderDeclined));
             }
         };
-        check(expires)?;
         let root_text = input
             .canonical_root
             .to_str()
@@ -302,6 +338,7 @@ fn capture_operation_decision(
             expires,
             Point::EnvelopeStaged,
             port,
+            checkpoint,
         )?;
         envelope_published = true;
         port.point(Point::EnvelopePublished)
@@ -319,6 +356,7 @@ fn capture_operation_decision(
             expires,
             Point::PointerStaged,
             port,
+            checkpoint,
         )?;
         Ok(CaptureOutcome::Captured)
     })();
@@ -335,8 +373,12 @@ enum Previous {
     Declined(DeclineReason),
 }
 
-fn previous_bytes(session: &File, expires: Instant) -> Result<Previous, FailureKind> {
-    check(expires)?;
+fn previous_bytes(
+    session: &File,
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+) -> Result<Previous, FailureKind> {
+    check(expires, checkpoint)?;
     let mut old = match opened(unsafe {
         libc::openat(
             session.as_raw_fd(),
@@ -360,7 +402,7 @@ fn previous_bytes(session: &File, expires: Instant) -> Result<Previous, FailureK
     let mut bytes = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
-        check(expires)?;
+        check(expires, checkpoint)?;
         let remaining = (MAX_EXISTING_BYTES + 1 - bytes.len()).min(chunk.len());
         match old.read(&mut chunk[..remaining]) {
             Ok(0) => break,
@@ -479,10 +521,12 @@ fn atomic_json(
     expires: Instant,
     point: Point,
     port: &mut impl Port,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<(), FailureKind> {
-    check(expires)?;
+    check(expires, checkpoint)?;
     let mut temporary = None;
     for _ in 0..16 {
+        check(expires, checkpoint)?;
         let temporary_name = name(&format!(
             "tmp-{}.{}.{}",
             target.to_string_lossy(),
@@ -515,7 +559,7 @@ fn atomic_json(
         temporary.ok_or_else(|| FailureKind::Io(io::Error::other("temporary collision limit")))?;
     let mut offset = 0;
     while offset < bytes.len() {
-        check(expires)?;
+        check(expires, checkpoint)?;
         match port.write(&mut temporary.file, &bytes[offset..]) {
             Ok(0) => return Err(FailureKind::Io(io::ErrorKind::WriteZero.into())),
             Ok(n) if n <= bytes.len() - offset => offset += n,
@@ -525,7 +569,7 @@ fn atomic_json(
         }
     }
     port.point(point).map_err(FailureKind::Io)?;
-    check(expires)?;
+    check(expires, checkpoint)?;
     if unsafe {
         libc::renameat(
             parent.as_raw_fd(),

@@ -468,6 +468,86 @@ fn native_clock_is_whole_second_utc_and_expiry_cannot_publish() {
     assert!(!f.root.join(".caws/sessions").exists());
 }
 
+fn cancellation_preserves_publication_boundary(target: Option<Point>) {
+    let f = Fixture::new();
+    f.seed("s", b"old envelope");
+    fs::write(f.pointer(), b"old pointer").unwrap();
+    let cancelled = std::cell::Cell::new(false);
+    let mut p = port(|point| {
+        if target == Some(point) {
+            cancelled.set(true);
+        }
+        Ok(())
+    });
+    let mut calls = 0;
+    let failure = capture_operation_decision_checked(
+        &f.input(Some("s"), Some("PreToolUse")),
+        expires(),
+        || Ok(NOW.into()),
+        &mut p,
+        &mut || {
+            if cancelled.get() {
+                Err("exact cancellation cause".into())
+            } else {
+                Ok(())
+            }
+        },
+        |old| {
+            calls += 1;
+            assert_eq!(old, ExistingEnvelope::Bytes(b"old envelope"));
+            if target.is_none() {
+                cancelled.set(true);
+            }
+            Ok(CaptureDecision::Capture(None))
+        },
+    )
+    .unwrap_err();
+    assert_eq!(calls, 1);
+    assert!(
+        matches!(failure.kind, FailureKind::Cancelled(ref cause) if cause == "exact cancellation cause")
+    );
+    let published = target == Some(Point::EnvelopePublished);
+    assert_eq!(failure.envelope_published, published);
+    if published {
+        assert_eq!(value(&f.envelope("s"))["last_seen_at"], NOW);
+    } else {
+        assert_eq!(fs::read(f.envelope("s")).unwrap(), b"old envelope");
+    }
+    assert_eq!(fs::read(f.pointer()).unwrap(), b"old pointer");
+    no_temporaries(&f.session("s"));
+    no_temporaries(&f.root.join(".caws/sessions"));
+}
+
+#[test]
+fn cancellation_after_decision_prevents_both_publications() {
+    cancellation_preserves_publication_boundary(None);
+}
+
+#[test]
+fn cancellation_before_envelope_rename_removes_staged_temporary() {
+    cancellation_preserves_publication_boundary(Some(Point::EnvelopeStaged));
+}
+
+#[test]
+fn cancellation_after_envelope_publication_preserves_old_pointer() {
+    cancellation_preserves_publication_boundary(Some(Point::EnvelopePublished));
+}
+
+#[test]
+fn cancellation_at_entry_does_not_create_session_directories_or_exchange() {
+    let f = Fixture::new();
+    let failed = capture_with_decision_checked(
+        &f.input(Some("s"), None),
+        expires(),
+        || Err("caller exited".into()),
+        |_| panic!("cancelled operation reached decision"),
+    )
+    .unwrap_err();
+    assert!(matches!(failed.kind, FailureKind::Cancelled(ref cause) if cause == "caller exited"));
+    assert!(!failed.envelope_published);
+    assert!(!f.root.join(".caws/sessions").exists());
+}
+
 #[test]
 fn identical_sid_in_two_physical_roots_keeps_envelope_and_pointer_separate() {
     let a = Fixture::new();
