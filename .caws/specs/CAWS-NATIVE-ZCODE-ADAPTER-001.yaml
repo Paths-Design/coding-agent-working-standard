@@ -55,3 +55,10 @@ evidence:
     command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verify.py"
     exit_code: 0
     commit_sha: "5b81b7ae872808e03b73aaca682dcc3b521075f9"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Actual A→missing→A→B observed state A,A,A,B withboundariesA/B. Explicit5seeded states agree.7independent occurrence scenarios/runtime+injectedsecond-timestamp failure show callerstateunchanged;failed/tentative drafts have no durable authority. Directnonobject/corruptstatecontrols outsidecontractretain15mismatches ratherthangreenproof. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verification.json; /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/commands; independent rawstreams native-harness-tail-differential/runs/0002-node22 and0003-node18 under sessionartifactroot. Commitverificationchecksreachability; recordedcommandnotrerunbyACCLI."
+    recorded_at: "2026-10-21T06:17:42.977Z"
+    command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verify.py"
+    exit_code: 0
+    commit_sha: "5b81b7ae872808e03b73aaca682dcc3b521075f9"
