@@ -85,13 +85,12 @@ contracts:
     type: contract-test
 evidence:
   - criterion_id: A1
-    status: fail
-    evidence_ref: "Committed d12d74a compiled candidate read actual Codex source4418B containing embedded4301-digit integer as ready/eventCount1 under selected4300; conversion-fatal contract is refuted. Root inspected source and result. Artifact verifier not run for this record; command exit0 reports the counterexample, not acceptance. Shared-profile repair and regression remain open."
-    recorded_at: "2026-10-21T18:50:55.906Z"
-    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-numeric/probe.cjs
+    status: pass
+    evidence_ref: "Actual source reader covers syntax/nonobject skip, fatal UTF8 and embedded Codex/DSH/Claude numeric conversion, complete-chunk rollback and tentative-prefix checkpoints; final standalone capped input fails numeric at checkpoint0 and unlimited preserves4301digits. Supersedes d12 counterexample. 282 executed checks plus inspected raw artifacts; verify below checks artifact/commit existence, not test execution. Inspected durable receipt /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/qualification-final.json SHA25620c9805a07c3f5b53c834524433b1defec8eef95ced4740629dfcaa25f3b4e93. CLI verify here checks commit reachability only; absolute external artifact was separately inspected/offline checked and is not a machine artifact citation."
+    recorded_at: "2026-10-21T19:37:19.541Z"
+    command: node packages/caws-cli/tests/transcripts/run.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/candidate-06/compiled/tests/transcripts
     exit_code: 0
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-numeric/result.json"
-    commit_sha: d12d74a2416ee36f3da0f38acbacef1bd9f7141c
+    commit_sha: "199fa5e1e1e38ff072b6f40f3987f211f19a3070"
   - criterion_id: A4
     status: fail
     evidence_ref: "At committed c2a1fdb/candidate05, actual 8945B one-turn and 9032B two-turn sources with admitted4300-digit usage operands yield ready artifacts containing4301-digit sums under selected4300. Index-only case has two4300-digit turn artifacts plus4301-digit session-index. Selected Python decimal-output refusal derives from pinned renderer json.dumps calls and official Python3.11 integer-to-string limit documentation; no Python oracle executed. Encoding profile repair and runtime falsifier remain open."
