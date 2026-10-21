@@ -5763,8 +5763,14 @@ progress and does not replace that transaction or its event readback.
    year-addition extension against the25 E204/E206 historical exclusions without
    rewriting those earlier observations. E223 assigns the two-file extension to
    its bound peer; root exercises the stable native REAL boundary after source
-   validation. Add a single-use exhausted-and-settled store publication permit;
-   generic confirmed close does not grant one. Integrate atomic projection
+   validation. Implement a surviving owner for acquisition settlement and
+   single-use exhausted-and-settled publication. The store call in `main.rs`
+   owns acquisition in the transient frontend, while `render_owner.rs`'s
+   resident actor separately owns writer custody; the engine custodian proxies
+   bytes without original store context. A local return object cannot transfer
+   authority across those processes. Establish native-original registration and
+   a bounded row/control/publication exchange in the surviving owner; generic
+   confirmed close does not grant a permit. Integrate atomic projection
    publication under compatible continuous writer custody before the actual
    renderer opens its source, followed by receipt serialization/delivery as
    distinct outcomes. E213 records why a separate recursively acquired publisher
