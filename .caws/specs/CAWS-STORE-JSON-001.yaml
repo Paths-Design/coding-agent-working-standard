@@ -1,10 +1,11 @@
 id: CAWS-STORE-JSON-001
 title: 'Preserve SQL-class and CPython codepoint JSON semantics'
 mode: feature
-lifecycle_state: active
-worktree: store-json
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed a9420ad two-file opt-in CPython3.11.13/4300 SQL-class decoder and hostile tests. Four component AC passes recorded/read with events10107-10110. Actual compiled70tests each18.20.8/22 and794 differential cases each18.0/18.20.8/22 agree; package/lint/gates0; four selected mutants detected; fresh read-only committed review discharged no defect. Source/raw artifact verifier74 references retained externally. No installed profile selection, native SQL, renderer, publication, host resource equivalence or cutover claim.'
 created_at: '2026-10-21T11:21:58.759Z'
-updated_at: '2026-10-21T11:22:07.985Z'
+updated_at: '2026-10-21T11:50:30.132Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
