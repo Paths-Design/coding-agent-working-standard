@@ -1,9 +1,10 @@
 id: CAWS-TRANSCRIPT-NODE-FLOOR-001
 title: 'Qualify emitted transcript preparation on the declared Node runtime floor'
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
+worktree: transcript-node-floor
 created_at: '2026-10-21T20:59:25.293Z'
-updated_at: '2026-10-21T20:59:25.293Z'
+updated_at: '2026-10-21T20:59:57.697Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
