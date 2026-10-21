@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-PROJECT-BINDING-001
 title: 'Bind store operations to original native project observations'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-project-binding
 created_at: '2026-10-21T17:14:04.583Z'
-updated_at: '2026-10-21T17:14:04.583Z'
+updated_at: '2026-10-21T17:25:51.175Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
