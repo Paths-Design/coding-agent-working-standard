@@ -71,3 +71,10 @@ evidence:
     evidence_ref: "Directly inspected /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-project-binding/check-04/project.stdout:13 executed controls cancellation,outputlimit,malformedpath,pipeholder deadline,private-group settlement+reap. Injected EPERM retains Child until real retry/settlement/reap; not actual privilege failure. No durable post-owner custody/escaped containment claim. CLI verifies commit only."
     recorded_at: "2026-10-21T19:32:59.246Z"
     commit_sha: e31d09aeac88752630e8d6400bc3f9f00529250d
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Actual node qualify-frontend.cjs check-04 frontend-03 exit0,16 cases; raw /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-project-binding/frontend-03/. Ten positives exact bytes/3rows/exhaustedclosed; foreign/size/EOF no rows/budget; boundmissingDB original-rootcounter1. UnchangedDB/no sidecars;73 source files match e31 and image retained. No stock publication/receipt/reader/resident/adoption. CLI verifies commit only."
+    recorded_at: "2026-10-21T19:33:03.573Z"
+    command: node qualify-frontend.cjs check-04 frontend-03
+    exit_code: 0
+    commit_sha: e31d09aeac88752630e8d6400bc3f9f00529250d
