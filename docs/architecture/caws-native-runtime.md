@@ -320,6 +320,35 @@ policy to a second language and cutting over the shared runtime without rollback
 are the expensive-to-reverse choices. A one-shot engine and explicit extension
 boundary keep implementation order reversible.
 
+## Native qualification build contract
+
+The SQLite qualification build uses an explicit reviewed request selected by
+`CAWS_NATIVE_BUILD_REQUEST`. Its value is an absolute JSON-file path matching
+`NativeSqliteBuildRequest` in
+`packages/caws-cli/src/tooling/native-sqlite-build.ts`. The request inventories
+the native crate, its embedded CLI templates, vendored crates, SQLite prefix and
+bindings, resolved tools and selected SDK settings. Caller-supplied pins require
+review; they do not authenticate their own origin or establish full toolchain,
+dynamic-loader or SDK closure.
+
+The build entry requires a previously absent output root and creates its own
+target, Cargo home, source and vendor snapshots. It refuses ambient Cargo
+configuration and publishes completion only after embedded-object, binding,
+runtime-identity and static-linkage checks. Failed roots remain retained with
+explicit uncertain writer state. A completed receipt grants no runtime adoption.
+
+The four direct qualification build commands invoke the coordinator. Ordinary
+qualification consumers load that explicit request's completed receipt and use
+its verified artifact paths. Containment and service probes require debug;
+renderer probes require their selected debug/release profile. Substitution's
+explicit native argument must equal the verified artifact. Missing requests,
+profile mismatch and conventional-target fallback cannot select a candidate.
+Reuse a completed candidate by invoking the emitted qualifier with its request;
+the build entry refuses an existing root. Capture-only heartbeat qualification
+retains its separate explicit native/observer profile and performs no Cargo
+discovery. Default feature-off Cargo builds remain separate from this SQLite
+qualification path.
+
 ## Functional acceptance and proof
 
 Each parity claim names a preserved behavior and its dependency chain, not only

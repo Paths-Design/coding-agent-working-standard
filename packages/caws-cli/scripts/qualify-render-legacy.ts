@@ -20,6 +20,18 @@ const sterling = fs.realpathSync(path.resolve(process.argv[3]));
 const profile = process.argv[4] ?? 'release';
 assert(['debug', 'release'].includes(profile), 'native profile must be debug or release');
 const crate = path.resolve(cli, '../caws-native');
+const selectedRequest = process.env.CAWS_NATIVE_BUILD_REQUEST;
+assert(
+  selectedRequest && path.isAbsolute(selectedRequest),
+  'CAWS_NATIVE_BUILD_REQUEST must name an explicit absolute request file'
+);
+const nativeBuild = (
+  createRequire(path.join(cli, 'package.json'))(
+    './dist/tooling/native-sqlite-build.js'
+  ) as typeof import('../dist/tooling/native-sqlite-build')
+).loadNativeSqliteBuild(selectedRequest);
+assert.equal(nativeBuild.build.profile, profile, 'native qualification profile mismatch');
+const native = nativeBuild.build.artifacts.native.path;
 const root = path.join(
   crate,
   'target/qualification/render-legacy-' + new Date().toISOString().replace(/[:.]/g, '-')
@@ -31,7 +43,6 @@ const project = path.join(sandbox, 'project'),
 const hooks = path.join(project, '.caws/hooks'),
   sessionId = 'legacy-writer-private-fixture';
 const output = path.join(project, '.caws/sessions', sessionId);
-const native = path.join(crate, 'target', profile, 'caws-native');
 const requireCli = createRequire(path.join(cli, 'package.json'));
 const { STERLING_SESSION_SOURCE_PROFILE } = requireCli('./dist/runtime/service-image.js') as {
   STERLING_SESSION_SOURCE_PROFILE: Record<string, string>;
@@ -56,6 +67,14 @@ const environment: NodeJS.ProcessEnv = {
 const commands: Row[] = [];
 const manifest: Row = {
   schema: 'caws.qualification.render-legacy.v1',
+  nativeBuild: {
+    requestFile: nativeBuild.requestFile,
+    completionReceipt: nativeBuild.completionReceipt,
+    requestDigest: nativeBuild.build.requestDigest,
+    profile: nativeBuild.build.profile,
+    prefixManifest: nativeBuild.build.prefixManifest,
+    adoption: nativeBuild.build.adoption,
+  },
   state: 'running',
   root,
   sandbox,

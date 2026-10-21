@@ -40,6 +40,22 @@ assert(process.argv[2] && process.argv[3], 'CLI root and Sterling root are requi
 const cli = fs.realpathSync(path.resolve(process.argv[2]));
 const sterling = fs.realpathSync(path.resolve(process.argv[3]));
 const crate = path.resolve(cli, '../caws-native');
+const nativeProfile = process.argv[4] ?? 'release';
+assert(['debug', 'release'].includes(nativeProfile), 'native profile must be debug or release');
+const selectedRequest = process.env.CAWS_NATIVE_BUILD_REQUEST;
+assert(
+  selectedRequest && path.isAbsolute(selectedRequest),
+  'CAWS_NATIVE_BUILD_REQUEST must name an explicit absolute request file'
+);
+const nativeBuild = (
+  createRequire(path.join(cli, 'package.json'))(
+    './dist/tooling/native-sqlite-build.js'
+  ) as typeof import('../dist/tooling/native-sqlite-build')
+).loadNativeSqliteBuild(selectedRequest);
+assert.equal(nativeBuild.build.profile, nativeProfile, 'native qualification profile mismatch');
+const native = nativeBuild.build.artifacts.native.path;
+const observer = nativeBuild.build.artifacts.observer.path;
+const custodyObserver = nativeBuild.build.artifacts.custodyObserver.path;
 const root = path.join(
   crate,
   'target/qualification/render-owner-' + new Date().toISOString().replace(/[:.]/g, '-')
@@ -52,16 +68,6 @@ const sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-rend
 const home = path.join(sandbox, 'machine'),
   project = path.join(sandbox, 'project');
 const owner = path.join(home, 'state/render-service');
-const nativeProfile = process.argv[4] ?? 'release';
-assert(['debug', 'release'].includes(nativeProfile), 'native profile must be debug or release');
-const native = path.join(crate, 'target', nativeProfile, 'caws-native');
-const observer = path.join(crate, 'target', nativeProfile, 'examples/service-observer');
-const custodyObserver = path.join(
-  crate,
-  'target',
-  nativeProfile,
-  'examples/service-custody-observer'
-);
 const engine = path.join(cli, 'dist/runtime/engine-entry.js');
 const cliEntry = path.join(cli, 'dist/index.js');
 const sessionId = 'render-owner-private-fixture';
@@ -88,6 +94,14 @@ const requestCustodies = new Map<
 const backendPids = new Set<number>();
 const manifest: Data = {
   schema: 'caws.qualification.render-owner.v1',
+  nativeBuild: {
+    requestFile: nativeBuild.requestFile,
+    completionReceipt: nativeBuild.completionReceipt,
+    requestDigest: nativeBuild.build.requestDigest,
+    profile: nativeBuild.build.profile,
+    prefixManifest: nativeBuild.build.prefixManifest,
+    adoption: nativeBuild.build.adoption,
+  },
   state: 'running',
   artifactRoot: root,
   sandbox,

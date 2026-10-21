@@ -319,8 +319,35 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
     }
     if block { 2 } else { 0 }
 }
+#[cfg(feature = "sqlite-store")]
+mod sqlite_build_identity;
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // Identity is a separate tooling command; failures must not reach the
+    // invocation fallback, whose no-event infrastructure policy may exit zero.
+    if args
+        .first()
+        .is_some_and(|arg| arg == "--sqlite-build-identity")
+    {
+        if args.len() != 1 {
+            eprintln!("CAWS SQLite identity requires exactly one argument");
+            std::process::exit(2);
+        }
+        #[cfg(feature = "sqlite-store")]
+        {
+            if let Err(error) = sqlite_build_identity::run() {
+                eprintln!("CAWS SQLite identity refused: {error}");
+                std::process::exit(2);
+            }
+            return;
+        }
+        #[cfg(not(feature = "sqlite-store"))]
+        {
+            eprintln!("CAWS SQLite identity requires the qualified sqlite-store build feature");
+            std::process::exit(2);
+        }
+    }
     #[cfg(target_os = "macos")]
     if args.first().is_some_and(|arg| arg == "engine-custodian") {
         let result = (|| {

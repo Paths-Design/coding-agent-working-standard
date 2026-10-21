@@ -44,8 +44,28 @@ const jq = fs.realpathSync(process.argv[5]!);
 for (const value of [cli, sterling, python, jq]) assert(path.isAbsolute(value));
 assert(fs.existsSync(path.join(cli, 'src/runtime/engine.ts')));
 const crate = path.resolve(cli, '../caws-native');
-const native = path.join(crate, 'target/debug/caws-native');
-const observer = path.join(crate, 'target/debug/examples/service-observer');
+const requireBuilt = createRequire(path.join(cli, 'package.json'));
+const selectedRequest = process.env.CAWS_NATIVE_BUILD_REQUEST;
+assert(
+  selectedRequest && path.isAbsolute(selectedRequest),
+  'CAWS_NATIVE_BUILD_REQUEST must name an explicit absolute request file'
+);
+const nativeBuild = (
+  requireBuilt(
+    './dist/tooling/native-sqlite-build.js'
+  ) as typeof import('../dist/tooling/native-sqlite-build')
+).loadNativeSqliteBuild(selectedRequest);
+assert.equal(nativeBuild.build.profile, 'debug', 'native qualification profile mismatch');
+const native = nativeBuild.build.artifacts.native.path;
+const observer = nativeBuild.build.artifacts.observer.path;
+const nativeBuildEvidence = {
+  requestFile: nativeBuild.requestFile,
+  completionReceipt: nativeBuild.completionReceipt,
+  requestDigest: nativeBuild.build.requestDigest,
+  profile: nativeBuild.build.profile,
+  prefixManifest: nativeBuild.build.prefixManifest,
+  adoption: nativeBuild.build.adoption,
+};
 const engine = path.join(cli, 'dist/runtime/engine-entry.js');
 const legacy = path.join(cli, 'templates/hook-packs/runtime/caws-hook.py');
 const root = path.join(
@@ -54,7 +74,6 @@ const root = path.join(
 );
 fs.mkdirSync(root, { recursive: true, mode: 0o700 });
 fs.chmodSync(root, 0o700);
-const requireBuilt = createRequire(path.join(cli, 'package.json'));
 const failures: string[] = [];
 const results: Data[] = [];
 // Longer than one bounded hook call. The foreign PID-only wedge reaper starts
@@ -686,6 +705,7 @@ async function run(): Promise<void> {
   for (const relative of files(path.join(cli, 'dist')))
     if (/\.(js|json)$/.test(relative)) modules[relative] = sha(path.join(cli, 'dist', relative));
   json(path.join(root, 'build-identities.json'), {
+    nativeBuild: nativeBuildEvidence,
     identities,
     modules,
     revision: git(['rev-parse', 'HEAD'], cli, { PATH: '/usr/bin:/bin' }),

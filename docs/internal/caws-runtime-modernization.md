@@ -4967,6 +4967,74 @@ Additional bounded evidence and unresolved dependencies:
   fallback. Coverage32/37 qualifying partial slices and parent acceptance0/8 do
   not advance; no first-party Python production row is retired.
 
+- E207: Root implements the reviewed-input native SQLite build coordinator,
+  explicit entry and receipt loader. It owns fresh private source/vendor/Cargo
+  home/target snapshots, validates input pins before Cargo and around each tool,
+  selects actual Cargo JSON artifacts, checks generated binding bytes and the
+  embedded C member, and verifies actual SQLite identity and static linkage. The
+  optional native feature adds the eight E195-qualified lock packages; existing
+  nonparent lock records are unchanged. The private exact identity command
+  refuses feature-off or extra arguments without success output. The secondary
+  Rust build guard checks the prefix manifest when it runs; E197's cache
+  falsifier remains the reason the external fresh target is required.
+
+  Root validates34 cached crate archives against lock checksums and2242 regular
+  file bytes. Cargo's vendor view omits22 archive files; the retained before
+  report records those omissions and original checksum metadata before root
+  restores an archive-exact generated input view. This is byte consistency, not
+  upstream authentication. The first actual fresh build exits101 at12 missing
+  sibling `include_str!` inputs. Root adds the pinned client and complete11-file
+  service-image tree; a source trace finds no additional production sibling
+  embed. The Cargo-test input closure has additional siblings and is not
+  claimed. The second build reaches actual SQLite identity but refuses
+  overflowing1MiB symbol output. Root measures1729611 symbol bytes and selects
+  a2MiB request limit within the unchanged4MiB combined retained-output ceiling.
+
+  `host-build-03` completes in72.21s with six actual tools exiting0 and their
+  direct children reaped. The loader succeeds on actual Node18.0.0 and22.19.0.
+  Native SHA256 is
+  `c940b691833d9489dd0ae6b18e1526c05179db5383a54546954a6f24554ef34e`; SQLite
+  reports3.53.4, the E193 source ID, THREADSAFE=1, OMIT_LOAD_EXTENSION and
+  ENABLE_API_ARMOR. The sys rlib has four strict-BSD members: its exact reviewed
+  SQLite object plus three retained UNADMITTED extras. Generated binding SHA256
+  is `4f94d0192ec890b62773368cb026daf219f5182094952c007d28ed6d3812fd68`.
+  Completed receipt SHA256 is
+  `4be1f6019d5af919821b9f22ec2a3e6b917b8fbe2a37e5fa196a3b0ee98b6f63`. Root
+  retains121 physical files/29728847 bytes, including staged native source,
+  embedded templates, artifacts and executed tooling modules. These are
+  post-observation copies; original paths are preserved and no prior immutable
+  execution-image attestation is inferred.
+
+  Actual controls preserve an existing completed root with zero child launches
+  and reject a changed archive pin before Cargo. A separate real build mutates
+  caller metadata after Cargo returns, then aborts after the sixth tool exits:
+  the captured request digest survives, all six direct children are reaped and
+  no completed or pending marker is published. Failed roots remain uncertain;
+  descendant quiescence, cleanup and reuse are not established. The50 compiled
+  refusal tests, normal CLI build, scoped lint, feature-off identity test,
+  existing invoke-grammar test and feature-off strict Clippy exit0.
+
+  All four direct Cargo package callers invoke this coordinator. Their ordinary
+  qualifier consumers load explicit verified native/observer paths, preserve
+  receipt identity and enforce profile agreement; capture-only heartbeat input
+  selection stays separate. Four existing qualifier compilation paths exit0; ten
+  actual missing-request/profile controls refuse before fixture creation. The
+  first compile attempt used an absent local TypeScript path; the installed
+  workspace compiler succeeds, and both attempts are retained. A combined
+  interpreter command is refused by the shell guard as a cross-repo mutation; it
+  never executes. Read-only input inspection plus exact file-tool writes
+  complete the owned request preparation without changing guard state or the
+  existing foreign-owner hold.
+
+  Raw requests, separate command streams, failed receipts, real-child controls,
+  vendor readbacks and retained source bytes live under root artifact
+  `native-sqlite-coordinator-parent/`; original private build roots remain
+  retained. Final source review and committed-candidate checks remain distinct
+  from these observations. Fixed-query native acquisition, SQL row conversion
+  and failure order, calendar transport, store projection, production consumers,
+  release qualification, full toolchain/SDK custody and adoption remain owed.
+  Coverage32/37 partial and parent acceptance0/8 do not advance.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5073,12 +5141,10 @@ progress and does not replace that transaction or its event readback.
    owner; its reserved source and failed ownership control remain obligations.
    Keep the refused CLI inventory unexecuted pending a supported resolution; do
    not infer an attempted foreign write from the refusal alone.
-4. Turn E198's imported pinned builder and E193/E195/E197 linkage/cache controls
-   into a reviewed-prefix coordinator with exclusive fresh Cargo target and
-   actual embedded-member verification. E199 supplies strict framing and the
-   builder consumer; E201 identifies the four direct Cargo callers and explicit
-   artifact-path consumers. Explicit Rust-extra inventory/provenance and the
-   pre-Cargo admission guard remain root-owned. Implement native fixed-query
+4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
+   target, embedded-member checks and four direct build/consumer integrations.
+   Qualify its committed candidate and retain UNADMITTED Rust-extra provenance
+   and the open full toolchain/SDK boundary. Implement native fixed-query
    acquisition with snapshot, cancellation and lossless SQL-value custody.
    Connect the imported registry to transactional rendering/writing and retain
    E165/E166 source/profile controls. E196 requires a store-specific timestamp
@@ -5097,7 +5163,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E206 retain the historical candidates, failures and bounded observations;
+E167–E207 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.

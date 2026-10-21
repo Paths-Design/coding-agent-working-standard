@@ -177,6 +177,20 @@ export class RenderHarness {
       this.ownerConfig = { schema: 'caws.qualification.capture-only.v1' };
       return;
     }
+    const nativeProfile = options.nativeProfile ?? 'release';
+    assert(['debug', 'release'].includes(nativeProfile), 'native profile must be debug or release');
+    const selectedRequest = process.env.CAWS_NATIVE_BUILD_REQUEST;
+    assert(
+      selectedRequest && path.isAbsolute(selectedRequest),
+      'CAWS_NATIVE_BUILD_REQUEST must name an explicit absolute request file'
+    );
+    const nativeBuild = (
+      createRequire(path.join(this.cli, 'package.json'))(
+        './dist/tooling/native-sqlite-build.js'
+      ) as typeof import('../dist/tooling/native-sqlite-build')
+    ).loadNativeSqliteBuild(selectedRequest);
+    assert.equal(nativeBuild.build.profile, nativeProfile, 'native qualification profile mismatch');
+
     assert(options.sterling, 'renderer qualification requires its source repository');
     this.sterling = fs.realpathSync(options.sterling);
     const crate = path.resolve(this.cli, '../caws-native');
@@ -189,15 +203,9 @@ export class RenderHarness {
     this.sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-render-qual-')));
     this.home = path.join(this.sandbox, 'machine');
     this.owner = path.join(this.home, 'state/render-service');
-    const nativeProfile = options.nativeProfile ?? 'release';
-    this.native = path.join(crate, 'target', nativeProfile, 'caws-native');
-    this.observer = path.join(crate, 'target', nativeProfile, 'examples/service-observer');
-    this.custodyObserver = path.join(
-      crate,
-      'target',
-      nativeProfile,
-      'examples/service-custody-observer'
-    );
+    this.native = nativeBuild.build.artifacts.native.path;
+    this.observer = nativeBuild.build.artifacts.observer.path;
+    this.custodyObserver = nativeBuild.build.artifacts.custodyObserver.path;
     this.engine = path.join(this.cli, 'dist/runtime/engine-entry.js');
     this.cliEntry = path.join(this.cli, 'dist/index.js');
     this.hookCli = path.join(this.root, 'hook-cli/caws');
@@ -287,6 +295,14 @@ export class RenderHarness {
     };
     this.writeJson('harness.json', {
       schema: 'caws.qualification.render-harness.v1',
+      nativeBuild: {
+        requestFile: nativeBuild.requestFile,
+        completionReceipt: nativeBuild.completionReceipt,
+        requestDigest: nativeBuild.build.requestDigest,
+        profile: nativeBuild.build.profile,
+        prefixManifest: nativeBuild.build.prefixManifest,
+        adoption: nativeBuild.build.adoption,
+      },
       root: this.root,
       sandbox: this.sandbox,
       home: this.home,
