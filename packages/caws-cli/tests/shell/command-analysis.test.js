@@ -398,58 +398,83 @@ describe('bounded shell analysis contract', () => {
     expect(results.get('query-missing').context).toBeNull();
   });
   test.each([
-    ['policies.js', 'gitPolicy(args, state, env, ctx, node, reader);', 'void 0;', 'git-canonical'],
-    ['policies.js', 'sedPolicy(args, ctx, node);', 'void 0;', 'sed-execution-command'],
-    ['words.js', 'inspect(part.script, state, depth + 1);', 'void 0;', 'nested-reader-foreign-git'],
+    [
+      'policies.js',
+      'gitPolicy(args, state, env, ctx, node, reader);',
+      'void 0;',
+      'git-canonical',
+      'allow',
+    ],
+    ['policies.js', 'sedPolicy(args, ctx, node);', 'void 0;', 'sed-execution-command', 'allow'],
+    [
+      'policies.js',
+      'sort: /^-[bdfginrMu]+$/',
+      'sort: /-[bdfginrMu]+$/',
+      'profile-reader-sort-attached-output',
+      'allow',
+    ],
+    [
+      'words.js',
+      'inspect(part.script, state, depth + 1);',
+      'void 0;',
+      'nested-reader-foreign-git',
+      'allow',
+    ],
     [
       'words.js',
       "ctx.reason(word, 'unknown-splitting', 'Unquoted unknown expansion can change argument count and options.');",
       'void 0;',
       'unknown-unquoted-filename',
+      'allow',
     ],
-    ['analyze.js', 'if (tree.errors?.length)', 'if (false)', 'malformed-quote'],
+    ['analyze.js', 'if (tree.errors?.length)', 'if (false)', 'malformed-quote', 'allow'],
     [
       'analyze.js',
       'const outputs = list(node.body.commands, [clone(state)], reader, depth + 1);',
       'return list(node.body.commands, [clone(state)], reader, depth + 1);',
       'subshell-cannot-sanitize-parent',
+      'allow',
     ],
-  ])('semantic mutation in %s is caught by %s', (file, search, replacement, fixtureId) => {
-    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-analysis-mutant-'));
-    try {
-      const moduleDir = path.join(temp, 'analysis');
-      fs.cpSync(path.resolve(__dirname, '../../dist/shell/analysis'), moduleDir, {
-        recursive: true,
-      });
-      fs.mkdirSync(path.join(temp, 'node_modules'));
-      fs.symlinkSync(
-        path.dirname(path.dirname(require.resolve('unbash'))),
-        path.join(temp, 'node_modules/unbash')
-      );
-      const target = path.join(moduleDir, file);
-      const original = fs.readFileSync(target, 'utf8');
-      const mutated = original.replace(search, replacement);
-      expect(mutated).not.toBe(original);
-      fs.writeFileSync(target, mutated);
-      const request = requests.find((item) => item.id === fixtureId);
-      const child = spawnSync(
-        process.execPath,
-        ['-e', RUNNER, path.join(moduleDir, 'analyze.js')],
-        {
-          input: JSON.stringify([request]),
-          encoding: 'utf8',
-          shell: false,
-          timeout: 15000,
-        }
-      );
-      if (child.error || child.status !== 0)
-        throw new Error('Mutation infrastructure failed: ' + child.stderr);
-      const actual = JSON.parse(child.stdout)[0].first;
-      expect(actual.decision).not.toBe(corpus.find((item) => item.id === fixtureId).decision);
-      // A runtime/import crash is not a semantic kill.
-      expect(actual.reasons.map((item) => item.code)).not.toContain('analysis-failure');
-    } finally {
-      fs.rmSync(temp, { recursive: true, force: true });
+  ])(
+    'semantic mutation in %s is caught by %s',
+    (file, search, replacement, fixtureId, changedDecision) => {
+      const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-analysis-mutant-'));
+      try {
+        const moduleDir = path.join(temp, 'analysis');
+        fs.cpSync(path.resolve(__dirname, '../../dist/shell/analysis'), moduleDir, {
+          recursive: true,
+        });
+        fs.mkdirSync(path.join(temp, 'node_modules'));
+        fs.symlinkSync(
+          path.dirname(path.dirname(require.resolve('unbash'))),
+          path.join(temp, 'node_modules/unbash')
+        );
+        const target = path.join(moduleDir, file);
+        const original = fs.readFileSync(target, 'utf8');
+        const mutated = original.replace(search, replacement);
+        expect(mutated).not.toBe(original);
+        fs.writeFileSync(target, mutated);
+        const request = requests.find((item) => item.id === fixtureId);
+        const child = spawnSync(
+          process.execPath,
+          ['-e', RUNNER, path.join(moduleDir, 'analyze.js')],
+          {
+            input: JSON.stringify([request]),
+            encoding: 'utf8',
+            shell: false,
+            timeout: 15000,
+          }
+        );
+        if (child.error || child.status !== 0)
+          throw new Error('Mutation infrastructure failed: ' + child.stderr);
+        const actual = JSON.parse(child.stdout)[0].first;
+        expect(actual.decision).not.toBe(corpus.find((item) => item.id === fixtureId).decision);
+        expect(actual.decision).toBe(changedDecision);
+        // A runtime/import crash is not a semantic kill.
+        expect(actual.reasons.map((item) => item.code)).not.toContain('analysis-failure');
+      } finally {
+        fs.rmSync(temp, { recursive: true, force: true });
+      }
     }
-  });
+  );
 });

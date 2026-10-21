@@ -892,4 +892,65 @@ add(
   'wrapper-option'
 );
 
+// Routing and execution slots must retain their roles across equivalent spellings.
+add('git-attached-own-cwd', "git -C'{{OWN}}' status");
+add('git-attached-foreign-cwd', "git -C'{{FOREIGN}}' status", 'deny', 'foreign-git-target');
+for (const option of [
+  '--no-pager',
+  '--no-optional-locks',
+  '--literal-pathspecs',
+  '--no-replace-objects',
+])
+  add('git-global-data-control-' + option, 'git ' + option + ' status');
+add('git-global-pager-execution', 'git --paginate status', 'deny', 'git-execution');
+for (const command of [
+  'git diff --textconv HEAD',
+  'git show --textconv HEAD',
+  'git grep --open-files-in-pager needle',
+])
+  add('git-execution-slot-' + command, command, 'deny', 'git-execution');
+add('git-later-external-transport', "git fetch origin 'ext::tool args'", 'deny', 'git-execution');
+add('git-external-transport-as-path', 'git status -- ext::data');
+
+// Each reader's closed flag profile must match the entire option. The same
+// spelling after -- is a data operand and must not acquire option semantics.
+for (const [name, flag] of [
+  ['rg', '-n'],
+  ['grep', '-n'],
+  ['head', '-n12'],
+  ['tail', '-n12'],
+  ['wc', '-cl'],
+  ['ls', '-al'],
+  ['cut', '-b1,2'],
+  ['tr', '-cd'],
+  ['sort', '-rn'],
+  ['uniq', '-cd'],
+]) {
+  add('reader-whole-flag-control-' + name, name + ' ' + flag);
+  add('reader-prefix-flag-' + name, name + ' --unsupported' + flag, 'unresolved', 'reader-option');
+  if (name !== 'cut')
+    add(
+      'reader-suffix-flag-' + name,
+      name + ' ' + flag + '--unsupported',
+      'unresolved',
+      'reader-option'
+    );
+  add('reader-flag-as-data-' + name, name + ' -- --unsupported' + flag);
+}
+// A loose sort flag match could hide an attached output operand ending in -r.
+add(
+  'reader-sort-attached-output',
+  "sort -o'{{FOREIGN}}/output-r' input",
+  'unresolved',
+  'reader-option'
+);
+for (const [name, flag] of [
+  ['grep', '--color'],
+  ['ls', '--color'],
+  ['head', '--lines=12'],
+  ['tail', '--bytes=12'],
+  ['cut', '--fields=1,2'],
+])
+  add('reader-long-flag-control-' + name, name + ' ' + flag);
+
 module.exports = cases;
