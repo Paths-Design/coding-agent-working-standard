@@ -58,3 +58,8 @@ evidence:
     evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-timestamp; Candidate3405ada0:3648 qualified final comparisons match actual CPython including63 raw gmtime failures;25 upper C-int year-addition cases explicitly refuse without parity claim.84 synthetic-calendar results agree on actual Node18.0/22.51 Jest include OS-error precedence/correlation, Gregorian leap clamp and UTC formatting. Century-rule mutant survives ordinary corpus but fails3 synthetic cases. tmMon INT_MAX C-addition overflow is not qualified by synthetic oracle; ordinary gmtime months0..11. Supplied fields/errno are caller observations, not authenticated native authority."
     recorded_at: "2026-10-21T12:58:19.683Z"
     commit_sha: "3405ada0fce0ff86ba28d7239077be789cb99e49"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-timestamp; Candidate3405ada0: tests/transcripts/store-timestamp.test.js51 checks on Node18.20.8/22 retained in commands/node18-jest and node22-jest; hostile profile/tag/accessors/proxy failures, forged/copy tokens, mismatched seconds, malformed OS/port envelopes, transport/cancel/callback separation and Date/callback prohibition assertions inspected. No native I/O/async cleanup/producer identity or consumer adoption exercised."
+    recorded_at: "2026-10-21T12:58:21.106Z"
+    commit_sha: "3405ada0fce0ff86ba28d7239077be789cb99e49"
