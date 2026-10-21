@@ -1,0 +1,56 @@
+id: CAWS-NATIVE-PROJECT-BINDING-001
+title: 'Bind store operations to original native project observations'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-21T17:14:04.583Z'
+updated_at: '2026-10-21T17:14:04.583Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Native original invocation project observation and transcript-store binding'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/invocation_project.rs'
+    - 'packages/caws-native/src/lib.rs'
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/protocol.rs'
+    - 'packages/caws-native/src/transcript_store_wire.rs'
+    - 'packages/caws-native/tests/fixtures/store-engine.cjs'
+    - 'docs/architecture/caws-native-runtime.md'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Engine root and Ready digest agreement is correlation, never an independent original project observation or publication authority.'
+  - 'Project selection uses original captured cwd/environment/payload and selected pinned Git under the original deadline; no engine output/database/SQL path override is admitted.'
+  - 'Direct child, transport and cleanup outcomes remain independent; failure or uncertain cleanup cannot yield a successful project observation.'
+acceptance:
+  - id: A1
+    given: 'original caller data and supported project context'
+    when: 'native project observation executes'
+    then: 'selected cwd and Git common-directory mapping preserve the actual existing context contract including linked worktrees and sanitized Git routing.'
+  - id: A2
+    given: 'an engine root and Ready digest agreeing on a foreign project'
+    when: 'a store operation is requested'
+    then: 'original native project disagreement refuses before database acquisition or output effects.'
+  - id: A3
+    given: 'timeout cancellation malformed output or failed child cleanup'
+    when: 'native Git observation settles'
+    then: 'exact phase failures and independent cleanup remain observable with no success or unsafe retry.'
+  - id: A4
+    given: 'real isolated Git and linked-worktree store fixtures'
+    when: 'the integrated native store path executes'
+    then: 'root binding and refusal artifacts are retained while read-only row semantics remain supported and publication or cutover is not inferred.'
+observability:
+  - 'Raw selected Git identity, original context selection, query stdout/stderr, exit/cleanup and actual root agreement/refusal artifacts'
+rollback:
+  - 'Retain existing installed runtime; revert only this feature-gated native observation and store integration before adoption.'
+non_functional:
+  security:
+    - 'No cache or renderer grant and no digest alone can authorize store publication.'
+contracts:
+  - name: 'native-project-observation'
+    type: api
+  - name: 'original-store-root-binding'
+    type: contract-test
