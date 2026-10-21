@@ -28,9 +28,19 @@ invariants:
   - 'Scope boundary. This closes the admission that happens when normalization is unavailable while Python-success behavior is preserved. It does NOT retire the interpreter: the parent CAWS-NATIVE-RUNTIME-001 no-Python objective (Rust/TS) stays open, and so does sibling parse-input.sh:219-225 (deliberately fail-open when its python3 parser fails). Same-unit release metadata is the shared pack fingerprint (enforced by tests/init/pack-fingerprint.test.js) and SHARED_PACK_VERSION (read by hook-chain.ts:201 and doctor installed_pack_version_lag). Native typed-engine pins (stock-handlers.ts LIBRARIES caws-state.sh, service-image.ts) are the native integration owner obligation at import, not this unit.'
 acceptance:
   - id: A1
-    given: 'a fixture canonical repo whose linked worktree is owned by session S, plus a second worktree owned by session F'
-    when: 'worktree-write-guard.sh adjudicates a Write into F worktree payload from S worktree with python3 absent from PATH, and again with a python3 on PATH that exits nonzero'
-    then: 'both exit 2 with the block_foreign_worktree verdict, identical to the python3-present run. The pre-fix exit 0 is retained as the counterexample.'
+    given: >-
+      a fixture canonical repo with real linked worktrees s-wt (owner v2-session-s)
+      and f-wt (owner v2-session-f) stamped in worktrees.json owner.session_id, and
+      HOOK_* precomputed for a Write into f-wt/src/payload.ts from s-wt
+    when: >-
+      the shipped worktree-write-guard.sh adjudicates it with python3 present, with
+      a python3 on PATH that exits 1, and with python3 absent from PATH, plus an
+      owner-self control with python3 present
+    then: >-
+      python3 present exits 2 with BLOCKED naming f-wt. The owner-self control exits
+      0. The failing and absent cases exit 2 with the matching [caws-guard-realpath]
+      class on stderr instead of the run-01 baseline exit 0. In every case the
+      target path stays absent.
   - id: A2
     given: 'a hostile path corpus (/tmp alias, symlinked ancestor with missing leaf, relative and absolute link targets, link/.., missing/../link, dangling leaf, ENOTDIR, //, trailing slash, non-UTF8 name, leading dash)'
     when: '_realpath resolves each with no python3'
