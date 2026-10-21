@@ -26,3 +26,11 @@ rollback:
   - 'Revert the merge commit; test-only change'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "macOS, pre-push PATH (python3 3.9.6), agent env stripped: tests/hooks/pytest-entrypoint.test.js 7/7; before the fix the same test failed with expected /var/... vs selected /private/var/.../marker.sh"
+    recorded_at: "2026-10-21T02:53:40.213Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest-entrypoint.test.js::cold npm pytest entrypoint builds before a real installed read-only selection and marker invocation"
+    commit_sha: d49f43f7
+    test_verified_at: d49f43f7c9fe10a7198180760d076db589913fb0
