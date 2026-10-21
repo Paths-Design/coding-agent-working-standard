@@ -42,3 +42,11 @@ non_functional:
 contracts:
   - name: 'opencode-historical-surface'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exact frozen historical metadata agrees:9 tool-name translations,8 input mapper coordinates,3 prefixes,0 adapters; source4a1499d1e16991998565c0376f3944e915b8ec5f016f3cae11a7ac11ffdcb612. Unknown coordinates returnundefined; fallback belongs actual transcript-store.py consumer, not these declarations. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verification.json; /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/commands; independent rawstreams native-harness-tail-differential/runs/0002-node22 and0003-node18 under sessionartifactroot. Commitverificationchecksreachability; recordedcommandnotrerunbyACCLI."
+    recorded_at: "2026-10-21T06:17:27.043Z"
+    command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verify.py"
+    exit_code: 0
+    commit_sha: e968dcaac211cd69888ab97a3bda1e8f521fbb74
