@@ -48,3 +48,10 @@ evidence:
     command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runTestsByPath tests/hooks/pytest-entrypoint.test.js --runInBand --json --outputFile /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/native-pytest-entrypoint/008-committed-final/jest-results.json
     exit_code: 0
     commit_sha: "36669f7ac4dfb586d3ecd615088b6ca2dc54ad56"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/native-pytest-entrypoint/008-committed-final/custody.json: equivalent source identities and manifests differ only pretest deletion; negative npm PID61613 exit1; actual MODULE_NOT_FOUND missing copied dist installer; no marker or journal; actual EOF/groupabsence."
+    recorded_at: "2026-10-21T00:15:07.559Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runTestsByPath tests/hooks/pytest-entrypoint.test.js --runInBand --json --outputFile /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/native-pytest-entrypoint/008-committed-final/jest-results.json
+    exit_code: 0
+    commit_sha: "36669f7ac4dfb586d3ecd615088b6ca2dc54ad56"
