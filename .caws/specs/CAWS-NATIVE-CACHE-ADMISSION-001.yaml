@@ -1,0 +1,40 @@
+id: CAWS-NATIVE-CACHE-ADMISSION-001
+title: 'Qualify the finite stock Codex prefix before native session cache effects'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T05:24:28.767Z'
+updated_at: '2026-10-21T05:24:28.767Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Runtime session cache admission'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/session-cache-admission.ts'
+    - 'packages/caws-cli/tests/runtime/session-cache-admission.test.js'
+  out: []
+invariants:
+  - 'Unsupported source identities, paths, caller environment or cwd decline before native cache effects; this read-only predicate grants no write authority or session identity.'
+acceptance:
+  - id: A1
+    given: 'a matching system Codex pre_tool_use canonical Bash request and current confined stock prefix'
+    when: 'cache admission is evaluated'
+    then: 'the finite admitted profile returns true without spawning or writing'
+  - id: A2
+    given: 'a changed missing redirected or overridden prefix source or project bootstrap path'
+    when: 'cache admission is evaluated'
+    then: 'it returns false including when the selected handler chain is empty'
+  - id: A3
+    given: 'original or derived startup timing imported-function loaded-state customization or unsupported request selection or cwd'
+    when: 'cache admission is evaluated'
+    then: 'it returns false without mutating input or manufacturing session identity'
+observability:
+  - 'Retain exact compiled candidate checks, hostile admission decisions and before/after fixture state outside source control.'
+rollback:
+  - 'Remove the helper import at the parent integration seam; unsupported invocations retain complete compatibility dispatch.'
+non_functional: {}
+contracts:
+  - name: 'session-cache-admission'
+    type: behavior
