@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde_json::{Value, json, value::RawValue};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeMap,
     ffi::CStr,
     path::{Component, Path},
     time::Instant,
@@ -41,6 +42,7 @@ pub enum ServeFailurePhase {
 #[derive(Debug)]
 pub enum ServeError {
     BeforeAcquisition(String),
+    ProjectObservation(Box<crate::invocation_project::ProjectFailure>),
     AfterAcquisition {
         phase: ServeFailurePhase,
         message: String,
@@ -49,6 +51,13 @@ pub enum ServeError {
 }
 
 impl ServeError {
+    /// Query cleanup is independent of both engine and SQLite cleanup.
+    pub fn retry_project_cleanup(&mut self) -> Result<(), String> {
+        match self {
+            Self::ProjectObservation(error) => error.retry_cleanup(),
+            _ => Ok(()),
+        }
+    }
     pub(crate) fn settled(
         phase: ServeFailurePhase,
         message: String,
@@ -76,6 +85,9 @@ impl std::fmt::Display for ServeError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BeforeAcquisition(message) => formatter.write_str(message),
+            Self::ProjectObservation(error) => {
+                write!(formatter, "store project observation: {error}")
+            }
             Self::AfterAcquisition {
                 phase,
                 message,
@@ -111,6 +123,7 @@ pub struct Invocation<'a> {
     pub dispatched: bool,
     pub database: Option<&'a str>,
     pub caller_cwd: &'a str,
+    pub caller_environment: &'a BTreeMap<String, String>,
 }
 
 /// One reader and one writer are supplied by the original invocation owner.
@@ -280,19 +293,31 @@ pub fn serve(
     {
         return Err("store request binding mismatch".into());
     }
-    let payload: Value = serde_json::from_str(invocation.original_payload.get())
-        .map_err(|_| "unsupported original store payload")?;
-    let sid = payload
-        .get("session_id")
-        .and_then(Value::as_str)
+    let sid = crate::invocation_project::payload_string(invocation.original_payload, "session_id")?
         .ok_or("store requires original string session_id")?;
-    if !safe_sid(sid) || Some(sid) != invocation.ready_session_id {
+    if !safe_sid(&sid) || Some(sid.as_str()) != invocation.ready_session_id {
         return Err("store original session binding mismatch".into());
     }
     let database = invocation
         .database
         .filter(|value| !value.is_empty() && !value.contains('\0'))
         .ok_or("captured store database unavailable")?;
+    let project = crate::invocation_project::observe(
+        invocation.caller_cwd,
+        invocation.caller_environment,
+        invocation.original_payload,
+        deadline,
+        &is_cancelled,
+    )
+    .map_err(|error| ServeError::ProjectObservation(Box::new(error)))?;
+    // Ready/root agreement alone is an engine assertion. Correlate both with
+    // the project independently observed from the original native invocation.
+    if project.canonical_root.to_str() != Some(request.canonical_root.as_str()) {
+        return Err("store original project binding mismatch".into());
+    }
+    if is_cancelled() || Instant::now() >= deadline {
+        return Err("store project observation cancelled or expired".into());
+    }
     let path = if Path::new(database).is_absolute() {
         Path::new(database).to_path_buf()
     } else {
@@ -312,7 +337,7 @@ pub fn serve(
     let mut exchange_error = None;
     let outcome = transcript_store::acquire(
         path,
-        sid,
+        &sid,
         AcquisitionLimits {
             max_rows: MAX_ROWS,
             max_cell_bytes: MAX_CELL_BYTES,
@@ -440,10 +465,19 @@ mod tests {
     use super::*;
     use std::{
         collections::VecDeque,
-        sync::atomic::{AtomicU64, Ordering},
+        sync::{
+            LazyLock,
+            atomic::{AtomicU64, Ordering},
+        },
         time::Duration,
     };
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    static ENVIRONMENT: LazyLock<BTreeMap<String, String>> = LazyLock::new(|| {
+        BTreeMap::from([
+            ("PATH".into(), "/usr/bin:/bin".into()),
+            ("HOME".into(), "/nonexistent-caws-store-test-home".into()),
+        ])
+    });
     fn never_cancel() -> bool {
         false
     }
@@ -505,6 +539,7 @@ mod tests {
             dispatched: true,
             database,
             caller_cwd: "/",
+            caller_environment: &ENVIRONMENT,
         }
     }
     fn control(action: &str) -> Value {
@@ -522,6 +557,15 @@ mod tests {
                 NEXT.fetch_add(1, Ordering::SeqCst)
             ));
             std::fs::create_dir(&directory).unwrap();
+            let directory = directory.canonicalize().unwrap();
+            let initialized = std::process::Command::new("/usr/bin/git")
+                .args(["init", "--quiet"])
+                .arg(&directory)
+                .env_clear()
+                .envs(ENVIRONMENT.iter())
+                .output()
+                .unwrap();
+            assert!(initialized.status.success(), "{initialized:?}");
             let database = directory.join("source.sqlite");
             let connection = rusqlite::Connection::open(&database).unwrap();
             connection.execute_batch("CREATE TABLE message(id,session_id,time_created,data);CREATE TABLE part(id,message_id,time_created,data);INSERT INTO message VALUES('m','s',0,'{}');INSERT INTO part VALUES('p','m',0,'{}');").unwrap();
@@ -533,6 +577,22 @@ mod tests {
         }
         fn path(&self) -> &str {
             self.database.to_str().unwrap()
+        }
+        fn root(&self) -> &str {
+            self.directory.to_str().unwrap()
+        }
+        fn digest(&self) -> String {
+            format!("{:x}", Sha256::digest(self.root().as_bytes()))
+        }
+        fn request(&self) -> Vec<u8> {
+            let mut value: Value = serde_json::from_slice(&request()).unwrap();
+            value["canonicalRoot"] = json!(self.root());
+            serde_json::to_vec(&value).unwrap()
+        }
+        fn invocation<'a>(&'a self, payload: &'a RawValue, digest: &'a str) -> Invocation<'a> {
+            let mut context = invocation(payload, Some(self.path()), digest);
+            context.caller_cwd = self.root();
+            context
         }
         fn can_lock(&self) {
             let connection = rusqlite::Connection::open(&self.database).unwrap();
@@ -601,13 +661,13 @@ mod tests {
         let fixture = Fixture::new();
         let before = std::fs::read(&fixture.database).unwrap();
         let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
-        let digest = format!("{:x}", Sha256::digest(b"/private/tmp/store-root"));
+        let digest = fixture.digest();
         let mut utc_control = control("utc");
         utc_control["seconds"] = json!("0");
         let mut transport = transport(vec![utc_control, control("continue")]);
         run(
-            &request(),
-            invocation(&payload, Some(fixture.path()), &digest),
+            &fixture.request(),
+            fixture.invocation(&payload, &digest),
             &mut transport,
         )
         .unwrap();
@@ -628,12 +688,169 @@ mod tests {
         assert_eq!(transport.sent[2]["metrics"]["rowsDelivered"], 1);
         fixture.can_lock();
         assert_eq!(std::fs::read(&fixture.database).unwrap(), before);
+        println!(
+            "store row/UTC/closed frames={:?}; database SHA256 before/after={:x}; exclusive lock reacquired",
+            transport.sent,
+            Sha256::digest(&before)
+        );
+    }
+    #[test]
+    fn transcript_store_agreeing_foreign_engine_root_refuses_before_database_resolution() {
+        let original = Fixture::new();
+        let foreign = Fixture::new();
+        let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
+        let foreign_digest = foreign.digest();
+        let mut context = original.invocation(&payload, &foreign_digest);
+        context.database = Some("/does/not/exist-caws-root-binding-control");
+        let mut transport = transport(vec![]);
+        let error = run(&foreign.request(), context, &mut transport).unwrap_err();
+        assert!(
+            matches!(&error, ServeError::BeforeAcquisition(message)
+            if message == "store original project binding mismatch"),
+            "{error}"
+        );
+        assert_eq!(transport.credit, 0);
+        assert!(transport.sent.is_empty());
+        original.can_lock();
+        foreign.can_lock();
+        println!(
+            "matching foreign Ready/root refusal={error}; original={}; foreign={}; credit={}; frames={:?}",
+            original.root(),
+            foreign.root(),
+            transport.credit,
+            transport.sent
+        );
+    }
+    #[test]
+    fn transcript_store_original_environment_ignores_foreign_git_routing() {
+        let original = Fixture::new();
+        let foreign = Fixture::new();
+        let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
+        let mut environment = ENVIRONMENT.clone();
+        environment.insert(
+            "GIT_DIR".into(),
+            foreign.directory.join(".git").to_str().unwrap().into(),
+        );
+        environment.insert("GIT_WORK_TREE".into(), foreign.root().into());
+        environment.insert("HOOK_PROJECT_DIR".into(), foreign.root().into());
+        for wrong_root in [false, true] {
+            let digest = if wrong_root {
+                foreign.digest()
+            } else {
+                original.digest()
+            };
+            let mut context = original.invocation(&payload, &digest);
+            context.caller_environment = &environment;
+            let mut transport = transport(vec![control("continue")]);
+            let bytes = if wrong_root {
+                foreign.request()
+            } else {
+                original.request()
+            };
+            let result = run(&bytes, context, &mut transport);
+            if wrong_root {
+                assert!(
+                    matches!(result, Err(ServeError::BeforeAcquisition(ref message))
+                    if message == "store original project binding mismatch")
+                );
+                assert_eq!(transport.credit, 0);
+                assert!(transport.sent.is_empty());
+            } else {
+                result.unwrap();
+                assert_eq!(transport.sent.last().unwrap()["closed"], true);
+            }
+        }
+    }
+    #[test]
+    fn transcript_store_opaque_extension_and_duplicate_owned_keys_preserve_last_value() {
+        let fixture = Fixture::new();
+        let payload = RawValue::from_string(
+            r#"{"session_id":false,"cwd":false,"unused":1e9999,"\ud800":{"value":"\udfff"},"session\u005fid":"s","cwd":""}"#.into()
+        ).unwrap();
+        let digest = fixture.digest();
+        let mut transport = transport(vec![control("continue")]);
+        run(
+            &fixture.request(),
+            fixture.invocation(&payload, &digest),
+            &mut transport,
+        )
+        .unwrap();
+        assert_eq!(transport.sent.last().unwrap()["end"], "exhausted");
+    }
+    #[test]
+    fn transcript_store_linked_worktree_observes_common_directory_parent() {
+        let fixture = Fixture::new();
+        let git = |args: &[&str]| {
+            let result = std::process::Command::new("/usr/bin/git")
+                .current_dir(&fixture.directory)
+                .env_clear()
+                .envs(ENVIRONMENT.iter())
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(result.status.success(), "{result:?}");
+        };
+        git(&[
+            "-c",
+            "user.name=CAWS",
+            "-c",
+            "user.email=caws@example.invalid",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            "fixture",
+        ]);
+        let linked = fixture.directory.join("linked");
+        git(&[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            linked.to_str().unwrap(),
+        ]);
+        let nested = linked.join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
+        let digest = fixture.digest();
+        let mut context = fixture.invocation(&payload, &digest);
+        context.caller_cwd = nested.to_str().unwrap();
+        let mut transport = transport(vec![control("continue")]);
+        run(&fixture.request(), context, &mut transport).unwrap();
+        assert_eq!(transport.sent.last().unwrap()["closed"], true);
+        fixture.can_lock();
+    }
+    #[test]
+    fn transcript_store_cancelled_project_observation_never_credits_or_opens_source() {
+        let fixture = Fixture::new();
+        let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
+        let digest = fixture.digest();
+        let mut context = fixture.invocation(&payload, &digest);
+        context.database = Some("/does/not/exist-caws-cancellation-control");
+        let mut transport = transport(vec![]);
+        let error = serve(
+            &fixture.request(),
+            context,
+            Instant::now() + Duration::from_secs(3),
+            || true,
+            &mut transport,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, ServeError::ProjectObservation(_)),
+            "{error}"
+        );
+        assert_eq!(transport.credit, 0);
+        assert!(transport.sent.is_empty());
+        fixture.can_lock();
     }
     #[test]
     fn transcript_store_control_failures_end_query_without_continuation() {
         let fixture = Fixture::new();
         let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
-        let digest = format!("{:x}", Sha256::digest(b"/private/tmp/store-root"));
+        let digest = fixture.digest();
         for variant in 0..7 {
             let mut first = control("continue");
             let controls = match variant {
@@ -667,8 +884,8 @@ mod tests {
             };
             let mut transport = transport(controls);
             let error = run(
-                &request(),
-                invocation(&payload, Some(fixture.path()), &digest),
+                &fixture.request(),
+                fixture.invocation(&payload, &digest),
                 &mut transport,
             )
             .unwrap_err();
@@ -711,11 +928,11 @@ mod tests {
         }
         let fixture = Fixture::new();
         let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
-        let digest = format!("{:x}", Sha256::digest(b"/private/tmp/store-root"));
+        let digest = fixture.digest();
         let mut transport = FailClosed(transport(vec![control("continue")]));
         let error = serve(
-            &request(),
-            invocation(&payload, Some(fixture.path()), &digest),
+            &fixture.request(),
+            fixture.invocation(&payload, &digest),
             Instant::now() + Duration::from_secs(3),
             never_cancel,
             &mut transport,

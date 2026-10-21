@@ -84,6 +84,7 @@ impl Request {
                 .get("CAWS_TRANSCRIPT_DATABASE")
                 .map(String::as_str),
             caller_cwd: &self.caller.cwd,
+            caller_environment: &self.caller.environment,
         }
     }
     pub fn session_cache_owner<'a>(

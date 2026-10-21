@@ -355,8 +355,29 @@ The default-off SQLite feature exposes a finite development exchange through the
 frontend's existing pre-proposal reader. It does not select a stock handler or
 replace compatibility dispatch. Native observations bind one active dispatched
 system OpenCode/ZCode Stop to its original safe session, captured database/cwd,
-Ready root digest and exchange token. Cache and renderer grants confer no store
+Ready root digest and exchange token. A store request additionally observes the
+project from the original caller environment, cwd and raw payload. Payload cwd
+precedes `CAWS_PROJECT_DIR`, then caller cwd; unrelated JSON values remain raw.
+The observer selects Git from that caller's environment, removes inherited
+`GIT_*`/`HOOK_*` routing, queries checkout and absolute common directory, and
+derives the canonical root as the common directory's parent. The finite
+physical-path profile compares that observed root with the engine root before
+database resolution, transport credit or acquisition. Engine root/digest
+agreement alone supplies correlation. Cache and renderer grants confer no store
 authority. Supplied SQL and database overrides are refused.
+
+Each query retains its direct child, private group and pipes independently of
+the engine. Cancellation, combined output limits and each query's five-second
+ceiling remain capped by the original invocation deadline. Cleanup records stop,
+group settlement and reap separately; an accepted signal cannot establish group
+exit. A typed failure carries uncertain query ownership across independent
+engine cleanup and final error delivery, with a bounded retry rather than an
+unbounded destructor. This supplies in-process custody, not durable custody
+after owner destruction. Executable pathname/metadata/hash checks around launch
+are not atomic execution-image attestation. Physical root strings do not anchor
+directory identity against concurrent replacement, and lexical symlink aliases
+outside this profile remain unqualified. These observations confer no
+publication permit.
 
 One native connection owns the fixed read transaction and cursor across typed
 row callbacks. Current-row TEXT admission precedes the next VM step and current

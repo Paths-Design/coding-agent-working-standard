@@ -169,6 +169,12 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             if let Err(error) = session.cleanup() {
                 message.push_str(&format!("; cleanup: {error}"));
             }
+            #[cfg(feature = "sqlite-store")]
+            if let Some(failure) = store_failure.as_mut()
+                && let Err(error) = failure.retry_project_cleanup()
+            {
+                message.push_str(&format!("; independent Git query cleanup: {error}"));
+            }
             return Err(Failure {
                 dispatched,
                 ready: ready.map(Box::new),
