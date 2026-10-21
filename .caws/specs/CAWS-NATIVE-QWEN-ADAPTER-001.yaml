@@ -50,3 +50,10 @@ evidence:
     command: python3 -B /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-qwen-adapter/verify-artifacts.py
     exit_code: 0
     commit_sha: "39941e8cced49c2072956bf7acf0a67ce0e958a5"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-qwen-adapter :: commands/013-final-tests22 and014-final-tests18 exit0/104pass0skip, seven process APIs0attempts (not OS sandbox); qwen-falsifiers/observation-node18,22.stdout retain exact raw bytes/events/paths/frozen envelopes, partial commitAllowed:false and empty normalized claim. Root019 rederived. No live acquisition/registry/native claim."
+    recorded_at: "2026-10-21T00:36:44.859Z"
+    command: python3 -B /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-qwen-adapter/verify-artifacts.py
+    exit_code: 0
+    commit_sha: "39941e8cced49c2072956bf7acf0a67ce0e958a5"
