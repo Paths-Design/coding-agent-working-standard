@@ -1,0 +1,47 @@
+id: CAWS-NATIVE-ZCODE-ADAPTER-001
+title: 'Historical Zcode model_io transcript adapter'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T05:33:57.286Z'
+updated_at: '2026-10-21T05:33:57.286Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Zcode native model_io matching ordered projection timestamp coalescing and turn deduplication'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/harness-zcode.ts'
+    - 'packages/caws-cli/tests/transcripts/zcode.test.ts'
+  out: []
+invariants:
+  - 'Use the explicitly pinned common interpretation profile and preserve numeric kinds and source custody; production profile selection remains parent-owned.'
+  - 'A matched row owns its outcome even when it emits no events. Native transcript labels confer no execution authority; failed and tentative drafts confer no durable state authority.'
+acceptance:
+  - id: A1
+    given: 'ordinary decoded model_io rows and hostile malformed shapes'
+    when: 'typed matching and projection execute'
+    then: 'ordered boundaries assistant text tool calls exact fields timestamp truthiness and error semantics match independent pinned Python references'
+  - id: A2
+    given: 'repeated absent changed and malformed turn identifiers with explicit initial states'
+    when: 'direct projection and occurrence transactions execute'
+    then: 'turn deduplication state creation and preservation match references while failed or tentative drafts cannot mutate caller state'
+  - id: A3
+    given: 'complete partial empty matched and mismatched raw occurrences'
+    when: 'normalization executes on Node18 and22 without Python launches'
+    then: 'exact bytes paths attribution frozen envelopes and tentative commitAllowed false remain observable'
+  - id: A4
+    given: 'committed two-file component independent references and targeted counterexamples'
+    when: 'strict compilation semantic tests and declared gates execute'
+    then: 'checked identities support only bounded adapter parity while DB reconstruction ordered registry acquisition cache writer native installation full workload Python retirement and cutover remain unverified'
+observability:
+  - 'Retain exact source interpreter fixture command status stream and runtime artifact identities; separate ordinary reader inputs from constructed and hostile seeded controls.'
+rollback:
+  - 'Revert standalone component source commit; this unit modifies no production consumer or installed runtime.'
+non_functional:
+  security:
+    - 'Never execute transcript content or grant authority from normalized labels.'
+contracts:
+  - name: 'zcode-historical-surface'
+    type: behavior
