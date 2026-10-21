@@ -156,8 +156,11 @@ partition is discharged. Root retains Cargo/native admission, raw SQL
 acquisition, projection and consumer integration.
 `CAWS-NATIVE-AR-INSPECTION-001` is superseded without source changes after
 guarded worker writes refused despite its CLI claim. Root accepts the complete
-inspector contract; that disposition does not establish implementation or
-resolve the effective hook/session identity mismatch.
+inspector contract. E199 implements its bounded framing and builder consumer;
+the disposition does not resolve the effective hook/session identity mismatch.
+`CAWS-STORE-JSON-001` is active in peer A's owned `store-json` lane, restricted
+to the decoder and its tests. E200 supplies reference evidence; root retains
+profile selection, SQL acquisition, projection and publication integration.
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -172,14 +175,15 @@ Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 the established boundary. Existing Python consumers remain obligations until
 removed or explicitly classified as foreign/historical test material.
 
-Committed implementation/evidence covers **31/37 feature rows (about84%)**: six
-lack that durable coverage, and no complete row has retired its Python
-production path. This count includes standalone components awaiting parent
-integration; it measures feature coverage, not cutover effort or readiness.
-Uncommitted drafts do not advance this count. Parent acceptance is **0/8**.
-Recompute coverage when a row changes and use the acceptance ledger, parity
-evidence and selected installation state to determine cutover readiness. E174
-and E178 ground the Kimi and DSH row corrections; E184 grounds OpenCode and
+Committed qualifying replacement implementation slices cover **31/37 feature
+rows (83.8%)**. R01/R09/R18/R19/R22/R27 lack that coverage, and no complete row
+has retired its Python production path. Investigations, reference evidence and
+support tooling alone do not qualify. This count includes standalone components
+awaiting parent integration; it measures feature coverage, not cutover effort or
+readiness. Uncommitted drafts do not advance this count. Parent acceptance is
+**0/8**. Recompute coverage when a row changes and use the acceptance ledger,
+parity evidence and selected installation state to determine cutover readiness.
+E174 and E178 ground the Kimi and DSH row corrections; E184 grounds OpenCode and
 Zcode.
 
 ## Feature ledger
@@ -198,7 +202,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration                                                         | TS configuration module                                                    | selected-stock root integration and public-control repair exercised, E119                                                                       | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim                                                                                                                                    |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                          | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                                       |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                              | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate          |
-| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | unreplaced; fixed-query contract and pinned static-link feasibility investigated, E184/E193                                                     | Root owns dependency/profile choice, complete bounded acquisition, snapshot/cancellation, lossless SQL values, projection/publication custody and actual renderer consumption                                                                                                                                                                                                                                                 |
+| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | unreplaced; build/archive tooling and SQL-cell reference evidence E198–E200; decoder component active                                           | Root owns dependency/profile choice, complete bounded acquisition, snapshot/cancellation, lossless SQL values, projection/publication custody and actual renderer consumption                                                                                                                                                                                                                                                 |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | lossless/common foundation and ordered registry imported and exercised, E157/E192; production consumer unreplaced                               | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                     |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                           | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                    | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
@@ -218,7 +222,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R26 | Persistent request outcomes / deferred queue                                                                        | Rust durable journal + typed TS outcomes and bounded scheduler             | normal/queued/dispatched cancellation and host-crash restart observed on native43, E128/E130                                                    | Runtime build39 and qualifier266 retain actual partial writes, accepted Unknown, correlated retry/capacity denials and reap/EOF/absence receipts. Fatal worker loss, generation replacement, autonomous drain and production retention remain unqualified                                                                                                                                                                     |
 | R27 | Package/install/upgrade/rollback and trust                                                                          | Existing TS init/store adapters + native artifact distribution             | unreplaced                                                                                                                                      | Node >=18 compatibility, supported target builds, clean unpacked no-Python execution, rollback and native trust                                                                                                                                                                                                                                                                                                               |
 | R28 | Performance and load qualification                                                                                  | Replayable TS/native workload                                              | workload and exact semantic/ordering hostile controls tested, E91/E94; runtime unqualified                                                      | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target                                                                                                                                                                                                                                            |
-| R29 | SOLID boundaries and existing CLI integration                                                                       | Shared typed kernel/store adapters                                         | implementing                                                                                                                                    | No duplicate Rust authority engine; explicit per-request dependencies; strict compilation and consumer tests                                                                                                                                                                                                                                                                                                                  |
+| R29 | SOLID boundaries and existing CLI integration                                                                       | Shared typed kernel/store adapters                                         | shared heartbeat/message operations reused by CLI and typed stock consumer, E172 (`ad3a6d24`); complete boundary qualification open             | Explicit canonical directory, identity, context, clock and store ports reuse existing lease kernel/store and message queue. Application and consumer semantic checks support this bounded slice; full dependency closure, installed parity and cutover remain open.                                                                                                                                                           |
 | R30 | Stop infrastructure budget persistence                                                                              | Rust project/session budget library                                        | library and native protocol-fixture consumption exercised                                                                                       | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified                                                                                                                                                                                                                                                                              |
 | R31 | Machine-wide fair admission and owner-specific ordering                                                             | TS bounded scheduler                                                       | component tested; not integrated                                                                                                                | Global/project/session queue caps, required capacity reservations, resource-domain ordering and thirteen-session/four-project controlled-worker tests; native workload proof remains open                                                                                                                                                                                                                                     |
 | R32 | Danger-latch containment across session resolution, latch state, agent PID/start verification and tool escalation   | Typed containment boundary plus native process operations                  | blocking; selected explicit-session path exercised, E51–E56; native Darwin lookup and strict cleanup oracle exercised in protocol fixtures, E71 | Preserve the actual latch → prohibited subsequent tool → verified caller process → termination chain, exceptions/reset, native refusal and observed nonexecution. Missing-session behavior, exclusive logical-session process ownership, reset races, different-credential lookup and compatibility paths remain obligations; no installed replacement                                                                        |
@@ -4671,6 +4675,87 @@ Additional bounded evidence and unresolved dependencies:
   consumption, installed selection or a Python production path. R09/R18 remain
   unreplaced; coverage31/37 and parent acceptance0/8 do not advance.
 
+- E199: Root implements `tooling/ar-archive.ts` and hostile checks, and replaces
+  the imported builder's private archive parser with that inspector. The pure,
+  bounded API supports regular BSD extended-name framing only. It validates raw
+  ASCII before decoding, complete headers and stored bounds, names/padding,
+  duplicate names, alignment and exact consumption. Frozen ordered inventories
+  retain all member/range hashes, including ordinary metadata; no suffix or
+  Mach-O magic grants a member role or native admission. Shared backing is
+  refused through intrinsic view coordinates. Private snapshot allocation and
+  independently allocated returned bytes prevent backing-store aliasing.
+
+  The retained red control mutates a returned ArrayBuffer and changes retained
+  `PAYLOAD` to seven zero bytes in the initial pooled-copy proposal. Unpooled
+  private allocation and independent return allocation repair that defect.
+  Ordinary package emission, scoped lint and121 focused checks on each actual
+  Node18.20.8/22.19.0 exit0 on source52a5ec67/helper1855b175/test515532ac.
+  `ar-inspection-parent/` retains every red/green/candidate command, raw
+  channels and source hashes. Actual Node18.0 inspection and candidate Node22
+  inspection inventory the retained C archive's2 and Rust sys archive's4
+  members. Both C payloads are1532664 bytes SHA256 `4f1b3c6b…873bad`; the76-byte
+  Rust member name has no terminating NUL. Other Rust metadata and codegen
+  members remain unadmitted. The current source/compiled hashes match the
+  repaired full-helper packet; candidate-readback verifies returned host
+  artifacts and channels. The positive strict-builder host call retains all six
+  real steps exit0/direct-child-reaped and archive SHA256 `5b6d8787…6241693`,
+  always NOT_ADOPTED.
+
+  Peer A's one old-helper control changes only raw member-name byte8348 from
+  0x73 to0xf3. The object and index remain identical; the old helper wrongly
+  completes all six steps and publishes completion. One authorized repaired
+  repeat produces byte-identical before/after archives but refuses
+  `invalid_name` at8348 after compile/archive exit0. Completed and pending
+  markers are absent; failure retains uncertain writer state. Root executes the
+  inspected read/hash/assert portions of both packet verifiers without writing
+  peer artifacts or rerunning producers:37 old and28 repaired files verify. Root
+  readbacks are in `ar-inspection-parent/`; peer packets are
+  `native-sqlite-ar-name-control/` and its `-repaired` sibling under chat
+  `01a157bd-8bb6-7fc1-9322-6120a73b5a72`'s external artifact root. A retained
+  verifier attempt incorrectly expected the persisted failure receipt to include
+  its own returned path; the corrected comparison checks the exact null/path
+  difference, without repeating the helper invocation.
+
+  This repairs observed framing and memory custody, not compiler provenance,
+  complete tool/SDK identity, Cargo admission, descendant quiescence, native
+  acquisition or installed behavior. R09/R18 remain unreplaced;31/37 qualifying
+  replacement coverage and0/8 parent acceptance do not advance.
+
+- E200: Root grounds peer A's actual SQL-cell reference packet
+  `native-sqlite-cell-reference/runs/20261021T105551Z-cc25e5a0` by inspecting
+  producer/verifier and executing its read/hash/assert body without peer writes
+  or producer replay. Root
+  `native-sqlite-source/reference-sql-cell-readback.json` retains426 file/hash
+  checks. The304-file manifest is SHA256 `2ce53ac2…6ba44`; the pinned producer
+  is490cf2c0. Actual CPython3.11.13, integer limit4300, Unicode14 and
+  SQLite3.53.4 execute18 cases:9 payloads in each TEXT/BLOB storage class,
+  through frozen ordinary `transcript-store.py`. Synthetic TEXT-affinity DDL
+  uses explicit TEXT casts or BLOB bindings; the diagnostic raw-byte connection
+  is separate and closed before owner execution.
+
+  Eight cases project and replace prior output; ten fail and preserve it. Each
+  database's physical/logical bytes remain unchanged and projection temp files
+  are absent. TEXT strictly decodes UTF8 before JSON; BLOB permits Python's BOM
+  encoding detection. A UTF8 BOM fails TEXT JSON but succeeds as BLOB; UTF16/32
+  BOMs fail TEXT SQL decoding but succeed as BLOB. Literal surrogate bytes fail
+  TEXT decoding; a visible BLOB surrogate pair fails final UTF8 publication,
+  while the same pair in ignored bookkeeping permits ordinary visible output.
+  Invalid UTF8 and array roots refuse at their respective owning layers. The
+  earlier incomplete105340Z packet and image-closure limitation are preserved;
+  readable-image observations do not authenticate every CLI child's symbol
+  binding. These synthetic cells do not establish product DDL, malformed
+  ID/time/message-data behavior, the3.9 profile or native acquisition.
+
+  The approved `CAWS-STORE-JSON-001` component is active and bound to peer A's
+  `store-json` lane, with exactly decoder/test paths. It must require explicit
+  CPython3.11.13/4300 selection and caller bounds, preserve SQL class, codepoint
+  strings/keys and numeric tokens, and distinguish resource/encoding/syntax/
+  integer-limit failures. This assignment confers no installed profile choice,
+  generic AST change or projection/publication authority. Root retains semantic
+  numeric operations, store timestamps, both-cell decoding order, visible UTF8
+  publication, native acquisition and consumer integration. The component is
+  unfinished;31/37 coverage and0/8 parent acceptance remain unchanged.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4779,21 +4864,24 @@ progress and does not replace that transaction or its event readback.
    not infer an attempted foreign write from the refusal alone.
 4. Turn E198's imported pinned builder and E193/E195/E197 linkage/cache controls
    into a reviewed-prefix coordinator with exclusive fresh Cargo target and
-   actual embedded-member verification. Root owns the superseded inspector's
-   complete implementation and the native admission guard. Implement native
-   fixed-query acquisition with snapshot, cancellation and lossless SQL-value
-   custody. Connect the imported registry to transactional rendering/writing and
-   retain E165/E166 source/profile controls. E196 requires a store-specific
-   timestamp conversion, explicit integer profile and codepoint-preserving JSON
-   projection; the generic decoder and JS-string AST cannot silently supply that
-   contract. R09 and R18 remain unreplaced; standalone registry composition does
-   not discharge production consumer parity.
+   actual embedded-member verification. E199 supplies strict framing and the
+   builder consumer; explicit Rust-extra inventory/provenance and the native
+   admission guard remain root-owned. Implement native fixed-query acquisition
+   with snapshot, cancellation and lossless SQL-value custody. Connect the
+   imported registry to transactional rendering/writing and retain E165/E166
+   source/profile controls. E196 requires a store-specific timestamp conversion,
+   explicit integer profile and codepoint-preserving JSON projection. Integrate
+   the separately owned E200 store-JSON component only after its committed
+   checks, review and lifecycle evidence; the generic decoder and JS-string AST
+   cannot silently supply that contract. R09 and R18 remain unreplaced;
+   standalone registry composition does not discharge production consumer
+   parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E198 retain the historical candidates, failures and bounded observations;
+E167–E200 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is31/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
