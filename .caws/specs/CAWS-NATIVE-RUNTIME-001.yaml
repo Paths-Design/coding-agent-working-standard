@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-20T23:41:23.608Z'
+updated_at: '2026-10-21T00:15:48.608Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -94,6 +94,16 @@ scope:
     - packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js
     - packages/caws-cli/tests/hooks/bats/worktree-write-guard.bats
     - packages/caws-cli/tests/shell/scope-contention.test.js
+    - packages/caws-cli/src/transcripts/harness-claude.ts
+    - packages/caws-cli/src/transcripts/python-html.ts
+    - packages/caws-cli/src/transcripts/html311/LICENSE.txt
+    - packages/caws-cli/src/transcripts/html311/entities.generated.ts
+    - packages/caws-cli/src/transcripts/html311/numeric.generated.ts
+    - packages/caws-cli/src/transcripts/html311/manifest.generated.ts
+    - packages/caws-cli/tests/transcripts/claude.test.ts
+    - packages/caws-cli/tests/transcripts/python-html.test.ts
+    - packages/caws-cli/tests/transcripts/html311/generate.mjs
+    - packages/caws-cli/tests/transcripts/html311/sources.json
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
