@@ -1,0 +1,44 @@
+id: CAWS-R21-CLAIM-ORACLE-PYTEST-RETIRE-001
+title: 'Retire the claim-oracle pytest with Python-free verdict, matcher-parity and consumer checks'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-21T23:31:04.042Z'
+updated_at: '2026-10-21T23:31:04.042Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'Worktree claim oracle verification (R21 pytest retirement)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js'
+    - 'packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py'
+  out: []
+invariants:
+  - 'Production guards, the claim oracle, Bats files, Bats helpers and the migration ledger are unchanged.'
+  - 'Every original pytest verdict semantic is preserved by an exact first-line verdict assertion.'
+  - 'The consumer check isolates HOME, CAWS_HOME and session identity and arms no latch.'
+acceptance:
+  - id: A1
+    given: 'the ten original test_worktree_claim_oracle.py cases and the shipped oracle'
+    when: 'the new Jest file runs'
+    then: 'each case asserts the same first-line verdict prefix the pytest asserted, including degraded_no_yaml and never error_fail_closed under a js-yaml require blocker, and all ten pass.'
+  - id: A2
+    given: 'the CAWS_NODE_GLOB_TO_SCOPE_REGEXP string from caws-state.sh and the oracle globToRegExp'
+    when: 'both evaluate one hostile pattern-by-path matrix'
+    then: 'extraction of both functions is asserted, every pair yields identical match results, and changing only the shell copy wildcard mapping in a disposable copy makes the differential fail.'
+  - id: A3
+    given: 'a temp git repo where a foreign-owned active worktree claims packages/dir'
+    when: 'bash-write-guard.sh adjudicates Bash mutations of packages/dir/file.py and packages/directory/file.py'
+    then: 'the first exits 2 with the claimed-by-scope.in BLOCKED message and the second exits 0, and removing the oracle containment suffix in a disposable copy makes the refusal case fail.'
+  - id: A4
+    given: 'the committed candidate'
+    when: 'the old path, pytest collection and the diff against main are inspected'
+    then: 'test_worktree_claim_oracle.py is deleted, pytest collection drops by exactly ten cases with no collection error, and only the two scoped paths differ from main.'
+observability:
+  - 'Retain exact Jest, control and collection commands, exit codes and failing-assertion text in ignored artifacts outside the repo.'
+rollback:
+  - 'Revert the commit through a governed follow-up, restoring the pytest module.'
+non_functional: {}
+contracts: []
