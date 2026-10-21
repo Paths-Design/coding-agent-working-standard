@@ -56,3 +56,8 @@ evidence:
     evidence_ref: "git ls-tree packages/caws-cli/tests/hooks/pytest: 10690d4b modules=12 conftest=1, main modules=13 conftest=1 with test_template_annotation_compat.py only on main; harness_kimi.py 'from __future__ import annotations' count 10690d4b=0 main=1 (8a758936 is not an ancestor of 10690d4b). Candidate a5f8e4c1 R21/R14 cells state exactly these. The 3.9.6 interpreter context is cited from the 8a758936 commit message, not re-executed."
     recorded_at: "2026-10-21T21:44:32.351Z"
     commit_sha: a5f8e4c1
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "All 15 R19 line anchors resolve to a python3 invocation at 10690d4b (agent-surface.sh:520 HIT; old :516 has 0 python3 matches as negative control). qualify-render-daemon.py, qualify-transcript-cache.py, source_freshness.py exist on main and 10690d4b; the six removed paths are absent on both, and git show --name-status reports D for each at its cited commit (8e56cee2, 8ce627ca x2, 098dc1f4, d147dd3e x2), each an ancestor of main and 10690d4b."
+    recorded_at: "2026-10-21T21:44:35.298Z"
+    commit_sha: a5f8e4c1
