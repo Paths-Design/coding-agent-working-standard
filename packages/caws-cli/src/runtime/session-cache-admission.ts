@@ -1,0 +1,225 @@
+import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { assertMachinePath } from '../init/machine-paths';
+import type { RuntimeRequest } from './protocol';
+import type { ActiveInvocationSelection } from './selection';
+
+/** Compatibility identities for the prefix being replaced, not executable trust. */
+const PREFIX: Readonly<Record<string, string>> = {
+  'dispatch.sh': '5f8a185f8b63e601aa29af3431d0ddafedb9a44f45d6a2d9279d32410fc2150f',
+  'handler-env.sh': '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7',
+  'runtime-paths.sh': 'c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08',
+  'lib/agent-surface.sh': '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
+  'surfaces/codex/lib/parse-input.sh':
+    '04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61',
+  'lib/session-cache.sh': 'eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb',
+  'lib/session-id.sh': 'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53',
+  'surfaces/codex/lib/emit.sh': '7719c904cce6073598717e6a90d82e1c88e99482f79afbfd12b35d23f6d7e86e',
+};
+const LIBRARIES = {
+  'agent-surface.sh': 'shared',
+  'parse-input.sh': 'surface',
+  'session-cache.sh': 'shared',
+  'session-id.sh': 'shared',
+  'emit.sh': 'surface',
+} as const;
+// Both stock lookups select no override for the enforced empty library map.
+// The newer source skips that JSON lookup; executable qualification is separate.
+const agentSurfaceProfiles = [
+  'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
+  PREFIX['lib/agent-surface.sh']!,
+];
+const identities = (relative: string): readonly string[] =>
+  relative === 'lib/agent-surface.sh' ? agentSurfaceProfiles : [PREFIX[relative]!];
+const object = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+const nativePath = (value: string): boolean =>
+  path.isAbsolute(value) &&
+  path.normalize(value) === value &&
+  // Shell command substitution strips final LF in resolved roots. Keep that
+  // representation difference outside this finite replacement profile.
+  !/[\r\n]/.test(value) &&
+  !value.includes('\0') &&
+  Buffer.from(value, 'utf8').toString('utf8') === value;
+
+function directory(file: string): boolean {
+  if (!nativePath(file)) return false;
+  assertMachinePath(path.parse(file).root, file);
+  return fs.lstatSync(file).isDirectory();
+}
+
+/** ENOENT alone establishes absence; dangling links and inaccessible paths decline. */
+function absent(root: string, file: string): boolean {
+  assertMachinePath(root, file);
+  try {
+    fs.lstatSync(file);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  }
+}
+
+function pinned(root: string, relative: string): boolean {
+  const file = path.join(root, relative);
+  assertMachinePath(root, file);
+  if (!fs.lstatSync(file).isFile()) return false;
+  // Nonblocking avoids opening a substituted FIFO indefinitely. Hash the opened
+  // regular file, bounded independently of a possibly changing size observation.
+  const fd = fs.openSync(
+    file,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+  );
+  try {
+    if (!fs.fstatSync(fd).isFile()) return false;
+    const bytes = Buffer.alloc(1024 * 1024 + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = fs.readSync(fd, bytes, length, bytes.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    return (
+      length < bytes.length &&
+      identities(relative).includes(
+        createHash('sha256').update(bytes.subarray(0, length)).digest('hex')
+      )
+    );
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function environmentSupported(
+  environment: Readonly<Record<string, string>>,
+  startup: string | null
+): boolean {
+  for (const [name, value] of Object.entries(environment)) {
+    if (name.startsWith('BASH_FUNC_')) return false;
+    if (!value) continue;
+    if (name === 'BASH_ENV') {
+      if (value !== startup) return false;
+      continue;
+    }
+    if (
+      [
+        'CAWS_PRIOR_BASH_ENV',
+        'ENV',
+        'SHELLOPTS',
+        'BASHOPTS',
+        'CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES',
+      ].includes(name) ||
+      /^_(?:CAWS|HOOK).*LOADED/.test(name) ||
+      /^(?:CAWS|CLAUDE|CODEX)_HOOK_(?:TIMING|DRY_RUN)$/.test(name) ||
+      name.startsWith('LD_') ||
+      name.startsWith('DYLD_') ||
+      name.startsWith('NODE_') ||
+      (name.startsWith('PYTHON') && !(name === 'PYTHONDONTWRITEBYTECODE' && value === '1'))
+    )
+      return false;
+  }
+  return true;
+}
+
+/**
+ * Read-only admission for a finite stock Codex prefix. False requires complete
+ * compatibility dispatch before cache effects, even for an empty/reprieved chain.
+ * This observes source bytes and paths, not held native custody, PATH-selected
+ * executables, Python imports, input decoding, or old-envelope interpretation.
+ * The caller must qualify those separately and keep missing/unknown SID inert.
+ */
+export function qualifiesForNativeSessionCache(context: {
+  readonly request: RuntimeRequest;
+  readonly selection: ActiveInvocationSelection;
+  readonly environment: Readonly<Record<string, string>>;
+}): boolean {
+  const { request, selection, environment } = context;
+  try {
+    if (
+      selection.status !== 'active' ||
+      request.configuration !== 'system' ||
+      selection.configuration !== 'system' ||
+      request.surface !== 'codex' ||
+      selection.surface !== request.surface ||
+      request.event !== 'pre_tool_use' ||
+      selection.event !== request.event ||
+      !/^[a-f0-9]{64}$/.test(request.runtimeDigest) ||
+      selection.runtimeDigest !== request.runtimeDigest ||
+      selection.hooksDirectory !== selection.runtimeDirectory ||
+      request.payload.tool_name !== 'Bash' ||
+      !object(request.payload.tool_input) ||
+      typeof request.payload.tool_input.command !== 'string' ||
+      Object.keys(selection.overrides).length > 0 ||
+      Object.keys(selection.libraryOverrides).length > 0 ||
+      selection.handlers.some((handler) => handler.kind !== 'stock') ||
+      Object.values(selection.libraries).some(
+        (library) => !['shared', 'surface'].includes(library.kind)
+      )
+    )
+      return false;
+    const home =
+      environment.CAWS_HOME || (environment.HOME ? path.join(environment.HOME, '.caws') : '');
+    if (
+      !directory(home) ||
+      !directory(selection.checkout) ||
+      !directory(selection.canonical) ||
+      selection.runtimeDirectory !== path.join(home, 'lib/runtimes', request.runtimeDigest) ||
+      !directory(selection.runtimeDirectory) ||
+      !environmentSupported(request.caller.environment, null) ||
+      !environmentSupported(environment, path.join(selection.runtimeDirectory, 'handler-env.sh'))
+    )
+      return false;
+
+    const cwd = request.payload.cwd;
+    if (cwd !== undefined && cwd !== null && cwd !== '') {
+      if (typeof cwd !== 'string' || !directory(cwd)) return false;
+      const relative = path.relative(selection.checkout, cwd);
+      if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative))
+        return false;
+    }
+    const routing: Readonly<Record<string, string>> = {
+      CAWS_PROJECT_DIR: selection.checkout,
+      CAWS_MACHINE_POLICY_ROOT: selection.canonical,
+      CAWS_MACHINE_RUNTIME: '1',
+      CAWS_SYSTEM_RUNTIME: '1',
+      CAWS_AGENT_SURFACE: 'codex',
+      CAWS_ADAPTER_RUNTIME_DIGEST: request.runtimeDigest,
+      CAWS_SHARED_LIB_DIR: path.join(selection.runtimeDirectory, 'lib'),
+      CAWS_MACHINE_ADAPTER_LIB_DIR: path.join(selection.runtimeDirectory, 'surfaces/codex/lib'),
+      CAWS_MACHINE_LIBRARIES: '{}',
+      CAWS_MACHINE_HANDLERS: '{}',
+      HOOKS_DIR: selection.runtimeDirectory,
+    };
+    for (const [name, expected] of Object.entries(routing))
+      if (environment[name] && environment[name] !== expected) return false;
+    if (!absent(selection.checkout, path.join(selection.checkout, '.caws/hooks/runtime-paths.sh')))
+      return false;
+    for (const [name, kind] of Object.entries(LIBRARIES)) {
+      const relative = kind === 'shared' ? 'lib/' + name : 'surfaces/codex/lib/' + name;
+      const library = selection.libraries[name];
+      if (
+        !library ||
+        library.kind !== kind ||
+        library.path !== path.join(selection.runtimeDirectory, relative) ||
+        !identities(relative).includes(library.sha256)
+      )
+        return false;
+      // Recheck higher-priority paths: selection is a prior observation and a
+      // newly created override must not authorize replacement of its prefix.
+      if (!absent(home, path.join(home, 'surfaces/codex/lib', name))) return false;
+      if (
+        kind === 'shared' &&
+        !absent(
+          selection.runtimeDirectory,
+          path.join(selection.runtimeDirectory, 'surfaces/codex/lib', name)
+        )
+      )
+        return false;
+    }
+    for (const relative of Object.keys(PREFIX))
+      if (!pinned(selection.runtimeDirectory, relative)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
