@@ -174,7 +174,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                              | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate          |
 | R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | TS transcript store                                                        | unreplaced                                                                                                                                      | Atomic replacement, identity, replay custody, malformed and concurrent inputs                                                                                                                                                                                                                                                                                                                                                 |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | bounded lossless/common foundation landed and integrated, E157; production consumer unreplaced                                                  | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                     |
-| R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | unreplaced                                                                                                                                      | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
+| R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                           | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                    | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
 | R13 | `shared/lib/harness_qwen.py`                                                                                        | TS Qwen adapter                                                            | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
 | R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
@@ -3689,6 +3689,45 @@ Additional bounded evidence and unresolved dependencies:
   refs/registry/events are checked. This is source and isolated installed-pack
   qualification, not machine adoption or a repair of the kernel parser bound.
 
+- E168: Ordinary merge `96ebeb36d20de2d215a5f56234a23305f7a6f21f` imports the
+  frozen Claude main merge `2164831e` and checked candidate `172242ea`. Root
+  matches all10 source/support files against both the candidate Git bytes and
+  its retained final identities. The canonical component's A1-A3 records and
+  events9704-9706 establish its separately closed scope, not parent acceptance.
+  The public transcript index exports the exact Claude adapter and pinned
+  revision; a fresh compiled import checks both identities.
+
+  Fresh parent Node22.19.0 strict compilation and the dynamic runner exit0: 95
+  tests pass with0 skipped. The ordinary Jest foundation bridge independently
+  compiles and runs the parent test selection, exiting0. Exact imported bytes
+  are retained in external `transcript-integration/claude-source-readback.json`;
+  `claude-{compile,run,bridge}.{stdout,stderr}` retain the fresh channels.
+  Independently inspected component evidence retains215 differential fixtures
+  per Node18/22, the Unicode14/CPython3.11.13 HTML profile and meaningful
+  bounded fault controls. These are historical standalone normalization
+  observations. Ordered Qwen-before-Claude dispatch, acquisition/profile
+  admission (E166), cache, writer (E165), installed rendering and original
+  Python retirement remain parent obligations. Neither the barrel export nor
+  matching text proves execution through those consumers.
+
+- E169: Root accepts the R24/A2/A5 copy-guard investigation and repair
+  obligation after inspecting the peer's effective-source finding and actual
+  parent `shared/worktree-guard.sh:317-345`. With a canonical or absent payload
+  cwd, the predicate marks any command containing a worktree operand plus an
+  unanchored `packages/`, `src/`, `tests/` or `core/` token as worktree-to-main.
+  It derives neither the destination nor direction. The peer's retained
+  `native-qwen-adapter/worktree-guard-boundary/finding.json` binds the inspected
+  installed/shipping bytes and conditional illustrative operands.
+
+  The actual rejected hook payload and cwd remain uninspected; the illustrations
+  are not replayed runtime results. Root owns the smallest next falsifier:
+  isolated guard decisions with explicit canonical/worktree cwd, external-to-
+  owned and owned-to-external operands, and a genuine owned-to-canonical write
+  that must remain refused. Inspect ownership and path resolution for those
+  targets before choosing a repair. Preserve the raw-export obligation in E160;
+  no guard disable, runtime replacement or permission bypass follows from this
+  finding. The Qwen component does not own or claim this guard repair.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3780,13 +3819,18 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-Finish the guard error-path candidate and its committed review (E167), integrate
-the exact landed Claude component with fresh parent checks, then connect and
-qualify the complete typed heartbeat consumer. Preserve the acquisition-profile
-and transactional-writer obligations in E166/E165. The closed replay, Unicode
-and utility components do not replace these consumers. Resume the unchanged
-fairness workload only after the owning implementation and cleanup evidence
-justify it; machine adoption follows full parity.
+Guard candidate `33003656` has committed inspection and the bounded source/
+private-pack evidence in E167. E168 integrates the checked Claude component and
+fresh parent selection. Integrate the separately landed pytest-entrypoint leaf
+after its exact source/AC/runtime readback, then connect and qualify the
+complete typed heartbeat consumer. Bind that native probe to the complete
+source/build and installed package/dependency identities; a template runtime
+digest or a flat `dist/runtime` file list cannot identify new application
+dependencies. Preserve the acquisition-profile and transactional-writer
+obligations in E166/E165 and the guard-decision falsifier in E169. The closed
+replay, Unicode and utility components do not replace these consumers. Resume
+the unchanged fairness workload only after the owning implementation and cleanup
+evidence justify it; machine adoption follows full parity.
 
 E105/E107/E108 establish the repaired selected Stop path, seven actual owner
 controls and existing-untracked-custody observation on executable `d4644326`.

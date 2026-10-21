@@ -20,5 +20,6 @@ export * from './harness-common';
 export { decodeOccurrence, isParsedRow } from './source-occurrence';
 export type { OccurrenceCoordinates } from './source-occurrence';
 export * from './harness-codex';
+export * from './harness-claude';
 export * from './codepoint-text';
 export * from './python-unicode-profile';
