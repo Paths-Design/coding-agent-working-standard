@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-OPENCODE-SURFACE-001
 title: 'OpenCode tool translation and noise declarations'
 mode: feature
-lifecycle_state: active
-worktree: native-opencode-surface
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded two-file OpenCode translation/noise declaration candidate e968dcaac211cd69888ab97a3bda1e8f521fbb74. Exact9/8/3 declarations andzero adapters, independent finite references and5selected semanticfaults/runtime,150tests Node18/22,41checkedGitblobs/33identicalcompiledoutputs;5policygates0,doctor0E3W4I,freshread-onlypeerfeedbackgrounded. A1-A3dualread. DB acquisition/reconstruction, actualnoiseconsumption, registry/native/install/profile/fullworkload/Pythonretirement/cutover remainparentownedunverified.'
 created_at: '2026-10-21T05:33:41.361Z'
-updated_at: '2026-10-21T05:33:47.353Z'
+updated_at: '2026-10-21T06:20:36.041Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
