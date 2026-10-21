@@ -4266,6 +4266,19 @@ Additional bounded evidence and unresolved dependencies:
   load or parent acceptance. Root retains those obligations. Feature coverage
   stays31/37 and acceptance0/8.
 
+  A separate final numeric-occurrence control corrects the direct engine
+  fixture's decoded unused field to match its last JSON occurrence, then sends
+  the duplicate-member bytes through the actual native/compiled-entry path.
+  `root-cache-duplicate-control.stderr` records2 selected passes and16
+  explicitly unselected checks. Under
+  `cache-engine-duplicate-control/cache-engine-lApwLu/`, original input SHA256
+  `e0599a25893e66e434b835d21b33f7055181bc35b91a6387c868121915310388` contains an
+  earlier numeric member overwritten by a string. Native exits0, no
+  session_cache_completed record exists, full compatibility completes once, and
+  the actual parser writes the session envelope. This earns the original
+  token-admission route without relying on an inconsistent injected request.
+  Runtime source is unchanged; final test-file lint parses with0 diagnostics.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under

@@ -223,6 +223,7 @@ test.each([
   'old-envelope-decline',
   'missing-sid',
   'pointer-failure',
+  'overwritten-input-numeric',
 ])(
   'actual native exchange publishes only the supplied session prefix: %s',
   (scenario) => {
@@ -267,7 +268,10 @@ test.each([
         '--configuration',
         'system',
       ];
-      const input = JSON.stringify(payload);
+      const input =
+        scenario === 'overwritten-input-numeric'
+          ? JSON.stringify(payload).replace(/}$/, ',"unused":1,"unused":"last"}')
+          : JSON.stringify(payload);
       const result = cp.spawnSync(native, args, {
         cwd: f.repo,
         input,
@@ -330,13 +334,19 @@ test.each([
             fs.readFileSync(path.join(journals, name), 'utf8').trim().split('\n').map(JSON.parse)
           );
         const stages = rows.map((row) => row.stage);
-        expect(stages).toContain('session_cache_completed');
+        if (scenario === 'overwritten-input-numeric') {
+          expect(stages).not.toContain('session_cache_completed');
+          expect(
+            stages.filter((stage) => stage === 'compatibility_dispatch_completed')
+          ).toHaveLength(1);
+        } else expect(stages).toContain('session_cache_completed');
         if (scenario === 'old-envelope-decline') {
           expect(rows.find((row) => row.stage === 'session_cache_completed').status).toBe(
             'declined'
           );
           expect(stages).toContain('compatibility_dispatch_completed');
-        } else expect(stages).not.toContain('compatibility_dispatch_completed');
+        } else if (scenario !== 'overwritten-input-numeric')
+          expect(stages).not.toContain('compatibility_dispatch_completed');
         if (refusing) {
           expect(JSON.parse(result.stdout.toString()).decision).toBe('block');
           expect(stages.indexOf('session_cache_completed')).toBeLessThan(
@@ -739,8 +749,10 @@ test.each([
         request.payload.unused = 1;
         request.inputJson = JSON.stringify(request.payload);
       }
-      if (profile === 'overwritten-numeric')
+      if (profile === 'overwritten-numeric') {
+        request.payload.unused = 'last';
         request.inputJson = request.inputJson.replace(/}$/, ',"unused":1,"unused":"last"}');
+      }
       if (profile === 'parser-override')
         f.put(path.join(f.repo, '.caws/hooks/runtime-paths.sh'), '# project runtime override\n');
       if (profile === 'missing-capability') delete request.sessionCache;
