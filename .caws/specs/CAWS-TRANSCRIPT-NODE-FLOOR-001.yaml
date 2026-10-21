@@ -1,10 +1,11 @@
 id: CAWS-TRANSCRIPT-NODE-FLOOR-001
 title: 'Qualify emitted transcript preparation on the declared Node runtime floor'
 mode: chore
-lifecycle_state: active
-worktree: transcript-node-floor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded Node 18.0.0 transcript preparation qualification: candidate 41a39f6694c3453c1ea90eb3c360023ccff3b11d; normal build and 10 focused tests exited 0; private packed-module execution under actual Node 18.0.0 exited 0 with four byte-identical prepared artifacts and 33 recursively hashed JavaScript images. Wrong-runtime, missing-module, and corrupt-spill controls exited 1; pending-receipt postwrite fault harness exited 0 with no final receipt and overwrite retry refused. A1-A3 PASS and matching ac_recorded events 10478-10480 read back; lead independently inspected original commands and artifacts. Evidence retained externally under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-node-floor/candidate-02/. Does not establish full R27, native publication, crash durability, installed adoption, or retirement; parent CAWS-NATIVE-RUNTIME-001 retains those obligations.'
 created_at: '2026-10-21T20:59:25.293Z'
-updated_at: '2026-10-21T20:59:57.697Z'
+updated_at: '2026-10-21T21:57:53.828Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
