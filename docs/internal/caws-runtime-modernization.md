@@ -4490,6 +4490,37 @@ Additional bounded evidence and unresolved dependencies:
   Cargo integration. Root retains those outcomes, R09/R18 remain unreplaced,
   coverage stays31/37 and parent acceptance0/8.
 
+- E194: The assigned disposable reference WAL probe retains successful runs and
+  one expected injected reader failure under peer artifact root
+  `native-sqlite-wal-snapshot/`. Root inspects the producer's actual connection/
+  cursor proxies, writer transaction and ordinary CLI calls, verifies165
+  artifact hashes and all3 frozen/current source identities, and checks the
+  retained traces/outputs without rerunning the producer. Root readback is
+  `native-sqlite-source/reference-snapshot-readback.json`.
+
+  In run20261021T093309Z-0685c526, reader90868 pauses after its first yielded
+  row with in_transaction true. Independent writer90901 commits3 mutations
+  between the recorded pause/resume. A separate ordinary CLI read while that
+  reader is paused sees old-A,old-B,new-C,new-D; original reconstruct then
+  returns old-A,old-B,old-C, and ordinary after agrees with the new state. SQL
+  trace retains query_only,BEGIN and the parameterized session JOIN. All normal
+  child commands exit0; the injected before-pause RuntimeError retains stderr
+  and exit1 in run20261021T093300Z-2d0a987c. Eight DB/WAL/SHM snapshots retain
+  physical changes, including bookkeeping sidefiles; this is not a zero-write
+  claim. Closed-handle refusal and direct child waits do not establish global
+  descendant/FD cleanup.
+
+  The separately labeled runtime profile records SQLite3.53.4/source ID, compile
+  options, Python/module and readable Homebrew SQLite image hashes; the
+  older54-case runtime record remains unchanged. Multiple SQLite-related images
+  and unreadable shared-cache paths leave complete active-symbol binding
+  unverified. One synthetic, instrumented cursor interleaving demonstrates this
+  finite snapshot observation; a single SELECT can materialize rows, so it does
+  not prove BEGIN's unique causality. Ordinary concurrent paused-reader,
+  malformed SQL/WAL/index, crash/cancellation, native/static Rust acquisition
+  and whole publication remain open. This refines reference evidence without
+  implementing R09/R18 or advancing31/37 coverage or0/8 parent acceptance.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4607,7 +4638,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E193 retain the historical candidates, failures and bounded observations;
+E167–E194 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is31/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
