@@ -19,6 +19,7 @@ scope:
 invariants:
   - 'Use the explicitly pinned common interpretation profile and preserve numeric kinds and source custody; production profile selection remains parent-owned.'
   - 'A matched row owns its outcome even when it emits no events. Native transcript labels confer no execution authority; failed and tentative drafts confer no durable state authority.'
+  - 'Declare the exact Zcode noise-prefix data from its historical module; actual accumulation/filtering and registry consumption remain parent-owned and unverified by this standalone adapter.'
 acceptance:
   - id: A1
     given: 'ordinary decoded model_io rows and hostile malformed shapes'
