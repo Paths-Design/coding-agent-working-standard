@@ -275,25 +275,43 @@ export interface PreparedRendererArtifacts {
   readonly turnPayloads: readonly RenderObject[];
   readonly index: RenderObject;
 }
-function assertSpillClosure(value: RenderValue, spill: ReadonlyMap<string, RenderText>): void {
-  if (Array.isArray(value)) {
-    for (const item of value) assertSpillClosure(item, spill);
-    return;
-  }
-  if (!record(value)) return;
-  for (const [key, item] of renderEntries(value)) {
-    if (typeof key === 'string' && key.endsWith('_ref') && record(item)) {
-      const digest = renderGet(item, 'sha256'),
-        length = renderGet(item, 'length');
-      if (digest !== undefined || length !== undefined) {
-        if (typeof digest !== 'string' || !spill.has(digest))
-          throw new TypeError('Turn references an unavailable sibling spill payload');
-        const text = spill.get(digest)!;
-        if (!renderEqual(length, renderInteger(renderTextLength(text))))
-          throw new TypeError('Spill reference length disagrees with its payload');
-      }
+function assertSpillReference(
+  reference: RenderValue | undefined,
+  spill: ReadonlyMap<string, RenderText>
+): void {
+  if (reference === undefined) return;
+  const digest = renderGet(reference, 'sha256'),
+    length = renderGet(reference, 'length');
+  if (!record(reference) || typeof digest !== 'string' || !spill.has(digest))
+    throw new TypeError('Turn references an unavailable sibling spill payload');
+  const text = spill.get(digest)!;
+  if (!renderEqual(length, renderInteger(renderTextLength(text))))
+    throw new TypeError('Spill reference length disagrees with its payload');
+}
+function assertSpillClosure(payload: RenderObject, spill: ReadonlyMap<string, RenderText>): void {
+  // buildRendererTurnPayload carries accumulator-issued references at these
+  // timeline coordinates. Nested source values (including tool input and refs
+  // indexes) can contain external *_ref data and are not renderer spill links.
+  const timeline = renderGet(payload, 'timeline');
+  if (!Array.isArray(timeline)) throw new TypeError('Renderer timeline must be an array');
+  for (const item of timeline) {
+    const kind = renderGet(item, 'kind');
+    const fields: string[] = [];
+    if (kind === 'reasoning') fields.push('text_ref');
+    else if (kind === 'audit_action') fields.push('input_ref', 'response_ref');
+    else if (kind === 'tool_call') {
+      fields.push('output_ref');
+      const originalName = renderGet(item, 'name');
+      const name =
+        renderGet(item, 'source_harness') === 'codex' && typeof originalName === 'string'
+          ? originalName.slice(originalName.lastIndexOf('.') + 1)
+          : originalName;
+      if (name === 'Edit') fields.push('old_string_ref', 'new_string_ref');
+      else if (name === 'Write') fields.push('content_ref');
+      else if (name === 'Agent' || name === 'Task') fields.push('prompt_ref');
+      else if (name === 'ExitPlanMode') fields.push('plan_ref');
     }
-    assertSpillClosure(item, spill);
+    for (const field of fields) assertSpillReference(renderGet(item, field), spill);
   }
 }
 /** Encodes and checks the entire generation before exposing any ready artifact. */

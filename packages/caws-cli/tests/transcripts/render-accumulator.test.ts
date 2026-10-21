@@ -35,7 +35,7 @@ import { UNICODE_PROFILE_ID } from '../../src/transcripts/python-unicode-profile
 
 function stock(surface?: string): TranscriptRegistry {
   return createDefaultTranscriptRegistry({
-    dshProfile: { id: 'accumulator-fixture-json', decode: parsePythonJson },
+    numericProfile: RENDER_JSON_UNLIMITED,
     ...(surface === undefined ? {} : { surface }),
   });
 }
@@ -69,14 +69,17 @@ function fixture(events: readonly CanonicalEvent[]) {
       events: [{ event: events[index]!, nativeMemberPath: [] }],
     }),
   };
-  const registry = createTranscriptRegistry([
-    {
-      id: adapter.id,
-      revision: adapter.revision,
-      adapters: [registerTranscriptAdapter(adapter)],
-      noisePrefixes: ['<injected-noise>'],
-    },
-  ]);
+  const registry = createTranscriptRegistry(
+    [
+      {
+        id: adapter.id,
+        revision: adapter.revision,
+        adapters: [registerTranscriptAdapter(adapter)],
+        noisePrefixes: ['<injected-noise>'],
+      },
+    ],
+    { numericProfile: RENDER_JSON_UNLIMITED }
+  );
   return { events: read(events.map(() => '{}').join('\n') + '\n', registry), registry };
 }
 function options(

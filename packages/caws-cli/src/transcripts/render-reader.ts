@@ -26,12 +26,13 @@ import { renderObject, type RenderValue } from './render-values';
 import type { PreparedSubagentLink } from './render-artifacts';
 import { type TranscriptRegistry, type RegistryCheckpoint } from './registry';
 import { decodeProfiledOccurrence } from './source-occurrence';
+import {
+  TranscriptJsonNumericConversionError as NumericConversionFailure,
+  snapshotTranscriptJsonProfile,
+  type TranscriptJsonNumericProfile,
+} from './transcript-json-profile';
 
-export interface RenderNumericProfile {
-  readonly id: string;
-  /** CPython int_max_str_digits: zero disables the cap; positive values are at least 640. */
-  readonly integerMaxDigits: number;
-}
+export type RenderNumericProfile = TranscriptJsonNumericProfile;
 export const RENDER_JSON_4300: RenderNumericProfile = Object.freeze({
   id: 'cpython3.11-json/int-max-str-digits:4300',
   integerMaxDigits: 4300,
@@ -118,7 +119,6 @@ interface PrivateCheckpoint {
 }
 const checkpoints = new WeakMap<RenderReaderCheckpoint, PrivateCheckpoint>();
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
-class NumericConversionFailure extends RangeError {}
 function prepareEvent(envelope: EventEnvelope): PreparedRendererEvent {
   const event = envelope.event;
   const raw = event.ev === 'tool_use' ? getMember(event.input, 'raw') : undefined;
@@ -161,6 +161,13 @@ export function readRendererSource(input: RenderReaderInput): RenderReaderResult
     return failAdmission('profile', 'Explicit supported numeric profile required');
   if (input.selectedAdapterOverride !== undefined)
     return failAdmission('profile', 'Selected transcript adapter override is unsupported');
+  const embeddedProfile = input.registry.context.numericProfile;
+  if (
+    !embeddedProfile ||
+    embeddedProfile.id !== profile.id ||
+    embeddedProfile.integerMaxDigits !== profile.integerMaxDigits
+  )
+    return failAdmission('profile', 'Registry and reader numeric profiles must agree exactly');
   const observed = input.source;
   if (
     !observed ||
@@ -453,15 +460,7 @@ function ownDirectory(observed: ObservedRendererDirectory): OwnedDirectory {
   });
 }
 function selectNumericProfile(profile: RenderNumericProfile): RenderNumericProfile {
-  if (
-    !profile ||
-    typeof profile.id !== 'string' ||
-    !profile.id ||
-    !Number.isSafeInteger(profile.integerMaxDigits) ||
-    (profile.integerMaxDigits !== 0 && profile.integerMaxDigits < 640)
-  )
-    throw new TypeError('Explicit supported numeric profile required');
-  return Object.freeze({ id: profile.id, integerMaxDigits: profile.integerMaxDigits });
+  return snapshotTranscriptJsonProfile(profile);
 }
 function numberAdmission(profile: RenderNumericProfile) {
   return (token: import('./lossless-json').JsonNumber): void => {

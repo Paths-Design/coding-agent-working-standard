@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { jsonNumber, parsePythonJson } from '../../src/transcripts/lossless-json';
+import { jsonNumber } from '../../src/transcripts/lossless-json';
 import { createDefaultTranscriptRegistry } from '../../src/transcripts/registry';
-import { RENDER_JSON_4300, type ObservedRendererFile } from '../../src/transcripts/render-reader';
+import {
+  RENDER_JSON_4300,
+  RENDER_JSON_UNLIMITED,
+  type ObservedRendererFile,
+} from '../../src/transcripts/render-reader';
 import {
   prepareSessionArtifacts,
   type PrepareSessionArtifactsInput,
@@ -54,7 +58,7 @@ function input(
       qwenCandidate: { path: '/fixture/subagents/s', kind: 'absent' },
     },
     registry: createDefaultTranscriptRegistry({
-      dshProfile: { id: 'test-json', decode: parsePythonJson },
+      numericProfile: RENDER_JSON_4300,
     }),
     numericProfile: RENDER_JSON_4300,
     calendar: {
@@ -137,6 +141,61 @@ test('actual owned source bytes reach complete turn and index artifacts with rec
   assert.deepEqual(prepared.generation.artifacts[0]!.bytes(), original);
   assert.equal('outputs_current' in prepared.generation, false);
 });
+test('source tool input references remain data while renderer output closes over its sibling spill', () => {
+  const documentRef = { sha256: 'external', length: 7 },
+    output = 'renderer output '.repeat(1600),
+    digest = createHash('sha256').update(output).digest('hex');
+  const raw = rows(
+    {
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'Read the document' }],
+      },
+    },
+    {
+      type: 'response_item',
+      payload: {
+        type: 'function_call',
+        name: 'read_document',
+        call_id: 'document-tool',
+        arguments: JSON.stringify({
+          nested: { document_ref: documentRef, output_ref: documentRef },
+        }),
+      },
+    },
+    {
+      type: 'response_item',
+      payload: { type: 'function_call_output', call_id: 'document-tool', output },
+    }
+  );
+  const prepared = ready(prepareSessionArtifacts(input(raw)));
+  assert.equal(prepared.publication, 'not_attempted');
+  assert.deepEqual(
+    prepared.generation.artifacts.map((item) => item.name),
+    ['turn-001.payloads.json', 'turn-001.json', 'session-index.json']
+  );
+  const payload = JSON.parse(
+    Buffer.from(
+      prepared.generation.artifacts.find((item) => item.role === 'turn')!.bytes()
+    ).toString()
+  );
+  const spill = JSON.parse(
+    Buffer.from(
+      prepared.generation.artifacts.find((item) => item.role === 'spill')!.bytes()
+    ).toString()
+  );
+  assert.equal(payload.timeline[0].source_harness, 'codex');
+  assert.deepEqual(payload.timeline[0].input.nested, {
+    document_ref: documentRef,
+    output_ref: documentRef,
+  });
+  assert.deepEqual(payload.timeline[0].output_ref, { sha256: digest, length: output.length });
+  assert.deepEqual(spill, { [digest]: output });
+  assert.deepEqual(payload.payloads_sha256, [digest]);
+  assert.equal(payload.payloads_sidecar, 'turn-001.payloads.json');
+});
 test('missing and empty sources retain observed human history as explicitly noncurrent', () => {
   const configured = input('');
   const existing = prior('turn-001.json', 'session-index.json');
@@ -178,6 +237,154 @@ test('a failed tentative conversion returns the new complete-prefix checkpoint w
   );
   assert.equal(repaired.checkpoint!.events.length, 3);
   assert.equal(repaired.generation.artifacts.filter((item) => item.role === 'turn').length, 3);
+});
+test('embedded conversion failures retain the complete prefix and cannot return ready artifacts', () => {
+  const embedded = `{"unused":${'1'.repeat(4301)},broken`;
+  for (const row of [
+    {
+      type: 'response_item',
+      payload: { type: 'function_call', name: 'example', call_id: 'embedded', arguments: embedded },
+    },
+    { type: 'tool/call', data: { name: 'example', callId: 'embedded', arguments: embedded } },
+    {
+      type: 'attachment',
+      attachment: { type: 'hook_success', hookName: 'profile', stdout: embedded },
+    },
+  ]) {
+    const a = rows(user('A')),
+      b = rows(user('B')),
+      configured = input(a),
+      baseline = ready(prepareSessionArtifacts(configured));
+    const failed = prepareSessionArtifacts({
+      ...configured,
+      transcript: file(transcriptPath, a + b + JSON.stringify(row)),
+      priorCheckpoint: baseline.checkpoint!,
+    });
+    if (failed.disposition !== 'failed') throw new Error('Expected embedded numeric failure');
+    assert.equal(failed.failure.phase, 'numeric');
+    assert.equal(failed.publication, 'not_attempted');
+    assert.equal('generation' in failed, false);
+    assert.equal(failed.checkpoint!.offset, BigInt(Buffer.byteLength(a + b)));
+    assert.deepEqual(
+      failed.checkpoint!.events.map(({ envelope }) => envelope.event.text),
+      ['A', 'B']
+    );
+    assert.equal(baseline.checkpoint!.offset, BigInt(Buffer.byteLength(a)));
+    assert.equal(baseline.checkpoint!.events.length, 1);
+    const repaired = ready(
+      prepareSessionArtifacts({
+        ...configured,
+        transcript: file(transcriptPath, a + b + rows(user('C'))),
+        priorCheckpoint: failed.checkpoint!,
+      })
+    );
+    assert.equal(repaired.checkpoint!.events.length, 3);
+    assert.equal(repaired.generation.artifacts.filter((item) => item.role === 'turn').length, 3);
+  }
+});
+
+test('selected structured output fallback changes actual error fields lengths and spill bytes', () => {
+  const output =
+    '[{"text":"ok","is_error":true,"unused":' +
+    '1'.repeat(4301) +
+    ',"padding":"' +
+    'x'.repeat(18000) +
+    '"}]';
+  const raw = rows(
+    user('Inspect the output'),
+    {
+      type: 'response_item',
+      payload: { type: 'function_call', name: 'example', call_id: 'output', arguments: '{}' },
+    },
+    {
+      type: 'response_item',
+      payload: { type: 'function_call_output', call_id: 'output', output },
+    }
+  );
+  const digest = createHash('sha256').update(output).digest('hex');
+  for (const numericProfile of [RENDER_JSON_4300, RENDER_JSON_UNLIMITED]) {
+    const prepared = ready(
+      prepareSessionArtifacts({
+        ...input(raw),
+        numericProfile,
+        registry: createDefaultTranscriptRegistry({ numericProfile }),
+      })
+    );
+    const payload = JSON.parse(
+      Buffer.from(
+        prepared.generation.artifacts.find((item) => item.role === 'turn')!.bytes()
+      ).toString()
+    );
+    assert.equal(payload.timeline.length, 1);
+    const tool = payload.timeline[0];
+    assert.equal(tool.kind, 'tool_call');
+    assert.equal(tool.name, 'example');
+    if (numericProfile.integerMaxDigits === 0) {
+      assert.equal(tool.output, 'ok');
+      assert.equal(tool.output_length, 2);
+      assert.equal(tool.is_error, true);
+      assert.equal(tool.output_truncated, false);
+      assert.equal(tool.output_ref, undefined);
+      assert.equal(payload.payloads_sidecar, null);
+      assert.deepEqual(payload.payloads_sha256, []);
+      assert.equal(prepared.generation.artifacts.filter((item) => item.role === 'spill').length, 0);
+    } else {
+      assert.equal(tool.output_length, output.length);
+      assert.equal(tool.is_error, false);
+      assert.equal(tool.output_truncated, true);
+      assert.equal(tool.output_cut, true);
+      assert.deepEqual(tool.output_ref, { sha256: digest, length: output.length });
+      assert.equal(payload.payloads_sidecar, 'turn-001.payloads.json');
+      assert.deepEqual(payload.payloads_sha256, [digest]);
+      const spillArtifact = prepared.generation.artifacts.find((item) => item.role === 'spill');
+      assert.ok(spillArtifact);
+      const spill = JSON.parse(Buffer.from(spillArtifact.bytes()).toString());
+      assert.deepEqual(spill, { [digest]: output });
+      const retained = spill[digest];
+      assert.ok(typeof retained === 'string');
+      assert.equal(createHash('sha256').update(retained).digest('hex'), digest);
+    }
+  }
+});
+
+test('lineage CR projection skips selected numeric failure while unlimited retains the parent', () => {
+  const raw =
+    'garbage\r{"type":"session_meta","payload":{"forked_from":"selected-parent"},"unused":' +
+    '1'.repeat(4301) +
+    '}\n' +
+    rows(user('Inspect lineage'));
+  for (const numericProfile of [RENDER_JSON_4300, RENDER_JSON_UNLIMITED]) {
+    const prepared = ready(
+      prepareSessionArtifacts({
+        ...input(raw),
+        numericProfile,
+        registry: createDefaultTranscriptRegistry({ numericProfile }),
+      })
+    );
+    const lineage = renderGet(prepared.generation.context, 'lineage');
+    assert.equal(prepared.checkpoint!.events.length, 1);
+    assert.equal(prepared.checkpoint!.events[0]!.envelope.event.text, 'Inspect lineage');
+    if (numericProfile.integerMaxDigits === 0) {
+      assert.equal(renderGet(lineage, 'parent_session_id'), 'selected-parent');
+      assert.equal(renderGet(lineage, 'authority'), 'none');
+    } else assert.equal(lineage, null);
+    const payload = JSON.parse(
+      Buffer.from(
+        prepared.generation.artifacts.find((item) => item.role === 'turn')!.bytes()
+      ).toString()
+    );
+    assert.deepEqual(
+      payload.context.lineage,
+      numericProfile.integerMaxDigits === 0
+        ? {
+            parent_session_id: 'selected-parent',
+            source: 'transcript_metadata',
+            authority: 'none',
+            source_path: transcriptPath,
+          }
+        : null
+    );
+  }
 });
 test('smaller positive preparation proposes only observed obsolete output names', () => {
   const prepared = ready(
@@ -416,7 +623,7 @@ test('retained ordinary store event bytes reach the Claude adapter under OpenCod
         ...input(projection),
         registry: createDefaultTranscriptRegistry({
           surface,
-          dshProfile: { id: 'test-json', decode: parsePythonJson },
+          numericProfile: RENDER_JSON_4300,
         }),
       })
     );

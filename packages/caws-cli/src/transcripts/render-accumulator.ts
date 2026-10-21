@@ -2,6 +2,10 @@
 import { createHash } from 'node:crypto';
 import { codepointTextFromString, encodeUtf8Strict, isCodepointText } from './codepoint-text';
 import { decodeStructuredTextPayload, parseTimestamp } from './harness-common';
+import {
+  snapshotTranscriptJsonProfile,
+  type TranscriptJsonNumericProfile,
+} from './transcript-json-profile';
 import { isJsonNumber, isJsonObject, pythonStr, type JsonNumber } from './lossless-json';
 import { isPythonWordCodepoint, UNICODE_PROFILE_ID } from './python-unicode-profile';
 import { PYTHON_WHITESPACE_PATTERN } from './source-occurrence';
@@ -62,6 +66,8 @@ export interface RendererDurationPort {
 export interface RendererAccumulationOptions {
   readonly noisePrefixes: readonly string[];
   readonly duration: RendererDurationPort;
+  /** Absent only for historical standalone accumulation; preparation supplies its selected profile. */
+  readonly numericProfile?: TranscriptJsonNumericProfile;
 }
 const object = (fields: Readonly<Record<string, RenderValue>>): RenderObject =>
   renderObject(Object.entries(fields));
@@ -333,10 +339,10 @@ function patchPaths(value: RenderText): RenderText[] {
   }
   return paths;
 }
-function decoded(value: RenderText): RenderText {
+function decoded(value: RenderText, numericProfile?: TranscriptJsonNumericProfile): RenderText {
   // Structured tool envelopes originate in transcript JSON strings. Derived
   // CodepointText is never serialized and reparsed to manufacture an envelope.
-  return typeof value === 'string' ? decodeStructuredTextPayload(value) : value;
+  return typeof value === 'string' ? decodeStructuredTextPayload(value, numericProfile) : value;
 }
 type ToolReference = { turn: RenderTurn; index: number };
 const tool = (reference: ToolReference): RenderObject => reference.turn.timeline[reference.index]!;
@@ -346,6 +352,10 @@ export function accumulateRendererEvents(
   cwd: string,
   options: RendererAccumulationOptions
 ): { turns: RenderTurn[]; sessionEvents: RenderObject[] } {
+  const numericProfile =
+    options.numericProfile === undefined
+      ? undefined
+      : snapshotTranscriptJsonProfile(options.numericProfile);
   if (
     !options.duration ||
     typeof options.duration.profileId !== 'string' ||
@@ -926,7 +936,7 @@ export function accumulateRendererEvents(
           codex = get(info, 'source_harness') === 'codex';
         let result =
           codex || name === 'Agent' || name === 'Task' || name === 'exec' || name === 'wait'
-            ? decoded(content)
+            ? decoded(content, numericProfile)
             : content;
         if (name === 'Read') result = content;
         const bounded = boundedRendererText(
@@ -939,7 +949,7 @@ export function accumulateRendererEvents(
           duration = options.duration.secondsBetween(typeof first === 'string' ? first : null, ts);
         if (duration !== null && !isJsonNumber(duration))
           throw new TypeError('Duration port returned an invalid numeric value');
-        const outputLength = renderTextLength(decoded(content));
+        const outputLength = renderTextLength(decoded(content, numericProfile));
         for (const [key, value] of Object.entries({
           output: bounded.text,
           output_length: renderInteger(outputLength),

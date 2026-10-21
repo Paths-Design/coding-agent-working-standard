@@ -1,13 +1,12 @@
 /** Source-to-artifact computation. Native admission, publication and current-use are separate. */
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
+import { isJsonNumber, isJsonObject, getMember, type JsonNumber } from './lossless-json';
 import {
-  isJsonNumber,
-  isJsonObject,
-  getMember,
-  parsePythonJson,
-  type JsonNumber,
-} from './lossless-json';
+  parseTranscriptJson,
+  snapshotTranscriptJsonProfile,
+  TranscriptJsonNumericConversionError,
+} from './transcript-json-profile';
 import { type TranscriptRegistry } from './registry';
 import {
   accumulateRendererEvents,
@@ -207,15 +206,16 @@ export function mergeRendererChronologicalEvents(
   );
   return Object.freeze(decorated.map((item) => item.event));
 }
-function lineage(file: ObservedRendererFile): RenderValue {
+function lineage(file: ObservedRendererFile, numericProfile: RenderNumericProfile): RenderValue {
   if (file.disposition !== 'read') return null;
   const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(file.source.bytes);
   for (const line of text.replace(/\r\n?/g, '\n').split('\n').slice(0, 32)) {
     let value;
     try {
-      value = parsePythonJson(line);
+      value = parseTranscriptJson(line, numericProfile);
     } catch (error) {
-      if (error instanceof SyntaxError) continue;
+      if (error instanceof SyntaxError || error instanceof TranscriptJsonNumericConversionError)
+        continue;
       throw error;
     }
     if (!isJsonObject(value) || getMember(value, 'type') !== 'session_meta') continue;
@@ -273,7 +273,7 @@ export function prepareSessionArtifacts(
       qwenCandidate: snapshotDirectory(input.subagents.qwenCandidate),
     });
     const registry = input.registry,
-      numericProfile = Object.freeze({ ...input.numericProfile });
+      numericProfile = snapshotTranscriptJsonProfile(input.numericProfile);
     const priorObservationId = input.priorInventory.observationId;
     const calendar: RendererCalendarPort = Object.freeze({
       profileId: input.calendar.profileId,
@@ -301,6 +301,11 @@ export function prepareSessionArtifacts(
       (numericProfile.integerMaxDigits !== 0 && numericProfile.integerMaxDigits < 640)
     )
       throw new TypeError('A supported numeric reader profile is required');
+    if (
+      registry.context.numericProfile?.id !== numericProfile.id ||
+      registry.context.numericProfile?.integerMaxDigits !== numericProfile.integerMaxDigits
+    )
+      throw new TypeError('Registry and preparation numeric profiles must agree exactly');
     const prior = input.priorInventory.artifacts.map((item) => {
       if (
         !item.name ||
@@ -370,6 +375,7 @@ export function prepareSessionArtifacts(
     const accumulated = accumulateRendererEvents(merged, contextInput.cwd, {
       noisePrefixes: registry.noisePrefixes,
       duration: calendar,
+      numericProfile,
     });
     const turns = accumulated.turns.filter(rendererTurnIsSubstantive);
     if (!turns.length)
@@ -408,7 +414,7 @@ export function prepareSessionArtifacts(
       ['head_sha', contextInput.headSha],
       ['start_sha', contextInput.startSha],
       ['dirty_files', contextInput.dirtyFiles],
-      ['lineage', lineage(transcript)],
+      ['lineage', lineage(transcript, numericProfile)],
     ]);
     phase = 'metadata';
     const metadata = parseRendererSubagents({

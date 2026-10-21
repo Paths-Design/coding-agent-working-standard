@@ -28,3 +28,4 @@ export * from './render-reader';
 export * from './render-accumulator';
 export * from './render-artifacts';
 export * from './render-prepare';
+export * from './transcript-json-profile';

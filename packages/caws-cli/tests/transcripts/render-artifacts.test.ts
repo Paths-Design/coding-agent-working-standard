@@ -3,12 +3,17 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { codepointText } from '../../src/transcripts/codepoint-text';
 import { jsonNumber } from '../../src/transcripts/lossless-json';
-import { type RenderTurn } from '../../src/transcripts/render-accumulator';
+import {
+  accumulateRendererEvents,
+  type RenderTurn,
+} from '../../src/transcripts/render-accumulator';
 import {
   buildRendererTurnPayload,
   isPreparedSessionArtifact,
   prepareRendererArtifacts,
 } from '../../src/transcripts/render-artifacts';
+import { createDefaultTranscriptRegistry } from '../../src/transcripts/registry';
+import { readRendererSource, RENDER_JSON_4300 } from '../../src/transcripts/render-reader';
 import {
   renderGet,
   renderInteger,
@@ -167,6 +172,126 @@ test('refuses dangling, wrong-length and wrong-content spill references before r
   assert.throws(() => prepareRendererArtifacts([current], context), /length disagrees/);
   current.payload_spill.set(digest, 'nope');
   assert.throws(() => prepareRendererArtifacts([current], context), /digest does not match/);
+});
+test('checks every renderer-issued spill coordinate without traversing source values', async (t) => {
+  const coordinates = [
+    ['reasoning', '', 'text_ref'],
+    ['audit_action', '', 'input_ref'],
+    ['audit_action', '', 'response_ref'],
+    ['tool_call', 'Read', 'output_ref'],
+    ['tool_call', 'Edit', 'old_string_ref'],
+    ['tool_call', 'Edit', 'new_string_ref'],
+    ['tool_call', 'Write', 'content_ref'],
+    ['tool_call', 'Agent', 'prompt_ref'],
+    ['tool_call', 'Task', 'prompt_ref'],
+    ['tool_call', 'ExitPlanMode', 'plan_ref'],
+    ['tool_call', 'functions.Edit', 'old_string_ref'],
+    ['tool_call', 'functions.Edit', 'new_string_ref'],
+    ['tool_call', 'functions.Write', 'content_ref'],
+    ['tool_call', 'functions.Agent', 'prompt_ref'],
+    ['tool_call', 'functions.Task', 'prompt_ref'],
+    ['tool_call', 'functions.ExitPlanMode', 'plan_ref'],
+  ] as const;
+  for (const [kind, name, field] of coordinates)
+    await t.test(`${kind}/${name}/${field}`, () => {
+      const current = turn(),
+        digest = createHash('sha256').update('full').digest('hex');
+      current.timeline.push(
+        renderObject([
+          ['kind', kind],
+          ['text', 'preview'],
+          ['name', name],
+          ['source_harness', name.startsWith('functions.') ? 'codex' : ''],
+          [
+            field,
+            renderObject([
+              ['sha256', digest],
+              ['length', renderInteger(4)],
+            ]),
+          ],
+          [
+            'input',
+            renderObject([
+              [
+                'document_ref',
+                renderObject([
+                  ['sha256', 'external'],
+                  ['length', renderInteger(7)],
+                ]),
+              ],
+            ]),
+          ],
+        ])
+      );
+      assert.throws(
+        () => prepareRendererArtifacts([current], context),
+        /unavailable sibling spill/
+      );
+      current.payload_spill.set(digest, 'full');
+      assert.deepEqual(
+        prepareRendererArtifacts([current], context).artifacts.map((item) => item.name),
+        ['turn-001.payloads.json', 'turn-001.json', 'session-index.json']
+      );
+      current.payload_spill.set(digest, 'other');
+      assert.throws(() => prepareRendererArtifacts([current], context), /length disagrees/);
+    });
+});
+test('refuses a removed spill produced by actual source tool output', () => {
+  const output = 'source output '.repeat(1600),
+    digest = createHash('sha256').update(output).digest('hex'),
+    registry = createDefaultTranscriptRegistry({
+      numericProfile: RENDER_JSON_4300,
+    });
+  const bytes = Buffer.from(
+    [
+      { type: 'user', message: { content: 'Read' } },
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', name: 'Read', id: 'read', input: { file_path: 'x' } }],
+        },
+      },
+      {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'read', content: output }] },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join('\n') + '\n'
+  );
+  const read = readRendererSource({
+    source: {
+      sourceId: 'spill-source',
+      sourceGeneration: 'g1',
+      inode: '100',
+      size: BigInt(bytes.length),
+      bytes,
+    },
+    registry,
+    numericProfile: RENDER_JSON_4300,
+  });
+  assert.equal(read.disposition, 'ready');
+  if (read.disposition !== 'ready') throw new Error('Expected prepared source');
+  const accumulated = accumulateRendererEvents(read.events, '/repo', {
+    noisePrefixes: registry.noisePrefixes,
+    duration: { profileId: 'spill-null-duration', secondsBetween: () => null },
+  });
+  assert.equal(accumulated.turns.length, 1);
+  const current = accumulated.turns[0]!;
+  assert.equal(current.payload_spill.get(digest), output);
+  assert.deepEqual(
+    renderGet(current.timeline[0], 'output_ref'),
+    renderObject([
+      ['sha256', digest],
+      ['length', renderInteger(output.length)],
+    ])
+  );
+  assert.equal(prepareRendererArtifacts(accumulated.turns, context).artifacts[0]!.role, 'spill');
+  current.payload_spill.delete(digest);
+  assert.throws(
+    () => prepareRendererArtifacts(accumulated.turns, context),
+    /unavailable sibling spill/
+  );
 });
 test('resolves rewind numbering only against retained turns and preserves status precedence', () => {
   const first = turn(),
