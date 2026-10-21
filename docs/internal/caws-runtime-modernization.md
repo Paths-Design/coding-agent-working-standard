@@ -30,12 +30,13 @@ passing unit tests, or the existence of this document.
 ## Source location and progress
 
 This working ledger is published on `main` independently of candidate source.
-The source integration checkpoint is the `native-runtime-modernization` branch
-at `10690d4bc1937a1a28fcf37e5ab3aed1f3e6ccd5`. Evidence entries identify their
-actual component branch or historical revision. Publishing this document does
-not land those implementations on `main`. Inspect the candidate architecture
-with `git show 10690d4b:docs/architecture/caws-native-runtime.md`; the relative
-architecture link follows the branch containing this document.
+The integration branch is `native-runtime-modernization`; its source-tree
+checkpoint is `505ec19f8f92392f5e402d730c1ed5daa1c87f36`. Later branch commits
+that change only this ledger leave that checkpoint unchanged. Evidence entries
+identify their actual component branch or historical revision. Publishing this
+document does not land those implementations on `main`. Inspect the candidate
+architecture with `git show 505ec19f:docs/architecture/caws-native-runtime.md`;
+the relative architecture link follows the branch containing this document.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
@@ -180,6 +181,15 @@ restricted to the decoder and its tests. E200 supplies SQL-cell reference
 evidence; root retains profile selection, SQL acquisition, explicit store-AST
 projection and publication integration.
 
+`CAWS-TRANSCRIPT-NODE-FLOOR-001` qualifies emitted transcript preparation on the
+declared Node 18.0.0 floor for R18 and is integrated at `505ec19f`; E228 records
+its bounded package evidence and partial lifecycle failure.
+`CAWS-STORE-TIMESTAMP-SENSITIVITY-001` (worktree `timestamp-sensitivity`)
+retains the five R09 regression controls E226 lists as gaps. Its source and
+tests remain unchanged while execution and edit refusals are unresolved; E229
+records the accepted parent qualification dependency. `caws worktree list`
+reports current bindings and owners. Component closure is not parent acceptance.
+
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
 Shared-output adoption therefore requires all legitimate writer paths to
@@ -188,10 +198,26 @@ writer. A fence implemented only in the new service does not establish that
 transition. Private fixtures and cooperative successor evidence cannot imply
 deployed Sterling exclusion, full A3/A8 acceptance or machine installation.
 
-Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
-**packaged**, **installed**, **native-observed**, **retired**. Record exactly
-the established boundary. Existing Python consumers remain obligations until
-removed or explicitly classified as foreign/historical test material.
+The State cells describe the established implementation boundary and remaining
+consumer work; they are not a fixed lifecycle vocabulary. Keep committed,
+tested, packaged, installed, native-observed and retired claims separate.
+Existing Python consumers remain obligations until removed or explicitly
+classified as foreign/historical test material.
+
+The following coverage index defines which feature rows contribute to the
+partial-implementation numerator. Each range is inclusive; the feature table
+below supplies the row's source, boundary and acceptance evidence.
+
+| Feature rows | Qualifying committed replacement slice | Row count |
+| ------------ | -------------------------------------- | --------- |
+| R01          | no                                     | 1         |
+| R02–R18      | yes                                    | 17        |
+| R19          | no                                     | 1         |
+| R20–R21      | yes                                    | 2         |
+| R22          | no                                     | 1         |
+| R23–R26      | yes                                    | 4         |
+| R27          | no                                     | 1         |
+| R28–R37      | yes                                    | 10        |
 
 Committed qualifying replacement implementation slices cover **33/37 feature
 rows (89.2%)**. R01/R19/R22/R27 lack that coverage, and no complete row has
@@ -226,14 +252,14 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                             | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                      | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
 | R13 | `shared/lib/harness_qwen.py`                                                                                        | TS Qwen adapter                                                            | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
-| R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures; Parent first-matched-empty registry behavior is exercised in E192; ordinary production consumption remains open                                                                                                                                                                                                                                                 |
+| R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures; Parent first-matched-empty registry behavior is exercised in E192; ordinary production consumption remains open. `main` `8a758936` adds deferred annotations to `harness_kimi.py` so stock `/usr/bin/python3` 3.9.6 imports it; the integration branch's Python reference lacks this import-compatibility change                                                |
 | R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode translation and noise declarations; zero row adapters          | closed declarations imported and parent transcript checks exercised, E190; production consumption open                                            | Actual R09 DB acquisition/reconstruction owns mapper consumption and fallback; renderer owns noise filtering. Declarations do not implement those consumers or installed behavior                                                                                                                                                                                                                                             |
 | R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Stateful model_io component evidence; DB-to-Claude-shaped acquisition, reader/cache/writer, registry, native and installed consumption remain parent obligations                                                                                                                                                                                                                                                              |
 | R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures; root owns selected interpretation, registry, reader/cache/writer and native consumption                                                                                                                                                                                                                                                                         |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | bounded source reader, accumulation and complete turn/spill/index preparation accepted and landed, E225; production renderer unreplaced           | Selected numeric/catch/spill and output boundaries exercised at199fa5e. Native publication/current-attempt admission, real SessionEnd consumption, production calendar, context-bound freshness, packaging and installed rendering remain open; E147/E165 partial-publication counterexamples are not closed by preparation.                                                                                                  |
-| R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                           | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
+| R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                           | 15 executable shell consumers, 19 inline bodies and seven external callsites; the [embedded inventory](#embedded-and-developer-implementation-coverage) groups them and excludes textual interpreter mentions                                                                                                                                                                                                                 |
 | R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity, hook-harvest and replay leaves accepted, landed and integrated; three original paths unreplaced                          | E134/E144/E148/E163 retain bounded reference profiles, deliberate repairs and raw failed/successful artifacts. E151/E163 integrate the exact source and Python deletions; qualify-render-daemon.py, qualify-transcript-cache.py and source_freshness.py remain; component progress is not parent acceptance                                                                                                                   |
-| R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | one test-module retirement integrated, E170; remaining corpus unreplaced                                                                          | Twelve test modules plus conftest (13 tracked pytest files); preserve independent hostile oracles and checked failure causes                                                                                                                                                                                                                                                                                                  |
+| R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | one test-module retirement integrated, E170; remaining corpus unreplaced                                                                          | Integration source `10690d4b`: twelve test modules plus conftest (13 tracked pytest files). `main` adds `test_template_annotation_compat.py` at `8a758936` (thirteen modules plus conftest), which the integration branch lacks. Preserve independent hostile oracles and checked failure causes                                                                                                                              |
 | R22 | Tracked installed `.caws/hooks` Python copies                                                                       | Governed self-host/runtime adoption                                        | unreplaced                                                                                                                                        | Fourteen copies identified; do not edit generated/governed installation by hand                                                                                                                                                                                                                                                                                                                                               |
 | R23 | Rust client / versioned local protocol                                                                              | `packages/caws-native` + TS protocol                                       | POSIX one-shot transport/cancellation and bounded actual-engine replay tested; macOS pre-Ready frontend-death custody observed, E145              | E156 observes ordinary typed-engine/renderer replay and E162 one after-Ready/dispatch frontend loss; closed-pipe nonleader settlement, other loss phases/surfaces, descriptor leakage, resident IPC, bounded Stop recovery and installed parity remain open                                                                                                                                                                   |
 | R24 | One-shot typed engine                                                                                               | `packages/caws-cli/src/runtime`                                            | opt-in prototype; isolated nonlatching Codex branch exercised                                                                                     | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified                                                                                                                                                                                                                                                |
@@ -397,7 +423,7 @@ Additional component evidence:
   establish native engine integration, installed behavior or complete shell
   soundness.
 
-## Embedded and developer implementation coverage
+## Evidence ledger (continued)
 
 Additional bounded evidence and unresolved dependencies:
 
@@ -5694,6 +5720,64 @@ Additional bounded evidence and unresolved dependencies:
   ownership, with implemented analysis, proposed execution custody and native
   adoption stated separately.
 
+- E228: The Node-floor component candidate `41a39f66` is integrated into the
+  source branch at `505ec19f` (parents `5446010b` and `41a39f66`). Normal build
+  and ten focused tests exit 0. Actual Node 18.0.0 executes the unpacked private
+  package and prepares four files byte-identical to the retained R18 scenario.
+  Root and an independent read-only peer verify the package SHA
+  `f5139faad5a873316e12aeb1509fa50b754bc10718ddb2aa2344c8c631aa2eac`, 1,258
+  entries, all 33 recursive JavaScript images and the 29-module literal require
+  closure. Wrong-runtime, missing-module and corrupt-spill controls exit 1 for
+  their intended reasons. The actual Node 18 pending-write fault harness exits 0
+  after one injected failure, verifies retained prepared bytes, leaves no final
+  receipt and refuses overwrite retry. Original command and terminal output
+  records in the owner's transcript independently corroborate the retained
+  diagnostics; these are not reruns inferred from a summary.
+
+  A1–A3 PASS records match events 10478–10480. The normal owner merge commits
+  and closes the spec (event 10499), then fails to append `worktree_merged`.
+  This is a partial lifecycle failure, not an ordinary successful merge. Owner
+  destroy exits 0; root verifies terminal event 10504, absent registry/directory
+  and Git worktree listing, then safely refreshes the clean parent checkout to
+  `505ec19f`. The missing merge event remains an accepted root audit concern;
+  recovery does not fabricate that event or erase the failed command. Artifact
+  relations, command identities and failed attempts are retained under
+  `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-node-floor/candidate-02/`.
+  This qualifies a bounded R18 support component. It does not qualify the
+  packaged CLI, production caller, publication, rename/crash durability,
+  calendar, installation or full R27. Coverage remains 33/37; parent acceptance
+  remains 0/8.
+
+- E229: Root accepts the unresolved child-actor qualification dependency into
+  parent A5, recorded unchecked in event 10495. The sensitivity lane's CLI owner
+  is the child session, while its refused edit has parent-session hook context.
+  The documented host contract uses the parent session ID for subagent hooks.
+  Source inspection distinguishes the CLI's surface/environment selection from
+  payload-first hook selection and exact scalar worktree-owner comparison; fork
+  telemetry grants no ownership equivalence. This does not establish an
+  incorrect historical guard verdict or malformed host input. Retained journals
+  do not establish the actual oracle-winning identity and owner snapshot at
+  decision. Raw refusals and the bounded host observation remain under
+  `/Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-sensitivity/`.
+  Root owns the parent consequence. The clean bound sensitivity component and
+  all five controls remain on hold. Resume requires trusted actor semantics,
+  same-invocation decision provenance, an admitted owner edit and an
+  independently identified foreign edit refused with bytes preserved. No
+  takeover, inferred parent/child authority, writer substitution or rerouted
+  execution follows.
+
+- E230: All four existing guard documents are committed in root's
+  `guard-contract-docs` lane at `063991aa`. Root grounds independent committed
+  review and the source owner's startup-binding correction against source.
+  Formatter, diff checks and scoped gates exit 0; doctor exits 0 with three
+  warnings and four informational findings. Spec A1/A2 PASS and A3 unchecked
+  match events 10496–10498. Commit verification establishes reachability, not
+  native execution. Coherent source landing remains open: the documents must
+  land with the held analysis source, whose full-topology policies mutation
+  attempt is running. The earlier incomplete and narrowed failed attempts are
+  retained. Root owns documentation and integration; installed runtime,
+  final-launch custody, native canary and rollback remain unqualified.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5726,27 +5810,34 @@ custody and bounded finalization together. A signal-accepted record alone cannot
 claim termination, and the legacy refusal's unconditional process-end wording is
 not an observation that the target exited.
 
+## Embedded and developer implementation coverage
+
 The executable embedded-Python surface is 15 shell files, 19 inline bodies and
 seven external callsites. A textual `python` hit is not sufficient: seven
 broader search matches contain only comments or interpreter-recognition data.
+Line anchors below refer to the integration source tree `10690d4b`.
 
 | Group / source sites                                                                                                                                           | Destination and decisive proof                                                                                                                                                                                  |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared/runtime-paths.sh:58`; shared/Codex/Kimi `lib/parse-input.sh`                                                                                           | Typed input normalization: raw controls/NUL/surrogate handling, shell-safe assignments, Codex multi-file patch first-action mode, Kimi fallback precedence and large-input transport                            |
 | `shared/lib/caws-state.sh:211`                                                                                                                                 | Shared path/native FS port: existing symlink ancestor with missing leaf, `/tmp` alias and unresolved path fallback                                                                                              |
-| `shared/lib/agent-surface.sh:516`, `shared/lib/run-handlers.sh:598`                                                                                            | Typed selection: malformed/absent override maps, custom paths and concurrent request environment isolation                                                                                                      |
+| `shared/lib/agent-surface.sh:520`, `shared/lib/run-handlers.sh:598`                                                                                            | Typed selection: malformed/absent override maps, custom paths and concurrent request environment isolation                                                                                                      |
 | `shared/lib/parse-input.sh:355,372,449`, `shared/lib/agent-pid.sh:162`, `shared/lib/session-cache.sh:29`                                                       | Native anchored filesystem + typed identity/cache: dir-relative no-follow writes, exclusive temp0600/rename, symlink races, unsafe IDs, original created_at, partial writes, PID reuse and retention boundaries |
 | `shared/lib/reprieve.sh:194`                                                                                                                                   | Owning reprieve reader: handler/session/repo scope, legacy null repo reach, revoke-key presence, naive-UTC/offset/equal-expiry and symlink ancestry                                                             |
 | `shared/goal-ac-gate.sh:192,209,244`                                                                                                                           | Typed verify-acs consumer: no binding, malformed/empty report, all verified, not-rederived, non-dict criteria and bounded infrastructure release; do not rederive authority                                     |
 | `shared/lib/run-handlers.sh:94,371`                                                                                                                            | Typed journal/supervisor: selected identity, start/result, short append/symlink failures, failed provenance independent of guard outcome                                                                        |
 | External calls in `shared/block-dangerous.sh`, `shared/session-log.sh`, `shared/hook-utilities.sh`, `shared/lib/guard-config.sh`, `shared/lib/run-handlers.sh` | Classifier, renderer/store, utility, config and truncation modules tracked separately in R05-R18; consumers must migrate with tests                                                                             |
 
-Developer paths: `scripts/calculate-rule-tokens.py`, `scripts/hook-harvest.py`,
-`scripts/hook-harvest.test.py`, and `scripts/hook-experiments/` files
-`qualify-render-daemon.py`, `qualify-transcript-cache.py`,
-`replay-terminal-corpus.py`, `sensitivity.py`, `source_freshness.py`,
-`test_replay_boundary.py`. Retained qualification tools remain obligations, not
-historical exemptions inferred from their directory name.
+Remaining developer paths: `scripts/hook-experiments/` files
+`qualify-render-daemon.py`, `qualify-transcript-cache.py` and
+`source_freshness.py`. Retained qualification tools remain obligations, not
+historical exemptions inferred from their directory name. The other original
+developer paths are absent from `main` and the integration source: `8e56cee2`
+removes `scripts/calculate-rule-tokens.py`; `8ce627ca` removes
+`scripts/hook-harvest.py` and `scripts/hook-harvest.test.py`; `098dc1f4` removes
+`scripts/hook-experiments/sensitivity.py`; and `d147dd3e` removes
+`scripts/hook-experiments/replay-terminal-corpus.py` and
+`scripts/hook-experiments/test_replay_boundary.py`.
 
 The native component's post-start transport failure is conservatively uncertain
 and refuses; bounded Stop transport recovery is unresolved. It must not become
@@ -5807,10 +5898,12 @@ progress and does not replace that transaction or its event readback.
    accepted source-owner repair; native A5/A7 integration obligations remain
    open. Include the four accepted documentation surfaces in that landing:
    `hook-pack-shared-core.md`, `hook-packs.md`, `README.md` and the existing
-   guard-lineage `command-analysis.md`. Their contract must distinguish actual
-   execution metadata, mandatory write guard versus optional pin guard,
-   command-specific exits, the full three-suite/six-file verification scope,
-   proposed executor custody and unqualified native adoption.
+   guard-lineage `command-analysis.md`. E230 records the committed and reviewed
+   four-file candidate; coherent source landing remains required. Their contract
+   must distinguish actual execution metadata, mandatory write guard versus
+   optional pin guard, command-specific exits, the full three-suite/six-file
+   verification scope, proposed executor custody and unqualified native
+   adoption.
 4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
    target, embedded-member checks and four direct build/consumer integrations.
    E209 qualifies one frozen current-host release build; ordinary consumer
@@ -5864,7 +5957,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E227 retain the historical candidates, failures and bounded observations;
+E167–E230 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is33/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
@@ -5954,12 +6047,17 @@ safety/validation repairs through a separately accepted component. The original
 lane, evidence and all A1–A8 obligations remain active. Native installation is
 separate. The normal machine bootstrap remains Python, but a future legacy
 adapters installation receives changed shared guard bytes, so source landing is
-not a behavior-inert claim. Continue the dependency order below. Keep the failed
-backpressure witness; instrument startup, ancestor capture, proposal arrival and
-output delivery before attributing its timeout or claiming concurrent
-performance. E69 adds a separate reproduced ancestor-capture deadline failure;
-inspect its typed stage and per-observation/substage timing before changing
-capture policy or budgets.
+not a behavior-inert claim. Keep the failed backpressure witness; instrument
+startup, ancestor capture, proposal arrival and output delivery before
+attributing its timeout or claiming concurrent performance. E69 adds a separate
+reproduced ancestor-capture deadline failure; inspect its typed stage and
+per-observation/substage timing before changing capture policy or budgets.
+
+### Remaining parent obligations
+
+The numbered list at the start of this section governs the next execution. The
+items below keep the remaining parent obligations in their dependency order.
+Their position does not discharge them, and they do not override that list.
 
 1. Qualify R33's integrated hostile paths after the complete selected-source
    cold/warm observation in E81. E70's journal, E74's codec, E75's custody and
