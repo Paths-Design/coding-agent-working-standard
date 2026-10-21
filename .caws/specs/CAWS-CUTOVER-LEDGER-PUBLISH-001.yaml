@@ -1,0 +1,36 @@
+id: CAWS-CUTOVER-LEDGER-PUBLISH-001
+title: 'Publish reconciled cutover obligations and source provenance'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-21T19:36:19.581Z'
+updated_at: '2026-10-21T19:36:19.581Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Canonical cutover tracking and CLI doctor documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+    - 'README.md'
+  out: []
+invariants:
+  - 'Documentation publication does not imply candidate source delivery or machine adoption.'
+acceptance:
+  - id: A1
+    given: 'modernization source and retained execution evidence'
+    when: 'the canonical ledger is reconciled'
+    then: 'ownership, component landing, open obligations and partial-versus-parent metrics match inspected source and governance.'
+  - id: A2
+    given: 'canonical doctor implementation and a warning-only live result'
+    when: 'README exit semantics are read'
+    then: 'zero permits warnings and one denotes error-severity findings or load errors.'
+observability:
+  - 'Governed document diff, inspected source revisions and matching lifecycle/evidence events'
+rollback:
+  - 'Revert only this documentation publication; leave source lanes and selected runtime unchanged.'
+non_functional: {}
+contracts:
+  - name: 'cutover-ledger'
+    type: behavior
