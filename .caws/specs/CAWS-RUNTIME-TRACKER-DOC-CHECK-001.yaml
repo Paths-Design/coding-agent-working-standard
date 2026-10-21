@@ -45,3 +45,9 @@ rollback:
   - 'Revert the documentation commit through a governed follow-up if primary evidence contradicts a correction.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected candidate a5f8e4c1: 'Continue the dependency order below' occurs 0 times; both 'governs the next execution' sites (L5886, L5983) designate the near-term 1-5 list under Ordered next work; the older list sits under '### Remaining parent obligations' (L5981) and its body from '1. Qualify R33' to Landing obligations hashes identically on main and candidate (shasum 7cfde3adce0f), all seven items retained. Source inspection only; does not establish that agents follow the ordering."
+    recorded_at: "2026-10-21T21:44:29.262Z"
+    commit_sha: a5f8e4c1
