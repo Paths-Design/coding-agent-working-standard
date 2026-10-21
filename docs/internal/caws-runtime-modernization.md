@@ -149,6 +149,13 @@ confer authority or acceptance.
 | Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29`          | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                                                                                                                       |
 | Transcript adapters and interpretation         | Root integrates closed Claude/Qwen/Kimi/DSH/OpenCode/Zcode and numeric-token components; peers own only separately assigned slices | Claude and token imports are observed in E168/E179. E190 imports the five closed Qwen/Kimi/DSH/OpenCode/Zcode components; E192 imports their ordered registry and exercises combined parent transcript contracts. Acquisition, cache, writer, profile selection and installed consumption remain parent-owned. |
 
+The bound `CAWS-SQLITE-STATIC-BUILD-001` component owns the pinned build helper,
+its hostile tests and `packages/caws-cli/tsconfig.vnext.json` in the
+`sqlite-static-build` lane. The parent admits the configuration as support and
+does not write it concurrently. Root retains Cargo/native admission, raw SQL
+acquisition, projection, consumer integration and the component's eventual
+parent import; an uncommitted helper does not advance coverage or acceptance.
+
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
 Shared-output adoption therefore requires all legitimate writer paths to
@@ -4521,6 +4528,40 @@ Additional bounded evidence and unresolved dependencies:
   and whole publication remain open. This refines reference evidence without
   implementing R09/R18 or advancing31/37 coverage or0/8 parent acceptance.
 
+- E195: Root qualifies the exact nonbundled rusqlite 0.40.2/libsqlite3-sys
+  0.38.2 wrappers against E193's observed static archive in the external
+  `native-sqlite-source/rust-wrapper-probe/`. `readback.json` retains actual
+  command/status and artifact identities. Cargo resolution/fetch/metadata/tree,
+  offline single-job build and executable run exit0. All 8 compressed registry
+  packages match their resolved lock checksums; 1039 regular tar-member bytes
+  match extracted source before and after build. The two wrapper checksums also
+  match the independently inspected E193 upstream metadata. The first input
+  inspector incorrectly assumed a `.cargo-checksum.json` file; its pre-build
+  failure and correction to compressed-archive/member verification are retained.
+
+  The actual feature tree transitively enables sys defaults/pkg-config/vcpkg
+  through rusqlite despite both direct dependencies disabling defaults. The
+  inspected pkg-config 0.3.34 gate returns before process execution when
+  SQLITE3_NO_PKG_CONFIG is set. The explicit library directory, STATIC=1 and
+  NO_PKG_CONFIG=1 produce actual build directives `static=sqlite3` and the
+  identified E193 archive search path. The resulting executable imports only
+  libSystem according to otool and defines sqlite3_libversion/sqlite3_open_v2
+  according to nm. Runtime output gives the exact 3.53.4/source ID and verifies
+  raw BLOB `00ff`, malformed-UTF8 TEXT `80ff`, INTEGER `9007199254740993`, REAL
+  negative-zero bits `8000000000000000` and NULL through ValueRef on one
+  in-memory SELECT. A separately compiled empty-prefix control exits101 with
+  `could not find native static library sqlite3` and publishes no executable.
+  These observations support finite linkage/raw-value feasibility, not a general
+  discovery or changed-archive guard.
+
+  Parent Cargo/source and machine selection remain unchanged. Point-in-time
+  source/tool/archive checks do not establish immutable compiler, linker, SDK or
+  executable-image custody. A durable reviewed-prefix/Cargo guard, actual fixed
+  file JOIN, real-product schema admission, row/byte limits, concurrent WAL
+  snapshot, cancellation, publication and renderer consumption remain
+  root-owned. R09/R18 stay unreplaced; coverage31/37 and parent acceptance0/8 do
+  not advance for this private probe.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4627,18 +4668,19 @@ progress and does not replace that transaction or its event readback.
    owner; its reserved source and failed ownership control remain obligations.
    Keep the refused CLI inventory unexecuted pending a supported resolution; do
    not infer an attempted foreign write from the refusal alone.
-4. Turn E193 static-link feasibility into a durable pinned build and Cargo link
-   guard, then implement native fixed-query acquisition with snapshot,
-   cancellation and lossless SQL-value custody. Connect the imported registry to
-   transactional rendering/writing and retain E165/E166 source/profile controls.
-   R09 and R18 remain unreplaced; standalone registry composition does not
-   discharge production consumer parity.
+4. Land and integrate the owned pinned-build component, then turn E193/E195
+   static-link and Rust raw-cell feasibility into a durable
+   reviewed-prefix/Cargo link guard. Implement native fixed-query acquisition
+   with snapshot, cancellation and lossless SQL-value custody. Connect the
+   imported registry to transactional rendering/writing and retain E165/E166
+   source/profile controls. R09 and R18 remain unreplaced; standalone registry
+   composition does not discharge production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E194 retain the historical candidates, failures and bounded observations;
+E167–E195 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is31/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
