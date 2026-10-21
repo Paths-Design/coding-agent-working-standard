@@ -4921,6 +4921,26 @@ Additional bounded evidence and unresolved dependencies:
   dual acceptance readback precede import. This decision does not establish
   implementation or alter32/37 partial coverage or0/8 parent acceptance.
 
+- E205: Root verifies timestamp component candidate
+  `3405ada0fce0ff86ba28d7239077be789cb99e49` is an ancestor of `main` and reads
+  closed/completed `CAWS-STORE-TIMESTAMP-001`. The candidate contains exactly
+  the two E204-approved paths. Its source SHA256 is
+  `a188a54d56e9213a67a6f506e5c5501109eb636194eb72ea5f6847f722abe262`; its test
+  SHA256 is `69d7c05f06072bd1bd08348757a0d813bb96615c519c1cfb3837a3988241b65a`.
+  Component acceptance A1–A4 records cite that exact candidate; component
+  closure does not discharge parent acceptance. The component retains the
+  excluded C-int extreme month/year addition bands and finite arithmetic
+  qualification limits.
+
+  This checkpoint establishes component source landing on `main`, not parent
+  import. Parent artifact verification, source import and integrated checks are
+  pending. Root owns the actual native UTC-calendar/errno port, asynchronous
+  transport and cancellation, SQL acquisition, explicit profile selection,
+  store-AST/schema projection, publication and renderer integration. The native
+  SQLite build coordinator is in progress and has no completed candidate-build
+  observation. Coverage remains32/37 qualifying partial slices (86.5%), parent
+  acceptance0/8; no production Python row is retired or machine runtime adopted.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5038,8 +5058,9 @@ progress and does not replace that transaction or its event readback.
    E165/E166 source/profile controls. E196 requires a store-specific timestamp
    conversion, explicit integer profile and codepoint-preserving JSON
    projection. E203 supplies bounded actual SQL timestamp/error observations;
-   E204 adjudicates the two-stage leaf; actual native calendar/error behavior
-   and its consumer integration remain root-owned. E202 imports the closed
+   E204 adjudicates the two-stage leaf; E205 verifies its component landing on
+   main with parent import pending. Actual native calendar/error behavior and
+   its consumer integration remain root-owned. E202 imports the closed
    store-JSON component; root owes its explicit store-AST access/schema
    projection and both-cell decode/admission order. The generic decoder and
    JS-string AST cannot silently supply that contract. R09's production consumer
@@ -5050,7 +5071,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E204 retain the historical candidates, failures and bounded observations;
+E167–E205 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
