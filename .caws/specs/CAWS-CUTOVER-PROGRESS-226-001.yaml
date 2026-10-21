@@ -39,3 +39,8 @@ evidence:
     evidence_ref: "Directly inspected timestamp41999be7 source/reference/mutation artifacts, canonical A1-A4 events10395/96/98/10401 and closed/merge/removal10413-15, integration10690 ancestry and clean reconciliation. E226 preserves finite external mutation versus absent canonical CI registration; E227 exact prepared helpers and build-refusal-01.json preserve blocked-before-execution/no native claim. Independent committed review87025309 grounded; its CI-registration question repaired in37a66618 against actual mutation-policy244-268. Formatter/diff/ordinary commit/scoped5gates exit0; doctor0E3W4I exit0. This verify establishes commit existence only, not artifact semantics, native qualification or adoption."
     recorded_at: "2026-10-21T21:08:03.398Z"
     commit_sha: "37a666184ce3c36fb0de99ac4e41d9342cd37034"
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Main/source publication interval open. Candidate37a66618 reviewed and scoped checks pass; root will merge main with no-close, bind same finite unit off integration10690, copy exact reviewed ledger, check byte equality, then record A2 and normal source merge/closure. No two-branch identity claimed yet."
+    recorded_at: "2026-10-21T21:08:07.662Z"
+    commit_sha: "37a666184ce3c36fb0de99ac4e41d9342cd37034"
