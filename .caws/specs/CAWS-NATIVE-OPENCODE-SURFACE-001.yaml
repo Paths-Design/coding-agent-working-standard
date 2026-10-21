@@ -1,0 +1,43 @@
+id: CAWS-NATIVE-OPENCODE-SURFACE-001
+title: 'OpenCode tool translation and noise declarations'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T05:33:41.361Z'
+updated_at: '2026-10-21T05:33:41.361Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Historical OpenCode surface declarations and input mapping; deliberately zero row adapters'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/harness-opencode.ts'
+    - 'packages/caws-cli/tests/transcripts/opencode.test.ts'
+  out: []
+invariants:
+  - 'OpenCode contributes translation and noise declarations, not a row-matching adapter. Do not infer current DB reconstruction or installed consumption from module existence.'
+  - 'Preserve lossless numeric kinds and raw source custody; transcript labels and tool names confer no execution authority.'
+acceptance:
+  - id: A1
+    given: 'historical OpenCode module constants'
+    when: 'typed surface declarations are inspected'
+    then: 'exact nine tool-name translations eight mapper coordinates three noise prefixes and zero row adapters match the pinned source without invented acquisition behavior'
+  - id: A2
+    given: 'missing null numeric Unicode and hostile-key JSON input fields'
+    when: 'each historical input mapper executes'
+    then: 'ordered field names defaults original values and nonmutation match independent pinned Python observations with unsupported direct shapes explicitly classified'
+  - id: A3
+    given: 'immutable typed module declarations and source-derived counterexamples'
+    when: 'Node18 and22 compilation semantic references and targeted negative controls execute'
+    then: 'exact checked identities and frozen declarations support the bounded component while actual DB reconstruction noise filtering consumers registry native installation Python retirement and cutover remain unverified'
+observability:
+  - 'Retain exact source interpreter fixture command status stream and runtime artifact identities; separate ordinary reader inputs from constructed and hostile seeded controls.'
+rollback:
+  - 'Revert standalone component source commit; this unit modifies no production consumer or installed runtime.'
+non_functional:
+  security:
+    - 'Never execute transcript content or grant authority from normalized labels.'
+contracts:
+  - name: 'opencode-historical-surface'
+    type: behavior
