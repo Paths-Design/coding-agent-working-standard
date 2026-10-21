@@ -63,3 +63,8 @@ evidence:
     evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-timestamp; Candidate3405ada0: tests/transcripts/store-timestamp.test.js51 checks on Node18.20.8/22 retained in commands/node18-jest and node22-jest; hostile profile/tag/accessors/proxy failures, forged/copy tokens, mismatched seconds, malformed OS/port envelopes, transport/cancel/callback separation and Date/callback prohibition assertions inspected. No native I/O/async cleanup/producer identity or consumer adoption exercised."
     recorded_at: "2026-10-21T12:58:21.106Z"
     commit_sha: "3405ada0fce0ff86ba28d7239077be789cb99e49"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-timestamp; Candidate3405ada0 source and actual emitted JS f0e161b42e3e5ce83a6002b268436a6b6c578e26ca4e152a2735248219197885 byte-retained in candidate/ before teardown. Normal npm run build/strict compile/scoped lint/5 gates exit0,51 Jest18.20.8/22,3673 differential18.0/18.20.8/22 and84 synthetic18.0/22 all0diff; frozen independent reference has equal pre/post exe/datetime/native/OS/bridge identities. Six semantic mutants detected; not full mutation score. Independent-artifact-audit.json rechecks307 custody entries and raw per-row comparisons. No SQL/native port/publication/installed/cutover claim."
+    recorded_at: "2026-10-21T12:58:22.566Z"
+    commit_sha: "3405ada0fce0ff86ba28d7239077be789cb99e49"
