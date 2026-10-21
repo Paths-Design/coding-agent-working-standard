@@ -47,3 +47,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py::test_shipped_templates_import_on_python_3_9"
     commit_sha: "8a758936"
     test_verified_at: d12d0b6dd59aa36b148ff0a62e31a496ce559c9b
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Python 3.9.6 (/usr/bin first, the .husky/pre-push PATH): session_log_renderer.py imports and prints usage (was TypeError at harness_kimi.py:28); system-runtime + artifact-contracts + 4 pack suites 116/116 at d12d0b6d. --verify below re-runs the renderer contract test under the default interpreter only."
+    recorded_at: "2026-10-21T02:45:37.678Z"
+    test_nodeid: "packages/caws-cli/tests/ci/artifact-contracts.test.js::real renderer bytes validate with nullable summary and lineage; malformed shapes are rejected"
+    commit_sha: "8a758936"
+    test_verified_at: d12d0b6dd59aa36b148ff0a62e31a496ce559c9b
