@@ -65,3 +65,8 @@ evidence:
     evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-sqlite-static-build/artifact-verification.json: actualsource childfailure17,abort/timeout/SIGKILL,reaptrue,stdout/stderroverflow bounded4096,no marker; persistenceconflict retainsforeignfile+rawfallback. Realbuild final-rootabort oldec1 falselycompleted despite6steps0; repaired91a64e8 returnsBuildaborted,nocompletedmarker,pendingretained. Node18.20.8/22 current55tests0 include durableprocesscases. Deadlineexpiryatfinalrootnotindependentlyinjected; afterlinkdispatch,OSIO/descendantsoutofguarantee."
     recorded_at: "2026-10-21T10:27:49.927Z"
     commit_sha: "91a64e8bc358f36f57c5daa8df52cfe67ffefb77"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-sqlite-static-build/commands/final-package-build npmrunbuild0; repaired-package-build strictCLIbuild0 emits tooling+all22transcriptmodules. RepairedJestexact55cases eachNode22.19.0/18.20.8 exit0; actualhelperalsoexecutesNode18.0.0. Node18.0Jestprecollectionconfigfailure retainedfinal-tests18 exit1, Jestengines18.14min observed; causalresolverdiagnosisnotproven. Scopedlint0; doctor0/0E3W4I; repairedgates0all5passactual3filebasis91a64e8."
+    recorded_at: "2026-10-21T10:28:00.333Z"
+    commit_sha: "91a64e8bc358f36f57c5daa8df52cfe67ffefb77"
