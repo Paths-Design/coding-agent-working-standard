@@ -47,3 +47,8 @@ evidence:
     evidence_ref: "Actual retained Node18.0.0 executed the private unpacked package floor entry with exit0; executable SHA1f38ec2a91df1d1db0f258872737cdfce65702a4e810c5fb7fd0a40d34f544fa and argv recorded in floor-run/receipt.json. Wrong Node22 and missing module each exit1 with exact stderr and no output directory. Root inspected raw commands and files under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-node-floor/candidate-02. Commit verify checks reachability only; external artifact and execution claims were directly inspected, not re-executed by the CLI."
     recorded_at: "2026-10-21T21:35:58.651Z"
     commit_sha: "41a39f6694c3453c1ea90eb3c360023ccff3b11d"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Actual floor-run prepares two turns, index and originating-turn spill with exact21001x. Four files223/3992/21077/1104B byte-identical to prior scenario03. Fatal UTF8/numeric produce no generation; empty prior history retains noncurrent; caller and returned-byte mutation preserve outputs. Corrupt spill verifier on Node18 exits1 with exact semantic assertion. No native publication/currentness or production calendar claim; publication remains not_attempted. Retained inspection.json SHA702cf8ef4f73ff923bb13dac6d15d82b3a8a5aefc16e9662cf1014435b670aef root verifies52 artifact relations offline, not52 new tests. CLI verify commit-only."
+    recorded_at: "2026-10-21T21:36:34.345Z"
+    commit_sha: "41a39f6694c3453c1ea90eb3c360023ccff3b11d"
