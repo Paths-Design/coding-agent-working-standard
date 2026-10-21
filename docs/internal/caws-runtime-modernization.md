@@ -31,11 +31,11 @@ passing unit tests, or the existence of this document.
 
 This working ledger is published on `main` independently of candidate source.
 The integration branch is `native-runtime-modernization`; its source-tree
-checkpoint is `10690d4bc1937a1a28fcf37e5ab3aed1f3e6ccd5`. Later branch commits
+checkpoint is `505ec19f8f92392f5e402d730c1ed5daa1c87f36`. Later branch commits
 that change only this ledger leave that checkpoint unchanged. Evidence entries
 identify their actual component branch or historical revision. Publishing this
 document does not land those implementations on `main`. Inspect the candidate
-architecture with `git show 10690d4b:docs/architecture/caws-native-runtime.md`;
+architecture with `git show 505ec19f:docs/architecture/caws-native-runtime.md`;
 the relative architecture link follows the branch containing this document.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
@@ -181,15 +181,14 @@ restricted to the decoder and its tests. E200 supplies SQL-cell reference
 evidence; root retains profile selection, SQL acquisition, explicit store-AST
 projection and publication integration.
 
-Two component lanes target the integration branch while this ledger is open.
-`CAWS-TRANSCRIPT-NODE-FLOOR-001` (worktree `transcript-node-floor`) qualifies
-emitted transcript preparation on the declared Node 18.0.0 floor for R18; its
-criteria exclude packaged CLI, installed publication, calendar and full R27
-claims. `CAWS-STORE-TIMESTAMP-SENSITIVITY-001` (worktree
-`timestamp-sensitivity`) adds the regression controls E226 lists as gaps for R09
-without changing production timestamp source. `caws worktree list` reports their
-current state and owners; their closure is component evidence, not parent
-acceptance.
+`CAWS-TRANSCRIPT-NODE-FLOOR-001` qualifies emitted transcript preparation on the
+declared Node 18.0.0 floor for R18 and is integrated at `505ec19f`; E228 records
+its bounded package evidence and partial lifecycle failure.
+`CAWS-STORE-TIMESTAMP-SENSITIVITY-001` (worktree `timestamp-sensitivity`)
+retains the five R09 regression controls E226 lists as gaps. Its source and
+tests remain unchanged while execution and edit refusals are unresolved; E229
+records the accepted parent qualification dependency. `caws worktree list`
+reports current bindings and owners. Component closure is not parent acceptance.
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -199,10 +198,26 @@ writer. A fence implemented only in the new service does not establish that
 transition. Private fixtures and cooperative successor evidence cannot imply
 deployed Sterling exclusion, full A3/A8 acceptance or machine installation.
 
-Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
-**packaged**, **installed**, **native-observed**, **retired**. Record exactly
-the established boundary. Existing Python consumers remain obligations until
-removed or explicitly classified as foreign/historical test material.
+The State cells describe the established implementation boundary and remaining
+consumer work; they are not a fixed lifecycle vocabulary. Keep committed,
+tested, packaged, installed, native-observed and retired claims separate.
+Existing Python consumers remain obligations until removed or explicitly
+classified as foreign/historical test material.
+
+The following coverage index defines which feature rows contribute to the
+partial-implementation numerator. Each range is inclusive; the feature table
+below supplies the row's source, boundary and acceptance evidence.
+
+| Feature rows | Qualifying committed replacement slice | Row count |
+| ------------ | -------------------------------------- | --------- |
+| R01          | no                                     | 1         |
+| R02–R18      | yes                                    | 17        |
+| R19          | no                                     | 1         |
+| R20–R21      | yes                                    | 2         |
+| R22          | no                                     | 1         |
+| R23–R26      | yes                                    | 4         |
+| R27          | no                                     | 1         |
+| R28–R37      | yes                                    | 10        |
 
 Committed qualifying replacement implementation slices cover **33/37 feature
 rows (89.2%)**. R01/R19/R22/R27 lack that coverage, and no complete row has
@@ -5705,6 +5720,64 @@ Additional bounded evidence and unresolved dependencies:
   ownership, with implemented analysis, proposed execution custody and native
   adoption stated separately.
 
+- E228: The Node-floor component candidate `41a39f66` is integrated into the
+  source branch at `505ec19f` (parents `5446010b` and `41a39f66`). Normal build
+  and ten focused tests exit 0. Actual Node 18.0.0 executes the unpacked private
+  package and prepares four files byte-identical to the retained R18 scenario.
+  Root and an independent read-only peer verify the package SHA
+  `f5139faad5a873316e12aeb1509fa50b754bc10718ddb2aa2344c8c631aa2eac`, 1,258
+  entries, all 33 recursive JavaScript images and the 29-module literal require
+  closure. Wrong-runtime, missing-module and corrupt-spill controls exit 1 for
+  their intended reasons. The actual Node 18 pending-write fault harness exits 0
+  after one injected failure, verifies retained prepared bytes, leaves no final
+  receipt and refuses overwrite retry. Original command and terminal output
+  records in the owner's transcript independently corroborate the retained
+  diagnostics; these are not reruns inferred from a summary.
+
+  A1–A3 PASS records match events 10478–10480. The normal owner merge commits
+  and closes the spec (event 10499), then fails to append `worktree_merged`.
+  This is a partial lifecycle failure, not an ordinary successful merge. Owner
+  destroy exits 0; root verifies terminal event 10504, absent registry/directory
+  and Git worktree listing, then safely refreshes the clean parent checkout to
+  `505ec19f`. The missing merge event remains an accepted root audit concern;
+  recovery does not fabricate that event or erase the failed command. Artifact
+  relations, command identities and failed attempts are retained under
+  `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-node-floor/candidate-02/`.
+  This qualifies a bounded R18 support component. It does not qualify the
+  packaged CLI, production caller, publication, rename/crash durability,
+  calendar, installation or full R27. Coverage remains 33/37; parent acceptance
+  remains 0/8.
+
+- E229: Root accepts the unresolved child-actor qualification dependency into
+  parent A5, recorded unchecked in event 10495. The sensitivity lane's CLI owner
+  is the child session, while its refused edit has parent-session hook context.
+  The documented host contract uses the parent session ID for subagent hooks.
+  Source inspection distinguishes the CLI's surface/environment selection from
+  payload-first hook selection and exact scalar worktree-owner comparison; fork
+  telemetry grants no ownership equivalence. This does not establish an
+  incorrect historical guard verdict or malformed host input. Retained journals
+  do not establish the actual oracle-winning identity and owner snapshot at
+  decision. Raw refusals and the bounded host observation remain under
+  `/Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-sensitivity/`.
+  Root owns the parent consequence. The clean bound sensitivity component and
+  all five controls remain on hold. Resume requires trusted actor semantics,
+  same-invocation decision provenance, an admitted owner edit and an
+  independently identified foreign edit refused with bytes preserved. No
+  takeover, inferred parent/child authority, writer substitution or rerouted
+  execution follows.
+
+- E230: All four existing guard documents are committed in root's
+  `guard-contract-docs` lane at `063991aa`. Root grounds independent committed
+  review and the source owner's startup-binding correction against source.
+  Formatter, diff checks and scoped gates exit 0; doctor exits 0 with three
+  warnings and four informational findings. Spec A1/A2 PASS and A3 unchecked
+  match events 10496–10498. Commit verification establishes reachability, not
+  native execution. Coherent source landing remains open: the documents must
+  land with the held analysis source, whose full-topology policies mutation
+  attempt is running. The earlier incomplete and narrowed failed attempts are
+  retained. Root owns documentation and integration; installed runtime,
+  final-launch custody, native canary and rollback remain unqualified.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5825,10 +5898,12 @@ progress and does not replace that transaction or its event readback.
    accepted source-owner repair; native A5/A7 integration obligations remain
    open. Include the four accepted documentation surfaces in that landing:
    `hook-pack-shared-core.md`, `hook-packs.md`, `README.md` and the existing
-   guard-lineage `command-analysis.md`. Their contract must distinguish actual
-   execution metadata, mandatory write guard versus optional pin guard,
-   command-specific exits, the full three-suite/six-file verification scope,
-   proposed executor custody and unqualified native adoption.
+   guard-lineage `command-analysis.md`. E230 records the committed and reviewed
+   four-file candidate; coherent source landing remains required. Their contract
+   must distinguish actual execution metadata, mandatory write guard versus
+   optional pin guard, command-specific exits, the full three-suite/six-file
+   verification scope, proposed executor custody and unqualified native
+   adoption.
 4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
    target, embedded-member checks and four direct build/consumer integrations.
    E209 qualifies one frozen current-host release build; ordinary consumer
@@ -5882,7 +5957,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E227 retain the historical candidates, failures and bounded observations;
+E167–E230 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is33/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
