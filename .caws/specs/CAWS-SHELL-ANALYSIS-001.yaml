@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: shell-analysis
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-21T21:21:38.108Z'
+updated_at: '2026-10-21T23:59:42.198Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -29,7 +29,6 @@ scope:
     - packages/caws-cli/stryker.analysis.conf.js
     - packages/caws-cli/tests/ci/mutation-contract.test.js
     - .github/workflows/mutation.yml
-    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-analysis.sh
     - packages/caws-cli/tests/shell/mutation-view.test.js
@@ -50,6 +49,10 @@ scope:
   support:
     - docs/guides/command-analysis.md
     - docs/guides/hook-packs.md
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/caws-state.sh
+    - packages/caws-cli/tests/hooks/bats/guard-realpath-python-absent.bats
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
