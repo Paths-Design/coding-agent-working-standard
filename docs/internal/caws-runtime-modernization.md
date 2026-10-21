@@ -156,14 +156,15 @@ Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 the established boundary. Existing Python consumers remain obligations until
 removed or explicitly classified as foreign/historical test material.
 
-Committed implementation/evidence covers **29/37 feature rows (about78%)**:
-eight lack that durable coverage, and no complete row has retired its Python
+Committed implementation/evidence covers **31/37 feature rows (about84%)**: six
+lack that durable coverage, and no complete row has retired its Python
 production path. This count includes standalone components awaiting parent
 integration; it measures feature coverage, not cutover effort or readiness.
 Uncommitted drafts do not advance this count. Parent acceptance is **0/8**.
 Recompute coverage when a row changes and use the acceptance ledger, parity
 evidence and selected installation state to determine cutover readiness. E174
-and E178 ground the Kimi and DSH row corrections behind this count.
+and E178 ground the Kimi and DSH row corrections; E184 grounds OpenCode and
+Zcode.
 
 ## Feature ledger
 
@@ -181,14 +182,14 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration                                                         | TS configuration module                                                    | selected-stock root integration and public-control repair exercised, E119                                                                       | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim                                                                                                                                    |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                          | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                                       |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                              | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate          |
-| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | TS transcript store                                                        | unreplaced                                                                                                                                      | Atomic replacement, identity, replay custody, malformed and concurrent inputs                                                                                                                                                                                                                                                                                                                                                 |
+| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | unreplaced; fixed-query reference contract investigated, E184                                                                                   | Root owns dependency/profile choice, complete bounded acquisition, snapshot/cancellation, lossless SQL values, projection/publication custody and actual renderer consumption                                                                                                                                                                                                                                                 |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | bounded lossless/common foundation landed and integrated, E157; production consumer unreplaced                                                  | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                     |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                           | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                    | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
 | R13 | `shared/lib/harness_qwen.py`                                                                                        | TS Qwen adapter                                                            | standalone component closed on main, E171; parent integration and production replacement open                                                   | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
 | R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | standalone component closed on main, E174; parent integration and production replacement open                                                   | Surface-specific transcript and native registration fixtures; root owns the parent import and first-matched-empty dispatch contract                                                                                                                                                                                                                                                                                           |
-| R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode adapter                                                        | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
-| R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
+| R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode translation and noise declarations; zero row adapters          | bounded standalone component closed on main, E184; parent import and production consumption open                                                | Actual R09 DB acquisition/reconstruction owns mapper consumption and fallback; renderer owns noise filtering. Declarations do not implement those consumers or installed behavior                                                                                                                                                                                                                                             |
+| R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | bounded standalone component closed on main, E184; parent import and production replacement open                                                | Stateful model_io component evidence; DB-to-Claude-shaped acquisition, reader/cache/writer, registry, native and installed consumption remain parent obligations                                                                                                                                                                                                                                                              |
 | R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | bounded standalone component closed on main, E178; parent integration and production replacement open                                           | Surface-specific transcript and native registration fixtures; root owns selected interpretation, registry, reader/cache/writer and native consumption                                                                                                                                                                                                                                                                         |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | unreplaced; cache interpretation-context and writer partial-publication counterexamples observed, E147/E165                                     | Complete semantic transcript fixtures, context-bound cache freshness and installed rendering; current installed cross-surface reach unverified                                                                                                                                                                                                                                                                                |
 | R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                         | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
@@ -4056,8 +4057,114 @@ Additional bounded evidence and unresolved dependencies:
   audited scope operation, not a guard change. The peer owns
   `CAWS-NATIVE-CACHE-ADMISSION-001`; root retains integration and must read back
   actual contention before treating the overlap as resolved. Remove the two
-  exclusions through the CLI only after closure before importing. The helper and
-  parent cache exchange are work in progress, not accepted features.
+  exclusions through the CLI only after closure before importing. E182/E183
+  record the committed component boundaries and remaining parent integration;
+  neither component establishes parent acceptance.
+
+- E182: Parent commit `3ba6add124b88506fd37bd07b22f74917e9d054b` adds the
+  directory-relative native session-cache operation, one-shot correlated wire
+  exchange and optional typed client. Native retains the selected root/session
+  directory descriptors, reads exact bounded old bytes, and owns envelope then
+  pointer publication. The client owns the finite old-JSON decision; explicit
+  decline permits compatibility only after a correlated terminal no-publication
+  result. Lost/invalid exchanges never grant replay. This private coordinated
+  pair does not establish mixed-version installation compatibility.
+
+  Raw artifacts live under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/heartbeat-runtime/`.
+  `root-cache-custody-repair-invoke.stdout` records35 passing actual native
+  invocation checks, including7 cache scenarios; the corresponding
+  `native-cache-custody-repair-cases/` retains frames, streams, topology and
+  reap observations. `root-cache-client-final-tests.stdout` records149 typed
+  client checks; strict production compilation, package build, actual
+  package-cwd lint and all-target Clippy pass. The earlier33-pass/2-fail
+  invocation run and Clippy failure remain retained: repairs preserve the
+  custodian's original no-child spawn error, use the actual observed
+  direct/custodied EOF topology, and reap a child when the native test collector
+  panics after spawn. These checks exercise finite fixtures, not ordinary
+  heartbeat or installed use.
+
+  Independent committed-candidate review identifies two follow-ups. The original
+  library run precedes the final contract-test naming/source correction;
+  `root-cache-cancellation-final-library.stdout` executes the committed declared
+  wire assertion and47 matching checks. More consequentially, decision receipt
+  alone does not observe cancellation before publication. The checked cache
+  operation carries the binary's existing cancellation observer through
+  directory/read/ write and pre-rename checkpoints, preserves the exact cause
+  and partial publication state, and routes cancellation through failure/cleanup
+  without compatibility replay. Injected post-decision, staged-envelope and
+  post-envelope cancellation controls verify retained old bytes and temporary
+  cleanup. Cancellation racing a syscall and blocking filesystem calls remain
+  outside an atomic interruption guarantee. Ordinary precomposition wiring and
+  fresh native downstream-consumer qualification remain owed.
+
+  `root-cache-cancellation-invoke.stdout` retains a fresh35-check native
+  invocation pass after the cancellation change; successful temporary scenario
+  directories from this run are not retained.
+  `root-cache-cancellation-bin.stdout` records78 binary checks and all-target
+  Clippy exits0. The cache cancellation falsifiers observe both capture and
+  explicit-decline decisions: cancellation supersedes either result before it
+  can grant replay.
+
+- E183: `CAWS-NATIVE-CACHE-ADMISSION-001` is closed/completed on main: candidate
+  `437032e13a73cd6e329103109b439f70fccbfe2a`, merge
+  `7912184be31e30db5610ddc28bf664cd6beeb65b`, close `5d70df3b`. Root reads the
+  actual spec/landing receipt, verifies merge ancestry, and inspects the finite
+  helper source. It admits exact stock Codex prefix source bytes and
+  environment/path conditions; it does not establish selected PATH executables,
+  Python imports, full decoding or held native custody. The parent scope
+  exclusions are removed and exact helper/test claims restored through the
+  audited CLI after closure. Parent import and ordinary consumer wiring remain
+  owed. Peer packet `native-cache-admission/020-stock-profile/` reports actual
+  finite9fb-source decisions on Node18.0.0/18.20.8/22.19; those observations are
+  not ordinary heartbeat/native evidence.
+
+- E184: OpenCode and Zcode standalone components are closed/completed on main.
+  Root reads their actual specs and checks merge ancestry and source hashes
+  against `native-harness-tail-coordination/postmerge-readback.json` under peer
+  artifact root
+  `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/`.
+  OpenCode candidate `e968dcaac211cd69888ab97a3bda1e8f521fbb74` merges at
+  `05cd4ced1c954fbc1ddccd08ec3feaf69fd21c28` and closes at `1bc80f73`; Zcode
+  candidate `5b81b7ae872808e03b73aaca682dcc3b521075f9` merges at
+  `9d60bce0f4c33d96346546c867c77492e1893270` and closes at `fc7efd0c`. Their
+  implementation SHA256 values are respectively
+  `24cd37a14b94b7aec5f32ce941b6deec9338f1ef78e3c322cb0c34de8758c6ce` and
+  `b39506d358e84a221c6c3cbc200264b9b2860526e690785aac35e674acc64881`.
+  Peer165-check combined Node18/22 results are retained reports, not root
+  reexecution. OpenCode declares9 name translations,8 input mappers and3 noise
+  prefixes with zero row adapters; R09 owns actual acquisition/reconstruction.
+  Zcode supplies a bounded stateful model_io adapter. Both parent imports,
+  production registry/reader/cache/writer and installed use remain open. These
+  two rows raise committed feature coverage31/37; acceptance stays0/8.
+
+  Root accepts the R09 investigation handoff and retains implementation and
+  dependency/profile choice. The fixed read-only SQLite JOIN requires a complete
+  snapshot-bounded result with original JSON bytes and lossless typed SQL
+  values; failure/cancellation cannot promote partial rows or old projection as
+  current. Rust-owned acquisition is the selected direction for Node18/22; no
+  particular crate/version, Cargo change or native API is adopted. Peer
+  synthetic reference/actual-renderer packets remain inputs to ground before
+  implementation. SQLite reference-versus-bundle version and compile-option
+  differences, busy/progress/interrupt controls and WAL sidecar behavior remain
+  explicit obligations. A projection-only module would not discharge R09.
+
+- E185: The installed shell guard refuses a read-only quoted Node heredoc
+  containing `.map(e=>({...}))` as `ask_unsupported_nesting` before execution. A
+  read-only investigation traces the actual Codex registration through active
+  runtime `408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0`.
+  Shipping/installed `shared/lib/heredoc.sh:98–109` blanks only safelisted
+  cat/tee bodies; `bash-mutation-targets.sh:485–504` passes the Node body to the
+  lexer, whose325–336 process-substitution branch sees the JavaScript `>(`.
+  `bash-write-guard.sh:501–505,566–579` promotes it to ask/refusal. This is a
+  source-grounded explanation, not a byte-exact replay of the original request.
+  The selected stock guard remains shell-backed in handler-executor, so this
+  defect reaches ordinary cutover verification. Root retains the repair: finite
+  quoted interpreter bodies must be excluded from shell operator parsing while
+  preserving interpreter-write inspection, header redirects, following shell
+  commands, real process substitution and unquoted expansions. No guard,
+  registration, reprieve or bypass is changed. E169/E181's operand/cwd defects
+  remain distinct obligations.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
