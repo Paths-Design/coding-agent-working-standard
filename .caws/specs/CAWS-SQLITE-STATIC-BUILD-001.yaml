@@ -49,3 +49,9 @@ contracts:
   - name: 'pinned-build-receipt'
     type: api
     path: 'packages/caws-cli/src/tooling/sqlite-static-build.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-sqlite-static-build/artifact-verification.json verifies240files and finalcandidate91a64e8 host-final22/host-final18 actual6steps0, archive bytes equal1541032 SHA5b6d8787f9ae2e1db478d4a67f18a7efda17f340ce197d8e39cac84666241693, exactSQLite3.53.4/sourceid/3options, nmT/otoolonlylibSystem. Reviewedpinmatch alwaysNOT_ADOPTED; nofullSDK/tools/nativeauthority."
+    recorded_at: "2026-10-21T10:27:28.590Z"
+    commit_sha: "91a64e8bc358f36f57c5daa8df52cfe67ffefb77"
