@@ -4326,15 +4326,15 @@ Additional bounded evidence and unresolved dependencies:
   later payload lookup, and its ordinary object admits inherited event-name
   properties. Actual compiled baseline `root-ajv-inherited-key-baseline.jsonl`
   records constructor/toString throwing `schema must be object or boolean`;
-  **proto** remains rejected as an unknown event, so this does not establish an
-  admission bypass. Both exact source/test paths have clear contention and are
-  admitted through the parent scope CLI.
+  `__proto__` remains rejected as an unknown event, so this does not establish
+  an admission bypass. Both exact source/test paths have clear contention and
+  are admitted through the parent scope CLI.
 
   Own-property schema selection confines code generation to declared release
   schemas. The new focused kernel test first fails6 inherited-key cases while
   its declared-payload control passes; the red output remains in
   `root-evidence-schema-red.stderr`. It checks the actual compiler boundary for
-  **proto** as well as typed errors for inherited functions, repeats lookups,
+  `__proto__` as well as typed errors for inherited functions, repeats lookups,
   and retains valid/invalid declared payload controls. The repaired full kernel
   run records808 checks/35 suites in `root-evidence-schema-kernel.stderr`.
   Package rebuild and kernel typecheck exit0; actual2-file lint has0
@@ -4351,6 +4351,24 @@ Additional bounded evidence and unresolved dependencies:
   peer Ajv source trace retain their earlier identities; root must refresh the
   changed application identities before the next reviewed-profile qualification.
   Coverage stays31/37, acceptance0/8, and the full goal remains active.
+
+- E189: Root checks the qualifier's required executable/file list against
+  `dist/index.js`: selected CLI execution adds commander/chalk beyond E187's
+  engine graph. Neither a refreshed CLI graph nor a combined reviewed profile
+  exists. The peer's proposed CLI inventory is refused before execution;
+  `/Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/native-cli-entry-refusal-001.json`
+  retains the transcribed hook diagnostic and its provenance rather than child
+  stderr. Root inspects the retained runner: it names a Node executable and
+  reads its bytes for identity, while its write calls target external artifacts.
+  Installed recognizer source scans a named interpreter script for any write
+  verb and emits every path fragment; the guard treats a foreign-repository
+  literal as a refusal without argument-level read/write attribution. This
+  establishes the conservative source mechanism, not a byte-exact replay or an
+  attempted foreign write. The runner remains unexecuted; no alternate command,
+  reprieve or installed modification substitutes for resolving the guard
+  boundary. Read-only source classification can continue. Root retains the
+  combined qualification outcome and reserved-owner coordination obligation;
+  coverage and acceptance do not advance.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -4443,65 +4461,76 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
-Guard candidate `33003656` has committed inspection and the bounded source/
-private-pack evidence in E167. E168 integrates the checked Claude component and
-fresh parent selection. E170 integrates the checked pytest-entrypoint leaf and
-observes its combined-parent cold lifecycle. E172 integrates and tests the typed
-heartbeat consumer; E173 retains the finite complete-stock-chain observation and
-its final missing-SID correlation failure. E177 resolves that original request's
-cleanup from retained native custody and independent absence evidence. Implement
-the anchored native session-envelope/caller-pointer prefix and qualify early
-protective return plus downstream session resolution without borrowing a later
-shell parser's effects. Bind future probes to the complete source/build and
-installed package/dependency identities; a template runtime digest or a flat
-`dist/runtime` file list cannot identify new application dependencies. Preserve
-the acquisition-profile and transactional-writer obligations in E166/E165 and
-the guard-decision falsifier in E169. The closed replay, Unicode and utility
-components do not replace these consumers. Resume the unchanged fairness
-workload only after the owning implementation and cleanup evidence justify it;
-machine adoption follows full parity.
+1. Refresh complete source/build/dependency identities after E188, including
+   both the engine and the selected CLI entry. The CLI entry imports commander
+   and chalk outside E187's seven engine package roots; the qualifier requires
+   it separately. Classify filesystem/codegen/import and
+   PATH/Python/native-image boundaries before adopting expected identities. A
+   reachable graph or runtime digest cannot replace complete recursive trees.
+2. Qualify the implemented E186 anchored cache prefix and downstream consumer
+   under the complete stock chain, including early protective return,
+   cancellation and independently observed cleanup. The finite native cases and
+   E177's earlier cleanup do not establish this combined result. Preserve
+   original supplied-session identity without borrowing later parser effects.
+3. Resolve the E185 guard/effect boundary with the existing shell-analysis
+   owner; its reserved source and failed ownership control remain obligations.
+   Keep the refused CLI inventory unexecuted pending a supported resolution; do
+   not infer an attempted foreign write from the refusal alone.
+4. Import the closed adapter components, integrate their registry with native
+   transcript acquisition and transactional rendering/writing, and retain
+   E165/E166 source/profile controls. R09 and R18 remain unreplaced; standalone
+   registry composition does not discharge production consumer parity.
+5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
+   workload only after the owning consumer change and cleanup evidence justify
+   it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
+   machine adoption remain required before parent acceptance and retirement.
+
+E167–E189 retain the historical candidates, failures and bounded observations;
+the ordered work above governs the next execution. Coverage is31/37 and parent
+acceptance0/8. Root updates row state and this order with each durable change;
+component closure alone does not establish integration or installation.
 
 E105/E107/E108 establish the repaired selected Stop path, seven actual owner
 controls and existing-untracked-custody observation on executable `d4644326`.
 E109 retains the failed real Running-overlap baseline alongside13 completed
 native clients. E111 repairs idle Stop and E112 retains a separate failed
-fairness run with correct semantic output but no required overlap. Remove only
-the demonstrably redundant exact-empty library-map subprocess lookup, pin the
-qualification fixture's unsealed CLI identity and measure publication phases
-before choosing a caching or synchronization change. Review the changed prefix
-source explicitly; no candidate-derived automatic blessing. E113 implements
-those changes; E116/E117 retain stronger kernel/state diagnostics and a complete
-instrumented pass without erasing two unexplained earlier failures. E118's
-actual replay fails fairness and locates both publication cost and the larger
-required-lane/consumer-path dependency. Define the complete executor, native
-request ownership, fresh authority and cancellation boundaries before claiming
-residency or integrating scheduler capacity; preserve the caller's PID safety
-contract and sibling isolation. R06/R08 source integration retains per-consumer
-proof obligations. E119 integrates R06 and repairs its demonstrated public
-NO_ASK regression; E124 integrates R08 components and E127 exercises their
-actual local native consumer after repairing stop-receipt displacement. E120
-isolates the intentional fork; E121 retains further full-suite failures and
-stronger diagnostics without attributing their causes. E123 repairs partial
-holder publication and retains actual cleanup plus a full pass. E125 exercises
-the separate retained-join unwind branch; injected-quarantine unwind remains
-unqualified. E126 preserves the failed advisory baseline; E127 observes exact
-local native boundary cuts and required-goal output, with platform consumption
-explicitly unverified. E128 replays three lifecycle modes on native43 and
-preserves a pre-crash collector failure. E129 qualifies committed-turn
-collection and stable session retention; E130 replays restart and E131 replays
-the cooperative legacy boundary on the same frozen native/runtime bytes. The
-unchanged legacy counterexample remains an adoption/drain obligation. E132
-restores the reviewed typed stock profile without changing its authority
-predicates. E135 repairs raw patch-alias protective admission and E136 keeps
-failed cleanup pending. E142 wires that custodian and exercises pure contracts;
-E145 observes one pre-Ready frontend-death boundary with strict settlement,
-actual reap, both EOFs and correlated receipts. E149 exercises the corrected
-ordinary fixture with independently observed frontend/custodian/Node topology.
-E152 repairs request-local renderer coverage with pure counterexamples. E153
-exercises the corrected terminal fixture and bounded pipe collector on the same
-native executable. E155 adds custody-receipt correlation and focused hostile
-controls; E156 exercises the actual typed engine and selected copied renderer
-with matching per-request custody and cleanup. A previous request's group cannot
+fairness run with correct semantic output but no required overlap. E113 removes
+the demonstrably redundant exact-empty library-map subprocess lookup, pins the
+qualification fixture's unsealed CLI identity and measures publication phases.
+Changed prefix source requires explicit review; candidate-derived identities do
+not establish independent review. E116/E117 retain stronger kernel/state
+diagnostics and a complete instrumented pass without erasing two unexplained
+earlier failures. E118's actual replay fails fairness and locates both
+publication cost and the larger required-lane/consumer-path dependency. Define
+the complete executor, native request ownership, fresh authority and
+cancellation boundaries before claiming residency or integrating scheduler
+capacity; preserve the caller's PID safety contract and sibling isolation.
+R06/R08 source integration retains per-consumer proof obligations. E119
+integrates R06 and repairs its demonstrated public NO_ASK regression; E124
+integrates R08 components and E127 exercises their actual local native consumer
+after repairing stop-receipt displacement. E120 isolates the intentional fork;
+E121 retains further full-suite failures and stronger diagnostics without
+attributing their causes. E123 repairs partial holder publication and retains
+actual cleanup plus a full pass. E125 exercises the separate retained-join
+unwind branch; injected-quarantine unwind remains unqualified. E126 preserves
+the failed advisory baseline; E127 observes exact local native boundary cuts and
+required-goal output, with platform consumption explicitly unverified. E128
+replays three lifecycle modes on native43 and preserves a pre-crash collector
+failure. E129 qualifies committed-turn collection and stable session retention;
+E130 replays restart and E131 replays the cooperative legacy boundary on the
+same frozen native/runtime bytes. The unchanged legacy counterexample remains an
+adoption/drain obligation. E132 restores the reviewed typed stock profile
+without changing its authority predicates. E135 repairs raw patch-alias
+protective admission and E136 keeps failed cleanup pending. E142 wires that
+custodian and exercises pure contracts; E145 observes one pre-Ready
+frontend-death boundary with strict settlement, actual reap, both EOFs and
+correlated receipts. E149 exercises the corrected ordinary fixture with
+independently observed frontend/custodian/Node topology. E152 repairs
+request-local renderer coverage with pure counterexamples. E153 exercises the
+corrected terminal fixture and bounded pipe collector on the same native
+executable. E155 adds custody-receipt correlation and focused hostile controls;
+E156 exercises the actual typed engine and selected copied renderer with
+matching per-request custody and cleanup. A previous request's group cannot
 qualify a later request with missing chain evidence. E162 observes one frontend
 loss after Ready and dispatch; closed-pipe nonleaders and other loss phases and
 surfaces require separately retained scenarios. Keep original caller capture and
