@@ -61,3 +61,8 @@ evidence:
     evidence_ref: "Inspected TS context/git-selection and committed e31 native observer; retained check-04/project.stdout13 controls and frontend-03/summary.json16 cases under /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-project-binding/. Linked/routing/null-empty-missing cwd exact rows. Finite physical-path profile; no atomic executable identity or arbitrary spelling parity. CLI verifies commit only; external artifacts inspected directly, not CLI rederived."
     recorded_at: "2026-10-21T19:32:49.705Z"
     commit_sha: e31d09aeac88752630e8d6400bc3f9f00529250d
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Directly inspected frontend-03/agreeing-foreign-root/result.json and foreign-oversized-store-frame,foreign-eof-before-store-frame controls under /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-project-binding/: zero rows,empty budgets,no projection. Original Unbound survives actual8629-byte frame and EOF. No-context infraStop exit0 diagnostic is not success; bound missingDB exit2counter1. CLI verifies commit only."
+    recorded_at: "2026-10-21T19:32:54.902Z"
+    commit_sha: e31d09aeac88752630e8d6400bc3f9f00529250d
