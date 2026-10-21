@@ -2907,6 +2907,7 @@ export function mergeWorktree(
           }),
           data: {
             merge_commit: mergeCommit,
+            merged_cause: mergedTxn.errors,
           },
         }
       )
