@@ -52,8 +52,8 @@ evidence:
     commit_sha: "72a24a403fc3f80cf85c42b71a0bafe96fa4d0fc"
   - criterion_id: A2
     status: pass
-    evidence_ref: "README41/225 says doctor error-severity findings or load errors; inspected canonical doctor.ts369-374/432-440 hasErrors=findingCounts.errors>0||loadCounts.errors>0,return1else0. Actual cawsdoctor exit0 with findings0E/3W/4I andload0E/0W/0I; no new runtime installation. Peer ambiguity grounded and repaired04bccb2a. CLI verification checks commit identity only; source/runtime semantics directly inspected."
-    recorded_at: "2026-10-21T19:56:38.369Z"
+    evidence_ref: "README and governingcommandcontract both distinguish doctorerror-severity findings/loaderrors fromwarnings. Actual canonicaldoctor.ts369-374/432-440 hasErrors errors-only; retaineddoctor exit0 with0E/3W/4I. Peer ambiguity corrected04bccb2a,dependentcontract corrected84c91390. No runtimeinstall. CLIverify checkscommit only; semantics groundedsource/runtime."
+    recorded_at: "2026-10-21T20:16:44.524Z"
     command: caws doctor
     exit_code: 0
-    commit_sha: "04bccb2a1ecb1fed7d5aed118ab3da46964e4efd"
+    commit_sha: "72a24a403fc3f80cf85c42b71a0bafe96fa4d0fc"
