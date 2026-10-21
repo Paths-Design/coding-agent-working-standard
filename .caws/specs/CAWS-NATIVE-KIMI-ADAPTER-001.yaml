@@ -57,3 +57,10 @@ evidence:
     command: "Node18/22 observe.cjs plus integer probe; root013 rederived raw hashes and values"
     exit_code: 0
     commit_sha: "346d50441c006e88affee2f86408ca9ca36ffd74"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "37 committed checked source/dependency identities and29 identical compiled outputs. /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-kimi-adapter/observations-verified.json; commands004-011 strictcompiles/lint/116tests each/format/doctor0E3W4I/5gates;16manualfaults rejected. Independent read-only review noactionablecomponentdefect. Registry/acquisition/cache/writer/native/install/workload/Pythonretirement/cutover unverified."
+    recorded_at: "2026-10-21T01:59:00.306Z"
+    command: "python3 verify-artifacts.py; strict tsc Node18/22; focused tests/lint/format; caws doctor; caws gates run --spec CAWS-NATIVE-KIMI-ADAPTER-001"
+    exit_code: 0
+    commit_sha: "346d50441c006e88affee2f86408ca9ca36ffd74"
