@@ -464,6 +464,45 @@ test('file-entry bytes cannot authorize execution even when the script exists', 
   );
   refused('cd scripts; node task.mjs', 'mutation-interpreter-effects');
 });
+test.each(["-e '1'", "--eval='1'", "-p '1'"])(
+  'Node %s cannot hide trailing startup or replacement source',
+  (selected) => {
+    refused('node ' + selected + ' --require /not-executed.cjs', 'mutation-interpreter-option');
+    refused(
+      'node ' +
+        selected +
+        ' --eval ' +
+        quote(
+          "require('fs').writeFileSync(" +
+            JSON.stringify(path.join(fx.foreign, 'not-written')) +
+            ", 'bad')"
+        ),
+      'mutation-code-source'
+    );
+    expect(fs.existsSync(path.join(fx.foreign, 'not-written'))).toBe(false);
+  }
+);
+test.each(['--', 'arg0'])(
+  'Node arguments after %s do not become startup options or another payload',
+  (boundary) => {
+    const result = guard(
+      "node -e '1' " +
+        boundary +
+        ' --require /not-executed.cjs --eval ' +
+        quote("unknownCall('" + fx.sibling + "/data')")
+    );
+    expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+  }
+);
+test('print equals syntax cannot substitute for executable stdin', () => {
+  refused(
+    "node --print='1' <<'JS'\nrequire('fs').writeFileSync('" +
+      fx.foreign +
+      "/not-written', 'bad')\nJS",
+    'mutation-interpreter-option'
+  );
+  expect(fs.existsSync(path.join(fx.foreign, 'not-written'))).toBe(false);
+});
 test.each(['{}', '{"schema":"caws.shell_mutation_view.v2","tokens":[]}'])(
   'invalid CLI response refuses without lexical fallback: %s',
   (response) => {

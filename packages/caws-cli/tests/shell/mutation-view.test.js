@@ -117,10 +117,10 @@ const CODE_CASES = [
   ],
   [
     'node-print-mode',
-    'node --print=\'(() => "a > b")()\'',
+    'node --print \'(() => "a > b")()\'',
     'node',
     '(() => "a > b")()',
-    '--print=\'(() => "a > b")()\'',
+    '\'(() => "a > b")()\'',
   ],
   [
     'python-inline-mode',
@@ -1108,6 +1108,70 @@ describe('mutation view uses shared traversal without granting scope', () => {
 // These programs are analyzed as source only, including the hostile payloads.
 const HARDENING_PAYLOAD = 'require("node:fs").writeFileSync("{{MARKER}}", "unexpected")';
 const HARDENING_PYTHON_PAYLOAD = 'open("{{MARKER}}", "w").write("unexpected")';
+const NODE_CODE_OPTIONS = ["-e '1'", "--eval '1'", "--eval='1'", "-p '1'", "--print '1'"];
+const NODE_STARTUP_OPTIONS = [
+  '--require /not-executed.cjs',
+  '-r /not-executed.cjs',
+  '--import=/not-executed.mjs',
+];
+const NODE_OPTION_HOLDS = NODE_CODE_OPTIONS.flatMap((selected, index) => [
+  ...NODE_STARTUP_OPTIONS.flatMap((startup, option) => [
+    [
+      `node-startup-before-${index}-${option}`,
+      `node ${startup} ${selected}`,
+      'mutation-interpreter-option',
+    ],
+    [
+      `node-startup-after-${index}-${option}`,
+      `node ${selected} ${startup}`,
+      'mutation-interpreter-option',
+    ],
+  ]),
+  ...['-e', '--eval', '-p', '--print'].map((override, option) => [
+    `node-repeated-source-${index}-${option}`,
+    `node ${selected} ${override} '${HARDENING_PAYLOAD}'`,
+    'mutation-code-source',
+  ]),
+  [
+    `node-repeated-inline-${index}`,
+    `node ${selected} --eval='${HARDENING_PAYLOAD}'`,
+    'mutation-code-source',
+  ],
+  [`node-opaque-tail-${index}`, `node ${selected} "$OPTION"`, 'mutation-code-source'],
+]);
+NODE_OPTION_HOLDS.push(
+  ['node-empty-inline-eval', "node --eval=''", 'mutation-code-source'],
+  ...['-p', '--print'].flatMap((option, index) => [
+    [
+      `node-empty-print-${index}`,
+      `node ${option} '' <<'JS'\n${HARDENING_PAYLOAD}\nJS`,
+      'mutation-code-source',
+    ],
+    [
+      `node-print-option-operand-${index}`,
+      `node ${option} --require /not-executed.cjs`,
+      'mutation-code-source',
+    ],
+  ]),
+  [
+    'node-inline-print-is-not-code',
+    `node --print='1' <<'JS'\n${HARDENING_PAYLOAD}\nJS`,
+    'mutation-interpreter-option',
+  ],
+  ['node-leading-dash-eval', "node -e '-1'", 'mutation-code-source'],
+  ['node-transformed-eval', "node -e '\\-1'", 'mutation-code-source'],
+  [
+    'node-combined-options',
+    "node -pe '1' --require /not-executed.cjs",
+    'mutation-interpreter-option',
+  ]
+);
+const NODE_OPTION_DATA = NODE_CODE_OPTIONS.flatMap((selected, index) =>
+  ['--', 'arg0', '-'].map((boundary, option) => [
+    `node-option-data-${index}-${option}`,
+    `node ${selected} ${boundary} --require /not-executed.cjs --eval='${HARDENING_PAYLOAD}' "$UNKNOWN"`,
+  ])
+);
 const HARDENING_CODE = [
   ['node-short-print', "node -p '1'", 'node', '1', "'1'"],
   ['node-long-print', "node --print '1'", 'node', '1', "'1'"],
@@ -1243,6 +1307,11 @@ describe('mutation projection preserves program roles and source custody', () =>
   const source = (id) => requests.find((item) => item.id === id).input.command;
   const issueCodes = (id) => result(id).issues.map((item) => item.code);
   const ordinary = [
+    ...NODE_OPTION_HOLDS.map(([id, command]) => [id, command]),
+    ...NODE_OPTION_DATA,
+    ['node-neutral-tail', "node -e '1' --no-warnings --input-type=commonjs"],
+    ['python-option-tail-data', "python3 -c '1' --require /not-executed.cjs"],
+    ['bash-option-tail-data', "bash -c 'printf safe' --require /not-executed.cjs"],
     ...HARDENING_CODE.map(([id, command]) => [id, command]),
     ...HARDENING_REJECT.map(([id, command]) => [id, command]),
     ...HARDENING_STDIN.map(([id, command]) => [id, command]),
@@ -1351,6 +1420,36 @@ describe('mutation projection preserves program roles and source custody', () =>
   });
   afterAll(() => {
     if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+  });
+  test.each(NODE_OPTION_HOLDS)(
+    '%s cannot certify an incomplete Node option vector',
+    (id, _command, code) => {
+      expect(issueCodes(id)).toContain(code);
+      expect(result(id).interpreters).toEqual([]);
+      expect(result(id).interpreterInvocations).toHaveLength(1);
+      expect(fs.existsSync(locations.MARKER)).toBe(false);
+    }
+  );
+  test.each([...NODE_OPTION_DATA, ['node-neutral-tail']])(
+    '%s preserves the selected source after an option boundary',
+    (id) => {
+      expect(result(id).issues).toEqual([]);
+      expect(result(id).interpreters).toHaveLength(1);
+      expect(result(id).interpreters[0].payloads[0].text).toBe('1');
+      expect(result(id).interpreters[0].effects).toEqual({
+        kind: 'readonly',
+        profile: 'caws.node-source-effects.v1',
+        writes: [],
+      });
+      expect(fs.existsSync(locations.MARKER)).toBe(false);
+    }
+  );
+  test('Python and Bash code options keep following arguments as data', () => {
+    expect(result('python-option-tail-data').interpreters[0].payloads[0].text).toBe('1');
+    expect(issueCodes('python-option-tail-data')).toEqual(['mutation-interpreter-effects']);
+    expect(result('bash-option-tail-data').issues).toEqual([]);
+    expect(result('bash-option-tail-data').interpreters).toEqual([]);
+    expect(fs.existsSync(locations.MARKER)).toBe(false);
   });
   test.each(HARDENING_CODE)(
     '%s keeps the actual finite executable payload',

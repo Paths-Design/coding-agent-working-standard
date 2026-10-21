@@ -230,6 +230,26 @@ try {
   const unknownInterpreter = writeGuard("node -e 'unrecognizedOperation()'");
   assert.equal(unknownInterpreter.status, 2, JSON.stringify(unknownInterpreter));
   assert.match(unknownInterpreter.stderr, /mutation-interpreter-effects/);
+  const trailingStartup = writeGuard("node -e '1' --require /not-executed.cjs");
+  assert.equal(trailingStartup.status, 2, JSON.stringify(trailingStartup));
+  assert.match(trailingStartup.stderr, /mutation-interpreter-option/);
+  const replacementSource = writeGuard(
+    `node -e '1' --eval 'require("fs").writeFileSync("${foreign}/interpreter-never-written", "bad")'`
+  );
+  assert.equal(replacementSource.status, 2, JSON.stringify(replacementSource));
+  assert.match(replacementSource.stderr, /mutation-code-source/);
+  const optionData = ['--', 'arg0'].map((boundary) => {
+    const result = writeGuard(
+      `node -e '1' ${boundary} --require /not-executed.cjs --eval 'unrecognizedOperation()'`
+    );
+    assert.equal(result.status, 0, result.stderr);
+    return result.status;
+  });
+  const ambiguousPrint = writeGuard(
+    `node --print='1' <<'JS'\nrequire("fs").writeFileSync("${foreign}/interpreter-never-written", "bad");\nJS`
+  );
+  assert.equal(ambiguousPrint.status, 2, JSON.stringify(ambiguousPrint));
+  assert.match(ambiguousPrint.stderr, /mutation-interpreter-option/);
   const malformed = writeGuard('printf safe', {}, '{');
   assert.equal(malformed.status, 2, JSON.stringify(malformed));
   assert.match(malformed.stderr, /original tool metadata is missing or malformed/);
@@ -339,6 +359,10 @@ try {
       packagedWriteGuardForeignWorktreeInterpreter: foreignWorktreeInterpreter.status,
       packagedWriteGuardForeignReadOwnedWrite: foreignReadOwnedWrite.status,
       packagedWriteGuardUnknownInterpreter: unknownInterpreter.status,
+      packagedWriteGuardTrailingStartup: trailingStartup.status,
+      packagedWriteGuardReplacementSource: replacementSource.status,
+      packagedWriteGuardOptionData: optionData,
+      packagedWriteGuardAmbiguousPrint: ambiguousPrint.status,
       packagedWriteGuardMalformedEnvelope: malformed.status,
       packagedWriteGuardUnavailableBackend: unavailable.status,
       packagedCodexNativeProjection: codexProjection.status,

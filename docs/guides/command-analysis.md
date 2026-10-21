@@ -153,6 +153,18 @@ admitted APIs are `readFileSync`, `readdirSync`, `writeFileSync` and
 unresolved because their flags can request truncation. Inherited `NODE_PATH`
 alone cannot replace these builtins; nonempty `NODE_OPTIONS` remains unresolved.
 
+Node option validation continues after the selected code operand until `--`,
+`-`, or the first positional argument. Trailing preloads and other unmodeled
+options remain unresolved. Repeated code selectors also remain unresolved; they
+cannot lend the first payload's effects to a later program. Arguments after the
+option boundary remain data. Print operands with empty or leading-dash values,
+escape transformations and `--print=value` are outside this profile. The
+[pinned Node option parser](https://github.com/nodejs/node/blob/v22.19.0/src/node_options-inl.h)
+and its
+[option definitions](https://github.com/nodejs/node/blob/v22.19.0/src/node_options.cc)
+define these distinctions; Python and Bash code options retain their separate
+argument rules.
+
 The language profile bounds source and cumulative abstract strings at 64 KiB,
 the complete AST at 8,192 nodes and depth 64, abstract values at 4,096, and
 evaluation at 32,768 steps. Exceeded limits return unresolved. It does not read

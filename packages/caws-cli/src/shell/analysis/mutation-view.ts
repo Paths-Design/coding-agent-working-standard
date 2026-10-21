@@ -434,6 +434,7 @@ export async function projectMutationView(
       node: Location
     ): { argument?: Argument; code?: string; stdin: boolean } | null => {
       const flag = language === 'node' ? '-e' : '-c';
+      let selected: { argument: Argument; code: string; stdin: false } | undefined;
       let index = 1;
       while (index < args.length) {
         const arg = args[index]!,
@@ -446,7 +447,7 @@ export async function projectMutationView(
           );
           return null;
         }
-        const long = language === 'node' && /^(?:--eval|--print)=/.test(value);
+        const long = language === 'node' && value.startsWith('--eval=');
         const short = language === 'python' && value.startsWith(flag) && value.length > flag.length;
         if (
           value === flag ||
@@ -461,18 +462,52 @@ export async function projectMutationView(
             );
             return null;
           }
-          return { argument: code, code: code.value, stdin: false };
+          if (
+            language === 'node' &&
+            (code.value.startsWith('-') ||
+              code.value.startsWith('\\-') ||
+              (['-p', '--print'].includes(value) && code.value === ''))
+          ) {
+            issue(
+              'mutation-code-source',
+              'Node code-operand option or escape semantics are outside this profile.',
+              argSpan(code, node)
+            );
+            return null;
+          }
+          if (language !== 'node') return { argument: code, code: code.value, stdin: false };
+          if (selected) {
+            issue(
+              'mutation-code-source',
+              'Multiple Node code selectors are not modeled.',
+              argSpan(arg, node)
+            );
+            return null;
+          }
+          selected = { argument: code, code: code.value, stdin: false };
+          // Node keeps parsing options after an eval/print operand. Returning
+          // here would hide preloads and later replacements of the eval source.
+          index += 2;
+          continue;
         }
-        if (long || short)
-          return {
-            argument: arg,
-            code: long ? value.slice(value.indexOf('=') + 1) : value.slice(2),
-            stdin: false,
-          };
-        if (value === '-') return { stdin: true };
+        if (long) {
+          if (selected || value === '--eval=') {
+            issue(
+              'mutation-code-source',
+              'Node code selection is repeated or empty.',
+              argSpan(arg, node)
+            );
+            return null;
+          }
+          selected = { argument: arg, code: value.slice('--eval='.length), stdin: false };
+          index++;
+          continue;
+        }
+        if (short) return { argument: arg, code: value.slice(2), stdin: false };
+        if (value === '-') return selected ?? { stdin: true };
         if (value === '--')
-          return { stdin: index + 1 >= args.length || args[index + 1]?.value === '-' };
-        if (!value.startsWith('-')) return { stdin: false };
+          return selected ?? { stdin: index + 1 >= args.length || args[index + 1]?.value === '-' };
+        if (!value.startsWith('-')) return selected ?? { stdin: false };
         const harmless =
           (language === 'node' &&
             (value === '--no-warnings' || /^--input-type=(?:module|commonjs)$/.test(value))) ||
@@ -489,7 +524,7 @@ export async function projectMutationView(
         }
         index++;
       }
-      return { stdin: true };
+      return selected ?? { stdin: true };
     };
     const observeInvocation = ({ node, argv, state }: Invocation): void => {
       if (exhausted) return;
