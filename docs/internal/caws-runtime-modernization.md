@@ -5237,6 +5237,62 @@ Additional bounded evidence and unresolved dependencies:
   states. These are inspected prerequisites, not implemented publication.
   R09/R18, coverage32/37 and parent acceptance0/8 remain open.
 
+- E214: Root inspects the retained ten-case ordinary publication reference,
+  offline verifier, raw closed-output command/stderr and published bytes.
+  `native-store-publication-reference/summary.json` remains `incomplete`: exact
+  pre/post producer profile equality is unmet. The collector enumerates images
+  before calling `platform.platform()`; the later observation adds pyexpat
+  without a before identity. Common-image equality and the inferred collector
+  side effect do not retrospectively attest that image. No ordinary case is
+  retried. The independent audit reports341 consistent references and exits1 for
+  the retained unmet requirement; audit SHA256 is
+  `9dbf58a47fd397629ac941b76b9cb56b0374a55064c09ea55c9c5338f0856660`.
+
+  Case10 records a pipe reader closed before spawn and exit120 with
+  BrokenPipeError after replacement. Root rehashes its121 published bytes as
+  `95011de1a155c684f2a5097ba8dae5447d58b0312a253e86672508764bbe8a2a`. Its
+  zero-byte stdout artifact means unavailable capture, not an observed empty
+  emitted stream. Publication and receipt delivery remain separate facts. Other
+  retained cases cover replacement/empty/leaf-link and parent/type/
+  permission/name frontiers. Absent or directory prior states must not be called
+  preserved prior regular-file bytes; permission restoration is harness cleanup.
+  These finite observations inform the publisher contract without earning a
+  frozen-profile pass, native parity, crash/concurrency or renderer acceptance.
+
+- E215: Chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` explicitly accepts the
+  coherent R18 preparation outcome. Root reads back active spec
+  `CAWS-RENDER-PREPARE-001` and its owned `render-prepare` worktree on
+  `caws/render-prepare`, based on parent candidate ecee3218. Actual CLI scope
+  and binding remain authority; no prepared implementation is accepted here.
+  `prepareSessionArtifacts` must consume actual owned source bytes/read
+  observations through selected-profile decoding, registry normalization,
+  auxiliary merge, accumulation and complete turn/spill/index encoding.
+  Source-occurrence/index/shared-codec changes require verified ownership, not
+  an assumption that imported foundations are free to edit.
+
+  The actual reader skips JSON syntax/nonobject rows while strict UTF-8 and
+  selected integer-profile errors remain fatal. Generic `decodeOccurrence`
+  catches all parser errors and cannot supply that policy unchanged. Complete
+  prefix checkpoint mutation precedes tentative-tail parsing; failure retains
+  the correct checkpoint. Codepoint/lossless-number values, exact Codex inner
+  source, metadata lookup including negative candidates and selected TZ/calendar
+  behavior remain dependencies. Ready owns immutable artifact bytes, internal
+  spill closure, input observations and proposed removals; it supplies neither
+  publication authority nor currentness. Root retains native admission,
+  publication, actual-consumer integration and final render-state settlement.
+
+  Source inspection grounds a separate publication consequence: sidecar-first
+  replacement can leave an old turn naming H1 beside a new sidecar containing
+  only H2 if turn replacement fails. Writer exclusion does not exclude readers;
+  SessionEnd reads flat turn files without generation/closure admission. Native
+  custody or a prepared artifact list alone cannot establish coherent current
+  output. Parent integration must admit captured complete generation inventory,
+  including index/spills, or refuse mixed/failed state. An old successful
+  receipt cannot make a failed newer invocation current. The
+  old-turn/new-spill/failure control must reach the actual reader. This
+  obligation remains open alongside selected overrides and output ownership. R18
+  is unreplaced; coverage32/37 and parent0/8 do not advance.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5364,16 +5420,19 @@ progress and does not replace that transaction or its event readback.
    truth even when later receipt encoding fails; no failed invocation may select
    an old projection. Connect this owner to the actual session-log renderer
    consumer while preserving normalization, selected overrides and E165/E166
-   source/profile controls. E202/E206 component imports and E208–E213 finite
+   source/profile controls. E202/E206 component imports and E208–E215 finite
    observations do not close complete native calendar/error/path/profile
    behavior, WAL, asynchronous cleanup, release packaging or ordinary consumer
-   parity. R09's production consumer and R18 remain unreplaced.
+   parity. R09's production consumer and R18 remain unreplaced. E214 retains the
+   incomplete-profile publication reference. E215 assigns coherent typed
+   preparation and preserves the actual-reader generation/closure obligation; a
+   prepared result cannot stand in for that integration.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E213 retain the historical candidates, failures and bounded observations;
+E167–E215 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
