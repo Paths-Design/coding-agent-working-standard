@@ -41,3 +41,11 @@ rollback:
   - 'Revert the merge commit; no data migration'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A3
+    status: pass
+    evidence_ref: packages/caws-cli/tests/store/worktree-reconciliation.test.js
+    recorded_at: "2026-10-21T01:51:52.955Z"
+    test_nodeid: "packages/caws-cli/tests/store/worktree-reconciliation.test.js::built CLI preview does not mutate; apply logs one exact receipt and discharges current diagnosis"
+    commit_sha: "27596e0c"
+    test_verified_at: "27596e0ceaee5a7e5e0cf40433e50fe9d3ebb424"
