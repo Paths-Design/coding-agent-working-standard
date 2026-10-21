@@ -30,12 +30,13 @@ passing unit tests, or the existence of this document.
 ## Source location and progress
 
 This working ledger is published on `main` independently of candidate source.
-The source integration checkpoint is the `native-runtime-modernization` branch
-at `10690d4bc1937a1a28fcf37e5ab3aed1f3e6ccd5`. Evidence entries identify their
-actual component branch or historical revision. Publishing this document does
-not land those implementations on `main`. Inspect the candidate architecture
-with `git show 10690d4b:docs/architecture/caws-native-runtime.md`; the relative
-architecture link follows the branch containing this document.
+The integration branch is `native-runtime-modernization`; its source-tree
+checkpoint is `10690d4bc1937a1a28fcf37e5ab3aed1f3e6ccd5`. Later branch commits
+that change only this ledger leave that checkpoint unchanged. Evidence entries
+identify their actual component branch or historical revision. Publishing this
+document does not land those implementations on `main`. Inspect the candidate
+architecture with `git show 10690d4b:docs/architecture/caws-native-runtime.md`;
+the relative architecture link follows the branch containing this document.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
@@ -180,6 +181,16 @@ restricted to the decoder and its tests. E200 supplies SQL-cell reference
 evidence; root retains profile selection, SQL acquisition, explicit store-AST
 projection and publication integration.
 
+Two component lanes target the integration branch while this ledger is open.
+`CAWS-TRANSCRIPT-NODE-FLOOR-001` (worktree `transcript-node-floor`) qualifies
+emitted transcript preparation on the declared Node 18.0.0 floor for R18; its
+criteria exclude packaged CLI, installed publication, calendar and full R27
+claims. `CAWS-STORE-TIMESTAMP-SENSITIVITY-001` (worktree
+`timestamp-sensitivity`) adds the regression controls E226 lists as gaps for R09
+without changing production timestamp source. `caws worktree list` reports their
+current state and owners; their closure is component evidence, not parent
+acceptance.
+
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
 Shared-output adoption therefore requires all legitimate writer paths to
@@ -226,14 +237,14 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                             | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                      | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
 | R13 | `shared/lib/harness_qwen.py`                                                                                        | TS Qwen adapter                                                            | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
-| R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures; Parent first-matched-empty registry behavior is exercised in E192; ordinary production consumption remains open                                                                                                                                                                                                                                                 |
+| R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures; Parent first-matched-empty registry behavior is exercised in E192; ordinary production consumption remains open. `main` `8a758936` adds deferred annotations to `harness_kimi.py` so stock `/usr/bin/python3` 3.9.6 imports it; the integration branch's Python reference lacks this import-compatibility change                                                |
 | R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode translation and noise declarations; zero row adapters          | closed declarations imported and parent transcript checks exercised, E190; production consumption open                                            | Actual R09 DB acquisition/reconstruction owns mapper consumption and fallback; renderer owns noise filtering. Declarations do not implement those consumers or installed behavior                                                                                                                                                                                                                                             |
 | R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Stateful model_io component evidence; DB-to-Claude-shaped acquisition, reader/cache/writer, registry, native and installed consumption remain parent obligations                                                                                                                                                                                                                                                              |
 | R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures; root owns selected interpretation, registry, reader/cache/writer and native consumption                                                                                                                                                                                                                                                                         |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | bounded source reader, accumulation and complete turn/spill/index preparation accepted and landed, E225; production renderer unreplaced           | Selected numeric/catch/spill and output boundaries exercised at199fa5e. Native publication/current-attempt admission, real SessionEnd consumption, production calendar, context-bound freshness, packaging and installed rendering remain open; E147/E165 partial-publication counterexamples are not closed by preparation.                                                                                                  |
-| R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                           | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
+| R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                           | 15 executable shell consumers, 19 inline bodies and seven external callsites; the [embedded inventory](#embedded-and-developer-implementation-coverage) groups them and excludes textual interpreter mentions                                                                                                                                                                                                                 |
 | R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity, hook-harvest and replay leaves accepted, landed and integrated; three original paths unreplaced                          | E134/E144/E148/E163 retain bounded reference profiles, deliberate repairs and raw failed/successful artifacts. E151/E163 integrate the exact source and Python deletions; qualify-render-daemon.py, qualify-transcript-cache.py and source_freshness.py remain; component progress is not parent acceptance                                                                                                                   |
-| R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | one test-module retirement integrated, E170; remaining corpus unreplaced                                                                          | Twelve test modules plus conftest (13 tracked pytest files); preserve independent hostile oracles and checked failure causes                                                                                                                                                                                                                                                                                                  |
+| R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | one test-module retirement integrated, E170; remaining corpus unreplaced                                                                          | Integration source `10690d4b`: twelve test modules plus conftest (13 tracked pytest files). `main` adds `test_template_annotation_compat.py` at `8a758936` (thirteen modules plus conftest), which the integration branch lacks. Preserve independent hostile oracles and checked failure causes                                                                                                                              |
 | R22 | Tracked installed `.caws/hooks` Python copies                                                                       | Governed self-host/runtime adoption                                        | unreplaced                                                                                                                                        | Fourteen copies identified; do not edit generated/governed installation by hand                                                                                                                                                                                                                                                                                                                                               |
 | R23 | Rust client / versioned local protocol                                                                              | `packages/caws-native` + TS protocol                                       | POSIX one-shot transport/cancellation and bounded actual-engine replay tested; macOS pre-Ready frontend-death custody observed, E145              | E156 observes ordinary typed-engine/renderer replay and E162 one after-Ready/dispatch frontend loss; closed-pipe nonleader settlement, other loss phases/surfaces, descriptor leakage, resident IPC, bounded Stop recovery and installed parity remain open                                                                                                                                                                   |
 | R24 | One-shot typed engine                                                                                               | `packages/caws-cli/src/runtime`                                            | opt-in prototype; isolated nonlatching Codex branch exercised                                                                                     | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified                                                                                                                                                                                                                                                |
@@ -397,7 +408,7 @@ Additional component evidence:
   establish native engine integration, installed behavior or complete shell
   soundness.
 
-## Embedded and developer implementation coverage
+## Evidence ledger (continued)
 
 Additional bounded evidence and unresolved dependencies:
 
@@ -5726,27 +5737,34 @@ custody and bounded finalization together. A signal-accepted record alone cannot
 claim termination, and the legacy refusal's unconditional process-end wording is
 not an observation that the target exited.
 
+## Embedded and developer implementation coverage
+
 The executable embedded-Python surface is 15 shell files, 19 inline bodies and
 seven external callsites. A textual `python` hit is not sufficient: seven
 broader search matches contain only comments or interpreter-recognition data.
+Line anchors below refer to the integration source tree `10690d4b`.
 
 | Group / source sites                                                                                                                                           | Destination and decisive proof                                                                                                                                                                                  |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared/runtime-paths.sh:58`; shared/Codex/Kimi `lib/parse-input.sh`                                                                                           | Typed input normalization: raw controls/NUL/surrogate handling, shell-safe assignments, Codex multi-file patch first-action mode, Kimi fallback precedence and large-input transport                            |
 | `shared/lib/caws-state.sh:211`                                                                                                                                 | Shared path/native FS port: existing symlink ancestor with missing leaf, `/tmp` alias and unresolved path fallback                                                                                              |
-| `shared/lib/agent-surface.sh:516`, `shared/lib/run-handlers.sh:598`                                                                                            | Typed selection: malformed/absent override maps, custom paths and concurrent request environment isolation                                                                                                      |
+| `shared/lib/agent-surface.sh:520`, `shared/lib/run-handlers.sh:598`                                                                                            | Typed selection: malformed/absent override maps, custom paths and concurrent request environment isolation                                                                                                      |
 | `shared/lib/parse-input.sh:355,372,449`, `shared/lib/agent-pid.sh:162`, `shared/lib/session-cache.sh:29`                                                       | Native anchored filesystem + typed identity/cache: dir-relative no-follow writes, exclusive temp0600/rename, symlink races, unsafe IDs, original created_at, partial writes, PID reuse and retention boundaries |
 | `shared/lib/reprieve.sh:194`                                                                                                                                   | Owning reprieve reader: handler/session/repo scope, legacy null repo reach, revoke-key presence, naive-UTC/offset/equal-expiry and symlink ancestry                                                             |
 | `shared/goal-ac-gate.sh:192,209,244`                                                                                                                           | Typed verify-acs consumer: no binding, malformed/empty report, all verified, not-rederived, non-dict criteria and bounded infrastructure release; do not rederive authority                                     |
 | `shared/lib/run-handlers.sh:94,371`                                                                                                                            | Typed journal/supervisor: selected identity, start/result, short append/symlink failures, failed provenance independent of guard outcome                                                                        |
 | External calls in `shared/block-dangerous.sh`, `shared/session-log.sh`, `shared/hook-utilities.sh`, `shared/lib/guard-config.sh`, `shared/lib/run-handlers.sh` | Classifier, renderer/store, utility, config and truncation modules tracked separately in R05-R18; consumers must migrate with tests                                                                             |
 
-Developer paths: `scripts/calculate-rule-tokens.py`, `scripts/hook-harvest.py`,
-`scripts/hook-harvest.test.py`, and `scripts/hook-experiments/` files
-`qualify-render-daemon.py`, `qualify-transcript-cache.py`,
-`replay-terminal-corpus.py`, `sensitivity.py`, `source_freshness.py`,
-`test_replay_boundary.py`. Retained qualification tools remain obligations, not
-historical exemptions inferred from their directory name.
+Remaining developer paths: `scripts/hook-experiments/` files
+`qualify-render-daemon.py`, `qualify-transcript-cache.py` and
+`source_freshness.py`. Retained qualification tools remain obligations, not
+historical exemptions inferred from their directory name. The other original
+developer paths are absent from `main` and the integration source: `8e56cee2`
+removes `scripts/calculate-rule-tokens.py`; `8ce627ca` removes
+`scripts/hook-harvest.py` and `scripts/hook-harvest.test.py`; `098dc1f4` removes
+`scripts/hook-experiments/sensitivity.py`; and `d147dd3e` removes
+`scripts/hook-experiments/replay-terminal-corpus.py` and
+`scripts/hook-experiments/test_replay_boundary.py`.
 
 The native component's post-start transport failure is conservatively uncertain
 and refuses; bounded Stop transport recovery is unresolved. It must not become
@@ -5954,12 +5972,17 @@ safety/validation repairs through a separately accepted component. The original
 lane, evidence and all A1–A8 obligations remain active. Native installation is
 separate. The normal machine bootstrap remains Python, but a future legacy
 adapters installation receives changed shared guard bytes, so source landing is
-not a behavior-inert claim. Continue the dependency order below. Keep the failed
-backpressure witness; instrument startup, ancestor capture, proposal arrival and
-output delivery before attributing its timeout or claiming concurrent
-performance. E69 adds a separate reproduced ancestor-capture deadline failure;
-inspect its typed stage and per-observation/substage timing before changing
-capture policy or budgets.
+not a behavior-inert claim. Keep the failed backpressure witness; instrument
+startup, ancestor capture, proposal arrival and output delivery before
+attributing its timeout or claiming concurrent performance. E69 adds a separate
+reproduced ancestor-capture deadline failure; inspect its typed stage and
+per-observation/substage timing before changing capture policy or budgets.
+
+### Remaining parent obligations
+
+The numbered list at the start of this section governs the next execution. The
+items below keep the remaining parent obligations in their dependency order.
+Their position does not discharge them, and they do not override that list.
 
 1. Qualify R33's integrated hostile paths after the complete selected-source
    cold/warm observation in E81. E70's journal, E74's codec, E75's custody and
