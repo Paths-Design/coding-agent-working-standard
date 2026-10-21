@@ -4928,9 +4928,9 @@ Additional bounded evidence and unresolved dependencies:
   `a188a54d56e9213a67a6f506e5c5501109eb636194eb72ea5f6847f722abe262`; its test
   SHA256 is `69d7c05f06072bd1bd08348757a0d813bb96615c519c1cfb3837a3988241b65a`.
   Component acceptance A1–A4 records cite that exact candidate; component
-  closure does not discharge parent acceptance. The component retains the
-  excluded C-int extreme month/year addition bands and finite arithmetic
-  qualification limits.
+  closure does not discharge parent acceptance. Qualification excludes the C-int
+  extreme month-addition mechanism; the helper explicitly refuses the upper
+  year-addition band. Finite arithmetic qualification limits remain.
 
   This checkpoint establishes component source landing on `main`, not parent
   import. Parent artifact verification, source import and integrated checks are
@@ -4940,6 +4940,32 @@ Additional bounded evidence and unresolved dependencies:
   SQLite build coordinator is in progress and has no completed candidate-build
   observation. Coverage remains32/37 qualifying partial slices (86.5%), parent
   acceptance0/8; no production Python row is retired or machine runtime adopted.
+
+- E206: Root imports exactly the two timestamp component files from E205's
+  `3405ada0` candidate after audited scope admission and clear contention.
+  Imported source/test hashes match E205. Root inspects and executes the
+  retained `native-store-timestamp/verify-artifacts.py`: exit0 re-derives313
+  retained hashes, three3673-case comparisons, two84-case synthetic comparisons,
+  six semantic controls and the four component AC records. This reads retained
+  observations; it does not rerun CPython or native gmtime.
+
+  Parent normal emission produces the retained JS SHA256
+  `f0e161b42e3e5ce83a6002b268436a6b6c578e26ca4e152a2735248219197885`. Parent
+  build,51 compiled Jest checks and scoped lint exit0. The retained producer
+  compares3673 cases against this parent module on actual Node18.0.0 and22.19.0
+  with zero differences, including intermediate quotient bits and normalized
+  seconds/microseconds;25 upper-year cases explicitly refuse. Root artifacts and
+  separate command streams are under
+  `native-sqlite-coordinator-parent/timestamp-parent-*` in its artifact root.
+  The read-only component source inspection finds no demonstrated import defect
+  and preserves the unqualified extreme C-month mechanism.
+
+  This discharges E205's source import and bounded parent checks. Native UTC
+  calendar/errno identity, asynchronous order/cancellation, SQL acquisition,
+  actual store projection, publication, renderer consumption and profile
+  adoption remain root-owned. There is no default calendar callback or JS Date
+  fallback. Coverage32/37 qualifying partial slices and parent acceptance0/8 do
+  not advance; no first-party Python production row is retired.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -5059,19 +5085,19 @@ progress and does not replace that transaction or its event readback.
    conversion, explicit integer profile and codepoint-preserving JSON
    projection. E203 supplies bounded actual SQL timestamp/error observations;
    E204 adjudicates the two-stage leaf; E205 verifies its component landing on
-   main with parent import pending. Actual native calendar/error behavior and
-   its consumer integration remain root-owned. E202 imports the closed
-   store-JSON component; root owes its explicit store-AST access/schema
-   projection and both-cell decode/admission order. The generic decoder and
-   JS-string AST cannot silently supply that contract. R09's production consumer
-   and R18 remain unreplaced; standalone composition does not discharge
-   production consumer parity.
+   main and E206 imports and parent-checks the exact source. Actual native
+   calendar/error behavior and its consumer integration remain root-owned. E202
+   imports the closed store-JSON component; root owes its explicit store-AST
+   access/schema projection and both-cell decode/admission order. The generic
+   decoder and JS-string AST cannot silently supply that contract. R09's
+   production consumer and R18 remain unreplaced; standalone composition does
+   not discharge production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E205 retain the historical candidates, failures and bounded observations;
+E167–E206 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
