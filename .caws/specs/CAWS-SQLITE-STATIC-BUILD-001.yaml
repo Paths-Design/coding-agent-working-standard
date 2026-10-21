@@ -1,9 +1,10 @@
 id: CAWS-SQLITE-STATIC-BUILD-001
 title: 'Pinned static SQLite build receipts without adoption authority'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: sqlite-static-build
 created_at: '2026-10-21T09:50:42.827Z'
-updated_at: '2026-10-21T09:50:42.827Z'
+updated_at: '2026-10-21T09:51:27.202Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
