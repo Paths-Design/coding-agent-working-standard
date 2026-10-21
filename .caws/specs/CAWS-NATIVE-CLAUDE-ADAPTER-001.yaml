@@ -1,0 +1,70 @@
+id: CAWS-NATIVE-CLAUDE-ADAPTER-001
+title: 'Historical Claude transcript adapter and HTML interpretation'
+mode: feature
+lifecycle_state: active
+worktree: native-claude-adapter
+created_at: '2026-10-20T22:59:17.225Z'
+updated_at: '2026-10-20T22:59:55.083Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Claude transcript row normalization and pinned CPython HTML decoding'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/harness-claude.ts'
+    - 'packages/caws-cli/src/transcripts/python-html.ts'
+    - 'packages/caws-cli/src/transcripts/html311/'
+    - 'packages/caws-cli/tests/transcripts/claude.test.ts'
+    - 'packages/caws-cli/tests/transcripts/python-html.test.ts'
+    - 'packages/caws-cli/tests/transcripts/html311/'
+  out: []
+invariants:
+  - 'Raw occurrence custody and JsonValue numeric values remain intact; interpreted records confer no execution or authority.'
+  - 'Historical broad Claude matcher is preserved; registry ordering, acquisition, renderer, cache, package and machine runtime remain parent-owned.'
+acceptance:
+  - id: A1
+    given: 'historical Claude rows and hostile input shapes'
+    when: 'typed adapter normalization executes'
+    then: 'ordered semantic events errors lineage numeric values and native member paths match independently inspected Python3.11.13 behavior without changing raw occurrence bytes'
+  - id: A2
+    given: 'pinned CPython3.11.13 HTML data and numeric-reference semantics'
+    when: 'decoding runs without Python on Node18 and22'
+    then: 'named numeric malformed semicolonless longest-prefix and digit-limit cases match the declared finite profile with checked provenance'
+  - id: A3
+    given: 'committed component and raw reference fixtures'
+    when: 'focused compilation tests negative controls and gates run'
+    then: 'runtime artifacts and exact source identity support adapter parity with explicit registry writer cache and cutover nonclaims'
+observability:
+  - 'External raw differential outputs preserve fixture bytes source hashes commands exit status semantic projections and refusal/error controls.'
+rollback:
+  - 'Revert the component source commit; no installed runtime or production consumer changes.'
+non_functional:
+  security:
+    - 'Never execute transcript content or grant authority through adapter matching or metadata.'
+contracts:
+  - name: 'historical-claude-transcript'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "commands001/015/016/017:215 exact typed comparisons perNode18/22,zero mismatches, ordered events/exception classes, bool/integer/float custody,lineage; final-runtime18/22 raw bytes/member paths/frozen values. Root95 focused cases include12Claude semantics; finite declared profile, no registry/writer claim. External artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter. CLI --verify checks commit reachability ONLY; command is recorded, not executed. Direct raw behavior and source identity were inspected independently; no artifact-content rederivation claim."
+    recorded_at: "2026-10-20T23:36:56.291Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/candidate.mjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/final22/src/transcripts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/fixtures.jsonl /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/final-runtime22.json"
+    exit_code: 0
+    commit_sha: "172242eaa14ebdd9e82fbc97ebeac384b90f1689"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Actual independentCPython3.11.13 refs and Node18/22 tests match2231names,8924variants and1114114decimal plus1114114hex codepoint-vector domain outcomes. Fixed4300decimal limit/leadingzero and unlimitedhex controls; officialsource/license hashes and019generator check match; tamperedinputrefused beforeoutputmutation.025/026 all95 cases with0monitoredprocessattempts; not OSsandbox proof. External artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter. CLI --verify checks commit reachability ONLY; command is recorded, not executed. Direct raw behavior and source identity were inspected independently; no artifact-content rederivation claim."
+    recorded_at: "2026-10-20T23:37:25.261Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/run-tests-no-process.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/final22/tests/transcripts"
+    exit_code: 0
+    commit_sha: "172242eaa14ebdd9e82fbc97ebeac384b90f1689"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "candidate-identity.json matches10committed/checked filehashes and25compiledJSfiles acrossNode18/22.010/011compile013/01495cases017compare018correctlint019generator020doctor021fivegates all0; doctor0E3W4I. SevenClaude plus eightmeaningfulHTML targetedfaults detected, weakrecursiveprobe retained/replaced, no fullmutation score. Exactconsumer exclusions index.ts1-24/registry81-96 grounded; production/package/cache/writer/installed/cutover remainparent-owned. External artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter. CLI --verify checks commit reachability ONLY; command is recorded, not executed. Direct raw behavior and source identity were inspected independently; no artifact-content rederivation claim."
+    recorded_at: "2026-10-20T23:37:42.759Z"
+    command: caws gates run --spec CAWS-NATIVE-CLAUDE-ADAPTER-001
+    exit_code: 0
+    commit_sha: "172242eaa14ebdd9e82fbc97ebeac384b90f1689"
