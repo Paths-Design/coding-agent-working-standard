@@ -76,7 +76,10 @@ export function hasMember(value: JsonValue | undefined, key: string): boolean {
   return isJsonObject(value) && value.entries.some(([name]) => name === key);
 }
 
-export function parsePythonJson(text: string): JsonValue {
+export function parsePythonJson(
+  text: string,
+  options?: { readonly admitNumberToken?: (token: JsonNumber) => void }
+): JsonValue {
   let offset = 0;
   const fail = (): never => {
     throw new SyntaxError(`Invalid Python JSON at offset ${offset}`);
@@ -167,7 +170,10 @@ export function parsePythonJson(text: string): JsonValue {
       );
     if (!number) return fail();
     offset += number[0].length;
-    return jsonNumber(number[0]);
+    const token = jsonNumber(number[0]);
+    // Admission observes every recognized token before container collapse or later syntax.
+    options?.admitNumberToken?.(token);
+    return token;
   };
   const result = value();
   space();
