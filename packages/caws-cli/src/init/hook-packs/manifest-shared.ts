@@ -608,7 +608,8 @@ import { isAdapterCoveredSurface } from './types';
 // v102: raw Codex apply_patch requests enter armed file-tool quarantine checks.
 // v103: contention command failures retain the existing unknown-observation
 // allowlist and approval policy instead of exiting before either policy runs.
-export const SHARED_PACK_VERSION = 103;
+// v104: heartbeat message provenance reads the canonical sender specId field.
+export const SHARED_PACK_VERSION = 104;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

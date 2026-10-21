@@ -3798,6 +3798,37 @@ Additional bounded evidence and unresolved dependencies:
   Further adapters keep separate bounded ownership and do not change that parent
   obligation.
 
+- E172: The parent integrates shared typed heartbeat/message-poll application
+  operations into both existing CLI commands and the stock Codex Bash consumer.
+  The consumer uses canonical leases/mail, checkout-local observation sidecars,
+  the original request caller PID, independent mail polling during lease
+  throttle and existing composer offer settlement. Selection requires reviewed
+  stock sources and libraries, no selected overrides or startup extensions,
+  PATH's genuine same-package CLI entry and the engine's Node executable.
+  Missing, foreign, nonexecutable, wrapped or ambiguous selections retain the
+  selected shell handler. The CLI entry hash is a finite compatibility pin, not
+  a sealed package/dependency closure. Shared pack104 corrects the sender's
+  `specId` projection; the typed consumer also creates the checkout cache
+  directory before escalation-state persistence. Neither deliberate repair
+  grants authority. Root's retained
+  `heartbeat-runtime/root-build.{stdout,stderr}` exits0 after
+  runtime-asset/registry checks and strict production compilation. The first
+  integrated Jest attempt exits1:176/177 checks pass, and the new unsafe-ID test
+  expects `session_id_invalid` where `safeLeaseFilename('../foreign')` returns
+  `session_id_unsafe`. The store contract remains unchanged; the corrected
+  oracle and consumer suites pass29 checks in3.158s, exit0. The initial scoped
+  lint exits1 on the new test's missing `AbortController` declaration; the
+  explicit global declaration repairs it and corrected scoped lint exits0. Raw
+  failed and corrected logs/JSON and stock fixture snapshots remain under root
+  artifact `heartbeat-runtime/`; no attempt is overwritten. These checks
+  exercise application refusal/throttle, canonical state and offer composition
+  plus positive typed admission and hostile executable/override fallback. They
+  do not observe native selection, complete process execution, installed package
+  closure, actual native offer ACK/release, performance, residency, fairness or
+  machine adoption. The native qualifier must stop on unknown cleanup; recording
+  it and continuing the scenario chain cannot establish qualification. Parent
+  A1–A8 remain open, and the installed Python pipeline remains selected.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3892,15 +3923,16 @@ progress and does not replace that transaction or its event readback.
 Guard candidate `33003656` has committed inspection and the bounded source/
 private-pack evidence in E167. E168 integrates the checked Claude component and
 fresh parent selection. E170 integrates the checked pytest-entrypoint leaf and
-observes its combined-parent cold lifecycle. Connect and qualify the complete
-typed heartbeat consumer next. Bind that native probe to the complete
-source/build and installed package/dependency identities; a template runtime
-digest or a flat `dist/runtime` file list cannot identify new application
-dependencies. Preserve the acquisition-profile and transactional-writer
-obligations in E166/E165 and the guard-decision falsifier in E169. The closed
-replay, Unicode and utility components do not replace these consumers. Resume
-the unchanged fairness workload only after the owning implementation and cleanup
-evidence justify it; machine adoption follows full parity.
+observes its combined-parent cold lifecycle. E172 integrates and tests the typed
+heartbeat consumer; qualify its complete native chain next. Bind that probe to
+the complete source/build and installed package/dependency identities; a
+template runtime digest or a flat `dist/runtime` file list cannot identify new
+application dependencies. Preserve the acquisition-profile and
+transactional-writer obligations in E166/E165 and the guard-decision falsifier
+in E169. The closed replay, Unicode and utility components do not replace these
+consumers. Resume the unchanged fairness workload only after the owning
+implementation and cleanup evidence justify it; machine adoption follows full
+parity.
 
 E105/E107/E108 establish the repaired selected Stop path, seven actual owner
 controls and existing-untracked-custody observation on executable `d4644326`.

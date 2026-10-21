@@ -326,7 +326,7 @@ if [[ -n "$_MSG_OUT" ]]; then
         const sender = e.sender || null;
         const bits = [];
         if (sender && sender.worktree) bits.push("worktree " + sender.worktree);
-        if (sender && sender.spec_id) bits.push("spec " + sender.spec_id);
+        if (sender && sender.specId) bits.push("spec " + sender.specId);
         return bits.length > 0 ? " (" + bits.join(", ") + ")" : "";
       };
       let ctx = "";

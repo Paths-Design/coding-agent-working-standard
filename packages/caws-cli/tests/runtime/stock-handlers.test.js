@@ -683,3 +683,285 @@ test('native entry honors cancellation and an already expired request', () => {
   request.deadlineEpochMs = Date.now() - 1;
   expect(() => tryExecuteStockHandler(handler, context())).toThrow('deadline expired');
 });
+
+function useHeartbeatCli() {
+  const bin = path.join(directory, 'heartbeat-bin');
+  fs.mkdirSync(bin);
+  fs.symlinkSync(path.resolve(__dirname, '../../dist/index.js'), path.join(bin, 'caws'));
+  fs.symlinkSync(process.execPath, path.join(bin, 'node'));
+  environment.PATH = bin + path.delimiter + '/usr/bin:/bin';
+  return bin;
+}
+
+test.each([undefined, '', 'caws'])(
+  'exact stock Codex Bash heartbeat selects typed application consumer with CAWS_BIN=%s',
+  async (cli) => {
+    useHeartbeatCli();
+    if (cli !== undefined) environment.CAWS_BIN = cli;
+    const heartbeat = require('../../dist/runtime/agent-heartbeat');
+    const result = { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+    const execute = jest.spyOn(heartbeat, 'executeAgentHeartbeat').mockResolvedValue(result);
+    command('true');
+    const handler = select('agent-heartbeat.sh');
+    expect(await tryExecuteStockHandler(handler, context())).toBe(result);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0][0].request.payload.session_id).toBe('fixture');
+  }
+);
+test.each([
+  [
+    'Node preload',
+    () => {
+      environment.NODE_OPTIONS = '--require /custom/preload.js';
+    },
+  ],
+  [
+    'Node module path',
+    () => {
+      environment.NODE_PATH = '/custom/modules';
+    },
+  ],
+  [
+    'loader preload',
+    () => {
+      environment.LD_PRELOAD = '/custom/preload.so';
+    },
+  ],
+  [
+    'Darwin loader preload',
+    () => {
+      environment.DYLD_INSERT_LIBRARIES = '/custom/preload.dylib';
+    },
+  ],
+  [
+    'imported Bash function',
+    () => {
+      environment['BASH_FUNC_caws%%'] = '() { :; }';
+    },
+  ],
+  [
+    'custom CLI',
+    () => {
+      environment.CAWS_BIN = '/custom/caws';
+    },
+  ],
+  [
+    'PATH-selected custom CLI',
+    () => {
+      const custom = path.join(directory, 'custom-bin');
+      fs.mkdirSync(custom);
+      fs.writeFileSync(path.join(custom, 'caws'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+      environment.PATH = custom + path.delimiter + environment.PATH;
+    },
+  ],
+  [
+    'missing CLI',
+    () => {
+      fs.unlinkSync(path.join(directory, 'heartbeat-bin/caws'));
+    },
+  ],
+  [
+    'nonexecutable CLI',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/caws');
+      fs.unlinkSync(file);
+      fs.writeFileSync(file, '#!/bin/sh\nexit 1\n', { mode: 0o600 });
+    },
+  ],
+  [
+    'CLI directory',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/caws');
+      fs.unlinkSync(file);
+      fs.mkdirSync(file, { mode: 0o700 });
+    },
+  ],
+  [
+    'broken CLI symlink',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/caws');
+      fs.unlinkSync(file);
+      fs.symlinkSync('missing', file);
+    },
+  ],
+  [
+    'foreign CLI with identical entry bytes',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/caws');
+      fs.unlinkSync(file);
+      fs.copyFileSync(path.resolve(__dirname, '../../dist/index.js'), file);
+      fs.chmodSync(file, 0o700);
+    },
+  ],
+  [
+    'missing Node',
+    () => {
+      const bin = path.join(directory, 'heartbeat-bin');
+      fs.unlinkSync(path.join(bin, 'node'));
+      environment.PATH = bin;
+    },
+  ],
+  [
+    'missing PATH',
+    () => {
+      delete environment.PATH;
+    },
+  ],
+  [
+    'PATH-selected custom Node',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/node');
+      fs.unlinkSync(file);
+      fs.writeFileSync(file, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    },
+  ],
+  [
+    'empty PATH entry',
+    () => {
+      environment.PATH = ':' + environment.PATH;
+    },
+  ],
+  [
+    'relative PATH entry',
+    () => {
+      environment.PATH = '.' + path.delimiter + environment.PATH;
+    },
+  ],
+  [
+    'modified CLI startup bytes',
+    () => {
+      const entry = fs.realpathSync(path.resolve(__dirname, '../../dist/index.js'));
+      const read = fs.readFileSync;
+      jest
+        .spyOn(fs, 'readFileSync')
+        .mockImplementation((file, ...args) =>
+          file === entry
+            ? Buffer.from('#!/usr/bin/env node\n// custom startup\n')
+            : read(file, ...args)
+        );
+    },
+  ],
+  [
+    'startup Bash',
+    () => {
+      environment.BASH_ENV = '/custom/startup';
+    },
+  ],
+  [
+    'prior startup Bash',
+    () => {
+      environment.CAWS_PRIOR_BASH_ENV = '/custom/startup';
+    },
+  ],
+  [
+    'preloaded library',
+    () => {
+      environment._CAWS_EMIT_SH_LOADED = '1';
+    },
+  ],
+  [
+    'project configuration',
+    () => {
+      selection.configuration = 'project-policy';
+    },
+  ],
+  [
+    'other event',
+    () => {
+      selection.event = 'post_tool_use';
+    },
+  ],
+  [
+    'other surface',
+    () => {
+      selection.surface = 'claude-code';
+    },
+  ],
+  [
+    'non-Bash',
+    () => {
+      request.payload.tool_name = 'Write';
+    },
+  ],
+  [
+    'noncanonical Bash',
+    () => {
+      request.payload.tool_input = { command: 27 };
+    },
+  ],
+  [
+    'arguments',
+    (handler) => {
+      handler.args = ['extra'];
+    },
+  ],
+  [
+    'user library',
+    () => {
+      selection.libraries['emit.sh'].kind = 'user';
+    },
+  ],
+  [
+    'project library',
+    () => {
+      selection.libraries['emit.sh'].kind = 'project';
+    },
+  ],
+  [
+    'library override',
+    () => {
+      selection.libraryOverrides['emit.sh'] = '/override';
+    },
+  ],
+  [
+    'handler override',
+    () => {
+      selection.overrides['other.sh'] = '/override';
+    },
+  ],
+  [
+    'project handler',
+    () => {
+      selection.handlers.push({ ...selection.handlers[0], kind: 'project-policy' });
+    },
+  ],
+  [
+    'handler source changed',
+    (handler) => {
+      fs.appendFileSync(handler.path, '\n# changed\n');
+    },
+  ],
+  [
+    'library source changed',
+    () => {
+      fs.appendFileSync(selection.libraries['emit.sh'].path, '\n# changed\n');
+    },
+  ],
+  [
+    'parse dependency changed',
+    () => {
+      fs.appendFileSync(path.join(runtime, 'lib/session-cache.sh'), '\n# changed\n');
+    },
+  ],
+  [
+    'runtime bootstrap changed',
+    () => {
+      fs.appendFileSync(path.join(runtime, 'runtime-paths.sh'), '\n# changed\n');
+    },
+  ],
+  [
+    'handler startup changed',
+    () => {
+      fs.appendFileSync(path.join(runtime, 'handler-env.sh'), '\n# changed\n');
+    },
+  ],
+])('heartbeat %s retains compatibility fallback', (_, mutate) => {
+  useHeartbeatCli();
+  const heartbeat = require('../../dist/runtime/agent-heartbeat');
+  const execute = jest.spyOn(heartbeat, 'executeAgentHeartbeat');
+  command('true');
+  const handler = select('agent-heartbeat.sh');
+  mutate(handler);
+  expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  expect(execute).not.toHaveBeenCalled();
+});

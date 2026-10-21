@@ -1,9 +1,18 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, isAbsolute, join } from 'node:path';
+import {
+  accessSync,
+  constants,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+} from 'node:fs';
+import { basename, delimiter, isAbsolute, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { assertMachinePath } from '../init/machine-paths';
 import { classifyCommand } from './classifier';
+import { executeAgentHeartbeat } from './agent-heartbeat';
 import { createGuardUtilityPorts, runGuardUtilities } from './guard-utilities';
 import type { HandlerResult } from './composer';
 import type { RuntimeRequest } from './protocol';
@@ -11,6 +20,7 @@ import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
+  'agent-heartbeat.sh': '05d61d1c55a3be8802250083d10899d44e2bbb33a689f0e806f65afb46df8abc',
   'block-dangerous.sh': '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5',
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
 };
@@ -53,6 +63,40 @@ const empty = (): HandlerResult => ({
 const sha = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** Preserve the shell's executable selection before replacing its CLI calls.
+ * Relative/empty PATH entries and a missing PATH retain shell execution, including
+ * runtime-paths.sh's recovery behavior. Admission never invokes an unknown CLI.
+ */
+function heartbeatCliCompatible(environment: Readonly<Record<string, string>>): boolean {
+  const directories = environment.PATH?.split(delimiter);
+  if (!directories?.length || directories.some((directory) => !isAbsolute(directory))) return false;
+  const resolve = (name: string): string | null => {
+    for (const directory of directories) {
+      const candidate = join(directory, name);
+      try {
+        if (!statSync(candidate).isFile()) continue;
+        accessSync(candidate, constants.X_OK);
+        return realpathSync(candidate);
+      } catch {
+        // Continue the shell's left-to-right executable search.
+      }
+    }
+    return null;
+  };
+  try {
+    const entry = realpathSync(join(__dirname, '../index.js'));
+    return (
+      resolve('caws') === entry &&
+      resolve('node') === realpathSync(process.execPath) &&
+      // This entry is copied verbatim by build-cli.js. A custom startup at the
+      // same filename is an extension, even when its package path is unchanged.
+      sha(entry) === '53ddd298061d30435160b8ee60a7ea7a5f4c495bab57cfcf36ee6c9e3e86c183'
+    );
+  } catch {
+    return false;
+  }
+}
 
 function compatible(handler: SelectedHandler, context: StockHandlerContext): boolean {
   const { selection, environment } = context;
@@ -98,6 +142,18 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
       if (library.path !== expected) return false;
       assertMachinePath(selection.runtimeDirectory, library.path);
       if (sha(library.path) !== library.sha256) return false;
+    }
+    if (handler.name === 'agent-heartbeat.sh') {
+      for (const [name, expected] of Object.entries({
+        'handler-env.sh': '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7',
+        'runtime-paths.sh': 'c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08',
+        'lib/session-cache.sh': 'eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb',
+      })) {
+        const dependency = join(selection.runtimeDirectory, name);
+        assertMachinePath(selection.runtimeDirectory, dependency);
+        if (sha(dependency) !== expected) return false;
+      }
+      return true;
     }
     const file =
       handler.name === 'hook-utilities.sh'
@@ -185,13 +241,43 @@ function noDangerLatch(selection: ActiveInvocationSelection): boolean {
 export function tryExecuteStockHandler(
   handler: SelectedHandler,
   context: StockHandlerContext
-): HandlerResult | null {
+): HandlerResult | Promise<HandlerResult> | null {
   if (context.signal.aborted) throw new Error('Handler invocation cancelled');
   if (Date.now() >= context.request.deadlineEpochMs) throw new Error('Handler deadline expired');
   if (!compatible(handler, context)) return null;
   const { request, selection, environment } = context;
   const payload = request.payload;
   const toolInput = object(payload.tool_input) ? payload.tool_input : {};
+  if (handler.name === 'agent-heartbeat.sh') {
+    if (
+      selection.surface !== 'codex' ||
+      selection.event !== 'pre_tool_use' ||
+      request.surface !== selection.surface ||
+      request.event !== selection.event ||
+      request.runtimeDigest !== selection.runtimeDigest ||
+      payload.tool_name !== 'Bash' ||
+      typeof toolInput.command !== 'string' ||
+      (environment.CAWS_BIN && environment.CAWS_BIN !== 'caws') ||
+      !heartbeatCliCompatible(environment) ||
+      Object.entries(environment).some(
+        ([name, value]) =>
+          Boolean(value) &&
+          (name === 'NODE_OPTIONS' ||
+            name === 'NODE_PATH' ||
+            name.startsWith('LD_') ||
+            name.startsWith('DYLD_') ||
+            name.startsWith('BASH_FUNC_'))
+      ) ||
+      selection.handlers.some((entry) => entry.kind !== 'stock') ||
+      Object.values(selection.libraries).some(
+        (entry) => entry.kind === 'project' || entry.kind === 'user'
+      ) ||
+      Object.keys(selection.overrides).length ||
+      Object.keys(selection.libraryOverrides).length
+    )
+      return null;
+    return executeAgentHeartbeat(context);
+  }
   if (handler.name === 'hook-utilities.sh') {
     const policy = environment.CAWS_OPTIONAL_HOOK_POLICY;
     let text: string | null = null;

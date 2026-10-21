@@ -464,7 +464,7 @@ export function createHandlerExecutor(
     if (Date.now() >= owned.request.deadlineEpochMs)
       throw new HandlerExecutionError('Handler deadline expired');
     verifyHandler(expected, owned.selection);
-    const result = tryExecuteStockHandler(expected, owned);
+    const result = await tryExecuteStockHandler(expected, owned);
     return result ?? runChild({ path: expected.path, args: expected.args }, owned, false, expected);
   };
 }
