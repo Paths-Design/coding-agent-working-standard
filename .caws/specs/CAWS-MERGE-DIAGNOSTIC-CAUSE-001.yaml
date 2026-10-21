@@ -1,9 +1,10 @@
 id: CAWS-MERGE-DIAGNOSTIC-CAUSE-001
 title: 'Preserve underlying merge-event lifecycle diagnostics'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: merge-diagnostic-cause
 created_at: '2026-10-21T22:33:13.165Z'
-updated_at: '2026-10-21T22:33:13.165Z'
+updated_at: '2026-10-21T22:33:50.812Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
