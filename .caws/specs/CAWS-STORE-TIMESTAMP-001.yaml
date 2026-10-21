@@ -1,0 +1,48 @@
+id: CAWS-STORE-TIMESTAMP-001
+title: 'Preserve store timestamp arithmetic and typed UTC calendar results'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T12:30:10.806Z'
+updated_at: '2026-10-21T12:30:10.806Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Store SQL timestamp preparation and UTC calendar finishing'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/store-timestamp.ts'
+    - 'packages/caws-cli/tests/transcripts/store-timestamp.test.js'
+  out: []
+invariants:
+  - 'Explicit opt-in profile and SQL storage classes preserve i64 true division and REAL binary64 semantics without coercion or installed default selection.'
+  - 'Normalized signed64 seconds remain exact bigint and immutable preparation tokens confer no source or native authority.'
+  - 'Calendar observations are supplied by an owning port; no default Date conversion or guessed platform failure threshold replaces actual native behavior.'
+  - 'Reference ValueError OSError and OverflowError remain distinct from request transport cancellation malformed-result and unqualified-profile failures.'
+acceptance:
+  - id: A1
+    given: 'explicit profile and tagged SQL integer REAL or nonnumeric cells'
+    when: 'pure preparation executes'
+    then: 'exact i64 true division and binary64 REAL division precede half-even normalization and signed64 bounds with typed reference and contract failures.'
+  - id: A2
+    given: 'immutable prepared seconds and an explicit typed UTC calendar observation'
+    when: 'pure finishing executes'
+    then: 'matching responses preserve OS failure precedence or validate and format UTC calendar values with correct leap clamping and optional six-digit fractions.'
+  - id: A3
+    given: 'hostile requests forged tokens mismatched or malformed calendar observations and transport cancellation or unqualified inputs'
+    when: 'each stage executes'
+    then: 'failures remain distinct and no implicit calendar I/O callback or Date fallback executes.'
+  - id: A4
+    given: 'pre-and-post pinned CPython reference profile and ordinary package emission'
+    when: 'intermediate and final differential controls compiled Node18 and Node22 checks and semantic falsifiers execute'
+    then: 'finite arithmetic and formatting evidence agrees without granting native port consumer or cutover parity.'
+observability:
+  - 'Retained intermediate quotient bits normalized seconds microseconds calendar results and final output or typed failures with profile identity before and after qualification.'
+rollback:
+  - 'Remove two unconsumed component files through governed source changes; no runtime adoption or output publication occurs.'
+non_functional: {}
+contracts:
+  - name: 'store-timestamp-stages'
+    type: api
+    path: 'packages/caws-cli/src/transcripts/store-timestamp.ts'
