@@ -32,3 +32,9 @@ non_functional:
 contracts:
   - name: 'cutover-tracker'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Manual narrative verification of committed tracker lines179 and E214-E215 against retained publication summary/profile reconciliation, raw case10 command/stderr/published-byte hash, actual renderer reader/sidecar-turn sequence and SessionEnd flat reader, plus registry/spec readback for render-prepare based on ecee3218. Incomplete profile stays incomplete; preparation is accepted unfinished work; parent coverage32/37 and acceptance0/8 remain unchanged. Commit verification establishes identity, not runtime parity."
+    recorded_at: "2026-10-21T17:01:22.676Z"
+    commit_sha: d66ca06547dc7166e82fc5da54536511140b0377
