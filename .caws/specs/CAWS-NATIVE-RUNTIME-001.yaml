@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-21T08:38:30.076Z'
+updated_at: '2026-10-21T08:57:08.713Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -130,6 +130,8 @@ scope:
     - packages/caws-cli/tests/transcripts/opencode.test.ts
     - packages/caws-cli/src/transcripts/harness-zcode.ts
     - packages/caws-cli/tests/transcripts/zcode.test.ts
+    - packages/caws-cli/src/transcripts/registry.ts
+    - packages/caws-cli/tests/transcripts/registry.test.ts
   out:
     - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
