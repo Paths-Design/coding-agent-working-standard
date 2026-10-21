@@ -15,8 +15,13 @@ export const MAX_TYPED_JOURNAL = 8 * 1024 * 1024;
 export function decodeInvocationIdentity(
   bytes: Uint8Array,
   runtimeDigest: string,
-  inputDigest: string
+  inputDigest: string,
+  expectedEvent: 'stop' | 'pre_tool_use' = 'stop'
 ) {
+  requireValue(
+    expectedEvent === 'stop' || expectedEvent === 'pre_tool_use',
+    'unsupported expected hook event'
+  );
   requireValue(
     bytes.byteLength > 0 && bytes.byteLength <= MAX_TYPED_JOURNAL && bytes.at(-1) === 10,
     'typed invocation journal empty/partial/oversized'
@@ -44,7 +49,7 @@ export function decodeInvocationIdentity(
         row.runtime_digest === runtimeDigest &&
         row.input_sha256 === inputDigest &&
         row.surface === 'codex' &&
-        row.event === 'stop'
+        row.event === expectedEvent
     ),
     'typed invocation journal identity differs'
   );

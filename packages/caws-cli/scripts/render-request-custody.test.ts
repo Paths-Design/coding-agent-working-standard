@@ -577,3 +577,50 @@ test('collector refuses oversized sparse file before publishing any journal snap
     assert.equal(fs.statSync(f.journal).size, MAX_CUSTODY_JOURNAL * 64);
   });
 });
+
+test('journal event is exact against the request-owned expectation, with Stop as default', () => {
+  const metadata = {
+    schema: 'caws.hook_invocation.v1',
+    invocation_id: 'independent-typed-request',
+    runtime_digest: digest,
+    input_sha256: 'b'.repeat(64),
+    surface: 'codex',
+    stage: 'invocation_started',
+  };
+  const stop = journal([{ ...metadata, event: 'stop' }]);
+  assert.throws(() =>
+    decodeInvocationIdentity(
+      journal([{ ...metadata, event: 'post_tool_use' }]),
+      digest,
+      'b'.repeat(64),
+      'post_tool_use' as never
+    )
+  );
+  const pre = journal([{ ...metadata, event: 'pre_tool_use' }]);
+  assert.deepEqual(decodeInvocationIdentity(stop, digest, 'b'.repeat(64)), {
+    invocationId: 'independent-typed-request',
+    runtimeDigest: digest,
+  });
+  assert.deepEqual(decodeInvocationIdentity(pre, digest, 'b'.repeat(64), 'pre_tool_use'), {
+    invocationId: 'independent-typed-request',
+    runtimeDigest: digest,
+  });
+  assert.throws(() => decodeInvocationIdentity(pre, digest, 'b'.repeat(64)));
+  assert.throws(() => decodeInvocationIdentity(stop, digest, 'b'.repeat(64), 'pre_tool_use'));
+  for (const event of [undefined, 'post_tool_use', 'PreToolUse', '', null]) {
+    const invalid = journal([{ ...metadata, ...(event === undefined ? {} : { event }) }]);
+    assert.throws(() => decodeInvocationIdentity(invalid, digest, 'b'.repeat(64), 'pre_tool_use'));
+    assert.throws(() => decodeInvocationIdentity(invalid, digest, 'b'.repeat(64)));
+  }
+  assert.throws(() =>
+    decodeInvocationIdentity(
+      journal([
+        { ...metadata, event: 'pre_tool_use' },
+        { ...metadata, event: 'stop' },
+      ]),
+      digest,
+      'b'.repeat(64),
+      'pre_tool_use'
+    )
+  );
+});

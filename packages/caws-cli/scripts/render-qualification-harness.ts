@@ -50,6 +50,7 @@ export type InvocationTrace = {
   journalIdentity: string | null;
   rows: Data[];
   reads: number;
+  event: 'stop' | 'pre_tool_use';
   errors: string[];
 };
 export type SessionFixture = {
@@ -125,6 +126,7 @@ export class RenderHarness {
   readonly tools: readonly { name: string; path: string; sha256: string }[];
   readonly installed: { digest: string; files: readonly string[] };
   readonly ownerConfig: Data;
+  private captureOnly = false;
   private command = 0;
   private readonly sessions = new Map<string, SessionFixture>();
   private readonly children: Started[] = [];
@@ -132,13 +134,50 @@ export class RenderHarness {
 
   constructor(options: {
     cli: string;
-    sterling: string;
+    sterling?: string;
+    capture?: {
+      root: string;
+      sandbox: string;
+      home: string;
+      native: string;
+      observer: string;
+      environment: NodeJS.ProcessEnv;
+      tools: readonly { name: string; path: string; sha256: string }[];
+      installed: { digest: string; files: readonly string[] };
+    };
     label: string;
     limits?: Data;
     runtimeTemplates?: string;
     nativeProfile?: 'debug' | 'release';
   }) {
     this.cli = fs.realpathSync(options.cli);
+    if (options.capture) {
+      // Reuse capture/custody machinery without a renderer, wrapper, installation,
+      // inherited startup code or a changed protective guard environment.
+      const capture = options.capture;
+      for (const directory of [capture.root, capture.sandbox, capture.home])
+        assert(path.isAbsolute(directory) && fs.statSync(directory).isDirectory());
+      this.captureOnly = true;
+      this.sterling = ''; // Renderer-only APIs below refuse capture mode.
+      this.root = fs.realpathSync(capture.root);
+      this.sandbox = fs.realpathSync(capture.sandbox);
+      this.home = fs.realpathSync(capture.home);
+      this.owner = path.join(this.home, 'state/render-service');
+      this.native = fs.realpathSync(capture.native);
+      this.observer = fs.realpathSync(capture.observer);
+      this.custodyObserver = ''; // No service custody API is available in this mode.
+      this.engine = path.join(this.cli, 'dist/runtime/engine-entry.js');
+      this.cliEntry = path.join(this.cli, 'dist/index.js');
+      this.hookCli = ''; // In particular, no PATH wrapper is installed.
+      this.configPath = '';
+      this.env = { ...capture.environment };
+      this.api = loadApi(this.cli);
+      this.tools = capture.tools;
+      this.installed = capture.installed;
+      this.ownerConfig = { schema: 'caws.qualification.capture-only.v1' };
+      return;
+    }
+    assert(options.sterling, 'renderer qualification requires its source repository');
     this.sterling = fs.realpathSync(options.sterling);
     const crate = path.resolve(this.cli, '../caws-native');
     this.root = path.join(
@@ -348,7 +387,12 @@ export class RenderHarness {
     cwd: string,
     env = this.env,
     input?: string,
-    options: { keepInputOpen?: boolean; traceSession?: string; observeBirth?: boolean } = {}
+    options: {
+      keepInputOpen?: boolean;
+      traceSession?: string;
+      observeBirth?: boolean;
+      traceEvent?: 'stop' | 'pre_tool_use';
+    } = {}
   ): Started {
     const directory = this.commandDirectory(name, executable, args, cwd);
     const journalDirectory = options.traceSession
@@ -448,6 +492,7 @@ export class RenderHarness {
         journalIdentity: null,
         rows: [],
         reads: 0,
+        event: options.traceEvent ?? 'stop',
         errors: [],
       };
       writeJson(path.join(directory, 'original-frontend.json'), originalBirth);
@@ -467,6 +512,7 @@ export class RenderHarness {
     return started;
   }
   startHost(observeBirth = false): Started {
+    assert(!this.captureOnly, 'renderer operation unavailable in capture-only mode');
     return this.start(
       'owned-host',
       this.native,
@@ -483,6 +529,7 @@ export class RenderHarness {
     sessions?: string[];
     stopExtensions?: readonly { handler: 'agent-heartbeat.sh'; before: 'agent-stop.sh' }[];
   }): Promise<ProjectFixture> {
+    assert(!this.captureOnly, 'renderer fixture unavailable in capture-only mode');
     assert(/^[a-zA-Z0-9_-]+$/.test(options.name));
     const project = path.join(this.sandbox, options.name),
       surface = options.surface ?? 'codex';
@@ -790,6 +837,7 @@ export class RenderHarness {
     return this.spawnInvocation(fixture, options).done;
   }
   ownerEvents(): Data[] {
+    assert(!this.captureOnly, 'renderer operation unavailable in capture-only mode');
     const file = path.join(this.owner, 'observations.jsonl');
     if (!fs.existsSync(file)) return [];
     const bytes = fs.readFileSync(file, 'utf8');
@@ -802,6 +850,7 @@ export class RenderHarness {
       .map((line) => row(row(JSON.parse(line)).observation));
   }
   operations(): Data[] {
+    assert(!this.captureOnly, 'renderer operation unavailable in capture-only mode');
     const base = path.join(this.owner, 'custody/operations/services');
     return files(base)
       .filter((name) => /(?:^|\/)\w{64}\.json$/.test(name))
@@ -977,7 +1026,12 @@ export class RenderHarness {
     trace.journalPrefix = bytes;
     const prefix = final ? bytes : bytes.subarray(0, bytes.lastIndexOf(10) + 1);
     if (!final && prefix.length === 0) return [];
-    const identity = decodeInvocationIdentity(prefix, this.installed.digest, trace.inputDigest);
+    const identity = decodeInvocationIdentity(
+      prefix,
+      this.installed.digest,
+      trace.inputDigest,
+      trace.event
+    );
     assert.equal(
       path.basename(file),
       identity.invocationId + '.jsonl',
@@ -1237,6 +1291,7 @@ export class RenderHarness {
     return evidence;
   }
   async cleanup(ms = 20000): Promise<Data> {
+    assert(!this.captureOnly, 'renderer operation unavailable in capture-only mode');
     const deadline = Date.now() + ms,
       socket = path.join(
         '/private/tmp',
