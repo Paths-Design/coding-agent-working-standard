@@ -5656,6 +5656,12 @@ Additional bounded evidence and unresolved dependencies:
   statuses live under
   `/Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/`.
 
+  This whole-file report uses a retained external finite configuration.
+  Integration `mutation-policy.json` does not register the timestamp source or
+  focused suite in its store surface; the report does not establish durable CI
+  coverage. Root retains that registration obligation and must coordinate any
+  shared policy edit after the guard owner's pinned mutation inputs are settled.
+
   Remaining regression gaps include malformed callback message42, a tagged array
   with calendar fields, valid1904/rejected2100 leap days and minute59. Inspected
   production source enforces these conditions; this is not a complete
