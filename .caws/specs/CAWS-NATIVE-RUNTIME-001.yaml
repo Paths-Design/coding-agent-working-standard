@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-21T05:46:05.055Z'
+updated_at: '2026-10-21T06:32:18.985Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -106,9 +106,9 @@ scope:
     - packages/caws-cli/tests/runtime/utf8.test.js
     - packages/caws-cli/src/runtime/session-cache-client.ts
     - packages/caws-cli/tests/runtime/session-cache-client.test.js
-  out:
     - packages/caws-cli/src/runtime/session-cache-admission.ts
     - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+  out: []
   support:
     - packages/caws-cli/reports/
     - package.json
