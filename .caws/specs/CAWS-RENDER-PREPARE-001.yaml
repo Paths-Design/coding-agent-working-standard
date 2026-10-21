@@ -92,3 +92,11 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-numeric/result.json"
     commit_sha: d12d74a2416ee36f3da0f38acbacef1bd9f7141c
+  - criterion_id: A4
+    status: fail
+    evidence_ref: "At committed c2a1fdb/candidate05, actual 8945B one-turn and 9032B two-turn sources with admitted4300-digit usage operands yield ready artifacts containing4301-digit sums under selected4300. Index-only case has two4300-digit turn artifacts plus4301-digit session-index. Selected Python decimal-output refusal derives from pinned renderer json.dumps calls and official Python3.11 integer-to-string limit documentation; no Python oracle executed. Encoding profile repair and runtime falsifier remain open."
+    recorded_at: "2026-10-21T19:23:29.354Z"
+    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-output-numeric/probe.cjs
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-output-numeric/receipt.json"
+    commit_sha: c2a1fdb8df897ff99a66f7d1cc0068a677c53d1a
