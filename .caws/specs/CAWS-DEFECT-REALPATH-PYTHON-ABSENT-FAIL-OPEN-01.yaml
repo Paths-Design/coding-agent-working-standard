@@ -54,8 +54,14 @@ acceptance:
       with empty stdout and exactly one stderr line carrying class empty-path,
       python3-unavailable or python3-exit-1.
   - id: A3
-    given: 'every _realpath and abspath call site in the shipped write guards'
-    when: 'a contract test scans them'
-    then: 'each carries an explicit fail-closed handler exiting 2. Replacing _realpath with identity turns the A1 fixture red.'
+    given: 'the shipped worktree-write-guard.sh and bash-write-guard.sh'
+    when: >-
+      a contract test scans every caws_guard_realpath and abspath command
+      substitution and every _realpath reference, and a mutant replaces the helper
+      body with print-input-and-return-0
+    then: >-
+      neither guard references _realpath, every substitution is followed by an
+      explicit refusal that exits 2, and under the mutant the A1 and A4
+      failing/absent cases turn red.
 non_functional: {}
 contracts: []
