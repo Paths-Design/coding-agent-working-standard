@@ -1,0 +1,40 @@
+id: CAWS-GUARD-CONTRACT-DOCS-001
+title: 'Align the four guard landing documents with execution and qualification contracts'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-21T21:21:46.923Z'
+updated_at: '2026-10-21T21:21:46.923Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Existing shared guard architecture, setup, README and command-analysis guide'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'README.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+  out: []
+invariants:
+  - 'All four existing documents are landing obligations; no new guide or duplicate progress ledger is created.'
+  - 'Implemented bounded analysis and private package observations remain distinct from proposed execution custody and separately qualified native adoption.'
+  - 'Preserve foreign pinned source and recorded guard ownership; acquire guide path claims through coordinated scope partition before editing.'
+acceptance:
+  - id: A1
+    given: 'the actual guard decoder, dispatcher, analysis policy and retained private package behavior'
+    when: 'all four documents are reconciled'
+    then: 'execution cwd/shell/startup, mandatory write versus optional pin, command-specific exits and complete three-suite/six-file verification match source without native admission claims.'
+  - id: A2
+    given: 'the proposed final-launch execution boundary and reduced Codex producer'
+    when: 'architecture and operational guidance are read'
+    then: 'implemented analysis, proposed executor, unqualified final-launch/native canary/rollback and unchanged deployed runtime remain explicit.'
+  - id: A3
+    given: 'the committed four-file diff and original landing request'
+    when: 'root grounds independent review and existing source-owner feedback'
+    then: 'all four edits are included in coherent source landing with raw scoped checks and no deferred documentation debt.'
+observability:
+  - 'Retain exact committed diff, source coordinates, formatter/link checks and raw review feedback; no generated review report or native proof is inferred.'
+rollback:
+  - 'Revert the logical document change through the governed lane if actual source refutes its contracts.'
+non_functional: {}
+contracts: []
