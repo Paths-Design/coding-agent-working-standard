@@ -20,12 +20,41 @@ enum StoreProjectBinding {
     Bound,
 }
 
+// Both variants own their acquisition/cleanup observations. A completed wire
+// exchange can retain a stopped or failed acquisition; it grants no publication.
+#[cfg(feature = "sqlite-store")]
+type StoreSettlement = Result<
+    Box<caws_native::transcript_store::Acquisition<String>>,
+    Box<caws_native::transcript_store_wire::ServeError>,
+>;
+
+#[cfg(feature = "sqlite-store")]
+fn retain_store_result(
+    result: Result<
+        caws_native::transcript_store::Acquisition<String>,
+        caws_native::transcript_store_wire::ServeError,
+    >,
+    settlement: &mut Option<StoreSettlement>,
+) -> (StoreProjectBinding, Result<(), String>) {
+    let binding = match &result {
+        Err(error) if !error.original_project_bound() => StoreProjectBinding::Unbound,
+        _ => StoreProjectBinding::Bound,
+    };
+    let owned = result.map(Box::new).map_err(Box::new);
+    let status = owned
+        .as_ref()
+        .map(|_| ())
+        .map_err(|error| error.to_string());
+    *settlement = Some(owned);
+    (binding, status)
+}
+
 struct Failure {
     dispatched: bool,
     ready: Option<Box<protocol::Ready>>,
     message: String,
     #[cfg(feature = "sqlite-store")]
-    store_failure: Option<Box<caws_native::transcript_store_wire::ServeError>>,
+    store_settlement: Option<StoreSettlement>,
     #[cfg(feature = "sqlite-store")]
     store_project_binding: StoreProjectBinding,
 }
@@ -36,7 +65,7 @@ impl Failure {
             ready: None,
             message,
             #[cfg(feature = "sqlite-store")]
-            store_failure: None,
+            store_settlement: None,
             #[cfg(feature = "sqlite-store")]
             store_project_binding: StoreProjectBinding::NotApplicable,
         }
@@ -72,7 +101,7 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     let mut ready = None;
     let mut dispatched = false;
     #[cfg(feature = "sqlite-store")]
-    let mut store_failure = None;
+    let mut store_settlement = None;
     #[cfg(feature = "sqlite-store")]
     let mut store_project_binding = if caws_native::transcript_store_wire::supports_invocation(
         &config.surface,
@@ -117,24 +146,16 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                     }
                     store_attempted = true;
                     let context = ready.as_ref().ok_or("missing store readiness")?;
-                    if let Err(error) = caws_native::transcript_store_wire::serve(
+                    let result = caws_native::transcript_store_wire::serve(
                         &frame,
                         request.transcript_store_invocation(context, dispatched),
                         deadline,
                         || cancellation::check().is_err(),
                         &mut session,
-                    ) {
-                        store_project_binding = if error.original_project_bound() {
-                            StoreProjectBinding::Bound
-                        } else {
-                            StoreProjectBinding::Unbound
-                        };
-                        let message = error.to_string();
-                        store_failure = Some(Box::new(error));
-                        return Err(message);
-                    } else {
-                        store_project_binding = StoreProjectBinding::Bound;
-                    }
+                    );
+                    let (binding, status) = retain_store_result(result, &mut store_settlement);
+                    store_project_binding = binding;
+                    status?;
                 }
                 protocol::EngineFrame::SessionCacheRequest(frame) => {
                     if cache_attempted {
@@ -199,7 +220,7 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                 message.push_str(&format!("; cleanup: {error}"));
             }
             #[cfg(feature = "sqlite-store")]
-            if let Some(failure) = store_failure.as_mut()
+            if let Some(Err(failure)) = store_settlement.as_mut()
                 && let Err(error) = failure.retry_project_cleanup()
             {
                 message.push_str(&format!("; independent Git query cleanup: {error}"));
@@ -209,7 +230,7 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                 ready: ready.map(Box::new),
                 message,
                 #[cfg(feature = "sqlite-store")]
-                store_failure,
+                store_settlement,
                 #[cfg(feature = "sqlite-store")]
                 store_project_binding,
             });
@@ -332,13 +353,17 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             .as_bytes(),
         );
     }
+    // Keep completed source settlement through output, handoff, engine cleanup
+    // and diagnostic delivery. This remains frontend-local, not resident custody.
+    #[cfg(feature = "sqlite-store")]
+    let _store_settlement = store_settlement.as_ref();
     Ok(code)
 }
 fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
     // Borrow the settlement while Failure retains its opaque SQL owner through
     // the final output attempt. Display never consumes that owner.
     #[cfg(feature = "sqlite-store")]
-    let _store_settlement = error.store_failure.as_ref();
+    let _store_settlement = error.store_settlement.as_ref();
     let mut reason = format!(
         "CAWS native infrastructure failure ({}): {}. Checks did not complete; request was not retried.{}",
         if error.dispatched {
@@ -354,6 +379,16 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
         }
     );
     let mut block = pre || error.dispatched;
+    #[cfg(feature = "sqlite-store")]
+    if let Some(Ok(outcome)) = error.store_settlement.as_ref() {
+        // Report only finite settlement metadata, never SQL cell/error payloads.
+        reason.push_str(&format!(
+            " Completed store exchange retained: end={:?}; acquisitionFailed={}; rowsDelivered={}.",
+            outcome.end,
+            outcome.first_failure.is_some(),
+            outcome.metrics.rows_delivered,
+        ));
+    }
     if error.dispatched && stop {
         let budget_ready = error.ready.as_deref();
         #[cfg(feature = "sqlite-store")]
@@ -529,4 +564,34 @@ fn main() {
         Err(error) => fallback(error, event("pre_tool_use"), event("stop")),
     };
     std::process::exit(code.into());
+}
+
+#[cfg(all(test, feature = "sqlite-store"))]
+mod store_settlement_tests {
+    use super::*;
+    use caws_native::transcript_store_wire::ServeError;
+
+    #[test]
+    fn store_settlement_failure_retention_preserves_native_project_binding() {
+        for (error, bound) in [
+            (
+                ServeError::BeforeAcquisition("unbound-sentinel".into()),
+                false,
+            ),
+            (
+                ServeError::AfterProjectBinding("bound-sentinel".into()),
+                true,
+            ),
+        ] {
+            let expected = error.to_string();
+            let mut retained = None;
+            let (binding, status) = retain_store_result(Err(error), &mut retained);
+            assert_eq!(status, Err(expected.clone()));
+            assert_eq!(matches!(binding, StoreProjectBinding::Bound), bound);
+            assert_eq!(matches!(binding, StoreProjectBinding::Unbound), !bound);
+            let failure = retained.unwrap().unwrap_err();
+            assert_eq!(failure.to_string(), expected);
+            assert_eq!(failure.original_project_bound(), bound);
+        }
+    }
 }

@@ -17,6 +17,9 @@ use std::{
 mod collector;
 #[path = "invoke/session_cache.rs"]
 mod session_cache_tests;
+#[cfg(feature = "sqlite-store")]
+#[path = "invoke/store_settlement.rs"]
+mod store_settlement_tests;
 use collector::{PipeCapture, cleanup_execute_child, collection_outcome, set_nonblocking};
 
 static SERIAL: AtomicU64 = AtomicU64::new(0);

@@ -409,6 +409,18 @@ publication, later receipt serialization and actual renderer selection require
 their own integrated owner and evidence; encoded event bytes alone confer no
 publication, delivery or cutover claim.
 
+A completed wire exchange returns the complete owned acquisition rather than
+discarding it. Confirmed source close and a written CLOSED frame can accompany
+an exhausted, stopped or failed acquisition; the first acquisition failure and
+row metrics retain that distinction. The original frontend keeps this result
+through its remaining output, handoff and cleanup, including a later engine
+protocol failure. The additional completion metadata contains the end, a
+failure-presence flag and delivered-row count; it does not serialize the
+retained acquisition's cell or error payloads. This is frontend-local retention,
+not resident ownership, engine-consumption proof or an exhausted-and-settled
+publication permit. Moving acquisition and settlement into the surviving actor
+remains an integration obligation.
+
 ## Functional acceptance and proof
 
 Each parity claim names a preserved behavior and its dependency chain, not only

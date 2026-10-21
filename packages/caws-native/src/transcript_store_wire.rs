@@ -279,13 +279,16 @@ fn utc(seconds: i64) -> Result<Value, String> {
 
 /// Exactly one acquisition attempt is enforced by the outer pre-proposal loop.
 /// Errors never grant compatibility replay or publication of a partial result.
+/// Ok retains the complete acquisition after CLOSED was written and source
+/// close was confirmed. It can contain Stopped or Failed; it is not an
+/// exhausted-source assertion, engine-consumption receipt or publication grant.
 pub fn serve(
     bytes: &[u8],
     invocation: Invocation<'_>,
     deadline: Instant,
     is_cancelled: fn() -> bool,
     transport: &mut impl Transport,
-) -> Result<(), ServeError> {
+) -> Result<transcript_store::Acquisition<String>, ServeError> {
     if bytes.len() > MAX_REQUEST_BYTES {
         return Err("store request exceeds byte bound".into());
     }
@@ -484,7 +487,7 @@ pub fn serve(
                 outcome,
             ));
         }
-        Ok(())
+        Ok(outcome)
     })();
     result.map_err(ServeError::after_project_binding)
 }
@@ -640,7 +643,7 @@ mod tests {
         bytes: &[u8],
         invocation: Invocation<'_>,
         transport: &mut MemoryTransport,
-    ) -> Result<(), ServeError> {
+    ) -> Result<transcript_store::Acquisition<String>, ServeError> {
         serve(
             bytes,
             invocation,
@@ -694,12 +697,19 @@ mod tests {
         let mut utc_control = control("utc");
         utc_control["seconds"] = json!("0");
         let mut transport = transport(vec![utc_control, control("continue")]);
-        run(
+        let outcome = run(
             &fixture.request(),
             fixture.invocation(&payload, &digest),
             &mut transport,
         )
         .unwrap();
+        assert_eq!(outcome.end, transcript_store::End::Exhausted);
+        assert!(outcome.first_failure.is_none());
+        assert_eq!(outcome.metrics.rows_copied, 1);
+        assert_eq!(outcome.metrics.rows_delivered, 1);
+        assert!(matches!(outcome.cleanup.close, CleanupCall::Succeeded));
+        assert!(!outcome.cleanup.retained_uncertain);
+        assert!(outcome.retained.is_none());
         assert_eq!(transport.sent.len(), 3);
         assert_eq!(transport.sent[0]["schema"], ROW_SCHEMA);
         assert_eq!(
@@ -722,6 +732,69 @@ mod tests {
             transport.sent,
             Sha256::digest(&before)
         );
+    }
+    #[test]
+    fn transcript_store_completed_exchange_retains_stopped_acquisition() {
+        let fixture = Fixture::new();
+        let before = std::fs::read(&fixture.database).unwrap();
+        let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
+        let digest = fixture.digest();
+        let mut transport = transport(vec![control("stop")]);
+        let outcome = run(
+            &fixture.request(),
+            fixture.invocation(&payload, &digest),
+            &mut transport,
+        )
+        .unwrap();
+        assert_eq!(outcome.end, transcript_store::End::Stopped);
+        assert!(outcome.first_failure.is_none());
+        assert_eq!(outcome.metrics.rows_copied, 1);
+        assert_eq!(outcome.metrics.rows_delivered, 1);
+        assert!(source_closed(&outcome));
+        assert!(matches!(outcome.cleanup.close, CleanupCall::Succeeded));
+        assert!(outcome.retained.is_none());
+        assert_eq!(transport.sent.len(), 2);
+        assert_eq!(transport.sent[1]["schema"], CLOSED_SCHEMA);
+        assert_eq!(transport.sent[1]["end"], "stopped");
+        assert_eq!(transport.sent[1]["closed"], true);
+        assert_eq!(transport.sent[1]["failure"], Value::Null);
+        fixture.can_lock();
+        assert_eq!(std::fs::read(&fixture.database).unwrap(), before);
+    }
+    #[test]
+    fn transcript_store_completed_exchange_retains_failed_but_closed_acquisition() {
+        let fixture = Fixture::new();
+        let connection = rusqlite::Connection::open(&fixture.database).unwrap();
+        connection
+            .execute_batch("UPDATE part SET data=CAST(X'80' AS TEXT)")
+            .unwrap();
+        connection.close().unwrap();
+        let before = std::fs::read(&fixture.database).unwrap();
+        let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
+        let digest = fixture.digest();
+        let mut transport = transport(vec![]);
+        let outcome = run(
+            &fixture.request(),
+            fixture.invocation(&payload, &digest),
+            &mut transport,
+        )
+        .unwrap();
+        assert_eq!(outcome.end, transcript_store::End::Failed);
+        assert!(
+            matches!(&outcome.first_failure, Some(transcript_store::Failure::Text(failure))
+            if failure.raw == [0x80] && failure.valid_up_to == 0 && failure.error_len == Some(1))
+        );
+        assert_eq!(outcome.metrics.rows_delivered, 0);
+        assert!(source_closed(&outcome));
+        assert!(matches!(outcome.cleanup.close, CleanupCall::Succeeded));
+        assert!(outcome.retained.is_none());
+        assert_eq!(transport.sent.len(), 1);
+        assert_eq!(transport.sent[0]["schema"], CLOSED_SCHEMA);
+        assert_eq!(transport.sent[0]["end"], "failed");
+        assert_eq!(transport.sent[0]["closed"], true);
+        assert!(!transport.sent[0]["failure"].is_null());
+        fixture.can_lock();
+        assert_eq!(std::fs::read(&fixture.database).unwrap(), before);
     }
     #[test]
     fn transcript_store_agreeing_foreign_engine_root_refuses_before_database_resolution() {

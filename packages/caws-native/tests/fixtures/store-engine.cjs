@@ -140,6 +140,8 @@ async function main() {
         JSON.stringify(observation) + '\n',
         { flag: 'wx', mode: 0o600 }
       );
+    if (process.env.CAWS_NATIVE_STORE_REQUEST_MODE === 'fail-after-store')
+      throw Error('controlled failure after native store settlement');
     const token = crypto.randomUUID();
     await write({
       schema: 'caws.runtime.proposal.v2',
