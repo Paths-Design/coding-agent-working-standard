@@ -37,6 +37,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
 const nativePath = (value: string): boolean =>
   path.isAbsolute(value) &&
   path.normalize(value) === value &&
+  (value === path.parse(value).root || !value.endsWith(path.sep)) &&
   // Match native root transport; shell command substitution also strips final LF.
   Buffer.byteLength(value, 'utf8') <= 4096 &&
   !/[\x00-\x1f\x7f-\x9f]/.test(value) &&

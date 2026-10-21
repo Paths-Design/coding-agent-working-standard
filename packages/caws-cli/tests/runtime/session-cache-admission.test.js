@@ -45,10 +45,11 @@ afterAll(() => {
     path.join(artifactRoot, 'admission-decisions.json'),
     JSON.stringify(observations, null, 2) + '\n'
   );
-  fs.writeFileSync(
-    path.join(artifactRoot, 'read-only-state.json'),
-    JSON.stringify(stateObservation, null, 2) + '\n'
-  );
+  if (stateObservation)
+    fs.writeFileSync(
+      path.join(artifactRoot, 'read-only-state.json'),
+      JSON.stringify(stateObservation, null, 2) + '\n'
+    );
 });
 const selectedFile = (name) => selection.libraries[name].path;
 const prefixFiles = () => [
@@ -584,6 +585,16 @@ test('native root byte limit is checked before filesystem interpretation', () =>
   });
   expect(qualify()).toBe(false);
   expect(rootReads).toBe(0);
+});
+
+test('non-root trailing slash declines before native root transport', () => {
+  expect(qualify()).toBe(true);
+  selection.canonical = checkout + '/';
+  expect(fs.statSync(selection.canonical).isDirectory()).toBe(true);
+  expect(qualify()).toBe(false);
+  selection.canonical = checkout;
+  payload({ tool_name: 'Bash', cwd: checkout + '/', tool_input: { command: 'printf fixture' } });
+  expect(qualify()).toBe(false);
 });
 
 test('qualification does not mutate frozen inputs, write cache state or spawn a process', () => {
