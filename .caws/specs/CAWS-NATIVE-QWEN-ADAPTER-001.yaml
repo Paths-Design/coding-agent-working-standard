@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-QWEN-ADAPTER-001
 title: 'Historical Qwen transcript row adapter'
 mode: feature
-lifecycle_state: active
-worktree: native-qwen-adapter
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded Qwen profile component39941e8c:35 checked sources/27 identical compiled JS per Node18/22,104 focused tests0skip each,799 ordered reference comparisons each with0mismatch,16 meaningful targeted fault kills and complete/partial/empty raw occurrence artifacts. Root019 rederived source/Git/raw identities; AC A1-A3/events9753-9755 dual readback. Independent readonly review grounded. Five gates pass;doctor0E3W4I. Parent retains ordered registry, acquisition profile, cache/writer, installation/native/full workload/cutover; no Python retirement or complete mutation score.'
 created_at: '2026-10-20T23:49:29.988Z'
-updated_at: '2026-10-20T23:49:51.050Z'
+updated_at: '2026-10-21T00:41:24.709Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
