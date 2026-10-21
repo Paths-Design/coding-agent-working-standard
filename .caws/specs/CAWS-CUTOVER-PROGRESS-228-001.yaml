@@ -33,3 +33,9 @@ rollback:
   - 'Revert only the logical ledger change through governed work.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed candidate ddfe5dcb makes the inclusive row coverage reproducible: 37 unique feature rows, 33 qualifying, exclusions R01/R19/R22/R27. Corrected read-only consistency check and formatter/diff checks exit 0; earlier checker failures are preserved and diagnosed as counting four index rows again. Scoped gates pass and doctor exits 0 with 0 errors, 3 warnings, 4 informational findings. Independent committed review directly verifies new E228-E230 event/commit/original command relations and finds no actionable defect. Root grounds review at the canonical events, merge parents and raw owner transcript. Main/source publication is not yet established; parent remains 0/8 and installed runtime unchanged. Commit verification checks reachability, not underlying runtime semantics."
+    recorded_at: "2026-10-21T22:11:16.815Z"
+    commit_sha: ddfe5dcb01e43bff48a3d5ea5380e60740e2a152
