@@ -47,3 +47,9 @@ contracts:
   - name: 'store-timestamp-stages'
     type: api
     path: 'packages/caws-cli/src/transcripts/store-timestamp.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-timestamp; Exact candidate3405ada0: committed-actual-node18-floor.json, committed-actual-node18-20-8.json and committed-actual-node22.json independently compare3673 cells, quotient bits and normalized pairs with zero differences; reference/results.json pins CPython3.11.13/actual gmtime before-after. INTEGER Number-first mutant1391 differences; half-up20 and missing-borrow1080. Explicit nonnumeric null and i64/time_t failures; finite sample, not exhaustive binary64 proof."
+    recorded_at: "2026-10-21T12:58:18.102Z"
+    commit_sha: "3405ada0fce0ff86ba28d7239077be789cb99e49"
