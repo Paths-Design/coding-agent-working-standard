@@ -29,6 +29,74 @@ pub const MAX_ROWS: u64 = 4096;
 pub const MAX_CELL_BYTES: usize = 256 * 1024;
 pub const MAX_TOTAL_CELL_BYTES: usize = 16 * 1024 * 1024;
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum ServeFailurePhase {
+    Exchange,
+    ClosedEncoding,
+    ClosedWrite,
+    UnconfirmedClose,
+}
+
+/// An acquired source remains owned even when the engine transport is lost.
+#[derive(Debug)]
+pub enum ServeError {
+    BeforeAcquisition(String),
+    AfterAcquisition {
+        phase: ServeFailurePhase,
+        message: String,
+        outcome: Box<transcript_store::Acquisition<String>>,
+    },
+}
+
+impl ServeError {
+    pub(crate) fn settled(
+        phase: ServeFailurePhase,
+        message: String,
+        outcome: transcript_store::Acquisition<String>,
+    ) -> Self {
+        Self::AfterAcquisition {
+            phase,
+            message,
+            outcome: Box::new(outcome),
+        }
+    }
+}
+
+impl From<String> for ServeError {
+    fn from(message: String) -> Self {
+        Self::BeforeAcquisition(message)
+    }
+}
+impl From<&str> for ServeError {
+    fn from(message: &str) -> Self {
+        Self::BeforeAcquisition(message.into())
+    }
+}
+impl std::fmt::Display for ServeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BeforeAcquisition(message) => formatter.write_str(message),
+            Self::AfterAcquisition {
+                phase,
+                message,
+                outcome,
+            } => write!(
+                formatter,
+                "store {phase:?}: {message}; acquisition: {:?}; SQL cleanup: {:?}; sourceClosed={}",
+                outcome.first_failure,
+                outcome.cleanup,
+                source_closed(outcome)
+            ),
+        }
+    }
+}
+
+fn source_closed(outcome: &transcript_store::Acquisition<String>) -> bool {
+    matches!(outcome.cleanup.close, CleanupCall::Succeeded)
+        && !outcome.cleanup.retained_uncertain
+        && outcome.retained.is_none()
+}
+
 /// The frontend owns these observations; they are not engine frame fields.
 pub struct Invocation<'a> {
     pub id: &'a str,
@@ -182,7 +250,7 @@ pub fn serve(
     deadline: Instant,
     is_cancelled: fn() -> bool,
     transport: &mut impl Transport,
-) -> Result<(), String> {
+) -> Result<(), ServeError> {
     if bytes.len() > MAX_REQUEST_BYTES {
         return Err("store request exceeds byte bound".into());
     }
@@ -317,10 +385,13 @@ pub fn serve(
         },
     );
     if let Some(error) = exchange_error {
-        return Err(error);
+        return Err(ServeError::settled(
+            ServeFailurePhase::Exchange,
+            error,
+            outcome,
+        ));
     }
-    let closed = matches!(outcome.cleanup.close, CleanupCall::Succeeded)
-        && !outcome.cleanup.retained_uncertain;
+    let closed = source_closed(&outcome);
     let mut frame = common(CLOSED_SCHEMA);
     frame["closed"] = json!(closed);
     frame["end"] = json!(match outcome.end {
@@ -337,9 +408,29 @@ pub fn serve(
         "busyUnregistered":format!("{:?}",outcome.cleanup.busy_unregistered),
         "finalized":format!("{:?}",outcome.cleanup.finalized),"rollback":format!("{:?}",outcome.cleanup.rollback)});
     frame["metrics"] = json!({"rowsCopied":outcome.metrics.rows_copied,"rowsDelivered":outcome.metrics.rows_delivered,"cellBytes":outcome.metrics.accounted_cell_bytes});
-    transport.write(&encode(frame)?, deadline)?;
+    let bytes = match encode(frame) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Err(ServeError::settled(
+                ServeFailurePhase::ClosedEncoding,
+                error,
+                outcome,
+            ));
+        }
+    };
+    if let Err(error) = transport.write(&bytes, deadline) {
+        return Err(ServeError::settled(
+            ServeFailurePhase::ClosedWrite,
+            error,
+            outcome,
+        ));
+    }
     if !closed {
-        return Err("store connection cleanup remains uncertain".into());
+        return Err(ServeError::settled(
+            ServeFailurePhase::UnconfirmedClose,
+            "store connection cleanup remains uncertain".into(),
+            outcome,
+        ));
     }
     Ok(())
 }
@@ -460,7 +551,7 @@ mod tests {
         bytes: &[u8],
         invocation: Invocation<'_>,
         transport: &mut MemoryTransport,
-    ) -> Result<(), String> {
+    ) -> Result<(), ServeError> {
         serve(
             bytes,
             invocation,
@@ -498,7 +589,7 @@ mod tests {
             )
             .unwrap_err();
             assert!(
-                !error.contains("path resolution"),
+                matches!(&error, ServeError::BeforeAcquisition(message) if !message.contains("path resolution")),
                 "binding must fail before attempting source open: {error}"
             );
             assert!(transport.sent.is_empty());
@@ -575,14 +666,21 @@ mod tests {
                 }
             };
             let mut transport = transport(controls);
+            let error = run(
+                &request(),
+                invocation(&payload, Some(fixture.path()), &digest),
+                &mut transport,
+            )
+            .unwrap_err();
+            let ServeError::AfterAcquisition { phase, outcome, .. } = error else {
+                panic!("control failure lost acquisition");
+            };
+            assert_eq!(phase, ServeFailurePhase::Exchange);
             assert!(
-                run(
-                    &request(),
-                    invocation(&payload, Some(fixture.path()), &digest),
-                    &mut transport
-                )
-                .is_err()
+                matches!(&outcome.first_failure, Some(transcript_store::Failure::Transport(message)) if !message.is_empty())
             );
+            assert!(source_closed(&outcome));
+            assert!(matches!(outcome.cleanup.rollback, CleanupCall::Succeeded));
             assert_eq!(transport.sent[0]["schema"], ROW_SCHEMA);
             assert!(
                 !transport
@@ -593,6 +691,55 @@ mod tests {
             fixture.can_lock();
         }
     }
+    #[test]
+    fn transcript_store_closed_delivery_failure_retains_successful_sql_close() {
+        struct FailClosed(MemoryTransport);
+        impl Transport for FailClosed {
+            fn write(&mut self, bytes: &[u8], deadline: Instant) -> Result<(), String> {
+                let frame: Value = serde_json::from_slice(bytes).unwrap();
+                if frame["schema"] == CLOSED_SCHEMA {
+                    return Err("closed-delivery-sentinel".into());
+                }
+                self.0.write(bytes, deadline)
+            }
+            fn read(&mut self, deadline: Instant) -> Result<Vec<u8>, String> {
+                self.0.read(deadline)
+            }
+            fn credit(&mut self, bytes: usize) -> Result<(), String> {
+                self.0.credit(bytes)
+            }
+        }
+        let fixture = Fixture::new();
+        let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
+        let digest = format!("{:x}", Sha256::digest(b"/private/tmp/store-root"));
+        let mut transport = FailClosed(transport(vec![control("continue")]));
+        let error = serve(
+            &request(),
+            invocation(&payload, Some(fixture.path()), &digest),
+            Instant::now() + Duration::from_secs(3),
+            never_cancel,
+            &mut transport,
+        )
+        .unwrap_err();
+        let ServeError::AfterAcquisition {
+            phase,
+            message,
+            outcome,
+        } = error
+        else {
+            panic!("lost settlement");
+        };
+        assert_eq!(phase, ServeFailurePhase::ClosedWrite);
+        assert_eq!(message, "closed-delivery-sentinel");
+        assert_eq!(outcome.end, transcript_store::End::Exhausted);
+        assert!(outcome.first_failure.is_none());
+        assert!(source_closed(&outcome));
+        assert_eq!(outcome.metrics.rows_delivered, 1);
+        assert_eq!(transport.0.sent.len(), 1);
+        assert_eq!(transport.0.sent[0]["schema"], ROW_SCHEMA);
+        fixture.can_lock();
+    }
+
     #[test]
     fn transcript_store_native_calendar_keeps_out_of_datetime_year_and_real_os_error() {
         let year10000 = utc(253402300800).unwrap();

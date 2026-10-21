@@ -368,10 +368,14 @@ hard OS-I/O deadline or complete SQLite-memory limit.
 Reconstruction preserves storage classes, numeric/codepoint profiles and failure
 order. It checks native settlement independently of IteratorClose and retains
 the first operation failure, separate cleanup detail and confirmed-close state.
-Event encoding follows reconstruction and close acknowledgment. Atomic
-projection publication, later receipt serialization and actual renderer
-selection require their own integrated owner and evidence; encoded event bytes
-alone confer no publication, delivery or cutover claim.
+Native exchange and CLOSED-delivery errors retain the complete acquisition
+settlement, including any uncertain cleanup owner, through the frontend's final
+error delivery. Failure to deliver CLOSED does not erase an observed SQL close;
+successful refusal does not establish closure of an uncertain connection. Event
+encoding follows reconstruction and close acknowledgment. Atomic projection
+publication, later receipt serialization and actual renderer selection require
+their own integrated owner and evidence; encoded event bytes alone confer no
+publication, delivery or cutover claim.
 
 ## Functional acceptance and proof
 

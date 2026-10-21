@@ -203,7 +203,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration                                                         | TS configuration module                                                    | selected-stock root integration and public-control repair exercised, E119                                                                       | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim                                                                                                                                    |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                          | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                                       |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                              | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate          |
-| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | bounded native acquisition, row/UTC transport and store-AST/event pipeline exercised, E211; production store unreplaced                         | Root owns atomic publication, subsequent receipt/delivery, ordinary renderer consumption and remaining profile/path/WAL/cleanup qualification. E209 is a frozen prior release build; E211 is a finite debug native-entry fixture, with independent failed-cleanup state retained. Complete consumer integration, changed-source release packaging and adoption remain unqualified.                                            |
+| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | bounded native acquisition, row/UTC transport and store-AST/event pipeline exercised, E211/E212; production store unreplaced                    | Root owns original output-project binding, publication under compatible writer custody, subsequent receipt/delivery and ordinary renderer consumption. E212 retains settlement through failed exchange/delivery. E213 grounds the root-authority and recursive-custody prerequisites; changed-source release, profile/path/WAL/cleanup qualification and adoption remain open.                                                |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | lossless/common foundation and ordered registry imported and exercised, E157/E192; production consumer unreplaced                               | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                     |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                           | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                    | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
@@ -5169,6 +5169,74 @@ Additional bounded evidence and unresolved dependencies:
   release qualification of changed source or installation. Production R09/R18,
   32/37 qualifying partial coverage and0/8 parent acceptance remain open.
 
+- E212: Native post-acquisition errors preserve their owned settlement through
+  frontend error delivery. The row-exchange branch previously returned only its
+  transport string after acquisition had independently observed SQL cleanup;
+  failed CLOSED encoding/delivery had the same ownership-loss boundary. A typed
+  phase/message plus boxed acquisition retains the first operation failure, each
+  cleanup observation and any opaque uncertain connection owner. SQL closure is
+  derived separately from delivery and requires successful close, no retained
+  uncertainty and no retained owner. The frontend's failure owns this error
+  through its final output attempt. This does not establish an OS close
+  succeeded when the retained observation says otherwise.
+
+  Sixteen focused SQLite/wire controls pass in fresh `manual-test-06`, including
+  real row-control failures, failed CLOSED delivery after successful SQL close,
+  and exact independent transport/rollback sentinels across the typed boundary.
+  An injected uncertain settlement retains a real private in-memory connection
+  and its cleanup-only retry. That control tests ownership transfer, not an
+  actual OS close failure. Strict feature-on Clippy, four binary protocol
+  controls and feature-off identity refusal pass. The preceding Clippy attempts
+  at160 and128-byte frontend errors remain retained; boxing readiness and the
+  settlement repairs the representation without suppressing the warning.
+
+  Final coordinator `build-06` completes all six tools. Native SHA256 is
+  `ff1e92297d308950c4f9b79ea9ccddb0ea9b3e5d88bdb7683ce5ea016e15fa89`; completion
+  SHA256 is `4f5d0a7e28c80f9388a5c9f65c0d1002b87428d9cdad52279ec38dc9441dc16b`.
+  Its `store-replay-04` repeats the44 retained cases against this candidate: 13
+  exact ordinary event streams,29 expected failures and two BLOB event-only
+  comparisons pass within E211's limits. Summary SHA256 is
+  `26cb54be4925d9bf0e2ee38ef341b22e25cee139a2676ef20e135f148be05998`. Earlier
+  builds04/05 and replay03 remain historical attempts, not final-source
+  qualification. Raw commands, snapshots, channels and checks are retained under
+  root `native-store-acquisition-draft/`. No publication, stock renderer,
+  OS-fault, release/adoption or whole-runtime claim follows. Coverage32/37 and
+  parent acceptance0/8 do not advance.
+
+- E213: Human-authorized coordination reaches the existing shell-analysis owner,
+  chat `01a151c0-4722-76a0-9814-eb680a4be9b2`; its archived chat is restored to
+  deliver the request. The owner explicitly accepts E185's guard concern under
+  `CAWS-SHELL-ANALYSIS-001/A6`, preserving its clean4bde1f49 lane. Root reads
+  the retained probe source and concrete deployed/parent/held observations:
+  benign quoted Node arrow2/2/0, same-project foreign Node write0/0/0,
+  equivalent shell write2/2/2. The guard invocations consume inert command text
+  under synthetic Bash context; submitted programs are not executed. The initial
+  missing-parser attempt is separate. The report at the owner's
+  `guard-coordination-20261021/packaged-observations.json` hashes to
+  `65bd35f940ff1654866b23992c375d02cf6fd8940e8509f3f79fce6672466017`. Root reads
+  back A6 FAIL in both the spec and `ac_recorded` event10189. Accepted remaining
+  work is a bounded interpreter effect contract/profile, preserving real write
+  ownership checks and distinguishing read operands; body masking or all-path
+  hints cannot establish that result. Trusted final launch, effective identity
+  and complete routing remain separate adoption prerequisites. This is accepted
+  unfinished work, not cutover clearance.
+
+  Publication preflight grounds two additional integration obligations in
+  source. `protocol::Request` captures caller cwd/environment/payload, whereas
+  the store's root/digest agreement is between engine statements;
+  `session_cache` explicitly disclaims independent Git/root resolution. A store
+  publication owner must bind its fixed session leaf to an original project
+  observation, preserving the selected Git/common-directory mapping.
+  `render_owner::Actor` holds writer custody across backend reuse until actual
+  retirement/settlement. A separate publisher cannot acquire that lock and
+  invoke the actor recursively, or release it before the renderer opens the
+  shared projection. Publication therefore needs a separate store permit under
+  the compatible existing owner, or truly retained immutable input with
+  path-derived renderer behavior preserved. Exhausted success, stopped/failed
+  but closed, publication, later receipt encoding and delivery are distinct
+  states. These are inspected prerequisites, not implemented publication.
+  R09/R18, coverage32/37 and parent acceptance0/8 remain open.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5272,9 +5340,11 @@ progress and does not replace that transaction or its event readback.
    E177's earlier cleanup do not establish this combined result. Preserve
    original supplied-session identity without borrowing later parser effects.
 3. Resolve the E185 guard/effect boundary with the existing shell-analysis
-   owner; its reserved source and failed ownership control remain obligations.
-   Keep the refused CLI inventory unexecuted pending a supported resolution; do
-   not infer an attempted foreign write from the refusal alone.
+   owner, which explicitly accepts the unfinished repair in E213. Its A6 FAIL,
+   reserved source, interpreter effect profile and trusted-launch dependencies
+   remain obligations; acceptance of the handoff does not close the hold. Keep
+   the refused CLI inventory unexecuted pending a supported resolution; do not
+   infer an attempted foreign write from the refusal alone.
 4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
    target, embedded-member checks and four direct build/consumer integrations.
    E209 qualifies one frozen current-host release build; ordinary consumer
@@ -5282,22 +5352,28 @@ progress and does not replace that transaction or its event readback.
    Rust-extra provenance and the open full toolchain/SDK boundary. E211
    implements bounded native fixed-query acquisition, row/UTC transport,
    store-AST reconstruction and event encoding through a native entry fixture.
-   Finish committed-candidate review, then implement atomic projection
-   publication followed by receipt serialization/delivery as distinct outcomes.
-   E210 requires retaining publication truth even when later receipt encoding
-   fails; no failed invocation may select an old projection. Connect this owner
-   to the actual session-log renderer consumer while preserving normalization,
-   selected overrides and E165/E166 source/profile controls. E202/E206 component
-   imports and E208–E211 finite observations do not close complete native
-   calendar/error/path/profile behavior, WAL, asynchronous cleanup, release
-   packaging or ordinary consumer parity. R09's production consumer and R18
-   remain unreplaced.
+   E212 repairs the source-grounded error/cleanup custody gap from candidate
+   inspection and retains exact candidate checks. Next bind the output project
+   to original invocation observations, preserving selected Git/common-dir
+   resolution. Add a single-use exhausted-and-settled store publication permit;
+   generic confirmed close does not grant one. Integrate atomic projection
+   publication under compatible continuous writer custody before the actual
+   renderer opens its source, followed by receipt serialization/delivery as
+   distinct outcomes. E213 records why a separate recursively acquired publisher
+   lock or an early unlock is insufficient. E210 requires retaining publication
+   truth even when later receipt encoding fails; no failed invocation may select
+   an old projection. Connect this owner to the actual session-log renderer
+   consumer while preserving normalization, selected overrides and E165/E166
+   source/profile controls. E202/E206 component imports and E208–E213 finite
+   observations do not close complete native calendar/error/path/profile
+   behavior, WAL, asynchronous cleanup, release packaging or ordinary consumer
+   parity. R09's production consumer and R18 remain unreplaced.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E211 retain the historical candidates, failures and bounded observations;
+E167–E213 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.

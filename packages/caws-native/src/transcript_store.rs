@@ -1268,4 +1268,82 @@ mod tests {
         assert!(matches!(outcome.cleanup.rollback, CleanupCall::Succeeded));
         assert!(matches!(outcome.cleanup.close, CleanupCall::Succeeded));
     }
+
+    #[test]
+    fn transcript_store_wire_failure_retains_independent_cleanup_and_owner() {
+        use crate::transcript_store_wire::{ServeError, ServeFailurePhase};
+        // Inject settlement observations at the error-transfer boundary. The
+        // connection is real; this does not simulate an OS close failure.
+        for uncertain in [false, true] {
+            let owner = uncertain.then(|| RetainedConnection {
+                connection: Some(Connection::open_in_memory().unwrap()),
+                control: None,
+            });
+            let outcome = Acquisition {
+                end: End::Failed,
+                first_failure: Some(Failure::Transport("primary-read-sentinel".into())),
+                cleanup: Cleanup {
+                    progress_unregistered: true,
+                    busy_unregistered: CleanupCall::Succeeded,
+                    finalized: CleanupCall::Succeeded,
+                    rollback: CleanupCall::Failed(SqlFailure {
+                        phase: "rollback",
+                        primary_code: Some(10),
+                        extended_code: Some(10),
+                        message: "independent-rollback-sentinel".into(),
+                    }),
+                    close: if uncertain {
+                        CleanupCall::Failed(SqlFailure {
+                            phase: "close",
+                            primary_code: Some(5),
+                            extended_code: Some(5),
+                            message: "independent-close-sentinel".into(),
+                        })
+                    } else {
+                        CleanupCall::Succeeded
+                    },
+                    retained_uncertain: uncertain,
+                },
+                metrics: Metrics::default(),
+                retained: owner,
+            };
+            let error = ServeError::settled(
+                ServeFailurePhase::Exchange,
+                "read-boundary-sentinel".into(),
+                outcome,
+            );
+            let diagnostic = error.to_string();
+            assert!(diagnostic.contains("primary-read-sentinel"));
+            assert!(diagnostic.contains("independent-rollback-sentinel"));
+            assert!(diagnostic.contains(if uncertain {
+                "sourceClosed=false"
+            } else {
+                "sourceClosed=true"
+            }));
+            let ServeError::AfterAcquisition {
+                phase,
+                message,
+                mut outcome,
+            } = error
+            else {
+                panic!("lost settlement");
+            };
+            assert_eq!(phase, ServeFailurePhase::Exchange);
+            assert_eq!(message, "read-boundary-sentinel");
+            assert!(
+                matches!(&outcome.first_failure, Some(Failure::Transport(message)) if message == "primary-read-sentinel")
+            );
+            assert!(
+                matches!(&outcome.cleanup.rollback, CleanupCall::Failed(error) if error.message == "independent-rollback-sentinel")
+            );
+            assert_eq!(outcome.retained.is_some(), uncertain);
+            if uncertain {
+                assert!(diagnostic.contains("independent-close-sentinel"));
+                let owner = outcome.retained.as_mut().expect("uncertain owner retained");
+                assert!(owner.connection.is_some());
+                owner.retry_close().unwrap();
+                assert!(owner.connection.is_none());
+            }
+        }
+    }
 }

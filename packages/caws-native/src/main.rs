@@ -14,8 +14,10 @@ use std::time::{Duration, Instant};
 
 struct Failure {
     dispatched: bool,
-    ready: Option<protocol::Ready>,
+    ready: Option<Box<protocol::Ready>>,
     message: String,
+    #[cfg(feature = "sqlite-store")]
+    store_failure: Option<Box<caws_native::transcript_store_wire::ServeError>>,
 }
 impl Failure {
     fn configuration(message: String) -> Self {
@@ -23,6 +25,8 @@ impl Failure {
             dispatched: false,
             ready: None,
             message,
+            #[cfg(feature = "sqlite-store")]
+            store_failure: None,
         }
     }
 }
@@ -55,6 +59,8 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
         runner::Session::start(config, &request.id, deadline).map_err(Failure::configuration)?;
     let mut ready = None;
     let mut dispatched = false;
+    #[cfg(feature = "sqlite-store")]
+    let mut store_failure = None;
     let proposal = (|| {
         session.send(&bytes, deadline)?;
         ready = Some(
@@ -89,13 +95,17 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                     }
                     store_attempted = true;
                     let context = ready.as_ref().ok_or("missing store readiness")?;
-                    caws_native::transcript_store_wire::serve(
+                    if let Err(error) = caws_native::transcript_store_wire::serve(
                         &frame,
                         request.transcript_store_invocation(context, dispatched),
                         deadline,
                         || cancellation::check().is_err(),
                         &mut session,
-                    )?;
+                    ) {
+                        let message = error.to_string();
+                        store_failure = Some(Box::new(error));
+                        return Err(message);
+                    }
                 }
                 protocol::EngineFrame::SessionCacheRequest(frame) => {
                     if cache_attempted {
@@ -161,8 +171,10 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             }
             return Err(Failure {
                 dispatched,
-                ready,
+                ready: ready.map(Box::new),
                 message,
+                #[cfg(feature = "sqlite-store")]
+                store_failure,
             });
         }
     };
@@ -286,6 +298,10 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     Ok(code)
 }
 fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
+    // Borrow the settlement while Failure retains its opaque SQL owner through
+    // the final output attempt. Display never consumes that owner.
+    #[cfg(feature = "sqlite-store")]
+    let _store_settlement = error.store_failure.as_ref();
     let mut reason = format!(
         "CAWS native infrastructure failure ({}): {}. Checks did not complete; request was not retried.{}",
         if error.dispatched {
@@ -303,7 +319,7 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
     let mut block = pre || error.dispatched;
     if error.dispatched && stop {
         match charge(
-            error.ready.as_ref(),
+            error.ready.as_deref(),
             Instant::now() + Duration::from_millis(100),
         ) {
             Ok(Charge::Refuse) => {}
