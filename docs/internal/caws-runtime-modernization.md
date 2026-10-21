@@ -188,7 +188,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration                                                         | TS configuration module                                                    | selected-stock root integration and public-control repair exercised, E119                                                                       | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim                                                                                                                                    |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                          | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                                       |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                              | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate          |
-| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | unreplaced; fixed-query reference contract investigated, E184                                                                                   | Root owns dependency/profile choice, complete bounded acquisition, snapshot/cancellation, lossless SQL values, projection/publication custody and actual renderer consumption                                                                                                                                                                                                                                                 |
+| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | unreplaced; fixed-query contract and pinned static-link feasibility investigated, E184/E193                                                     | Root owns dependency/profile choice, complete bounded acquisition, snapshot/cancellation, lossless SQL values, projection/publication custody and actual renderer consumption                                                                                                                                                                                                                                                 |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | lossless/common foundation and ordered registry imported and exercised, E157/E192; production consumer unreplaced                               | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                     |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                           | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                    | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
@@ -4447,6 +4447,49 @@ Additional bounded evidence and unresolved dependencies:
   R09/R18 and production consumer integration remain open; coverage stays31/37,
   parent acceptance0/8 and the full goal remains active.
 
+- E193: Root retains the remaining R09 work after inspecting peer packet
+  `native-sqlite-dependency-choice/dependency-choice.json`, SHA256
+  `46cc71688b6a3ec2dc4c3083c95b80eb2471539d009e2d3e9b8fe64ad18d16e0`, and its
+  corrected static-build/source excerpts. Root independently reads the
+  [immutable upstream sys build](https://github.com/rusqlite/rusqlite/blob/e88f112bef7899234a497baed5cc3c3d553deeb8/libsqlite3-sys/build.rs)
+  and [SQLite release metadata](https://sqlite.org/releaselog/3_53_4.html).
+  Explicit LIB_DIR still probes pkg-config; prefix selection alone does not
+  establish archive custody. Root chooses separately pinned static SQLite3.53.4
+  with nonbundled rusqlite0.40.2/libsqlite3-sys0.38.2 and their stable ABI
+  subset for a bounded macOS arm64 investigation. Rust dependencies/features and
+  Cargo linkage remain unchanged.
+
+  Root acquires the official HTTPS amalgamation archive once (HTTP200, 2,946,650
+  bytes). `native-sqlite-source/source-readback.json` records archive SHA256
+  `1e71ddf93849c6a6ecf58b827c0692073d2dd7ee40196158068f7b29f422e87d`; the
+  actual9,515,341-byte C file matches the official SHA3-256
+  `67f423e9ebbbdc473cbc4772c872ee6b89f31fde4ed0279a5c25d5f65c043a16`. Header
+  SHA256 is pinned from that archive; it is not byte-identical to the embedded
+  header, and `embedded-header.diff` retains the differences. The initial
+  wrong-delimiter probe failure remains separately retained; neither source nor
+  expected C hash changes to obtain success.
+
+  `native-sqlite-source/static-probe/commands.json` retains11 successful
+  commands, minimal child environment and raw streams. Actual Clang21/SDK27
+  compilation targets arm64-apple-macos11.0 with thread safety and API armor
+  enabled and extension loading omitted. The1,541,032-byte archive SHA256 is
+  `5b6d8787f9ae2e1db478d4a67f18a7efda17f340ce197d8e39cac84666241693`. The
+  private identity executable reports3.53.4, source ID hash
+  bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b33e4e09459bcc and
+  threadsafe1. Otool lists only libSystem; nm defines sqlite3_sourceid in the
+  executable. Its build metadata records minos11/sdk27. `manifest.json` pins
+  observed tools, SDK settings, flags and resulting files; it does not close the
+  complete SDK/toolchain image or prove execution on older/other targets.
+
+  This is actual C static-link feasibility, not Rust wrapper/native acquisition,
+  SQL execution, snapshot/cancellation, projection, cache/writer/renderer or
+  installed parity. The reference Python version-only SQLite observation lacks
+  source ID/options/image custody and concurrent-writer evidence. A separately
+  labeled disposable reference probe is assigned; a durable typed builder
+  proposal must bind reviewed inputs and refuse ambient fallback before parent
+  Cargo integration. Root retains those outcomes, R09/R18 remain unreplaced,
+  coverage stays31/37 and parent acceptance0/8.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4553,16 +4596,18 @@ progress and does not replace that transaction or its event readback.
    owner; its reserved source and failed ownership control remain obligations.
    Keep the refused CLI inventory unexecuted pending a supported resolution; do
    not infer an attempted foreign write from the refusal alone.
-4. Integrate the imported adapter components and their registry with native
-   transcript acquisition and transactional rendering/writing, and retain
-   E165/E166 source/profile controls. R09 and R18 remain unreplaced; standalone
-   registry composition does not discharge production consumer parity.
+4. Turn E193 static-link feasibility into a durable pinned build and Cargo link
+   guard, then implement native fixed-query acquisition with snapshot,
+   cancellation and lossless SQL-value custody. Connect the imported registry to
+   transactional rendering/writing and retain E165/E166 source/profile controls.
+   R09 and R18 remain unreplaced; standalone registry composition does not
+   discharge production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E192 retain the historical candidates, failures and bounded observations;
+E167–E193 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is31/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
