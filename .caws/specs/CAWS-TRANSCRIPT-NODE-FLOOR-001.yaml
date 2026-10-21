@@ -41,3 +41,9 @@ non_functional: {}
 contracts:
   - name: 'transcript-runtime-floor'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Actual retained Node18.0.0 executed the private unpacked package floor entry with exit0; executable SHA1f38ec2a91df1d1db0f258872737cdfce65702a4e810c5fb7fd0a40d34f544fa and argv recorded in floor-run/receipt.json. Wrong Node22 and missing module each exit1 with exact stderr and no output directory. Root inspected raw commands and files under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-node-floor/candidate-02. Commit verify checks reachability only; external artifact and execution claims were directly inspected, not re-executed by the CLI."
+    recorded_at: "2026-10-21T21:35:58.651Z"
+    commit_sha: "41a39f6694c3453c1ea90eb3c360023ccff3b11d"
