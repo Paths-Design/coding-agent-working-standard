@@ -39,7 +39,7 @@ evidence:
     recorded_at: "2026-10-21T21:08:03.398Z"
     commit_sha: "37a666184ce3c36fb0de99ac4e41d9342cd37034"
   - criterion_id: A2
-    status: unchecked
-    evidence_ref: "Main/source publication interval open. Candidate37a66618 reviewed and scoped checks pass; root will merge main with no-close, bind same finite unit off integration10690, copy exact reviewed ledger, check byte equality, then record A2 and normal source merge/closure. No two-branch identity claimed yet."
-    recorded_at: "2026-10-21T21:08:07.662Z"
-    commit_sha: "37a666184ce3c36fb0de99ac4e41d9342cd37034"
+    status: pass
+    evidence_ref: "Directly verified main merge4864837c and source merge5446010b ancestry, clean source checkout reconciliation10690->5446010b, and cmp exit0 canonical versus integration ledger. Identical SHA2563bcf3aadb5912bf58eef43ec89b362962fda947a804fcf49fd806d9f45566e7b throughE227; sourcecopy candidate2d3d1c62 contains only the reviewed ledger diff, formatter/diff/cmp/ordinary commit and five scopedgates0. Bash cross-checkout cp command refused beforeexecution; owned absolute editor admitted the same reviewed patch after claim/scopecheck, no cp retried. Candidate architecture/codecheckpoint remains10690, selectedruntime408 unchanged. Verify establishes commit existence only; byte/source/runtime limits separately inspected."
+    recorded_at: "2026-10-21T21:16:32.196Z"
+    commit_sha: "2d3d1c6264bdea91be2575d7c283d9cc59349c7e"
