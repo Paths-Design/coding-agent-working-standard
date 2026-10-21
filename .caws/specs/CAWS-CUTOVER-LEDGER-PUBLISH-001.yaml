@@ -1,10 +1,11 @@
 id: CAWS-CUTOVER-LEDGER-PUBLISH-001
 title: 'Publish reconciled cutover obligations and source provenance'
 mode: doc
-lifecycle_state: active
-worktree: cutover-ledger-source
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Documentation unit published to main in1f5a8621 and synchronized to integration from40b21a7a; ledger byte-identical throughE225. Reviewed current33/37partial89.2%,parent0/8,zero productionretirement,408selected; nativebinding/preparation scopedsource landings and all open publication/reader/quality/adoption obligations retained. Doctor exit semantics grounded against source and observed0E3W4I; exact mainledgerignoreexception fixes actual normalstaging failure while scratch staysignored. A1-A3 records+events readback; commit rederivation is not semantic test execution. No runtimeinstall,parentacceptance or codecutover. Pending audit commit recovered through CLI after concurrentindexlock.'
 created_at: '2026-10-21T19:36:19.581Z'
-updated_at: '2026-10-21T20:08:05.735Z'
+updated_at: '2026-10-21T20:24:34.274Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
