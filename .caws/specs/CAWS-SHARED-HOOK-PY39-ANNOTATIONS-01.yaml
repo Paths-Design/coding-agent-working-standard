@@ -1,0 +1,40 @@
+id: CAWS-SHARED-HOOK-PY39-ANNOTATIONS-01
+title: 'Shared session renderer crashes at import on stock macOS Python 3.9: harness_kimi.py evaluates a PEP 604 annotation'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-21T02:31:14.765Z'
+updated_at: '2026-10-21T02:31:14.765Z'
+created_by_session: '2cab376d-3f6a-4fb5-ab68-c931fbde6779'
+blast_radius:
+  modules:
+    - 'shared hook-pack Python harness adapters (session_log_renderer import chain)'
+    - 'shared hook-pack version and fingerprint baseline'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/harness_kimi.py'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py'
+  out: []
+invariants:
+  - 'Every shipped hook-pack Python module imports under the stock macOS python3 (3.9); annotation syntax newer than the interpreter is deferred with from __future__ import annotations'
+  - 'A shared template change ships with a pack version bump and a re-derived fingerprint'
+acceptance:
+  - id: A1
+    given: '/usr/bin/python3 3.9.6 first on PATH, as .husky/pre-push arranges on macOS'
+    when: 'session_log_renderer.py is imported'
+    then: 'it loads (usage line) instead of raising TypeError from harness_kimi.py:28, and the system-runtime and artifact-contracts renderer tests pass under that PATH'
+  - id: A2
+    given: 'a hook-pack template module without the future import whose annotation uses an X | Y union'
+    when: 'the template annotation compatibility test runs on any interpreter'
+    then: 'it fails naming the module and line, and passes for the shipped tree'
+  - id: A3
+    given: 'harness_kimi.py changed after the v99 baseline'
+    when: 'SHARED_PACK_VERSION is bumped and the fingerprint re-derived'
+    then: 'pack-fingerprint.test.js passes with recorded version equal to the manifest version'
+rollback:
+  - 'Revert the merge commit; no data migration'
+non_functional: {}
+contracts: []
