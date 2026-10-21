@@ -442,9 +442,10 @@ type MutationCliView = MutationProjection & {
 };
 function failedMutationView(issue: ExecutionIssue): MutationCliView {
   return {
-    schema: 'caws.shell_mutation_view.v1',
+    schema: 'caws.shell_mutation_view.v2',
     tokens: [],
     interpreters: [],
+    interpreterInvocations: [],
     gitMetadata: [],
     issues: [issue],
     execution: null,

@@ -20,6 +20,7 @@
         "src/kernel/worktree/transitions.ts",
         "src/shell/analysis/analyze.ts",
         "src/shell/analysis/git-context.ts",
+        "src/shell/analysis/interpreter-effects.ts",
         "src/shell/analysis/mutation-view.ts",
         "src/shell/analysis/policies.ts",
         "src/shell/analysis/words.ts",
@@ -206,11 +207,16 @@
       "targets": [
         { "source": "src/shell/analysis/analyze.ts" },
         { "source": "src/shell/analysis/git-context.ts" },
+        { "source": "src/shell/analysis/interpreter-effects.ts" },
         { "source": "src/shell/analysis/mutation-view.ts" },
         { "source": "src/shell/analysis/policies.ts" },
         { "source": "src/shell/analysis/words.ts" }
       ],
-      "tests": ["tests/shell/command-analysis.test.js", "tests/shell/mutation-view.test.js"]
+      "tests": [
+        "tests/shell/command-analysis.test.js",
+        "tests/shell/interpreter-effects.test.js",
+        "tests/shell/mutation-view.test.js"
+      ]
     },
     "kernel": {
       "config": "stryker.kernel.conf.js",

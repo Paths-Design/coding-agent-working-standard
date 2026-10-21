@@ -47,7 +47,7 @@ describe('hooks analyze public CLI', () => {
     if (child.error) throw child.error;
     expect(child.stderr).toBe('');
     const result = JSON.parse(child.stdout);
-    expect(result.schema).toBe('caws.shell_mutation_view.v1');
+    expect(result.schema).toBe('caws.shell_mutation_view.v2');
     expect(Object.prototype.hasOwnProperty.call(result, 'execution')).toBe(true);
     expect(Object.prototype.hasOwnProperty.call(result, 'singleLifecycle')).toBe(true);
     return { status: child.status, ...result };

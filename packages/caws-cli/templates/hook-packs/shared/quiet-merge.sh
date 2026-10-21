@@ -103,7 +103,7 @@ if [[ "$COMMAND" == *caws* ]]; then
     exit 0
   fi
   if ! printf '%s' "$FACTS" | jq -se --arg command "$COMMAND" --arg cwd "$EXPECTED_CWD" '
-      length==1 and .[0].schema=="caws.shell_mutation_view.v1" and
+      length==1 and .[0].schema=="caws.shell_mutation_view.v2" and
       .[0].execution.command==$command and .[0].execution.cwd==$cwd and
       (.[0].issues|type)=="array" and (.[0].issues|length)==0 and
       (.[0].singleLifecycle=="merge" or .[0].singleLifecycle=="destroy")

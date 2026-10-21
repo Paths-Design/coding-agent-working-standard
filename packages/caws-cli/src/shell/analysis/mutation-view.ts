@@ -1,5 +1,6 @@
 import { basename, isAbsolute } from 'node:path';
 import { analyzeCommand } from './analyze';
+import { classifyInterpreterEffects } from './interpreter-effects';
 import { resolveGitContext } from './git-context';
 import type { GitContext, GitContextResolver } from './git-context';
 import type { Command, Redirection } from './parser-types';
@@ -39,14 +40,16 @@ export interface MutationInterpreter {
   language: 'node' | 'python';
   argv: (string | null)[];
   payloads: InterpreterPayload[];
+  effects: ReturnType<typeof classifyInterpreterEffects>;
   cwd: string | null;
   start: number;
   end: number;
 }
 export interface MutationView {
-  schema: 'caws.shell_mutation_view.v1';
+  schema: 'caws.shell_mutation_view.v2';
   tokens: MutationToken[];
   issues: MutationIssue[];
+  interpreterInvocations: { language: 'node' | 'python'; start: number; end: number }[];
   interpreters: MutationInterpreter[];
   gitMetadata: GitMetadataWrite[];
 }
@@ -172,9 +175,10 @@ export async function projectMutationView(
   dependencies: MutationViewDependencies = {}
 ): Promise<MutationView> {
   const view: MutationView = {
-    schema: 'caws.shell_mutation_view.v1',
+    schema: 'caws.shell_mutation_view.v2',
     tokens: [],
     issues: [],
+    interpreterInvocations: [],
     interpreters: [],
     gitMetadata: [],
   };
@@ -528,6 +532,10 @@ export async function projectMutationView(
             ? 'python'
             : null;
       if (!shell && !language) return;
+      if (language) {
+        const original = span(node);
+        view.interpreterInvocations.push({ language, start: original.pos, end: original.end });
+      }
       if (
         shell &&
         (unwrapped.environment || node.prefix.some((part) => part.type === 'Assignment'))
@@ -592,10 +600,46 @@ export async function projectMutationView(
         );
       if (language && !exhausted) {
         const original = span(node);
+        // Source profiles establish effects only under the declared controlled
+        // interpreter host. Submitted environment/startup changes and script
+        // files cannot borrow the profile of a literal payload.
+        const startupChanged =
+          unwrapped.environment ||
+          node.prefix.some((part) => part.type === 'Assignment') ||
+          [...state.bindings.keys()].some((key) =>
+            language === 'node'
+              ? key === 'NODE_OPTIONS' || key === 'NODE_PATH'
+              : key.startsWith('PYTHON')
+          ) ||
+          // This profile permits only literal builtin fs imports. Node resolves
+          // those before NODE_PATH's fallback lookup for nonbuiltin modules.
+          // Inherited NODE_OPTIONS can instead preload or transform execution;
+          // an empty value supplies no such options.
+          (language === 'node'
+            ? Boolean(process.env.NODE_OPTIONS)
+            : Object.keys(process.env).some((key) => key.startsWith('PYTHON')));
+        const effects: MutationInterpreter['effects'] = startupChanged
+          ? {
+              kind: 'unresolved',
+              profile: null,
+              reason: 'Interpreter environment or startup effects are not proven.',
+              writes: [],
+            }
+          : payloads.length !== 1
+            ? {
+                kind: 'unresolved',
+                profile: null,
+                reason: 'Exactly one literal inline or here-document source is required.',
+                writes: [],
+              }
+            : classifyInterpreterEffects(language, payloads[0]!.text);
+        if (effects.kind === 'unresolved')
+          issue('mutation-interpreter-effects', effects.reason, original);
         view.interpreters.push({
           language,
           argv: args.map((arg) => arg.value),
           payloads,
+          effects,
           cwd: request.cwd === null ? null : state.cwd,
           start: original.pos,
           end: original.end,

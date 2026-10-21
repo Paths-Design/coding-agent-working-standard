@@ -204,6 +204,15 @@ const CASES = [
   ['python-import-path', "env PYTHONPATH=/tmp/untrusted python3 -c 'import os'"],
   ['unknown-cwd-nested', "bash -c 'cd /; touch relative'"],
   ['unknown-cwd-node', "node <<'JS'\nconsole.log(1);\nJS\n"],
+  ['effects-readonly', 'node -e \'console.log("/foreign/mentioned writeFileSync")\''],
+  [
+    'effects-finite-write',
+    'node -e \'console.log("{{FOREIGN}}/decoy"); require("node:fs").writeFileSync("{{FOREIGN}}/actual", "{{PROJECT}}/data")\'',
+  ],
+  ['effects-dynamic-write', 'node -e \'require("node:fs").writeFileSync(process.env.DEST, "x")\''],
+  ['effects-unknown-call', "node -e 'unknownFunction()'"],
+  ['effects-entry-file', 'node entry.js'],
+  ['effects-source-startup', "NODE_OPTIONS='--require /tmp/untrusted.cjs'; node -e '1'"],
   ['sed-combined-edit', 'sed -ni -e p /foreign/out'],
   ['uniq-output', 'uniq /dev/null /foreign/out'],
   ['sort-output', 'sort -o /foreign/out /dev/null'],
@@ -390,6 +399,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
         plan: [],
         queries: [],
         rows: [],
+        code: 'mutation-interpreter-effects',
       },
       {
         id: 'metadata-read-after-application',
@@ -744,8 +754,25 @@ describe('mutation view uses shared traversal without granting scope', () => {
     (id) => {
       const actual = view(id),
         command = requests.find((item) => item.id === id).input.command;
-      expect(actual.schema).toBe('caws.shell_mutation_view.v1');
+      expect(actual.schema).toBe('caws.shell_mutation_view.v2');
       expect(Object.hasOwn(actual, 'decision')).toBe(false);
+      expect(
+        actual.interpreterInvocations.map(({ language, start, end }) => ({ language, start, end }))
+      ).toEqual(
+        actual.interpreters
+          .map(({ language, start, end }) => ({ language, start, end }))
+          .concat(
+            ['node-missing-eval', 'python-opaque-code'].includes(id)
+              ? [
+                  {
+                    language: id === 'node-missing-eval' ? 'node' : 'python',
+                    start: 0,
+                    end: command.length,
+                  },
+                ]
+              : []
+          )
+      );
       expect(actual.tokens.length).toBeLessThanOrEqual(4096);
       for (const token of actual.tokens) {
         expect(token.prefix).toBe('');
@@ -759,6 +786,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
       for (const item of [
         ...actual.tokens,
         ...actual.issues,
+        ...actual.interpreterInvocations,
         ...actual.interpreters,
         ...actual.gitMetadata,
       ]) {
@@ -772,11 +800,12 @@ describe('mutation view uses shared traversal without granting scope', () => {
   test.each(['node-arrow-argument', 'node-arrow-heredoc', 'wrapped-node'])(
     '%s keeps actual interpreter code separate from shell redirections',
     (id) => {
-      expect(view(id).issues).toEqual([]);
+      expect(codes(id)).toEqual(['mutation-interpreter-effects']);
       expect(view(id).tokens.filter((token) => token.kind === 'redirect')).toEqual([]);
       expect(view(id).interpreters).toHaveLength(1);
       expect(view(id).interpreters[0].language).toBe('node');
       expect(view(id).interpreters[0].argv[0]).toBe('node');
+      expect(view(id).interpreters[0].effects.kind).toBe('unresolved');
       expect(view(id).interpreters[0].payloads.map((payload) => payload.text)).toEqual([
         id === 'node-arrow-heredoc' ? 'const fn = x => x;\n' : 'const fn = x => x;',
       ]);
@@ -787,10 +816,13 @@ describe('mutation view uses shared traversal without granting scope', () => {
     (id, _source, language, code, original) => {
       const actual = view(id);
       const source = requests.find((item) => item.id === id).input.command;
-      expect(actual.issues).toEqual([]);
+      expect(codes(id)).toEqual(language === 'python' ? ['mutation-interpreter-effects'] : []);
       expect(actual.tokens.filter((token) => token.kind === 'redirect')).toEqual([]);
       expect(actual.interpreters).toHaveLength(1);
       expect(actual.interpreters[0].language).toBe(language);
+      expect(actual.interpreters[0].effects.kind).toBe(
+        language === 'python' ? 'unresolved' : 'readonly'
+      );
       expect(actual.interpreters[0].payloads).toHaveLength(1);
       const payload = actual.interpreters[0].payloads[0];
       expect(payload.text).toBe(code);
@@ -803,6 +835,9 @@ describe('mutation view uses shared traversal without granting scope', () => {
     (id) => {
       expect(codes(id)).toContain('mutation-code-source');
       expect(view(id).interpreters).toEqual([]);
+      expect(view(id).interpreterInvocations.map((entry) => entry.language)).toEqual([
+        id === 'node-missing-eval' ? 'node' : 'python',
+      ]);
     }
   );
   test('the last stdin redirection selects executable input', () => {
@@ -1010,6 +1045,52 @@ describe('mutation view uses shared traversal without granting scope', () => {
     );
     expect(fs.existsSync(locations.MARKER)).toBe(false);
   });
+  test('effect knowledge separates literal data from proven write operands', () => {
+    expect(view('effects-readonly').issues).toEqual([]);
+    expect(view('effects-readonly').interpreters[0].effects).toEqual({
+      kind: 'readonly',
+      profile: 'caws.node-source-effects.v1',
+      writes: [],
+    });
+    const actual = view('effects-finite-write');
+    expect(actual.issues).toEqual([]);
+    const interpreter = actual.interpreters[0];
+    expect(interpreter.effects.kind).toBe('finite-writes');
+    expect(interpreter.effects.profile).toBe('caws.node-source-effects.v1');
+    expect(
+      interpreter.effects.writes.map(({ target, operation }) => ({ target, operation }))
+    ).toEqual([{ target: locations.FOREIGN + '/actual', operation: 'write' }]);
+    for (const write of interpreter.effects.writes) {
+      expect(interpreter.payloads[0].text.slice(write.start, write.end)).toBe(
+        '"' + locations.FOREIGN + '/actual"'
+      );
+    }
+    expect(actual.tokens.filter((token) => token.kind === 'redirect')).toEqual([]);
+  });
+  test.each([
+    'effects-dynamic-write',
+    'effects-unknown-call',
+    'effects-entry-file',
+    'effects-source-startup',
+    'wrapped-node',
+  ])('%s cannot turn absent proven write facts into permission', (id) => {
+    expect(codes(id)).toContain('mutation-interpreter-effects');
+    const interpreter = view(id).interpreters[0];
+    expect(interpreter.effects).toEqual({
+      kind: 'unresolved',
+      profile: null,
+      reason: expect.any(String),
+      writes: [],
+    });
+    expect(view(id).interpreterInvocations).toEqual([
+      { language: interpreter.language, start: interpreter.start, end: interpreter.end },
+    ]);
+    const issue = view(id).issues.find((entry) => entry.code === 'mutation-interpreter-effects');
+    expect({ start: issue.start, end: issue.end }).toEqual({
+      start: interpreter.start,
+      end: interpreter.end,
+    });
+  });
   test('unknown coordinates survive nested source and interpreter rows', () => {
     expect(words('unknown-cwd-nested')).toContain('relative');
     expect(view('unknown-cwd-nested').tokens.every((token) => token.cwd === null)).toBe(true);
@@ -1184,6 +1265,25 @@ describe('mutation projection preserves program roles and source custody', () =>
     ['explicit-bash', 'printf x', 'bash'],
     ['unsupported-shell', 'printf x', 'zsh'],
     ['env-unsupported-name', "env 9A=x node -e '" + HARDENING_PAYLOAD + "'"],
+    [
+      'inherited-node-path',
+      'node -e \'require("fs").readFileSync("input", "utf8")\'',
+      undefined,
+      { NODE_PATH: '/untrusted/node_modules' },
+    ],
+    [
+      'inherited-node-path-nonbuiltin',
+      'node -e \'require("untrusted-module")\'',
+      undefined,
+      { NODE_PATH: '/untrusted/node_modules' },
+    ],
+    [
+      'inherited-node-options',
+      "node -e 'console.log(1)'",
+      undefined,
+      { NODE_OPTIONS: '--require /must-not-execute.cjs' },
+    ],
+    ['inherited-empty-node-options', "node -e 'console.log(1)'", undefined, { NODE_OPTIONS: '' }],
   ];
   beforeAll(() => {
     temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-projection-roles-'));
@@ -1195,8 +1295,9 @@ describe('mutation projection preserves program roles and source custody', () =>
     };
     for (const directory of [locations.PROJECT, locations.FOREIGN, locations.META])
       fs.mkdirSync(directory);
-    requests = ordinary.map(([id, command, shell]) => ({
+    requests = ordinary.map(([id, command, shell, environment]) => ({
       id,
+      environment,
       input: {
         command: expand(command),
         cwd: locations.PROJECT,
@@ -1255,10 +1356,12 @@ describe('mutation projection preserves program roles and source custody', () =>
     '%s keeps the actual finite executable payload',
     (id, _command, language, code, original) => {
       const actual = result(id);
-      expect(actual.issues).toEqual([]);
+      const unsupportedEffects = language === 'python' || id.startsWith('env-');
+      expect(issueCodes(id)).toEqual(unsupportedEffects ? ['mutation-interpreter-effects'] : []);
       expect(actual.interpreters).toHaveLength(1);
       const interpreter = actual.interpreters[0];
       expect(interpreter.language).toBe(language);
+      expect(interpreter.effects.kind).toBe(unsupportedEffects ? 'unresolved' : 'readonly');
       expect(interpreter.cwd).toBe(fs.realpathSync.native(locations.PROJECT));
       expect(interpreter.payloads).toHaveLength(1);
       const payload = interpreter.payloads[0];
@@ -1269,6 +1372,32 @@ describe('mutation projection preserves program roles and source custody', () =>
       expect(fs.existsSync(locations.MARKER)).toBe(false);
     }
   );
+  test('inherited module fallback paths do not override builtin-only source effects', () => {
+    const actual = result('inherited-node-path');
+    expect(actual.issues).toEqual([]);
+    expect(actual.interpreters[0].effects).toEqual({
+      kind: 'readonly',
+      profile: 'caws.node-source-effects.v1',
+      writes: [],
+    });
+    expect(actual.interpreters[0].payloads[0].text).toBe(
+      'require("fs").readFileSync("input", "utf8")'
+    );
+    expect(issueCodes('inherited-node-path-nonbuiltin')).toEqual(['mutation-interpreter-effects']);
+    expect(result('inherited-node-path-nonbuiltin').interpreters[0].effects.kind).toBe(
+      'unresolved'
+    );
+  });
+  test('nonempty inherited startup options remain unresolved and empty options preserve the profile', () => {
+    expect(issueCodes('inherited-node-options')).toEqual(['mutation-interpreter-effects']);
+    expect(result('inherited-node-options').interpreters[0].effects.kind).toBe('unresolved');
+    expect(result('inherited-empty-node-options').issues).toEqual([]);
+    expect(result('inherited-empty-node-options').interpreters[0].effects).toEqual({
+      kind: 'readonly',
+      profile: 'caws.node-source-effects.v1',
+      writes: [],
+    });
+  });
   test.each(HARDENING_REJECT)(
     '%s refuses unsupported selection without attributing code',
     (id, _command, code, original) => {
@@ -1305,9 +1434,10 @@ describe('mutation projection preserves program roles and source custody', () =>
         .map((token) => token.value)
     ).toEqual(['bash', '-s', 'printf', '%s', 'selected']);
     for (const id of ['node-entry-stops-options', 'node-end-stops-options']) {
-      expect(result(id).issues).toEqual([]);
+      expect(issueCodes(id)).toEqual(['mutation-interpreter-effects']);
       expect(result(id).interpreters).toHaveLength(1);
       expect(result(id).interpreters[0].payloads).toEqual([]);
+      expect(result(id).interpreters[0].effects.kind).toBe('unresolved');
     }
     for (const id of ['python-prefix-is-data', 'python-suffix-is-data']) {
       expect(result(id).issues).toEqual([]);

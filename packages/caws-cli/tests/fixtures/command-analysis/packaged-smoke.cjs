@@ -29,6 +29,7 @@ try {
     'dist/shell/analysis/load-parser.js',
     'dist/shell/analysis/analyze.js',
     'dist/shell/analysis/mutation-view.js',
+    'dist/shell/analysis/interpreter-effects.js',
     'templates/hook-packs/shared/lib/bash-mutation-analysis.sh',
     'docs/guides/command-analysis.md',
   ])
@@ -53,6 +54,11 @@ try {
     fs.readFileSync(path.resolve(pkg, '../../docs/guides/command-analysis.md'), 'utf8')
   );
   assert.equal(packageJson.dependencies.unbash, '6.0.0');
+  assert.equal(packageJson.dependencies.acorn, '8.15.0');
+  const javascriptParser = JSON.parse(
+    fs.readFileSync(path.join(prefix, 'node_modules/acorn/package.json'), 'utf8')
+  );
+  assert.equal(javascriptParser.version, '8.15.0');
   const parser = JSON.parse(
     fs.readFileSync(path.join(prefix, 'node_modules/unbash/package.json'), 'utf8')
   );
@@ -186,7 +192,9 @@ try {
     "node <<'JS'\nconst f = () => { console.log(1, 2); }; const obj = { a: 1, b: 2 }; f();\nJS"
   );
   assert.equal(benignInterpreter.status, 0, benignInterpreter.stderr);
-  const benignThenRead = writeGuard("node <<'JS'\nconst fn = x => x;\nJS\ngit status --short");
+  const benignThenRead = writeGuard(
+    "node <<'JS'\nconst fn = x => x; fn(1);\nJS\ngit status --short"
+  );
   assert.equal(benignThenRead.status, 0, benignThenRead.stderr);
   const quotedSearch = writeGuard(
     `rg -n -- 'writeFileSync("${foreign}/search-data", "x") > { data }' .`
@@ -204,13 +212,24 @@ try {
   assert.equal(fs.existsSync(marker), false);
   const independent = path.join(root, 'independent-project');
   linkedRepository(independent, []);
-  // Interpreter literals are weak cross-repository observations. The actual
-  // shell operand pair above separately exercises foreign-worktree ownership.
+  // Proven interpreter operands must reach the same ownership checks as shell writes.
+  const foreignWorktreeInterpreter = writeGuard(
+    `node -e 'require("node:fs").writeFileSync("${foreign}/interpreter-never-written", "bad")'`
+  );
+  assert.equal(foreignWorktreeInterpreter.status, 2, JSON.stringify(foreignWorktreeInterpreter));
+  assert.match(foreignWorktreeInterpreter.stderr, /worktree 'foreign'/);
   const foreignInterpreter = writeGuard(
     `node -e 'require("node:fs").writeFileSync("${independent}/interpreter-never-written", "bad")'`
   );
   assert.equal(foreignInterpreter.status, 2, JSON.stringify(foreignInterpreter));
   assert.match(foreignInterpreter.stderr, /DIFFERENT repository/);
+  const foreignReadOwnedWrite = writeGuard(
+    `node -e 'const fs = require("node:fs"); const data = fs.readFileSync("${independent}/input.txt", "utf8"); fs.writeFileSync("${own}/owned-never-written", data)'`
+  );
+  assert.equal(foreignReadOwnedWrite.status, 0, foreignReadOwnedWrite.stderr);
+  const unknownInterpreter = writeGuard("node -e 'unrecognizedOperation()'");
+  assert.equal(unknownInterpreter.status, 2, JSON.stringify(unknownInterpreter));
+  assert.match(unknownInterpreter.stderr, /mutation-interpreter-effects/);
   const malformed = writeGuard('printf safe', {}, '{');
   assert.equal(malformed.status, 2, JSON.stringify(malformed));
   assert.match(malformed.stderr, /original tool metadata is missing or malformed/);
@@ -224,6 +243,8 @@ try {
   assert.equal(fs.existsSync(path.join(foreign, 'search-data')), false);
   assert.equal(fs.existsSync(path.join(foreign, 'never-written')), false);
   assert.equal(fs.existsSync(path.join(foreign, 'nested-never-written')), false);
+  assert.equal(fs.existsSync(path.join(foreign, 'interpreter-never-written')), false);
+  assert.equal(fs.existsSync(path.join(own, 'owned-never-written')), false);
   const ownMetadata = writeGuard('git add -- package-never-written');
   assert.equal(ownMetadata.status, 0, ownMetadata.stderr);
   const foreignMetadata = writeGuard(`git -C '${foreign}' add -- package-never-written`);
@@ -297,6 +318,7 @@ try {
     JSON.stringify({
       tarballSha256,
       parserVersion: parser.version,
+      javascriptParserVersion: javascriptParser.version,
       loaderShipped: true,
       consumerDocsShipped: true,
       installedBenign: benign.decision,
@@ -314,6 +336,9 @@ try {
       packagedWriteGuardReboundEnvironment: reboundEnvironment.status,
       packagedWriteGuardQuotedSearch: quotedSearch.status,
       packagedWriteGuardForeignInterpreter: foreignInterpreter.status,
+      packagedWriteGuardForeignWorktreeInterpreter: foreignWorktreeInterpreter.status,
+      packagedWriteGuardForeignReadOwnedWrite: foreignReadOwnedWrite.status,
+      packagedWriteGuardUnknownInterpreter: unknownInterpreter.status,
       packagedWriteGuardMalformedEnvelope: malformed.status,
       packagedWriteGuardUnavailableBackend: unavailable.status,
       packagedCodexNativeProjection: codexProjection.status,

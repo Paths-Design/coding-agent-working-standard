@@ -287,10 +287,10 @@ test('Node arrow/object data does not fabricate a shell target', () => {
   expect(result.stderr).not.toContain('ask_dynamic_unconfined');
   expect(fs.readdirSync(fx.sibling)).toEqual(['.git']);
 });
-test('read-only Git after opaque interpreter code does not require metadata ownership', () => {
-  const result = guard("node <<'JS'\nconst fn = x => x;\nJS\ngit status --short");
+test('read-only Git after admitted interpreter code does not require metadata ownership', () => {
+  const result = guard("node <<'JS'\nconst fn = x => x; fn(1);\nJS\ngit status --short");
   expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
-  const write = guard("node <<'JS'\nconst fn = x => x;\nJS\ngit add -- file");
+  const write = guard("node <<'JS'\nconst fn = x => x; fn(1);\nJS\ngit add -- file");
   expect(write.status).toBe(2);
   expect(write.stderr).toContain('metadata-coordinate-unresolved');
 });
@@ -316,6 +316,75 @@ test('nested Git cannot borrow launcher coordinates after source rebinds an expo
     inherited
   );
   expect({ status: unchanged.status, stderr: unchanged.stderr }).toEqual({ status: 0, stderr: '' });
+});
+test.each([
+  [
+    'actual quoted arrows',
+    'console.log(JSON.stringify([{ value: 2 }].map(item => ({ value: item.value }))))',
+  ],
+  ['a local helper', "const show = value => console.log(value); show('search > data')"],
+  ['write names in inert data', "console.log({ text: 'writeFileSync /foreign/path >' })"],
+])('known readonly Node profile admits %s', (_label, payload) => {
+  const result = guard('node -e ' + quote(payload));
+  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+});
+test('quoted search data never becomes executable interpreter source', () => {
+  const result = guard('rg -F ' + quote('node => writeFileSync("/foreign/path")') + ' src');
+  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+});
+test.each([
+  'unknownCall()',
+  "const write = require('fs').writeFileSync; write('/tmp/unbound','x')",
+  "require('fs').writeFileSync(process.env.DEST,'x')",
+  "require('fs')[process.env.METHOD]('/tmp/unbound','x')",
+])('unmodeled Node effects hold without write-verb inference: %s', (payload) => {
+  refused('node -e ' + quote(payload), 'mutation-interpreter-effects');
+});
+test.each(['writeFileSync', 'appendFileSync'])(
+  'proven %s operands obey same-project worktree and canonical-claim ownership',
+  (operation) => {
+    const source = (target) =>
+      'node -e ' + quote("require('fs')." + operation + '(' + JSON.stringify(target) + ",'x')");
+    refused(source(path.join(fx.foreign, 'out.txt')), "worktree 'foreign'");
+    refused(source('src/claimed.txt'), 'foreign:src/claimed.txt');
+    refused('touch ' + quote(path.join(fx.foreign, 'out.txt')), "worktree 'foreign'");
+    expect(fs.existsSync(path.join(fx.foreign, 'out.txt'))).toBe(false);
+  }
+);
+test('a foreign read and owned write cannot be confused by path co-occurrence', () => {
+  const target = path.join(fx.project, 'src/owned.txt');
+  const payload =
+    "const fs = require('node:fs'); const data = fs.readFileSync(" +
+    JSON.stringify(path.join(fx.sibling, 'input.txt')) +
+    ", 'utf8'); fs.writeFileSync(" +
+    JSON.stringify(target) +
+    ', data)';
+  const result = guard('node -e ' + quote(payload));
+  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+  expect(
+    guard('cat ' + quote(path.join(fx.sibling, 'input.txt')) + ' > ' + quote(target)).status
+  ).toBe(0);
+  expect(fs.existsSync(target)).toBe(false);
+});
+test('admitted interpreter source is analyzed without executing its bytes', () => {
+  const marker = path.join(fx.root, 'source-executed');
+  const result = guard(
+    'node -e ' +
+      quote("require('node:fs').writeFileSync(" + JSON.stringify(marker) + ", 'executed')")
+  );
+  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+  expect(fs.existsSync(marker)).toBe(false);
+});
+test('proven relative interpreter writes retain their invocation cwd', () => {
+  refused(
+    'cd ' + quote(fx.foreign) + '; node -e ' + quote("require('fs').writeFileSync('out','x')"),
+    "worktree 'foreign'"
+  );
+  const unresolved = guard('node -e ' + quote("require('fs').writeFileSync('relative','x')"), {
+    HOOK_CWD: '',
+  });
+  expect(unresolved.status).toBe(2);
+  expect(unresolved.stderr).toContain('interpreter_target_cwd_unresolved');
 });
 test('an actual Node payload still blocks a foreign literal write', () => {
   refused(
@@ -369,7 +438,7 @@ test('unknown cwd retains absolute foreign writes and nested relative uncertaint
 test('interpreter write verbs without a literal target remain unresolved', () => {
   refused(
     "node <<'NODE'\nrequire('fs').writeFileSync(process.env.DEST, 'x');\nNODE",
-    'interpreter_write_target_unresolved'
+    'mutation-interpreter-effects'
   );
 });
 test('text mentioning node and a write verb cannot create an interpreter invocation', () => {
@@ -380,19 +449,22 @@ test('text mentioning node and a write verb cannot create an interpreter invocat
 });
 test.each([
   ['sh -c \'G=printf; G=rm :; "$G" /foreign/x\'', 'mutation-shell-dialect'],
-  ["NODE_OPTIONS='--require /tmp/preload.cjs' node -e 'console.log(1)'", 'environment-change'],
+  [
+    "NODE_OPTIONS='--require /tmp/preload.cjs' node -e 'console.log(1)'",
+    'mutation-interpreter-effects',
+  ],
 ])('unmodeled interpreter selection cannot be an empty allow: %s', (command, reason) => {
   refused(command, reason);
 });
-test('a real entry script is read from the invocation cwd', () => {
+test('file-entry bytes cannot authorize execution even when the script exists', () => {
   fs.mkdirSync(path.join(fx.project, 'scripts'));
   fs.writeFileSync(
     path.join(fx.project, 'scripts/task.mjs'),
     "import { writeFileSync } from 'node:fs'; writeFileSync('" + fx.sibling + "/x.txt','x');\n"
   );
-  refused('cd scripts; node task.mjs', fx.sibling);
+  refused('cd scripts; node task.mjs', 'mutation-interpreter-effects');
 });
-test.each(['{}', '{"schema":"caws.shell_mutation_view.v1","tokens":[]}'])(
+test.each(['{}', '{"schema":"caws.shell_mutation_view.v2","tokens":[]}'])(
   'invalid CLI response refuses without lexical fallback: %s',
   (response) => {
     const broken = path.join(fx.root, 'broken-caws');
@@ -435,15 +507,126 @@ function protocolToken(value, kind = 'word') {
 }
 function protocolView(tokens, command = 'fixture') {
   return {
-    schema: 'caws.shell_mutation_view.v1',
+    schema: 'caws.shell_mutation_view.v2',
     execution: { command, cwd: fs.realpathSync.native(fx.project) },
     singleLifecycle: null,
     tokens,
     issues: [],
     interpreters: [],
+    interpreterInvocations: [],
     gitMetadata: [],
   };
 }
+function interpreterProtocol(
+  effects = { kind: 'readonly', profile: 'caws.node-source-effects.v1', writes: [] }
+) {
+  const command = "node -e 'console.log(1)'";
+  const row = {
+    language: 'node',
+    argv: ['node', '-e', 'console.log(1)'],
+    payloads: [{ text: 'console.log(1)', origin: 'argument', start: 8, end: command.length }],
+    cwd: fs.realpathSync.native(fx.project),
+    start: 0,
+    end: command.length,
+    effects,
+  };
+  const view = protocolView([], command);
+  view.interpreters.push(row);
+  view.interpreterInvocations.push({ language: row.language, start: row.start, end: row.end });
+  return { command, row, view };
+}
+test('v2 rejects an old backend and requires interpreter coverage even on readonly results', () => {
+  const { command, view } = interpreterProtocol();
+  expect(guard(command, protocolBackend(JSON.stringify(view))).status).toBe(0);
+  for (const replacement of [
+    { ...view, schema: 'caws.shell_mutation_view.v1' },
+    { ...view, interpreterInvocations: undefined },
+    { ...view, interpreters: [] },
+    { ...view, interpreterInvocations: [] },
+  ]) {
+    const result = guard(command, protocolBackend(JSON.stringify(replacement)));
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('invalid or incomplete contract');
+  }
+});
+test.each([
+  undefined,
+  null,
+  {},
+  { kind: 'readonly', profile: null, writes: [] },
+  { kind: 'readonly', profile: 'unknown-profile', writes: [] },
+  {
+    kind: 'readonly',
+    profile: 'caws.node-source-effects.v1',
+    writes: [{ target: '/tmp/a', operation: 'write', start: 0, end: 1 }],
+  },
+  { kind: 'finite-writes', profile: 'caws.node-source-effects.v1', writes: [] },
+  { kind: 'unresolved', profile: 'caws.node-source-effects.v1', reason: 'unknown', writes: [] },
+  { kind: 'unresolved', profile: null, reason: '', writes: [] },
+])('malformed or missing interpreter effects cannot grant admission: %j', (effects) => {
+  const { command, row, view } = interpreterProtocol();
+  row.effects = effects;
+  const result = guard(command, protocolBackend(JSON.stringify(view)));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('invalid or incomplete contract');
+});
+test('an unresolved effect is held even if the backend omits its issue diagnostic', () => {
+  const { command, view } = interpreterProtocol({
+    kind: 'unresolved',
+    profile: null,
+    reason: 'unknown call',
+    writes: [],
+  });
+  const result = guard(command, protocolBackend(JSON.stringify(view)));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('mutation-interpreter-effects: unknown call');
+});
+test.each([
+  { start: -1 },
+  { end: 99 },
+  { start: 1.5 },
+  { start: 4, end: 4 },
+  { operation: 'delete' },
+  { target: '' },
+  { target: 'a\0b' },
+  { target: 'a\nb' },
+  { target: 'a\rb' },
+  { target: 'a\tb' },
+  { target: '__INTERP__/tmp/escape' },
+])('finite interpreter write transport rejects malformed operands: %j', (replacement) => {
+  const { command, view } = interpreterProtocol({
+    kind: 'finite-writes',
+    profile: 'caws.node-source-effects.v1',
+    writes: [{ target: '/tmp/owned', operation: 'write', start: 0, end: 1, ...replacement }],
+  });
+  const result = guard(command, protocolBackend(JSON.stringify(view)));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('invalid or incomplete contract');
+});
+test.each(['row', 'payload', 'coverage'])(
+  'interpreter %s offsets cannot exceed the original source',
+  (field) => {
+    const { command, row, view } = interpreterProtocol();
+    if (field === 'row') row.end = command.length + 1;
+    if (field === 'payload') row.payloads[0].end = command.length + 1;
+    if (field === 'coverage') view.interpreterInvocations[0].end = command.length + 1;
+    const result = guard(command, protocolBackend(JSON.stringify(view)));
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('invalid or incomplete contract');
+  }
+);
+test('write offsets count UTF-16 payload units rather than shell-source offsets', () => {
+  const { command, row, view } = interpreterProtocol({
+    kind: 'finite-writes',
+    profile: 'caws.node-source-effects.v1',
+    writes: [{ target: path.join(fx.foreign, 'out'), operation: 'append', start: 2, end: 3 }],
+  });
+  row.payloads[0].text = '😀x';
+  const result = guard(command, protocolBackend(JSON.stringify(view)));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain("worktree 'foreign'");
+  expect(result.stderr).not.toContain('invalid or incomplete contract');
+});
 function git(command, cwd = fx.project) {
   return execFileSync('git', command, {
     cwd,

@@ -141,8 +141,8 @@ describe('mutation policy topology contract', () => {
     // mutation target must reconcile policy AND this pin in the same change
     // (6abff54f reconciled the policy for agents-conjoining.ts but not the
     // pin — the pin is the forcing function, so bump it consciously).
-    expect(result.stdout).toMatch(/PASS: 169 source files accounted for exactly once/);
-    expect(result.stdout).toMatch(/25 mutation targets across 4 surfaces/);
+    expect(result.stdout).toMatch(/PASS: 170 source files accounted for exactly once/);
+    expect(result.stdout).toMatch(/26 mutation targets across 4 surfaces/);
   });
 
   test('an unclassified production source is a hard failure', () => {
@@ -201,6 +201,7 @@ describe('mutation policy topology contract', () => {
     expect(config.mutate).toEqual([
       'src/shell/analysis/analyze.ts',
       'src/shell/analysis/git-context.ts',
+      'src/shell/analysis/interpreter-effects.ts',
       'src/shell/analysis/mutation-view.ts',
       'src/shell/analysis/policies.ts',
       'src/shell/analysis/words.ts',
@@ -210,6 +211,7 @@ describe('mutation policy topology contract', () => {
     expect(config).not.toHaveProperty('testFiles');
     expect(config.jest.config.testMatch).toEqual([
       '<rootDir>/tests/shell/command-analysis.test.js',
+      '<rootDir>/tests/shell/interpreter-effects.test.js',
       '<rootDir>/tests/shell/mutation-view.test.js',
     ]);
     const names = new RegExp(config.jest.config.testNamePattern);

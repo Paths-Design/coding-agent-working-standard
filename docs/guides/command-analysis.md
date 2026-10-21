@@ -16,12 +16,20 @@ audience: consumer
 `caws hooks mutation-view --json --cwd <execution-cwd> --project <canonical-root>`,
 with the original native execution envelope on JSON stdin. The CLI's literal
 `{command}` request form is also available for direct callers. This separate
-`caws.shell_mutation_view.v1` contract supplies shell tokens, source spans,
-observed directories, interpreter payloads, Git metadata coordinates and
-unresolved issues. It has no permission verdict. Existing utility operand rules
-and the claim oracle determine whether a recognized write is authorized. A
-missing or malformed backend fails closed without falling back to the legacy
-lexer.
+`caws.shell_mutation_view.v2` contract supplies shell tokens, source spans,
+observed directories, interpreter payloads and effect knowledge, Git metadata
+coordinates and unresolved issues. It has no permission verdict. Existing
+utility operand rules and the claim oracle determine whether a recognized write
+is authorized. A missing or malformed backend fails closed without falling back
+to the legacy lexer.
+
+Every recognized interpreter invocation has an independent coverage entry and an
+effect result: `readonly`, `finite-writes`, or `unresolved`. Issue-free
+responses require ordered coverage to match every interpreter row. The v2 bridge
+rejects missing knowledge, malformed results and incompatible v1 responses;
+older consumers reject the v2 schema. These checks establish the trusted
+backend's structural contract, not authentication of an arbitrary replacement
+backend.
 
 The CLI response adds `execution: {command, cwd}` and `singleLifecycle` to the
 projection. The bridge requires the exact decoded source to match all supplied
@@ -118,13 +126,37 @@ separate worktree-pin policy. This does not prove application internals or Git
 configuration safe: trusted executable/configuration assumptions and the
 limited-recognizer residual remain in force.
 
-The interpreter check retains a limited write-verb/path co-occurrence heuristic
-over actual payloads and bounded entry-script reads. It is weaker evidence than
-a shell operand and feeds only the foreign-repository check, never the claim
-oracle. A recognized write verb without an extractable path remains unresolved.
-This does not prove arbitrary Node, Python or external programs read-only;
-indirect calls, imports, dynamically selected behavior and concurrent file
-replacement remain outside this source-level recognizer.
+The bounded Node source profile parses the complete submitted payload without
+executing it. Supported plain data, local functions, console output and explicit
+filesystem APIs produce effect knowledge. Only proven write operands enter
+foreign-repository and worktree ownership checks; a path used by a read API does
+not become a write target because a write occurs elsewhere in the payload.
+Unrecognized calls, unsafe aliasing, dynamic targets, unsupported syntax and
+exhausted budgets remain unresolved even when no write verb appears. Python
+programs and file-based interpreter entry points remain unresolved. Reading a
+script before execution would not bind those bytes to the eventual launch.
+
+The profile assumes ordinary Node builtins and controlled startup; it is a
+source-analysis contract, not runtime confinement. Source-selected preload or
+interpreter environments cannot qualify it. Weak path-literal co-occurrence
+observations remain separate legacy diagnostics and confer no write permission
+or mutation finding in the mandatory v2 consumer. Arbitrary external
+applications retain the explicitly limited recognizer boundary.
+
+`caws.node-source-effects.v1` uses Acorn 8.15.0 to parse complete script source
+with ECMAScript 2022 grammar. It admits `const` bindings, plain own-data arrays
+and objects, directly applied local arrows, nonempty array maps with direct
+arrow callbacks, console output and one-argument JSON serialization. Filesystem
+capabilities come only from literal builtin `fs` or `node:fs` imports. The
+admitted APIs are `readFileSync`, `readdirSync`, `writeFileSync` and
+`appendFileSync`; optional encoding must be a string. Read options objects are
+unresolved because their flags can request truncation. Inherited `NODE_PATH`
+alone cannot replace these builtins; nonempty `NODE_OPTIONS` remains unresolved.
+
+The language profile bounds source and cumulative abstract strings at 64 KiB,
+the complete AST at 8,192 nodes and depth 64, abstract values at 4,096, and
+evaluation at 32,768 steps. Exceeded limits return unresolved. It does not read
+entry scripts or execute submitted functions to learn their effects.
 
 The projection shares the expansion engine's limits and adds shared limits of
 4,096 emitted tokens, eight nested shell levels, 32 source jobs, 64 KiB
@@ -342,12 +374,10 @@ contract. It places preparation, authorization and launch under one owner. A
 parser or an optional command wrapper cannot supply that ownership by itself.
 The matching Codex release's reduced hook payload is insufficient input.
 
-The existing interpreter recognizer applies weak path-literal observations only
-at the cross-repository boundary. It can allow Node write source targeting
-another worktree inside the same project; those hints do not enter the ownership
-oracle. This retained consumer limit is not write authority. The proposed
-boundary must establish an effect profile or enforce confinement before
-admitting opaque interpreter programs.
+Interpreter source profiles establish bounded effect knowledge and send proven
+write operands to ownership checks. Opaque interpreter programs have no such
+proof. The proposed execution boundary must enforce the source profile's host
+and byte-custody assumptions or establish confinement before admitting them.
 
 The prerequisite is a trusted integration at the host's final launch point. That
 integration must associate the call with its authenticated session, provide
