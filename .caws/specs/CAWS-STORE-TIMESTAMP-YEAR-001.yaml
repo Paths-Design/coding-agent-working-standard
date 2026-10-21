@@ -32,6 +32,15 @@ acceptance:
     given: 'unknown profiles and malformed, accessor-backed, mismatched or unowned preparation/calendar inputs'
     when: 'preparation or finishing runs'
     then: 'no reference success or OS error is fabricated and existing typed rejection and error precedence remain observable.'
+  - id: A4
+    given: >-
+      the exact committed timestamp source and focused tests under the existing
+      store-surface mutation standard
+    when: 'the coordinator releases the bounded slot and a full-file mutation report is produced'
+    then: >-
+      the unchanged 80 percent floor is met with exact report source correspondence,
+      no invalid or pending verdicts, and consequential survivors inspected without
+      inferring native or cutover acceptance
 observability:
   - 'Retain candidate and runtime identities, exact commands and statuses, per-case differential outputs, selected boundary values and preserved failures outside tracked source.'
 rollback:
