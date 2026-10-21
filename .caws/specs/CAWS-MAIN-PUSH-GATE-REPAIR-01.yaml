@@ -49,3 +49,9 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/worktree-reconciliation.test.js::built CLI preview does not mutate; apply logs one exact receipt and discharges current diagnosis"
     commit_sha: "27596e0c"
     test_verified_at: "27596e0ceaee5a7e5e0cf40433e50fe9d3ebb424"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest tests/init/pack-fingerprint.test.js at b697baa7: 'shared pack fingerprint is unchanged (or version bumped)' passed (test.each case; verifier cannot select parameterized names); fingerprint abd1f542 matches independent derivation at b07e96a1"
+    recorded_at: "2026-10-21T01:54:37.740Z"
+    artifact_path: packages/caws-cli/tests/init/pack-fingerprints.json
+    commit_sha: b697baa7
