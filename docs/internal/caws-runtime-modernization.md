@@ -30,19 +30,18 @@ passing unit tests, or the existence of this document.
 ## Source location and progress
 
 This working ledger is published on `main` independently of candidate source.
-Implementation and evidence through E220 belong to the
-`native-runtime-modernization` integration branch at
-`ac0169989488557c53731b01e97e11431800f6e4`, except where an entry identifies a
-separate component branch or historical revision. Publishing this document does
+The source integration checkpoint is the `native-runtime-modernization` branch
+at `20ca11b4b16a65cdacea4c3d5f890a941df705fe`. Evidence entries identify their
+actual component branch or historical revision. Publishing this document does
 not land those implementations on `main`. Inspect the candidate architecture
-with `git show ac016998:docs/architecture/caws-native-runtime.md`; the relative
+with `git show 20ca11b4:docs/architecture/caws-native-runtime.md`; the relative
 architecture link follows the branch containing this document.
 
 The coverage measure is32/37 rows with qualifying partial implementation
 (86.5%). It is not an overall completion percentage. Parent acceptance is0/8;
 zero complete production Python rows are retired. The selected machine runtime
-is `408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0`.
-Component acceptance, integration-branch landing, delivery on `main`, package
+is `408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0`. Component
+acceptance, integration-branch landing, delivery on `main`, package
 qualification and selected-machine adoption are separate states.
 
 ## Ownership and execution
@@ -5503,13 +5502,13 @@ Additional bounded evidence and unresolved dependencies:
   `e03fd7d0`, `d533d064` and `e31d09ae`. Its spec
   `CAWS-NATIVE-PROJECT-BINDING-001` closes with four scoped PASS records, read
   back from both spec and `ac_recorded` events10301–10304. CLI re-derivation
-  checks the cited commit only; external artifacts were inspected directly.
-  The rejected absolute-artifact citation writes no AC record. Final test
+  checks the cited commit only; external artifacts were inspected directly. The
+  rejected absolute-artifact citation writes no AC record. Final test
   events10298/10299 retain41 selected checks and16 native scenarios; the prior
-  data-schema refusal writes no event. Source-byte evidence retains all73
-  native files matching `e31d09ae` and executable SHA
-  `58de5db0da52f26dc5d71c88d3c7978b7fc96823e233b5422fe84e9ea30ce569`.
-  Raw artifacts remain under the E218 native-project-binding root. Foreign
+  data-schema refusal writes no event. Source-byte evidence retains all73 native
+  files matching `e31d09ae` and executable SHA
+  `58de5db0da52f26dc5d71c88d3c7978b7fc96823e233b5422fe84e9ea30ce569`. Raw
+  artifacts remain under the E218 native-project-binding root. Foreign
   agreement, oversized frame and pre-store EOF yield no rows or budget files;
   established-binding missing-database failure retains the original-project
   counter1. Independent committed review's two fallback findings are repaired
@@ -5520,11 +5519,11 @@ Additional bounded evidence and unresolved dependencies:
   linked checkout. Root verifies its index equals `f0ab6fc4` and no worktree
   delta exists, then uses the source-documented safe before/after
   `git read-tree -u -m f0ab6fc49f1804653097eda19c243b25b4a4e787 ac0169989488557c53731b01e97e11431800f6e4`
-  transition; status is clean. A path restore is refused before execution and
-  is not retried. The pending scope audit commit caused by a concurrent index
-  lock is recovered through `caws specs commit`, commit `7e697074`. The source
-  branch is retained because it is not merged into `main`; no force deletion
-  or installed-runtime change occurs.
+  transition; status is clean. A path restore is refused before execution and is
+  not retried. The pending scope audit commit caused by a concurrent index lock
+  is recovered through `caws specs commit`, commit `7e697074`. The source branch
+  is retained because it is not merged into `main`; no force deletion or
+  installed-runtime change occurs.
 
 - E222: Canonical tracking reconciliation uses the existing ledger and README,
   under `CAWS-CUTOVER-LEDGER-PUBLISH-001`. The canonical ledger's E67 endpoint
@@ -5552,15 +5551,86 @@ Additional bounded evidence and unresolved dependencies:
   `src/transcripts/store-timestamp.ts` and its package-scoped focused test.
   Parent exclusive claims move to supporting scope plus exclusions, and both
   exact paths report CLEAR before the owner creates and claims
-  `native-timestamp-year`, spec `CAWS-STORE-TIMESTAMP-YEAR-001`, from `ac016998`.
-  The owner reports the two files unchanged across the intervening native
-  merge; root reads the actual bound spec and start revision. Root retains
-  native REAL acquisition, publication/receipt/reader integration, parent
-  acceptance and ledger ownership. The finite slot permits sequential pinned
-  compilation, focused tests and retained-reference comparison; new mutation
-  execution waits for the live policies run. Original E204–E206 exclusions
-  remain historical evidence. No timestamp parity, integration or adoption is
-  inferred from this assignment.
+  `native-timestamp-year`, spec `CAWS-STORE-TIMESTAMP-YEAR-001`, from
+  `ac016998`. The owner reports the two files unchanged across the intervening
+  native merge; root reads the actual bound spec and start revision. Root
+  retains native REAL acquisition, publication/receipt/reader integration,
+  parent acceptance and ledger ownership. The finite slot permits sequential
+  pinned compilation, focused tests and retained-reference comparison; new
+  mutation execution waits for the live policies run. Original E204–E206
+  exclusions remain historical evidence. No timestamp parity, integration or
+  adoption is inferred from this assignment.
+
+- E224: Root completes the accepted policies-report inspection. The actual
+  Stryker process has exited; its owner polls the original tool session and
+  reports command exit0. The completed report contains1432 mutants: 1112
+  killed,320 survived,zero timeout/no-coverage/error verdicts. The per-file
+  score77.65% is below the declared80 floor. `break: null` makes process success
+  distinct from the report assertion's policy result. Root reads the configured
+  analysis threshold and per-file assertion formula; it does not infer quality
+  from exit0.
+
+  Retained report SHA is
+  `4c876050be61045f143079794cadd3de1ba576e5b253aa2e087dfe379be55221` at E220's
+  exact policies artifact root. Its embedded source SHA
+  `96ef2d6744838f316bca1442fa14b75d0c73fcefb933010e9308c26ee3bbe70e` equals
+  `git show 56ec1372:packages/caws-cli/src/shell/analysis/policies.ts`. The
+  completed config selects only `command-analysis.test.js`, whereas
+  `mutation-policy.json` declares that suite plus `interpreter-effects.test.js`
+  and `mutation-view.test.js`. This is a completed subset result, not the
+  declared full-topology gate or proof of a production defect. The owner
+  identifies the omitted consumer-observer coverage and accepts validation and
+  consequential source-quality repair, preserving the report and original
+  successful process status without exclusions or floor reduction. Establish
+  representative survivor behavior with declared consumer tests before changing
+  production or rerunning the complete topology. Survivor1431 changes
+  `filesystemChanged` after an unsupported utility; the accompanying reason
+  already holds analysis, so a claimed admission escape requires a consumer
+  trace or targeted falsifier. Meaningful survivor analysis and repairs remain
+  owed. Root retains the combined integration hold; A6's scoped private-package
+  functionality is not whole-source quality or native adoption.
+
+- E225: The existing preparation owner normally merges `199fa5e` through CAWS
+  into the integration branch at `20ca11b4b16a65cdacea4c3d5f890a941df705fe`.
+  Root reads the closed spec and current six PASS records with matching
+  events10321/10322/10323/10324/10326/10327; historical input/output FAIL
+  events10265/10291 remain. Root grounds selected numeric/catch/spill repairs
+  against source and actual final numeric/output artifacts. The8945B/9032B
+  sources refuse encoding under4300 with no generation and full committed
+  checkpoints; unlimited outputs retain exact4301-digit sums. The four-artifact
+  scenario has two turns and a21001-character sibling spill. The actual full
+  runner log retains282 passed,zero failed/skipped/cancelled. Artifacts live
+  under
+  `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/`.
+
+  Independent read-only inspection matches54 compiler inputs to committed Git
+  blobs and52 compiled images across both retained trees, manifest SHA
+  `178b95266e33c5bac7b5ecdbd531797dba57f1ab559682e13c902d91a6fb4e26`. Raw R6/R7
+  baseline and mutant logs contain actual selected semantic failures; initial
+  classifier failures are retained and adjudicated, not rewritten. Historical
+  argv/exits remain recorded subprocess evidence; compiler closure, Node
+  bytes/environment and installed execution are not attested. This is scoped
+  content preparation, not native publication/currentness or full R18. Root
+  accepts the parent integration obligation. A direct root merge is refused for
+  foreign ownership before mutation; the existing owner performs the normal
+  merge without takeover. Root verifies and safely refreshes the previously
+  clean checked-out integration transition from `ac016998` to `20ca11b4`; no
+  path restore, forced history or installed change occurs.
+
+  Root also accepts and grounds the concrete SessionEnd consumer debt. Its
+  actual extracted jq filter expects `usage.models` and renamed token totals;
+  actual renderer output uses top-level `models` and provider usage keys. The
+  retained5359-byte prepared turn makes that filter exit5, cannot iterate over
+  null. A single-number-to3 derived control produces the same failure; adding
+  only an empty nested model list exposes null totals. The old-shaped synthetic
+  control exits0. Source `session-log.sh`292–310 and renderer1456–1465 confirm
+  the mismatch; the whole hook was not executed. Exact commands,
+  source/filter/image/input hashes, stdout and stderr are retained under
+  `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/session-end-consumer-contract/`.
+  This is an ordinary-consumer obligation alongside manifest/current-attempt
+  admission, not a reason to alter the producer to satisfy a synthetic test.
+  Derive the sealer's actual schema/consumers before repairing its mapping. Root
+  retains that outcome; coverage32/37 and parent0/8 do not advance.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -5666,13 +5736,14 @@ progress and does not replace that transaction or its event readback.
    original supplied-session identity without borrowing later parser effects.
 3. Resolve the E185 guard/effect boundary with the existing shell-analysis
    owner, which explicitly accepts the unfinished repair in E213. E220 replaces
-   the earlier A6 FAIL with scoped private-package PASS; pending policies
-   mutation quality, reserved source and trusted-launch dependencies remain
-   obligations. Acceptance of the handoff does not close the hold. Keep
-   the refused CLI inventory unexecuted pending a supported resolution; do not
-   infer an attempted foreign write from the refusal alone. E220 assigns root
-   the exact pending policies-report inspection while retaining source-owner
-   repairs and native A5/A7 integration obligations.
+   the earlier A6 FAIL with scoped private-package PASS; E224's completed
+   subset-quality failure and missing full-topology result, reserved source and
+   trusted-launch dependencies remain obligations. Acceptance of the handoff
+   does not close the hold. Keep the refused CLI inventory unexecuted pending a
+   supported resolution; do not infer an attempted foreign write from the
+   refusal alone. E224 discharges root's finite report inspection and records
+   accepted source-owner repair; native A5/A7 integration obligations remain
+   open.
 4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
    target, embedded-member checks and four direct build/consumer integrations.
    E209 qualifies one frozen current-host release build; ordinary consumer
@@ -5708,14 +5779,17 @@ progress and does not replace that transaction or its event readback.
    incomplete-profile publication reference. E215 assigns coherent typed
    preparation and preserves the actual-reader generation/closure obligation; a
    prepared result cannot stand in for that integration. E219 grounds the exact
-   missing entry/selection/actor/reader connections and retains the R18 owner's
-   embedded-profile and owned-spill repairs before import.
+   missing entry/selection/actor/reader connections. E225 lands the bounded
+   embedded-profile, owned-spill and output-conversion repairs; connect that
+   prepared API to native publication and the actual reader. Repair the
+   source-grounded SessionEnd usage-schema mismatch through its real metadata
+   consumer, preserving provider counts and top-level model ordering.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E223 retain the historical candidates, failures and bounded observations;
+E167–E225 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
