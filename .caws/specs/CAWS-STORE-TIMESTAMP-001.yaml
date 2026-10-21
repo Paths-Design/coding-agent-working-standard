@@ -1,10 +1,11 @@
 id: CAWS-STORE-TIMESTAMP-001
 title: 'Preserve store timestamp arithmetic and typed UTC calendar results'
 mode: feature
-lifecycle_state: active
-worktree: store-timestamp
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed pure opt-in timestamp component3405ada0. A1-A4 recorded/read back in spec and events10145-10148. Frozen CPython reference3673 cells,3648 qualified finals and25 explicit unsupported year-band refusals match exact emittedJS on Node18.0/18.20.8/22;84 synthetic calendar cases,51 Jest on18.20/22,6 semantic controls, normal build/lint/strict/gates0. Candidate source and emitted files retained outside lane before removal. Native calendar identity/errno fallback/locale, async cancellation/cleanup, SQLite acquisition, projection/publication/renderer, profile adoption and full cutover remain parent CAWS-NATIVE-RUNTIME-001 obligations. tmMon INT_MAX C-addition overflow not qualified; no full mutation or universal binary64 proof.'
 created_at: '2026-10-21T12:30:10.806Z'
-updated_at: '2026-10-21T12:30:19.284Z'
+updated_at: '2026-10-21T13:00:18.359Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
