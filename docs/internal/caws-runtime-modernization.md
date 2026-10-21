@@ -4855,10 +4855,13 @@ Additional bounded evidence and unresolved dependencies:
   REAL negative zero retains its binary64 sign in the retrieved cell. Half a
   microsecond rounds to zero while the next higher input rounds to one
   microsecond. Integer max-calendar milliseconds produce `.998993`, whereas
-  nearby REAL milliseconds produce `.999969`; integer true division cannot be
-  replaced with a premature number conversion. i64 extrema return ValueError;
-  the observed finite/time_t cases distinguish caught OSError from escaping
-  OverflowError. These are concrete cases, not a derived full-range classifier.
+  nearby REAL milliseconds produce `.999969`. Those inputs differ; this pair
+  does not falsify premature integer conversion. The exact-division requirement
+  is separately source-grounded in E204, and its check must compare quotient
+  bits beyond2^53 rather than only calendar-error categories. i64 extrema return
+  ValueError; the observed finite/time_t cases distinguish caught OSError from
+  escaping OverflowError. These are concrete cases, not a derived full-range
+  classifier.
 
   The batch pins Python/SQLite and frozen source but omits pre-execution
   `datetime.py`, `_datetime` and OS identity. The separate
@@ -4877,6 +4880,46 @@ Additional bounded evidence and unresolved dependencies:
   before execution. No new source/spec is authorized by this reference entry,
   and no installed profile, native acquisition, product DDL, renderer or full
   cleanup claim is earned. Coverage32/37 and parent0/8 do not advance.
+
+- E204: Root adjudicates the timestamp leaf as two pure stages: prepare tagged
+  SQL cells under an explicit opt-in numeric/profile contract, then finish a
+  supplied typed UTC-calendar result. Message
+  `30c358c1-06f8-4923-b826-69cf9428ab77` authorizes peer A to create/claim a
+  bounded component in exactly `src/transcripts/store-timestamp.ts` and
+  `tests/transcripts/store-timestamp.test.js`, both under `packages/caws-cli/`.
+  Both paths are contention-clear at approval; creation must recheck ownership.
+  No default selection, generic AST/config, Cargo or native change is assigned.
+
+  Root inspects tagged CPython3.11.13 source: integer division rounds the exact
+  rational once
+  ([long_true_divide](https://github.com/python/cpython/blob/v3.11.13/Objects/longobject.c#L3742));
+  REAL division uses binary64
+  ([float_div](https://github.com/python/cpython/blob/v3.11.13/Objects/floatobject.c#L599)).
+  Preparation preserves i64 input and produces exact signed64 seconds plus
+  normalized microseconds. Fraction rounding and range-error ordering follow
+  [PyTime](https://github.com/python/cpython/blob/v3.11.13/Python/pytime.c#L224).
+  Nonnumeric SQL classes return null without coercion. Qualification must
+  compare intermediate quotient bits for i64 values beyond2^53, rounding ties
+  and carry/ borrow, as well as final results.
+
+  A required future native calendar port supplies UTC fields or a typed OS
+  failure; there is no guessed Darwin range model or default JS Date. The leaf
+  keeps OS failure precedence, leap-second clamping, date validation and UTC
+  formatting aligned with
+  [datetime construction](https://github.com/python/cpython/blob/v3.11.13/Modules/_datetimemodule.c#L4701).
+  Separate stages leave asynchronous I/O and cancellation with the caller.
+  Contract/transport failures must remain distinct from reference
+  ValueError/OSError/OverflowError. Prepared values grant no source authority.
+
+  Root retains actual gmtime/errno/locale and native-image qualification, SQL
+  acquisition, async/cancellation integration, projection/publication and
+  installed-profile choice. The C-int extreme-year addition/error-text band is
+  unqualified; neither source review nor E203 establishes every Darwin result.
+  Subsequent differential qualification must capture datetime/platform
+  identities before and after execution. Component commit, fresh read-only
+  review, normal emission, Node18 floor/22 checks, negative controls, gates and
+  dual acceptance readback precede import. This decision does not establish
+  implementation or alter32/37 partial coverage or0/8 parent acceptance.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -4995,18 +5038,19 @@ progress and does not replace that transaction or its event readback.
    E165/E166 source/profile controls. E196 requires a store-specific timestamp
    conversion, explicit integer profile and codepoint-preserving JSON
    projection. E203 supplies bounded actual SQL timestamp/error observations;
-   root must ground platform range/error rules and adjudicate its leaf contract
-   before implementation. E202 imports the closed store-JSON component; root
-   owes its explicit store-AST access/schema projection and both-cell
-   decode/admission order. The generic decoder and JS-string AST cannot silently
-   supply that contract. R09's production consumer and R18 remain unreplaced;
-   standalone composition does not discharge production consumer parity.
+   E204 adjudicates the two-stage leaf; actual native calendar/error behavior
+   and its consumer integration remain root-owned. E202 imports the closed
+   store-JSON component; root owes its explicit store-AST access/schema
+   projection and both-cell decode/admission order. The generic decoder and
+   JS-string AST cannot silently supply that contract. R09's production consumer
+   and R18 remain unreplaced; standalone composition does not discharge
+   production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E203 retain the historical candidates, failures and bounded observations;
+E167–E204 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
