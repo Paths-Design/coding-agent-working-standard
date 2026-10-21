@@ -1,0 +1,46 @@
+id: CAWS-RUNTIME-TRACKER-DOC-CHECK-001
+title: 'Correct doc-check drift in the native runtime migration tracker'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-21T21:32:53.822Z'
+updated_at: '2026-10-21T21:32:53.822Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'Internal native runtime migration tracker'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'No recorded evidence entry, E identifier or open obligation is removed or renumbered.'
+  - 'Each corrected claim states only what git trees, canonical specs or the selected runtime establish.'
+acceptance:
+  - id: A1
+    given: 'the ordered next work section'
+    when: 'an agent re-enters and reads it'
+    then: 'exactly one list governs the next execution and the older list is a labeled remaining-obligations subsection retaining every original item, with no instruction to continue from it instead.'
+  - id: A2
+    given: 'main 8a758936 and integration source 10690d4b'
+    when: 'R14 and R21 are read'
+    then: 'R21 gives twelve modules plus conftest on the integration source and thirteen plus conftest on main, and R14 records the harness_kimi.py change, both matching git ls-tree and git show.'
+  - id: A3
+    given: 'the main and 10690d4b trees'
+    when: 'the developer paths and R19 anchors are read'
+    then: 'every listed remaining path exists on both trees, each deleted path cites its deletion commit, and all fifteen R19 line anchors resolve to a python invocation on 10690d4b.'
+  - id: A4
+    given: 'the document headings and active peer lanes'
+    when: 'a reader follows the evidence ledger, the embedded inventory and the ownership section'
+    then: 'E27 onward sits under an evidence-ledger heading, the embedded-coverage heading immediately precedes the inventory, no in-repo anchor link breaks, the source checkpoint names 10690d4b as source-tree identity, and both active component lanes are named by spec id.'
+  - id: A5
+    given: 'the committed candidate'
+    when: 'prettier check, validate-docs and git diff --check run and the diff is listed'
+    then: 'all exit 0 and the diff touches only docs/internal/caws-runtime-modernization.md.'
+observability:
+  - 'Retain git ls-tree, anchor resolution, prettier, validate-docs and diff-check outputs in the evidence references.'
+rollback:
+  - 'Revert the documentation commit through a governed follow-up if primary evidence contradicts a correction.'
+non_functional: {}
+contracts: []
