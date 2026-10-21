@@ -63,5 +63,14 @@ acceptance:
       neither guard references _realpath, every substitution is followed by an
       explicit refusal that exits 2, and under the mutant the A1 and A4
       failing/absent cases turn red.
+  - id: A4
+    given: 'the A1 fixture with HOOK_TOOL_NAME=Bash and HOOK_COMMAND touching f-wt/src/payload.ts from s-wt'
+    when: >-
+      the shipped bash-write-guard.sh adjudicates it with python3 present, failing
+      and absent, plus an owner-self control
+    then: >-
+      python3 present exits 2 with the foreign-worktree refusal, owner-self exits 0,
+      failing and absent exit 2 with the [caws-guard-realpath] class, and the target
+      path stays absent.
 non_functional: {}
 contracts: []
