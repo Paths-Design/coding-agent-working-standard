@@ -1,9 +1,10 @@
 id: CAWS-GUARD-CONTRACT-DOCS-001
 title: 'Align the four guard landing documents with execution and qualification contracts'
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: guard-contract-docs
 created_at: '2026-10-21T21:21:46.923Z'
-updated_at: '2026-10-21T21:21:50.524Z'
+updated_at: '2026-10-21T21:21:54.428Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
