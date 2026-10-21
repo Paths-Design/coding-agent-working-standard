@@ -66,3 +66,8 @@ evidence:
     evidence_ref: "Candidate a5f8e4c1 heading readback: Evidence ledger L301, Evidence ledger (continued) L411 holding E27 onward, Embedded and developer implementation coverage L5740 directly before the inventory paragraph. In-doc anchor links feature-ledger, ordered-next-work and embedded-and-developer-implementation-coverage all resolve; no other repo markdown links a section anchor in this doc. Source checkpoint names 10690d4b as source-tree identity; git diff --name-only 10690d4b native-runtime-modernization lists only the ledger. CAWS-TRANSCRIPT-NODE-FLOOR-001 and CAWS-STORE-TIMESTAMP-SENSITIVITY-001 named with descriptions drawn from their spec acceptance text. E-id set unchanged (227, same hash as main)."
     recorded_at: "2026-10-21T21:44:38.449Z"
     commit_sha: a5f8e4c1
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "At a5f8e4c1 in a clean worktree: prettier 3.6.2 --check exit 0; node packages/caws-cli/scripts/validate-docs.mjs exit 0 (5 strict-set valid, 30 pre-existing lenient warnings); git diff --check 72c4fd82..a5f8e4c1 exit 0; git diff --name-only lists only docs/internal/caws-runtime-modernization.md (46 insertions, 23 deletions). git merge-tree against main 7ec67259 is clean."
+    recorded_at: "2026-10-21T21:44:41.800Z"
+    commit_sha: a5f8e4c1
