@@ -320,14 +320,19 @@ export function qualifyTranscriptFloorComponent() {
 }
 function moduleImages() {
   const directory = path.resolve(__dirname, '../transcripts');
+  const javascriptFiles = (root: string): string[] =>
+    [...fs.readdirSync(root, { withFileTypes: true })].flatMap((entry) => {
+      const file = path.join(root, entry.name);
+      return entry.isDirectory()
+        ? javascriptFiles(file)
+        : entry.isFile() && entry.name.endsWith('.js')
+          ? [file]
+          : [];
+    });
   return [
     __filename,
     path.join(__dirname, 'transcript-runtime-floor-entry.js'),
-    ...fs
-      .readdirSync(directory)
-      .filter((name) => name.endsWith('.js'))
-      .sort()
-      .map((name) => path.join(directory, name)),
+    ...javascriptFiles(directory).sort(),
   ].map((file) => {
     const bytes = fs.readFileSync(file);
     return { path: file, byteLength: bytes.length, sha256: sha(bytes) };
@@ -365,7 +370,7 @@ export function captureTranscriptFloor(output: string): string {
   const before = moduleImages();
   const result = qualifyTranscriptFloorComponent();
   const after = moduleImages();
-  assert.deepEqual(after, before);
+  assert.deepEqual(after, before, 'Emitted module identities changed during qualification');
   const executable = fs.readFileSync(process.execPath);
   const receipt = {
     ...result.summary,
@@ -389,7 +394,11 @@ export function captureTranscriptFloor(output: string): string {
   for (const artifact of result.artifacts)
     write(path.join('prepared', artifact.name), artifact.bytes);
   verifyTranscriptFloorCapture(target);
-  // A failed write or capture check leaves diagnostics, never a completed receipt.
-  write('receipt.json', Buffer.from(JSON.stringify(receipt, null, 2) + '\n'));
-  return path.join(target, 'receipt.json');
+  // A pending-write failure retains diagnostics without finalizing the receipt.
+  // Rename outcome uncertainty and crash durability are outside this observation.
+  const receiptPath = path.join(target, 'receipt.json');
+  const pendingReceiptPath = path.join(target, 'receipt.pending.json');
+  write('receipt.pending.json', Buffer.from(JSON.stringify(receipt, null, 2) + '\n'));
+  fs.renameSync(pendingReceiptPath, receiptPath);
+  return receiptPath;
 }

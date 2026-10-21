@@ -82,8 +82,25 @@ describe('bounded emitted transcript component qualification on the test runtime
     expect(
       receipt.modulesBefore.some((a) => a.path.endsWith('/transcripts/render-prepare.js'))
     ).toBe(true);
+    for (const nested of [
+      'unicode14/tables.generated.js',
+      'unicode14/names.generated.js',
+      'unicode14/manifest.generated.js',
+      'html311/entities.generated.js',
+      'html311/numeric.generated.js',
+      'html311/manifest.generated.js',
+    ]) {
+      const file = path.resolve(__dirname, '../../dist/transcripts', nested);
+      const bytes = fs.readFileSync(file);
+      expect(receipt.modulesBefore.find((image) => image.path === file)).toEqual({
+        path: file,
+        byteLength: bytes.length,
+        sha256: sha(bytes),
+      });
+    }
     expect(fs.statSync(output).mode & 0o777).toBe(0o700);
     expect(fs.statSync(receiptPath).mode & 0o777).toBe(0o600);
+    expect(fs.existsSync(path.join(output, 'receipt.pending.json'))).toBe(false);
     const originalReceipt = fs.readFileSync(receiptPath);
     expect(() => qualifier.captureTranscriptFloor(output)).toThrow(/must be new/);
     expect(fs.readFileSync(receiptPath)).toEqual(originalReceipt);
@@ -136,6 +153,51 @@ describe('bounded emitted transcript component qualification on the test runtime
       expect(fs.existsSync(path.join(output, 'receipt.json'))).toBe(false);
     }
   );
+
+  test('post-write pending receipt failure retains diagnostics without a final receipt', () => {
+    const output = path.join(root, 'pending-failure');
+    const pending = path.join(output, 'receipt.pending.json');
+    const final = path.join(output, 'receipt.json');
+    const originalWrite = fs.writeFileSync;
+    let faultsFired = 0;
+    const write = jest.spyOn(fs, 'writeFileSync').mockImplementation((file, bytes, options) => {
+      originalWrite(file, bytes, options);
+      if (file === pending) {
+        faultsFired++;
+        throw new Error('injected post-write pending receipt failure');
+      }
+    });
+    expect(() => qualifier.captureTranscriptFloor(output)).toThrow(
+      /^injected post-write pending receipt failure$/
+    );
+    write.mockRestore();
+    expect(faultsFired).toBe(1);
+    expect(fs.existsSync(final)).toBe(false);
+    const retained = fs.readFileSync(pending);
+    expect(JSON.parse(retained).status).toBe('bounded_emitted_module_component_passed');
+    expect(() => qualifier.verifyTranscriptFloorCapture(output)).not.toThrow();
+    expect(() => qualifier.captureTranscriptFloor(output)).toThrow(/must be new/);
+    expect(fs.readFileSync(pending)).toEqual(retained);
+    expect(fs.existsSync(final)).toBe(false);
+  });
+
+  test('nested emitted module identity changes refuse before capture output', () => {
+    const output = path.join(root, 'nested-change');
+    const nested = path.resolve(__dirname, '../../dist/transcripts/unicode14/tables.generated.js');
+    const originalRead = fs.readFileSync;
+    let observations = 0;
+    // Simulate a changed second observation at the file-read boundary; leave source intact.
+    jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+      const bytes = originalRead(file, ...args);
+      if (file === nested && ++observations === 2) return Buffer.concat([bytes, Buffer.from('\n')]);
+      return bytes;
+    });
+    expect(() => qualifier.captureTranscriptFloor(output)).toThrow(
+      /Emitted module identities changed during qualification/
+    );
+    expect(observations).toBe(2);
+    expect(fs.existsSync(output)).toBe(false);
+  });
 
   test('changed package engine contract refuses before creating capture output', () => {
     const output = path.join(root, 'contract-mismatch');
