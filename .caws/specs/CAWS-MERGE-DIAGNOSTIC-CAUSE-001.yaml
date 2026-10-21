@@ -1,10 +1,11 @@
 id: CAWS-MERGE-DIAGNOSTIC-CAUSE-001
 title: 'Preserve underlying merge-event lifecycle diagnostics'
 mode: fix
-lifecycle_state: active
-worktree: merge-diagnostic-cause
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded diagnostic preservation at candidate642b66a609c10782fc95f9f7fd9c38fbacefdd9f: preserve original mergedTxn.errors as nested merged_cause without changing retry, lifecycle, recovery, default rendering or publication policy. Private normal build exited0; seven real-fixture store and in-process shell checks exited0; removing only the emitted assignment in a separate private copy caused both new assertions to fail for missing cause (control exit1). Raw diagnostics, CLI output, two-parent Git graphs, payloads, closed specs, event inventories and retained registry/lane state inspected before acceptance. Initial failed merge-SHA oracle attempt retained; corrected oracle independently derives the integration object before closure audit commit. A1/A2 PASS match ac_recorded10554/10555; five scoped gates0 and doctor0/0E3W4I. Evidence externally retained under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/merge-diagnostic-cause/642b66a609c10782fc95f9f7fd9c38fbacefdd9f/. Compiled controlled-consumer observation only: no installed CLI, exact loaded Jest closure, candidate-lock installation, historical lock cause or missing-event recovery claim. Parent retains audit and full cutover obligations.'
 created_at: '2026-10-21T22:33:13.165Z'
-updated_at: '2026-10-21T22:33:50.812Z'
+updated_at: '2026-10-21T23:31:23.658Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
