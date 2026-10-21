@@ -149,8 +149,10 @@ programs and file-based interpreter entry points remain unresolved. Reading a
 script before execution would not bind those bytes to the eventual launch.
 
 The profile assumes ordinary Node builtins and controlled startup; it is a
-source-analysis contract, not runtime confinement. Source-selected preload or
-interpreter environments cannot qualify it. Weak path-literal co-occurrence
+source-analysis contract, not runtime confinement. Preloads selected by the
+submitted source and assignments to tracked startup bindings remain unresolved.
+Ordinary application bindings, such as `NODE_ENV` or `NODE_OPTIONS_DATA`, do not
+by themselves invalidate this profile. Weak path-literal co-occurrence
 observations remain separate legacy diagnostics and confer no write permission
 or mutation finding in the mandatory v2 consumer. Arbitrary external
 applications retain the explicitly limited recognizer boundary.
