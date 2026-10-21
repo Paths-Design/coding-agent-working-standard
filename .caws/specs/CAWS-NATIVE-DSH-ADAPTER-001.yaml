@@ -1,0 +1,47 @@
+id: CAWS-NATIVE-DSH-ADAPTER-001
+title: 'Historical stateful DSH transcript row adapter'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T02:17:14.740Z'
+updated_at: '2026-10-21T02:17:14.740Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'DSH transcript matching governance reasoning tool usage and paired step state'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/harness-dsh.ts'
+    - 'packages/caws-cli/tests/transcripts/dsh.test.ts'
+  out: []
+invariants:
+  - 'Preserve original occurrence custody and numeric kinds; transcript governance descriptions and labels confer no execution authority.'
+  - 'Derive DSH timestamp division key equality rounding deduplication and failure order from actual pinned Python observations rather than Kimi analogy; failed or tentative drafts confer no durable state authority.'
+acceptance:
+  - id: A1
+    given: 'historical DSH rows and hostile malformed shapes'
+    when: 'typed matching and projection run'
+    then: 'claimed and ignored kinds ordered conversation reasoning governance usage tool data and error semantics match independent pinned Python3.11.13 references'
+  - id: A2
+    given: 'ordered descriptor and step sequences including hostile keys and labeled seeded states'
+    when: 'direct projection and occurrence transactions execute'
+    then: 'deduplication numeric key equivalence overwrite pairing ties-to-even duration and failure-order observations match the reference while caller state remains isolated from failed or tentative drafts'
+  - id: A3
+    given: 'millisecond values Unicode14 text and complete partial empty or mismatched raw occurrences'
+    when: 'normalization runs on Node18 and22 without Python'
+    then: 'source-derived timestamp conversion and errors exact bytes emitting paths attribution and frozen envelopes remain observable with tentative commitAllowed false'
+  - id: A4
+    given: 'committed two-file component and retained independent reference sequences'
+    when: 'strict compilation semantic tests targeted negative controls and declared gates execute'
+    then: 'exact checked identities and concrete runtime artifacts support only the bounded component while registry acquisition cache writer native installation full workload Python retirement and cutover remain unverified'
+observability:
+  - 'Retain source and interpreter profile identities original fixture bytes ordered events exact errors state before and after source custody command argv cwd exit and raw streams.'
+rollback:
+  - 'Revert standalone adapter commit; no production consumers or installed runtime are modified.'
+non_functional:
+  security:
+    - 'Never execute transcript content or infer operational authority from normalized governance control events.'
+contracts:
+  - name: 'historical-dsh-transcript'
+    type: behavior
