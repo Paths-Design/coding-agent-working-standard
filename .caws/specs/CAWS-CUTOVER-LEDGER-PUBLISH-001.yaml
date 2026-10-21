@@ -47,9 +47,9 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Canonical E67 ledger reconciled from clean integration ac016998 through E223; no main-only ledger commit omitted. Explicit32/37 partial86.5%,parent0/8,zero complete production retirement,selected408; source/main/adoption distinct. Native scoped4AC events10301-10304 and e31 ancestry inspected; timestamp actual boundtwofile spec/base verified. Independent doc peer found only READMEload-error ambiguity, repaired04bccb2a. gitdiffcheck0 and committed five gates PASS; content/history inspected. Lint-staged first commit reports ignored-doc restage failure despite commit0; clean committed bytes verified, not a green lint-staged claim."
-    recorded_at: "2026-10-21T19:56:36.709Z"
-    commit_sha: "04bccb2a1ecb1fed7d5aed118ab3da46964e4efd"
+    evidence_ref: "Reconciled canonicalE67 record throughE225; nativebindingac016998 and preparation20ca11 actualancestry/closedcomponentACs readback. Existing standalone-component rule nowconsistently includesR18:33/37partial89.2%,4excludedrows,parent0/8,zero productionretirement,408selected. Peer row-metric finding sourcegrounded and repaired72a24a40. Source/main/package/adoption separated; rawsubset policies77.65 andmissingdeclaredtopology/acceptedrepair retained; actualSessionEndfilter/schema mismatch and crossprocessacquisition/custody debt remainopen. gitdiffcheck0; fourfile committedgates all5PASS. This is reviewed documentation, not parentcompletion."
+    recorded_at: "2026-10-21T20:16:42.672Z"
+    commit_sha: "72a24a403fc3f80cf85c42b71a0bafe96fa4d0fc"
   - criterion_id: A2
     status: pass
     evidence_ref: "README41/225 says doctor error-severity findings or load errors; inspected canonical doctor.ts369-374/432-440 hasErrors=findingCounts.errors>0||loadCounts.errors>0,return1else0. Actual cawsdoctor exit0 with findings0E/3W/4I andload0E/0W/0I; no new runtime installation. Peer ambiguity grounded and repaired04bccb2a. CLI verification checks commit identity only; source/runtime semantics directly inspected."
