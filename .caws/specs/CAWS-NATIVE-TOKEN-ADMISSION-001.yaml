@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-TOKEN-ADMISSION-001
+title: 'Add optional per-occurrence transcript number admission without selecting a numeric profile'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T02:35:34.254Z'
+updated_at: '2026-10-21T02:35:34.254Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Lossless transcript JSON token admission seam'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/lossless-json.ts'
+    - 'packages/caws-cli/tests/transcripts/lossless-json.test.ts'
+  out: []
+invariants:
+  - 'One-argument parsing and jsonNumber remain uncapped; no production numeric profile, acquisition, cache, nested-helper policy, renderer, package or installed-runtime behavior is selected by this component.'
+  - 'Optional admission observes each recognized frozen numeric token exactly once before duplicate-key collapse or later syntax, with original lexeme and kind; callback failures propagate unchanged.'
+acceptance:
+  - id: A1
+    given: 'arbitrary integer lexemes and existing parser inputs'
+    when: 'one-argument parsing or jsonNumber executes without an admission callback'
+    then: 'lossless uncapped values and the existing syntax behavior are preserved.'
+  - id: A2
+    given: 'repeated, overwritten, unused, nested and nonfinite numeric occurrences plus quoted digits'
+    when: 'a recording admission callback executes'
+    then: 'every actual numeric occurrence is observed once in source order as a frozen original-lexeme token while strings and object keys are not admitted.'
+  - id: A3
+    given: 'malformed input before or after a number and a callback that refuses a token'
+    when: 'parsing reaches or fails before that number'
+    then: 'source-order syntax precedence is preserved and any admission refusal propagates at that token with the original thrown identity before later syntax or duplicate collapse.'
+observability:
+  - 'Committed source identities, strict transcript compiler and focused test commands with raw stdout/stderr and actual exits, ordered token observations and refusal identity controls.'
+rollback:
+  - 'Revert only the two scoped parser/test changes through ordinary governed Git; preserve prior failed artifacts and avoid installed-runtime changes.'
+non_functional: {}
+contracts:
+  - name: 'transcript-number-token-admission'
+    type: api
+    path: 'packages/caws-cli/src/transcripts/lossless-json.ts'
