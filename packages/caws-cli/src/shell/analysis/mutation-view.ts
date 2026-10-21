@@ -4,6 +4,7 @@ import { classifyInterpreterEffects } from './interpreter-effects';
 import { resolveGitContext } from './git-context';
 import type { GitContext, GitContextResolver } from './git-context';
 import type { Command, Redirection } from './parser-types';
+import { nodeStartupBinding } from './policies';
 import type { Argument, GitMetadataObservation, Location, State, Value } from './types';
 
 export interface MutationViewRequest {
@@ -642,16 +643,20 @@ export async function projectMutationView(
           unwrapped.environment ||
           node.prefix.some((part) => part.type === 'Assignment') ||
           [...state.bindings.keys()].some((key) =>
-            language === 'node'
-              ? key === 'NODE_OPTIONS' || key === 'NODE_PATH'
-              : key.startsWith('PYTHON')
+            language === 'node' ? nodeStartupBinding(key) : key.startsWith('PYTHON')
           ) ||
           // This profile permits only literal builtin fs imports. Node resolves
           // those before NODE_PATH's fallback lookup for nonbuiltin modules.
-          // Inherited NODE_OPTIONS can instead preload or transform execution;
-          // an empty value supplies no such options.
+          // Known startup controls include coverage/compile-cache writers and
+          // native configuration loaders. Only known inactive empty settings
+          // can be omitted; a source rebind above never borrows that exception.
           (language === 'node'
-            ? Boolean(process.env.NODE_OPTIONS)
+            ? Object.keys(process.env).some(
+                (key) =>
+                  nodeStartupBinding(key) &&
+                  key !== 'NODE_PATH' &&
+                  !(['NODE_OPTIONS', 'NODE_V8_COVERAGE'].includes(key) && process.env[key] === '')
+              )
             : Object.keys(process.env).some((key) => key.startsWith('PYTHON')));
         const effects: MutationInterpreter['effects'] = startupChanged
           ? {

@@ -15,9 +15,24 @@ export function resolveDirectory(path: string, cwd: string): string | null {
   }
 }
 const SENSITIVE =
-  /^(?:IFS|PATH|CDPATH|ENV|BASH_ENV|SHELLOPTS|BASHOPTS|GLOBIGNORE|POSIXLY_CORRECT|LANG|LC_.*|RIPGREP_CONFIG_PATH|GIT_CONFIG.*|NODE_OPTIONS|NODE_PATH|PYTHONPATH|PYTHONHOME|PYTHONSTARTUP|PYTHONINSPECT|LD_.*|DYLD_.*)$/;
+  /^(?:IFS|PATH|CDPATH|ENV|BASH_ENV|SHELLOPTS|BASHOPTS|GLOBIGNORE|POSIXLY_CORRECT|LANG|LC_.*|RIPGREP_CONFIG_PATH|GIT_CONFIG.*|PYTHONPATH|PYTHONHOME|PYTHONSTARTUP|PYTHONINSPECT|LD_.*|DYLD_.*)$/;
+/** Exact startup controls; similarly named application data is not a control. */
+export function nodeStartupBinding(name: string): boolean {
+  return [
+    'NODE_OPTIONS',
+    'NODE_PATH',
+    'NODE_V8_COVERAGE',
+    'NODE_COMPILE_CACHE',
+    'NODE_REDIRECT_WARNINGS',
+    'NODE_REPL_EXTERNAL_MODULE',
+    'NODE_REPL_HISTORY',
+    'NODE_ICU_DATA',
+    'OPENSSL_CONF',
+    'OPENSSL_ENGINES',
+  ].includes(name);
+}
 export function sensitiveBinding(name: string): boolean {
-  return SENSITIVE.test(name);
+  return SENSITIVE.test(name) || nodeStartupBinding(name);
 }
 
 /** Git's reciprocal linked-worktree files bind metadata to this exact pin. */

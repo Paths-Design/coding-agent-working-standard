@@ -150,8 +150,22 @@ arrow callbacks, console output and one-argument JSON serialization. Filesystem
 capabilities come only from literal builtin `fs` or `node:fs` imports. The
 admitted APIs are `readFileSync`, `readdirSync`, `writeFileSync` and
 `appendFileSync`; optional encoding must be a string. Read options objects are
-unresolved because their flags can request truncation. Inherited `NODE_PATH`
-alone cannot replace these builtins; nonempty `NODE_OPTIONS` remains unresolved.
+unresolved because their flags can request truncation. The startup-control
+policy matches exact names: `NODE_OPTIONS`, `NODE_PATH`, `NODE_V8_COVERAGE`,
+`NODE_COMPILE_CACHE`, `NODE_REDIRECT_WARNINGS`, `NODE_REPL_EXTERNAL_MODULE`,
+`NODE_REPL_HISTORY`, `NODE_ICU_DATA`, `OPENSSL_CONF` and `OPENSSL_ENGINES`.
+Similarly named application data, such as `NODE_OPTIONS_DATA`, is not a startup
+setting. Inherited `NODE_PATH` alone cannot replace these builtins. Empty
+inherited `NODE_OPTIONS` and `NODE_V8_COVERAGE` are inactive; source rebinding
+cannot borrow those exceptions because an inherited export attribute survives a
+plain assignment. Coverage, compile-cache, warning-file and native configuration
+settings therefore cannot borrow a harmless payload's effects. The
+[Node coverage startup code](https://github.com/nodejs/node/blob/v22.19.0/lib/internal/process/pre_execution.js)
+and
+[environment contract](https://nodejs.org/download/release/v22.19.0/docs/api/cli.html#environment-variables)
+define the known exceptions. This is source analysis under a controlled host;
+the launcher must own the actual child's environment and qualify the runtime
+version and its startup contract before using these effects to admit execution.
 
 Node option validation continues after the selected code operand until `--`,
 `-`, or the first positional argument. Trailing preloads and other unmodeled

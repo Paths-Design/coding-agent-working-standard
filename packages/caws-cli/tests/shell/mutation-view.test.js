@@ -1353,6 +1353,29 @@ describe('mutation projection preserves program roles and source custody', () =>
       { NODE_OPTIONS: '--require /must-not-execute.cjs' },
     ],
     ['inherited-empty-node-options', "node -e 'console.log(1)'", undefined, { NODE_OPTIONS: '' }],
+    ['inherited-empty-coverage', "node -e '1'", undefined, { NODE_V8_COVERAGE: '' }],
+    ...['NODE_V8_COVERAGE', 'NODE_COMPILE_CACHE', 'NODE_REDIRECT_WARNINGS', 'OPENSSL_CONF'].map(
+      (name) => [
+        'inherited-startup-' + name,
+        "node -e '1'",
+        undefined,
+        { [name]: '/untrusted/output' },
+      ]
+    ),
+    ...['NODE_OPTIONS', 'NODE_PATH', 'NODE_V8_COVERAGE', 'NODE_COMPILE_CACHE', 'OPENSSL_CONF'].map(
+      (name) => [
+        'rebound-startup-' + name,
+        name + "='/untrusted/output'; node -e '1'",
+        undefined,
+        { [name]: '' },
+      ]
+    ),
+    ...['NODE_ENV', 'NODE_NO_WARNINGS', 'NODE_DISABLE_COLORS', 'NODE_OPTIONS_DATA'].flatMap(
+      (name) => [
+        ['inherited-data-' + name, "node -e '1'", undefined, { [name]: '1' }],
+        ['rebound-data-' + name, name + "='1'; node -e '1'", undefined, { [name]: '' }],
+      ]
+    ),
   ];
   beforeAll(() => {
     temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-projection-roles-'));
@@ -1420,6 +1443,37 @@ describe('mutation projection preserves program roles and source custody', () =>
   });
   afterAll(() => {
     if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+  });
+  test.each([
+    ...['NODE_V8_COVERAGE', 'NODE_COMPILE_CACHE', 'NODE_REDIRECT_WARNINGS', 'OPENSSL_CONF'].map(
+      (name) => 'inherited-startup-' + name
+    ),
+    ...['NODE_OPTIONS', 'NODE_PATH', 'NODE_V8_COVERAGE', 'NODE_COMPILE_CACHE', 'OPENSSL_CONF'].map(
+      (name) => 'rebound-startup-' + name
+    ),
+  ])('%s cannot borrow the literal payload effects', (id) => {
+    expect(issueCodes(id)).toContain('mutation-interpreter-effects');
+    expect(result(id).interpreters).toHaveLength(1);
+    expect(result(id).interpreters[0].effects).toEqual({
+      kind: 'unresolved',
+      profile: null,
+      reason: 'Interpreter environment or startup effects are not proven.',
+      writes: [],
+    });
+    if (id.startsWith('rebound-')) expect(issueCodes(id)).toContain('environment-change');
+  });
+  test.each([
+    'inherited-empty-coverage',
+    ...['NODE_ENV', 'NODE_NO_WARNINGS', 'NODE_DISABLE_COLORS', 'NODE_OPTIONS_DATA'].flatMap(
+      (name) => ['inherited-data-' + name, 'rebound-data-' + name]
+    ),
+  ])('%s preserves the proven readonly payload', (id) => {
+    expect(result(id).issues).toEqual([]);
+    expect(result(id).interpreters[0].effects).toEqual({
+      kind: 'readonly',
+      profile: 'caws.node-source-effects.v1',
+      writes: [],
+    });
   });
   test.each(NODE_OPTION_HOLDS)(
     '%s cannot certify an incomplete Node option vector',

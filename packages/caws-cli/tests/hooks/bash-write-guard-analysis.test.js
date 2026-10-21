@@ -464,6 +464,16 @@ test('file-entry bytes cannot authorize execution even when the script exists', 
   );
   refused('cd scripts; node task.mjs', 'mutation-interpreter-effects');
 });
+test('an exported startup writer cannot hide behind an inactive inherited value', () => {
+  const target = path.join(fx.sibling, 'coverage-never-written');
+  const result = guard('NODE_V8_COVERAGE=' + quote(target) + "; node -e '1'", {
+    NODE_V8_COVERAGE: '',
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('environment-change');
+  expect(fs.existsSync(target)).toBe(false);
+});
 test.each(["-e '1'", "--eval='1'", "-p '1'"])(
   'Node %s cannot hide trailing startup or replacement source',
   (selected) => {

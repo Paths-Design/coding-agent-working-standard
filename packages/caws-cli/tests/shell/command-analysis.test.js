@@ -13,6 +13,39 @@ const wordCases = require('../fixtures/command-analysis/abstract-words.cjs');
 require('../fixtures/command-analysis/git-context-cases.cjs')(
   path.resolve(__dirname, '../../dist/shell/analysis/git-context.js')
 );
+describe('Node startup binding policy', () => {
+  const { nodeStartupBinding, sensitiveBinding } = require('../../dist/shell/analysis/policies.js');
+  test.each([
+    ['NODE_OPTIONS', true],
+    ['NODE_PATH', true],
+    ['NODE_V8_COVERAGE', true],
+    ['NODE_COMPILE_CACHE', true],
+    ['NODE_REDIRECT_WARNINGS', true],
+    ['NODE_REPL_EXTERNAL_MODULE', true],
+    ['NODE_REPL_HISTORY', true],
+    ['NODE_ICU_DATA', true],
+    ['OPENSSL_CONF', true],
+    ['OPENSSL_ENGINES', true],
+    ['NODE_FUTURE_STARTUP', false],
+    ['NODE_', false],
+    ['NODE_OPTIONS_DATA', false],
+    ['NODE_PATH_DATA', false],
+    ['NODE_V8_COVERAGE_DATA', false],
+    ['NODE_ENV_EXTRA', false],
+    ['NODE_NO_WARNINGS_EXTRA', false],
+    ['NODE_DISABLE_COLORS_EXTRA', false],
+    ['NODE_ENV', false],
+    ['NODE_NO_WARNINGS', false],
+    ['NODE_DISABLE_COLORS', false],
+    ['NODE', false],
+    ['XNODE_OPTIONS', false],
+    ['node_OPTIONS', false],
+    ['OTHER', false],
+  ])('%s has explicit startup sensitivity %s', (name, expected) => {
+    expect(nodeStartupBinding(name)).toBe(expected);
+    expect(sensitiveBinding(name)).toBe(expected);
+  });
+});
 // Feed inert command strings to the compiled consumer over stdin. Jest's VM
 // cannot import the parser's ESM, so use one real Node process, without a shell.
 const RUNNER = String.raw`

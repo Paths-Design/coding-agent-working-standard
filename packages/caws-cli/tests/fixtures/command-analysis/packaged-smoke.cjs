@@ -230,6 +230,15 @@ try {
   const unknownInterpreter = writeGuard("node -e 'unrecognizedOperation()'");
   assert.equal(unknownInterpreter.status, 2, JSON.stringify(unknownInterpreter));
   assert.match(unknownInterpreter.stderr, /mutation-interpreter-effects/);
+  const reboundCoverage = writeGuard(
+    `NODE_V8_COVERAGE='${foreign}/coverage-never-written'; node -e '1'`,
+    { NODE_V8_COVERAGE: '' }
+  );
+  assert.equal(reboundCoverage.status, 2, JSON.stringify(reboundCoverage));
+  assert.match(reboundCoverage.stderr, /environment-change/);
+  assert.equal(fs.existsSync(path.join(foreign, 'coverage-never-written')), false);
+  const inactiveCoverage = writeGuard("node -e '1'", { NODE_V8_COVERAGE: '' });
+  assert.equal(inactiveCoverage.status, 0, inactiveCoverage.stderr);
   const trailingStartup = writeGuard("node -e '1' --require /not-executed.cjs");
   assert.equal(trailingStartup.status, 2, JSON.stringify(trailingStartup));
   assert.match(trailingStartup.stderr, /mutation-interpreter-option/);
@@ -359,6 +368,8 @@ try {
       packagedWriteGuardForeignWorktreeInterpreter: foreignWorktreeInterpreter.status,
       packagedWriteGuardForeignReadOwnedWrite: foreignReadOwnedWrite.status,
       packagedWriteGuardUnknownInterpreter: unknownInterpreter.status,
+      packagedWriteGuardReboundCoverage: reboundCoverage.status,
+      packagedWriteGuardInactiveCoverage: inactiveCoverage.status,
       packagedWriteGuardTrailingStartup: trailingStartup.status,
       packagedWriteGuardReplacementSource: replacementSource.status,
       packagedWriteGuardOptionData: optionData,
