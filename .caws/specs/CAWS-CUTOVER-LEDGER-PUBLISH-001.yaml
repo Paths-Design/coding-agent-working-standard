@@ -52,13 +52,13 @@ evidence:
     commit_sha: "40b21a7a37ceec0deb2b9f5bbaaa56ff61697584"
   - criterion_id: A2
     status: pass
-    evidence_ref: "README and governingcommandcontract both distinguish doctorerror-severity findings/loaderrors fromwarnings. Actual canonicaldoctor.ts369-374/432-440 hasErrors errors-only; retaineddoctor exit0 with0E/3W/4I. Peer ambiguity corrected04bccb2a,dependentcontract corrected84c91390. No runtimeinstall. CLIverify checkscommit only; semantics groundedsource/runtime."
-    recorded_at: "2026-10-21T20:16:44.524Z"
+    evidence_ref: "Main README+governingcontract doctorerrors-only wording published1f5a8621. IntegrationREADME alreadycontains samewording; source40b21a7a updates governingcontract only with identicalreviewed corrections. Actualdoctor.ts errors-only predicate and freshsource cawsdoctor exit0/findings0E3W4I/load0E0W0I inspected. No runtimeinstallation; commitverification only."
+    recorded_at: "2026-10-21T20:23:32.148Z"
     command: caws doctor
     exit_code: 0
-    commit_sha: "72a24a403fc3f80cf85c42b71a0bafe96fa4d0fc"
+    commit_sha: "40b21a7a37ceec0deb2b9f5bbaaa56ff61697584"
   - criterion_id: A3
     status: pass
-    evidence_ref: "Actual gitcheck-ignore --no-index shows exact !ledger exception and positive docs/internal/* scratchrule; independentpeer alsochecks siblings/nested scratch. Normal gitadd withoutforce and subsequentaba5818a/84c91390/72a24a40 commits complete formatter/restaging withno ignored-pathfailure,exit0/statusclean. Initialfailedrestaging retained; no hook bypass. Onlycanonicalledger unignored; otherinternalscratch remainsignored."
-    recorded_at: "2026-10-21T20:16:46.317Z"
-    commit_sha: "72a24a403fc3f80cf85c42b71a0bafe96fa4d0fc"
+    evidence_ref: "Canonicalmain exactledgerignoreexception fixedaba5818a and subsequentordinarygitadd/commits formatter/restaging0. Integrationalreadyhad same docs/internal/* plusnegativeledgerexception, so preserveditsrule without broadunignore. Actualsourcecheck-ignore identifiesledgerexception andscratchwildcard; source40b21a7a ordinarytwofile commit/lint-staged allstagescompleted0,statusclean. Initialmain ignored-pathfailure retained; noforceadd/hookbypass."
+    recorded_at: "2026-10-21T20:23:33.225Z"
+    commit_sha: "40b21a7a37ceec0deb2b9f5bbaaa56ff61697584"
