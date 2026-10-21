@@ -619,6 +619,14 @@ describe('mutation view uses shared traversal without granting scope', () => {
         queries: [{ ...query, overrides: { GIT_DIR: metadataContext.directory } }],
         rows: ['add'],
       },
+      {
+        id: 'metadata-relative-common-input',
+        command: 'GIT_COMMON_DIR=. git add -- file',
+        plan: [],
+        queries: [],
+        rows: [],
+        code: 'metadata-coordinate-unresolved',
+      },
       ...['directory', 'common', 'worktree'].map((field) => ({
         id: 'metadata-relative-' + field,
         command: 'git add -- file',

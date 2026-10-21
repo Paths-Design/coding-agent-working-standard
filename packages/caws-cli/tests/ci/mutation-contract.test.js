@@ -219,6 +219,27 @@ describe('mutation policy topology contract', () => {
     expect(names.test('bounded shell analysis contract semantic mutation in policies')).toBe(false);
   });
 
+  test.each([
+    [
+      'multiline benign source',
+      'bounded interpreter source effects admits only modeled benign source: // writeFileSync("/foreign", "x")\nconsole.log("write /foreign/output");',
+      true,
+    ],
+    [
+      'control words inside benign source',
+      'bounded interpreter source effects admits only modeled benign source: console.log("semantic mutation in data");',
+      true,
+    ],
+    [
+      'multiline control payload',
+      'bounded shell analysis contract semantic mutation in policies\nsource payload',
+      false,
+    ],
+  ])('analysis name selection handles %s', (_label, name, selected) => {
+    const config = require(path.join(PACKAGE_ROOT, 'stryker.analysis.conf.js'));
+    expect(new RegExp(config.jest.config.testNamePattern).test(name)).toBe(selected);
+  });
+
   test.each(['kernel', 'store', 'shell', 'analysis'])(
     '%s sandbox excludes sibling runs while retaining source and tests',
     (surface) => {
