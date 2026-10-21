@@ -3,6 +3,7 @@ import {
   decodeRuntimeRequest,
   encodeRuntimeResponse,
   MAX_REQUEST_DURATION_MS,
+  SESSION_CACHE_CAPABILITY,
   type RuntimeRequest,
 } from './protocol';
 import {
@@ -17,6 +18,7 @@ import {
 } from './live-protocol';
 import { prepareRuntimeInvocation, type PreparedRuntimeInvocation } from './engine';
 import { containmentWire } from './containment';
+import { createNativeSessionCachePort } from './session-cache-client';
 
 /** Private one-shot protocol entry. Installation and resident-host selection are separate contracts. */
 export async function runEngineEntry(): Promise<void> {
@@ -52,7 +54,18 @@ export async function runEngineEntry(): Promise<void> {
       () => controller.abort(new Error('Native request deadline expired')),
       Math.max(1, request.deadlineEpochMs - Date.now())
     );
-    prepared = await prepareRuntimeInvocation(request, controller.signal);
+    const sessionCache =
+      request.sessionCache === SESSION_CACHE_CAPABILITY
+        ? createNativeSessionCachePort(
+            request,
+            {
+              read: (signal) => reader.read(signal),
+              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
+            },
+            controller.signal
+          )
+        : undefined;
+    prepared = await prepareRuntimeInvocation(request, controller.signal, sessionCache);
     await writeRuntimeFrame(
       process.stdout,
       {

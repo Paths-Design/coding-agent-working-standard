@@ -23,7 +23,9 @@ import { InvocationJournal } from './journal';
 import { AdvisoryDedup } from './advisory-dedup';
 import { normalizeNativeResult } from './native-response';
 import { resolveInvocationSelection, type ActiveInvocationSelection } from './selection';
-import { encodeRuntimeResponse, type RuntimeRequest } from './protocol';
+import { encodeRuntimeResponse, SESSION_CACHE_CAPABILITY, type RuntimeRequest } from './protocol';
+import { qualifiesForNativeSessionCache } from './session-cache-admission';
+import { sessionCacheInputSupported, type NativeSessionCachePort } from './session-cache-client';
 import type { NativeResult } from './types';
 import { prepareNativeRenderOffer, type NativeRenderOffer } from './service-offer';
 import { type NativeRenderAdmission, disposeNativeRenderAdmission } from './service-image';
@@ -193,7 +195,8 @@ export interface PreparedRuntimeInvocation {
 
 export async function prepareRuntimeInvocation(
   request: RuntimeRequest,
-  signal: AbortSignal
+  signal: AbortSignal,
+  nativeSessionCache?: NativeSessionCachePort
 ): Promise<PreparedRuntimeInvocation> {
   const environment = invocationEnvironment(request.caller);
   clearGuardConfigurationTransport(environment);
@@ -308,6 +311,7 @@ export async function prepareRuntimeInvocation(
       if (signal.aborted) throw signal.reason;
       dispatched = true;
       journal.append('dispatch_started');
+      let cacheDiagnostic = '';
       try {
         const options = {
           request,
@@ -315,7 +319,40 @@ export async function prepareRuntimeInvocation(
           environment: invocationGuardConfiguration(selection, environment),
           signal,
         };
-        if (compatibilityRequired(request, selection, environment)) {
+        let compatibility = compatibilityRequired(request, selection, environment);
+        if (!compatibility) {
+          const sid = request.payload.session_id;
+          // Unsafe/non-string identity retains the complete parser's diagnostic
+          // behavior. Resolved fallback identity must never select cache writes.
+          const supportedSid =
+            sid === undefined ||
+            (typeof sid === 'string' &&
+              (sid === '' ||
+                sid === 'unknown' ||
+                (sid !== '.' && sid !== '..' && /^[A-Za-z0-9_.@:-]+$/.test(sid))));
+          if (
+            !nativeSessionCache ||
+            request.sessionCache !== SESSION_CACHE_CAPABILITY ||
+            !supportedSid ||
+            !sessionCacheInputSupported(request.inputJson) ||
+            !qualifiesForNativeSessionCache({ request, selection, environment })
+          ) {
+            compatibility = true;
+          } else {
+            // Ready and the native dispatch grant precede this awaited prefix.
+            // It also runs for empty or entirely reprieved handler selections.
+            const cache = await nativeSessionCache.capture(selection.canonical);
+            if (signal.aborted) throw signal.reason;
+            journal.append('session_cache_completed', {
+              status: cache.status,
+              envelope_published: cache.envelopePublished,
+            });
+            if (cache.status === 'declined') compatibility = true;
+            else if (cache.status === 'unavailable')
+              cacheDiagnostic = '[caws runtime] ' + cache.diagnostic + '\n';
+          }
+        }
+        if (compatibility) {
           const completed = await executeCompatibilityDispatch({
             ...options,
             ...(admission ? { nativeRenderAdmission: admission } : {}),
@@ -394,7 +431,7 @@ export async function prepareRuntimeInvocation(
           ...result,
           stderr: Buffer.concat([
             result.stderr,
-            Buffer.from(identity.diagnostic + journal.takeDiagnostics()),
+            Buffer.from(cacheDiagnostic + identity.diagnostic + journal.takeDiagnostics()),
           ]),
         })
       );

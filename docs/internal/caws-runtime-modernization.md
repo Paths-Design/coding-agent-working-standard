@@ -135,13 +135,13 @@ lane. GPT-6.1 Sol assignments produce bounded drafts or read-only findings; only
 separately bound peer lanes own their declared source. These assignments do not
 confer authority or acceptance.
 
-| Outcome                                        | Owner and boundary                                                                                                                                            | Observable acceptance / falsifier                                                                                                                                                                                            |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                                                          | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                               |
-| Complete heartbeat consumer                    | Root integrates `ad3a6d24`; Sol drafts the anchored native session-cache operation; root owns precomposition binding and native custody qualification         | E172/E173 retain typed application/runtime checks and a finite native run. E177 resolves retained missing-SID cleanup. Durable session-envelope parity and fresh complete-chain qualification remain open.                   |
-| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                                                                | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets         |
-| Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29`                                     | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                                     |
-| Transcript adapters and interpretation         | Root integrates closed Claude/Qwen/Kimi/DSH and numeric-token components; chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` owns the next OpenCode/Zcode components | Claude and token parent imports are observed in E168/E179; Qwen/Kimi/DSH imports remain open. E178 verifies DSH closed on main. Acquisition, cache, writer, profile selection and installed consumption remain parent-owned. |
+| Outcome                                        | Owner and boundary                                                                                                                 | Observable acceptance / falsifier                                                                                                                                                                                                                                |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                               | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                                                                   |
+| Complete heartbeat consumer                    | Root integrates typed application, native cache exchange and precomposition binding; root owns complete-chain qualification        | E172/E173 retain prior application/runtime checks; E177 resolves retained missing-SID cleanup. E182/E186 exercise cache publication and downstream attribution/authority. Fresh full-stock heartbeat replay and complete dependency/profile closure remain open. |
+| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                                     | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets                                             |
+| Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29`          | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                                                                         |
+| Transcript adapters and interpretation         | Root integrates closed Claude/Qwen/Kimi/DSH/OpenCode/Zcode and numeric-token components; peers own only separately assigned slices | Claude and token imports are observed in E168/E179. E178/E184 record DSH/OpenCode/Zcode closure; other parent imports remain open. Acquisition, cache, writer, profile selection and installed consumption remain parent-owned.                                  |
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -175,7 +175,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | ID  | Feature / authoritative source                                                                                      | Destination                                                                | State                                                                                                                                           | Dependency / acceptance evidence                                                                                                                                                                                                                                                                                                                                                                                              |
 | --- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | R01 | `runtime/bootstrap.py`: immutable generation bootstrap                                                              | Rust client + TS generation resolver                                       | unreplaced                                                                                                                                      | Identity tamper, upgrade, absent runtime, native error tests; package targets unproven                                                                                                                                                                                                                                                                                                                                        |
-| R02 | `runtime/caws-hook.py`: configuration, selection, overrides                                                         | TS invocation engine and existing authority adapters                       | isolated one-shot selection exercised; complete enforcement open                                                                                | Shared validators and freshness/override fixtures plus E33 selected stock path; full authority and override execution require qualification                                                                                                                                                                                                                                                                                   |
+| R02 | `runtime/caws-hook.py`: configuration, selection, overrides                                                         | TS invocation engine and existing authority adapters                       | isolated one-shot selection and finite native cache prefix/consumer exercised, E186; complete enforcement open                                  | Shared validators and freshness/override fixtures; full authority, override execution, complete dependency/profile closure and full-stock replay require qualification.                                                                                                                                                                                                                                                       |
 | R03 | `runtime/caws-hook.py` and `shared/lib/run-handlers.sh`: invocation scheduling, provenance, composition and handoff | TS supervisor/journal/composer                                             | one-shot journal/composer/local ACK integrated; resident open                                                                                   | E33 retains actual input/handler/index/native-output artifacts; crash persistence, production message settlement and resident admission remain open                                                                                                                                                                                                                                                                           |
 | R04 | `runtime/caws-hook.py`: native output and phase/event error policy                                                  | TS native-response adapter, Rust exact delivery                            | selected production refusal and native Stop fixture exercised                                                                                   | E33 nonlatching refusal; E34 real native budget with fixture context. Complete event/harness/Stop producer behavior remains unqualified                                                                                                                                                                                                                                                                                       |
 | R05 | `shared/classify_command.py`: shell syntax and mutation classification                                              | Typed TS classifier                                                        | substitution precedence repaired; typed execution, selected-shell state and native handoff exercised, E63/E65                                   | E62 reproduces advisory masking. The proof-aware two-pass classifier preserves baseline substitution precedence and statement-specific context; full classifier corpus, stateful consumer and harness parity remain open                                                                                                                                                                                                      |
@@ -4095,8 +4095,9 @@ Additional bounded evidence and unresolved dependencies:
   without compatibility replay. Injected post-decision, staged-envelope and
   post-envelope cancellation controls verify retained old bytes and temporary
   cleanup. Cancellation racing a syscall and blocking filesystem calls remain
-  outside an atomic interruption guarantee. Ordinary precomposition wiring and
-  fresh native downstream-consumer qualification remain owed.
+  outside an atomic interruption guarantee. E186 records precomposition binding
+  and finite native downstream-consumer observations; fresh complete-chain
+  qualification remains owed.
 
   `root-cache-cancellation-invoke.stdout` retains a fresh35-check native
   invocation pass after the cancellation change; successful temporary scenario
@@ -4114,10 +4115,10 @@ Additional bounded evidence and unresolved dependencies:
   environment/path conditions; it does not establish selected PATH executables,
   Python imports, full decoding or held native custody. The parent scope
   exclusions are removed and exact helper/test claims restored through the
-  audited CLI after closure. Parent import and ordinary consumer wiring remain
-  owed. Peer packet `native-cache-admission/020-stock-profile/` reports actual
-  finite9fb-source decisions on Node18.0.0/18.20.8/22.19; those observations are
-  not ordinary heartbeat/native evidence.
+  audited CLI after closure. E186 records the exact parent import and finite
+  consumer wiring. Peer packet `native-cache-admission/020-stock-profile/`
+  reports actual finite9fb-source decisions on Node18.0.0/18.20.8/22.19; those
+  observations are not ordinary heartbeat/native evidence.
 
 - E184: OpenCode and Zcode standalone components are closed/completed on main.
   Root reads their actual specs and checks merge ancestry and source hashes
@@ -4165,6 +4166,105 @@ Additional bounded evidence and unresolved dependencies:
   commands, real process substitution and unquoted expansions. No guard,
   registration, reprieve or bypass is changed. E169/E181's operand/cwd defects
   remain distinct obligations.
+
+  Readback exposes an existing owner and governing requirement: active
+  `CAWS-SHELL-ANALYSIS-001`, clean worktree `shell-analysis` at `4bde1f49`, owns
+  the mutation library and interpreter cross-repository tests. Its A6 already
+  requires benign Node data to avoid fabricated shell targets and real foreign
+  writes to remain refused; recorded A6 is fail, and A5/A7 retain effect and
+  final-launch prerequisites. This is a live19-commit lane, not a ghost to
+  prune. Root releases its overlapping broad template claim through the CLI,
+  retains existing parent template changes as exact claims/support, and excludes
+  the three proposed repair paths. That does not release the foreign owner's
+  claims. No duplicate repair spec/lane or takeover is created. Peer baseline
+  artifacts under `native-quoted-node-heredoc/scenarios/` report the actual
+  read-only arrow refusal and a computed-write control whose only refusal is the
+  spurious nesting token. A standalone masker could weaken protection;
+  owner-coordinated syntax/effect repair remains owed. Root requests permission
+  to message the additional owner and continues independent cache work.
+
+  Root inspects retained effect/substitution command bytes, guard records and
+  unchanged sentinels under that peer artifact root. Same-project foreign-lane
+  Node write source returns0 with empty streams, while a shell redirect to the
+  identical target returns2 naming the different session. An unquoted Node
+  heredoc containing a shell touch substitution also returns0 once the unrelated
+  JavaScript arrow is removed; quoted and unquoted bodies cannot share the same
+  expansion rule. Submitted bodies are not executed. A computed-write fixture
+  using process.argv[1] supplies no argument in its header, so its empty guard
+  result does not establish a concrete foreign target; root requests a
+  corrected, independently identified finite target rather than accepting that
+  claim. These observations retain the existing A6 effect/expansion obligation
+  and A5/A7 native-context limits; they do not advance coverage or acceptance.
+
+- E186: The parent imports the exact two helper/test files from closed
+  `437032e13a73cd6e329103109b439f70fccbfe2a`; SHA256 values are
+  `f9eb668efbf07558c62b20860eba6ee3b932d0a7986c44a2bef684ebf632ada5` and
+  `04d1627c412c348c5677dbb9f980760ec64ed1f869e08ce02c06f472ade7ef7b`. Engine
+  entry supplies the optional cache port with its existing single frame
+  reader/writer. Dispatch awaits finite source/input/identity admission and
+  capture after Ready/grant and before compatibility/composition. Unsupported
+  profiles or a received no-publication decline use full compatibility once;
+  unavailable capture remains diagnostic and guards continue; a lost exchange
+  fails without replay. Empty and fully reprieved selections retain the prefix.
+  Missing/unsafe supplied identity never becomes resolved fallback identity for
+  native publication; unsafe input retains the full parser's diagnostic path.
+
+  `root-cache-engine-final-tests.stderr` records354 checks across7 suites,
+  including17 routing checks, with strict production compilation. The final
+  package build checks runtime assets/surface registry and completes. Actual
+  package-cwd lint parses all5 changed JavaScript/TypeScript files with0 errors,
+  warnings or ignored-file results. The first lint's missing timer globals and
+  wrong initial TypeScript config attempt are retained; explicit Node timer
+  imports and the owning `tsconfig.vnext.json` resolve them. Earlier routing
+  failures remain: a first refusal legitimately arms the latch, so independent
+  fresh-state fixtures and normalization of their absolute diagnostic paths
+  replace a false byte-equality assumption; the framed test reads the actual
+  response.result field. Production behavior is not changed for those oracles.
+
+  `root-cache-engine-final-native.stderr` records5 actual native scenarios after
+  the package build, with12 unselected checks explicitly skipped by the focused
+  command. Their artifacts live in `cache-engine-final-cases/` under the E182
+  root. Each retains `native-receipt.json`, original input, stdout, stderr,
+  private runtime, resulting cache/journal files and native cleanup receipts.
+  Executable SHA256 is
+  `9f74887819973cf5ee23612ea16e488b39b8ee554701f612bf0488df355c1cf1`;
+  engine-entry SHA256 is
+  `6d19dcc91764e6dfcbe0ec583c9a5d6447e3eaac833c1ab7a4f3c16365115984`. Selected
+  private runtime is
+  `ef2d1eb1b2f0cc4d9528a158fa32eb75ecd2e06286ab955fc83ae8440dcdef40`.
+  - `cache-engine-Wmrr28`: empty-chain capture exits0. The native envelope and
+    pointer retain only supplied `cache-fixture`, canonical fixture root and
+    configured PreToolUse despite a forged payload event. The retained original
+    observation hashes envelope
+    `6cb20da7aed8a6d9723f1fad55275a4139c65d5abfec4e41e088d978e24246f1` and
+    pointer `15c2b3b7a0da53e524504443167d4ff8a1ac572c43e5dfcfe46eb5a36a4321d7`.
+    An actual compiled CLI `message status --mine --queued --json` with no SID
+    environment exits0 and reports read_only/me=cache-fixture. Direct resolver
+    observation identifies durable_hook_envelope attribution, but caller
+    resolution fails and ownership candidates reject the uncorroborated cache. A
+    separately seeded foreign envelope/pointer control cannot displace an
+    explicitly pinned caller. `native-cache-observation.json`,
+    `downstream-cli.stdout` and `downstream-resolver.json` retain these
+    boundaries; the pointer is deliberately changed only after its original
+    observation.
+  - `cache-engine-osZ6fF`: capture precedes a real stock guard refusal, exit2;
+    the supplied destructive command is hook input and is never executed.
+  - `cache-engine-Wxf4Sk`: the native old-envelope profile declines an unused
+    numeric member; full compatibility exits0 and preserves created_at
+    `2000-01-02T03:04:05Z`, with one compatibility completion.
+  - `cache-engine-iLM1Gv`: missing supplied SID exits0 without envelope, pointer
+    or a directory for inherited foreign-cache identity.
+  - `cache-engine-rC0A1S`: a real pointer-directory rename failure retains the
+    published envelope and pointer directory, reports partial publication in
+    stderr, and still delivers the stock guard refusal, exit2.
+
+  The five custody journals retain monotonic started/pending/complete records;
+  the empty-chain terminal records child exit0, both EOFs and successful
+  settlement. These are source-bound private fixtures, not independent live
+  process-absence observations, complete import/PATH/Python-profile closure,
+  full stock heartbeat replay, installation, thirteen-session/four-repository
+  load or parent acceptance. Root retains those obligations. Feature coverage
+  stays31/37 and acceptance0/8.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
