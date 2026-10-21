@@ -1,11 +1,22 @@
 'use strict';
-const {
-  STORE_TIMESTAMP_PROFILE,
+let STORE_TIMESTAMP_PROFILE,
   prepareStoreTimestamp,
   finishStoreTimestamp,
   StoreTimestampReferenceError,
-  StoreTimestampContractError,
-} = require('../../dist/transcripts/store-timestamp');
+  StoreTimestampContractError;
+// Observe module initialization inside each test's execution and coverage.
+// An unloadable mutant must fail tests, not abort collection or leave static
+// bounds unexercised. Preparation and finishing share one instance per test.
+beforeEach(() => {
+  jest.resetModules();
+  ({
+    STORE_TIMESTAMP_PROFILE,
+    prepareStoreTimestamp,
+    finishStoreTimestamp,
+    StoreTimestampReferenceError,
+    StoreTimestampContractError,
+  } = require('../../dist/transcripts/store-timestamp'));
+});
 const prepare = (cell) => prepareStoreTimestamp(STORE_TIMESTAMP_PROFILE, cell);
 const real = (value) => prepare({ storageClass: 'real', value });
 const integer = (value) => prepare({ storageClass: 'integer', value });
@@ -108,6 +119,35 @@ describe('explicit SQL timestamp preparation', () => {
       expect(prepared.quotientBinary64Hex).not.toBe(bits(Number(value) / 1000));
     }
   );
+  // At 2**50, binary64 values are 0.25 apart. These exact i64/1000
+  // rationals are halfway on opposite mantissa parities; expectations follow
+  // nearest-even arithmetic, not a new Python/native oracle execution.
+  test.each([
+    [1125899906842624125n, '4310000000000000', 0],
+    [1125899906842624375n, '4310000000000002', 500000],
+  ])(
+    'INTEGER binary64 division rounds the exact halfway rational %s to even',
+    (value, hex, micros) => {
+      expect(integer(value)).toMatchObject({
+        quotientBinary64Hex: hex,
+        seconds: 1125899906842624n,
+        microseconds: micros,
+      });
+    }
+  );
+  test.each([
+    [7n, '3f7cac083126e979', 0n, 7000],
+    [1003n, '3ff00c49ba5e353f', 1n, 3000],
+  ])(
+    'INTEGER division retains small rational %s across binade selection',
+    (value, hex, seconds, micros) => {
+      expect(integer(value)).toMatchObject({
+        quotientBinary64Hex: hex,
+        seconds,
+        microseconds: micros,
+      });
+    }
+  );
   test('INTEGER zero and REAL signed zero preserve quotient distinction and normalize the pair', () => {
     expect(integer(0n).quotientBinary64Hex).toBe('0000000000000000');
     expect(real(-0).quotientBinary64Hex).toBe('8000000000000000');
@@ -205,6 +245,53 @@ describe('supplied UTC calendar finishing', () => {
     const err = reference(() => finishStoreTimestamp(prepared, result), 'OSError', result.message);
     expect(err.errno).toBe(84);
     expect(getter).not.toHaveBeenCalled();
+  });
+  test.each([1.5, 2147483648])('malformed errno %s cannot become a reference OS error', (errno) => {
+    const prepared = integer(0n);
+    contract(
+      () =>
+        finishStoreTimestamp(prepared, {
+          kind: 'os_error',
+          seconds: prepared.seconds,
+          errno,
+          message: 'supplied failure',
+        }),
+      'calendar_result',
+      'invalid_os_error'
+    );
+  });
+  test('the valid signed C-int errno endpoint is retained without calendar interpretation', () => {
+    const prepared = integer(0n);
+    const err = reference(
+      () =>
+        finishStoreTimestamp(prepared, {
+          kind: 'os_error',
+          seconds: prepared.seconds,
+          errno: 2147483647,
+          message: 'supplied boundary failure',
+        }),
+      'OSError',
+      'supplied boundary failure'
+    );
+    expect(err.errno).toBe(2147483647);
+  });
+  test('complete calendar fields cannot mask an unknown result discriminator', () => {
+    const prepared = integer(0n);
+    contract(
+      () => finishStoreTimestamp(prepared, calendar(prepared, { kind: 'other' })),
+      'calendar_result',
+      'unknown_result'
+    );
+  });
+  test('a missing calendar field retains calendar-result provenance', () => {
+    const prepared = integer(0n);
+    const result = calendar(prepared);
+    delete result.tmYear;
+    contract(
+      () => finishStoreTimestamp(prepared, result),
+      'calendar_result',
+      'missing_or_accessor_tmYear'
+    );
   });
   test.each(['transport', 'cancelled', 'callback'])(
     'port failure %s stays separate from reference errors',
