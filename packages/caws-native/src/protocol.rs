@@ -84,6 +84,7 @@ impl Request {
                 .get("CAWS_TRANSCRIPT_DATABASE")
                 .map(String::as_str),
             caller_cwd: &self.caller.cwd,
+            caller_environment: &self.caller.environment,
         }
     }
     pub fn session_cache_owner<'a>(
@@ -310,9 +311,9 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
     #[cfg(feature = "sqlite-store")]
     if header.schema == caws_native::transcript_store_wire::REQUEST_SCHEMA {
-        if bytes.len() > caws_native::transcript_store_wire::MAX_REQUEST_BYTES {
-            return Err("transcript store request exceeds frame budget".into());
-        }
+        // Classification is not admission. The single-use store owner must
+        // retain every recognized refusal, including its byte bound, so an
+        // unbound failure cannot borrow Ready's project budget namespace.
         return Ok(EngineFrame::TranscriptStoreRequest(bytes.to_vec()));
     }
     if header.schema == caws_native::session_cache_wire::REQUEST_SCHEMA {
@@ -503,6 +504,21 @@ mod tests {
             deadline_epoch_ms: 1,
             payload: RawValue::from_string("{}".into()).unwrap(),
             input_json: "{}".into(),
+        }
+    }
+    #[test]
+    #[cfg(feature = "sqlite-store")]
+    fn oversized_store_frame_reaches_the_typed_owner_without_admission() {
+        let request = fixture_request();
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "schema": caws_native::transcript_store_wire::REQUEST_SCHEMA,
+            "padding": "x".repeat(caws_native::transcript_store_wire::MAX_REQUEST_BYTES),
+        }))
+        .unwrap();
+        assert!(bytes.len() > caws_native::transcript_store_wire::MAX_REQUEST_BYTES);
+        match validate_frame(&bytes, &request).unwrap() {
+            EngineFrame::TranscriptStoreRequest(retained) => assert_eq!(retained, bytes),
+            _ => panic!("recognized store refusal lost its typed owner"),
         }
     }
     #[test]
