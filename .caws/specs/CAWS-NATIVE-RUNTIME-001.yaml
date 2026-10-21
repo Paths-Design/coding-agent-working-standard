@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-21T05:39:39.864Z'
+updated_at: '2026-10-21T05:46:05.055Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -14,8 +14,6 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'packages/caws-native/'
-    - 'packages/caws-cli/src/runtime/'
-    - 'packages/caws-cli/tests/runtime/'
     - 'packages/caws-cli/scripts/'
     - 'packages/caws-cli/templates/hook-packs/'
     - 'packages/caws-cli/src/init/'
@@ -37,6 +35,77 @@ scope:
     - .gitignore
     - packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js
     - packages/caws-cli/src/shell/binding/resolve-binding.ts
+    - packages/caws-cli/src/runtime/advisory-dedup.ts
+    - packages/caws-cli/src/runtime/advisory-truncate-entry.ts
+    - packages/caws-cli/src/runtime/agent-heartbeat.ts
+    - packages/caws-cli/src/runtime/classifier/adapters.ts
+    - packages/caws-cli/src/runtime/classifier/capabilities.ts
+    - packages/caws-cli/src/runtime/classifier/data.ts
+    - packages/caws-cli/src/runtime/classifier/filesystem-effects.ts
+    - packages/caws-cli/src/runtime/classifier/git-effects.ts
+    - packages/caws-cli/src/runtime/classifier/governed-families.ts
+    - packages/caws-cli/src/runtime/classifier/index.ts
+    - packages/caws-cli/src/runtime/classifier/lexer.ts
+    - packages/caws-cli/src/runtime/classifier/patterns.ts
+    - packages/caws-cli/src/runtime/classifier/ports.ts
+    - packages/caws-cli/src/runtime/classifier/types.ts
+    - packages/caws-cli/src/runtime/classifier/wrappers.ts
+    - packages/caws-cli/src/runtime/composer.ts
+    - packages/caws-cli/src/runtime/containment.ts
+    - packages/caws-cli/src/runtime/context.ts
+    - packages/caws-cli/src/runtime/eligibility.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/guard-config.ts
+    - packages/caws-cli/src/runtime/guard-utilities.ts
+    - packages/caws-cli/src/runtime/handler-executor.ts
+    - packages/caws-cli/src/runtime/identity.ts
+    - packages/caws-cli/src/runtime/journal.ts
+    - packages/caws-cli/src/runtime/json-custody.ts
+    - packages/caws-cli/src/runtime/live-protocol.ts
+    - packages/caws-cli/src/runtime/native-response.ts
+    - packages/caws-cli/src/runtime/operational-files.ts
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/scheduler.ts
+    - packages/caws-cli/src/runtime/selection.ts
+    - packages/caws-cli/src/runtime/service-client.ts
+    - packages/caws-cli/src/runtime/service-image.ts
+    - packages/caws-cli/src/runtime/service-offer.ts
+    - packages/caws-cli/src/runtime/service-protocol.ts
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/src/runtime/types.ts
+    - packages/caws-cli/src/runtime/utf8.ts
+    - packages/caws-cli/tests/runtime/advisory-truncate-integration.test.js
+    - packages/caws-cli/tests/runtime/agent-heartbeat.test.js
+    - packages/caws-cli/tests/runtime/agent-stop-output.test.js
+    - packages/caws-cli/tests/runtime/classifier.test.js
+    - packages/caws-cli/tests/runtime/committed-turn-files.test.js
+    - packages/caws-cli/tests/runtime/composer.test.js
+    - packages/caws-cli/tests/runtime/containment.test.js
+    - packages/caws-cli/tests/runtime/context.test.js
+    - packages/caws-cli/tests/runtime/engine-core.test.js
+    - packages/caws-cli/tests/runtime/engine-routing.test.js
+    - packages/caws-cli/tests/runtime/generated-runtime-assets.test.js
+    - packages/caws-cli/tests/runtime/guard-config-integration.test.js
+    - packages/caws-cli/tests/runtime/guard-config.test.js
+    - packages/caws-cli/tests/runtime/guard-utilities.test.js
+    - packages/caws-cli/tests/runtime/handler-executor.test.js
+    - packages/caws-cli/tests/runtime/json-custody.test.js
+    - packages/caws-cli/tests/runtime/native-response.test.js
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-cli/tests/runtime/render-session-evidence.test.js
+    - packages/caws-cli/tests/runtime/render-writer-client.test.js
+    - packages/caws-cli/tests/runtime/runtime-asset-fixture.js
+    - packages/caws-cli/tests/runtime/scheduler.test.js
+    - packages/caws-cli/tests/runtime/selection.test.js
+    - packages/caws-cli/tests/runtime/service-client.test.js
+    - packages/caws-cli/tests/runtime/service-image.test.js
+    - packages/caws-cli/tests/runtime/service-offer.test.js
+    - packages/caws-cli/tests/runtime/service-protocol.test.js
+    - packages/caws-cli/tests/runtime/stock-handlers.test.js
+    - packages/caws-cli/tests/runtime/utf8.test.js
+    - packages/caws-cli/src/runtime/session-cache-client.ts
+    - packages/caws-cli/tests/runtime/session-cache-client.test.js
   out:
     - packages/caws-cli/src/runtime/session-cache-admission.ts
     - packages/caws-cli/tests/runtime/session-cache-admission.test.js
@@ -116,6 +185,8 @@ scope:
     - packages/caws-cli/tests/application/agent-heartbeat.test.js
     - packages/caws-cli/tests/application/message-poll.test.js
     - packages/caws-cli/tests/runtime/agent-heartbeat.test.js
+    - packages/caws-cli/src/runtime/
+    - packages/caws-cli/tests/runtime/
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
