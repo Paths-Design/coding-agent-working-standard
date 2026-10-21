@@ -48,3 +48,8 @@ evidence:
     evidence_ref: "Exact native source ddd39 (unchanged by doc-only71eca81c), normal coordinator debug build0 and native SHA5ad1a1776339dc3323bd5fe75105ee9b2eca88f713a6af07cb7fc362a211b893. Selected wire/acquisition Cargo24 tests0; actual invoke0 exercises Exhausted/Stopped/Failed across opencode/zcode, exact CLOSED cleanup and metrics. Root inspected six raw traces/observations and test assertions. External commands/results/trace artifacts: /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-store-settlement/. Commit verification is reachability, not execution; no publication/residency/adoption claim."
     recorded_at: "2026-10-21T23:36:24.021Z"
     commit_sha: "71eca81c2bd614a9c412c2dfe36b0c4c34b449cd"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Root inspected selected24 Cargo tests exit0 including transcript_store_wire_failure_retains_independent_cleanup_and_owner, closed_delivery_failure_retains_successful_sql_close, control failures and real invalid-UTF8 failed-but-closed acquisition. Acquisition first failure, successful SQL close, cleanup uncertainty and CLOSED write failure remain separate in returned owned values and unchanged ServeError phases. Exact commands/results and raw traces under /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-store-settlement/. Qualified private debug image only; no universal failure coverage, resident custody or publication claim."
+    recorded_at: "2026-10-21T23:37:58.688Z"
+    commit_sha: "71eca81c2bd614a9c412c2dfe36b0c4c34b449cd"
