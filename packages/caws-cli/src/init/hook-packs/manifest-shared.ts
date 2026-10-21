@@ -602,7 +602,10 @@ import { isAdapterCoveredSurface } from './types';
 // and the kernel turn-log.v2 producer contract adopts the same unified
 // shape, so the shared pack template tree changed again after v96.
 // v98: retain per-invocation handler progress before subsequent handlers run.
-export const SHARED_PACK_VERSION = 98;
+// v99: block-dangerous.sh requires complete arm-time and live agent identity
+// before kill escalation, stamps each latch arm with a distinct generation, and
+// accepts the native executor's explicit containment descriptor.
+export const SHARED_PACK_VERSION = 99;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
