@@ -37,8 +37,8 @@ not land those implementations on `main`. Inspect the candidate architecture
 with `git show 20ca11b4:docs/architecture/caws-native-runtime.md`; the relative
 architecture link follows the branch containing this document.
 
-The coverage measure is32/37 rows with qualifying partial implementation
-(86.5%). It is not an overall completion percentage. Parent acceptance is0/8;
+The coverage measure is33/37 rows with qualifying partial implementation
+(89.2%). It is not an overall completion percentage. Parent acceptance is0/8;
 zero complete production Python rows are retired. The selected machine runtime
 is `408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0`. Component
 acceptance, integration-branch landing, delivery on `main`, package
@@ -193,8 +193,8 @@ Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 the established boundary. Existing Python consumers remain obligations until
 removed or explicitly classified as foreign/historical test material.
 
-Committed qualifying replacement implementation slices cover **32/37 feature
-rows (86.5%)**. R01/R18/R19/R22/R27 lack that coverage, and no complete row has
+Committed qualifying replacement implementation slices cover **33/37 feature
+rows (89.2%)**. R01/R19/R22/R27 lack that coverage, and no complete row has
 retired its Python production path. Investigations, reference evidence and
 support tooling alone do not qualify. This count includes standalone components
 awaiting parent integration; it measures feature coverage, not cutover effort or
@@ -202,7 +202,8 @@ readiness. Uncommitted drafts do not advance this count. Parent acceptance is
 **0/8**. Recompute coverage when a row changes and use the acceptance ledger,
 parity evidence and selected installation state to determine cutover readiness.
 E174 and E178 ground the Kimi and DSH row corrections; E184 grounds OpenCode and
-Zcode.
+Zcode. E225's accepted and landed preparation component qualifies R18 as a
+partial implementation; its production renderer remains unreplaced.
 
 ## Feature ledger
 
@@ -229,7 +230,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode translation and noise declarations; zero row adapters          | closed declarations imported and parent transcript checks exercised, E190; production consumption open                                            | Actual R09 DB acquisition/reconstruction owns mapper consumption and fallback; renderer owns noise filtering. Declarations do not implement those consumers or installed behavior                                                                                                                                                                                                                                             |
 | R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Stateful model_io component evidence; DB-to-Claude-shaped acquisition, reader/cache/writer, registry, native and installed consumption remain parent obligations                                                                                                                                                                                                                                                              |
 | R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | closed component imported and parent transcript checks exercised, E190; production replacement open                                               | Surface-specific transcript and native registration fixtures; root owns selected interpretation, registry, reader/cache/writer and native consumption                                                                                                                                                                                                                                                                         |
-| R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | unreplaced; cache interpretation-context and writer partial-publication counterexamples observed, E147/E165                                       | Complete semantic transcript fixtures, context-bound cache freshness and installed rendering; current installed cross-surface reach unverified                                                                                                                                                                                                                                                                                |
+| R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | bounded source reader, accumulation and complete turn/spill/index preparation accepted and landed, E225; production renderer unreplaced           | Selected numeric/catch/spill and output boundaries exercised at199fa5e. Native publication/current-attempt admission, real SessionEnd consumption, production calendar, context-bound freshness, packaging and installed rendering remain open; E147/E165 partial-publication counterexamples are not closed by preparation.                                                                                                  |
 | R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                           | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
 | R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity, hook-harvest and replay leaves accepted, landed and integrated; three original paths unreplaced                          | E134/E144/E148/E163 retain bounded reference profiles, deliberate repairs and raw failed/successful artifacts. E151/E163 integrate the exact source and Python deletions; qualify-render-daemon.py, qualify-transcript-cache.py and source_freshness.py remain; component progress is not parent acceptance                                                                                                                   |
 | R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | one test-module retirement integrated, E170; remaining corpus unreplaced                                                                          | Twelve test modules plus conftest (13 tracked pytest files); preserve independent hostile oracles and checked failure causes                                                                                                                                                                                                                                                                                                  |
@@ -5630,7 +5631,9 @@ Additional bounded evidence and unresolved dependencies:
   This is an ordinary-consumer obligation alongside manifest/current-attempt
   admission, not a reason to alter the producer to satisfy a synthetic test.
   Derive the sealer's actual schema/consumers before repairing its mapping. Root
-  retains that outcome; coverage32/37 and parent0/8 do not advance.
+  retains that outcome. This accepted, landed implementation qualifies R18 under
+  the stated partial-coverage rule, advancing coverage to33/37 (89.2%). Full R18
+  replacement and parent acceptance0/8 remain open.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -5796,7 +5799,7 @@ progress and does not replace that transaction or its event readback.
    machine adoption remain required before parent acceptance and retirement.
 
 E167–E225 retain the historical candidates, failures and bounded observations;
-the ordered work above governs the next execution. Coverage is32/37 and parent
+the ordered work above governs the next execution. Coverage is33/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
 
