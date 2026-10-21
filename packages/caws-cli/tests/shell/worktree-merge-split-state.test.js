@@ -12,11 +12,11 @@
  * renderDiagnostics prints ONLY under `--data`: the operator saw what broke and
  * nothing about what to do, at the moment three surfaces had come apart.
  *
- * These tests drive the REAL compiled writers against REAL git repos and force
- * a REAL late failure by making the write target non-writable, so the merge
- * breaks after the git half has already landed. The property under test is what
- * an operator reads on stderr with no extra flags, so the assertions are on the
- * default rendering.
+ * These tests drive compiled writers against real git repos. Permission tests
+ * make the write target non-writable; the merge-event lock tests inject only
+ * the targeted openSync failure after observing the closed spec and its event.
+ * Default-rendering assertions cover recovery prose, while --data assertions
+ * cover retention of the original structured lifecycle failure.
  */
 
 const fs = require('fs');
@@ -151,6 +151,121 @@ function runMergeCommand(repoRoot, name, opts = {}) {
     ...opts,
   });
   return { code, out: out.join('\n'), err: errLines.join('\n') };
+}
+
+function readEvents(caws) {
+  return fs
+    .readFileSync(path.join(caws, 'events.jsonl'), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line));
+}
+
+/** Install after fixture setup; all other opens use the actual filesystem. */
+function denyMergeEventLockAfterClose(caws, specId) {
+  const lockPath = path.join(fs.realpathSync(caws), 'state.lock');
+  const message = `injected merge-event lock denial for ${specId}`;
+  const originalOpen = fs.openSync;
+  const fault = { count: 0 };
+  const spy = jest.spyOn(fs, 'openSync').mockImplementation((file, flags, ...args) => {
+    if (
+      file === lockPath &&
+      flags === 'wx' &&
+      fs
+        .readFileSync(path.join(caws, 'specs', `${specId}.yaml`), 'utf8')
+        .includes('lifecycle_state: closed') &&
+      readEvents(caws).some((event) => event.event === 'spec_closed' && event.spec_id === specId)
+    ) {
+      fault.count++;
+      const error = new Error(message);
+      error.code = 'EACCES';
+      throw error;
+    }
+    return originalOpen(file, flags, ...args);
+  });
+  return {
+    spy,
+    fault,
+    cause: {
+      rule: 'store.lifecycle.lock_contention',
+      authority: 'kernel/diagnostics',
+      message: `Unexpected error acquiring lifecycle lock: ${message}.`,
+      subject: lockPath,
+      data: { code: 'EACCES' },
+      severity: 'error',
+    },
+  };
+}
+
+function assertMergeEventSplit(caws, specId, name, priorEntry) {
+  const repo = path.dirname(caws);
+  expect(execFileSync('git', ['-C', repo, 'show', 'main:payload.txt'], { encoding: 'utf8' })).toBe(
+    'work product\n'
+  );
+  expect(fs.readFileSync(path.join(caws, 'specs', `${specId}.yaml`), 'utf8')).toContain(
+    'lifecycle_state: closed'
+  );
+  const events = readEvents(caws);
+  expect(
+    events.filter((event) => event.event === 'spec_closed' && event.spec_id === specId)
+  ).toHaveLength(1);
+  expect(events.filter((event) => event.event === 'worktree_merged')).toHaveLength(0);
+  expect(fs.existsSync(path.join(caws, 'worktrees', name))).toBe(true);
+  expect(JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))[name]).toEqual(
+    priorEntry
+  );
+  expect(priorEntry).toBeDefined();
+  return execFileSync('git', ['-C', repo, 'rev-parse', 'main'], { encoding: 'utf8' }).trim();
+}
+
+/** Opt-in raw evidence for the root; each case writes a new private directory. */
+function retainMergeLockEvidence(label, caws, specId, name, sha, faultCount, outcome) {
+  const selected = process.env.CAWS_MERGE_DIAGNOSTIC_EVIDENCE_DIR;
+  if (!selected) return;
+  if (!path.isAbsolute(selected))
+    throw new Error('Merge diagnostic evidence parent must be absolute');
+  const output = path.join(fs.realpathSync(selected), label);
+  fs.mkdirSync(output, { mode: 0o700 });
+  const write = (file, bytes) =>
+    fs.writeFileSync(path.join(output, file), bytes, { flag: 'wx', mode: 0o600 });
+  const events = readEvents(caws);
+  const lane = path.join(caws, 'worktrees', name);
+  const specBytes = fs.readFileSync(path.join(caws, 'specs', `${specId}.yaml`));
+  const registryBytes = fs.readFileSync(path.join(caws, 'worktrees.json'));
+  write('spec.yaml', specBytes);
+  write('events.jsonl', fs.readFileSync(path.join(caws, 'events.jsonl')));
+  write('worktrees.json', registryBytes);
+  write('outcome.json', JSON.stringify(outcome, null, 2) + '\n');
+  write(
+    'state.json',
+    JSON.stringify(
+      {
+        repo: path.dirname(caws),
+        specId,
+        name,
+        mergeSha: sha,
+        faultCount,
+        basePayload: execFileSync('git', ['-C', path.dirname(caws), 'show', 'main:payload.txt'], {
+          encoding: 'utf8',
+        }),
+        specClosed: specBytes.toString('utf8').includes('lifecycle_state: closed'),
+        matchingCloseEvents: events.filter(
+          (event) => event.event === 'spec_closed' && event.spec_id === specId
+        ),
+        mergeEvents: events.filter((event) => event.event === 'worktree_merged'),
+        registryEntry: JSON.parse(registryBytes)[name],
+        lane,
+        laneExists: fs.existsSync(lane),
+        lanePayload: fs.readFileSync(path.join(lane, 'payload.txt'), 'utf8'),
+      },
+      null,
+      2
+    ) + '\n'
+  );
+  if (typeof outcome.err === 'string') {
+    write('stderr.txt', outcome.err);
+    write('stdout.txt', outcome.out);
+  }
 }
 
 afterAll(() => {
@@ -302,5 +417,83 @@ describe('A3: a healthy merge says nothing about split state', () => {
     const spec = fs.readFileSync(path.join(caws, 'specs', `${SPEC}.yaml`), 'utf8');
     expect(spec).toContain('lifecycle_state: closed');
     expect(fs.existsSync(path.join(caws, 'worktrees', 'wt-split-healthy'))).toBe(false);
+  });
+});
+
+describe('merge-event lock acquisition preserves the original structured cause', () => {
+  test('store keeps exact lock diagnostics and durable split state after spec closure', () => {
+    const caws = setupCaws(fs.realpathSync(mkRepo('split-merge-lock-store-')));
+    const repo = path.dirname(caws);
+    const specId = 'SPLIT-MERGE-LOCK-STORE-001';
+    const name = 'wt-merge-lock-store';
+    seedBoundableSpec(caws, specId);
+    commitCaws(repo, 'seed spec');
+    seedLane(caws, name, specId);
+    const priorEntry = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))[name];
+    const { spy, fault, cause } = denyMergeEventLockAfterClose(caws, specId);
+    let result;
+    try {
+      result = mergeWorktree(caws, {
+        name,
+        session: SESSION,
+        sessionCandidates: CANDIDATES,
+        actor: ACTOR,
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fault.count).toBe(1);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toHaveLength(1);
+    const outer = result.errors[0];
+    const sha = assertMergeEventSplit(caws, specId, name, priorEntry);
+    expect(outer.rule).toBe('store.lifecycle.partial_failure_unrecovered');
+    expect(outer.subject).toBe(name);
+    expect(outer.message).toBe(
+      'Merge succeeded and spec_closed event appended, but worktree_merged event append failed. The worktree was not destroyed.'
+    );
+    expect(outer.data).toEqual({ merge_commit: sha, merged_cause: [cause] });
+    expect(outer.narrowRepair).toContain(`git: branch merged into main at ${sha}`);
+    expect(outer.narrowRepair).toContain(`spec ${specId}: CLOSED`);
+    expect(outer.narrowRepair).toContain('provenance ledger: worktree_merged NOT appended');
+    expect(outer.narrowRepair).toContain(`worktree "${name}": still registered and on disk`);
+    expect(outer.narrowRepair).toContain(`caws worktree destroy ${name}`);
+    expect(outer.narrowRepair).toContain(
+      `Re-running \`caws worktree merge ${name}\` will NOT help`
+    );
+    retainMergeLockEvidence('store', caws, specId, name, sha, fault.count, result);
+  });
+
+  test('CLI --data exits one and renders the exact cause alongside existing split recovery', () => {
+    const caws = setupCaws(fs.realpathSync(mkRepo('split-merge-lock-cli-')));
+    const repo = path.dirname(caws);
+    const specId = 'SPLIT-MERGE-LOCK-CLI-001';
+    const name = 'wt-merge-lock-cli';
+    seedBoundableSpec(caws, specId);
+    commitCaws(repo, 'seed spec');
+    seedLane(caws, name, specId);
+    const priorEntry = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))[name];
+    const { spy, fault, cause } = denyMergeEventLockAfterClose(caws, specId);
+    let rendered;
+    try {
+      rendered = runMergeCommand(repo, name, { showData: true });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fault.count).toBe(1);
+    expect(rendered.code).toBe(1);
+    const sha = assertMergeEventSplit(caws, specId, name, priorEntry);
+    expect(rendered.err).toContain('store.lifecycle.partial_failure_unrecovered');
+    expect(rendered.err).toContain(`spec ${specId}: CLOSED`);
+    expect(rendered.err).toContain('provenance ledger: worktree_merged NOT appended');
+    expect(rendered.err).toContain(`caws worktree destroy ${name}`);
+    expect(rendered.err).toContain(`Re-running \`caws worktree merge ${name}\` will NOT help`);
+    const dataLines = rendered.err.split('\n').filter((line) => /^\s*data:\s*/.test(line));
+    expect(dataLines).toHaveLength(1);
+    expect(JSON.parse(dataLines[0].replace(/^\s*data:\s*/, ''))).toEqual({
+      merge_commit: sha,
+      merged_cause: [cause],
+    });
+    retainMergeLockEvidence('cli', caws, specId, name, sha, fault.count, rendered);
   });
 });
