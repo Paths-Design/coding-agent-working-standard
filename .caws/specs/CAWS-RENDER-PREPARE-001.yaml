@@ -76,3 +76,12 @@ contracts:
     type: api
   - name: 'source-to-artifact-semantics'
     type: contract-test
+evidence:
+  - criterion_id: A1
+    status: fail
+    evidence_ref: "Committed d12d74a compiled candidate read actual Codex source4418B containing embedded4301-digit integer as ready/eventCount1 under selected4300; conversion-fatal contract is refuted. Root inspected source and result. Artifact verifier not run for this record; command exit0 reports the counterexample, not acceptance. Shared-profile repair and regression remain open."
+    recorded_at: "2026-10-21T18:50:55.906Z"
+    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-numeric/probe.cjs
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-numeric/result.json"
+    commit_sha: d12d74a2416ee36f3da0f38acbacef1bd9f7141c
