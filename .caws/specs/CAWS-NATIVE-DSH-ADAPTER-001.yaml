@@ -63,3 +63,10 @@ evidence:
     command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/root-runtime-artifact-verification.py"
     exit_code: 0
     commit_sha: "1cde1d3094dded29f196db11cf57d50778dda8cc"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Exact direct/matched state/error snapshots in finite differential plus25 finite occurrence controls/runtime verify numeric key equivalence, dedupe, original keys/order, pop-before-error, draft isolation and tentative state. Fixed-size-key N256/512 occurrence costs, sharing and height controls; reconstructed deep-copy control preserves logical results but violates sharing/allocation bounds. See /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/dsh-falsifiers/phase-injected-profile and root-runtime-artifact-verification.json. No persistence/fairness/latency proof."
+    recorded_at: "2026-10-21T05:08:52.238Z"
+    command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/root-runtime-artifact-verification.py"
+    exit_code: 0
+    commit_sha: "1cde1d3094dded29f196db11cf57d50778dda8cc"
