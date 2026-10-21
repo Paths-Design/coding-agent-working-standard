@@ -135,13 +135,13 @@ lane. GPT-6.1 Sol assignments produce bounded drafts or read-only findings; only
 separately bound peer lanes own their declared source. These assignments do not
 confer authority or acceptance.
 
-| Outcome                                        | Owner and boundary                                                                                                            | Observable acceptance / falsifier                                                                                                                                                                                    |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                          | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                       |
-| Complete heartbeat consumer                    | Root writer; Sol application-port and runtime-consumer drafts outside the checkout                                            | Typed stock execution through the actual native engine, canonical leases/mail, original frontend PID, selected override fallback and exact advice/offer settlement; unused ports do not qualify                      |
-| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                                | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets |
-| Python pytest entrypoint retirement            | Chat `01a15984-840d-7301-a25a-7e681fd83b29`; separately bound `native-pytest-entrypoint`, `CAWS-NATIVE-PYTEST-ENTRYPOINT-001` | Original cold lifecycle baseline, typed test through the installed engine, missing-pretest negative control and owned process/pipe cleanup; parent integration and R21 retirement remain root obligations            |
-| Transcript adapters and interpretation         | Chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72`; closed Claude component, next declared Qwen component                            | Root integrates exact checked component bytes and ordered adapter dispatch; acquisition, cache, writer and installed consumption remain parent-owned                                                                 |
+| Outcome                                        | Owner and boundary                                                                                                        | Observable acceptance / falsifier                                                                                                                                                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                      | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                       |
+| Complete heartbeat consumer                    | Root writer; Sol application-port and runtime-consumer drafts outside the checkout                                        | Typed stock execution through the actual native engine, canonical leases/mail, original frontend PID, selected override fallback and exact advice/offer settlement; unused ports do not qualify                      |
+| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                            | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets |
+| Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29` | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                             |
+| Transcript adapters and interpretation         | Chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72`; closed Claude component, next declared Qwen component                        | Root integrates exact checked component bytes and ordered adapter dispatch; acquisition, cache, writer and installed consumption remain parent-owned                                                                 |
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -184,7 +184,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | unreplaced; cache interpretation-context and writer partial-publication counterexamples observed, E147/E165                                     | Complete semantic transcript fixtures, context-bound cache freshness and installed rendering; current installed cross-surface reach unverified                                                                                                                                                                                                                                                                                |
 | R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                         | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
 | R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity, hook-harvest and replay leaves accepted, landed and integrated; three original paths unreplaced                        | E134/E144/E148/E163 retain bounded reference profiles, deliberate repairs and raw failed/successful artifacts. E151/E163 integrate the exact source and Python deletions; qualify-render-daemon.py, qualify-transcript-cache.py and source_freshness.py remain; component progress is not parent acceptance                                                                                                                   |
-| R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | unreplaced                                                                                                                                      | Thirteen test modules plus conftest (14 tracked pytest files); preserve independent hostile oracles and checked failure causes                                                                                                                                                                                                                                                                                                |
+| R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | one test-module retirement integrated, E170; remaining corpus unreplaced                                                                        | Twelve test modules plus conftest (13 tracked pytest files); preserve independent hostile oracles and checked failure causes                                                                                                                                                                                                                                                                                                  |
 | R22 | Tracked installed `.caws/hooks` Python copies                                                                       | Governed self-host/runtime adoption                                        | unreplaced                                                                                                                                      | Fourteen copies identified; do not edit generated/governed installation by hand                                                                                                                                                                                                                                                                                                                                               |
 | R23 | Rust client / versioned local protocol                                                                              | `packages/caws-native` + TS protocol                                       | POSIX one-shot transport/cancellation and bounded actual-engine replay tested; macOS pre-Ready frontend-death custody observed, E145            | E156 observes ordinary typed-engine/renderer replay and E162 one after-Ready/dispatch frontend loss; closed-pipe nonleader settlement, other loss phases/surfaces, descriptor leakage, resident IPC, bounded Stop recovery and installed parity remain open                                                                                                                                                                   |
 | R24 | One-shot typed engine                                                                                               | `packages/caws-cli/src/runtime`                                            | opt-in prototype; isolated nonlatching Codex branch exercised                                                                                   | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified                                                                                                                                                                                                                                                |
@@ -3728,6 +3728,61 @@ Additional bounded evidence and unresolved dependencies:
   no guard disable, runtime replacement or permission bypass follows from this
   finding. The Qwen component does not own or claim this guard repair.
 
+  Root additionally inspects the peer's
+  `native-qwen-adapter/bash-write-guard-boundary/finding.json`, parent
+  `lib/bash-mutation-targets.sh:950-1032` and `bash-write-guard.sh:268-340`. One
+  interpreter write verb enables extraction of every slash-bearing fragment;
+  unrelated read/executable literals can reach the foreign-repository refusal.
+  The source describes this as conservative, weaker evidence. Root owns
+  adjudication of operation roles and that policy before choosing any repair:
+  pure extractor controls for mixed external-write/foreign-read inputs, genuine
+  foreign writes, computed unknown targets and physical symlink resolution. The
+  original refused native payload/cwd is uninspected. Applicability reaches the
+  shell guard and shared R05 remediation selector; a pure typed-classifier
+  defect is not established. No blanket interpreter exemption is authorized by
+  this finding.
+
+- E170: Ordinary parent merge `113ddd4b350c96231445bdf9b966b9d88f5fb686` imports
+  the separately landed pytest-entrypoint candidate `36669f7a` through frozen
+  main merge `4d448f17`. Root and independent readback match the two surviving
+  file hashes/Git bytes, original Python test deletion, component
+  A1-A3/events9735-9737 and completed closure9739. The component's original
+  Python cold baseline and meaningful cleanup/PID-only negative controls remain
+  retained in its `native-pytest-entrypoint/` artifact root. They are component
+  evidence, not parent acceptance.
+
+  Fresh combined-parent Node22.19.0 Jest execution exits0 with7 tests,0 pending
+  in36.124s. Positive npm PID35922 exits0 after the actual pretest/build;
+  installed Python `caws-hook --describe` and execution both exit0. The retained
+  installer SHA256 is
+  `c2c13338450d28cd8e1eca2f10adb8f5dc6333a6a14fdf87733b5056eb7f8f90`.
+  Before/after description snapshots contain142 equal regular files; exact
+  `invoked\n` bytes and one matching completed marker journal row establish the
+  selected project override's invocation. The private runtime generation is
+  `0dd794274dfb56be426d2cbe8403dda0eec159a9b3876195ecac11b30627ed49`.
+
+  Removing only `pretest:pytest` leaves560 other authored input files identical
+  and the effective package identical except that removed script. Negative npm
+  PID47898 exits1 with actual `MODULE_NOT_FOUND` at the missing copied
+  installer, without execute record, marker or journal. Both npm observations
+  retain actual exit/close, both EOFs and group absence; root's later group
+  probes confirm absence, and owned source fixtures are removed after
+  settlement. The held-pipe control observes descendant readiness,3038ms
+  settlement, no delayed effect, an unrelated-child acknowledgement and a
+  retained fixture.
+
+  External `pytest-integration-result.json`, `pytest-integration-readback.json`,
+  `pytest-integration-controls.json`, adjacent Jest channels and the seven
+  `pytest-integration/` scenario directories retain commands, outputs and state.
+  This retires one Python orchestration test;12 modules plus conftest remain, 13
+  tracked Python files. It exercises the installed Python runtime and one
+  project marker, not the complete stock guard chain or Rust entrypoint.
+  Descriptor/library hashes are not import traces; snapshots do not cover
+  metadata, empty directories or fsync. Ordinary inherited POSIX groups and
+  polling-tolerant deadlines do not establish escape containment or a strict
+  latency SLA. R20 remains three original developer scripts; no parent AC,
+  Python-free runtime, full CI, fairness or machine adoption follows.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3821,9 +3876,9 @@ progress and does not replace that transaction or its event readback.
 
 Guard candidate `33003656` has committed inspection and the bounded source/
 private-pack evidence in E167. E168 integrates the checked Claude component and
-fresh parent selection. Integrate the separately landed pytest-entrypoint leaf
-after its exact source/AC/runtime readback, then connect and qualify the
-complete typed heartbeat consumer. Bind that native probe to the complete
+fresh parent selection. E170 integrates the checked pytest-entrypoint leaf and
+observes its combined-parent cold lifecycle. Connect and qualify the complete
+typed heartbeat consumer next. Bind that native probe to the complete
 source/build and installed package/dependency identities; a template runtime
 digest or a flat `dist/runtime` file list cannot identify new application
 dependencies. Preserve the acquisition-profile and transactional-writer
