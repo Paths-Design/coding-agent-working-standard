@@ -671,8 +671,10 @@ export async function buildPinnedSqliteStatic(
     await exclusive(pendingPath, JSON.stringify(result, null, 2));
     check();
     await checkRoot();
-    // The exclusive link is the completion commit point. Cancellation observed
-    // before this point refuses publication; a later signal cannot undo a receipt.
+    check();
+    // Dispatching the exclusive link is the completion decision: there is no
+    // await between this last cancellation/deadline check and link dispatch.
+    // A signal after dispatch cannot cancel or undo the filesystem operation.
     await fs.link(pendingPath, markerPath);
     return result;
   } catch (error) {
