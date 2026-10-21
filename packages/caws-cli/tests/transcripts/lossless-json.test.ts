@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parsePythonJson,
+  type JsonNumber,
   encodeSourceJson,
   pythonJsonDumps,
   jsonNumber,
@@ -205,4 +206,241 @@ test('integer custody has no hidden decimal digit cap', () => {
   const source = '1' + '0'.repeat(4300);
   assert.equal(encodeSourceJson(parsePythonJson(source)), source);
   assert.equal(pythonJsonDumps(parsePythonJson(source)), source);
+});
+
+test('optional admission leaves default parser and standalone number constructor uncapped', () => {
+  const huge = '1' + '0'.repeat(4300);
+  assert.equal(encodeSourceJson(parsePythonJson(huge)), huge);
+  assert.equal(encodeSourceJson(parsePythonJson(huge, {})), huge);
+  assert.equal(encodeSourceJson(jsonNumber(huge)), huge);
+});
+
+test('admission observes every numeric member once before duplicate collapse', () => {
+  const seen: JsonNumber[] = [];
+  const parsed = parsePythonJson('{"x":1,"nested":[2,{"x":3}],"x":4}', {
+    admitNumberToken: (token) => {
+      seen.push(token);
+    },
+  });
+  assert.deepEqual(
+    seen.map((token) => token.lexeme),
+    ['1', '2', '3', '4']
+  );
+  assert.equal(encodeSourceJson(parsed), '{"x":4,"nested":[2,{"x":3}]}');
+});
+
+test('admission receives frozen tokens with integer and float spellings intact', () => {
+  const seen: JsonNumber[] = [];
+  const source = '[-0,1.0,1e2,NaN,Infinity,-Infinity]';
+  assert.equal(
+    encodeSourceJson(
+      parsePythonJson(source, {
+        admitNumberToken: (token) => {
+          assert.equal(Object.isFrozen(token), true);
+          seen.push(token);
+        },
+      })
+    ),
+    source
+  );
+  assert.deepEqual(
+    seen.map(({ lexeme, numberKind }) => [lexeme, numberKind]),
+    [
+      ['-0', 'integer'],
+      ['1.0', 'float'],
+      ['1e2', 'float'],
+      ['NaN', 'float'],
+      ['Infinity', 'float'],
+      ['-Infinity', 'float'],
+    ]
+  );
+});
+
+test('admission never visits quoted digits or numeric object keys', () => {
+  const seen: JsonNumber[] = [];
+  const source = '{"123":"' + '9'.repeat(4301) + '","nested":["-12","1e2"]}';
+  assert.equal(
+    encodeSourceJson(
+      parsePythonJson(source, {
+        admitNumberToken: (token) => {
+          seen.push(token);
+        },
+      })
+    ),
+    source
+  );
+  assert.deepEqual(seen, []);
+});
+
+test('syntax before a huge number prevents that token admission', () => {
+  const seen: JsonNumber[] = [];
+  assert.throws(
+    () =>
+      parsePythonJson('{"broken":!,"later":' + '9'.repeat(4301) + '}', {
+        admitNumberToken: (token) => {
+          seen.push(token);
+        },
+      }),
+    SyntaxError
+  );
+  assert.deepEqual(seen, []);
+});
+
+// Deliberately local policy: the codec and jsonNumber do not select a Python cap.
+function cappedAdmission(
+  limit: number,
+  seen: JsonNumber[],
+  rejection: Error
+): (token: JsonNumber) => void {
+  return (token) => {
+    seen.push(token);
+    const digits = token.lexeme.startsWith('-') ? token.lexeme.length - 1 : token.lexeme.length;
+    if (token.numberKind === 'integer' && digits > limit) throw rejection;
+  };
+}
+
+test('local integer cap counts digits without sign and exempts complete floats', () => {
+  const boundary = '1' + '0'.repeat(4299);
+  const huge = boundary + '0';
+  const rejection = new RangeError('test-local integer admission');
+  const accepted: JsonNumber[] = [];
+  const source = '[' + boundary + ',-' + boundary + ',' + huge + '.0,1e' + huge + ']';
+  assert.equal(
+    encodeSourceJson(
+      parsePythonJson(source, {
+        admitNumberToken: cappedAdmission(4300, accepted, rejection),
+      })
+    ),
+    source
+  );
+  assert.deepEqual(
+    accepted.map((token) => token.numberKind),
+    ['integer', 'integer', 'float', 'float']
+  );
+  for (const input of [huge, '-' + huge]) {
+    const seen: JsonNumber[] = [];
+    assert.throws(
+      () =>
+        parsePythonJson(input, {
+          admitNumberToken: cappedAdmission(4300, seen, rejection),
+        }),
+      (error: unknown) => {
+        assert.equal(error, rejection);
+        return true;
+      }
+    );
+    assert.deepEqual(
+      seen.map((token) => token.lexeme),
+      [input]
+    );
+  }
+});
+
+test('admission failure precedes syntax after huge integer prefixes and overwritten members', () => {
+  const huge = '1' + '0'.repeat(4300);
+  const sources = [
+    huge + 'x',
+    huge + '.',
+    huge + 'e',
+    huge + 'e+',
+    '{"x":' + huge + ',!}',
+    '{"x":' + huge + ',"x":1}',
+  ];
+  for (const source of sources) {
+    const seen: JsonNumber[] = [];
+    const rejection = new RangeError('test-local integer admission');
+    assert.throws(
+      () =>
+        parsePythonJson(source, {
+          admitNumberToken: cappedAdmission(4300, seen, rejection),
+        }),
+      (error: unknown) => {
+        assert.equal(error, rejection);
+        return true;
+      }
+    );
+    assert.deepEqual(
+      seen.map((token) => token.lexeme),
+      [huge]
+    );
+  }
+});
+
+test('leading zero admits only its zero prefix before later syntax rejection', () => {
+  for (const source of ['0' + '9'.repeat(4301), '-0' + '9'.repeat(4301)]) {
+    const seen: JsonNumber[] = [];
+    assert.throws(
+      () =>
+        parsePythonJson(source, {
+          admitNumberToken: cappedAdmission(4300, seen, new RangeError('unexpected cap rejection')),
+        }),
+      SyntaxError
+    );
+    assert.deepEqual(
+      seen.map((token) => token.lexeme),
+      [source.startsWith('-') ? '-0' : '0']
+    );
+  }
+});
+
+test('callback failures preserve thrown object identity and stop further admission', () => {
+  const failure = Object.freeze({ admissionFailure: true });
+  const seen: JsonNumber[] = [];
+  assert.throws(
+    () =>
+      parsePythonJson('[1,2]', {
+        admitNumberToken: (token) => {
+          seen.push(token);
+          throw failure;
+        },
+      }),
+    (error: unknown) => {
+      assert.equal(error, failure);
+      return true;
+    }
+  );
+  assert.deepEqual(
+    seen.map((token) => token.lexeme),
+    ['1']
+  );
+});
+
+test('admission visits repeated lexemes and repeated NaN occurrences separately', () => {
+  const seen: JsonNumber[] = [];
+  const source = '[1,1,NaN,NaN]';
+  assert.equal(
+    encodeSourceJson(
+      parsePythonJson(source, {
+        admitNumberToken: (token) => {
+          assert.equal(Object.isFrozen(token), true);
+          seen.push(token);
+        },
+      })
+    ),
+    source
+  );
+  assert.deepEqual(
+    seen.map((token) => token.lexeme),
+    ['1', '1', 'NaN', 'NaN']
+  );
+});
+
+test('admission refuses a huge unused field before any later wanted field', () => {
+  const huge = '1'.repeat(4301);
+  const seen: JsonNumber[] = [];
+  const rejection = new RangeError('test-local integer admission');
+  assert.throws(
+    () =>
+      parsePythonJson('{"unused":' + huge + ',"wanted":"ok"}', {
+        admitNumberToken: cappedAdmission(4300, seen, rejection),
+      }),
+    (error: unknown) => {
+      assert.equal(error, rejection);
+      return true;
+    }
+  );
+  assert.deepEqual(
+    seen.map((token) => token.lexeme),
+    [huge]
+  );
 });
