@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-PROJECT-BINDING-001
 title: 'Bind store operations to original native project observations'
 mode: refactor
-lifecycle_state: active
-worktree: native-project-binding
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded native original-project observation and store binding accepted at e31d09ae after raw41 selected checks/strict Clippy and16 real native fixture cases; foreign,size,EOF unbound budgets refused and bound missingDB control preserved. Independent committed review repaired both fallback defects. External artifacts retained; CLI rederived commit existence only. Parent0/8, stock publication/receipt/reader,residency/fullparity/adoption/rollback remain open under CAWS-NATIVE-RUNTIME-001.'
 created_at: '2026-10-21T17:14:04.583Z'
-updated_at: '2026-10-21T17:25:51.175Z'
+updated_at: '2026-10-21T19:35:05.810Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
