@@ -1,0 +1,36 @@
+id: CAWS-MERGE-DIAGNOSTIC-CAUSE-001
+title: 'Preserve underlying merge-event lifecycle diagnostics'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-21T22:33:13.165Z'
+updated_at: '2026-10-21T22:33:13.165Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Governed worktree merge diagnostic preservation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/shell/worktree-merge-split-state.test.js'
+  out: []
+invariants:
+  - 'A merge-event transaction error retains its original structured diagnostics without changing lifecycle state transitions, default output, retry, publication or recovery policy.'
+acceptance:
+  - id: A1
+    given: 'a real bound lane and successful Git merge and spec closure'
+    when: 'merge-event lifecycle lock acquisition fails'
+    then: 'outer split-state failure preserves exact nested cause rule message subject and error code plus merge identity while the lane is retained and no merge event is fabricated'
+  - id: A2
+    given: 'the same controlled merge-event acquisition failure'
+    when: 'the CLI renders diagnostic data'
+    then: 'it exits one and exposes the exact retained cause through the existing data option while healthy merge behavior is preserved'
+observability:
+  - 'Root-retained command exits raw structured and rendered diagnostics and before-after Git spec event registry and filesystem state'
+rollback:
+  - 'Revert the diagnostic metadata assignment and regression tests; do not rewrite historical events or change lifecycle recovery policy'
+non_functional: {}
+contracts:
+  - name: 'merge-diagnostic-cause'
+    type: behavior
