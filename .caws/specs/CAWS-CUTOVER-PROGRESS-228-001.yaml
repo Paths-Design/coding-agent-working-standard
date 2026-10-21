@@ -2,7 +2,6 @@ id: CAWS-CUTOVER-PROGRESS-228-001
 title: 'Publish reproducible partial coverage and retained cutover obligations'
 mode: doc
 lifecycle_state: active
-worktree: cutover-progress-228
 created_at: '2026-10-21T21:57:54.940Z'
 updated_at: '2026-10-21T21:57:57.044Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
