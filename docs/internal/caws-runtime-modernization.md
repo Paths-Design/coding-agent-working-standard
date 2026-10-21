@@ -5035,6 +5035,58 @@ Additional bounded evidence and unresolved dependencies:
   release qualification, full toolchain/SDK custody and adoption remain owed.
   Coverage32/37 partial and parent acceptance0/8 do not advance.
 
+- E208: Root reads the frozen ordinary store-reference producer, indices and
+  verifier, then reruns its readback: exit0,651 manifest references and39 actual
+  CLI observations (12 projected,1 empty,20 caught error receipts,6 escaping
+  exceptions). The packet is retained under peer artifact
+  `native-store-projection-reference/`; its main and supplemental index SHA256s
+  are `9eb6487b462ce03e0eef1bd0a6d2ae21240565274d9ec2ae979134ee612565df` and
+  `fb807135eb5057ee9e369cd3edf9bee8ff2aaf153f02da07d36f46f05f1f456d`. Actual
+  rivals distinguish earlier timestamp failure from later JSON failure, deferred
+  surrogate serialization from reconstruction, later-row TEXT conversion from
+  earlier JSON, and same-row TEXT admission from JSON order. Source and
+  before/after primary profile pins agree; this is synthetic no-affinity DDL,
+  not product schema, concurrent-writer, active-image binding, cancellation or
+  universal publication qualification.
+
+  The tagged CPython3.11.13 SQLite cursor source converts all current columns,
+  advances the VM once, then yields the current row. Current-row TEXT failure
+  precedes its JSON; a next VM-step failure can discard the current row before
+  its JSON, whereas next-row TEXT conversion does not. Native acquisition must
+  preserve these distinct frontiers. The Python store closes its connection
+  before event serialization and publishes before receipt serialization.
+  Metadata BLOB receipt failures and invalid TEXT in the remaining metadata/time
+  columns are assigned five bounded ordinary-reference controls; they are not
+  established by the39-case packet. SQLite readonly WAL may create sidecars;
+  readonly base access does not imply untouched WAL/SHM. Native SQL acquisition,
+  calendar transport, AST projection and publication remain root-owned and open.
+
+- E209: Root independently inspects and reruns the frozen release packet
+  verifier against the E207 candidate `16659cad`, with the E207 source and
+  embedded inputs re-rooted to retained copies. The first verifier invocation
+  supplies relative paths and refuses its literal marker-path check; the
+  absolute-path invocation exits0. This is a verifier invocation error, not a
+  candidate build failure. The actual cold release coordinator and loader exit0
+  in87.90s and347ms; Cargo uses offline/frozen/locked, jobs1 and a fresh target.
+  Actual Cargo JSON reports optimization3 and no fresh cached artifacts. All six
+  tool steps exit0 with direct children reaped. Root checks81 source/embed
+  files,7 selected artifacts and3026 physical references/188047893 bytes;
+  pre/post reviewed input and producer profiles agree.
+
+  Release native SHA256 is
+  `aec30179f8c4e3e38bad64fa38d2f5529c1522a7842402b136c797ca29c19438`; completion
+  SHA256 is `f557f6fe9bb6ec38e92bfdb05cf36c4a0b92ac5faabd5acd93958a924a99b944`.
+  Actual SQLite3.53.4/source ID, THREADSAFE=1, required options, generated
+  binding, exact embedded C payload, defined native symbol and all three otool
+  outputs agree with the reviewed inputs. Three Rust rlib extras remain
+  UNADMITTED. Raw failed driver attempts, commands, streams, physical manifest
+  and readback live under peer artifact `native-sqlite-release-qualification/`,
+  successful run `runs/release-02/`. This discharges one current-host release
+  build observation only. It does not qualify ordinary query/render/publication
+  workloads, later source changes, full toolchain/SDK/image custody, descendant
+  cleanup, reproducible builds, installed execution or cutover. Coverage32/37
+  qualifying partial slices and parent acceptance0/8 do not advance.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5143,7 +5195,8 @@ progress and does not replace that transaction or its event readback.
    not infer an attempted foreign write from the refusal alone.
 4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
    target, embedded-member checks and four direct build/consumer integrations.
-   Qualify release builds and ordinary consumer workloads; retain UNADMITTED
+   E209 qualifies one frozen current-host release build; ordinary consumer
+   workloads and later source changes remain unqualified. Retain UNADMITTED
    Rust-extra provenance and the open full toolchain/SDK boundary. Implement
    native fixed-query acquisition with snapshot, cancellation and lossless
    SQL-value custody. Connect the imported registry to transactional
@@ -5154,16 +5207,18 @@ progress and does not replace that transaction or its event readback.
    verifies its component landing on main and E206 imports and parent-checks the
    exact source. Actual native calendar/error behavior and its consumer
    integration remain root-owned. E202 imports the closed store-JSON component;
-   root owes its explicit store-AST access/schema projection and both-cell
-   decode/admission order. The generic decoder and JS-string AST cannot silently
-   supply that contract. R09's production consumer and R18 remain unreplaced;
-   standalone composition does not discharge production consumer parity.
+   E208 grounds the ordinary reference and distinct SQL/TEXT/JSON failure
+   frontiers; the five metadata controls remain pending. Root owes the explicit
+   store-AST access/schema projection and both-cell decode/admission order. The
+   generic decoder and JS-string AST cannot silently supply that contract. R09's
+   production consumer and R18 remain unreplaced; standalone composition does
+   not discharge production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E207 retain the historical candidates, failures and bounded observations;
+E167–E209 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
