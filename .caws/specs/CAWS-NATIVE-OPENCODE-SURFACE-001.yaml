@@ -50,3 +50,10 @@ evidence:
     command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verify.py"
     exit_code: 0
     commit_sha: e968dcaac211cd69888ab97a3bda1e8f521fbb74
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Independent frozen234-case corpus:151 ordinary decoded cases,32 OpenCode direct hostile controls,5 seeded states equal;15 Zcode direct nonobject/corrupt-state controls outside typed JsonObject/ZcodeState contract differ and remain retained;30 reader/accumulation cases skipped by standalone components;1 constructed surrogate-domain distinction. Append is only a labeled local-clone normalize comparison. Ordered mappings/default-only-missing/null/numeric-kind/Unicode/hostile-key/input-nonmutation compare to independent actual CPython3.11.13/Unicode14 references. Native declared-mapper nonobject AttributeError controls agree; raw JavaScript shapes separately refused. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verification.json; /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/commands; independent rawstreams native-harness-tail-differential/runs/0002-node22 and0003-node18 under sessionartifactroot. Commitverificationchecksreachability; recordedcommandnotrerunbyACCLI."
+    recorded_at: "2026-10-21T06:17:31.286Z"
+    command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verify.py"
+    exit_code: 0
+    commit_sha: e968dcaac211cd69888ab97a3bda1e8f521fbb74
