@@ -48,7 +48,10 @@ acceptance:
   - id: A3
     given: 'audit hook metadata and context observations including absent higher-priority candidates and selected timezone'
     when: 'preparation merges and links contextual events'
-    then: 'priority ordering metadata linkage and freshness depend on the complete observed context rather than mtime alone'
+    then: >-
+      priority ordering metadata linkage to the matching fork .jsonl filename and
+      freshness depend on complete observed context including negative candidates
+      and selected calendar semantics rather than mtime alone
   - id: A4
     given: 'accumulated turns including large payloads and lone surrogate boundaries'
     when: 'all turn spill and index outputs are prepared'
