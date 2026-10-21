@@ -42,3 +42,9 @@ rollback:
   - 'Revert the logical document change through the governed lane if actual source refutes its contracts.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed four-document candidate 063991aa. Root source-grounded decoder/exits, dispatcher mandatory write versus optional pin, startup-binding policy and three-suite/six-target per-file 80 mutation recipe. Independent read-only review of 5a504111 found no material mismatch; source owner reviewed both commits and the precise startup-binding correction at 063991aa. Formatter, diff checks and scoped gates passed; doctor exit 0 with 0 errors, 3 warnings, 4 informational findings. Commit verification checks reachability, not semantic correctness. No native execution or source availability on main is inferred."
+    recorded_at: "2026-10-21T21:55:20.289Z"
+    commit_sha: "063991aa2da021bd6eca9aff3714f8105041fcfb"
