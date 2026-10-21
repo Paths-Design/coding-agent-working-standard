@@ -1,0 +1,33 @@
+id: CAWS-CUTOVER-LEDGER-001
+title: 'Retain cutover publication evidence and accepted preparation ownership'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-21T16:52:58.441Z'
+updated_at: '2026-10-21T16:52:58.441Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Native cutover migration tracker'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Partial feature coverage, canonical parent acceptance and installed runtime state remain distinct; incomplete reference evidence stays incomplete.'
+acceptance:
+  - id: A1
+    given: 'retained publication reference and verified renderer-preparation lane'
+    when: 'the tracker reconciles the current checkpoint'
+    then: 'publication versus receipt failure, unmet profile identity, preparation ownership and actual-reader closure obligations are recorded without advancing parent acceptance or feature coverage.'
+observability:
+  - 'Tracked source references, retained raw bytes and CAWS ownership readback'
+rollback:
+  - 'Revert this documentation commit without altering retained artifacts or parent runtime selection.'
+non_functional:
+  security:
+    - 'Tracker text grants no filesystem or runtime authority.'
+contracts:
+  - name: 'cutover-tracker'
+    type: behavior
