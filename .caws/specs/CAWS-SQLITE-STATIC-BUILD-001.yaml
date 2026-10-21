@@ -1,0 +1,50 @@
+id: CAWS-SQLITE-STATIC-BUILD-001
+title: 'Pinned static SQLite build receipts without adoption authority'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T09:50:42.827Z'
+updated_at: '2026-10-21T09:50:42.827Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'CLI tooling: pinned SQLite static recipe and package emission'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/tooling/sqlite-static-build.ts'
+    - 'packages/caws-cli/tests/tooling/sqlite-static-build.test.js'
+    - 'packages/caws-cli/tsconfig.vnext.json'
+  out: []
+invariants:
+  - 'Every result is NOT_ADOPTED; build completion never grants prefix consumption or native release authority'
+  - 'Only fixed authenticated SQLite source bytes and reviewed absolute tool paths enter the fixed recipe; output root is new and exclusive'
+  - 'Failure, cancellation, timeout, output overflow or identity mismatch cannot publish a completed receipt; uncertain writer state is retained'
+acceptance:
+  - id: A1
+    given: 'authenticated SQLite 3.53.4 sources and reviewed current-host tools and SDK settings'
+    when: 'the fixed helper recipe builds in two fresh roots'
+    then: 'raw commands and artifacts show matching static archives and matching version/source identity, with every result explicitly NOT_ADOPTED'
+  - id: A2
+    given: 'missing changed or symlink inputs and pre-existing outputs or mismatching expected archive'
+    when: 'the helper is invoked'
+    then: 'it refuses completion and preserves inspectable failure evidence without adopting artifacts'
+  - id: A3
+    given: 'child failure cancellation timeout or bounded output overflow'
+    when: 'execution is interrupted'
+    then: 'no completed marker is published and raw channels and direct-child outcome are retained without descendant cleanup claims'
+  - id: A4
+    given: 'the ordinary CLI package build and supported Node 18 and 22 test runtimes'
+    when: 'build and focused hostile tests execute'
+    then: 'compiled tooling and transcript modules are emitted and semantic controls exercise refusals'
+observability:
+  - 'External raw argv env stdout stderr statuses identities depfile and NOT_ADOPTED receipt per helper run'
+rollback:
+  - 'Revert the three scoped source changes through ordinary history; retain failed build roots until writer quiescence is established'
+non_functional:
+  security:
+    - 'No network pkg-config ambient flags shell interpolation or auto adoption; SDK settings observations do not authenticate full SDK or immutable tool images'
+contracts:
+  - name: 'pinned-build-receipt'
+    type: api
+    path: 'packages/caws-cli/src/tooling/sqlite-static-build.ts'
