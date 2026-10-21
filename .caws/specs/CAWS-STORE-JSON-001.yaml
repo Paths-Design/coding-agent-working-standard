@@ -46,3 +46,9 @@ contracts:
   - name: 'store-json-decoder'
     type: api
     path: 'packages/caws-cli/src/transcripts/store-json.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "TEXT strictUTF8/BOM refusal versus BLOB UTF8/16/32 surrogatepass and raw-view custody: 70 compiled tests Node18.20.8/22 exit0; 794 CPython3.11.13 cases per Node18.0/18.20.8/22 agree. Raw commands and codepoint outcomes at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-json/verification-committed/artifact-verification.json; root verifier exit0/74 file references. Finite component only."
+    recorded_at: "2026-10-21T11:48:57.414Z"
+    commit_sha: a9420ad8bac757a55a93a61ace022af4b5621375
