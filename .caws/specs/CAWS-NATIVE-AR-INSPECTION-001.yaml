@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-AR-INSPECTION-001
 title: 'Bounded pure BSD archive byte inspection'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-ar-inspection
 created_at: '2026-10-21T10:36:07.912Z'
-updated_at: '2026-10-21T10:36:07.912Z'
+updated_at: '2026-10-21T10:36:10.802Z'
 created_by_session: '01a15dde-f4ca-7753-852c-91f67cc4faf8'
 blast_radius:
   modules:
