@@ -130,18 +130,18 @@ compatibility, legacy writer exclusion, uncertain-outcome recovery and
 multi-project workload remain open. No machine replacement follows from these
 bounded results.
 
-The next execution slice retains three separate obligations under the existing
-spec and lane. The root owns integration, Git and acceptance; GPT-6.1 Sol
-workers own the bounded implementation and qualification surfaces below. These
-are work assignments, not authority or acceptance records.
+The root owns parent integration, Git and acceptance under the existing spec and
+lane. GPT-6.1 Sol assignments produce bounded drafts or read-only findings; only
+separately bound peer lanes own their declared source. These assignments do not
+confer authority or acceptance.
 
-| Outcome                               | Owner and boundary                                                                                                                                           | Observable acceptance / falsifier                                                                                                                                                                                               |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live cancellation and restart         | `render_lifecycle`: native owner/backend and lifecycle qualifier                                                                                             | Real dispatched rendering, caller disconnect, owned cleanup and reopened durable state; queued cancellation must not dispatch, and uncertain dispatched work must not replay                                                    |
-| Legacy writer exclusion               | `render_legacy_fence`: cooperative writer bridge, native fence and legacy qualifier                                                                          | Actual foreign daemon/inline fallback counterexample, then shared stable custody across cooperative legacy/native paths and generations; an absent lease or opt-in marker alone cannot establish adoption/drain                 |
-| Thirteen sessions / four repositories | `render_load`: actual workload and hostile oracle controls; depends on lifecycle/fence checks                                                                | Thirteen overlapping native clients, isolated semantic output, durable cross-project running overlap, owner-specific ordering, guard progress and bounded overload; sequential submissions or diagnostic logs alone cannot pass |
-| Rule-token developer utility          | Separate owned lane `native-rule-tokens`, spec `CAWS-NATIVE-RULE-TOKENS-001`; parent retains integration and migration acceptance                            | Replace the Python counter and its CLI consumer with checked typed Node and a pinned offline encoder; retain actual differential outputs and the two declared zero-total/update-count repairs before retirement                 |
-| Additional peer                       | Chat `01a15984-840d-7301-a25a-7e681fd83b29`; `native-sensitivity`, spec `CAWS-NATIVE-SENSITIVITY-001`, plus read-only complete-engine contract investigation | Own the five reviewed sensitivity source/test/config/caller paths; synthetic orchestration qualification does not retire R21 production tests. Shared engine/protocol changes require an agreed native/Node ownership contract  |
+| Outcome                                        | Owner and boundary                                                                                                            | Observable acceptance / falsifier                                                                                                                                                                                    |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                          | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                       |
+| Complete heartbeat consumer                    | Root writer; Sol application-port and runtime-consumer drafts outside the checkout                                            | Typed stock execution through the actual native engine, canonical leases/mail, original frontend PID, selected override fallback and exact advice/offer settlement; unused ports do not qualify                      |
+| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                                | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets |
+| Python pytest entrypoint retirement            | Chat `01a15984-840d-7301-a25a-7e681fd83b29`; separately bound `native-pytest-entrypoint`, `CAWS-NATIVE-PYTEST-ENTRYPOINT-001` | Original cold lifecycle baseline, typed test through the installed engine, missing-pretest negative control and owned process/pipe cleanup; parent integration and R21 retirement remain root obligations            |
+| Transcript adapters and interpretation         | Chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72`; closed Claude component, next declared Qwen component                            | Root integrates exact checked component bytes and ordered adapter dispatch; acquisition, cache, writer and installed consumption remain parent-owned                                                                 |
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -3645,6 +3645,50 @@ Additional bounded evidence and unresolved dependencies:
   evidence because pair/scalar strings can collide after ASCII JSON. No typed
   writer, installed execution or atomicity repair is claimed.
 
+- E166: The transcript foundation's uncapped lossless integer codec is not the
+  production acquisition profile. Actual CPython3.11.13 reader probes at the
+  default and explicit4300-digit limits reject a4301-digit integer with
+  ValueError; an explicit unlimited control accepts it. The uncaught actual
+  reader exits1. The typed raw codec retains and roundtrips that integer, which
+  establishes custody rather than reader acceptance. Root inspects the source,
+  five retained command/channel identities and the partial-tail probe under peer
+  `native-claude-adapter/integer-boundary/`; external
+  `transcript-integration/integer-profile-readback.json` retains that readback.
+
+  In `session_log_renderer.py:498-537`, complete rows commit their cache prefix
+  before a tentative partial tail is parsed against a copy. The observed cache
+  offsets are124 before append,248 after complete row B plus a rejected partial
+  tail,248 after its failed completed retry, and372 after repair to row C.
+  Acquisition must preserve this phase distinction and return the resulting
+  committed checkpoint on tail failure. Select and validate the numeric limit in
+  the acquisition consumer and its cache identity; do not cap or rewrite raw
+  custody values to manufacture profile parity. The typed reader/profile and
+  cache-generation behavior remain implementation obligations; neither these
+  probes nor the standalone Claude component replace that consumer.
+
+- E167: A scope parser failure reaches an actual guard-strength and availability
+  defect. `scope contention` returns exit1 with a JSON error envelope for a
+  schema-valid65537-unit pattern. Under `set -e`, the unguarded command
+  substitution in `shared/worktree-write-guard.sh` exits1 before its existing
+  unknown-observation policy: a non-allowlisted `tests/` write misses the
+  ask-incapable exit2 protection, and an allowlisted `docs/` write misses its
+  deliberate availability path. The existing policy admits unknown allowlist
+  observations; this repair does not invent blanket refusal for docs faults.
+
+  The guarded substitution maps any nonzero CLI result to `unknown:caws-failed`
+  and discards its output before the existing policy runs. Actual compiled
+  CLI-to-source-guard tests fail both cases on the original guard (received1,
+  expected2/0) and pass after repair. The installed private pack tests
+  additionally exercise exit1, exit2 with misleading clear JSON, invalid JSON
+  and a successful undetermined observation. Complete focused suites pass21 Jest
+  cases and10 Bats cases; CLI build, scoped lint and Bash syntax checks exit0.
+  Shared pack103 and its recomputed fingerprint carry the template change. Raw
+  red/green channels are under external
+  `scope-matcher/contention-{red,green}-{jest,bats}.{stdout,stderr}`. Successful
+  claim/clear mapping, missing-library protection and unchanged
+  refs/registry/events are checked. This is source and isolated installed-pack
+  qualification, not machine adoption or a repair of the kernel parser bound.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -3736,6 +3780,14 @@ progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
 
+Finish the guard error-path candidate and its committed review (E167), integrate
+the exact landed Claude component with fresh parent checks, then connect and
+qualify the complete typed heartbeat consumer. Preserve the acquisition-profile
+and transactional-writer obligations in E166/E165. The closed replay, Unicode
+and utility components do not replace these consumers. Resume the unchanged
+fairness workload only after the owning implementation and cleanup evidence
+justify it; machine adoption follows full parity.
+
 E105/E107/E108 establish the repaired selected Stop path, seven actual owner
 controls and existing-untracked-custody observation on executable `d4644326`.
 E109 retains the failed real Running-overlap baseline alongside13 completed
@@ -3777,26 +3829,26 @@ exercises the corrected terminal fixture and bounded pipe collector on the same
 native executable. E155 adds custody-receipt correlation and focused hostile
 controls; E156 exercises the actual typed engine and selected copied renderer
 with matching per-request custody and cleanup. A previous request's group cannot
-qualify a later request with missing chain evidence. Qualify closed-pipe
-nonleaders and frontend loss after Ready and dispatch in separately retained
-scenarios. Keep original caller capture and native effects in the frontend;
-preserve Node FD3/4/5 and exclude every liveness/control descriptor from Node.
-Normal request stdin EOF is not frontend death. Unknown cleanup must retain
-custody and stop the scenario chain. This private per-invocation boundary does
-not require a public pre-Ready spawn service and does not earn warm residency.
-Missing-SID/cache branches additionally need a fresh logical-session binding or
-protective refusal without foreign strikes; process identity alone does not
-establish exclusive session ownership. The held E133 probe cannot supply that
-proof. E158 distinguishes one-shot consumer integration from later shared-module
-ownership. A changed complete consumer and measured invocation/prefix costs are
-needed before another unchanged fairness replay; a resident launcher alone does
-not establish that change. E122 forbids a pre-Node queue which skips required
-latch/Stop semantics. Keep the original 1000-turn hot transcript, counts,30s
-request budgets and later hot Running witness requirements. Correct output and
-source-level capacity are not fairness proof. No blind workload repetition: the
-next run needs an identified owning implementation change and known cleanup.
-Overload and final-executable lifecycle/legacy replay require separate retained
-runs.
+qualify a later request with missing chain evidence. E162 observes one frontend
+loss after Ready and dispatch; closed-pipe nonleaders and other loss phases and
+surfaces require separately retained scenarios. Keep original caller capture and
+native effects in the frontend; preserve Node FD3/4/5 and exclude every
+liveness/control descriptor from Node. Normal request stdin EOF is not frontend
+death. Unknown cleanup must retain custody and stop the scenario chain. This
+private per-invocation boundary does not require a public pre-Ready spawn
+service and does not earn warm residency. Missing-SID/cache branches
+additionally need a fresh logical-session binding or protective refusal without
+foreign strikes; process identity alone does not establish exclusive session
+ownership. The held E133 probe cannot supply that proof. E158 distinguishes
+one-shot consumer integration from later shared-module ownership. A changed
+complete consumer and measured invocation/prefix costs are needed before another
+unchanged fairness replay; a resident launcher alone does not establish that
+change. E122 forbids a pre-Node queue which skips required latch/Stop semantics.
+Keep the original 1000-turn hot transcript, counts,30s request budgets and later
+hot Running witness requirements. Correct output and source-level capacity are
+not fairness proof. No blind workload repetition: the next run needs an
+identified owning implementation change and known cleanup. Overload and
+final-executable lifecycle/legacy replay require separate retained runs.
 
 E90 independently confirms E87's orphan absent without a root cleanup signal.
 E91/E92 retain repaired signal readiness, the complete native suite and all four

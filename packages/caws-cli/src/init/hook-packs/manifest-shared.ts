@@ -606,7 +606,9 @@ import { isAdapterCoveredSurface } from './types';
 // v101: agent-stop routes the CLI's operational receipt to diagnostics while
 // preserving its lease mutation. Lifecycle text must not displace advice.
 // v102: raw Codex apply_patch requests enter armed file-tool quarantine checks.
-export const SHARED_PACK_VERSION = 102;
+// v103: contention command failures retain the existing unknown-observation
+// allowlist and approval policy instead of exiting before either policy runs.
+export const SHARED_PACK_VERSION = 103;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
