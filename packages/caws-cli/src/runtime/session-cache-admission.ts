@@ -37,10 +37,9 @@ const object = (value: unknown): value is Record<string, unknown> =>
 const nativePath = (value: string): boolean =>
   path.isAbsolute(value) &&
   path.normalize(value) === value &&
-  // Shell command substitution strips final LF in resolved roots. Keep that
-  // representation difference outside this finite replacement profile.
-  !/[\r\n]/.test(value) &&
-  !value.includes('\0') &&
+  // Match native root transport; shell command substitution also strips final LF.
+  Buffer.byteLength(value, 'utf8') <= 4096 &&
+  !/[\x00-\x1f\x7f-\x9f]/.test(value) &&
   Buffer.from(value, 'utf8').toString('utf8') === value;
 
 function directory(file: string): boolean {

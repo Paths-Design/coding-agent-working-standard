@@ -559,6 +559,33 @@ test('LF-final canonical repository and CR/LF cwd remain outside the shell path 
   }
 });
 
+test.each([1, 9, 31, 127, 128, 159])(
+  'control character %i in a real canonical directory declines before native transport',
+  (code) => {
+    selection.canonical = path.join(root, 'canonical' + String.fromCharCode(code));
+    fs.mkdirSync(selection.canonical);
+    expect(qualify()).toBe(false);
+  }
+);
+
+test('native root byte limit is checked before filesystem interpretation', () => {
+  selection.canonical = '/' + 'é'.repeat(2048);
+  expect(selection.canonical.length).toBeLessThan(4096);
+  expect(Buffer.byteLength(selection.canonical)).toBe(4097);
+  const stat = fs.lstatSync(checkout);
+  const original = fs.lstatSync;
+  let rootReads = 0;
+  jest.spyOn(fs, 'lstatSync').mockImplementation((file, ...args) => {
+    if (file === selection.canonical) {
+      rootReads++;
+      return stat;
+    }
+    return original(file, ...args);
+  });
+  expect(qualify()).toBe(false);
+  expect(rootReads).toBe(0);
+});
+
 test('qualification does not mutate frozen inputs, write cache state or spawn a process', () => {
   const before = snapshot(root);
   const serialized = JSON.stringify({ request, selection, environment });
