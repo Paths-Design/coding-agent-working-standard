@@ -4836,6 +4836,48 @@ Additional bounded evidence and unresolved dependencies:
   Installed profile choice, both-cell decode/admission order, timestamps,
   visible UTF8 publication and native/renderer consumption remain open.
 
+- E203: Root grounds the actual SQL timestamp reference packet
+  `native-sqlite-timestamp-reference/runs/20261021T120628Z-d8b90120` under peer
+  A's external artifact root. The full producer, verifier and separate
+  post-observation datetime capture are inspected. Root executes the inspected
+  verifier's read/hash/assert body with explicit CPython3.11 `-I -B`, omitting
+  peer-output writes. Root `store-timestamp-parent/reference-readback.json`
+  retains497 manifest-file/507 reference checks, including30 independent
+  read-only source-cell queries. Producer SHA256 is `ba6b3e02…1c6990`; manifest
+  SHA256 is `a77b0691…0e8193`.
+
+  Thirty synthetic no-affinity timestamp bindings reach the frozen ordinary
+  fixed-query CLI. Seventeen cases project output, seven return caught
+  ValueError/OSError JSON receipts, and six escape as OverflowError tracebacks
+  with empty stdout. All13 failures preserve prior output; all30 databases
+  retain physical/logical bytes and no projection temporary entries remain.
+  TEXT/BLOB/NULL timestamps produce null; bound NaN is retrieved as SQL NULL.
+  REAL negative zero retains its binary64 sign in the retrieved cell. Half a
+  microsecond rounds to zero while the next higher input rounds to one
+  microsecond. Integer max-calendar milliseconds produce `.998993`, whereas
+  nearby REAL milliseconds produce `.999969`; integer true division cannot be
+  replaced with a premature number conversion. i64 extrema return ValueError;
+  the observed finite/time_t cases distinguish caught OSError from escaping
+  OverflowError. These are concrete cases, not a derived full-range classifier.
+
+  The batch pins Python/SQLite and frozen source but omits pre-execution
+  `datetime.py`, `_datetime` and OS identity. The separate
+  `post-observation-20261021-datetime` capture matches current module/executable
+  bytes and E196 identities on macOS26.6.2 arm64. Root verifies those files;
+  POST-OBSERVATION-ONLY remains explicit and does not attest prior children or
+  their active libc/datetime images. No ordinary CLI replay or producer rerun is
+  inferred from readback.
+
+  Root retains the store-timestamp contract decision. The proposed two-path leaf
+  must preserve SQL-class dispatch, explicit opt-in profile, i64 true division,
+  REAL binary64 rounding and distinct ValueError/OSError/OverflowError outcomes.
+  Governing conversion/platform range behavior must be grounded before
+  implementation; finite outputs cannot supply arbitrary error thresholds.
+  Subsequent component qualification must pin datetime/platform identities
+  before execution. No new source/spec is authorized by this reference entry,
+  and no installed profile, native acquisition, product DDL, renderer or full
+  cleanup claim is earned. Coverage32/37 and parent0/8 do not advance.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4952,17 +4994,19 @@ progress and does not replace that transaction or its event readback.
    Connect the imported registry to transactional rendering/writing and retain
    E165/E166 source/profile controls. E196 requires a store-specific timestamp
    conversion, explicit integer profile and codepoint-preserving JSON
-   projection. E202 imports the closed store-JSON component; root owes its
-   explicit store-AST access/schema projection and both-cell decode/admission
-   order. The generic decoder and JS-string AST cannot silently supply that
-   contract. R09's production consumer and R18 remain unreplaced; standalone
-   composition does not discharge production consumer parity.
+   projection. E203 supplies bounded actual SQL timestamp/error observations;
+   root must ground platform range/error rules and adjudicate its leaf contract
+   before implementation. E202 imports the closed store-JSON component; root
+   owes its explicit store-AST access/schema projection and both-cell
+   decode/admission order. The generic decoder and JS-string AST cannot silently
+   supply that contract. R09's production consumer and R18 remain unreplaced;
+   standalone composition does not discharge production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E202 retain the historical candidates, failures and bounded observations;
+E167–E203 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
