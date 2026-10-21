@@ -1,0 +1,42 @@
+id: CAWS-MAIN-PUSH-GATE-REPAIR-01
+title: 'Restore main''s pre-push and qualification gates: Handlebars critical, unbumped shared pack, CI-only reconciliation failure'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-21T01:11:05.761Z'
+updated_at: '2026-10-21T01:11:05.761Z'
+created_by_session: '2cab376d-3f6a-4fb5-ab68-c931fbde6779'
+blast_radius:
+  modules:
+    - 'workspace lockfile (transitive dev dependency)'
+    - 'shared hook-pack version and fingerprint baseline'
+    - 'worktree reconciliation built-CLI test'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'package-lock.json'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/store/worktree-reconciliation.test.js'
+  out: []
+invariants:
+  - 'No gate is lowered, skipped or bypassed; each fix addresses the cause the gate reports'
+  - 'Direct dependency ranges are unchanged; only the transitive Handlebars resolution moves'
+  - 'A shared template change ships with a pack version bump and a re-derived fingerprint, never a re-recorded fingerprint alone'
+acceptance:
+  - id: A1
+    given: 'main''s lockfile resolves Handlebars 4.7.9 and the registry reports a critical advisory'
+    when: 'the compatible patched transitive release is selected'
+    then: 'the lockfile resolves Handlebars 4.7.10 with no direct range change and npm audit --audit-level=critical reports zero findings'
+  - id: A2
+    given: 'bd31d19d changed shared templates without bumping SHARED_PACK_VERSION 98'
+    when: 'the version is bumped and the fingerprint re-derived from the live tree'
+    then: 'pack-fingerprint.test.js passes with recorded version equal to the manifest version'
+  - id: A3
+    given: 'the reconciliation built-CLI test fails in CI and in an agent-env-stripped run but passes under an agent harness'
+    when: 'the environmental cause is identified and fixed'
+    then: 'the test passes in both environments for the identified reason'
+rollback:
+  - 'Revert the merge commit; no data migration'
+non_functional: {}
+contracts: []
