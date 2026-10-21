@@ -158,9 +158,10 @@ acquisition, projection and consumer integration.
 guarded worker writes refused despite its CLI claim. Root accepts the complete
 inspector contract. E199 implements its bounded framing and builder consumer;
 the disposition does not resolve the effective hook/session identity mismatch.
-`CAWS-STORE-JSON-001` is active in peer A's owned `store-json` lane, restricted
-to the decoder and its tests. E200 supplies reference evidence; root retains
-profile selection, SQL acquisition, projection and publication integration.
+The closed/completed `CAWS-STORE-JSON-001` component is imported in E202,
+restricted to the decoder and its tests. E200 supplies SQL-cell reference
+evidence; root retains profile selection, SQL acquisition, explicit store-AST
+projection and publication integration.
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -175,9 +176,9 @@ Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 the established boundary. Existing Python consumers remain obligations until
 removed or explicitly classified as foreign/historical test material.
 
-Committed qualifying replacement implementation slices cover **31/37 feature
-rows (83.8%)**. R01/R09/R18/R19/R22/R27 lack that coverage, and no complete row
-has retired its Python production path. Investigations, reference evidence and
+Committed qualifying replacement implementation slices cover **32/37 feature
+rows (86.5%)**. R01/R18/R19/R22/R27 lack that coverage, and no complete row has
+retired its Python production path. Investigations, reference evidence and
 support tooling alone do not qualify. This count includes standalone components
 awaiting parent integration; it measures feature coverage, not cutover effort or
 readiness. Uncommitted drafts do not advance this count. Parent acceptance is
@@ -202,7 +203,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration                                                         | TS configuration module                                                    | selected-stock root integration and public-control repair exercised, E119                                                                       | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim                                                                                                                                    |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                          | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                                       |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                              | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate          |
-| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | unreplaced; build/archive tooling and SQL-cell reference evidence E198–E200; decoder component active                                           | Root owns dependency/profile choice, complete bounded acquisition, snapshot/cancellation, lossless SQL values, projection/publication custody and actual renderer consumption                                                                                                                                                                                                                                                 |
+| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | opt-in SQL-class/codepoint JSON decoder imported and parent-tested, E202; production consumer unreplaced                                        | Root owns native acquisition, profile choice, snapshot/cancellation, explicit store-AST/schema projection, timestamp semantics, publication custody and actual renderer consumption. Build/archive tooling and SQL-cell reference evidence E198–E200 remain bounded prerequisites.                                                                                                                                            |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | lossless/common foundation and ordered registry imported and exercised, E157/E192; production consumer unreplaced                               | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                     |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                           | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                    | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
@@ -4787,6 +4788,54 @@ Additional bounded evidence and unresolved dependencies:
   inferred. The coordinator, native integration and consumer changes remain
   unfinished; coverage31/37 and acceptance0/8 retain their bounds.
 
+- E202: Root imports exactly the two closed/completed store-JSON files from
+  `a9420ad8bac757a55a93a61ace022af4b5621375`, merged by `e0251713` and closed at
+  `a4d1e1e2`. Actual spec A1–A4 pass records and matching events10107–10110 plus
+  closure/merge/destruction10111–10113 are inspected. Source paths have clear
+  contention and audited parent scope admission. Both imported file hashes and
+  unchanged CodepointText/JsonNumber dependencies match the candidate and
+  canonical source; `store-json-parent/import-readback.json` retains them. The
+  opt-in decoder replaces a bounded part of the original store's two
+  `json.loads` operations at lines56–57, while their production callers remain
+  unchanged. This qualifies R09 as a partial replacement slice and raises
+  coverage32/37 (86.5%); parent A1–A8 remain open at0/8.
+
+  Root inspects the frozen differential producer and executes the inspected
+  portable verifier's read/hash/assert body, omitting its peer-output writes.
+  `store-json-parent/reference-readback.json` verifies77 file references,
+  source/producers/profile/input/outcomes and actual lifecycle events. The
+  retained794 cases include244 semantic carriers and550 error categories,
+  agreeing with the pinned CPython3.11.13/Unicode14/int4300 reference on actual
+  Node18.0/18.20.8/22. Four selected mutants are detected by13/22/10/6
+  differences; this is finite negative-control evidence, not a mutation score.
+  Initial assertion/lint and incomplete wrong-executable-path attempts remain
+  retained. Original child compiled modules were not frozen before teardown;
+  isolated compilation reconstructs byte-identical modules matching executed
+  provenance. That reconstruction is explicit and does not establish original
+  process-image custody.
+
+  The ordinary parent package build exits0 and emits the imported module; parent
+  compiled-module/dependency hashes match the executed child pins. Parent70
+  focused tests on each Node18.20.8/22 and scoped lint exit0. A fresh
+  parent-compiled Node18.0 replay of the same794 retained cases has zero
+  differences; it does not claim Node18.0 Jest execution. Exact commands,
+  source/module pins and raw channels are in `store-json-parent/`; the build
+  command/output is retained in this chat's execution transcript. These checks
+  exercise strict TEXT versus BLOB encoding, complete decoding before JSON,
+  codepoint string/key distinctions, numeric tokens, duplicate-key semantics,
+  integer admission and caller resource bounds. They do not establish ordinary
+  SQL acquisition, host-stack/allocator equivalence or exact error messages and
+  offsets.
+
+  Source inspection identifies a concrete projection boundary: StoreJsonObject
+  has CodepointText keys but the same object tag as generic JSON. Generic
+  `isJsonObject` accepts that tag while `getMember` compares JS strings and
+  misses these keys. No production consumer imports the new decoder. Root
+  therefore owes an explicit store-AST access/schema/projection contract; a cast
+  to generic JsonValue or unchecked JS-string conversion cannot supply it.
+  Installed profile choice, both-cell decode/admission order, timestamps,
+  visible UTF8 publication and native/renderer consumption remain open.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4903,18 +4952,18 @@ progress and does not replace that transaction or its event readback.
    Connect the imported registry to transactional rendering/writing and retain
    E165/E166 source/profile controls. E196 requires a store-specific timestamp
    conversion, explicit integer profile and codepoint-preserving JSON
-   projection. Integrate the separately owned E200 store-JSON component only
-   after its committed checks, review and lifecycle evidence; the generic
-   decoder and JS-string AST cannot silently supply that contract. R09 and R18
-   remain unreplaced; standalone registry composition does not discharge
-   production consumer parity.
+   projection. E202 imports the closed store-JSON component; root owes its
+   explicit store-AST access/schema projection and both-cell decode/admission
+   order. The generic decoder and JS-string AST cannot silently supply that
+   contract. R09's production consumer and R18 remain unreplaced; standalone
+   composition does not discharge production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E201 retain the historical candidates, failures and bounded observations;
-the ordered work above governs the next execution. Coverage is31/37 and parent
+E167–E202 retain the historical candidates, failures and bounded observations;
+the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
 
