@@ -47,9 +47,9 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Reconciled canonicalE67 record throughE225; nativebindingac016998 and preparation20ca11 actualancestry/closedcomponentACs readback. Existing standalone-component rule nowconsistently includesR18:33/37partial89.2%,4excludedrows,parent0/8,zero productionretirement,408selected. Peer row-metric finding sourcegrounded and repaired72a24a40. Source/main/package/adoption separated; rawsubset policies77.65 andmissingdeclaredtopology/acceptedrepair retained; actualSessionEndfilter/schema mismatch and crossprocessacquisition/custody debt remainopen. gitdiffcheck0; fourfile committedgates all5PASS. This is reviewed documentation, not parentcompletion."
-    recorded_at: "2026-10-21T20:16:42.672Z"
-    commit_sha: "72a24a403fc3f80cf85c42b71a0bafe96fa4d0fc"
+    evidence_ref: "Published canonical main merge1f5a8621 from reviewed72a24a40 throughE225 and verifiedsource40b21a7a ledger byte-identical to main via gitdiffexit0. Counts33/37partial89.2%,parent0/8,zero productionretirement; native/preparation scopedlandings separatefrommaincode/adoption. IntegrationREADME alreadycorrect; copiedonlyledger/governingdoctorcontract, preserving sourcebranchchanges. Currenttwofilegates all5PASS,gitdiffcheck0,statusclean. Historicalfailures,subsetqualitytopology,consumer/schema/processownership obligations retained. Samefiniteunit returns corrections tosourcebeforeclosure."
+    recorded_at: "2026-10-21T20:23:30.391Z"
+    commit_sha: "40b21a7a37ceec0deb2b9f5bbaaa56ff61697584"
   - criterion_id: A2
     status: pass
     evidence_ref: "README and governingcommandcontract both distinguish doctorerror-severity findings/loaderrors fromwarnings. Actual canonicaldoctor.ts369-374/432-440 hasErrors errors-only; retaineddoctor exit0 with0E/3W/4I. Peer ambiguity corrected04bccb2a,dependentcontract corrected84c91390. No runtimeinstall. CLIverify checkscommit only; semantics groundedsource/runtime."
