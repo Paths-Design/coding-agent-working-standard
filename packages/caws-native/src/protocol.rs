@@ -52,6 +52,8 @@ pub struct Request {
     event: String,
     configuration: String,
     session_cache: &'static str,
+    #[cfg(feature = "sqlite-store")]
+    session_store: &'static str,
     caller: Caller,
     deadline_epoch_ms: u64,
     payload: Box<RawValue>,
@@ -59,6 +61,31 @@ pub struct Request {
 }
 
 impl Request {
+    #[cfg(feature = "sqlite-store")]
+    pub fn transcript_store_invocation<'a>(
+        &'a self,
+        ready: &'a Ready,
+        dispatched: bool,
+    ) -> caws_native::transcript_store_wire::Invocation<'a> {
+        caws_native::transcript_store_wire::Invocation {
+            id: &self.id,
+            runtime_digest: &self.runtime_digest,
+            original_payload: &self.payload,
+            surface: &self.surface,
+            event: &self.event,
+            configuration: &self.configuration,
+            ready_active: ready.active,
+            ready_project_digest: ready.project_digest.as_deref(),
+            ready_session_id: ready.session_id.as_deref(),
+            dispatched,
+            database: self
+                .caller
+                .environment
+                .get("CAWS_TRANSCRIPT_DATABASE")
+                .map(String::as_str),
+            caller_cwd: &self.caller.cwd,
+        }
+    }
     pub fn session_cache_owner<'a>(
         &'a self,
         ready: &'a Ready,
@@ -109,6 +136,8 @@ impl Request {
             event: config.event.clone(),
             configuration: config.configuration.clone(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            #[cfg(feature = "sqlite-store")]
+            session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller::capture()?,
             deadline_epoch_ms: deadline as u64,
             payload,
@@ -175,6 +204,8 @@ pub struct Ready {
 pub enum EngineFrame {
     Ready(Ready),
     SessionCacheRequest(Vec<u8>),
+    #[cfg(feature = "sqlite-store")]
+    TranscriptStoreRequest(Vec<u8>),
     Proposal {
         token: String,
         result: NativeResult,
@@ -277,6 +308,13 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    #[cfg(feature = "sqlite-store")]
+    if header.schema == caws_native::transcript_store_wire::REQUEST_SCHEMA {
+        if bytes.len() > caws_native::transcript_store_wire::MAX_REQUEST_BYTES {
+            return Err("transcript store request exceeds frame budget".into());
+        }
+        return Ok(EngineFrame::TranscriptStoreRequest(bytes.to_vec()));
+    }
     if header.schema == caws_native::session_cache_wire::REQUEST_SCHEMA {
         if bytes.len() > caws_native::session_cache_wire::MAX_REQUEST_BYTES {
             return Err("session cache request exceeds frame budget".into());
@@ -455,6 +493,8 @@ mod tests {
             event: "pre_tool_use".into(),
             configuration: "system".into(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            #[cfg(feature = "sqlite-store")]
+            session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller {
                 cwd: "/fixture".into(),
                 environment: BTreeMap::new(),

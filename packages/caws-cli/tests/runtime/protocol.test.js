@@ -33,6 +33,17 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('preserves the optional native store capability without borrowing cache authority', () => {
+    expect(decode().sessionStore).toBeUndefined();
+    expect(decode({ sessionStore: 'caws.runtime.transcript-store.v1' }).sessionStore).toBe(
+      'caws.runtime.transcript-store.v1'
+    );
+    expect(
+      decode({ sessionStore: 'caws.runtime.transcript-store.v1' }).sessionCache
+    ).toBeUndefined();
+    for (const sessionStore of [null, false, true, '', 'caws.runtime.transcript-store.v2', {}])
+      expect(() => decode({ sessionStore })).toThrow(/transcript store capability/);
+  });
   test('preserves an explicit native cache capability and rejects unsupported spellings', () => {
     expect(decode().sessionCache).toBeUndefined();
     expect(decode({ sessionCache: 'caws.runtime.session-cache.v1' }).sessionCache).toBe(

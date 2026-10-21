@@ -323,11 +323,34 @@ pub struct Session {
     diagnostics: Vec<u8>,
     stdout_bytes: usize,
     cache_control_credit: usize,
+    #[cfg(feature = "sqlite-store")]
+    store_control_credit: usize,
     out_done: bool,
     err_done: bool,
     terminal_containment: bool,
     render_bank: Option<crate::render_bridge::DescriptorBank>,
     render_bridge: Option<crate::render_bridge::Bridge>,
+}
+
+#[cfg(feature = "sqlite-store")]
+impl caws_native::transcript_store_wire::Transport for Session {
+    fn write(&mut self, bytes: &[u8], deadline: Instant) -> Result<(), String> {
+        self.send(bytes, deadline)
+    }
+    fn read(&mut self, deadline: Instant) -> Result<Vec<u8>, String> {
+        self.frame(deadline)
+    }
+    fn credit(&mut self, bytes: usize) -> Result<(), String> {
+        let credit = self
+            .store_control_credit
+            .checked_add(bytes)
+            .ok_or("store control credit overflow")?;
+        if credit > caws_native::transcript_store_wire::MAX_EXTRA_ENGINE_STDOUT_BYTES {
+            return Err("store control credit exceeds one finite acquisition".into());
+        }
+        self.store_control_credit = credit;
+        Ok(())
+    }
 }
 
 impl Session {
@@ -439,6 +462,8 @@ impl Session {
             diagnostics: Vec::new(),
             stdout_bytes: 0,
             cache_control_credit: 0,
+            #[cfg(feature = "sqlite-store")]
+            store_control_credit: 0,
             out_done: false,
             err_done: false,
             terminal_containment: false,
@@ -576,7 +601,7 @@ impl Session {
             let before = self.buffered.len();
             self.out_done = read_chunk(self.stdout.as_raw_fd(), &mut self.buffered, MAX_FRAME)?;
             self.stdout_bytes += self.buffered.len() - before;
-            if self.stdout_bytes > MAX_FRAME + 16_384 + self.cache_control_credit {
+            if self.stdout_bytes > MAX_FRAME + 16_384 + self.control_credit() {
                 return Err("engine stream exceeded total byte budget".into());
             }
         }
@@ -613,6 +638,17 @@ impl Session {
         }
         self.cache_control_credit = credit;
         Ok(())
+    }
+
+    fn control_credit(&self) -> usize {
+        #[cfg(feature = "sqlite-store")]
+        {
+            self.cache_control_credit + self.store_control_credit
+        }
+        #[cfg(not(feature = "sqlite-store"))]
+        {
+            self.cache_control_credit
+        }
     }
 
     pub fn begin_terminal_containment(&mut self, _target: &crate::process_effect::ValidatedTarget) {

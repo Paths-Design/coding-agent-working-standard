@@ -78,8 +78,25 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             deadline,
         )?;
         let mut cache_attempted = false;
+        #[cfg(feature = "sqlite-store")]
+        let mut store_attempted = false;
         loop {
             match protocol::validate_frame(&session.frame(deadline)?, &request)? {
+                #[cfg(feature = "sqlite-store")]
+                protocol::EngineFrame::TranscriptStoreRequest(frame) => {
+                    if store_attempted {
+                        return Err("transcript store exchange already attempted".into());
+                    }
+                    store_attempted = true;
+                    let context = ready.as_ref().ok_or("missing store readiness")?;
+                    caws_native::transcript_store_wire::serve(
+                        &frame,
+                        request.transcript_store_invocation(context, dispatched),
+                        deadline,
+                        || cancellation::check().is_err(),
+                        &mut session,
+                    )?;
+                }
                 protocol::EngineFrame::SessionCacheRequest(frame) => {
                     if cache_attempted {
                         return Err("session cache exchange already attempted".into());

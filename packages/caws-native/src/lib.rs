@@ -13,3 +13,7 @@ pub mod service_protocol;
 pub mod session_cache;
 pub mod session_cache_wire;
 pub mod stop_budget;
+#[cfg(feature = "sqlite-store")]
+pub mod transcript_store;
+#[cfg(feature = "sqlite-store")]
+pub mod transcript_store_wire;

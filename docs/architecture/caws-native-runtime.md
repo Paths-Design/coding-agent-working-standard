@@ -349,6 +349,30 @@ retains its separate explicit native/observer profile and performs no Cargo
 discovery. Default feature-off Cargo builds remain separate from this SQLite
 qualification path.
 
+## Native transcript-store ownership
+
+The default-off SQLite feature exposes a finite development exchange through the
+frontend's existing pre-proposal reader. It does not select a stock handler or
+replace compatibility dispatch. Native observations bind one active dispatched
+system OpenCode/ZCode Stop to its original safe session, captured database/cwd,
+Ready root digest and exchange token. Cache and renderer grants confer no store
+authority. Supplied SQL and database overrides are refused.
+
+One native connection owns the fixed read transaction and cursor across typed
+row callbacks. Current-row TEXT admission precedes the next VM step and current
+delivery. Native UTC returns actual fields/errno; typed arithmetic and calendar
+interpretation remain explicit. Cancellation covers SQL progress and busy wait
+cooperatively under the original deadline. Row payload bounds do not establish a
+hard OS-I/O deadline or complete SQLite-memory limit.
+
+Reconstruction preserves storage classes, numeric/codepoint profiles and failure
+order. It checks native settlement independently of IteratorClose and retains
+the first operation failure, separate cleanup detail and confirmed-close state.
+Event encoding follows reconstruction and close acknowledgment. Atomic
+projection publication, later receipt serialization and actual renderer
+selection require their own integrated owner and evidence; encoded event bytes
+alone confer no publication, delivery or cutover claim.
+
 ## Functional acceptance and proof
 
 Each parity claim names a preserved behavior and its dependency chain, not only
