@@ -42,3 +42,11 @@ non_functional:
 contracts:
   - name: 'historical-qwen-transcript'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-qwen-adapter :: 39941e8c bounded Qwen profile: commands/002-reference and qwen-worker/differential/final18,22 stdout retain799 ordered fixtures each,14 TypeError cases,582 events; exact projection SHA cdf03d5b38976de0b5e6b201692d322ff28289e34a24674fb7d0946975867fa8. Root019 and observations-verified.json rederive identity/bytes; parent production parser profile remains open."
+    recorded_at: "2026-10-21T00:36:09.393Z"
+    command: python3 -B /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-qwen-adapter/verify-artifacts.py
+    exit_code: 0
+    commit_sha: "39941e8cced49c2072956bf7acf0a67ce0e958a5"
