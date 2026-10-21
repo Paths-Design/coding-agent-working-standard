@@ -4756,6 +4756,37 @@ Additional bounded evidence and unresolved dependencies:
   publication, native acquisition and consumer integration. The component is
   unfinished;31/37 coverage and0/8 parent acceptance remain unchanged.
 
+- E201: The next coordinator boundary is grounded against parent source at
+  `2c10ed5b`. `packages/caws-native/Cargo.toml` has no SQLite dependency;
+  `build.rs` compiles only the existing process-group/comm/oracle C helpers.
+  Neither the external wrapper probe nor the tooling import integrates SQLite
+  into that crate. `packages/caws-cli/package.json` has four direct Cargo build
+  commands: containment, services, render-build and substitution. Render-load
+  inherits render-build. Ordinary CLI compilation emits tooling without
+  compiling native code.
+
+  Root owns the next finite implementation across a pre-Cargo coordinator,
+  entry/tests, pinned crate dependencies and defensive build check, those four
+  package callers and actual artifact consumers. Render owner, legacy renderer,
+  services and containment derive conventional target paths; the ordinary
+  `render-qualification-harness.ts` branch does too. Its capture-only explicit
+  paths do not cover ordinary rendering. Substitution already accepts an
+  absolute native path. All must consume verified coordinator-result paths;
+  copying a candidate into the shared conventional target would restore the
+  bypass.
+
+  The coordinator must admit an explicit reviewed archive/header/target/recipe
+  and Cargo lock/features/pregenerated bindings profile before launching Cargo,
+  copy and verify the prefix into a newly owned root, and require an absent,
+  exclusive target directory. The parent build script can defend its own
+  execution but cannot guard dependency compilation or an entirely cached
+  invocation. Controlled static-library environment, bounded child handling,
+  post-build sys-rlib C-payload verification and input rechecks must bind exact
+  returned artifacts. E199 supplies framing, not that profile or admission.
+  Source review identifies this contract; no new build or runtime probe is
+  inferred. The coordinator, native integration and consumer changes remain
+  unfinished; coverage31/37 and acceptance0/8 retain their bounds.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4865,23 +4896,24 @@ progress and does not replace that transaction or its event readback.
 4. Turn E198's imported pinned builder and E193/E195/E197 linkage/cache controls
    into a reviewed-prefix coordinator with exclusive fresh Cargo target and
    actual embedded-member verification. E199 supplies strict framing and the
-   builder consumer; explicit Rust-extra inventory/provenance and the native
-   admission guard remain root-owned. Implement native fixed-query acquisition
-   with snapshot, cancellation and lossless SQL-value custody. Connect the
-   imported registry to transactional rendering/writing and retain E165/E166
-   source/profile controls. E196 requires a store-specific timestamp conversion,
-   explicit integer profile and codepoint-preserving JSON projection. Integrate
-   the separately owned E200 store-JSON component only after its committed
-   checks, review and lifecycle evidence; the generic decoder and JS-string AST
-   cannot silently supply that contract. R09 and R18 remain unreplaced;
-   standalone registry composition does not discharge production consumer
-   parity.
+   builder consumer; E201 identifies the four direct Cargo callers and explicit
+   artifact-path consumers. Explicit Rust-extra inventory/provenance and the
+   pre-Cargo admission guard remain root-owned. Implement native fixed-query
+   acquisition with snapshot, cancellation and lossless SQL-value custody.
+   Connect the imported registry to transactional rendering/writing and retain
+   E165/E166 source/profile controls. E196 requires a store-specific timestamp
+   conversion, explicit integer profile and codepoint-preserving JSON
+   projection. Integrate the separately owned E200 store-JSON component only
+   after its committed checks, review and lifecycle evidence; the generic
+   decoder and JS-string AST cannot silently supply that contract. R09 and R18
+   remain unreplaced; standalone registry composition does not discharge
+   production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E200 retain the historical candidates, failures and bounded observations;
+E167–E201 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is31/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
