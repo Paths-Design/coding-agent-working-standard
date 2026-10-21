@@ -203,7 +203,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration                                                         | TS configuration module                                                    | selected-stock root integration and public-control repair exercised, E119                                                                       | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim                                                                                                                                    |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                          | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                                       |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                              | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate          |
-| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | opt-in SQL-class/codepoint JSON decoder imported and parent-tested, E202; production consumer unreplaced                                        | Root owns native acquisition, profile choice, snapshot/cancellation, explicit store-AST/schema projection, timestamp semantics, publication custody and actual renderer consumption. Build/archive tooling and SQL-cell reference evidence E198–E200 remain bounded prerequisites.                                                                                                                                            |
+| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | opt-in JSON/timestamp stages imported and parent-tested, E202/E206; SQLite build tooling E207; production store unreplaced                      | Root owns native acquisition, profile choice, snapshot/cancellation, explicit store-AST/schema projection, timestamp semantics, publication custody and actual renderer consumption. E207 qualifies a private debug build and explicit artifact selection; release and production store consumers remain unqualified.                                                                                                         |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | lossless/common foundation and ordered registry imported and exercised, E157/E192; production consumer unreplaced                               | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                     |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                           | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                            |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                    | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                    |
@@ -5143,21 +5143,21 @@ progress and does not replace that transaction or its event readback.
    not infer an attempted foreign write from the refusal alone.
 4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
    target, embedded-member checks and four direct build/consumer integrations.
-   Qualify its committed candidate and retain UNADMITTED Rust-extra provenance
-   and the open full toolchain/SDK boundary. Implement native fixed-query
-   acquisition with snapshot, cancellation and lossless SQL-value custody.
-   Connect the imported registry to transactional rendering/writing and retain
-   E165/E166 source/profile controls. E196 requires a store-specific timestamp
-   conversion, explicit integer profile and codepoint-preserving JSON
-   projection. E203 supplies bounded actual SQL timestamp/error observations;
-   E204 adjudicates the two-stage leaf; E205 verifies its component landing on
-   main and E206 imports and parent-checks the exact source. Actual native
-   calendar/error behavior and its consumer integration remain root-owned. E202
-   imports the closed store-JSON component; root owes its explicit store-AST
-   access/schema projection and both-cell decode/admission order. The generic
-   decoder and JS-string AST cannot silently supply that contract. R09's
-   production consumer and R18 remain unreplaced; standalone composition does
-   not discharge production consumer parity.
+   Qualify release builds and ordinary consumer workloads; retain UNADMITTED
+   Rust-extra provenance and the open full toolchain/SDK boundary. Implement
+   native fixed-query acquisition with snapshot, cancellation and lossless
+   SQL-value custody. Connect the imported registry to transactional
+   rendering/writing and retain E165/E166 source/profile controls. E196 requires
+   a store-specific timestamp conversion, explicit integer profile and
+   codepoint-preserving JSON projection. E203 supplies bounded actual SQL
+   timestamp/error observations; E204 adjudicates the two-stage leaf; E205
+   verifies its component landing on main and E206 imports and parent-checks the
+   exact source. Actual native calendar/error behavior and its consumer
+   integration remain root-owned. E202 imports the closed store-JSON component;
+   root owes its explicit store-AST access/schema projection and both-cell
+   decode/admission order. The generic decoder and JS-string AST cannot silently
+   supply that contract. R09's production consumer and R18 remain unreplaced;
+   standalone composition does not discharge production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
