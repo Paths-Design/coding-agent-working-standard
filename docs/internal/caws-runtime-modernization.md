@@ -4393,6 +4393,29 @@ Additional bounded evidence and unresolved dependencies:
   remain owed. Parent source import advances integration within already covered
   rows; coverage remains31/37 and acceptance0/8.
 
+- E191: The peer's `native-application-boundaries-001.json` classifies all42
+  recorded filesystem/codegen input sites:11 mutable operational data,9 mutable
+  policy/repository data,15 executable-selection/installed-identity sites,5
+  release-schema compilation sites and2 generic Ajv compilation capabilities.
+  The separate generated-function site remains explicit. Two js-yaml load calls
+  are parsers, not module imports. Root verifies packet SHA256
+  `985f2ee1ad94cb7371312bcff65d86722d53a7739b16209677e7a094d65b5497` and exact
+  one-to-one inventory coverage in
+  `transcript-parent-adapters/boundary-classification-readback.json`; it does
+  not independently reexecute all peer source comparisons.
+
+  Root inspects the selected CLI chain: index imports config, config eagerly
+  imports detection and detection imports fs-extra. Config also exports two lazy
+  loaders that require project/legacy/template-derived paths. The named
+  functions have no other named source caller in the inspected tree; this does
+  not exclude computed/aliased or later consumers. Engine-only package trees
+  therefore cannot identify the selected CLI, and static capability is distinct
+  from observed execution. Complete engine/CLI union, loader-policy
+  reachability, held executable/import custody, mutable-state authority and
+  fresh post-import whole-tree identities remain owed. The classification
+  neither executes the refused inventory nor adopts a profile or proves
+  native/installed closure.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4508,7 +4531,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E190 retain the historical candidates, failures and bounded observations;
+E167–E191 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is31/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
