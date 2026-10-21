@@ -30,6 +30,11 @@ pub const MAX_ROWS: u64 = 4096;
 pub const MAX_CELL_BYTES: usize = 256 * 1024;
 pub const MAX_TOTAL_CELL_BYTES: usize = 16 * 1024 * 1024;
 
+/// Scope of the development exchange, not a dispatch or project grant.
+pub fn supports_invocation(surface: &str, event: &str, configuration: &str) -> bool {
+    matches!(surface, "opencode" | "zcode") && event == "stop" && configuration == "system"
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum ServeFailurePhase {
     Exchange,
@@ -286,9 +291,11 @@ pub fn serve(
     }
     if !invocation.ready_active
         || !invocation.dispatched
-        || !matches!(invocation.surface, "opencode" | "zcode")
-        || invocation.event != "stop"
-        || invocation.configuration != "system"
+        || !supports_invocation(
+            invocation.surface,
+            invocation.event,
+            invocation.configuration,
+        )
     {
         return Err("store operation outside active dispatched system OpenCode/ZCode Stop".into());
     }

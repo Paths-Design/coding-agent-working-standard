@@ -5396,6 +5396,90 @@ Additional bounded evidence and unresolved dependencies:
   publication and renderer consumption, parent0/8 and machine cutover remain
   open.
 
+- E218: Follow-up source inspection of d533d064 identifies a pre-owner route
+  around E217's filter: protocol classification rejects a recognized store frame
+  above8192 bytes before `serve`, leaving no typed store failure for fallback.
+  This is a source-grounded control-flow finding; no old-image oversized-counter
+  execution is claimed. Classification forwards recognized frames to the
+  single-use owner's existing size refusal. A native-owned `StoreProjectBinding`
+  also starts unbound for the original eligible OpenCode/ZCode system Stop
+  before frame acquisition. Framing/EOF failures therefore cannot borrow Ready
+  state by arriving before the store owner. Actual matching-root observation or
+  a typed established-bound failure changes that state; other Ready consumers
+  remain parent obligations.
+
+  `native-project-binding/check-04` retains22 store,13 query, five protocol and
+  one feature-off test, strict Clippy and frontend build, all selected commands
+  exit0 with unchanged pinned inputs. `frontend-03` exits0 over16 scenarios;
+  summary SHA256 is
+  `1403d82e3721df7b1f4296a46a8f726314ef8cb013aaabcde4d257fd097435ad`, executed
+  debug image SHA256 is
+  `58de5db0da52f26dc5d71c88d3c7978b7fc96823e233b5422fe84e9ea30ce569`. Its
+  matching foreign Ready/root sends an actual8629-byte store body and receives
+  diagnostic release with zero rows and no budget directories/files. A foreign
+  Ready followed by EOF before any store frame has the same bounded disposition.
+  The valid-project/missing-DB rival retains block/counter1 under original
+  digest7468a5a0d26350187ff083bcd7b4386b4c3f45510213a6d42523ce7c243af6d7. Raw
+  command/output/wire/body-length/budget observations remain beside each result;
+  reference event bytes, source closure and DB pins remain stable on the ten
+  ordinary successes. E217's14-case pass is historical, not coverage of these
+  new routes. Debug source qualification does not establish release, atomic
+  path/image custody, complete Ready consumers, publication, installed selection
+  or cutover. Coverage32/37 and parent0/8 remain unchanged.
+
+- E219: Read-only inspection maps the committed R18 content API at d12d74a to
+  its missing production connections. Engine entry constructs only the cache
+  port; the store client has no production caller. Stop/SessionEnd retain
+  compatibility selection, stock handlers do not admit session-log, and the
+  native render offer covers a selected Codex project override rather than typed
+  stock preparation. The actor records no complete artifact manifest.
+  Preparation identity/owned bytes are content observations, not an original
+  invocation, writer grant or publication permit; its WeakMap checkpoint is
+  process-local. Root retains selected-handler wiring, a native publication
+  frame under existing continuous custody, single-use exhausted/settled store
+  permission, latest-attempt invalidation and complete actual-reader snapshot
+  admission including spill/index/removal checks.
+
+  The R18 owner retains an actual4418-byte Codex source counterexample:
+  `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-numeric/result.json`
+  admits an embedded4301-digit integer under selected4300 and unlimited
+  profiles. Root inspects those values and the
+  outer-reader/unprofiled-embedded-decoder path. Actual spec/event10265 record
+  A1 FAIL; no component acceptance follows from239 earlier checks. Parent
+  registry/DSH exact claims move to support by CLI for the owner's scoped
+  profile repair. Immutable per-normalization numeric data must reach embedded
+  decoders and accumulator/lineage, with each reference consumer's
+  catch/propagate behavior preserved; this is not a blanket fatal-conversion
+  rule. Arbitrary user `*_ref` fields must not become renderer-owned spill
+  authority. The owner retains those repairs and evidence; native integration
+  and parent acceptance remain root-owned. No row count or installed behavior
+  advances from the investigation.
+
+- E220: The shell-analysis owner records scoped private-installed-package A6
+  PASS at56ec137241f15ea8bc649b0dbc95e8a299b6a753. Root reads actual
+  spec/event10273 and its selected coverage-rebinding test's `test_verified_at`;
+  this does not independently re-execute or establish the
+  entire1889-check/package narrative. Native producer/launch/routing,
+  whole-chain canary and rollback remain A5/A7 obligations. The deployed machine
+  pointer reads408c06a7; no adoption follows.
+
+  Root explicitly accepts the finite pending policies mutation-report inspection
+  within the combined integration hold. Source repair stays with chat
+  `01a151c0-4722-76a0-9814-eb680a4be9b2` and its owned shell-analysis lane; no
+  claim takeover, source authority transfer or closure occurs. Direct process
+  observation finds PID19693 live as stryker. The inspected config selects the
+  full `src/shell/analysis/policies.ts`; its log records436/1432 tested, 130
+  survived and0 timed out when inspected. This is an unfinished run, not a final
+  score or quality verdict. Exact config/log/report paths are under
+  `/Users/darianrosebrook/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-coordination-20261021/startup-env-mutation/policies/`.
+  On terminal process/report evidence, root must inspect the full-file score
+  against the unchanged80 floor, embedded source equality with56ec1372 and
+  meaningful survivor applicability. Consequential gaps or floor failures return
+  to the source owner for repair; root retains integration and acceptance until
+  resolved. Do not restart from an observation timeout or infer completion from
+  owner silence. E185's refused inventory remains unexecuted and the complete
+  guard/native boundary stays open.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5503,7 +5587,9 @@ progress and does not replace that transaction or its event readback.
    reserved source, interpreter effect profile and trusted-launch dependencies
    remain obligations; acceptance of the handoff does not close the hold. Keep
    the refused CLI inventory unexecuted pending a supported resolution; do not
-   infer an attempted foreign write from the refusal alone.
+   infer an attempted foreign write from the refusal alone. E220 assigns root
+   the exact pending policies-report inspection while retaining source-owner
+   repairs and native A5/A7 integration obligations.
 4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
    target, embedded-member checks and four direct build/consumer integrations.
    E209 qualifies one frozen current-host release build; ordinary consumer
@@ -5518,31 +5604,34 @@ progress and does not replace that transaction or its event readback.
    qualification remain open. E217 prevents its unbound store failures from
    charging engine-selected project budget state while retaining established
    context on bound failures. Other Ready consumers need complete original
-   context qualification. Qualify the retained pinned-image year-addition
-   extension against the25 E204/E206 historical exclusions without rewriting
-   those earlier observations, then exercise the stable native REAL boundary.
-   Add a single-use exhausted-and-settled store publication permit; generic
-   confirmed close does not grant one. Integrate atomic projection publication
-   under compatible continuous writer custody before the actual renderer opens
-   its source, followed by receipt serialization/delivery as distinct outcomes.
-   E213 records why a separate recursively acquired publisher lock or an early
-   unlock is insufficient. E210 requires retaining publication truth even when
-   later receipt encoding fails; no failed invocation may select an old
-   projection. Connect this owner to the actual session-log renderer consumer
-   while preserving normalization, selected overrides and E165/E166
+   context qualification. E218 carries recognized oversize and early transport
+   refusals without a budget namespace bypass. Qualify the retained pinned-image
+   year-addition extension against the25 E204/E206 historical exclusions without
+   rewriting those earlier observations, then exercise the stable native REAL
+   boundary. Add a single-use exhausted-and-settled store publication permit;
+   generic confirmed close does not grant one. Integrate atomic projection
+   publication under compatible continuous writer custody before the actual
+   renderer opens its source, followed by receipt serialization/delivery as
+   distinct outcomes. E213 records why a separate recursively acquired publisher
+   lock or an early unlock is insufficient. E210 requires retaining publication
+   truth even when later receipt encoding fails; no failed invocation may select
+   an old projection. Connect this owner to the actual session-log renderer
+   consumer while preserving normalization, selected overrides and E165/E166
    source/profile controls. E202/E206 component imports and E208–E215 finite
    observations do not close complete native calendar/error/path/profile
    behavior, WAL, asynchronous cleanup, release packaging or ordinary consumer
    parity. R09's production consumer and R18 remain unreplaced. E214 retains the
    incomplete-profile publication reference. E215 assigns coherent typed
    preparation and preserves the actual-reader generation/closure obligation; a
-   prepared result cannot stand in for that integration.
+   prepared result cannot stand in for that integration. E219 grounds the exact
+   missing entry/selection/actor/reader connections and retains the R18 owner's
+   embedded-profile and owned-spill repairs before import.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E217 retain the historical candidates, failures and bounded observations;
+E167–E220 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.

@@ -74,9 +74,25 @@ async function main() {
       sessionId: request.payload.session_id,
     });
     decodeDispatchGrant(await read(), request);
+    if (process.env.CAWS_NATIVE_STORE_REQUEST_MODE === 'close-before-store') {
+      process.stdout.end();
+      return;
+    }
     const port = createNativeTranscriptStorePort(
       request,
-      { read: () => read(), write: frame => write(frame) },
+      {
+        read: () => read(),
+        write: frame => {
+          // Qualification-only protocol refusal: preserve a matching foreign
+          // Ready/root while exceeding the store owner's request byte bound.
+          if (
+            process.env.CAWS_NATIVE_STORE_REQUEST_PAD === '8193' &&
+            frame.schema === 'caws.runtime.transcript-store.request.v1'
+          )
+            return write({ ...frame, qualificationPadding: 'x'.repeat(8193) });
+          return write(frame);
+        },
+      },
       controller.signal
     );
     let bytes,

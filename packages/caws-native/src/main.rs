@@ -12,12 +12,22 @@ mod runner;
 use caws_native::stop_budget::{BudgetIdentity, Charge, StopBudget};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "sqlite-store")]
+#[derive(Clone, Copy)]
+enum StoreProjectBinding {
+    NotApplicable,
+    Unbound,
+    Bound,
+}
+
 struct Failure {
     dispatched: bool,
     ready: Option<Box<protocol::Ready>>,
     message: String,
     #[cfg(feature = "sqlite-store")]
     store_failure: Option<Box<caws_native::transcript_store_wire::ServeError>>,
+    #[cfg(feature = "sqlite-store")]
+    store_project_binding: StoreProjectBinding,
 }
 impl Failure {
     fn configuration(message: String) -> Self {
@@ -27,6 +37,8 @@ impl Failure {
             message,
             #[cfg(feature = "sqlite-store")]
             store_failure: None,
+            #[cfg(feature = "sqlite-store")]
+            store_project_binding: StoreProjectBinding::NotApplicable,
         }
     }
 }
@@ -61,6 +73,16 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     let mut dispatched = false;
     #[cfg(feature = "sqlite-store")]
     let mut store_failure = None;
+    #[cfg(feature = "sqlite-store")]
+    let mut store_project_binding = if caws_native::transcript_store_wire::supports_invocation(
+        &config.surface,
+        &config.event,
+        &config.configuration,
+    ) {
+        StoreProjectBinding::Unbound
+    } else {
+        StoreProjectBinding::NotApplicable
+    };
     let proposal = (|| {
         session.send(&bytes, deadline)?;
         ready = Some(
@@ -102,9 +124,16 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                         || cancellation::check().is_err(),
                         &mut session,
                     ) {
+                        store_project_binding = if error.original_project_bound() {
+                            StoreProjectBinding::Bound
+                        } else {
+                            StoreProjectBinding::Unbound
+                        };
                         let message = error.to_string();
                         store_failure = Some(Box::new(error));
                         return Err(message);
+                    } else {
+                        store_project_binding = StoreProjectBinding::Bound;
                     }
                 }
                 protocol::EngineFrame::SessionCacheRequest(frame) => {
@@ -181,6 +210,8 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                 message,
                 #[cfg(feature = "sqlite-store")]
                 store_failure,
+                #[cfg(feature = "sqlite-store")]
+                store_project_binding,
             });
         }
     };
@@ -326,12 +357,8 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
     if error.dispatched && stop {
         let budget_ready = error.ready.as_deref();
         #[cfg(feature = "sqlite-store")]
-        let budget_ready = budget_ready.filter(|_| {
-            error
-                .store_failure
-                .as_ref()
-                .is_none_or(|failure| failure.original_project_bound())
-        });
+        let budget_ready = budget_ready
+            .filter(|_| !matches!(error.store_project_binding, StoreProjectBinding::Unbound));
         match charge(budget_ready, Instant::now() + Duration::from_millis(100)) {
             Ok(Charge::Refuse) => {}
             Ok(Charge::Release) => {

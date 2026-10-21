@@ -379,7 +379,10 @@ directory identity against concurrent replacement, and lexical symlink aliases
 outside this profile remain unqualified. These observations confer no
 publication permit.
 
-Store errors preserve whether original-project agreement was established.
+Store errors preserve whether original-project agreement was established. The
+original store-eligible invocation starts unbound before frame acquisition;
+recognized byte-bound refusals stay with the store owner, and transport or
+framing failures cannot bypass this state by arriving before that owner runs.
 Fallback charges the Ready project namespace only after that agreement; an
 unbound store refusal uses the existing no-context diagnostic Stop release
 without creating project budget state. A database-path or transport failure
