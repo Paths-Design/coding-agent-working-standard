@@ -3,7 +3,7 @@ title: 'Align the four guard landing documents with execution and qualification 
 mode: doc
 lifecycle_state: draft
 created_at: '2026-10-21T21:21:46.923Z'
-updated_at: '2026-10-21T21:21:46.923Z'
+updated_at: '2026-10-21T21:21:50.524Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -15,6 +15,9 @@ scope:
     - 'README.md'
     - 'docs/architecture/hook-pack-shared-core.md'
   out: []
+  support:
+    - docs/guides/hook-packs.md
+    - docs/guides/command-analysis.md
 invariants:
   - 'All four existing documents are landing obligations; no new guide or duplicate progress ledger is created.'
   - 'Implemented bounded analysis and private package observations remain distinct from proposed execution custody and separately qualified native adoption.'
