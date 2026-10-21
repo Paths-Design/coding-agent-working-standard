@@ -17,6 +17,7 @@ import {
 } from '../../src/transcripts/lossless-json';
 import {
   decodeOccurrence,
+  decodeProfiledOccurrence,
   isParsedRow,
   type OccurrenceCoordinates,
   type ParsedRow,
@@ -400,4 +401,38 @@ test('refuses impossible native paths after normalization without mutating calle
     new RegExp('invalid native member path')
   );
   assert.equal(initial.value.count, 0);
+});
+
+test('profiled issuance preserves conversion failure before later syntax and duplicate collapse', () => {
+  const failure = new SyntaxError('selected numeric conversion rejected');
+  const seen: string[] = [];
+  const profile = {
+    admitNumberToken(token: { readonly lexeme: string }) {
+      seen.push(token.lexeme);
+      if (token.lexeme === '12345') throw failure;
+    },
+  };
+  for (const raw of ['{"x":12345,bad', '{"x":12345,"x":0}']) {
+    assert.throws(
+      () => decodeProfiledOccurrence(Buffer.from(raw), coords(), profile),
+      (error) => error === failure
+    );
+  }
+  assert.deepEqual(seen, ['12345', '12345']);
+  const parsed = decodeProfiledOccurrence(Buffer.from('{"n":9007199254740993}'), coords(), {
+    admitNumberToken() {},
+  });
+  assert.equal(isParsedRow(parsed), true);
+  assert.equal(parsed.disposition, 'parsed');
+  if (parsed.disposition !== 'parsed') throw new Error('expected parsed row');
+  assert.equal(pythonJsonDumps(parsed.row), '{"n": 9007199254740993}');
+  assert.equal(
+    decodeProfiledOccurrence(Buffer.from('{broken'), coords(), profile).disposition,
+    'invalid_json'
+  );
+  assert.equal(
+    decodeProfiledOccurrence(Buffer.from([0xff]), coords(), profile).disposition,
+    'invalid_utf8'
+  );
+  assert.equal(row('{"n":' + '1'.repeat(4301) + '}').disposition, 'parsed');
 });

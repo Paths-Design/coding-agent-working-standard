@@ -1,6 +1,12 @@
 /** Raw transcript occurrences. Coordinates are caller assertions, never custody or cache authority. */
 import { createHash } from 'node:crypto';
-import { isJsonObject, parsePythonJson, type JsonObject, type JsonValue } from './lossless-json';
+import {
+  isJsonObject,
+  parsePythonJson,
+  type JsonObject,
+  type JsonValue,
+  type JsonNumber,
+} from './lossless-json';
 
 const PYTHON_SPACE =
   '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]';
@@ -68,7 +74,37 @@ function freezeJson(value: JsonValue): JsonValue {
   }
   return value;
 }
+export interface OccurrenceDecodeProfile {
+  readonly utf8?: 'strict' | 'replace';
+  /** Default true retains the historical transcript decoder's outer strip. */
+  readonly stripOuterWhitespace?: boolean;
+  /** Called during token conversion, before later syntax and duplicate-key collapse. */
+  readonly admitNumberToken: (token: JsonNumber) => void;
+}
+class TokenAdmissionFailure {
+  constructor(readonly cause: unknown) {}
+}
+/** Profile errors propagate unchanged; only JSON syntax is classified as invalid_json. */
+export function decodeProfiledOccurrence(
+  bytes: Uint8Array,
+  coordinates: OccurrenceCoordinates,
+  profile: OccurrenceDecodeProfile
+): ParsedRow {
+  if (typeof profile?.admitNumberToken !== 'function')
+    throw new TypeError('occurrence profile requires numeric token admission');
+  if (profile.utf8 !== undefined && profile.utf8 !== 'strict' && profile.utf8 !== 'replace')
+    throw new TypeError('unsupported occurrence UTF8 profile');
+  return decode(bytes, coordinates, profile);
+}
+/** Historical custody decoder retains its unbounded numeric policy. */
 export function decodeOccurrence(bytes: Uint8Array, coordinates: OccurrenceCoordinates): ParsedRow {
+  return decode(bytes, coordinates);
+}
+function decode(
+  bytes: Uint8Array,
+  coordinates: OccurrenceCoordinates,
+  profile?: OccurrenceDecodeProfile
+): ParsedRow {
   for (const value of [
     coordinates.sourceId,
     coordinates.sourceGeneration,
@@ -103,14 +139,31 @@ export function decodeOccurrence(bytes: Uint8Array, coordinates: OccurrenceCoord
   };
   let text: string;
   try {
-    text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(raw);
+    text = new TextDecoder('utf-8', { fatal: profile?.utf8 !== 'replace', ignoreBOM: true }).decode(
+      raw
+    );
   } catch {
     return seal({ source, disposition: 'invalid_utf8' });
   }
   let value: JsonValue;
   try {
-    value = parsePythonJson(pythonStrip(text));
-  } catch {
+    value = parsePythonJson(
+      profile?.stripOuterWhitespace === false ? text : pythonStrip(text),
+      profile === undefined
+        ? undefined
+        : {
+            admitNumberToken(token) {
+              try {
+                profile.admitNumberToken(token);
+              } catch (cause) {
+                throw new TokenAdmissionFailure(cause);
+              }
+            },
+          }
+    );
+  } catch (error) {
+    if (error instanceof TokenAdmissionFailure) throw error.cause;
+    if (profile !== undefined && !(error instanceof SyntaxError)) throw error;
     return seal({ source, disposition: 'invalid_json' });
   }
   freezeJson(value);

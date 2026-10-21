@@ -19,6 +19,11 @@ import {
   type TranscriptAdapter,
 } from './harness-common';
 import { isParsedRow, type ParsedRow } from './source-occurrence';
+import {
+  parseTranscriptJson,
+  snapshotTranscriptJsonProfile,
+  type TranscriptJsonNumericProfile,
+} from './transcript-json-profile';
 import { KIMI_ADAPTER } from './harness-kimi';
 import { createDshAdapter, type DshEmbeddedJsonProfile } from './harness-dsh';
 import { CODEX_ADAPTER } from './harness-codex';
@@ -64,6 +69,7 @@ export interface TranscriptRegistry {
 export interface RegistryContextOptions {
   readonly surface?: string;
   readonly cacheGeneration?: string;
+  readonly numericProfile?: TranscriptJsonNumericProfile;
 }
 
 interface Slot {
@@ -242,11 +248,26 @@ export function createTranscriptRegistry(
   return Object.freeze(registry);
 }
 
-/** DSH interpretation is supplied explicitly; no global production decoder is chosen. */
+export type DefaultTranscriptRegistryOptions = Omit<RegistryContextOptions, 'numericProfile'> &
+  (
+    | { readonly numericProfile: TranscriptJsonNumericProfile; readonly dshProfile?: never }
+    | { readonly dshProfile: DshEmbeddedJsonProfile; readonly numericProfile?: never }
+  );
+/** Select one shared numeric policy or retain an explicitly supplied historical DSH decoder. */
 export function createDefaultTranscriptRegistry(
-  options: RegistryContextOptions & { readonly dshProfile: DshEmbeddedJsonProfile }
+  options: DefaultTranscriptRegistryOptions
 ): TranscriptRegistry {
-  const { dshProfile, ...contextOptions } = options;
+  if (options.numericProfile !== undefined && options.dshProfile !== undefined)
+    throw new TypeError('Select numericProfile or dshProfile, not both');
+  const { dshProfile: historical, numericProfile, ...labels } = options;
+  const selected =
+    numericProfile === undefined ? undefined : snapshotTranscriptJsonProfile(numericProfile);
+  const contextOptions: RegistryContextOptions =
+    selected === undefined ? labels : { ...labels, numericProfile: selected };
+  const dshProfile =
+    selected === undefined
+      ? historical!
+      : { id: selected.id, decode: (source: string) => parseTranscriptJson(source, selected) };
   const dsh = createDshAdapter(Object.freeze({ id: dshProfile.id, decode: dshProfile.decode }));
   const module = <S>(
     adapter: TranscriptAdapter<S>,
