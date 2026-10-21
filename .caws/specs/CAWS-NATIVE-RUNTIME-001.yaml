@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-21T20:01:50.825Z'
+updated_at: '2026-10-21T20:26:22.929Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -143,7 +143,6 @@ scope:
     - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
     - packages/caws-cli/src/transcripts/store-timestamp.ts
     - packages/caws-cli/tests/transcripts/store-timestamp.test.js
-    - .gitignore
   support:
     - packages/caws-cli/reports/
     - package.json
