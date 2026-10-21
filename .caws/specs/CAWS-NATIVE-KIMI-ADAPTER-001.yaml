@@ -50,3 +50,10 @@ evidence:
     command: "driver.cjs + compare.cjs on frozen reference/run-20261021T010201Z-c35d5ff0"
     exit_code: 0
     commit_sha: "346d50441c006e88affee2f86408ca9ca36ffd74"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Exact millisecond rounding/overflow and6 complete/partial/empty synthetic occurrence observations perruntime. /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-kimi-adapter/kimi-falsifiers/occurrence-observation-node18.stdout and occurrence-observation-node22.stdout; caller_asserted provenance; partial commitAllowed false is API signal only, not persistence evidence."
+    recorded_at: "2026-10-21T01:58:22.757Z"
+    command: "Node18/22 observe.cjs plus integer probe; root013 rederived raw hashes and values"
+    exit_code: 0
+    commit_sha: "346d50441c006e88affee2f86408ca9ca36ffd74"
