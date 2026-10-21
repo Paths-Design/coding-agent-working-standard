@@ -61,3 +61,8 @@ evidence:
     evidence_ref: "All 15 R19 line anchors resolve to a python3 invocation at 10690d4b (agent-surface.sh:520 HIT; old :516 has 0 python3 matches as negative control). qualify-render-daemon.py, qualify-transcript-cache.py, source_freshness.py exist on main and 10690d4b; the six removed paths are absent on both, and git show --name-status reports D for each at its cited commit (8e56cee2, 8ce627ca x2, 098dc1f4, d147dd3e x2), each an ancestor of main and 10690d4b."
     recorded_at: "2026-10-21T21:44:35.298Z"
     commit_sha: a5f8e4c1
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Candidate a5f8e4c1 heading readback: Evidence ledger L301, Evidence ledger (continued) L411 holding E27 onward, Embedded and developer implementation coverage L5740 directly before the inventory paragraph. In-doc anchor links feature-ledger, ordered-next-work and embedded-and-developer-implementation-coverage all resolve; no other repo markdown links a section anchor in this doc. Source checkpoint names 10690d4b as source-tree identity; git diff --name-only 10690d4b native-runtime-modernization lists only the ledger. CAWS-TRANSCRIPT-NODE-FLOOR-001 and CAWS-STORE-TIMESTAMP-SENSITIVITY-001 named with descriptions drawn from their spec acceptance text. E-id set unchanged (227, same hash as main)."
+    recorded_at: "2026-10-21T21:44:38.449Z"
+    commit_sha: a5f8e4c1
