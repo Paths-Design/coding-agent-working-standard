@@ -1,0 +1,73 @@
+id: CAWS-RENDER-PREPARE-001
+title: 'Prepare profile-bound session artifacts from observed source bytes'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-21T16:42:37.786Z'
+updated_at: '2026-10-21T16:42:37.786Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Typed transcript source reader, renderer accumulation, artifact preparation and profiled raw occurrence issuance'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/render-values.ts'
+    - 'packages/caws-cli/src/transcripts/render-reader.ts'
+    - 'packages/caws-cli/src/transcripts/render-accumulator.ts'
+    - 'packages/caws-cli/src/transcripts/render-artifacts.ts'
+    - 'packages/caws-cli/src/transcripts/render-prepare.ts'
+    - 'packages/caws-cli/src/transcripts/source-occurrence.ts'
+    - 'packages/caws-cli/src/transcripts/index.ts'
+    - 'packages/caws-cli/tests/transcripts/render-values.test.ts'
+    - 'packages/caws-cli/tests/transcripts/render-reader.test.ts'
+    - 'packages/caws-cli/tests/transcripts/render-accumulator.test.ts'
+    - 'packages/caws-cli/tests/transcripts/render-artifacts.test.ts'
+    - 'packages/caws-cli/tests/transcripts/render-prepare.test.ts'
+    - 'packages/caws-cli/tests/transcripts/occurrence.test.ts'
+  out: []
+invariants:
+  - 'prepareSessionArtifacts(input, owned read observations, prior checkpoint) returns ready, retain, empty, or failed with checkpoint; it never publishes or declares current.'
+  - 'Ready owns all immutable encoded turn, spill and index bytes with exact names, lengths and hashes, internal spill closure, source/context/profile observations and proposed removals from observed prior inventory.'
+  - 'Selected reader distinguishes JSON syntax skip from fatal UTF8 or numeric conversion; complete-prefix checkpoint advances before tentative-tail failure and is returned on failure.'
+  - 'Lossless integers and float kinds, JSON insertion order and CodepointText codepoint identity survive actual Codex enrichment through accumulation and encoding without serialize/reparse.'
+  - 'Metadata directory choice, negative candidates, listings, read outcomes and selected TZ/calendar semantics participate in preparation and freshness.'
+  - 'Missing or empty sources preserve existing human history as retained noncurrent; proposed removals never authorize deletion and prepared never means published.'
+  - 'Native root/path/input admission, writer custody, publication, current-use and render-state finalization remain parent-owned; selected unsupported overrides fail explicitly without fallback.'
+acceptance:
+  - id: A1
+    given: 'observed transcript bytes and selected UTF8/numeric/registry profile'
+    when: 'preparation reads complete lines and a tentative tail'
+    then: 'syntax-only malformed and nonobject rows are skipped while UTF8 and conversion failures remain fatal and return the exact committed-prefix checkpoint'
+  - id: A2
+    given: 'supported normalized harness rows and raw Codex functions.exec source'
+    when: 'actual registry events are accumulated'
+    then: 'turn grouping tools results rewind usage and enrichment match pinned consumer semantics while source identity and CodepointText distinctions remain preserved'
+  - id: A3
+    given: 'audit hook metadata and context observations including absent higher-priority candidates and selected timezone'
+    when: 'preparation merges and links contextual events'
+    then: 'priority ordering metadata linkage and freshness depend on the complete observed context rather than mtime alone'
+  - id: A4
+    given: 'accumulated turns including large payloads and lone surrogate boundaries'
+    when: 'all turn spill and index outputs are prepared'
+    then: 'exact encoding bytes hashes and internal spill references are complete before any publication intent and encoding failure yields no ready generation'
+  - id: A5
+    given: 'observed prior artifact inventory and missing empty or smaller new input'
+    when: 'preparation selects its outcome'
+    then: 'retained history is noncurrent empty is distinct from failed and removals refer only to observed prior inventory without deleting anything'
+  - id: A6
+    given: 'the prepared API and its tests'
+    when: 'hostile source-to-artifact controls and regression checks execute'
+    then: 'no publication currentness installed-runtime or full R18 parity is inferred and all admitted baseline adapter semantics remain unchanged'
+observability:
+  - 'Retained raw command logs and prepared bytes, source/checkpoint observations and typed refusal/failure phases'
+rollback:
+  - 'Remove exports and new preparation modules before consumer adoption; preserve parent runtime selection and all existing artifact bytes'
+non_functional:
+  security:
+    - 'Preparation has no production filesystem mutation or native publication authority.'
+contracts:
+  - name: 'prepared-session-artifacts'
+    type: api
+  - name: 'source-to-artifact-semantics'
+    type: contract-test
