@@ -235,7 +235,7 @@ try {
     { NODE_V8_COVERAGE: '' }
   );
   assert.equal(reboundCoverage.status, 2, JSON.stringify(reboundCoverage));
-  assert.match(reboundCoverage.stderr, /environment-change/);
+  assert.match(reboundCoverage.stderr, /mutation-interpreter-effects/);
   assert.equal(fs.existsSync(path.join(foreign, 'coverage-never-written')), false);
   const inactiveCoverage = writeGuard("node -e '1'", { NODE_V8_COVERAGE: '' });
   assert.equal(inactiveCoverage.status, 0, inactiveCoverage.stderr);

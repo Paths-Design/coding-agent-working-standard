@@ -471,7 +471,7 @@ test('an exported startup writer cannot hide behind an inactive inherited value'
   });
   expect(result.error).toBeUndefined();
   expect(result.status).toBe(2);
-  expect(result.stderr).toContain('environment-change');
+  expect(result.stderr).toContain('mutation-interpreter-effects');
   expect(fs.existsSync(target)).toBe(false);
 });
 test.each(["-e '1'", "--eval='1'", "-p '1'"])(
