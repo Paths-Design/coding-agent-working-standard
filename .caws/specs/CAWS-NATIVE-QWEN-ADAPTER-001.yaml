@@ -57,3 +57,10 @@ evidence:
     command: python3 -B /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-qwen-adapter/verify-artifacts.py
     exit_code: 0
     commit_sha: "39941e8cced49c2072956bf7acf0a67ce0e958a5"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-qwen-adapter :: candidate-final-identity.json binds39941e8c to35 checked source/Git blobs and27 identical compiled JS files perruntime. Commands010-017 compile/lint/104tests/format/doctor0E3W4I/fivegates pass; qwen-falsifiers records16 meaningful manualfault kills, failed Node18 --test exit9 retained/excluded. Root019 exit0 verified artifacts. Independent readonly peer feedback grounded; no full mutation score or production/cutover claim."
+    recorded_at: "2026-10-21T00:37:36.139Z"
+    command: python3 -B /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-qwen-adapter/verify-artifacts.py
+    exit_code: 0
+    commit_sha: "39941e8cced49c2072956bf7acf0a67ce0e958a5"
