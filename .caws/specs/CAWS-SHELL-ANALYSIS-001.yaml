@@ -54,6 +54,7 @@ invariants:
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
   - 'Literal data remains data; quotes, branch alternatives, assignment order and finite-loop state are preserved. Existing lifecycle release and foreign work remain preserved.'
   - 'Known incomplete native producer projections never confer command admission or lifecycle rewrite authority; the deployed runtime is retained until a qualified execution contract and isolated native canary exist.'
+  - 'The landing includes the architecture cwd contract, hook setup, README exit semantics and command-analysis verification updates. These four documents distinguish implemented bounded analysis and packaged consumer behavior, the proposed CAWS execution boundary, and native adoption that requires separate final-launch, canary and rollback qualification; they are part of the landing, not deferred follow-up work.'
 acceptance:
   - id: A1
     given: 'a declared supported Bash subset and exact command bytes'
