@@ -4191,10 +4191,17 @@ Additional bounded evidence and unresolved dependencies:
   JavaScript arrow is removed; quoted and unquoted bodies cannot share the same
   expansion rule. Submitted bodies are not executed. A computed-write fixture
   using process.argv[1] supplies no argument in its header, so its empty guard
-  result does not establish a concrete foreign target; root requests a
-  corrected, independently identified finite target rather than accepting that
-  claim. These observations retain the existing A6 effect/expansion obligation
-  and A5/A7 native-context limits; they do not advance coverage or acceptance.
+  result does not establish a concrete foreign target. Separate retained
+  finite-target-controls/finite-computed-write-{plain,arrow} witnesses supply
+  that target: root independently decodes the fixed ASCII list as data and
+  matches the sibling sentinel path. The plain guard returns0; adding the arrow
+  returns2 solely for fabricated nesting. No submitted body executes and the
+  sentinel stays unchanged. The original missing-argument limitation remains.
+  Peer artifact-verification-finite-target-controls.json records15 checked guard
+  invocations; root inspects the two corrected commands, raw scan/guard results
+  and target identity. These observations retain the A6 effect/expansion
+  obligation and A5/A7 native-context limits; they do not advance coverage or
+  acceptance.
 
 - E186: The parent imports the exact two helper/test files from closed
   `437032e13a73cd6e329103109b439f70fccbfe2a`; SHA256 values are
@@ -4278,6 +4285,40 @@ Additional bounded evidence and unresolved dependencies:
   the actual parser writes the session envelope. This earns the original
   token-admission route without relying on an inconsistent injected request.
   Runtime source is unchanged; final test-file lint parses with0 diagnostics.
+
+- E187: A read-only peer inventory of the compiled E186 entry reports165
+  first-party modules/assets and165 corresponding sources,290 visited modules or
+  assets,776 resolved static edges and7 external package roots. Packet
+  `/Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/native-application-closure-001/`
+  retains inventory SHA256
+  `9bdc494139db32bc6e3fce303476cadd0a2043b2f7a44324f4f53661e05d3be7`,
+  command/raw streams, resolver methods and source/boundary readback. Root
+  inspects entry/method/summary and structured readback: Node22.19 resolves
+  without loading the application; reported source identities match55a6b96a.
+  Forty emitted JSON assets differ in bytes but retain selected Node values/key
+  order. Participating package trees cover594 regular files/2,395,659 bytes with
+  no reported tree gaps. These are observed inventory facts and peer
+  comparisons, not adopted expected identities or root reexecution of every
+  comparison.
+
+  Zero unresolved literal imports are distinct from42 filesystem/codegen inputs
+  and one Ajv generated-function site. Root must classify those boundaries from
+  owning source; a separate read-only peer traces Ajv schema/options/code
+  inputs. Only5 transcript code modules are reached, not the unintegrated
+  adapters. The qualifier's verifyTree requires complete recursive
+  source/dist/dependency trees, so reachable subsets cannot replace them. Root
+  owns complete-tree reviewed identities, dynamic/import policy,
+  PATH/Python/native image closure and fresh full-stock heartbeat replay. No
+  application/handler execution, held custody, installed activation or ordinary
+  workload follows from this inventory; sealedClosure is explicitly false.
+
+  The next separately scoped adapter-registry proposal preserves historical
+  first-match-even-empty, source_harness and per-harness state/context failure
+  boundaries, with explicit DSH decoding/profile inputs. It is a composition
+  prerequisite within covered adapter rows, not renderer/R09 production parity
+  or additional coverage. Admission/binding precede writes; root retains parent
+  import and actual renderer/cache/writer obligations. Coverage stays31/37 and
+  acceptance0/8.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
