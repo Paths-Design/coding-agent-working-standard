@@ -1,9 +1,10 @@
 id: CAWS-PYTEST-ENTRYPOINT-MACOS-REALPATH-01
 title: 'pytest-entrypoint test compares a /var tmpdir path against the canonical /private/var handler path, failing on every macOS run'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: pytest-entrypoint-realpath
 created_at: '2026-10-21T02:49:08.399Z'
-updated_at: '2026-10-21T02:49:08.399Z'
+updated_at: '2026-10-21T02:49:20.984Z'
 created_by_session: '2cab376d-3f6a-4fb5-ab68-c931fbde6779'
 blast_radius:
   modules:
