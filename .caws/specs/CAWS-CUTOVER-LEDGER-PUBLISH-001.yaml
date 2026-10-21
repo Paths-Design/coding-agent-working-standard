@@ -28,6 +28,13 @@ acceptance:
     given: 'canonical doctor implementation and a warning-only live result'
     when: 'README exit semantics are read'
     then: 'zero permits warnings and one denotes error-severity findings or load errors.'
+  - id: A3
+    given: 'the tracked cutover ledger and ignored internal scratch documentation'
+    when: 'ordinary staging and commit formatting run'
+    then: >-
+      the ledger is admitted without force-add while scratch documentation remains
+      ignored and the ledger commit finishes without the ignored-path restaging
+      failure
 observability:
   - 'Governed document diff, inspected source revisions and matching lifecycle/evidence events'
 rollback:
