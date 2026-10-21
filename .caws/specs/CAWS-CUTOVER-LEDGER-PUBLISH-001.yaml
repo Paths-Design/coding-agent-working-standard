@@ -35,3 +35,9 @@ non_functional: {}
 contracts:
   - name: 'cutover-ledger'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Canonical E67 ledger reconciled from clean integration ac016998 through E223; no main-only ledger commit omitted. Explicit32/37 partial86.5%,parent0/8,zero complete production retirement,selected408; source/main/adoption distinct. Native scoped4AC events10301-10304 and e31 ancestry inspected; timestamp actual boundtwofile spec/base verified. Independent doc peer found only READMEload-error ambiguity, repaired04bccb2a. gitdiffcheck0 and committed five gates PASS; content/history inspected. Lint-staged first commit reports ignored-doc restage failure despite commit0; clean committed bytes verified, not a green lint-staged claim."
+    recorded_at: "2026-10-21T19:56:36.709Z"
+    commit_sha: "04bccb2a1ecb1fed7d5aed118ab3da46964e4efd"
