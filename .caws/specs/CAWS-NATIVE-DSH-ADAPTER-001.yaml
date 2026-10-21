@@ -84,3 +84,10 @@ evidence:
     command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/root-runtime-artifact-verification.py"
     exit_code: 0
     commit_sha: "1cde1d3094dded29f196db11cf57d50778dda8cc"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Factory controls on18/22 verify explicit named decoder, captured callback/id after caller mutation, exact decoded string text, nonstring bypass, distinct revisions/context refusal, SyntaxError-only raw fallback, other failure object identity including lookalike, independent uncapped4301 vs explicit test-local cap. Source has no fixed default adapter/int/recursion policy. See /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/dsh-falsifiers/phase-injected-profile factory-observation raw streams and /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/dsh-worker/differential/injected-profile-v1 corrected injection-admitted streams; original failed pre-ingress identity controls retained. No selected production profile inferred."
+    recorded_at: "2026-10-21T05:09:08.878Z"
+    command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/root-runtime-artifact-verification.py"
+    exit_code: 0
+    commit_sha: "1cde1d3094dded29f196db11cf57d50778dda8cc"
