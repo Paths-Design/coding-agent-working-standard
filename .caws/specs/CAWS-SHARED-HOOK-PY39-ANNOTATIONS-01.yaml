@@ -54,3 +54,9 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/ci/artifact-contracts.test.js::real renderer bytes validate with nullable summary and lineage; malformed shapes are rejected"
     commit_sha: "8a758936"
     test_verified_at: d12d0b6dd59aa36b148ff0a62e31a496ce559c9b
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest tests/init/pack-fingerprint.test.js at d12d0b6d: shared case passed (test.each; verifier cannot select parameterized names); only content change since v99 is lib/harness_kimi.py"
+    recorded_at: "2026-10-21T02:45:47.647Z"
+    artifact_path: packages/caws-cli/tests/init/pack-fingerprints.json
+    commit_sha: d12d0b6d
