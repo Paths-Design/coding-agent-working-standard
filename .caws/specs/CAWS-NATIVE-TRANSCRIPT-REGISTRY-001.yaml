@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-TRANSCRIPT-REGISTRY-001
 title: 'Compose native transcript adapters with occurrence and checkpoint custody'
 mode: feature
-lifecycle_state: active
-worktree: native-transcript-registry
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded typed registry completed at c69fdfcc; strict Node18/22 compile and186 tests each,51 finite Python differential steps each,4 selected semantic mutant kills,lint/doctor/gates,independent read-only review; A1-A4 dual-recorded events10000-10003. Raw artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-registry. No outer-reader/cache/writer/renderer,production DSH profile,installed/native or cutover claim; parent CAWS-NATIVE-RUNTIME-001 retains integration and all full-runtime acceptance.'
 created_at: '2026-10-21T08:08:48.781Z'
-updated_at: '2026-10-21T08:09:03.290Z'
+updated_at: '2026-10-21T08:51:47.080Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
