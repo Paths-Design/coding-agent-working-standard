@@ -35,3 +35,9 @@ non_functional: {}
 contracts:
   - name: 'merge-diagnostic-cause'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Actual private normal package build exited0 on Node22.19.0; the focused compiled store case injected exactly one EACCES only after real Git integration and spec_closed. Raw outcome retains outer partial-failure rule and exact nested rule/message/lock-path/error-code, with merge9ab13ad1 independently derived from Git before closure-tip16362750. Real payload, closed spec, exactly one close event, no merge event, retained registry and live lane are captured in case-evidence/store under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/merge-diagnostic-cause/642b66a609c10782fc95f9f7fd9c38fbacefdd9f/. Commands/exits and images retained there. Controlled fault demonstrates cause preservation, not historical contention or recovery. CLI verify checks commit reachability only; root inspected runtime artifacts separately."
+    recorded_at: "2026-10-21T23:23:02.361Z"
+    commit_sha: "642b66a609c10782fc95f9f7fd9c38fbacefdd9f"
