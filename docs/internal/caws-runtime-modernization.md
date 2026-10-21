@@ -5355,6 +5355,47 @@ Additional bounded evidence and unresolved dependencies:
   remains a production-consumer obligation; coverage32/37, parent0/8,
   publication/receipt/renderer integration and machine selection do not advance.
 
+- E217: Inspecting E216's actual artifacts exposes a missed native consumer
+  effect despite its13 frontend scenario passes. The matching foreign root
+  refuses acquisition, but fallback uses the rejected Ready digest to create
+  `frontend-01/agreeing-foreign-root/budget/state/projects/973a92b76e1e34ed6a07e92973028ec9341f45205a7a3c2385fce1f49fe0a4b2/sessions/sid-on4w45dimv2gsyznonswyzldorswilltmvzxg2lpny/stop-undeliverable.json`
+  under the E216 artifact root. Its bytes are `{"consecutive_undeliverable":1}`.
+  Root directly inspects that state and the
+  `main::fallback -> charge -> BudgetIdentity/StopBudget` consumer; independent
+  committed-candidate inspection corroborates the mechanism. Operational
+  namespacing is not authority, but a foreign namespace mutation changes later
+  Stop release behavior. The original zero-row assertions did not test it.
+
+  The child repair retains native-established project agreement in typed errors,
+  including DB resolution/version/credit errors before acquisition. Unbound
+  store failures cannot charge the engine-selected Ready namespace. They use the
+  existing no-context diagnostic Stop-release policy; exit0 here is not a
+  successful store operation, projection, retry or fallback consumer.
+  Established-bound failures preserve ordinary budgeting. E216's earlier exit2
+  observations remain historical; fresh controls must inspect counter state,
+  exact diagnostic release, source rows and the bound-failure rival together.
+
+  `native-project-binding/check-03` retains22 store and13 query tests, four
+  binary protocol tests and one feature-off refusal, strict Clippy and frontend
+  build; every selected command exits0 with unchanged pinned inputs.
+  `frontend-02` runs14 actual frontend scenarios and exits0. Summary SHA256 is
+  `4092dd3cc35532992f81740225eee36cea9796c08bf702133c74ce6d5448e5ba`; executed
+  feature-on debug image SHA256 is
+  `2506126bd8b2279847c8bb8df9a0c28f6622d6fc4aa4413477c00365a4ccd00b`. Matching
+  foreign roots and invalid owned cwd deliver zero rows, produce no project
+  budget directories/files and emit `systemMessage` with the explicit no-context
+  infrastructure Stop release. The valid-project/missing-database rival exits2
+  with a block and counter1 under original project digest
+  `bbc773889ed6d43b4285408aa1a3254a3028974324557099791693a44632f063`. Each
+  result retains its actual budget namespace and counter bytes/hash beside
+  command, output, wire and DB observations. Ten ordinary successes preserve
+  their reference event bytes and exhausted/closed source. No DB sidecars or
+  changed pinned inputs are observed. These controls qualify this store-error
+  consumer, not every Ready consumer, all failure phases or full native context
+  authority. E216's execution-image/directory/profile limits, production
+  publication and renderer consumption, parent0/8 and machine cutover remain
+  open.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5474,7 +5515,10 @@ progress and does not replace that transaction or its event readback.
    inspection and retains exact candidate checks. E216 binds store operations to
    original invocation observations and exercises actual foreign root/digest
    agreement refusal. Complete anchored root custody and path-profile
-   qualification remain open. Qualify the retained pinned-image year-addition
+   qualification remain open. E217 prevents its unbound store failures from
+   charging engine-selected project budget state while retaining established
+   context on bound failures. Other Ready consumers need complete original
+   context qualification. Qualify the retained pinned-image year-addition
    extension against the25 E204/E206 historical exclusions without rewriting
    those earlier observations, then exercise the stable native REAL boundary.
    Add a single-use exhausted-and-settled store publication permit; generic
@@ -5498,7 +5542,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E216 retain the historical candidates, failures and bounded observations;
+E167–E217 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is32/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.

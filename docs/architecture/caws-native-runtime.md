@@ -379,6 +379,14 @@ directory identity against concurrent replacement, and lexical symlink aliases
 outside this profile remain unqualified. These observations confer no
 publication permit.
 
+Store errors preserve whether original-project agreement was established.
+Fallback charges the Ready project namespace only after that agreement; an
+unbound store refusal uses the existing no-context diagnostic Stop release
+without creating project budget state. A database-path or transport failure
+after agreement retains normal infrastructure budgeting. This distinction binds
+this store error path and does not independently qualify every other Ready
+consumer.
+
 One native connection owns the fixed read transaction and cursor across typed
 row callbacks. Current-row TEXT admission precedes the next VM step and current
 delivery. Native UTC returns actual fields/errno; typed arithmetic and calendar

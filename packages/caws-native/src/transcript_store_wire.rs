@@ -42,6 +42,7 @@ pub enum ServeFailurePhase {
 #[derive(Debug)]
 pub enum ServeError {
     BeforeAcquisition(String),
+    AfterProjectBinding(String),
     ProjectObservation(Box<crate::invocation_project::ProjectFailure>),
     AfterAcquisition {
         phase: ServeFailurePhase,
@@ -51,6 +52,21 @@ pub enum ServeError {
 }
 
 impl ServeError {
+    /// Only native-established original project agreement permits reuse of the
+    /// Ready project namespace for operational failure accounting.
+    pub fn original_project_bound(&self) -> bool {
+        matches!(
+            self,
+            Self::AfterProjectBinding(_) | Self::AfterAcquisition { .. }
+        )
+    }
+
+    fn after_project_binding(self) -> Self {
+        match self {
+            Self::BeforeAcquisition(message) => Self::AfterProjectBinding(message),
+            other => other,
+        }
+    }
     /// Query cleanup is independent of both engine and SQLite cleanup.
     pub fn retry_project_cleanup(&mut self) -> Result<(), String> {
         match self {
@@ -85,6 +101,7 @@ impl std::fmt::Display for ServeError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BeforeAcquisition(message) => formatter.write_str(message),
+            Self::AfterProjectBinding(message) => formatter.write_str(message),
             Self::ProjectObservation(error) => {
                 write!(formatter, "store project observation: {error}")
             }
@@ -315,149 +332,154 @@ pub fn serve(
     if project.canonical_root.to_str() != Some(request.canonical_root.as_str()) {
         return Err("store original project binding mismatch".into());
     }
-    if is_cancelled() || Instant::now() >= deadline {
-        return Err("store project observation cancelled or expired".into());
-    }
-    let path = if Path::new(database).is_absolute() {
-        Path::new(database).to_path_buf()
-    } else {
-        Path::new(invocation.caller_cwd).join(database)
-    };
-    // Python resolves the supplied path before its read-only SQLite open. This
-    // finite profile refuses missing/unresolvable files without guessing an URI.
-    let path = path
-        .canonicalize()
-        .map_err(|error| format!("store path resolution: {error}"))?;
-    let path = path.to_str().ok_or("store path is not UTF-8")?;
-    if rusqlite::version() != "3.53.4" {
-        return Err("unqualified native store SQLite version".into());
-    }
-    transport.credit(bytes.len() + 1)?;
-    let common = |schema: &str| json!({"schema":schema,"id":request.id,"runtimeDigest":request.runtime_digest,"token":request.token});
-    let mut exchange_error = None;
-    let outcome = transcript_store::acquire(
-        path,
-        &sid,
-        AcquisitionLimits {
-            max_rows: MAX_ROWS,
-            max_cell_bytes: MAX_CELL_BYTES,
-            max_total_bytes: MAX_TOTAL_CELL_BYTES,
-        },
-        Cancellation {
-            is_cancelled,
-            deadline,
-        },
-        |row| {
-            let exchange = (|| -> Result<Visit, String> {
-                let mut frame = common(ROW_SCHEMA);
-                frame["ordinal"] = json!(row.ordinal);
-                frame["cells"] = Value::Array(row.cells.iter().map(cell).collect());
-                transport.write(&encode(frame)?, deadline)?;
-                let mut calendar_requested = false;
-                loop {
-                    let bytes = transport.read(deadline)?;
-                    if bytes.len() > MAX_CONTROL_BYTES {
-                        return Err("store control exceeds byte bound".into());
-                    }
-                    let control: Control = serde_json::from_slice(&bytes)
-                        .map_err(|error| format!("invalid store control: {error}"))?;
-                    if control.schema != CONTROL_SCHEMA
-                        || control.id != request.id
-                        || control.runtime_digest != request.runtime_digest
-                        || control.token != request.token
-                        || control.ordinal != row.ordinal
-                    {
-                        return Err("store row control binding mismatch".into());
-                    }
-                    match control.action.as_str() {
-                        "continue" | "stop" if control.seconds.is_none() => {
-                            transport.credit(bytes.len() + 1)?;
-                            return Ok(if control.action == "continue" {
-                                Visit::Continue
-                            } else {
-                                Visit::Stop
-                            });
+    // Preserve the established identity even when DB resolution/open or later
+    // transport fails. Earlier failures cannot lend Ready a budget namespace.
+    let result = (|| {
+        if is_cancelled() || Instant::now() >= deadline {
+            return Err("store project observation cancelled or expired".into());
+        }
+        let path = if Path::new(database).is_absolute() {
+            Path::new(database).to_path_buf()
+        } else {
+            Path::new(invocation.caller_cwd).join(database)
+        };
+        // Python resolves the supplied path before its read-only SQLite open. This
+        // finite profile refuses missing/unresolvable files without guessing an URI.
+        let path = path
+            .canonicalize()
+            .map_err(|error| format!("store path resolution: {error}"))?;
+        let path = path.to_str().ok_or("store path is not UTF-8")?;
+        if rusqlite::version() != "3.53.4" {
+            return Err("unqualified native store SQLite version".into());
+        }
+        transport.credit(bytes.len() + 1)?;
+        let common = |schema: &str| json!({"schema":schema,"id":request.id,"runtimeDigest":request.runtime_digest,"token":request.token});
+        let mut exchange_error = None;
+        let outcome = transcript_store::acquire(
+            path,
+            &sid,
+            AcquisitionLimits {
+                max_rows: MAX_ROWS,
+                max_cell_bytes: MAX_CELL_BYTES,
+                max_total_bytes: MAX_TOTAL_CELL_BYTES,
+            },
+            Cancellation {
+                is_cancelled,
+                deadline,
+            },
+            |row| {
+                let exchange = (|| -> Result<Visit, String> {
+                    let mut frame = common(ROW_SCHEMA);
+                    frame["ordinal"] = json!(row.ordinal);
+                    frame["cells"] = Value::Array(row.cells.iter().map(cell).collect());
+                    transport.write(&encode(frame)?, deadline)?;
+                    let mut calendar_requested = false;
+                    loop {
+                        let bytes = transport.read(deadline)?;
+                        if bytes.len() > MAX_CONTROL_BYTES {
+                            return Err("store control exceeds byte bound".into());
                         }
-                        "utc" if !calendar_requested => {
-                            let seconds = checked_seconds(
-                                control
-                                    .seconds
-                                    .as_deref()
-                                    .ok_or("store UTC seconds absent")?,
-                            )?;
-                            transport.credit(bytes.len() + 1)?;
-                            calendar_requested = true;
-                            if is_cancelled() || Instant::now() >= deadline {
-                                return Err("store UTC cancelled or expired".into());
-                            }
-                            let calendar = utc(seconds)?;
-                            if is_cancelled() || Instant::now() >= deadline {
-                                return Err("store UTC cancelled or expired".into());
-                            }
-                            let mut frame = common(UTC_SCHEMA);
-                            frame["ordinal"] = json!(row.ordinal);
-                            frame["calendar"] = calendar;
-                            transport.write(&encode(frame)?, deadline)?;
+                        let control: Control = serde_json::from_slice(&bytes)
+                            .map_err(|error| format!("invalid store control: {error}"))?;
+                        if control.schema != CONTROL_SCHEMA
+                            || control.id != request.id
+                            || control.runtime_digest != request.runtime_digest
+                            || control.token != request.token
+                            || control.ordinal != row.ordinal
+                        {
+                            return Err("store row control binding mismatch".into());
                         }
-                        _ => return Err("invalid or repeated store row action".into()),
+                        match control.action.as_str() {
+                            "continue" | "stop" if control.seconds.is_none() => {
+                                transport.credit(bytes.len() + 1)?;
+                                return Ok(if control.action == "continue" {
+                                    Visit::Continue
+                                } else {
+                                    Visit::Stop
+                                });
+                            }
+                            "utc" if !calendar_requested => {
+                                let seconds = checked_seconds(
+                                    control
+                                        .seconds
+                                        .as_deref()
+                                        .ok_or("store UTC seconds absent")?,
+                                )?;
+                                transport.credit(bytes.len() + 1)?;
+                                calendar_requested = true;
+                                if is_cancelled() || Instant::now() >= deadline {
+                                    return Err("store UTC cancelled or expired".into());
+                                }
+                                let calendar = utc(seconds)?;
+                                if is_cancelled() || Instant::now() >= deadline {
+                                    return Err("store UTC cancelled or expired".into());
+                                }
+                                let mut frame = common(UTC_SCHEMA);
+                                frame["ordinal"] = json!(row.ordinal);
+                                frame["calendar"] = calendar;
+                                transport.write(&encode(frame)?, deadline)?;
+                            }
+                            _ => return Err("invalid or repeated store row action".into()),
+                        }
                     }
-                }
-            })();
-            exchange.map_err(|error| {
-                exchange_error = Some(error.clone());
-                VisitorFailure::Transport(error)
-            })
-        },
-    );
-    if let Some(error) = exchange_error {
-        return Err(ServeError::settled(
-            ServeFailurePhase::Exchange,
-            error,
-            outcome,
-        ));
-    }
-    let closed = source_closed(&outcome);
-    let mut frame = common(CLOSED_SCHEMA);
-    frame["closed"] = json!(closed);
-    frame["end"] = json!(match outcome.end {
-        transcript_store::End::Exhausted => "exhausted",
-        transcript_store::End::Stopped => "stopped",
-        transcript_store::End::Failed => "failed",
-    });
-    // Internal typed diagnostic, deliberately not a CPython exception rendering.
-    frame["failure"] = outcome
-        .first_failure
-        .as_ref()
-        .map_or(Value::Null, |failure| json!(format!("{failure:?}")));
-    frame["cleanup"] = json!({"progressUnregistered":outcome.cleanup.progress_unregistered,
-        "busyUnregistered":format!("{:?}",outcome.cleanup.busy_unregistered),
-        "finalized":format!("{:?}",outcome.cleanup.finalized),"rollback":format!("{:?}",outcome.cleanup.rollback)});
-    frame["metrics"] = json!({"rowsCopied":outcome.metrics.rows_copied,"rowsDelivered":outcome.metrics.rows_delivered,"cellBytes":outcome.metrics.accounted_cell_bytes});
-    let bytes = match encode(frame) {
-        Ok(bytes) => bytes,
-        Err(error) => {
+                })();
+                exchange.map_err(|error| {
+                    exchange_error = Some(error.clone());
+                    VisitorFailure::Transport(error)
+                })
+            },
+        );
+        if let Some(error) = exchange_error {
             return Err(ServeError::settled(
-                ServeFailurePhase::ClosedEncoding,
+                ServeFailurePhase::Exchange,
                 error,
                 outcome,
             ));
         }
-    };
-    if let Err(error) = transport.write(&bytes, deadline) {
-        return Err(ServeError::settled(
-            ServeFailurePhase::ClosedWrite,
-            error,
-            outcome,
-        ));
-    }
-    if !closed {
-        return Err(ServeError::settled(
-            ServeFailurePhase::UnconfirmedClose,
-            "store connection cleanup remains uncertain".into(),
-            outcome,
-        ));
-    }
-    Ok(())
+        let closed = source_closed(&outcome);
+        let mut frame = common(CLOSED_SCHEMA);
+        frame["closed"] = json!(closed);
+        frame["end"] = json!(match outcome.end {
+            transcript_store::End::Exhausted => "exhausted",
+            transcript_store::End::Stopped => "stopped",
+            transcript_store::End::Failed => "failed",
+        });
+        // Internal typed diagnostic, deliberately not a CPython exception rendering.
+        frame["failure"] = outcome
+            .first_failure
+            .as_ref()
+            .map_or(Value::Null, |failure| json!(format!("{failure:?}")));
+        frame["cleanup"] = json!({"progressUnregistered":outcome.cleanup.progress_unregistered,
+        "busyUnregistered":format!("{:?}",outcome.cleanup.busy_unregistered),
+        "finalized":format!("{:?}",outcome.cleanup.finalized),"rollback":format!("{:?}",outcome.cleanup.rollback)});
+        frame["metrics"] = json!({"rowsCopied":outcome.metrics.rows_copied,"rowsDelivered":outcome.metrics.rows_delivered,"cellBytes":outcome.metrics.accounted_cell_bytes});
+        let bytes = match encode(frame) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                return Err(ServeError::settled(
+                    ServeFailurePhase::ClosedEncoding,
+                    error,
+                    outcome,
+                ));
+            }
+        };
+        if let Err(error) = transport.write(&bytes, deadline) {
+            return Err(ServeError::settled(
+                ServeFailurePhase::ClosedWrite,
+                error,
+                outcome,
+            ));
+        }
+        if !closed {
+            return Err(ServeError::settled(
+                ServeFailurePhase::UnconfirmedClose,
+                "store connection cleanup remains uncertain".into(),
+                outcome,
+            ));
+        }
+        Ok(())
+    })();
+    result.map_err(ServeError::after_project_binding)
 }
 
 #[cfg(test)]
@@ -704,6 +726,7 @@ mod tests {
         context.database = Some("/does/not/exist-caws-root-binding-control");
         let mut transport = transport(vec![]);
         let error = run(&foreign.request(), context, &mut transport).unwrap_err();
+        assert!(!error.original_project_bound());
         assert!(
             matches!(&error, ServeError::BeforeAcquisition(message)
             if message == "store original project binding mismatch"),
@@ -719,6 +742,26 @@ mod tests {
             foreign.root(),
             transport.credit,
             transport.sent
+        );
+    }
+    #[test]
+    fn transcript_store_path_failure_preserves_established_original_project_binding() {
+        let fixture = Fixture::new();
+        let payload = RawValue::from_string("{\"session_id\":\"s\"}".into()).unwrap();
+        let digest = fixture.digest();
+        let mut context = fixture.invocation(&payload, &digest);
+        context.database = Some("/does/not/exist-caws-bound-path-control");
+        let mut transport = transport(vec![]);
+        let error = run(&fixture.request(), context, &mut transport).unwrap_err();
+        assert!(error.original_project_bound());
+        assert!(
+            matches!(&error, ServeError::AfterProjectBinding(message) if message.starts_with("store path resolution:")),
+            "{error}"
+        );
+        assert_eq!(transport.credit, 0);
+        assert!(transport.sent.is_empty());
+        println!(
+            "bound pre-acquisition path failure retains only established project context: {error}"
         );
     }
     #[test]
@@ -889,6 +932,7 @@ mod tests {
                 &mut transport,
             )
             .unwrap_err();
+            assert!(error.original_project_bound());
             let ServeError::AfterAcquisition { phase, outcome, .. } = error else {
                 panic!("control failure lost acquisition");
             };

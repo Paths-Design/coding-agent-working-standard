@@ -324,10 +324,15 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
     );
     let mut block = pre || error.dispatched;
     if error.dispatched && stop {
-        match charge(
-            error.ready.as_deref(),
-            Instant::now() + Duration::from_millis(100),
-        ) {
+        let budget_ready = error.ready.as_deref();
+        #[cfg(feature = "sqlite-store")]
+        let budget_ready = budget_ready.filter(|_| {
+            error
+                .store_failure
+                .as_ref()
+                .is_none_or(|failure| failure.original_project_bound())
+        });
+        match charge(budget_ready, Instant::now() + Duration::from_millis(100)) {
             Ok(Charge::Refuse) => {}
             Ok(Charge::Release) => {
                 block = false;
