@@ -909,7 +909,7 @@ for (const command of [
   'git grep --open-files-in-pager needle',
 ])
   add('git-execution-slot-' + command, command, 'deny', 'git-execution');
-add('git-later-external-transport', "git fetch origin 'ext::tool args'", 'deny', 'git-execution');
+add('git-later-external-transport', "git fetch -- 'ext::tool args'", 'deny', 'git-execution');
 add('git-external-transport-as-path', 'git status -- ext::data');
 
 // Each reader's closed flag profile must match the entire option. The same
