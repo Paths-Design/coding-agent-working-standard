@@ -1,10 +1,11 @@
 id: CAWS-SQLITE-STATIC-BUILD-001
 title: 'Pinned static SQLite build receipts without adoption authority'
 mode: feature
-lifecycle_state: active
-worktree: sqlite-static-build
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded NOT_ADOPTED static recipe receipts at 91a64e8. Two final-candidate host roots Node18.0/22 produce identical archive; 55 hostile FS/process tests Node18.20.8/22, retained false-success controls and repaired late-abort publication counterexample. Artifact verifier checks240files. Fresh Sol review finding independently reproduced/repaired. A1-A4 evidence and events10063-10066 read back. Full SDK/tool images, descendants, hard OS deadlines, final-root deadline injection, Cargo/native consumers/installation and parent cutover remain outside component proof.'
 created_at: '2026-10-21T09:50:42.827Z'
-updated_at: '2026-10-21T09:51:27.202Z'
+updated_at: '2026-10-21T10:29:40.283Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
