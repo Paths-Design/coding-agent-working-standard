@@ -1,0 +1,36 @@
+id: CAWS-DEFECT-MESSAGE-POLL-WAIT-ABORTS-ON-LOCK-CONTENTION-01
+title: 'caws message poll --wait aborts the whole long-poll on one transient lifecycle-lock contention instead of retrying within its wait budget'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-21T23:56:27.908Z'
+updated_at: '2026-10-21T23:56:27.908Z'
+created_by_session: 'c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885'
+blast_radius:
+  modules:
+    - 'store: messages-store pollMessage long-poll loop and its lifecycle-lock attempt policy'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/messages-store.ts'
+    - 'packages/caws-cli/tests/store/messages-store.test.js'
+  out: []
+invariants:
+  - 'Observed three times in session c4c0f2e0 on 2026-10-21 with five or six concurrent agent sessions in this repo: caws message poll --wait <ms> printed "failed to read the message log" with store.lifecycle.lock_contention ("Could not acquire lifecycle lock after 3 attempts", subject .caws/messages.jsonl.lock). An immediate plain retry succeeded with "(no messages)". Exact timestamps were not captured.'
+  - 'Source mechanism (messages-store.ts:1105-1135, lifecycle-lock.ts:20,33,85,128): each long-poll attempt takes the lock with only 3 tries 50 ms apart, and the loop returns the first non-ok attempt (if (!r.ok) return r), so a single contended attempt ends the wait even when budget remains. The lock is correctly released between attempts; this is not a lock held across the wait.'
+  - 'A long-poll treats lock contention as retryable until its deadline. A non-contention error (unreadable or corrupt log, permission) still returns immediately and is never retried into silence. waitMs=0 keeps its current single-attempt behavior. Delivery semantics (receipt, drain, offer) and the release-between-attempts property are unchanged. If contention persists to the deadline, the command still fails loudly with the lock diagnostic and never reports "(no messages)" for an attempt that never read the log.'
+acceptance:
+  - id: A1
+    given: 'a messages lock held by another process for longer than one 150 ms attempt window but released before the wait deadline, with one queued message for me'
+    when: 'pollMessage runs with waitMs covering the release'
+    then: 'it returns that message, not lock_contention.'
+  - id: A2
+    given: 'the lock held past the whole wait deadline'
+    when: 'pollMessage runs with a finite waitMs'
+    then: 'it returns the store.lifecycle.lock_contention error, not an empty (no messages) result.'
+  - id: A3
+    given: 'a corrupt or unreadable messages log'
+    when: 'pollMessage runs with a nonzero waitMs'
+    then: 'it returns that error on the first attempt without waiting out the deadline.'
+non_functional: {}
+contracts: []
