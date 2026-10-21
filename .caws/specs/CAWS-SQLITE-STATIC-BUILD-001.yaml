@@ -60,3 +60,8 @@ evidence:
     evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-sqlite-static-build/commands/repaired-tests22 and repaired-tests18-20-8 exit0,55semanticFS/request+realprocess cases each. Top-level changed-header/pin-mismatch/zero-no-object/archive-masquerade/archive-object-mismatch/identity-duplicate/dynamic-sqlite/changed-staged-source controls refuse at expectedphase with no completedmarker. Earlier guardcontrols b055a0 source differ only finalpublicationcheck; source diff inspected. artifact-verification.json checksrawstreams/sourceidentities."
     recorded_at: "2026-10-21T10:27:38.657Z"
     commit_sha: "91a64e8bc358f36f57c5daa8df52cfe67ffefb77"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-sqlite-static-build/artifact-verification.json: actualsource childfailure17,abort/timeout/SIGKILL,reaptrue,stdout/stderroverflow bounded4096,no marker; persistenceconflict retainsforeignfile+rawfallback. Realbuild final-rootabort oldec1 falselycompleted despite6steps0; repaired91a64e8 returnsBuildaborted,nocompletedmarker,pendingretained. Node18.20.8/22 current55tests0 include durableprocesscases. Deadlineexpiryatfinalrootnotindependentlyinjected; afterlinkdispatch,OSIO/descendantsoutofguarantee."
+    recorded_at: "2026-10-21T10:27:49.927Z"
+    commit_sha: "91a64e8bc358f36f57c5daa8df52cfe67ffefb77"
