@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-KIMI-ADAPTER-001
 title: 'Historical Kimi transcript row adapter'
 mode: feature
-lifecycle_state: active
-worktree: native-kimi-adapter
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded standalone Kimi component accepted: candidate346d50441c006e88affee2f86408ca9ca36ffd74; independent900fixture typed differential on Node18/22;116tests each;16manualfaults;6synthetic occurrence artifacts each;root013 rederived37checkedsource/deps and29compiled outputs, exact raw hashes/values; fresh read-only Sol review grounded. CLI A1-A3 dualwrites readback. No parent registry/acquisition/cache/writer/native/install/workload/Pythonretirement/cutover acceptance. Partial commitAllowed false is API signal, not persistence proof.'
 created_at: '2026-10-21T00:55:50.632Z'
-updated_at: '2026-10-21T00:57:17.146Z'
+updated_at: '2026-10-21T02:02:49.823Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
