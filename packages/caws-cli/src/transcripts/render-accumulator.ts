@@ -856,7 +856,12 @@ export function accumulateRendererEvents(
         ts,
         provenance: 'hook_audit',
       });
-      const inputText = renderJsonDumps(input, { ensureAscii: false, sortKeys: true });
+      const jsonOptions = {
+        ensureAscii: false,
+        sortKeys: true,
+        ...(numericProfile === undefined ? {} : { numericProfile }),
+      };
+      const inputText = renderJsonDumps(input, jsonOptions);
       action = boundFields(action, 'input_preview', inputText, 2000, current.payload_spill, false);
       // The reference uses input_truncated/input_ref rather than preview suffixes.
       action = object(
@@ -877,7 +882,7 @@ export function accumulateRendererEvents(
         action = boundFields(
           action,
           'response',
-          renderJsonDumps(response, { ensureAscii: false, sortKeys: true }),
+          renderJsonDumps(response, jsonOptions),
           3000,
           current.payload_spill,
           false

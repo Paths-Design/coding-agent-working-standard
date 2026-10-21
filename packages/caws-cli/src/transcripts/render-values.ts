@@ -19,6 +19,11 @@ import {
   pythonEqual,
   pythonJsonDumps,
 } from './lossless-json';
+import {
+  admitTranscriptJsonNumber,
+  snapshotTranscriptJsonProfile,
+  type TranscriptJsonNumericProfile,
+} from './transcript-json-profile';
 
 export type RenderText = string | CodepointText;
 export type RenderKey = RenderText;
@@ -309,7 +314,12 @@ export function renderEqual(a: RenderValue | undefined, b: RenderValue | undefin
   return false;
 }
 
-export type RenderJsonOptions = Readonly<{ ensureAscii?: boolean; sortKeys?: boolean; indent?: 2 }>;
+export type RenderJsonOptions = Readonly<{
+  ensureAscii?: boolean;
+  sortKeys?: boolean;
+  indent?: 2;
+  numericProfile?: TranscriptJsonNumericProfile;
+}>;
 function quote(value: RenderText, ascii: boolean): string {
   const text = points(value);
   if (!ascii && text.codepoints.some((p) => p >= 0xd800 && p <= 0xdfff))
@@ -321,6 +331,9 @@ function quote(value: RenderText, ascii: boolean): string {
  * encoder rejects the same value after its in-memory json.dumps operation.
  */
 export function renderJsonDumps(value: RenderValue, options: RenderJsonOptions = {}): string {
+  const suppliedProfile = options.numericProfile;
+  const numericProfile =
+    suppliedProfile === undefined ? undefined : snapshotTranscriptJsonProfile(suppliedProfile);
   const ascii = options.ensureAscii ?? true,
     indent = options.indent;
   if (indent !== undefined && indent !== 2)
@@ -329,7 +342,10 @@ export function renderJsonDumps(value: RenderValue, options: RenderJsonOptions =
     if (item === null) return 'null';
     if (typeof item === 'boolean') return item ? 'true' : 'false';
     if (isRenderText(item)) return quote(item, ascii);
-    if (isJsonNumber(item)) return pythonJsonDumps(item);
+    if (isJsonNumber(item)) {
+      if (numericProfile !== undefined) admitTranscriptJsonNumber(item, numericProfile);
+      return pythonJsonDumps(item);
+    }
     const array = Array.isArray(item);
     if (!array && !isJsonObject(item) && !isRenderObject(item))
       throw new TypeError('Invalid renderer JSON value');

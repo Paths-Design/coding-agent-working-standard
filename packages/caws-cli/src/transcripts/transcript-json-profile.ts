@@ -1,5 +1,5 @@
 /** Selected Python JSON integer conversion policy, shared by outer and embedded decoders. */
-import { parsePythonJson, type JsonValue } from './lossless-json';
+import { parsePythonJson, type JsonNumber, type JsonValue } from './lossless-json';
 
 export interface TranscriptJsonNumericProfile {
   readonly id: string;
@@ -25,6 +25,21 @@ export function snapshotTranscriptJsonProfile(
 
 export class TranscriptJsonNumericConversionError extends RangeError {}
 
+/** Apply a snapshotted profile at decimal token conversion, during parsing or encoding. */
+export function admitTranscriptJsonNumber(
+  token: JsonNumber,
+  profile: TranscriptJsonNumericProfile
+): void {
+  if (
+    token.numberKind === 'integer' &&
+    profile.integerMaxDigits !== 0 &&
+    token.lexeme.length - (token.lexeme[0] === '-' ? 1 : 0) > profile.integerMaxDigits
+  )
+    throw new TranscriptJsonNumericConversionError(
+      `Integer exceeds selected ${profile.integerMaxDigits}-digit limit`
+    );
+}
+
 /** Omitted profiles preserve the historical unbounded lossless decoder. */
 export function parseTranscriptJson(
   text: string,
@@ -37,14 +52,7 @@ export function parseTranscriptJson(
       ? undefined
       : {
           admitNumberToken(token) {
-            if (
-              token.numberKind === 'integer' &&
-              selected.integerMaxDigits !== 0 &&
-              token.lexeme.length - (token.lexeme[0] === '-' ? 1 : 0) > selected.integerMaxDigits
-            )
-              throw new TranscriptJsonNumericConversionError(
-                `Integer exceeds selected ${selected.integerMaxDigits}-digit limit`
-              );
+            admitTranscriptJsonNumber(token, selected);
           },
         }
   );

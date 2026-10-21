@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { jsonNumber } from '../../src/transcripts/lossless-json';
+import { getMember, jsonNumber, parsePythonJson } from '../../src/transcripts/lossless-json';
 import { createDefaultTranscriptRegistry } from '../../src/transcripts/registry';
 import {
   RENDER_JSON_4300,
@@ -383,6 +383,93 @@ test('lineage CR projection skips selected numeric failure while unlimited retai
             source_path: transcriptPath,
           }
         : null
+    );
+  }
+});
+
+test('selected output conversion refuses usage sums that grow past the input integer boundary', () => {
+  const boundary = '9'.repeat(4300),
+    sum = (BigInt(boundary) + BigInt(boundary)).toString();
+  assert.equal(sum.length, 4301);
+  const assistantUsage = (id: string, usage: string): string =>
+    '{"type":"assistant","timestamp":"2026-01-01T00:00:01Z","message":{"id":' +
+    JSON.stringify(id) +
+    ',"usage":{"input_tokens":' +
+    usage +
+    '},"content":[{"type":"text","text":"Observed response"}]}}\n';
+  const artifactUsage = (bytes: Uint8Array) =>
+    getMember(getMember(parsePythonJson(Buffer.from(bytes).toString()), 'usage'), 'input_tokens');
+
+  for (const literal of ['3', boundary]) {
+    const raw = rows(user('One contribution')) + assistantUsage('boundary-message', literal),
+      prepared = ready(prepareSessionArtifacts(input(raw)));
+    assert.equal(prepared.checkpoint!.offset, BigInt(Buffer.byteLength(raw)));
+    assert.equal(prepared.generation.artifacts.filter((item) => item.role === 'turn').length, 1);
+    assert.deepEqual(
+      artifactUsage(prepared.generation.artifacts.find((item) => item.role === 'turn')!.bytes()),
+      jsonNumber(literal)
+    );
+    assert.deepEqual(
+      artifactUsage(prepared.generation.artifacts.find((item) => item.role === 'index')!.bytes()),
+      jsonNumber(literal)
+    );
+  }
+
+  for (const scenario of [
+    {
+      name: 'same-turn usage',
+      raw:
+        rows(user('Two contributions')) +
+        assistantUsage('same-turn-first', boundary) +
+        assistantUsage('same-turn-second', boundary),
+      turnUsage: [sum],
+    },
+    {
+      name: 'session-index usage',
+      raw:
+        rows(user('First contribution')) +
+        assistantUsage('first-turn-message', boundary) +
+        rows(user('Second contribution')) +
+        assistantUsage('second-turn-message', boundary),
+      turnUsage: [boundary, boundary],
+    },
+  ]) {
+    const failed = prepareSessionArtifacts(input(scenario.raw));
+    if (failed.disposition !== 'failed')
+      throw new Error(`${scenario.name} must fail selected output conversion`);
+    assert.equal(failed.failure.phase, 'encoding', scenario.name);
+    assert.equal(failed.publication, 'not_attempted', scenario.name);
+    assert.equal('generation' in failed, false, scenario.name);
+    assert.equal(failed.checkpoint!.offset, BigInt(Buffer.byteLength(scenario.raw)), scenario.name);
+    const contributions = failed
+      .checkpoint!.events.filter(({ envelope }) => envelope.event.ev === 'assistant_meta')
+      .map(({ envelope }) => getMember(envelope.event.usage, 'input_tokens'));
+    assert.deepEqual(contributions, [jsonNumber(boundary), jsonNumber(boundary)], scenario.name);
+
+    const unlimited = ready(
+      prepareSessionArtifacts({
+        ...input(scenario.raw),
+        numericProfile: RENDER_JSON_UNLIMITED,
+        registry: createDefaultTranscriptRegistry({ numericProfile: RENDER_JSON_UNLIMITED }),
+      })
+    );
+    assert.equal(unlimited.publication, 'not_attempted', scenario.name);
+    assert.equal(
+      unlimited.checkpoint!.offset,
+      BigInt(Buffer.byteLength(scenario.raw)),
+      scenario.name
+    );
+    const turns = unlimited.generation.artifacts.filter((item) => item.role === 'turn');
+    assert.equal(turns.length, scenario.turnUsage.length, scenario.name);
+    assert.deepEqual(
+      turns.map((artifact) => artifactUsage(artifact.bytes())),
+      scenario.turnUsage.map((literal) => jsonNumber(literal)),
+      scenario.name
+    );
+    assert.deepEqual(
+      artifactUsage(unlimited.generation.artifacts.find((item) => item.role === 'index')!.bytes()),
+      jsonNumber(sum),
+      scenario.name
     );
   }
 });

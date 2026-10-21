@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { codepointText, isCodepointText } from '../../src/transcripts/codepoint-text.js';
 import { jsonNumber, parsePythonJson } from '../../src/transcripts/lossless-json.js';
+import { TranscriptJsonNumericConversionError } from '../../src/transcripts/transcript-json-profile.js';
 import {
   renderObject,
   renderGet,
@@ -183,4 +184,112 @@ test('text helpers preserve interpreted codepoints, Python whitespace and line b
     () => renderDivide(jsonNumber('1' + '0'.repeat(400)), jsonNumber('0.0')),
     /too large/
   );
+});
+
+const numericProfile = { id: 'renderer-json-4300', integerMaxDigits: 4300 };
+
+test('selected JSON encoding caps signed decimal integers at the limit and retains historical/unlimited output', () => {
+  for (const sign of ['', '-']) {
+    const boundary = sign + '9'.repeat(4300);
+    const overlong = sign + '9'.repeat(4301);
+    assert.equal(renderJsonDumps(jsonNumber(boundary), { numericProfile }), boundary);
+    assert.equal(
+      Buffer.from(renderJsonBytes(jsonNumber(boundary), { numericProfile })).toString('utf8'),
+      boundary
+    );
+    assert.throws(
+      () => renderJsonDumps(jsonNumber(overlong), { numericProfile }),
+      TranscriptJsonNumericConversionError
+    );
+    assert.throws(
+      () => renderJsonBytes(jsonNumber(overlong), { numericProfile }),
+      TranscriptJsonNumericConversionError
+    );
+    assert.equal(renderJsonDumps(jsonNumber(overlong)), overlong);
+    assert.equal(
+      renderJsonDumps(jsonNumber(overlong), {
+        numericProfile: { id: 'unlimited', integerMaxDigits: 0 },
+      }),
+      overlong
+    );
+  }
+  assert.equal(renderJsonDumps(jsonNumber('-0'), { numericProfile }), '0');
+  assert.equal(renderJsonDumps([true, false], { numericProfile }), '[true, false]');
+  const minimum = { id: 'renderer-minimum', integerMaxDigits: 640 };
+  assert.equal(
+    renderJsonDumps(jsonNumber('9'.repeat(640)), { numericProfile: minimum }),
+    '9'.repeat(640)
+  );
+  assert.throws(
+    () => renderJsonDumps(jsonNumber('9'.repeat(641)), { numericProfile: minimum }),
+    TranscriptJsonNumericConversionError
+  );
+});
+
+test('bigint arithmetic may exceed the selected conversion limit until decimal encoding', () => {
+  const input = jsonNumber('9'.repeat(4300));
+  const expected = '1' + '9'.repeat(4299) + '8';
+  const sum = renderAdd(input, input);
+  assert.deepEqual(sum, jsonNumber(expected));
+  assert.throws(
+    () => renderJsonDumps(sum, { numericProfile }),
+    TranscriptJsonNumericConversionError
+  );
+  assert.equal(renderJsonDumps(sum), expected);
+  assert.equal(renderJsonDumps(renderSubtract(sum, input), { numericProfile }), input.lexeme);
+});
+
+test('selected output checks nested source and renderer values while exempting strings and floats', () => {
+  const overlong = '9'.repeat(4301);
+  const source = parsePythonJson(`{"nested":[{"value":${overlong}}]}`);
+  const renderer = renderObject([
+    ['nested', [renderObject([['value', jsonNumber('-' + overlong)]])]],
+  ]);
+  for (const value of [source, renderer]) {
+    assert.throws(
+      () => renderJsonDumps(value, { numericProfile, indent: 2, sortKeys: true }),
+      TranscriptJsonNumericConversionError
+    );
+    assert.throws(
+      () => renderJsonBytes(value, { numericProfile, ensureAscii: false }),
+      TranscriptJsonNumericConversionError
+    );
+  }
+  assert.equal(renderJsonDumps(overlong, { numericProfile }), JSON.stringify(overlong));
+  assert.equal(
+    renderJsonDumps(renderObject([[overlong, overlong]]), { numericProfile }),
+    `{${JSON.stringify(overlong)}: ${JSON.stringify(overlong)}}`
+  );
+  for (const [token, encoded] of [
+    [overlong + '.0', 'Infinity'],
+    [overlong + 'e0', 'Infinity'],
+    ['-0.0', '-0.0'],
+    ['NaN', 'NaN'],
+    ['Infinity', 'Infinity'],
+    ['-Infinity', '-Infinity'],
+  ] as const)
+    assert.equal(renderJsonDumps(jsonNumber(token), { numericProfile }), encoded);
+});
+
+test('encoding snapshots and validates the selected profile once before traversing the value', () => {
+  let reads = 0;
+  const options = {
+    get numericProfile() {
+      reads++;
+      return reads === 1 ? numericProfile : { id: 'changed', integerMaxDigits: 0 };
+    },
+  };
+  assert.throws(
+    () => renderJsonDumps([jsonNumber('9'.repeat(4301))], options),
+    TranscriptJsonNumericConversionError
+  );
+  assert.equal(reads, 1);
+  for (const integerMaxDigits of [-1, 639, 640.5, Infinity])
+    assert.throws(
+      () =>
+        renderJsonDumps('no numeric values', {
+          numericProfile: { id: 'invalid', integerMaxDigits },
+        }),
+      TypeError
+    );
 });

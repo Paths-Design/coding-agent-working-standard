@@ -27,6 +27,7 @@ import type { PreparedSubagentLink } from './render-artifacts';
 import { type TranscriptRegistry, type RegistryCheckpoint } from './registry';
 import { decodeProfiledOccurrence } from './source-occurrence';
 import {
+  admitTranscriptJsonNumber,
   TranscriptJsonNumericConversionError as NumericConversionFailure,
   snapshotTranscriptJsonProfile,
   type TranscriptJsonNumericProfile,
@@ -263,17 +264,7 @@ export function readRendererSource(input: RenderReaderInput): RenderReaderResult
         framing: partial ? 'partial' : 'complete',
       },
       {
-        admitNumberToken(token) {
-          if (
-            token.numberKind === 'integer' &&
-            context.numericProfile.integerMaxDigits !== 0 &&
-            token.lexeme.length - (token.lexeme[0] === '-' ? 1 : 0) >
-              context.numericProfile.integerMaxDigits
-          )
-            throw new NumericConversionFailure(
-              `Integer exceeds selected ${context.numericProfile.integerMaxDigits}-digit limit`
-            );
-        },
+        admitNumberToken: numberAdmission(context.numericProfile),
       }
     );
     if (parsed.disposition === 'invalid_utf8') {
@@ -464,14 +455,7 @@ function selectNumericProfile(profile: RenderNumericProfile): RenderNumericProfi
 }
 function numberAdmission(profile: RenderNumericProfile) {
   return (token: import('./lossless-json').JsonNumber): void => {
-    if (
-      token.numberKind === 'integer' &&
-      profile.integerMaxDigits !== 0 &&
-      token.lexeme.length - (token.lexeme[0] === '-' ? 1 : 0) > profile.integerMaxDigits
-    )
-      throw new NumericConversionFailure(
-        `Integer exceeds selected ${profile.integerMaxDigits}-digit limit`
-      );
+    admitTranscriptJsonNumber(token, profile);
   };
 }
 const member = (

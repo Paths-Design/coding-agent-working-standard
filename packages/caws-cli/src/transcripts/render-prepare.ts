@@ -430,7 +430,7 @@ export function prepareSessionArtifacts(
         failure: Object.freeze({ phase, cause: metadata.failure }),
       });
     phase = 'encoding';
-    const encoded = prepareRendererArtifacts(turns, context, metadata.links);
+    const encoded = prepareRendererArtifacts(turns, context, metadata.links, numericProfile);
     let totalArtifacts = 0;
     if (encoded.artifacts.length > limits.maximumArtifacts)
       throw new RangeError('Prepared artifact count exceeds declared profile');
@@ -498,7 +498,7 @@ export function prepareSessionArtifacts(
       ['proposed_removals', observationValue(proposedRemovals)],
     ]);
     const identity = createHash('sha256')
-      .update(renderJsonBytes(identityInput, { indent: 2, ensureAscii: true }))
+      .update(renderJsonBytes(identityInput, { indent: 2, ensureAscii: true, numericProfile }))
       .digest('hex');
     return Object.freeze({
       ...base(),

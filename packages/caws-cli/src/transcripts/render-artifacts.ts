@@ -3,6 +3,10 @@ import { createHash } from 'node:crypto';
 import { codepointTextFromString, encodeUtf8Strict, isCodepointText } from './codepoint-text';
 import { isJsonObject } from './lossless-json';
 import {
+  snapshotTranscriptJsonProfile,
+  type TranscriptJsonNumericProfile,
+} from './transcript-json-profile';
+import {
   compactRendererWhitespace,
   extractRendererHeuristicFields,
   type RenderTurn,
@@ -318,8 +322,13 @@ function assertSpillClosure(payload: RenderObject, spill: ReadonlyMap<string, Re
 export function prepareRendererArtifacts(
   turns: readonly RenderTurn[],
   context: RenderObject,
-  links: readonly PreparedSubagentLink[] = []
+  links: readonly PreparedSubagentLink[] = [],
+  numericProfile?: TranscriptJsonNumericProfile
 ): PreparedRendererArtifacts {
+  const jsonProfile =
+    numericProfile === undefined
+      ? {}
+      : { numericProfile: snapshotTranscriptJsonProfile(numericProfile) };
   const numbers = new Map(turns.map((turn, index) => [turn, index + 1] as const));
   const payloads = turns.map((turn, index) =>
     buildRendererTurnPayload(turn, index + 1, context, numbers, links)
@@ -342,7 +351,7 @@ export function prepareRendererArtifacts(
         artifact(
           `${stem}.payloads.json`,
           'spill',
-          renderJsonBytes(spill, { indent: 2, ensureAscii: false, sortKeys: true })
+          renderJsonBytes(spill, { indent: 2, ensureAscii: false, sortKeys: true, ...jsonProfile })
         )
       );
     }
@@ -350,7 +359,7 @@ export function prepareRendererArtifacts(
       artifact(
         `${stem}.json`,
         'turn',
-        renderJsonBytes(payloads[index]!, { indent: 2, ensureAscii: true })
+        renderJsonBytes(payloads[index]!, { indent: 2, ensureAscii: true, ...jsonProfile })
       )
     );
   }
@@ -359,7 +368,7 @@ export function prepareRendererArtifacts(
     artifact(
       'session-index.json',
       'index',
-      renderJsonBytes(index, { indent: 2, ensureAscii: false })
+      renderJsonBytes(index, { indent: 2, ensureAscii: false, ...jsonProfile })
     )
   );
   return Object.freeze({
