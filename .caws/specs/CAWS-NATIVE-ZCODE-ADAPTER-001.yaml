@@ -47,3 +47,11 @@ non_functional:
 contracts:
   - name: 'zcode-historical-surface'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Independent frozen234-case corpus:151 ordinary decoded cases,32 OpenCode direct hostile controls,5 seeded states equal;15 Zcode direct nonobject/corrupt-state controls outside typed JsonObject/ZcodeState contract differ and remain retained;30 reader/accumulation cases skipped by standalone components;1 constructed surrogate-domain distinction. Append is only a labeled local-clone normalize comparison. All151 ordinary corpus cases agree across combined direct projection/timestamp/map operations, not151 Zcode-only claims. Zcode ordered boundary/text/tools/timestamp truthiness, field/default/error observations withintyped row domain match pinned source3c8cd2b60bc9011f81f56176ace3ea524c334b938e3ba561fac84e6466e021b4. ExactZcode prefix metadataagrees; actualfilteringunverified. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verification.json; /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/commands; independent rawstreams native-harness-tail-differential/runs/0002-node22 and0003-node18 under sessionartifactroot. Commitverificationchecksreachability; recordedcommandnotrerunbyACCLI."
+    recorded_at: "2026-10-21T06:17:38.169Z"
+    command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verify.py"
+    exit_code: 0
+    commit_sha: "5b81b7ae872808e03b73aaca682dcc3b521075f9"
