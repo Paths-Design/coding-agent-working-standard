@@ -135,13 +135,13 @@ lane. GPT-6.1 Sol assignments produce bounded drafts or read-only findings; only
 separately bound peer lanes own their declared source. These assignments do not
 confer authority or acceptance.
 
-| Outcome                                        | Owner and boundary                                                                                                                                                | Observable acceptance / falsifier                                                                                                                                                                                                                                     |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                                                              | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                                                                        |
-| Complete heartbeat consumer                    | Root integrates `ad3a6d24`; Sol drafts the anchored native session-cache operation; root owns precomposition binding and native custody qualification             | E172/E173 retain typed application/runtime checks and a finite native run. Durable session-envelope parity, final missing-SID cleanup correlation and complete-chain qualification remain open.                                                                       |
-| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                                                                    | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets                                                  |
-| Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29`                                         | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                                                                              |
-| Transcript adapters and interpretation         | Root integrates closed Claude/Qwen/Kimi components; chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` owns the bounded DSH adapter; peer B owns numeric-token admission | Claude parent integration is observed in E168; Qwen/Kimi parent integration and ordered dispatch remain open. DSH has an active assignment, not accepted implementation. Acquisition, cache, writer, profile selection and installed consumption remain parent-owned. |
+| Outcome                                        | Owner and boundary                                                                                                                                    | Observable acceptance / falsifier                                                                                                                                                                                                                                       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                                                  | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                                                                          |
+| Complete heartbeat consumer                    | Root integrates `ad3a6d24`; Sol drafts the anchored native session-cache operation; root owns precomposition binding and native custody qualification | E172/E173 retain typed application/runtime checks and a finite native run. E177 resolves retained missing-SID cleanup. Durable session-envelope parity and fresh complete-chain qualification remain open.                                                              |
+| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                                                        | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets                                                    |
+| Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29`                             | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                                                                                |
+| Transcript adapters and interpretation         | Root integrates closed Claude/Qwen/Kimi and numeric-token components; chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` owns the bounded DSH adapter        | Claude parent integration is observed in E168; Qwen/Kimi and token-admission parent imports remain open (E176). DSH has an active assignment, not accepted implementation. Acquisition, cache, writer, profile selection and installed consumption remain parent-owned. |
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -156,13 +156,14 @@ Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 the established boundary. Existing Python consumers remain obligations until
 removed or explicitly classified as foreign/historical test material.
 
-Implementation/evidence coverage is **28/37 feature rows (about76%)**: nine
-remain unreplaced/inventoried and no complete row has retired its Python
+Committed implementation/evidence covers **28/37 feature rows (about76%)**: nine
+lack that durable coverage, and no complete row has retired its Python
 production path. This count includes standalone components awaiting parent
 integration; it measures feature coverage, not cutover effort or readiness.
-Parent acceptance is **0/8**. Recompute coverage when a row changes and use the
-acceptance ledger, parity evidence and selected installation state to determine
-cutover readiness. E174 grounds the Kimi row correction behind this count.
+Uncommitted drafts do not advance this count. Parent acceptance is **0/8**.
+Recompute coverage when a row changes and use the acceptance ledger, parity
+evidence and selected installation state to determine cutover readiness. E174
+grounds the Kimi row correction behind this count.
 
 ## Feature ledger
 
@@ -188,7 +189,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | standalone component closed on main, E174; parent integration and production replacement open                                                   | Surface-specific transcript and native registration fixtures; root owns the parent import and first-matched-empty dispatch contract                                                                                                                                                                                                                                                                                           |
 | R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode adapter                                                        | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
 | R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
-| R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
+| R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | implementing finite standalone profile; uncommitted/unaccepted, E176                                                                            | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | unreplaced; cache interpretation-context and writer partial-publication counterexamples observed, E147/E165                                     | Complete semantic transcript fixtures, context-bound cache freshness and installed rendering; current installed cross-surface reach unverified                                                                                                                                                                                                                                                                                |
 | R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                         | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
 | R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity, hook-harvest and replay leaves accepted, landed and integrated; three original paths unreplaced                        | E134/E144/E148/E163 retain bounded reference profiles, deliberate repairs and raw failed/successful artifacts. E151/E163 integrate the exact source and Python deletions; qualify-render-daemon.py, qualify-transcript-cache.py and source_freshness.py remain; component progress is not parent acceptance                                                                                                                   |
@@ -3868,14 +3869,16 @@ Additional bounded evidence and unresolved dependencies:
   the complete Node resolution closure or an exec census. Committed-candidate
   review also exposes an actual compatibility gap: the effective Codex parser
   writes a durable session envelope and caller pointer, while the typed
-  heartbeat prefix does not. A later shell handler can supply those effects in
-  this full-stock probe; that does not preserve them before an earlier typed
-  protective return. Root owns a native anchored precomposition writer and its
-  compatibility routing; Sol's external draft is not integrated. Python-only
-  existing JSON values remain explicit parity obligations. No effective Codex
-  agent-PID or session-log-path loss was demonstrated. Parent A1–A8,
-  performance/residency, thirteen-session/four-repo fairness, Python retirement
-  and machine adoption remain open.
+  heartbeat prefix does not. Individually launched Codex shell handlers receive
+  `HOOK_TOOL_NAME`; the parser fast path returns before capture, so a later
+  handler does not repair these effects in the typed route. The original
+  dispatcher parses before empty-handler and reprieve filtering. Root owns a
+  native anchored precomposition writer and its compatibility routing; Sol's
+  external draft is not integrated. Python-only existing JSON values remain
+  explicit parity obligations. No effective Codex agent-PID or session-log-path
+  loss was demonstrated. Parent A1–A8, performance/residency,
+  thirteen-session/four-repo fairness, Python retirement and machine adoption
+  remain open.
 
 - E174: Root verifies Kimi candidate `346d50441c006e88affee2f86408ca9ca36ffd74`
   and merge `7d17706b6f63f80f25dd7cd3984f261be4ab3591` reachable on main, with
@@ -3889,11 +3892,89 @@ Additional bounded evidence and unresolved dependencies:
   feature coverage, including standalone components not integrated into the
   parent; it is not a percentage of cutover effort or readiness. Recompute it
   when a row changes and retain the acceptance ledger as the readiness
-  authority. Peer A owns the active two-file DSH adapter component; peer B owns
-  the active two-file lossless numeric-token admission component. Neither
-  selects the parent production interpretation profile or closes the
-  renderer/cache, numeric-reference grounding or selected-reader provenance
-  obligations in E165/E166. Root retains integration and combined validation.
+  authority. Peer A owns the active two-file DSH adapter component; peer B's
+  two-file numeric-token component is closed on main in E176. Neither selects
+  the parent production interpretation profile or closes the renderer/cache,
+  numeric-reference grounding or selected-reader provenance obligations in
+  E165/E166. Root retains integration and combined validation.
+
+- E175: Source inspection grounds the omitted session capture at the original
+  dispatcher boundary. `runtime/caws-hook.py` overwrites `hook_event_name` from
+  the configured event and launches `runtime/dispatch.sh` in the selected
+  checkout. Dispatch parses before empty-handler and reprieve filtering. The
+  typed executor predefines `HOOK_TOOL_NAME`, so later individually launched
+  Codex handlers take the parser fast path without writing the cache. The native
+  owner must preserve this precomposition effect; PreToolUse persists literal
+  `PreToolUse`, not a forged or absent raw field. Missing/empty cwd uses the
+  selected checkout; a nonempty relative cwd is resolved a second time by the
+  legacy cache helper and cannot silently reuse selected canonical context. Root
+  owns that compatibility decision. Sol's external
+  `native-session-cache/src/lib.rs` supplies an anchored read/decision/write
+  operation, retaining directory FDs while the caller interprets exact old bytes
+  or Missing and returns optional UTF-16 creation units. Its retained
+  `callback-final-check.txt` exercises23 isolated cases, including surrogate
+  escaping, symlink/rename races, read failure, partial publication, short
+  writes and missing-identity inertness. This draft is not a production binding
+  or decoder-profile qualification. Native custody control treats received bytes
+  as cleanup requests; it is not a cache port. Root will bind a separately
+  discriminated handshake on the existing framed engine stream, with one reader,
+  original request/deadline binding and no replay after an uncertain write.
+  Committed qualifier review also exposes an unavailable lint observation:
+  `root-qualifier-current-lint.stdout` reports all four TypeScript files ignored
+  by the root JavaScript-only configuration. Exit0 did not establish coverage.
+  The corrected package-cwd invocation uses the existing package configuration;
+  `root-qualifier-package-lint.json` names all four parsed files with no errors
+  or warnings. The failed observation remains retained. Neither lint nor the
+  external operation closes parent acceptance.
+
+- E176: Root reads the actual closed/completed token-admission spec and verifies
+  candidate `be12095cae5a6bed7eac4f99351b82331e11fece`, merge
+  `f485dcf8274cc4b56a2f413d6ae58a0cde269cf6` reachable on main, and the two-file
+  source boundary. `parsePythonJson` has an optional callback on each frozen
+  numeric token before duplicate collapse or later syntax; the existing
+  one-argument API and `jsonNumber` remain uncapped. The component's A1–A3
+  records and closure are retained in peer B's
+  `native-token-admission/010-landing/readback.json`, with closure revision
+  `70e09aceebf0397158fef400adb3613eb83adfb4`. This component is closed on main
+  and not imported into the parent. Root accepts integration, production
+  interpretation-profile selection, acquisition/cache and nested-helper policy;
+  peer B's bounded component handoff does not transfer those parent obligations.
+  Its `native-cache-contract/cpython39-reference/root-readback.json` retains
+  five isolated Python3.9.6 references: positive4301, overwritten and unused
+  large integers are admitted, while syntax-before/after reports JSONDecodeError
+  at offsets10/4310. This packet differs from the retained Python3.11.13 default
+  limit profile; it does not authorize a global4300 policy. Root's current
+  `/usr/bin/python3 -I -B -S` probe independently identifies Python3.9.6,
+  Unicode13 and no integer-limit API, with resolved executable SHA256
+  `b971331ab9beb1dac075006955f035a97332eca21187c4de615ae58346713e2f`. An
+  isolated interpreter observation is not actual selected-reader/image custody,
+  production profile selection or cache transaction qualification. Root still
+  owes the decisive raw reference grounding in E166, the writer repair in E165
+  and integrated reader/native observations. Coverage stays28/37 and parent
+  acceptance0/8; a mechanism within an existing partial feature row does not
+  increment the feature denominator.
+
+- E177: Root's retained-request readback exits0 and records `confirmed_inactive`
+  for original frontend33697, custodian33766 and node33771 in
+  `heartbeat-runtime/root-missing-sid-readback-1/result.json`. It reconstructs
+  the original birth-confirmed chain from raw topology, binds exact captured
+  argv/input to the unique private native configuration and validates native
+  invocation `33697-1792550559901480000`, terminal sequence3, child exit0, both
+  EOFs and settled group facts. SHA-pinned native observer receipts report
+  actual ESRCH absence for all three PIDs; a separate coherent ps inventory has
+  no members in the two owned groups. Stop-event, old-birth, supplied-SID and
+  changed-input controls return unknown without a configuration witness. Strict
+  integrated compilation and86 focused custody checks exit0 without skips. The
+  new missing-SID API is distinct from the unchanged default Stop typed-journal
+  requirement. This readback preserves the original partial result; it neither
+  reruns the scenario nor credits the strengthened qualifier as executed. Native
+  configuration v1 lacks independent event/input attestation: this is
+  correlation within the original trusted private fixture, not kernel
+  executable-image proof or a universal descendant census. No new native
+  invocation, signal or cleanup occurs. E173's retained cleanup gap is resolved
+  within this boundary. Fresh native qualification still owes the session-cache
+  prefix repair, actual qualifier-wiring observation and complete
+  dependency-resolution evidence; parent acceptance remains0/8.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -3991,12 +4072,12 @@ private-pack evidence in E167. E168 integrates the checked Claude component and
 fresh parent selection. E170 integrates the checked pytest-entrypoint leaf and
 observes its combined-parent cold lifecycle. E172 integrates and tests the typed
 heartbeat consumer; E173 retains the finite complete-stock-chain observation and
-its final missing-SID correlation failure. Establish that original request's
-cleanup from retained native custody evidence before another native probe.
-Implement the anchored native session-envelope/caller-pointer prefix and qualify
-early protective return plus downstream session resolution without borrowing a
-later shell parser's effects. Bind future probes to the complete source/build
-and installed package/dependency identities; a template runtime digest or a flat
+its final missing-SID correlation failure. E177 resolves that original request's
+cleanup from retained native custody and independent absence evidence. Implement
+the anchored native session-envelope/caller-pointer prefix and qualify early
+protective return plus downstream session resolution without borrowing a later
+shell parser's effects. Bind future probes to the complete source/build and
+installed package/dependency identities; a template runtime digest or a flat
 `dist/runtime` file list cannot identify new application dependencies. Preserve
 the acquisition-profile and transactional-writer obligations in E166/E165 and
 the guard-decision falsifier in E169. The closed replay, Unicode and utility
