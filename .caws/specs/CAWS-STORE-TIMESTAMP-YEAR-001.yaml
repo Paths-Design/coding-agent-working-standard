@@ -1,0 +1,39 @@
+id: CAWS-STORE-TIMESTAMP-YEAR-001
+title: 'Qualify reviewed signed calendar-year addition in store timestamp interpretation'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-21T19:34:50.576Z'
+updated_at: '2026-10-21T19:34:50.576Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Pure store timestamp calendar interpretation and its focused regression oracle'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/store-timestamp.ts'
+    - 'packages/caws-cli/tests/transcripts/store-timestamp.test.js'
+  out: []
+invariants:
+  - 'Only the explicitly reviewed binary64 time_t64 tm32 CPython profile is interpreted; no token or supplied calendar grants native authority.'
+  - 'Unknown profiles, malformed or mismatched calendar records, transport failures and callback errors retain typed contract refusal.'
+acceptance:
+  - id: A1
+    given: 'the reviewed raw signed32 UTC year field and retained reference observations'
+    when: 'timestamp finishing crosses the positive signed32 addition boundary'
+    then: 'the exact reference ValueError type and signed year message are produced with literal boundary regression controls instead of a year_addition_band exclusion.'
+  - id: A2
+    given: 'the SHA-pinned 3673-case retained reference and exact candidate bytes'
+    when: 'strict differential verification runs on Node 18 and 22'
+    then: 'every case is compared without exclusions and semantic outputs or error type/message/errno match, with raw failed and successful attempts retained.'
+  - id: A3
+    given: 'unknown profiles and malformed, accessor-backed, mismatched or unowned preparation/calendar inputs'
+    when: 'preparation or finishing runs'
+    then: 'no reference success or OS error is fabricated and existing typed rejection and error precedence remain observable.'
+observability:
+  - 'Retain candidate and runtime identities, exact commands and statuses, per-case differential outputs, selected boundary values and preserved failures outside tracked source.'
+rollback:
+  - 'Revert the logical source commit through ordinary governed integration if retained reference observations refute the reviewed arithmetic profile; no installed runtime change belongs to this slice.'
+non_functional: {}
+contracts: []
