@@ -42,9 +42,17 @@ acceptance:
       class on stderr instead of the run-01 baseline exit 0. In every case the
       target path stays absent.
   - id: A2
-    given: 'a hostile path corpus (/tmp alias, symlinked ancestor with missing leaf, relative and absolute link targets, link/.., missing/../link, dangling leaf, ENOTDIR, //, trailing slash, non-UTF8 name, leading dash)'
-    when: '_realpath resolves each with no python3'
-    then: 'stdout bytes equal Python 3 os.path.realpath for every entry, and loops and chains over 40 links return status 2 with empty stdout.'
+    given: 'caws_guard_realpath and the unchanged _realpath sourced from lib/caws-state.sh'
+    when: >-
+      each resolves a /tmp alias, a symlinked ancestor with a missing leaf, a
+      link/.. path and a relative path with python3 present, and the helper is also
+      called with an empty argument, with python3 absent, and with a python3 that
+      exits 1
+    then: >-
+      with python3 present the helper stdout is byte-equal to _realpath stdout for
+      every path with status 0. Empty argument, absent and failing return status 2
+      with empty stdout and exactly one stderr line carrying class empty-path,
+      python3-unavailable or python3-exit-1.
   - id: A3
     given: 'every _realpath and abspath call site in the shipped write guards'
     when: 'a contract test scans them'
