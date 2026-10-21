@@ -62,3 +62,10 @@ evidence:
     command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verify.py"
     exit_code: 0
     commit_sha: "5b81b7ae872808e03b73aaca682dcc3b521075f9"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Actual Node18/22 183-byte rawpartial SHA256f142175574ab4497b516e199ab2c90ba2527ed32a8cf394c14bce70603ac2bc9 emitsboundary/text/unknown-tool at [],response,response.toolCalls.0; idnull,hostileinputkeysintact,source_harnesszcode. callerstate{},nextA,tentativetrue,commitAllowedfalse.7concretecomplete/partial/empty/rejection/mismatch/invalid/nonobjectrecords preserveexactsourcebytes/>2^53coordinates/frozenassertions. Runtime testdriver7processAPIs0, notOSsandbox. Artifacts /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verification.json; /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/commands; independent rawstreams native-harness-tail-differential/runs/0002-node22 and0003-node18 under sessionartifactroot. Commitverificationchecksreachability; recordedcommandnotrerunbyACCLI."
+    recorded_at: "2026-10-21T06:17:47.617Z"
+    command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-harness-tail-coordination/root-runtime-verify.py"
+    exit_code: 0
+    commit_sha: "5b81b7ae872808e03b73aaca682dcc3b521075f9"
