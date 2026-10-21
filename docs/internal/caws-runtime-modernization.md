@@ -4320,6 +4320,38 @@ Additional bounded evidence and unresolved dependencies:
   import and actual renderer/cache/writer obligations. Coverage stays31/37 and
   acceptance0/8.
 
+- E188: The Ajv input-boundary trace identifies a concrete dependency defect,
+  not caller-supplied schema/code injection. Root inspects
+  `src/kernel/evidence/validate.ts`: read-side envelope errors do not stop the
+  later payload lookup, and its ordinary object admits inherited event-name
+  properties. Actual compiled baseline `root-ajv-inherited-key-baseline.jsonl`
+  records constructor/toString throwing `schema must be object or boolean`;
+  **proto** remains rejected as an unknown event, so this does not establish an
+  admission bypass. Both exact source/test paths have clear contention and are
+  admitted through the parent scope CLI.
+
+  Own-property schema selection confines code generation to declared release
+  schemas. The new focused kernel test first fails6 inherited-key cases while
+  its declared-payload control passes; the red output remains in
+  `root-evidence-schema-red.stderr`. It checks the actual compiler boundary for
+  **proto** as well as typed errors for inherited functions, repeats lookups,
+  and retains valid/invalid declared payload controls. The repaired full kernel
+  run records808 checks/35 suites in `root-evidence-schema-kernel.stderr`.
+  Package rebuild and kernel typecheck exit0; actual2-file lint has0
+  diagnostics. `root-ajv-inherited-key-repaired.jsonl` records typed
+  unknown-event results without exceptions and preserved declared-payload
+  rejection.
+
+  `root-evidence-schema-consumers.stderr` records87 compiled event-store and
+  engine checks, including18 routing checks and6 actual native cache scenarios.
+  Fresh native files/receipts remain under `cache-engine-schema-repair-cases/`.
+  This exercises the repaired dependency with the current application; it does
+  not qualify installed behavior, hostile-schema execution, every codegen/
+  filesystem boundary or full-stock/load/cutover parity. The E187 inventory and
+  peer Ajv source trace retain their earlier identities; root must refresh the
+  changed application identities before the next reviewed-profile qualification.
+  Coverage stays31/37, acceptance0/8, and the full goal remains active.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
