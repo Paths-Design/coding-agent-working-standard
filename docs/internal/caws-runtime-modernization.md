@@ -135,13 +135,13 @@ lane. GPT-6.1 Sol assignments produce bounded drafts or read-only findings; only
 separately bound peer lanes own their declared source. These assignments do not
 confer authority or acceptance.
 
-| Outcome                                        | Owner and boundary                                                                                                                                    | Observable acceptance / falsifier                                                                                                                                                                                                                                       |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                                                  | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                                                                          |
-| Complete heartbeat consumer                    | Root integrates `ad3a6d24`; Sol drafts the anchored native session-cache operation; root owns precomposition binding and native custody qualification | E172/E173 retain typed application/runtime checks and a finite native run. E177 resolves retained missing-SID cleanup. Durable session-envelope parity and fresh complete-chain qualification remain open.                                                              |
-| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                                                        | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets                                                    |
-| Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29`                             | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                                                                                |
-| Transcript adapters and interpretation         | Root integrates closed Claude/Qwen/Kimi and numeric-token components; chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` owns the bounded DSH adapter        | Claude parent integration is observed in E168; Qwen/Kimi and token-admission parent imports remain open (E176). DSH has an active assignment, not accepted implementation. Acquisition, cache, writer, profile selection and installed consumption remain parent-owned. |
+| Outcome                                        | Owner and boundary                                                                                                                                            | Observable acceptance / falsifier                                                                                                                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lifecycle, custody and legacy writer exclusion | Root; retain the finite E156/E162 observations and unresolved phases                                                                                          | Actual owned cleanup, correlated uncertain-outcome recovery and prior-writer adoption/drain; sampled lifecycle success cannot establish every phase or surface                                                               |
+| Complete heartbeat consumer                    | Root integrates `ad3a6d24`; Sol drafts the anchored native session-cache operation; root owns precomposition binding and native custody qualification         | E172/E173 retain typed application/runtime checks and a finite native run. E177 resolves retained missing-SID cleanup. Durable session-envelope parity and fresh complete-chain qualification remain open.                   |
+| Thirteen sessions / four repositories          | Root after a measured complete-consumer change                                                                                                                | Thirteen overlapping native clients, isolated semantic output, durable cross-project Running overlap, owner-specific ordering, independent enforcement and bounded overload; retain the original fixture and budgets         |
+| Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29`                                     | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                                     |
+| Transcript adapters and interpretation         | Root integrates closed Claude/Qwen/Kimi/DSH and numeric-token components; chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` owns the next OpenCode/Zcode components | Claude and token parent imports are observed in E168/E179; Qwen/Kimi/DSH imports remain open. E178 verifies DSH closed on main. Acquisition, cache, writer, profile selection and installed consumption remain parent-owned. |
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -156,14 +156,14 @@ Statuses: **unreplaced**, **implementing**, **implemented**, **tested**,
 the established boundary. Existing Python consumers remain obligations until
 removed or explicitly classified as foreign/historical test material.
 
-Committed implementation/evidence covers **28/37 feature rows (about76%)**: nine
-lack that durable coverage, and no complete row has retired its Python
+Committed implementation/evidence covers **29/37 feature rows (about78%)**:
+eight lack that durable coverage, and no complete row has retired its Python
 production path. This count includes standalone components awaiting parent
 integration; it measures feature coverage, not cutover effort or readiness.
 Uncommitted drafts do not advance this count. Parent acceptance is **0/8**.
 Recompute coverage when a row changes and use the acceptance ledger, parity
 evidence and selected installation state to determine cutover readiness. E174
-grounds the Kimi row correction behind this count.
+and E178 ground the Kimi and DSH row corrections behind this count.
 
 ## Feature ledger
 
@@ -189,7 +189,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R14 | `shared/lib/harness_kimi.py`                                                                                        | TS Kimi adapter                                                            | standalone component closed on main, E174; parent integration and production replacement open                                                   | Surface-specific transcript and native registration fixtures; root owns the parent import and first-matched-empty dispatch contract                                                                                                                                                                                                                                                                                           |
 | R15 | `shared/lib/harness_opencode.py`                                                                                    | TS OpenCode adapter                                                        | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
 | R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | unreplaced                                                                                                                                      | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
-| R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | implementing finite standalone profile; uncommitted/unaccepted, E176                                                                            | Surface-specific transcript and native registration fixtures                                                                                                                                                                                                                                                                                                                                                                  |
+| R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | bounded standalone component closed on main, E178; parent integration and production replacement open                                           | Surface-specific transcript and native registration fixtures; root owns selected interpretation, registry, reader/cache/writer and native consumption                                                                                                                                                                                                                                                                         |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | unreplaced; cache interpretation-context and writer partial-publication counterexamples observed, E147/E165                                     | Complete semantic transcript fixtures, context-bound cache freshness and installed rendering; current installed cross-surface reach unverified                                                                                                                                                                                                                                                                                |
 | R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                         | 15 executable shell consumers, 19 inline bodies and seven external callsites; groups below distinguish textual interpreter mentions                                                                                                                                                                                                                                                                                           |
 | R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity, hook-harvest and replay leaves accepted, landed and integrated; three original paths unreplaced                        | E134/E144/E148/E163 retain bounded reference profiles, deliberate repairs and raw failed/successful artifacts. E151/E163 integrate the exact source and Python deletions; qualify-render-daemon.py, qualify-transcript-cache.py and source_freshness.py remain; component progress is not parent acceptance                                                                                                                   |
@@ -3975,6 +3975,89 @@ Additional bounded evidence and unresolved dependencies:
   within this boundary. Fresh native qualification still owes the session-cache
   prefix repair, actual qualifier-wiring observation and complete
   dependency-resolution evidence; parent acceptance remains0/8.
+
+- E178: Root verifies the actual closed/completed `CAWS-NATIVE-DSH-ADAPTER-001`
+  spec, its A1–A5 records, two-file committed candidate
+  `1cde1d3094dded29f196db11cf57d50778dda8cc` and source merge
+  `85de0c632aec43b206c6ab59089774158befc54f` reachable on main. The component
+  requires an explicit caller-supplied embedded decoder profile; no default
+  production integer or recursion policy is selected. The spec retains finite
+  reference, state, occurrence and Node18/22 evidence, including the original
+  constructed-vector and failure boundaries. Those records are not root
+  re-execution of the full component packet. DSH is a committed standalone
+  implementation awaiting parent import, not an uncommitted draft. This changes
+  feature coverage to29/37 (about78%); parent acceptance remains0/8. Root
+  retains production profile, registry, acquisition, cache/writer, native and
+  retirement obligations. Peer A accepts the next bounded OpenCode/Zcode
+  components after ordinary DSH closure; those assignments do not transfer
+  parent obligations.
+
+- E179: Parent commit `ff2cac0169496533248847a0f87822e47183c439` imports the
+  exact two token-admission files from closed candidate `be12095c`; root
+  compares both source files against that candidate. Baseline lossless-parser
+  checks pass9/9; fresh strict transcript compilation and all106 transcript
+  checks exit0 without skips after import.
+  `heartbeat-runtime/root-token-parent-tests.stdout` retains token
+  occurrence/order, duplicate-collapse, later-syntax and callback error-identity
+  controls alongside the existing transcript checks. Package build, actual
+  two-file package lint and all five policy gates exit0; raw logs retain the
+  evaluated branch/staged basis. Independent read-only inspection identifies no
+  additional defect, and the root's source/raw checks support the bounded claim.
+  This optional seam is integrated; selected production numeric, Unicode and
+  recursion profiles and ordinary reader/cache consumption are open. `684ee2eb`
+  separately commits E177's missing-SID correlation and its unchanged default
+  Stop boundary. Neither unit adds a fully retired Python row.
+
+- E180: Root checks all six raw emitted text/hash values and stream hashes in
+  peer B's `native-cache-contract/unicode-profile-falsifier/002-direct` packet.
+  The same structured abort reason containing U+1FAE0 renders as the escaped
+  `['\\U0001fae0']` under Python3.9.6, and as `['🫠']` under Python3.11.13 and
+  the typed adapter. The scalar-string control agrees across all three. Actual
+  source routes structured Codex abort reasons through `pythonStr`, while
+  `transcripts/index.ts` names the finite Python3.11.13/Unicode14 foundation.
+  Numeric-token admission alone cannot establish parity for a differently
+  selected interpreter profile. A separate bounded passive observer retains one
+  installed `session_log_renderer.py` occurrence, PID79973 with birth
+  `1792558678.094449`, OS executable path naming Python3.11.13 and filesystem
+  executable SHA256
+  `d5e2d4feef9f70f82e65429d1edd50a0e3e70debbbc6f27272f2f6ecd463b498`.
+  `selected-interpreter-observation/observations.json` retains before/after
+  process-birth checks and exact installed script identity, but omits the
+  harness/surface association. It does not establish the Codex selected reader,
+  all renderer profiles or mapped-image attestation. Root retains that precise
+  profile-selection gap; no machine registration, runtime or Python policy is
+  changed by these observations.
+
+- E181: Two actual contract-fixture copy attempts are refused before execution.
+  With an explicit owned `workdir` and relative target, installed
+  `bash-write-guard.sh` reports a canonical path claimed by the parent lane; its
+  source resolves operands from top-level `HOOK_CWD`, not the tool's `workdir`.
+  With the exact absolute owned target, installed `worktree-guard.sh:328–341`
+  classifies the same worktree operand's unanchored `packages/` token as a
+  main-repo operand and reports worktree-to-main copying. Source and destination
+  in that second request are external artifact and owned native fixture
+  respectively. Root's fresh `caws status` identifies the correct owned/bound
+  lane, and the relative native fixture scope check admits the path. The raw
+  registered hook payload/cwd has not been recovered, so this does not establish
+  every bootstrap attribution step. Both refusals and the E169 repair obligation
+  remain; installed guards are not changed or reprieved. The fixture is authored
+  through the normal scoped file-edit surface. No copy command reaches
+  execution, and no gate or authority conclusion is inferred from a different
+  tool's admission.
+
+  A separate real overlap requires narrowing parent claims. The first CLI
+  amendment adds exact helper/test scope.out exclusions and both parent checks
+  read back `scope.reject.scope_out`, but contention remains: the actual kernel
+  and installed claim oracle intentionally match scope.in without subtracting
+  scope.out. Root replaces the two broad runtime source/test claims with71 exact
+  current parent files and keeps the broad paths as editable, unclaimed
+  scope.support. The delegated helper/test retain their separate child claims;
+  the parent keeps their explicit exclusions until child closure. This is an
+  audited scope operation, not a guard change. The peer owns
+  `CAWS-NATIVE-CACHE-ADMISSION-001`; root retains integration and must read back
+  actual contention before treating the overlap as resolved. Remove the two
+  exclusions through the CLI only after closure before importing. The helper and
+  parent cache exchange are work in progress, not accepted features.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
