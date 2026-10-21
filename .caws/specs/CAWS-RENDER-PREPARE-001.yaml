@@ -1,10 +1,11 @@
 id: CAWS-RENDER-PREPARE-001
 title: 'Prepare profile-bound session artifacts from observed source bytes'
 mode: refactor
-lifecycle_state: active
-worktree: render-prepare
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Scoped preparation component at199fa5e: A1-A6 pass recorded and read back, earlier input/output numeric failures retained. Actual source-to-artifact runner282 checks exit0; committed gates and doctor exit0, doctor0E3W4I. Independent52-image committed codegen match, exact turn/spill/index bytes and finite hostile controls retained externally. Publication is not_attempted; no native writer/permit/currentness/actual SessionEnd consumption/production calendar/minimumNode18/hermetic toolchain/installed-runtime or fullR18/parent acceptance claim. Parent retains native integration and reader obligations; newly evidenced legacy SessionEnd usage-schema mismatch remains open integration work.'
 created_at: '2026-10-21T16:42:37.786Z'
-updated_at: '2026-10-21T18:54:41.145Z'
+updated_at: '2026-10-21T20:01:05.145Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
