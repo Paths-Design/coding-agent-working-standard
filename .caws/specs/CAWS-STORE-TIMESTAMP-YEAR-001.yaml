@@ -47,3 +47,9 @@ rollback:
   - 'Revert the logical source commit through ordinary governed integration if retained reference observations refute the reviewed arithmetic profile; no installed runtime change belongs to this slice.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Reviewed pinned ARM64 signed32 year addition at source line246; literal boundary assertions in committed tests and all25 historical exclusions now compared. Directly inspected /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/differential-01/node18.stdout.json and node22.stdout.json, zero differences; byte readback /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/committed-readback-final.json. Pure interpreter only; no native producer claim."
+    recorded_at: "2026-10-21T20:23:10.408Z"
+    commit_sha: "41999be7615850221719a93f39e67486b68a12a6"
