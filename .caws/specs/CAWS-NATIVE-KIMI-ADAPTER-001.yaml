@@ -1,0 +1,43 @@
+id: CAWS-NATIVE-KIMI-ADAPTER-001
+title: 'Historical Kimi transcript row adapter'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T00:55:50.632Z'
+updated_at: '2026-10-21T00:55:50.632Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Kimi transcript matching normalization millisecond arithmetic and occurrence provenance'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/harness-kimi.ts'
+    - 'packages/caws-cli/tests/transcripts/kimi.test.ts'
+  out: []
+invariants:
+  - 'Preserve original raw occurrence custody and numeric kinds; projection and labels confer no execution or filesystem authority.'
+  - 'Preserve numeric-time short circuit empty matched ownership and millisecond division before kind checks; registry consumers and installation remain parent-owned.'
+acceptance:
+  - id: A1
+    given: 'historical Kimi rows and hostile malformed shapes'
+    when: 'the typed matcher and projection run'
+    then: 'matcher short circuits iteration failures ordered prompt content tool/result events argument cloning and truthiness match the pinned independent Python3.11.13 profile'
+  - id: A2
+    given: 'millisecond numeric values Unicode14 text and complete partial or empty matched raw occurrences'
+    when: 'normalization runs on Node18 and22 without Python'
+    then: 'correctly rounded division finite fallback timestamps OverflowError distinctions original bytes member paths and frozen envelopes remain observable with tentative input refused for commit'
+  - id: A3
+    given: 'committed two-file component and retained independent reference fixtures'
+    when: 'strict compilation semantic tests targeted fault controls and declared gates execute'
+    then: 'exact checked source identities and runtime artifacts support the bounded adapter while registry acquisition cache writer native installation full workload and cutover remain explicitly unverified'
+observability:
+  - 'Retain source/interpreter profile hashes raw fixtures projections errors command argv cwd exit streams and complete partial empty occurrence envelopes.'
+rollback:
+  - 'Revert the component source commit; no production consumer or installed runtime is modified.'
+non_functional:
+  security:
+    - 'Never execute transcript text tool calls or infer authority from matching and occurrence metadata.'
+contracts:
+  - name: 'historical-kimi-transcript'
+    type: behavior
