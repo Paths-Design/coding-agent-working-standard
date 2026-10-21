@@ -57,3 +57,8 @@ evidence:
     evidence_ref: "Committed a9420ad preserves codepoint keys/values, literal versus escaped pairs, duplicate first-slot last-value semantics and numeric lexemes; integer4300 admission before duplicate collapse. 70 tests each Node18.20.8/22 and 794 differential cases each 18.0/18.20.8/22 exit0. Four selected compiled semantic mutants detected 13/22/10/6 differing cases, not full mutation score. Raw evidence under native-store-json/commands/committed-* and committed-differential, absolute root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/."
     recorded_at: "2026-10-21T11:49:05.939Z"
     commit_sha: a9420ad8bac757a55a93a61ace022af4b5621375
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Hostile malformed full-source encoding, JSON transitions/escapes, integer-limit precedence and all explicit resource boundaries exercised; 12000-container parsing/freezing uses explicit stack and refuses maxDepth crossing. Committed-tests18/22 exit0/70 each; selected semantic mutants and actual error-category carriers retained in /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-json/. Caller resource policy does not reproduce CPython host-stack/allocator failures; exact exception messages/positions not compared."
+    recorded_at: "2026-10-21T11:49:14.072Z"
+    commit_sha: a9420ad8bac757a55a93a61ace022af4b5621375
