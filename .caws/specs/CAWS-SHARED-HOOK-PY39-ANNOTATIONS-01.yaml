@@ -1,9 +1,10 @@
 id: CAWS-SHARED-HOOK-PY39-ANNOTATIONS-01
 title: 'Shared session renderer crashes at import on stock macOS Python 3.9: harness_kimi.py evaluates a PEP 604 annotation'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: py39-annotations
 created_at: '2026-10-21T02:31:14.765Z'
-updated_at: '2026-10-21T02:31:14.765Z'
+updated_at: '2026-10-21T02:31:23.863Z'
 created_by_session: '2cab376d-3f6a-4fb5-ab68-c931fbde6779'
 blast_radius:
   modules:
