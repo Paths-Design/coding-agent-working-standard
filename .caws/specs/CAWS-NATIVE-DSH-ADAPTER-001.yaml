@@ -55,3 +55,11 @@ non_functional:
 contracts:
   - name: 'historical-dsh-transcript'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Finite249 declared sequences/278 steps per phase on Node18/22:239 ordinary originals,7 named reader-decoded replacements,3 hostile seeds; exact typed event/error/state comparison0 mismatches, identical outputSHA c9751b5ee20ab643ef282733a5dd9e36b8acafed1db552e6fb1c086975c70d04. Original7 constructed vectors retained/classified, not silently counted as ordinary. Explicit test-local3.11/int4300 decoder, unresolved production/recursion profile. See /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/dsh-worker/differential/injected-profile-v1 and root-runtime-artifact-verification.json."
+    recorded_at: "2026-10-21T05:08:47.842Z"
+    command: "/opt/homebrew/opt/python@3.11/bin/python3.11 /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-dsh-adapter/root-runtime-artifact-verification.py"
+    exit_code: 0
+    commit_sha: "1cde1d3094dded29f196db11cf57d50778dda8cc"
