@@ -1,10 +1,11 @@
 id: CAWS-STORE-TIMESTAMP-YEAR-001
 title: 'Qualify reviewed signed calendar-year addition in store timestamp interpretation'
 mode: fix
-lifecycle_state: active
-worktree: native-timestamp-year
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Pure timestamp interpretation component: dd2f0cee implements reviewed signed32 year addition after complete raw C-int validation; 41999be7 strengthens executable initialization, rational ties and hostile errno/discriminator/provenance assertions. Node18/22 strict retained-reference differential compares all3673 cases including25 historical exclusions with0 differences on identical production bytes; historical test hash is preserved. Focused68 checks, full-file mutation03 official assertion91.14percent391/429 at unchanged80floor with0 invalid, exact committed source/test correspondence. Failed mutation01 and passing02/03 raw artifacts plus emitted JS/map retained outside worktree under /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year. Independent committed review grounded; remaining meaningful unchanged-calendar and malformed-record sensitivity gaps retained in committed-readback-final.json. A1-A4 spec/events10395/10396/10398/10401 read back; CLI rederives commit existence only. Doctor0E3W4I exit0, final scoped gates fivePASS exit0. No live Python oracle, native producer/path/image custody, native REAL probe, publication, actual reader, package/install/trust/rollback or parent cutover acceptance. Coordinator retains those outcomes and sole ledger ownership.'
 created_at: '2026-10-21T19:34:50.576Z'
-updated_at: '2026-10-21T19:35:08.875Z'
+updated_at: '2026-10-21T20:41:58.212Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
