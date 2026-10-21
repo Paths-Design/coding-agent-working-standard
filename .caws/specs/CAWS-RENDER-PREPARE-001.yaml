@@ -119,3 +119,10 @@ evidence:
     command: node packages/caws-cli/tests/transcripts/run.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/candidate-06/compiled/tests/transcripts
     exit_code: 0
     commit_sha: "199fa5e1e1e38ff072b6f40f3987f211f19a3070"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Executed full282 checks with no skipped/cancelled tests; committed-codegen audit52 byte-identical images; 7 original finite controls, 5 input repair and2 output repair controls retained at their identified revisions. Historical custom-DSH/unselected adapter semantics retained; selected mode explicit and mismatch refused. No publication/currentness/install/fullR18 claim; preparation only. Classifier/capture failures retained and adjudicated against raw output. Inspected durable receipt /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/qualification-final.json SHA25620c9805a07c3f5b53c834524433b1defec8eef95ced4740629dfcaa25f3b4e93. CLI verify here checks commit reachability only; absolute external artifact was separately inspected/offline checked and is not a machine artifact citation."
+    recorded_at: "2026-10-21T19:39:30.334Z"
+    command: node packages/caws-cli/tests/transcripts/run.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/candidate-06/compiled/tests/transcripts
+    exit_code: 0
+    commit_sha: "199fa5e1e1e38ff072b6f40f3987f211f19a3070"
