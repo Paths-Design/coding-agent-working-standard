@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-DSH-ADAPTER-001
 title: 'Historical stateful DSH transcript row adapter'
 mode: feature
-lifecycle_state: active
-worktree: native-dsh-adapter
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded two-file DSH projection with explicit caller-supplied embedded decoder profile and persistent immutable step/descriptor state. Candidate1cde1d3094dded29f196db11cf57d50778dda8cc independently reviewed;39 checked Git source blobs/31 identical Node18/22 outputs;140 tests each,249 declared reference sequences,20 semantic fault kills,25 occurrence cases/runtime and measured N256/512 resource controls. A1-A5 dual-read at events9865-9869. Finite test profiles and synthetic occurrences only; production decoder/recursion selection, registry/acquisition/cache/writer integration, native execution, installation, full workload/fairness, Python retirement and cutover remain parent-owned and unverified.'
 created_at: '2026-10-21T02:17:14.740Z'
-updated_at: '2026-10-21T02:27:40.082Z'
+updated_at: '2026-10-21T05:17:19.418Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
