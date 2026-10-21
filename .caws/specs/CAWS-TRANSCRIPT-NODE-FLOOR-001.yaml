@@ -1,0 +1,42 @@
+id: CAWS-TRANSCRIPT-NODE-FLOOR-001
+title: 'Qualify emitted transcript preparation on the declared Node runtime floor'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-10-21T20:59:25.293Z'
+updated_at: '2026-10-21T20:59:25.293Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Replayable Node runtime floor transcript qualification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/tooling/transcript-runtime-floor.ts'
+    - 'packages/caws-cli/src/tooling/transcript-runtime-floor-entry.ts'
+    - 'packages/caws-cli/tests/tooling/transcript-runtime-floor.test.js'
+  out: []
+invariants:
+  - 'Qualification executes actual normally emitted transcript modules on Node18.0.0 without runtime or module fallback; typed tooling never grants native publication or adoption authority.'
+  - 'Retained source, turn, spill, index and runtime image identities describe bounded observations; preparation remains not_attempted for publication and fixture calendar does not qualify production calendar semantics.'
+acceptance:
+  - id: A1
+    given: 'the package declares Node18.0.0 as its supported minimum'
+    when: 'the qualification entry runs under a selected runtime'
+    then: 'it requires the actual floor version before execution and fails nonzero on wrong runtime or missing module without alternate runtime fallback'
+  - id: A2
+    given: 'actual emitted registry and preparation with a late tool result and prior artifact inventory'
+    when: 'the bounded consumer executes on the floor'
+    then: 'exact two-turn index and 21001-character originating-turn spill bytes are retained and invalid UTF8 and numeric failures yield no generation while empty history is retained noncurrent'
+  - id: A3
+    given: 'the committed qualifier and actual private package output'
+    when: 'runtime and artifact identities and hostile controls are inspected'
+    then: 'exact commands and results are retained with source and output stability checks and no packaged CLI installed publication calendar or full R27 claim'
+observability:
+  - 'Exact process version and executable identity, source/module/artifact hashes, stdout stderr exit status and explicit qualification limits'
+rollback:
+  - 'Remove the qualification tooling and tests; preserve transcript implementation, native ownership and installed runtime selection'
+non_functional: {}
+contracts:
+  - name: 'transcript-runtime-floor'
+    type: behavior
