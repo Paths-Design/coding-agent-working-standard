@@ -57,3 +57,8 @@ evidence:
     command: caws doctor
     exit_code: 0
     commit_sha: "72a24a403fc3f80cf85c42b71a0bafe96fa4d0fc"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Actual gitcheck-ignore --no-index shows exact !ledger exception and positive docs/internal/* scratchrule; independentpeer alsochecks siblings/nested scratch. Normal gitadd withoutforce and subsequentaba5818a/84c91390/72a24a40 commits complete formatter/restaging withno ignored-pathfailure,exit0/statusclean. Initialfailedrestaging retained; no hook bypass. Onlycanonicalledger unignored; otherinternalscratch remainsignored."
+    recorded_at: "2026-10-21T20:16:46.317Z"
+    commit_sha: "72a24a403fc3f80cf85c42b71a0bafe96fa4d0fc"
