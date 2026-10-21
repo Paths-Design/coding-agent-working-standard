@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-21T11:58:36.733Z'
+updated_at: '2026-10-21T12:56:42.367Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -138,6 +138,9 @@ scope:
     - packages/caws-cli/tests/tooling/ar-archive.test.js
     - packages/caws-cli/src/transcripts/store-json.ts
     - packages/caws-cli/tests/transcripts/store-json.test.js
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build-entry.ts
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
   out:
     - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
