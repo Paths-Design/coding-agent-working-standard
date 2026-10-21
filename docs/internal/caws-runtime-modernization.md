@@ -4562,6 +4562,47 @@ Additional bounded evidence and unresolved dependencies:
   root-owned. R09/R18 stay unreplaced; coverage31/37 and parent acceptance0/8 do
   not advance for this private probe.
 
+- E196: A bounded Sol assignment freezes the three actual transcript-store
+  owner/module files and retains separate CPython 3.9.6 and 3.11.13 decoding/
+  timestamp observations under `sqlite-store-decoding-reference/`. Root inspects
+  producer/import/runner source and raw outputs, verifies all 26 artifacts in
+  the original and additive manifests, compares frozen files with the parent,
+  and checks both interpreter-image hashes. Root's retained readback is
+  `native-sqlite-source/reference-decoding-readback.json`; root does not rerun
+  the producers. All five bounded probe processes exit0 with empty stderr.
+
+  The 66 common cases agree across both interpreters. Direct BLOB-like JSON byte
+  decoding admits UTF-8/16/32 with the observed BOM/detection rules; a supplied
+  string with a leading BOM refuses. Non-JSON outer whitespace refuses.
+  Surrogate-pass decoding and strict final encoding are separate outcomes. The
+  store's millisecond timestamp accepts zero, uses optional microseconds and
+  `+00:00`, and preserves binary64 division/rounding: integer `253402300799999`
+  yields `9999-12-31T23:59:59.998993+00:00`. The default probe's 3.9 interpreter
+  has no digit-limit API and accepts all three 4299/4300/4301-digit controls.
+  Explicit 3.11 reports 4300, accepts 4299/4300 and refuses 4301. These are
+  labeled probe profiles, not claims about the interpreter selected by installed
+  hooks.
+
+  Six additive cases per interpreter preserve actual ord() arrays. Literal
+  paired surrogate codepoints in UTF-8/32 BLOB-like inputs remain D83D,DE00 and
+  fail strict final UTF-8 encoding; UTF-16 pairs, ordinary astral UTF-8 and
+  escaped JSON pairs become 1F600 and encode. A bookkeeping-field control fails
+  whole-object encoding while its selected ordinary text encodes. Rejecting all
+  such input objects would therefore change ignored-field handling; this
+  implication is grounded in the owner's field selection, not an executed
+  reconstruct run.
+
+  Existing `parseTimestamp` has different units/zero/output/failure semantics.
+  Existing `decodeOccurrence` strips before parsing and uses strict UTF-8;
+  existing `JsonValue` strings and JSON.parse string-token handling cannot keep
+  two adjacent literal surrogate codepoints distinct from one astral character.
+  Preserve raw cells and choose an explicit integer interpretation profile and
+  codepoint-capable projection representation before reusing those components.
+  The observations exercise actual frozen timestamp and direct JSON operations,
+  not SQLite cell conversion, reconstruct, native acquisition, publication or
+  renderer behavior. R09/R18, coverage31/37 and parent acceptance0/8 retain
+  their previously stated boundaries.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4673,14 +4714,17 @@ progress and does not replace that transaction or its event readback.
    reviewed-prefix/Cargo link guard. Implement native fixed-query acquisition
    with snapshot, cancellation and lossless SQL-value custody. Connect the
    imported registry to transactional rendering/writing and retain E165/E166
-   source/profile controls. R09 and R18 remain unreplaced; standalone registry
-   composition does not discharge production consumer parity.
+   source/profile controls. E196 requires a store-specific timestamp conversion,
+   explicit integer profile and codepoint-preserving JSON projection; the
+   generic decoder and JS-string AST cannot silently supply that contract. R09
+   and R18 remain unreplaced; standalone registry composition does not discharge
+   production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E195 retain the historical candidates, failures and bounded observations;
+E167–E196 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is31/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
