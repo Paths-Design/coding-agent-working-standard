@@ -1,0 +1,47 @@
+id: CAWS-STORE-JSON-001
+title: 'Preserve SQL-class and CPython codepoint JSON semantics'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-21T11:21:58.759Z'
+updated_at: '2026-10-21T11:21:58.759Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Transcript store SQL-cell JSON decoding'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/store-json.ts'
+    - 'packages/caws-cli/tests/transcripts/store-json.test.js'
+  out: []
+invariants:
+  - 'No installed profile or native authority is inferred from a derived codepoint AST.'
+  - 'TEXT and BLOB decoding, key equality, literal surrogate custody and integer admission follow the explicitly selected CPython 3.11.13 profile within caller limits.'
+  - 'Generic transcript AST, registry, renderer and writer remain separate owning contracts.'
+acceptance:
+  - id: A1
+    given: 'raw SQL TEXT or BLOB JSON cells and explicit profile and resource limits'
+    when: 'decoding executes'
+    then: 'strict TEXT UTF8 and CPython BLOB encoding detection preserve codepoints and produce typed failures without storage coercion or input aliasing.'
+  - id: A2
+    given: 'JSON strings keys numbers scalars duplicate keys and literal or escaped surrogates'
+    when: 'parsing executes'
+    then: 'immutable codepoint keys and values and numeric lexemes preserve Python distinctions and integer admission is checked before duplicate collapse.'
+  - id: A3
+    given: 'malformed encodings syntax and caller resource bounds'
+    when: 'hostile inputs execute'
+    then: 'failures are distinct and bounded without native stack overflow or hidden coercion.'
+  - id: A4
+    given: 'frozen CPython reference cases and ordinary package compilation'
+    when: 'differential and compiled Node18 and Node22 checks execute'
+    then: 'declared finite semantics agree and the component is emitted without claiming consumer integration or cutover.'
+observability:
+  - 'Typed encoding, syntax, integer-limit and resource failures with frozen source and actual differential outputs retained externally.'
+rollback:
+  - 'Remove the two unconsumed component files through governed source changes; no installed adoption or shared output mutation occurs.'
+non_functional: {}
+contracts:
+  - name: 'store-json-decoder'
+    type: api
+    path: 'packages/caws-cli/src/transcripts/store-json.ts'
