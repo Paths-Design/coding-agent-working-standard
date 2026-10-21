@@ -1,0 +1,39 @@
+id: CAWS-STORE-SETTLEMENT-001
+title: 'Retain successful native store acquisition settlement'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-21T22:17:58.701Z'
+updated_at: '2026-10-21T22:17:58.701Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Native store wire settlement and original frontend retention'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/transcript_store_wire.rs'
+    - 'packages/caws-native/src/main.rs'
+  out: []
+invariants:
+  - 'A delivered CLOSED frame and confirmed SQL close do not imply exhausted acquisition, publication authority, resident custody or engine consumption.'
+  - 'Retain exact first acquisition failure and cleanup evidence separately from later transport failure; no query replay or identity widening.'
+acceptance:
+  - id: A1
+    given: 'a valid native store invocation'
+    when: 'the exchange delivers CLOSED'
+    then: 'the complete owned acquisition is returned instead of discarded, including exhausted, stopped and failed-but-closed distinctions and semantic metrics.'
+  - id: A2
+    given: 'exchange, CLOSED delivery, acquisition or cleanup failure'
+    when: 'settlement is retained'
+    then: 'original failure, cleanup uncertainty and independent transport error remain distinguishable with hostile existing and targeted tests.'
+  - id: A3
+    given: 'a completed store exchange followed by a later engine protocol failure'
+    when: 'the original frontend reports failure'
+    then: 'it retains the owned completed acquisition without changing budget binding or claiming durable resident/publication authority.'
+observability:
+  - 'Retain exact source revision, qualified SQLite prefix/build inputs, raw Cargo command outcomes and bounded assertions; independent committed review before component completion.'
+rollback:
+  - 'Revert the logical API and caller change through the owned governed lane.'
+non_functional: {}
+contracts: []
