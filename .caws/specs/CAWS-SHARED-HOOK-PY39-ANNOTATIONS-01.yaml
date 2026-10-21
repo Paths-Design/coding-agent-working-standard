@@ -39,3 +39,11 @@ rollback:
   - 'Revert the merge commit; no data migration'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
+    recorded_at: "2026-10-21T02:44:56.992Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py::test_shipped_templates_import_on_python_3_9"
+    commit_sha: "8a758936"
+    test_verified_at: d12d0b6dd59aa36b148ff0a62e31a496ce559c9b
