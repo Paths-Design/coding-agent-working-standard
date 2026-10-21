@@ -284,18 +284,55 @@ describe('supplied UTC calendar finishing', () => {
           'invalid_' + key
         );
   });
-  test('extreme C-int year-addition band is explicitly unqualified', () => {
+  // Literal expectations for the reviewed image's 32-bit add, not a second
+  // implementation of its wrap operation. Earlier profile exclusions remain
+  // historical; this extends the reviewed arithmetic/error domain.
+  test.each([
+    [-2147483648, 'year -2147481748 is out of range'],
+    [2147481747, 'year 2147483647 is out of range'],
+    [2147481748, 'year -2147483648 is out of range'],
+    [2147483646, 'year -2147481750 is out of range'],
+    [2147483647, 'year -2147481749 is out of range'],
+  ])('reviewed signed year addition preserves reference error for tmYear %s', (tmYear, message) => {
     const prepared = integer(0n);
-    for (const tmYear of [2 ** 31 - 1900, 2 ** 31 - 1])
-      contract(
-        () => finishStoreTimestamp(prepared, calendar(prepared, { tmYear })),
-        'unqualified_profile',
-        'year_addition_band'
-      );
     reference(
-      () => finishStoreTimestamp(prepared, calendar(prepared, { tmYear: 2 ** 31 - 1901 })),
+      () => finishStoreTimestamp(prepared, calendar(prepared, { tmYear })),
       'ValueError',
-      'year 2147483647 is out of range'
+      message
+    );
+  });
+  test('wrapped year failure precedes other calendar ranges but not raw field validation', () => {
+    const prepared = integer(0n);
+    const result = calendar(prepared, {
+      tmYear: 2147483647,
+      tmMon: -1,
+      tmMday: 0,
+      tmHour: 99,
+    });
+    reference(
+      () => finishStoreTimestamp(prepared, result),
+      'ValueError',
+      'year -2147481749 is out of range'
+    );
+    contract(
+      () => finishStoreTimestamp(prepared, { ...result, tmSec: NaN }),
+      'calendar_result',
+      'invalid_tmSec'
+    );
+  });
+  test.each([
+    [-1899, '0001-01-01T00:00:00+00:00'],
+    [8099, '9999-01-01T00:00:00+00:00'],
+  ])('valid year boundary tmYear %s remains representable', (tmYear, expected) => {
+    const prepared = integer(0n);
+    expect(finishStoreTimestamp(prepared, calendar(prepared, { tmYear }))).toBe(expected);
+  });
+  test('malformed years cannot be wrapped into a valid reference year', () => {
+    const prepared = integer(0n);
+    contract(
+      () => finishStoreTimestamp(prepared, calendar(prepared, { tmYear: 4294967366 })),
+      'calendar_result',
+      'invalid_tmYear'
     );
   });
   test.each([
