@@ -53,3 +53,8 @@ evidence:
     evidence_ref: "Reviewed pinned ARM64 signed32 year addition at source line246; literal boundary assertions in committed tests and all25 historical exclusions now compared. Directly inspected /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/differential-01/node18.stdout.json and node22.stdout.json, zero differences; byte readback /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/committed-readback-final.json. Pure interpreter only; no native producer claim."
     recorded_at: "2026-10-21T20:23:10.408Z"
     commit_sha: "41999be7615850221719a93f39e67486b68a12a6"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Both exact commands actually exited0, raw commands/statuses /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/differential-01/command-runs.json; 3673 cases each, excluded0, full final comparisons3673, differences0. Source SHA187f9702131629e7fe102d4047e230e5c9b3432773ef06281bb945ee33a9b8e5 and emittedJS0eb0a4ec unchanged in final commit; differential historical test hash retained honestly. No new Python oracle/native acquisition executed."
+    recorded_at: "2026-10-21T20:23:21.012Z"
+    commit_sha: "41999be7615850221719a93f39e67486b68a12a6"
