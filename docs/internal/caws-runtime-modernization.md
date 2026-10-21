@@ -31,14 +31,14 @@ passing unit tests, or the existence of this document.
 
 This working ledger is published on `main` independently of candidate source.
 The source integration checkpoint is the `native-runtime-modernization` branch
-at `20ca11b4b16a65cdacea4c3d5f890a941df705fe`. Evidence entries identify their
+at `10690d4bc1937a1a28fcf37e5ab3aed1f3e6ccd5`. Evidence entries identify their
 actual component branch or historical revision. Publishing this document does
 not land those implementations on `main`. Inspect the candidate architecture
-with `git show 20ca11b4:docs/architecture/caws-native-runtime.md`; the relative
+with `git show 10690d4b:docs/architecture/caws-native-runtime.md`; the relative
 architecture link follows the branch containing this document.
 
-The coverage measure is33/37 rows with qualifying partial implementation
-(89.2%). It is not an overall completion percentage. Parent acceptance is0/8;
+The coverage measure is 33/37 rows with qualifying partial implementation
+(89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
 zero complete production Python rows are retired. The selected machine runtime
 is `408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0`. Component
 acceptance, integration-branch landing, delivery on `main`, package
@@ -5635,6 +5635,59 @@ Additional bounded evidence and unresolved dependencies:
   the stated partial-coverage rule, advancing coverage to33/37 (89.2%). Full R18
   replacement and parent acceptance0/8 remain open.
 
+- E226: The timestamp owner normally merges unchanged candidate
+  `41999be7615850221719a93f39e67486b68a12a6` into the integration branch at
+  `10690d4bc1937a1a28fcf37e5ab3aed1f3e6ccd5`. Root reads the closed
+  `CAWS-STORE-TIMESTAMP-YEAR-001` spec, four PASS records and matching
+  events10395/10396/10398/10401, then closure/merge/removal events10413–10415.
+  Source ancestry and the clean checked-out base transition from `10bb60e2` are
+  verified without discarding work. The native source tree is unchanged from
+  `e31d09ae`.
+
+  The bounded repair models signed32 `tm_year + 1900` in the pinned ARM64
+  CPython3.11.13 profile after validating all six raw calendar fields. Both
+  retained Node18/22 comparisons cover all3673 cases, including all25 former
+  exclusions, with zero differences. Historical E204–E206 exclusions remain
+  historical. Focused Jest records68 passed; final whole-file mutation records
+  391Killed/36Survived/2NoCoverage,91.14percent at the unchanged80percent floor,
+  no invalid verdicts. Source/test/report correspondence and meaningful kills
+  receive independent read-only inspection; raw mutation01 initialization
+  failure and passing02/03 attempts remain retained. Artifacts and exact command
+  statuses live under
+  `/Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/`.
+
+  Remaining regression gaps include malformed callback message42, a tagged array
+  with calendar fields, valid1904/rejected2100 leap days and minute59. Inspected
+  production source enforces these conditions; this is not a complete
+  test-sensitivity claim. CLI commit verification establishes commit existence,
+  not semantic execution. No fresh Python oracle, live native REAL boundary,
+  publication, ordinary reader, package/adoption or parent acceptance follows
+  this component closure. Coverage remains33/37 and parent0/8.
+
+- E227: Root prepares a coherent consumer build from integrated `10690d4b` and
+  an actual native REAL boundary probe using retained image SHA
+  `58de5db0da52f26dc5d71c88d3c7978b7fc96823e233b5422fe84e9ea30ce569`. PreToolUse
+  blocks the build-helper command before execution, naming a foreign write under
+  `.nvm`. There is no compiler status or native probe result. Exact
+  command/refusal and prepared helpers are retained under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-timestamp-boundary/`.
+
+  Installed408 `lib/bash-mutation-targets.sh`'s `_caws_interp_payload_literals`
+  accepts any write-verb co-occurrence and emits every slash-bearing fragment.
+  The helper's `.nvm` path names the Node executable and read-only hash input;
+  its explicit writes target the absent artifact output directory. This grounds
+  the false mutation attribution, without certifying transitive execution or
+  explaining the interrupted `printf`. Guard-owner diagnosis and direct guide
+  inspection distinguish candidate v2's removal of weak-literal authority from
+  its deliberate unresolved file-entry boundary: reading a mutable script does
+  not bind its final launch. The candidate is not an execution remedy or
+  adoption proof. Root preserves the refusal, performs no retry or alternative
+  execution, and retains native REAL row/calendar/error/cleanup qualification.
+  The selected runtime, trust and parent acceptance remain unchanged. The four
+  accepted guard documentation updates remain landing obligations under root
+  ownership, with implemented analysis, proposed execution custody and native
+  adoption stated separately.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -5746,7 +5799,12 @@ progress and does not replace that transaction or its event readback.
    supported resolution; do not infer an attempted foreign write from the
    refusal alone. E224 discharges root's finite report inspection and records
    accepted source-owner repair; native A5/A7 integration obligations remain
-   open.
+   open. Include the four accepted documentation surfaces in that landing:
+   `hook-pack-shared-core.md`, `hook-packs.md`, `README.md` and the existing
+   guard-lineage `command-analysis.md`. Their contract must distinguish actual
+   execution metadata, mandatory write guard versus optional pin guard,
+   command-specific exits, the full three-suite/six-file verification scope,
+   proposed executor custody and unqualified native adoption.
 4. E207 implements the reviewed-prefix coordinator, exclusive fresh Cargo
    target, embedded-member checks and four direct build/consumer integrations.
    E209 qualifies one frozen current-host release build; ordinary consumer
@@ -5762,15 +5820,17 @@ progress and does not replace that transaction or its event readback.
    charging engine-selected project budget state while retaining established
    context on bound failures. Other Ready consumers need complete original
    context qualification. E218 carries recognized oversize and early transport
-   refusals without a budget namespace bypass. Qualify the retained pinned-image
-   year-addition extension against the25 E204/E206 historical exclusions without
-   rewriting those earlier observations. E223 assigns the two-file extension to
-   its bound peer; root exercises the stable native REAL boundary after source
-   validation. Implement a surviving owner for acquisition settlement and
-   single-use exhausted-and-settled publication. The store call in `main.rs`
-   owns acquisition in the transient frontend, while `render_owner.rs`'s
-   resident actor separately owns writer custody; the engine custodian proxies
-   bytes without original store context. A local return object cannot transfer
+   refusals without a budget namespace bypass. E226 lands the pinned-profile
+   year-addition extension and compares all25 former exclusions without
+   rewriting historical observations. E227 retains the build refusal before
+   execution; resolve final-launch custody through a supported contract before
+   root executes the stable native REAL boundary. Preserve the prepared fixture
+   and exact expected error rather than infer live parity from pure arithmetic.
+   Implement a surviving owner for acquisition settlement and single-use
+   exhausted-and-settled publication. The store call in `main.rs` owns
+   acquisition in the transient frontend, while `render_owner.rs`'s resident
+   actor separately owns writer custody; the engine custodian proxies bytes
+   without original store context. A local return object cannot transfer
    authority across those processes. Establish native-original registration and
    a bounded row/control/publication exchange in the surviving owner; generic
    confirmed close does not grant a permit. Integrate atomic projection
@@ -5798,7 +5858,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E225 retain the historical candidates, failures and bounded observations;
+E167–E227 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is33/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
