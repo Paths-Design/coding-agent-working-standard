@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-21T18:53:04.211Z'
+updated_at: '2026-10-21T19:32:35.313Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -134,8 +134,6 @@ scope:
     - packages/caws-cli/src/tooling/native-sqlite-build.ts
     - packages/caws-cli/src/tooling/native-sqlite-build-entry.ts
     - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
-    - packages/caws-cli/src/transcripts/store-timestamp.ts
-    - packages/caws-cli/tests/transcripts/store-timestamp.test.js
     - packages/caws-cli/src/transcripts/store-projection.ts
     - packages/caws-cli/tests/transcripts/store-projection.test.js
     - packages/caws-cli/src/runtime/transcript-store-client.ts
@@ -150,6 +148,8 @@ scope:
     - packages/caws-native/src/protocol.rs
     - packages/caws-native/src/transcript_store_wire.rs
     - packages/caws-native/tests/fixtures/store-engine.cjs
+    - packages/caws-cli/src/transcripts/store-timestamp.ts
+    - packages/caws-cli/tests/transcripts/store-timestamp.test.js
   support:
     - packages/caws-cli/reports/
     - package.json
@@ -236,6 +236,8 @@ scope:
     - packages/caws-cli/tests/transcripts/dsh.test.ts
     - packages/caws-cli/src/transcripts/registry.ts
     - packages/caws-cli/tests/transcripts/registry.test.ts
+    - packages/caws-cli/src/transcripts/store-timestamp.ts
+    - packages/caws-cli/tests/transcripts/store-timestamp.test.js
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
