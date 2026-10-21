@@ -62,3 +62,8 @@ evidence:
     evidence_ref: "Hostile malformed full-source encoding, JSON transitions/escapes, integer-limit precedence and all explicit resource boundaries exercised; 12000-container parsing/freezing uses explicit stack and refuses maxDepth crossing. Committed-tests18/22 exit0/70 each; selected semantic mutants and actual error-category carriers retained in /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-json/. Caller resource policy does not reproduce CPython host-stack/allocator failures; exact exception messages/positions not compared."
     recorded_at: "2026-10-21T11:49:14.072Z"
     commit_sha: a9420ad8bac757a55a93a61ace022af4b5621375
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Ordinary npm run build, scoped lint and five policy gates exit0 at clean a9420ad, normal dist emission. Frozen CPython3.11.13/Unicode14/int4300/_json.Scanner plus 794 inputs yield244 successful carriers/550 typed failure categories and zero differences on each Node18.0.0/18.20.8/22.19.0. Artifact verifier exit0/74 references at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-store-json/verification-committed/artifact-verification.json. No SQL acquisition, renderer, installed profile or native parity grant."
+    recorded_at: "2026-10-21T11:49:22.281Z"
+    commit_sha: a9420ad8bac757a55a93a61ace022af4b5621375
