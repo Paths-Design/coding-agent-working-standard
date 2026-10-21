@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Shared hook runtime and native adapter contract
 owner: CAWS maintainers
-updated: 2026-10-05
+updated: 2026-10-21
 audience: consumer
 ---
 
@@ -288,63 +288,55 @@ so a not-yet-migrated wiring keeps working during the transition.
 
 ## Payload `cwd` contract
 
-Guards learn where the agent is from the payload's `cwd`. `lib/parse-input.sh`
-sets `HOOK_CWD` from it, and to empty when the field is absent — overwriting any
-value already exported — so an absent `cwd` is always seen as absent, never
-inherited.
+Repository identity, the payload's base directory and a command's effective
+execution directory serve different purposes. `lib/parse-input.sh` sets
+`HOOK_CWD` from the payload and clears it when absent; an inherited value is not
+evidence of supplied context.
 
-Two questions use that value, and they need different things:
+Repository-wide state (`.caws/sessions/`, leases) resolves through
+`git rev-parse --git-common-dir` from `${HOOK_CWD:-$PWD}`. That locates
+canonical governance from canonical and linked checkouts. It does not bind a
+relative command operand to its execution directory. Tests that execute hooks
+must enter a fixture root first
+([hook-test isolation](../guides/hook-packs.md#hook-test-isolation)).
 
-- **Which repository's state?** Repo-wide state (`.caws/sessions/`, leases) is
-  located by repository identity: `lib/session-cache.sh` runs
-  `git rev-parse --git-common-dir` from `${HOOK_CWD:-$PWD}`, which names the
-  canonical `.git` from the canonical checkout and from every linked worktree.
-  The `$PWD` step is the hook process's directory, chosen by whoever launched
-  the hook. A test that runs a real hook from inside a real checkout therefore
-  writes that checkout's state; hook tests must enter a fixture root first
-  ([hook-test isolation](../guides/hook-packs.md#hook-test-isolation)).
-- **Which file does a relative path name?** That needs a location, and
-  repository identity is not one. Only a payload `cwd` naming an existing
-  directory counts as resolved (`_CWD_RESOLVED` in `bash-write-guard.sh`).
-  Without it, on a surface whose contract carries `cwd`, a relative mutation
-  target goes to the ownership oracle flagged unresolved
-  (`CAWS_ORACLE_CWD_UNRESOLVED`) and the answer is
-  `ask_uncertain:cwd-unresolved:<path>`. On any other surface the guard keeps
-  resolving against the canonical root, because there an absent `cwd` is the
-  normal case and asking would refuse every relative write.
+The mandatory write guard uses the decoded execution contract from
+`caws hooks mutation-view`, not repository identity as a substitute for command
+context. Its native envelope preserves the exact source and rejects conflicting
+`command`/`cmd`, shell and startup declarations. Declared native
+`exec_command`/`shell_command` aliases require explicit Bash and
+`tool_input.login:false`. Their `workdir` resolves against the original native
+base `cwd`; an existing absolute workdir can establish its own coordinate.
+Invalid supplied context remains an issue. Unknown directories stay `null`,
+rather than borrowing the CLI's or canonical root's directory. The bounded
+projection can retain independently known facts without treating unknown
+relative targets as resolved.
 
-Which surfaces carry `cwd` is a per-surface fact, recorded here with its
-evidence. `_CWD_CONTRACT_SURFACES` in `bash-write-guard.sh` is the enforcing
-copy of the "fail closed" column; the two change together.
+`tool_input.cwd`, `env` and `environment` have no modeled native execution
+contract; supplying them is unresolved. The literal `Bash` compatibility profile
+retains its declared Bash assumption when no shell is supplied, except for the
+known incompatible Codex producer. That profile does not establish another
+harness's normalization or effective executor settings.
 
-| Surface        | Payload carries `cwd`    | Evidence                                                                                                                                                         | Absent `cwd`                                |
-| -------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `claude-code`  | yes                      | `cwd` is a common field of the harness's hook input                                                                                                              | fail closed (`ask`)                         |
-| `codex`        | assumed                  | the vendor parser reads it (`codex/hooks/lib/parse-input.sh`); no captured payload                                                                               | fail closed (`ask` → `deny`)                |
-| `opencode`     | yes, built by the plugin | `opencode/plugin.ts` `resolveAgentCwd`: the Bash call's `workdir` when given, else `ctx.directory`; never `ctx.worktree`, which differs in a subdirectory launch | fail closed (block — opencode has no `ask`) |
-| `qwen-code`    | yes, documented          | payload row in `qwen-code/CAWS-HOOKS.md`; `caws-qwen-hook.sh` header                                                                                             | fail closed (`ask`)                         |
-| `kimi-code`    | yes, documented          | payload row in `kimi-code/AGENTS.md`; `caws-kimi-hook.sh` header                                                                                                 | fail closed (`ask` → `deny`)                |
-| `zcode`        | unverified               | `zcode/hooks/caws-bridge.sh` passes the harness payload through unchanged                                                                                        | resolve against the canonical root          |
-| `dsh`          | unverified               | external adapter                                                                                                                                                 | resolve against the canonical root          |
-| (unrecognized) | —                        | —                                                                                                                                                                | resolve against the canonical root          |
+| Surface                   | Coordinate evidence                                                                             | Execution boundary                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Claude Code               | Native payload declares a base `cwd`                                                            | The compatibility profile does not by itself qualify final shell, startup or rewritten source.                |
+| Codex                     | The known producer supplies reduced metadata; a turn directory does not bind per-call execution | Native envelopes are held as `execution-contract` unresolved, including caller-added shell fields or aliases. |
+| OpenCode                  | The plugin derives a coordinate from the Bash call's workdir or its native directory            | Adapter coordinate construction is separate from complete native launch qualification.                        |
+| Qwen, Kimi, ZCode and DSH | Their adapters define payload transport with different documented or unverified cwd coverage    | A surface label or canonical-root fallback does not establish effective execution context.                    |
 
-Rules for changing it:
+The trusted launcher identifies the Codex producer through `CAWS_AGENT_SURFACE`;
+literal diagnostic analysis cannot lift that native restriction. Protective
+refusal is not benign admission or qualified deployment. The
+[bounded analysis guide](../guides/command-analysis.md) records the exact
+implemented decoder, source-profile limits and producer evidence.
 
-- **Absence is decided per surface, from evidence.** Failing closed on a surface
-  that never sends `cwd` refuses every relative write there; failing open on one
-  that does turns a degraded payload into a confident wrong answer. Neither is a
-  safe global default.
-- **Adding a surface to the fail-closed set** is a one-word change to
-  `_CWD_CONTRACT_SURFACES`, made together with this table's evidence and the
-  retirement of that surface's prior-behavior control test in
-  `tests/hooks/bats/claim-oracle-cwd-relative.bats`.
-- **A new vendor adapter** declares its row before it ships. If its harness
-  supplies no `cwd`, the adapter builds one from the harness's own notion of the
-  session directory, as `plugin.ts` does, rather than leaving the guards to
-  guess.
-- **Present is not current.** The table records whether the field is sent, not
-  whether each harness updates it after the agent changes directory inside its
-  shell; that is unverified per surface.
+Native adoption also requires the checked source and context to survive every
+later transformation. `quiet-merge.sh` follows blocking guards and can prepend a
+canonical-root directory change; an earlier decision cannot authorize changed
+bytes. The guide's typed executor and permit sequence are proposed. Complete
+final-launch mediation, native canary and rollback require separate proof before
+the deployed runtime is replaced.
 
 ## Dispatcher resolution
 

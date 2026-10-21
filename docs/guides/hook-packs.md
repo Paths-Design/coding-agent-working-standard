@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: CAWS shared runtime setup and hook maintenance
 owner: CAWS maintainers
-updated: 2026-10-05
+updated: 2026-10-21
 audience: consumer
 ---
 
@@ -16,6 +16,22 @@ project registrations once; subsequent runtime updates serve every adopted
 project. See [Machine adapter installation](#machine-adapter-installation).
 Legacy project packs remain supported during migration. The first part of this
 guide documents the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
+
+The runtime also carries mandatory authority guards. In shared PreToolUse
+dispatch, `bash-write-guard.sh` requires the bounded mutation backend and fails
+closed without a legacy fallback; `worktree-pin-guard.sh` is opt-in. These are
+separate from the four advisory quality hooks below. See
+[bounded command analysis](command-analysis.md) for execution context, effect
+coverage and verification.
+
+Ordinary runtime installation changes the shared handlers consumed by enabled
+registrations. The bounded analyzer and private package observations do not
+qualify native adoption. The known reduced Codex producer is held because its
+hook projection cannot bind the final command, shell, startup and per-call cwd.
+The guide's owned execution boundary is proposed. Retain the deployed runtime
+until complete final-launch and rewrite custody, useful benign admission, an
+isolated native canary and rollback are demonstrated. A protective refusal is
+not evidence of a qualified rollout.
 
 These four hooks are _advisory_ edit-time signals. They implement the
 load-bearing edit-time quality checks (`god_object`, `todo_detection`,
