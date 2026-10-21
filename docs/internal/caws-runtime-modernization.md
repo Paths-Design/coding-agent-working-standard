@@ -4,7 +4,7 @@ authority: working
 status: active
 title: CAWS native runtime migration tracker
 owner: CAWS runtime maintainers
-updated: 2026-10-20
+updated: 2026-10-21
 audience: maintainer
 ---
 
@@ -57,6 +57,12 @@ revision, dirty state and CAWS ownership; summaries and tracker entries are
 context, not proof of current behavior. Preserve outstanding obligations unless
 the user supersedes them. Distinguish committed, reviewed, landed, accepted and
 installed work, and correct stale next steps before choosing another task.
+
+Use the [ordered next work](#ordered-next-work) for execution and the
+[feature ledger](#feature-ledger) for current replacement state. The retained
+checkpoint context records the scope and limits of earlier observations.
+
+## Retained checkpoint context
 
 The macOS invocation path includes a separate native custodian that creates the
 Node engine before readiness. E145 observes the original frontend's death,
