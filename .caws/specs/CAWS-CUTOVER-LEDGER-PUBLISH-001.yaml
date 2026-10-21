@@ -2,6 +2,7 @@ id: CAWS-CUTOVER-LEDGER-PUBLISH-001
 title: 'Publish reconciled cutover obligations and source provenance'
 mode: doc
 lifecycle_state: active
+worktree: cutover-ledger-source
 created_at: '2026-10-21T19:36:19.581Z'
 updated_at: '2026-10-21T20:08:05.735Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
