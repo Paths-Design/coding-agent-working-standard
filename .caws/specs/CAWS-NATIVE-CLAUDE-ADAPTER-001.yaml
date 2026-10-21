@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-CLAUDE-ADAPTER-001
 title: 'Historical Claude transcript adapter and HTML interpretation'
 mode: feature
-lifecycle_state: active
-worktree: native-claude-adapter
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Candidate172242eaa14ebdd9e82fbc97ebeac384b90f1689 qualifies standalone historicalClaude normalization and pinnedPython3.11.13 HTMLprofile(default4300decimal). Node18/22 strictcompile and95tests0skip;215typedfixture comparisons/runtime0mismatch;2231entities/8924variants and2x1114114numeric-domain checks match independent codepoint digests. Tencommitted files matchcheckedhashes;25compiledJSfilesbyteidentical; noProcess025/026 zeroattempts on sevenAPI monitor, not OSsandbox. Raw failures/successes and profile/license/gen/probe evidence /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-claude-adapter/artifact-index.json. A1-A3 events9704-9706 matchspec; CLI rederivescommitreachabilityonly, commandsnotexecuted. IndependentreadonlySolfeedback grounded againstsource/rawchecks. No index/runner/registry/renderer/cache/package/installed change, Pythonretirement orcutoverclaim. Parentretains R10readerprofile/R18writer repairs andactualconsumeradoption.'
 created_at: '2026-10-20T22:59:17.225Z'
-updated_at: '2026-10-20T22:59:55.083Z'
+updated_at: '2026-10-20T23:41:03.362Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
