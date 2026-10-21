@@ -1085,6 +1085,68 @@ export class RenderHarness {
       return result;
     }
   }
+  /** Missing raw identity intentionally has no typed journal. This distinct
+   * qualification path binds the original fixture input/argv/birth to native
+   * custody; it does not relax the typed-journal requirement for Stop.
+   */
+  missingSidPreToolUseCompletion(started: Started): Data {
+    const trace = started.invocation;
+    assert(trace, 'invocation trace unavailable');
+    try {
+      assert.equal(trace.event, 'pre_tool_use', 'missing-SID path is PreToolUse only');
+      assert.equal(trace.expected, null, 'missing-SID path cannot borrow a typed identity');
+      assert.equal(trace.journalFile, null, 'missing-SID path cannot borrow a typed journal');
+      assert.equal(trace.journalPrefix.length, 0);
+      assert.equal(trace.rows.length, 0);
+      const journalDirectory = path.join(trace.session, 'hook-invocations');
+      if (fs.existsSync(journalDirectory)) {
+        const meta = fs.lstatSync(journalDirectory);
+        assert(meta.isDirectory() && !meta.isSymbolicLink(), 'unsafe typed journal directory');
+        assert.deepEqual(this.invocationJournal(started), [], 'unexpected current typed journal');
+      }
+      const command = row(
+        JSON.parse(fs.readFileSync(path.join(started.directory, 'command.json'), 'utf8'))
+      );
+      assert(typeof command.executable === 'string');
+      assert(Array.isArray(command.args) && command.args.every((arg) => typeof arg === 'string'));
+      const rawInput = fs.readFileSync(path.join(started.directory, 'stdin.bin'));
+      const custody = trace.collector.observeMissingSidPreToolUse({
+        coverage: trace.coverage,
+        runtimeDigest: this.installed.digest,
+        node: process.execPath,
+        engine: this.engine,
+        request: {
+          executable: command.executable,
+          args: command.args,
+          rawInput,
+          inputSha256: trace.inputDigest,
+          temporary: trace.collector.temporary,
+        },
+      });
+      let inventory: ProcessRow[] | null = null;
+      try {
+        inventory = this.processRows();
+      } catch {
+        /* strict absence stays unknown */
+      }
+      const absence = requestCleanupObservation(trace.coverage, inventory, (pid) =>
+        this.observe(pid)
+      );
+      const result = {
+        state: combinedRequestCleanup(absence, custody),
+        provenance: 'native-only-missing-sid-pre-tool-use',
+        absence,
+        custody,
+        errors: trace.errors,
+      };
+      writeJson(path.join(started.directory, 'request-completion.json'), result);
+      return result;
+    } catch (error) {
+      const result = { state: 'unknown', error: String(error), errors: trace.errors };
+      writeJson(path.join(started.directory, 'request-completion.json'), result);
+      return result;
+    }
+  }
   async waitFor<T>(
     check: () => T | undefined | null | false,
     ms: number,

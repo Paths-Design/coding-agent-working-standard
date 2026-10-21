@@ -519,7 +519,9 @@ const sent=messages.sendMessage(path.join(repo,'.caws'),{actor:{kind:'agent',id:
       'actual frontend Child PID unavailable'
     );
     const stdout = fs.readFileSync(path.join(started.directory, 'stdout.bin'));
-    const completion = h.requestCompletion(started); // Never convert missing coverage into confirmed cleanup.
+    const completion = options.missingSid
+      ? h.missingSidPreToolUseCompletion(started)
+      : h.requestCompletion(started); // Never convert missing coverage into confirmed cleanup.
     const journal = started.invocation?.rows ?? [];
     snapshot(name + '-after');
     const result = {
@@ -798,7 +800,7 @@ const sent=messages.sendMessage(path.join(repo,'.caws'),{actor:{kind:'agent',id:
       'No exhaustive short-lived exec observation or process-fanout absence',
       'No source-to-dist build derivation from hashes alone',
       'No installed user harness trust or real tool execution',
-      'Missing-SID typed journal/custody correlation stays unknown if no journal exists',
+      'Missing-SID correlation uses original fixture argv/input/birth and private native receipts; native configuration v1 has no independent event/input attestation',
       'Snapshot coverage misses remain unknown; native receipt EOF/group facts are retained separately',
       'No failed stdout handoff, cancellation, cross-platform, 13x4 fairness or performance qualification',
     ],

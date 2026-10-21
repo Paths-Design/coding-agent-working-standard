@@ -68,6 +68,32 @@ export type CustodyExpectation = {
   node: string;
   engine: string;
 };
+/** Qualification-only witness from the original request's private native files.
+ * The configuration witness is not inferred from a filename or ID prefix.
+ * It grants no invocation, signal, replay, session or event authority.
+ */
+export type MissingSidPreToolUseExpectation = Omit<CustodyExpectation, 'invocationId'> & {
+  request: {
+    executable: string;
+    args: readonly string[];
+    rawInput: Uint8Array;
+    inputSha256: string;
+    temporary: string;
+    configuration: { source: string; sha256: string; invocationId: string };
+  };
+};
+export type MissingSidPreToolUseObservation = CustodyObservation & {
+  provenance: 'native-only-missing-sid-pre-tool-use';
+  inputSha256: string;
+};
+export type MissingSidPreToolUseFirstExpectation = Omit<
+  MissingSidPreToolUseExpectation,
+  'request'
+> & {
+  request: Omit<MissingSidPreToolUseExpectation['request'], 'configuration'>;
+};
+export type NativeConfigurationWitness =
+  MissingSidPreToolUseExpectation['request']['configuration'];
 export type CustodyObservation = {
   state: 'confirmed_settled' | 'unknown';
   error: string | null;
@@ -387,6 +413,101 @@ export function combinedRequestCleanup(
     : 'unknown';
 }
 
+/** This entrypoint is deliberately separate from the typed-journal/Stop path.
+ * Native v1 configuration has no event/input fields: captured original argv and
+ * input bytes supply that correlation, within the trusted private fixture boundary.
+ */
+export function correlateMissingSidPreToolUseCustody(
+  candidates: readonly CustodyCandidate[],
+  expected: MissingSidPreToolUseExpectation
+): MissingSidPreToolUseObservation {
+  const { request } = expected;
+  const provenance = 'native-only-missing-sid-pre-tool-use' as const;
+  try {
+    const selected = expected.coverage.expected;
+    requireValue(
+      selected !== null && request.executable === selected.native,
+      'original native executable differs'
+    );
+    requireValue(
+      request.rawInput.byteLength > 0 &&
+        request.rawInput.byteLength <= MAX_TYPED_JOURNAL &&
+        /^[a-f0-9]{64}$/.test(request.inputSha256) &&
+        hash(request.rawInput) === request.inputSha256,
+      'original request input identity differs'
+    );
+    const payload = json(request.rawInput, MAX_TYPED_JOURNAL);
+    requireValue(
+      object(payload) &&
+        !Object.hasOwn(payload, 'session_id') &&
+        !Object.hasOwn(payload, 'sessionId'),
+      'missing-SID branch requires absent payload session identity'
+    );
+    const args = request.args;
+    requireValue(
+      args.length === 15 &&
+        args[0] === 'invoke' &&
+        args[1] === '--engine' &&
+        args[2] === expected.engine &&
+        args[3] === '--node' &&
+        args[4] === expected.node &&
+        args[5] === '--surface' &&
+        args[6] === 'codex' &&
+        args[7] === '--event' &&
+        args[8] === 'pre_tool_use' &&
+        args[9] === '--runtime-digest' &&
+        args[10] === expected.runtimeDigest &&
+        args[11] === '--timeout-ms' &&
+        /^[1-9]\d*$/.test(args[12]!) &&
+        Number.isSafeInteger(Number(args[12])) &&
+        Number(args[12]) <= 120000 &&
+        args[13] === '--configuration' &&
+        ['system', 'project'].includes(args[14]!),
+      'original missing-SID PreToolUse argv differs'
+    );
+    requireValue(
+      selected.frontendCommand === [request.executable, ...args].join(' ') &&
+        selected.node === expected.node &&
+        selected.engine === expected.engine,
+      'original request command/topology differs'
+    );
+    requireValue(
+      path.isAbsolute(request.temporary) &&
+        path.isAbsolute(request.configuration.source) &&
+        path.dirname(request.configuration.source) === request.temporary &&
+        /^[a-f0-9]{64}$/.test(request.configuration.sha256) &&
+        /^[A-Za-z0-9_.-]{1,128}$/.test(request.configuration.invocationId),
+      'original private native configuration witness unavailable'
+    );
+    requireValue(candidates.length === 1, 'original private native configuration absent/ambiguous');
+    const candidate = candidates[0]!;
+    requireValue(
+      candidate.source === request.configuration.source &&
+        hash(candidate.configuration) === request.configuration.sha256,
+      'original private native configuration source changed'
+    );
+    const result = correlateRequestCustody(candidates, {
+      coverage: expected.coverage,
+      invocationId: request.configuration.invocationId,
+      runtimeDigest: expected.runtimeDigest,
+      node: expected.node,
+      engine: expected.engine,
+    });
+    return { ...result, provenance, inputSha256: request.inputSha256 };
+  } catch (error) {
+    return {
+      state: 'unknown',
+      error: String(error),
+      source: null,
+      invocationId: request.configuration.invocationId,
+      runtimeDigest: expected.runtimeDigest,
+      terminal: null,
+      provenance,
+      inputSha256: request.inputSha256,
+    };
+  }
+}
+
 /** Reads are bounded, private, non-symlink regular files; snapshots retain source identity.
  * A dedicated caller-provisioned temporary directory limits the search domain.
  */
@@ -402,6 +523,87 @@ export class RequestCustodyCollector {
     readonly archive: string
   ) {}
   collect(expected: CustodyExpectation): CustodyObservation & { snapshots: Row[] } {
+    return this.collectWith(
+      (candidates) => correlateRequestCustody(candidates, expected),
+      expected.invocationId,
+      expected.runtimeDigest
+    );
+  }
+  collectMissingSidPreToolUse(
+    expected: MissingSidPreToolUseExpectation
+  ): MissingSidPreToolUseObservation & { snapshots: Row[] } {
+    const result = this.collectWith(
+      (candidates) => {
+        requireValue(
+          this.temporary === expected.request.temporary,
+          'collector does not own original missing-SID temporary root'
+        );
+        return correlateMissingSidPreToolUseCustody(candidates, expected);
+      },
+      expected.request.configuration.invocationId,
+      expected.runtimeDigest
+    );
+    return {
+      ...result,
+      provenance: 'native-only-missing-sid-pre-tool-use',
+      inputSha256: expected.request.inputSha256,
+    };
+  }
+  /** First observation uses the identical private bounded read/monotonicity
+   * boundary. No expected typed ID or unvalidated filesystem read is needed.
+   * Issue a reusable witness only after full correlation and native settlement;
+   * partial/pending native journals remain unknown and return no witness.
+   */
+  observeMissingSidPreToolUse(
+    expected: MissingSidPreToolUseFirstExpectation
+  ): MissingSidPreToolUseObservation & {
+    snapshots: Row[];
+    configurationWitness: NativeConfigurationWitness | null;
+  } {
+    let configurationWitness: NativeConfigurationWitness | null = null;
+    const result = this.collectWith(
+      (candidates) => {
+        requireValue(
+          this.temporary === expected.request.temporary,
+          'collector does not own original missing-SID temporary root'
+        );
+        requireValue(
+          candidates.length === 1,
+          'original private native configuration absent/ambiguous'
+        );
+        const candidate = candidates[0]!;
+        const configuration = json(candidate.configuration, MAX_CUSTODY_CONFIG);
+        requireValue(
+          object(configuration) && typeof configuration.invocation_id === 'string',
+          'original native invocation ID unavailable'
+        );
+        const witness = {
+          source: candidate.source,
+          sha256: hash(candidate.configuration),
+          invocationId: configuration.invocation_id,
+        };
+        const correlated = correlateMissingSidPreToolUseCustody(candidates, {
+          ...expected,
+          request: { ...expected.request, configuration: witness },
+        });
+        if (correlated.state === 'confirmed_settled') configurationWitness = witness;
+        return correlated;
+      },
+      '',
+      expected.runtimeDigest
+    );
+    return {
+      ...result,
+      provenance: 'native-only-missing-sid-pre-tool-use',
+      inputSha256: expected.request.inputSha256,
+      configurationWitness,
+    };
+  }
+  private collectWith(
+    correlate: (candidates: readonly CustodyCandidate[]) => CustodyObservation,
+    invocationId: string,
+    runtimeDigest: string
+  ): CustodyObservation & { snapshots: Row[] } {
     const snapshots: Row[] = [];
     try {
       requireValue(this.samples < 128, 'custody snapshot count exhausted');
@@ -472,14 +674,14 @@ export class RequestCustodyCollector {
           inode: journal.meta.ino,
         });
       }
-      return { ...correlateRequestCustody(candidates, expected), snapshots };
+      return { ...correlate(candidates), snapshots };
     } catch (error) {
       return {
         state: 'unknown',
         error: String(error),
         source: null,
-        invocationId: expected.invocationId,
-        runtimeDigest: expected.runtimeDigest,
+        invocationId,
+        runtimeDigest,
         terminal: null,
         snapshots,
       };

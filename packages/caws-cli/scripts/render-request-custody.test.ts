@@ -6,6 +6,9 @@ import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import {
   correlateRequestCustody,
+  correlateMissingSidPreToolUseCustody,
+  type MissingSidPreToolUseExpectation,
+  type MissingSidPreToolUseFirstExpectation,
   combinedRequestCleanup,
   decodeInvocationIdentity,
   MAX_CUSTODY_CONFIG,
@@ -117,6 +120,199 @@ function candidate(rows = [started(), complete()]): CustodyCandidate {
 function observe(candidates = [candidate()], expected = expectation()) {
   return correlateRequestCustody(candidates, expected);
 }
+function missingExpectation(source = candidate().source): MissingSidPreToolUseExpectation {
+  const original = expectation();
+  const { invocationId, ...withoutTypedIdentity } = original;
+  void invocationId;
+  const args = [
+    'invoke',
+    '--engine',
+    original.engine,
+    '--node',
+    original.node,
+    '--surface',
+    'codex',
+    '--event',
+    'pre_tool_use',
+    '--runtime-digest',
+    digest,
+    '--timeout-ms',
+    '30000',
+    '--configuration',
+    'system',
+  ];
+  original.coverage.expected!.frontendCommand = ['/selected/native', ...args].join(' ');
+  const rawInput = bytes({ tool_name: 'Bash', tool_input: { command: 'true' } });
+  return {
+    ...withoutTypedIdentity,
+    request: {
+      executable: '/selected/native',
+      args,
+      rawInput,
+      inputSha256: createHash('sha256').update(rawInput).digest('hex'),
+      temporary: path.dirname(source),
+      configuration: {
+        source,
+        sha256: createHash('sha256').update(candidate().configuration).digest('hex'),
+        invocationId: 'independent-typed-request',
+      },
+    },
+  };
+}
+test('missing-SID PreToolUse uses exact original native custody with explicit provenance', () => {
+  const result = correlateMissingSidPreToolUseCustody([candidate()], missingExpectation());
+  assert.equal(result.state, 'confirmed_settled');
+  assert.equal(result.provenance, 'native-only-missing-sid-pre-tool-use');
+  assert.equal(result.invocationId, 'independent-typed-request');
+  assert.deepEqual(result.terminal, complete());
+  assert.equal(result.inputSha256, missingExpectation().request.inputSha256);
+  assert.throws(() => decodeInvocationIdentity(Buffer.alloc(0), digest, 'b'.repeat(64)));
+});
+const missingFaults: [
+  string,
+  (e: MissingSidPreToolUseExpectation, c: CustodyCandidate[]) => void,
+][] = [
+  [
+    'Stop event',
+    (e) => {
+      (e.request.args as string[])[8] = 'stop';
+    },
+  ],
+  [
+    'over-limit native timeout',
+    (e) => {
+      (e.request.args as string[])[12] = '120001';
+      e.coverage.expected!.frontendCommand = [e.request.executable, ...e.request.args].join(' ');
+    },
+  ],
+  [
+    'different original command',
+    (e) => {
+      e.coverage.expected!.frontendCommand += ' --event stop';
+    },
+  ],
+  [
+    'foreign executable',
+    (e) => {
+      e.request.executable = '/foreign/native';
+    },
+  ],
+  [
+    'different input hash',
+    (e) => {
+      e.request.inputSha256 = '0'.repeat(64);
+    },
+  ],
+  [
+    'payload session identity',
+    (e) => {
+      e.request.rawInput = bytes({ session_id: 'old' });
+      e.request.inputSha256 = createHash('sha256').update(e.request.rawInput).digest('hex');
+    },
+  ],
+  [
+    'empty payload session identity',
+    (e) => {
+      e.request.rawInput = bytes({ session_id: '' });
+      e.request.inputSha256 = createHash('sha256').update(e.request.rawInput).digest('hex');
+    },
+  ],
+  [
+    'alternate session key',
+    (e) => {
+      e.request.rawInput = bytes({ sessionId: 'old' });
+      e.request.inputSha256 = createHash('sha256').update(e.request.rawInput).digest('hex');
+    },
+  ],
+  [
+    'old original birth',
+    (e) => {
+      (e.coverage.originalFrontend as { process: { startMicros: string } }).process.startMicros =
+        '999';
+    },
+  ],
+  [
+    'foreign chain',
+    (e) => {
+      e.coverage.confirmedChains[0]![1]!.parent = 999;
+    },
+  ],
+  [
+    'missing chain',
+    (e) => {
+      e.coverage.confirmedChains = [];
+    },
+  ],
+  [
+    'missing configuration',
+    (_e, c) => {
+      c.length = 0;
+    },
+  ],
+  [
+    'ambiguous configuration',
+    (_e, c) => {
+      c.push(candidate());
+    },
+  ],
+  [
+    'copied configuration directory',
+    (_e, c) => {
+      c[0]!.source = '/private/foreign/opaque';
+    },
+  ],
+  [
+    'foreign private root',
+    (e) => {
+      e.request.temporary = '/private/foreign';
+    },
+  ],
+  [
+    'changed configuration bytes',
+    (_e, c) => {
+      c[0]!.configuration = bytes({ ...config(), control_fd: 35 });
+    },
+  ],
+  [
+    'PID-prefix native ID',
+    (e) => {
+      e.request.configuration.invocationId = '100-spoofed';
+    },
+  ],
+  [
+    'foreign journal PID',
+    (_e, c) => {
+      c[0]!.journal = journal([{ ...started(), custodian_pid: 999 }, complete()]);
+    },
+  ],
+  [
+    'partial cleanup record',
+    (_e, c) => {
+      c[0]!.journal = c[0]!.journal.subarray(0, -1);
+    },
+  ],
+  [
+    'rewritten journal prefix',
+    (_e, c) => {
+      c[0]!.previousJournal = Buffer.from('foreign');
+    },
+  ],
+  [
+    'missing actual EOF',
+    (_e, c) => {
+      c[0]!.journal = journal([started(), { ...complete(), stdout_eof: false }]);
+    },
+  ],
+];
+for (const [name, change] of missingFaults)
+  test('missing-SID branch refuses ' + name, () => {
+    const e = missingExpectation(),
+      c = [candidate()];
+    change(e, c);
+    const result = correlateMissingSidPreToolUseCustody(c, e);
+    assert.equal(result.state, 'unknown', name);
+    assert.notEqual(result.error, null, name);
+  });
 test('current native Child receipts correlate by content, without PID filename/ID prefix assumptions', () => {
   const result = observe();
   assert.equal(result.state, 'confirmed_settled');
@@ -509,6 +705,126 @@ test('collector retains exact private native bytes, hashes and original inode pr
       assert.equal(record.bytes, original.length);
       assert.equal(record.sha256, createHash('sha256').update(original).digest('hex'));
     }
+  });
+});
+test('missing-SID collector preserves private-source and monotonic-inode checks', () => {
+  withFilesystem((f) => {
+    const e = missingExpectation(f.directory);
+    const first = f.collector.collectMissingSidPreToolUse(e);
+    assert.equal(first.state, 'confirmed_settled');
+    assert.equal(first.provenance, 'native-only-missing-sid-pre-tool-use');
+    const retained = fs.readFileSync(f.journal);
+    fs.unlinkSync(f.journal);
+    fs.writeFileSync(f.journal, retained, { mode: 0o600 });
+    const replaced = f.collector.collectMissingSidPreToolUse(e);
+    assert.equal(replaced.state, 'unknown');
+    assert.match(replaced.error!, /source identity changed/);
+  });
+});
+test('missing-SID collector refuses a different temporary root and changed pinned configuration', () => {
+  withFilesystem((f) => {
+    const e = missingExpectation(f.directory);
+    e.request.temporary = '/foreign';
+    assert.equal(f.collector.collectMissingSidPreToolUse(e).state, 'unknown');
+  });
+  withFilesystem((f) => {
+    const e = missingExpectation(f.directory);
+    assert.equal(f.collector.collectMissingSidPreToolUse(e).state, 'confirmed_settled');
+    fs.chmodSync(f.configuration, 0o600);
+    fs.writeFileSync(f.configuration, bytes({ ...config(), control_fd: 35 }));
+    fs.chmodSync(f.configuration, 0o400);
+    const changed = f.collector.collectMissingSidPreToolUse(e);
+    assert.equal(changed.state, 'unknown');
+    assert.match(changed.error!, /source identity changed/);
+  });
+});
+function firstExpectation(
+  e: MissingSidPreToolUseExpectation
+): MissingSidPreToolUseFirstExpectation {
+  const { configuration, ...request } = e.request;
+  void configuration;
+  return { ...e, request };
+}
+test('first missing-SID collector observation pins exact validated native bytes without typed ID', () => {
+  withFilesystem((f) => {
+    const e = firstExpectation(missingExpectation(f.directory));
+    assert.equal(Object.hasOwn(e.request, 'configuration'), false);
+    assert.equal(Object.hasOwn(e, 'invocationId'), false);
+    const observed = f.collector.observeMissingSidPreToolUse(e);
+    assert.equal(observed.state, 'confirmed_settled');
+    assert.equal(observed.provenance, 'native-only-missing-sid-pre-tool-use');
+    assert.deepEqual(observed.configurationWitness, {
+      source: f.directory,
+      sha256: createHash('sha256').update(fs.readFileSync(f.configuration)).digest('hex'),
+      invocationId: 'independent-typed-request',
+    });
+    if (observed.configurationWitness === null) throw new Error('validated witness absent');
+    assert.equal(
+      f.collector.collectMissingSidPreToolUse({
+        ...e,
+        request: { ...e.request, configuration: observed.configurationWitness },
+      }).state,
+      'confirmed_settled'
+    );
+  });
+});
+test('first missing-SID observation refuses incomplete native journal without issuing a pin', () => {
+  withFilesystem((f) => {
+    fs.writeFileSync(f.journal, journal([started()]));
+    const e = firstExpectation(missingExpectation(f.directory));
+    const pending = f.collector.observeMissingSidPreToolUse(e);
+    assert.equal(pending.state, 'unknown');
+    assert.equal(pending.configurationWitness, null);
+    assert.match(pending.error!, /terminal settlement unavailable/);
+    fs.appendFileSync(f.journal, journal([complete()]));
+    const settled = f.collector.observeMissingSidPreToolUse(e);
+    assert.equal(settled.state, 'confirmed_settled');
+    assert.equal(settled.configurationWitness?.invocationId, 'independent-typed-request');
+  });
+});
+test('first observation enforces original input, event, birth and native receipt chain before pinning', () => {
+  for (const name of [
+    'Stop event',
+    'over-limit native timeout',
+    'payload session identity',
+    'old original birth',
+    'foreign chain',
+    'foreign journal PID',
+    'partial cleanup record',
+  ]) {
+    withFilesystem((f) => {
+      const e = missingExpectation(f.directory),
+        c = [candidate()];
+      const change = missingFaults.find(([label]) => label === name);
+      assert.notEqual(change, undefined);
+      change![1](e, c);
+      fs.writeFileSync(f.journal, c[0]!.journal);
+      const rejected = f.collector.observeMissingSidPreToolUse(firstExpectation(e));
+      assert.equal(rejected.state, 'unknown', name);
+      assert.equal(rejected.configurationWitness, null, name);
+    });
+  }
+});
+test('first observation accepts the native timeout upper boundary and refuses multiple private configurations', () => {
+  withFilesystem((f) => {
+    const e = firstExpectation(missingExpectation(f.directory));
+    (e.request.args as string[])[12] = '120000';
+    e.coverage.expected!.frontendCommand = [e.request.executable, ...e.request.args].join(' ');
+    assert.equal(f.collector.observeMissingSidPreToolUse(e).state, 'confirmed_settled');
+  });
+  withFilesystem((f) => {
+    const foreign = path.join(f.temporary, 'foreign');
+    fs.mkdirSync(foreign, { mode: 0o700 });
+    fs.writeFileSync(path.join(foreign, 'configuration.json'), bytes(config()), { mode: 0o400 });
+    fs.writeFileSync(path.join(foreign, 'cleanup.jsonl'), journal([started(), complete()]), {
+      mode: 0o600,
+    });
+    const rejected = f.collector.observeMissingSidPreToolUse(
+      firstExpectation(missingExpectation(f.directory))
+    );
+    assert.equal(rejected.state, 'unknown');
+    assert.equal(rejected.configurationWitness, null);
+    assert.match(rejected.error!, /absent\/ambiguous/);
   });
 });
 test('collector accepts only extension of its observed native journal prefix', () => {
