@@ -41,8 +41,8 @@ acceptance:
     given: 'caller-selected named embedded JSON decoders with distinct admission and failure behavior'
     when: 'the DSH adapter factory and occurrence wrapper execute exact string and nonstring arguments'
     then: >-
-      the factory captures decoder and revision identity, sends original string
-      bytes as text only, skips nonstring decoding, preserves non-syntax failure
+      the factory captures decoder and revision identity, passes exact decoded
+      argument string text, skips nonstring decoding, preserves non-syntax failure
       identity and caller state, and keeps syntax-only raw fallback without a
       default integer or recursion policy
 observability:
