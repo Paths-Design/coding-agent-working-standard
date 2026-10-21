@@ -197,8 +197,29 @@ function denyMergeEventLockAfterClose(caws, specId) {
   };
 }
 
+function observeMergeGit(repo) {
+  const git = (args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+  const mergeSha = git(['rev-list', '--first-parent', '--merges', '-n1', 'main']);
+  return {
+    mergeSha,
+    baseHead: git(['rev-parse', 'main']),
+    mergeParents: mergeSha
+      ? git(['rev-list', '--parents', '-n1', mergeSha]).split(' ').slice(1)
+      : [],
+    mergeBase: mergeSha ? git(['merge-base', mergeSha, 'main']) : null,
+    graph: git(['log', '--all', '--graph', '--format=%H %P %s']),
+  };
+}
+
 function assertMergeEventSplit(caws, specId, name, priorEntry) {
   const repo = path.dirname(caws);
+  // closeSpec may advance main with its governance auto-commit after the merge.
+  // Derive the merge object from Git, independently of the reported diagnostic.
+  const git = observeMergeGit(repo);
+  expect(git.mergeSha).toMatch(/^[0-9a-f]{40}$/);
+  expect(git.mergeParents).toHaveLength(2);
+  for (const parent of git.mergeParents) expect(parent).toMatch(/^[0-9a-f]{40}$/);
+  expect(git.mergeBase).toBe(git.mergeSha);
   expect(execFileSync('git', ['-C', repo, 'show', 'main:payload.txt'], { encoding: 'utf8' })).toBe(
     'work product\n'
   );
@@ -206,20 +227,22 @@ function assertMergeEventSplit(caws, specId, name, priorEntry) {
     'lifecycle_state: closed'
   );
   const events = readEvents(caws);
-  expect(
-    events.filter((event) => event.event === 'spec_closed' && event.spec_id === specId)
-  ).toHaveLength(1);
+  const closeEvents = events.filter(
+    (event) => event.event === 'spec_closed' && event.spec_id === specId
+  );
+  expect(closeEvents).toHaveLength(1);
+  expect(closeEvents[0].data.merge_commit).toBe(git.mergeSha);
   expect(events.filter((event) => event.event === 'worktree_merged')).toHaveLength(0);
   expect(fs.existsSync(path.join(caws, 'worktrees', name))).toBe(true);
   expect(JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))[name]).toEqual(
     priorEntry
   );
   expect(priorEntry).toBeDefined();
-  return execFileSync('git', ['-C', repo, 'rev-parse', 'main'], { encoding: 'utf8' }).trim();
+  return git.mergeSha;
 }
 
 /** Opt-in raw evidence for the root; each case writes a new private directory. */
-function retainMergeLockEvidence(label, caws, specId, name, sha, faultCount, outcome) {
+function retainMergeLockEvidence(label, caws, specId, name, faultCount, outcome) {
   const selected = process.env.CAWS_MERGE_DIAGNOSTIC_EVIDENCE_DIR;
   if (!selected) return;
   if (!path.isAbsolute(selected))
@@ -228,6 +251,13 @@ function retainMergeLockEvidence(label, caws, specId, name, sha, faultCount, out
   fs.mkdirSync(output, { mode: 0o700 });
   const write = (file, bytes) =>
     fs.writeFileSync(path.join(output, file), bytes, { flag: 'wx', mode: 0o600 });
+  write('outcome.json', JSON.stringify(outcome, null, 2) + '\n');
+  if (typeof outcome.err === 'string') {
+    write('stderr.txt', outcome.err);
+    write('stdout.txt', outcome.out);
+  }
+  const git = observeMergeGit(path.dirname(caws));
+  write('git-graph.txt', git.graph + '\n');
   const events = readEvents(caws);
   const lane = path.join(caws, 'worktrees', name);
   const specBytes = fs.readFileSync(path.join(caws, 'specs', `${specId}.yaml`));
@@ -235,7 +265,6 @@ function retainMergeLockEvidence(label, caws, specId, name, sha, faultCount, out
   write('spec.yaml', specBytes);
   write('events.jsonl', fs.readFileSync(path.join(caws, 'events.jsonl')));
   write('worktrees.json', registryBytes);
-  write('outcome.json', JSON.stringify(outcome, null, 2) + '\n');
   write(
     'state.json',
     JSON.stringify(
@@ -243,7 +272,10 @@ function retainMergeLockEvidence(label, caws, specId, name, sha, faultCount, out
         repo: path.dirname(caws),
         specId,
         name,
-        mergeSha: sha,
+        mergeSha: git.mergeSha,
+        baseHead: git.baseHead,
+        mergeParents: git.mergeParents,
+        mergeBase: git.mergeBase,
         faultCount,
         basePayload: execFileSync('git', ['-C', path.dirname(caws), 'show', 'main:payload.txt'], {
           encoding: 'utf8',
@@ -262,10 +294,6 @@ function retainMergeLockEvidence(label, caws, specId, name, sha, faultCount, out
       2
     ) + '\n'
   );
-  if (typeof outcome.err === 'string') {
-    write('stderr.txt', outcome.err);
-    write('stdout.txt', outcome.out);
-  }
 }
 
 afterAll(() => {
@@ -442,6 +470,7 @@ describe('merge-event lock acquisition preserves the original structured cause',
     } finally {
       spy.mockRestore();
     }
+    retainMergeLockEvidence('store', caws, specId, name, fault.count, result);
     expect(fault.count).toBe(1);
     expect(result.ok).toBe(false);
     expect(result.errors).toHaveLength(1);
@@ -461,7 +490,6 @@ describe('merge-event lock acquisition preserves the original structured cause',
     expect(outer.narrowRepair).toContain(
       `Re-running \`caws worktree merge ${name}\` will NOT help`
     );
-    retainMergeLockEvidence('store', caws, specId, name, sha, fault.count, result);
   });
 
   test('CLI --data exits one and renders the exact cause alongside existing split recovery', () => {
@@ -480,6 +508,7 @@ describe('merge-event lock acquisition preserves the original structured cause',
     } finally {
       spy.mockRestore();
     }
+    retainMergeLockEvidence('cli', caws, specId, name, fault.count, rendered);
     expect(fault.count).toBe(1);
     expect(rendered.code).toBe(1);
     const sha = assertMergeEventSplit(caws, specId, name, priorEntry);
@@ -494,6 +523,5 @@ describe('merge-event lock acquisition preserves the original structured cause',
       merge_commit: sha,
       merged_cause: [cause],
     });
-    retainMergeLockEvidence('cli', caws, specId, name, sha, fault.count, rendered);
   });
 });
