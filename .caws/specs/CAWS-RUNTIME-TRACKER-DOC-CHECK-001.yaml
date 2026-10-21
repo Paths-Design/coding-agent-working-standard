@@ -51,3 +51,8 @@ evidence:
     evidence_ref: "Inspected candidate a5f8e4c1: 'Continue the dependency order below' occurs 0 times; both 'governs the next execution' sites (L5886, L5983) designate the near-term 1-5 list under Ordered next work; the older list sits under '### Remaining parent obligations' (L5981) and its body from '1. Qualify R33' to Landing obligations hashes identically on main and candidate (shasum 7cfde3adce0f), all seven items retained. Source inspection only; does not establish that agents follow the ordering."
     recorded_at: "2026-10-21T21:44:29.262Z"
     commit_sha: a5f8e4c1
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "git ls-tree packages/caws-cli/tests/hooks/pytest: 10690d4b modules=12 conftest=1, main modules=13 conftest=1 with test_template_annotation_compat.py only on main; harness_kimi.py 'from __future__ import annotations' count 10690d4b=0 main=1 (8a758936 is not an ancestor of 10690d4b). Candidate a5f8e4c1 R21/R14 cells state exactly these. The 3.9.6 interpreter context is cited from the 8a758936 commit message, not re-executed."
+    recorded_at: "2026-10-21T21:44:32.351Z"
+    commit_sha: a5f8e4c1
