@@ -48,3 +48,9 @@ non_functional:
 contracts:
   - name: 'native-transcript-registry'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed c69fdfcc: historical seven-module/six-adapter order, thirteen concatenated noise prefixes, first-match empty ownership; checked18/22 raw tests186 each and independent actual-Python 51-step comparisons each exit0. Default DSH decoder explicitly injected; no production consumer claim. Artifact verification binds checked bytes and frozen reference sources to commit; four selected semantic mutants supplement finite tests. Raw artifacts: /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/native-transcript-registry/artifact-verification.json and reference/differential-node18.json,reference/differential-node22.json,commands/checked-tests18,commands/checked-tests22. CLI --verify checks commit reachability only; behavioral adjudication derives from inspected raw external artifacts. Absolute artifact-path citation refused before write; retained commands/evidence-a1."
+    recorded_at: "2026-10-21T08:48:44.198Z"
+    commit_sha: c69fdfcc34dd0ebfb63c2100a91f103289f6662d
