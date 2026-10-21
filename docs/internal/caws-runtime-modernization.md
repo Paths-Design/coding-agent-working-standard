@@ -149,12 +149,15 @@ confer authority or acceptance.
 | Python pytest entrypoint retirement            | Root integration E170; separately closed `CAWS-NATIVE-PYTEST-ENTRYPOINT-001`, chat `01a15984-840d-7301-a25a-7e681fd83b29`          | Original cold baseline and fresh combined-parent lifecycle, missing-pretest rejection and owned cleanup are observed; the other12 pytest modules plus conftest remain parent obligations                                                                                                                       |
 | Transcript adapters and interpretation         | Root integrates closed Claude/Qwen/Kimi/DSH/OpenCode/Zcode and numeric-token components; peers own only separately assigned slices | Claude and token imports are observed in E168/E179. E190 imports the five closed Qwen/Kimi/DSH/OpenCode/Zcode components; E192 imports their ordered registry and exercises combined parent transcript contracts. Acquisition, cache, writer, profile selection and installed consumption remain parent-owned. |
 
-The bound `CAWS-SQLITE-STATIC-BUILD-001` component owns the pinned build helper,
-its hostile tests and `packages/caws-cli/tsconfig.vnext.json` in the
-`sqlite-static-build` lane. The parent admits the configuration as support and
-does not write it concurrently. Root retains Cargo/native admission, raw SQL
-acquisition, projection, consumer integration and the component's eventual
-parent import; an uncommitted helper does not advance coverage or acceptance.
+The closed `CAWS-SQLITE-STATIC-BUILD-001` component is imported in E198. Parent
+ownership covers its helper, hostile tests and
+`packages/caws-cli/tsconfig.vnext.json`; the temporary configuration support
+partition is discharged. Root retains Cargo/native admission, raw SQL
+acquisition, projection and consumer integration.
+`CAWS-NATIVE-AR-INSPECTION-001` is superseded without source changes after
+guarded worker writes refused despite its CLI claim. Root accepts the complete
+inspector contract; that disposition does not establish implementation or
+resolve the effective hook/session identity mismatch.
 
 The reviewed legacy client falls back inline on every non-success response, and
 its unchanged daemon/renderer do not acquire the native owner lock.
@@ -4603,6 +4606,71 @@ Additional bounded evidence and unresolved dependencies:
   renderer behavior. R09/R18, coverage31/37 and parent acceptance0/8 retain
   their previously stated boundaries.
 
+- E197: Root retains a direct Cargo cache counterexample under
+  `native-sqlite-source/rust-cache-control/`, with independently checked raw
+  results in `native-sqlite-source/cache-control-readback.json`. A new private
+  prefix copies E193's authenticated archive. The initial offline single-job
+  Rust build and in-memory raw-value executable exit0. The sys rlib's extracted
+  sqlite3.o hashes `4f1b3c6b…4873bad`, matching the retained C object.
+
+  After every initial child completes, root empties only that disposable archive
+  copy. Rebuilding the unchanged target still exits0, reports
+  `Fresh libsqlite3-sys v0.38.2`, retains executable SHA256 `c4d33238…827376f`,
+  and runs with identical SQLite/raw-value output. The same corrupted prefix
+  with a new target exits101: `failed to add native library` /
+  `memory map must have a non-zero length`; no executable exists there. Original
+  E193 source/archive bytes remain unchanged. These controls ground the
+  cached-byte distinction; a parent build.rs hash of a present archive does not
+  identify already embedded sys rlib bytes.
+
+  The parent build coordinator must stage an explicit reviewed prefix before
+  Cargo, require an exclusive fresh target, and verify the actual embedded C
+  member inventory after building. The selected sys path copies prebuilt
+  bindgen_3.34.1.rs; INCLUDE_DIR does not generate Rust bindings, so bind the
+  actual prebuilt bytes/features separately from the C recipe's header. Current
+  package qualification scripts invoke raw Cargo and render-owner derives
+  crate/target paths; route actual callers through the coordinator's returned
+  artifacts. Framing inspection and explicit accounting for extra Rust members
+  remain owed. No cache bypass, native consumption, immutable compiler/SDK
+  custody or parent acceptance is inferred from this private probe.
+
+- E198: Root imports the exact three closed component files from
+  `91a64e8bc358f36f57c5daa8df52cfe67ffefb77`, landed by merge `b7319605` and
+  close `8bb5e019`. Root reads the closed/completed spec, A1–A4 records and
+  matching events10063–10066 plus lifecycle10067–10069; the source lane is
+  absent and all three paths have clear contention. Audited parent scope
+  admission restores configuration ownership from support to scope.in. The new
+  inspector child is separately closed superseded by the parent at10075 and
+  ordinarily destroyed at10076, with no source writes or acceptance passes. Root
+  inspects that actual spec/disposition and accepts the remaining work; exact
+  guard/claim evidence is retained under `native-ar-inspection-disposition/`.
+  The effective rejected hook actor is not exposed, so parent-session
+  attribution remains unverified.
+
+  `sqlite-static-build-parent/import-readback.json` verifies candidate/main/
+  imported bytes. The ordinary parent package build exits0 and emits the helper
+  plus all 22 transcript modules; focused Jest55 checks each on actual
+  Node18.20.8/22.19.0 and scoped lint exit0. Tests exercise request/file
+  refusals and real process failure/abort/deadline/output boundaries, without
+  substituting tiny fixtures for authenticated SQLite. A fresh explicit parent
+  compiled-helper call executes all six actual steps exit0/direct-child-reaped
+  and produces archive1541032 bytes SHA256 `5b6d8787…6241693`, matching E193 and
+  both final child host roots. Root verifies every returned artifact size/hash.
+  Raw argv, channels, versions, compiled-module hashes and host receipts are
+  retained in `sqlite-static-build-parent/checks-readback.json` and its cited
+  files.
+
+  Child review's final-directory-await cancellation counterexample is retained;
+  root inspects the repaired cancellation/deadline check immediately before
+  completion-link dispatch. After-dispatch cancellation, hard OS I/O deadlines,
+  immutable tool/SDK images and descendant quiescence are outside this claim.
+  Node18.0 actual helper execution is historical child evidence; its Jest
+  precollection failure remains retained, and parent Jest validation uses
+  18.20.8. Every helper result remains NOT_ADOPTED, including reviewed-pin
+  match. Tooling/package emission does not replace native acquisition, renderer
+  consumption, installed selection or a Python production path. R09/R18 remain
+  unreplaced; coverage31/37 and parent acceptance0/8 do not advance.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -4709,22 +4777,23 @@ progress and does not replace that transaction or its event readback.
    owner; its reserved source and failed ownership control remain obligations.
    Keep the refused CLI inventory unexecuted pending a supported resolution; do
    not infer an attempted foreign write from the refusal alone.
-4. Land and integrate the owned pinned-build component, then turn E193/E195
-   static-link and Rust raw-cell feasibility into a durable
-   reviewed-prefix/Cargo link guard. Implement native fixed-query acquisition
-   with snapshot, cancellation and lossless SQL-value custody. Connect the
-   imported registry to transactional rendering/writing and retain E165/E166
-   source/profile controls. E196 requires a store-specific timestamp conversion,
-   explicit integer profile and codepoint-preserving JSON projection; the
-   generic decoder and JS-string AST cannot silently supply that contract. R09
-   and R18 remain unreplaced; standalone registry composition does not discharge
-   production consumer parity.
+4. Turn E198's imported pinned builder and E193/E195/E197 linkage/cache controls
+   into a reviewed-prefix coordinator with exclusive fresh Cargo target and
+   actual embedded-member verification. Root owns the superseded inspector's
+   complete implementation and the native admission guard. Implement native
+   fixed-query acquisition with snapshot, cancellation and lossless SQL-value
+   custody. Connect the imported registry to transactional rendering/writing and
+   retain E165/E166 source/profile controls. E196 requires a store-specific
+   timestamp conversion, explicit integer profile and codepoint-preserving JSON
+   projection; the generic decoder and JS-string AST cannot silently supply that
+   contract. R09 and R18 remain unreplaced; standalone registry composition does
+   not discharge production consumer parity.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E196 retain the historical candidates, failures and bounded observations;
+E167–E198 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is31/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
