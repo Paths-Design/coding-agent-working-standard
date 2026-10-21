@@ -35,6 +35,7 @@ invariants:
   - 'Metadata directory choice, negative candidates, listings, read outcomes and selected TZ/calendar semantics participate in preparation and freshness.'
   - 'Missing or empty sources preserve existing human history as retained noncurrent; proposed removals never authorize deletion and prepared never means published.'
   - 'Native root/path/input admission, writer custody, publication, current-use and render-state finalization remain parent-owned; selected unsupported overrides fail explicitly without fallback.'
+  - 'Subagent transcript linkage names the actual agent-X.jsonl fork identified by agent-X.meta.json; the legacy .meta target mismatch is intentionally repaired rather than reproduced.'
 acceptance:
   - id: A1
     given: 'observed transcript bytes and selected UTF8/numeric/registry profile'
