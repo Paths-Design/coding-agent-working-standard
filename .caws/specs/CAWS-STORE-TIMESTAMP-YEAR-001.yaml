@@ -63,3 +63,8 @@ evidence:
     evidence_ref: "Direct source inspection plus actual focused Jest68 pass exit0 /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/compile-01/jest-hostile-result.json and meaningful mutant kills2-5,264,265,273,274,314,320. Unknown-profile/accessor/raw-field/seconds/WeakSet ownership and typed error precedence retained. Remaining malformed-array/port-message and calendar endpoint test blind spots explicitly listed in /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/committed-readback-final.json; inspected source still enforces these. No universal test sensitivity claim."
     recorded_at: "2026-10-21T20:23:31.671Z"
     commit_sha: "41999be7615850221719a93f39e67486b68a12a6"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Whole-file mutation03 actual Strykerexit0; official assert exit0 PASS91.14%391/429,391Killed36Survived2NoCoverage,zero invalid/pending. Unchanged80floor. Embedded source and test hashes equal41999be7; direct receipt /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/timestamp-year/committed-readback-final.json. Preserve failed invalid mutation01 and passing02 plus03 rawreports/logs. Consequential survivors inspected; no demonstrated production defect, explicit test gaps retained. No native or cutover acceptance."
+    recorded_at: "2026-10-21T20:23:41.955Z"
+    commit_sha: "41999be7615850221719a93f39e67486b68a12a6"
