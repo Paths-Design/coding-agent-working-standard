@@ -106,3 +106,10 @@ evidence:
     command: node packages/caws-cli/tests/transcripts/run.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/candidate-06/compiled/tests/transcripts
     exit_code: 0
     commit_sha: "199fa5e1e1e38ff072b6f40f3987f211f19a3070"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Executed observed audit/hook/metadata tests cover ordering, higher-priority absent/empty/failed candidates, last-wins metadata and actual matching fork.jsonl repair, context/calendar identity and CR-lineage numeric skip. Calendar is an explicit selected caller port; production timezone provider and native freshness/current-use remain parent-owned, not verified. Inspected durable receipt /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/qualification-final.json SHA25620c9805a07c3f5b53c834524433b1defec8eef95ced4740629dfcaa25f3b4e93. CLI verify here checks commit reachability only; absolute external artifact was separately inspected/offline checked and is not a machine artifact citation."
+    recorded_at: "2026-10-21T19:38:12.844Z"
+    command: node packages/caws-cli/tests/transcripts/run.cjs /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/candidate-06/compiled/tests/transcripts
+    exit_code: 0
+    commit_sha: "199fa5e1e1e38ff072b6f40f3987f211f19a3070"
