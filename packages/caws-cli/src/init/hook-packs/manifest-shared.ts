@@ -605,7 +605,9 @@ import { isAdapterCoveredSurface } from './types';
 // v99: block-dangerous.sh requires complete arm-time and live agent identity
 // before kill escalation, stamps each latch arm with a distinct generation, and
 // accepts the native executor's explicit containment descriptor.
-export const SHARED_PACK_VERSION = 99;
+// v100: lib/harness_kimi.py defers annotations so the session renderer imports
+// under the stock macOS python3 (3.9).
+export const SHARED_PACK_VERSION = 100;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
