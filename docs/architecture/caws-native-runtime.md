@@ -414,11 +414,12 @@ discarding it. Confirmed source close and a written CLOSED frame can accompany
 an exhausted, stopped or failed acquisition; the first acquisition failure and
 row metrics retain that distinction. The original frontend keeps this result
 through its remaining output, handoff and cleanup, including a later engine
-protocol failure. Its failure diagnostic exposes finite completion metadata, not
-source cell values. This is frontend-local retention, not resident ownership,
-engine-consumption proof or an exhausted-and-settled publication permit. Moving
-acquisition and settlement into the surviving actor remains an integration
-obligation.
+protocol failure. The additional completion metadata contains the end, a
+failure-presence flag and delivered-row count; it does not serialize the
+retained acquisition's cell or error payloads. This is frontend-local retention,
+not resident ownership, engine-consumption proof or an exhausted-and-settled
+publication permit. Moving acquisition and settlement into the surviving actor
+remains an integration obligation.
 
 ## Functional acceptance and proof
 
