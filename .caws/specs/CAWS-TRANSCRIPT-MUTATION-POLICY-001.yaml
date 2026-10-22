@@ -50,3 +50,10 @@ evidence:
     command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/run-private.cjs
     exit_code: 0
     commit_sha: "4932954144212ea4739de31c164568e732b2a6b9"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "49329541 store-selection.json records exact6sources/9tests, timestamp source/test,80floor,perTest,noincremental,normalbuildCommand; missing-timestamp-test and unrelated-transcript-test controls exit1 at intended selection assertions. Raw commands.json and controlreports retained at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/4932954144212ea4739de31c164568e732b2a6b9. Canonical mutation execution/floor achievement excluded; root owns qualification."
+    recorded_at: "2026-10-22T00:14:27.910Z"
+    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/run-private.cjs
+    exit_code: 0
+    commit_sha: "4932954144212ea4739de31c164568e732b2a6b9"
