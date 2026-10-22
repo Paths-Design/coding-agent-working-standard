@@ -31,6 +31,7 @@ scope:
 invariants:
   - 'Native original identity and continuous writer custody govern effects; prepared bytes confer no authority'
   - 'No publication after stopped or unsettled acquisition; retain publication uncertainty and durable replay rejection after heavy record release'
+  - 'The 256 limit bounds live heavy work, not durable terminal original-ID history; persist the accepted original identity before effects and an exact validated CONSUMED tombstone before releasing heavy records; preserve unknown fences, continuous writer custody and fail-closed finite history exhaustion without ID eviction.'
 acceptance:
   - id: A1
     given: 'original native acquisition and SessionEnd captures'
