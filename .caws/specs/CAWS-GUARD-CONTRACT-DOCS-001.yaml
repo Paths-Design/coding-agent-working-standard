@@ -9,6 +9,7 @@ created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
     - 'Existing shared guard architecture, setup, README and command-analysis guide'
+    - 'Existing worktree-isolation guide: merge preview, application defaults and automatic teardown'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -37,6 +38,13 @@ acceptance:
     given: 'the committed four-file diff and original landing request'
     when: 'root grounds independent review and existing source-owner feedback'
     then: 'all four edits are included in coherent source landing with raw scoped checks and no deferred documentation debt.'
+  - id: A4
+    given: 'the shipped worktree merge command, registered options and store writer'
+    when: 'the existing worktree-isolation guide describes experimentation and merging'
+    then: >-
+      the examples leave the target worktree before removal, preview with --dry-run,
+      distinguish default apply and --apply from preview, explain --no-close
+      teardown, and require no redundant destroy after a successful merge
 observability:
   - 'Retain exact committed diff, source coordinates, formatter/link checks and raw review feedback; no generated review report or native proof is inferred.'
 rollback:
