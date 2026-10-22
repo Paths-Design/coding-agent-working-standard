@@ -1,0 +1,25 @@
+id: CAWS-MIGRATION-GUIDE-PARENT-001
+title: 'Integrate qualified migration guide into runtime source'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-22T05:22:12.354Z'
+updated_at: '2026-10-22T05:22:12.354Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Runtime candidate operating guide integration'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/guides/sterling-machine-runtime-migration.md'
+  out: []
+invariants:
+  - 'Qualified guide bytes remain identical across main and runtime source without implying registration or machine adoption.'
+acceptance:
+  - id: A1
+    given: 'qualified main guide84079dfb and source560f29b7'
+    when: 'the guide is imported through an owned source-based lane and landed normally'
+    then: 'source guide bytes match the qualified main guide SHA1d5041f4 and the parent remains active with the selected408 runtime unchanged.'
+non_functional: {}
+contracts: []
