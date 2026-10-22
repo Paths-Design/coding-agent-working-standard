@@ -149,6 +149,23 @@ acceptance:
       including the owner write, exits 2 with a guard-attributed git-unavailable
       diagnosis naming git, and the target stays absent, where the pre-repair guards
       (39d06b1a, 4ac64fbf) exited 0 with empty output.
+  - id: A9
+    given: >-
+      a governed repository with real linked worktrees s-wt (session rp-session-s)
+      and f-wt (another session)
+    when: >-
+      worktree-write-guard adjudicates a Write from s-wt of the absolute foreign
+      target, of ../f-wt/src/payload.ts with the payload cwd s-wt, of src/own.ts
+      with cwd s-wt, of ../f-wt/src/payload.ts with the project directory at the
+      canonical root and the cwd in s-wt, and of ../f-wt/src/payload.ts with no
+      payload cwd on claude-code (default and bypassPermissions) and on zcode
+    then: >-
+      the absolute and both relative foreign spellings are refused with exit 2 by
+      ownership, the own relative write exits 0, a missing cwd asks naming the
+      relative path on claude-code (exit 2 when asking is impossible), and zcode
+      resolves against the session project directory and refuses by ownership; at
+      2ce7b7ef the relative foreign write and the missing-cwd write exited 0 with
+      empty output.
 non_functional: {}
 contracts: []
 evidence:
