@@ -16,6 +16,7 @@ import {
 } from '../application/agent-heartbeat';
 import { pollAgentMessages, type MessagePollApplicationPayload } from '../application/message-poll';
 import type { LeaseContext } from '../kernel';
+import { ingressActorContext } from './actor-context';
 import type { HandlerResult } from './composer';
 import { createContextGitPort } from './context';
 import {
@@ -331,7 +332,12 @@ export async function executeAgentHeartbeat(
   }
   let mail = { text: '', offers: [] as NonNullable<HandlerResult['offers']> };
   try {
-    if (!signal.aborted && ports.now().getTime() < request.deadlineEpochMs) {
+    // Mail addressed to the session is offered only where its context will read it.
+    if (
+      ingressActorContext(request.inputJson) === 'main' &&
+      !signal.aborted &&
+      ports.now().getTime() < request.deadlineEpochMs
+    ) {
       const configured = Number(environment.CAWS_MESSAGE_OFFER_TTL_MS || 30_000);
       const ttl = Number.isFinite(configured)
         ? Math.min(300_000, Math.max(1, Math.floor(configured)))
