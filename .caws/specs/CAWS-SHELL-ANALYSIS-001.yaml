@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: shell-analysis
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-21T23:59:42.198Z'
+updated_at: '2026-10-22T00:16:06.655Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -53,6 +53,8 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/caws-state.sh
     - packages/caws-cli/tests/hooks/bats/guard-realpath-python-absent.bats
+    - README.md
+    - docs/architecture/hook-pack-shared-core.md
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
