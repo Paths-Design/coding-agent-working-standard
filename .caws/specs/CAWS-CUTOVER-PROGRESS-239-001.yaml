@@ -37,3 +37,8 @@ evidence:
     evidence_ref: "Ledger E239-E241 at5dd7f8de reconciles license292/source1d004, residentaa53/sourcebb3 acceptance+events and actual package/FIFO/build/raw artifacts; failed attempts, cache mutation1, R01combined293 normal build/Jest172/0, mailcleanup and multi-endpoint/Git-failure obligations retained. Independent read-only committed-candidate feedback grounded at parser/guard coordinates and discharged by5dd. Five gates pass over one path; format/diff0; 33/37partial and0/8parent unchanged. Commit verification establishes reachability only."
     recorded_at: "2026-10-22T04:21:46.248Z"
     commit_sha: "5dd7f8deadcc1229ec45196eab74fc9a3a661bb8"
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Source ledger landed at560f29b7 and clean parent bytes SHAe7fd8c90389a979769b2c9ee23ae00907d6e5e5296d30f717dfb4f598269b023. Main-based owned lane cutover-progress-239-main remains unchanged atfb75: installed408 guard refused the compound normal git-show ledger import before execution as claimed scope. Separate claim confirms OWNED and scopeADMIT. No import, alternate carrier, runtime guard change or main/source synchronization is claimed. Root retains publication; source/claim-oracle diagnosis in progress. Parent active0/8 and machine408 unchanged."
+    recorded_at: "2026-10-22T04:30:23.997Z"
+    commit_sha: "5dd7f8deadcc1229ec45196eab74fc9a3a661bb8"
