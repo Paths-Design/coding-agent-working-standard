@@ -576,14 +576,35 @@ caws message poll --wait 60000
                           # directed messages; not authority, verify claims before acting
 ```
 
-Auto-delivered mail surfaces only on a main-thread tool call. A Claude Code
-subagent's tool calls carry its parent's session id. The heartbeat withholds
-delivery when the hook payload carries a top-level `agent_id`, and also when it
-cannot tell whether one is present. The message then stays queued for the
-parent's next tool call of its own. An orchestrator waiting on background
-subagents receives mail when it next runs a tool, or immediately with
-`caws message poll`. Leave polling to the main thread: CAWS cannot tell a poll
-run from a subagent's shell from one the parent runs.
+The heartbeat decides whether to auto-deliver mail from its own ingress, the
+bytes its invocation reads on stdin. It offers mail only when that ingress is a
+well-formed JSON object with no top-level `agent_id` key. Otherwise the message
+stays queued for a later call, in either of two cases:
+
+- The ingress carries an `agent_id`, so the call is a subagent's.
+- The heartbeat cannot classify the ingress: the `agent_id` is invalid, or the
+  input is empty, undecodable, BOM-prefixed or not an object.
+
+The classifier recognizes subagents only by that key. A surface whose subagent
+calls omit `agent_id` is classified main-thread.
+
+The supported observation is Claude Code: its subagent tool calls carry the
+parent's session id plus a top-level `agent_id`, so their mail waits for the
+parent's own next tool call.
+
+Three paths fall outside this contract:
+
+- **Installed runtimes without this classifier.** A machine runtime snapshot
+  whose heartbeat lacks it delivers into subagents.
+- **Project dispatchers.** They pass handlers the parser's re-serialized
+  payload, or empty input on the inherited-`HOOK_TOOL_NAME` fast path, instead
+  of the harness's original bytes.
+- **Codex.** Codex subagent payloads have not been observed.
+
+On any of these paths, an orchestrator running background subagents reads its
+mail with `caws message poll` on the main thread rather than relying on
+injection. CAWS cannot tell a poll run from a subagent's shell from one the
+parent runs.
 
 There is no pre-push range check: provenance is enforced at the merge boundary
 by `caws worktree merge`, which refuses a lane carrying commits outside its
