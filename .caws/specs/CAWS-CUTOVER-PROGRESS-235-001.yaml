@@ -31,3 +31,10 @@ acceptance:
     then: 'both ledger byte streams match and record completed bounded units, raw evidence, false-confidence limits, exact remaining owners and documentation obligations without changing unearned coverage or acceptance.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exact R21 test blob795947e8 equals main-landed c667; predecessor absent; integrated Jest15 checks terminal0 from source cc95efeb with shared dependency paths, later ledger-only commits. Raw r21-integrated-jest json/stdout/stderr/exit under /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/cutover-progress-235; report SHAe7fac74e75a2694d82a51f5273faf9721c3ddd15417f3ed1733ed39536f431ce. Governing feature table37 unique rows; scope review3commits3paths0out-of-scope; gates0 and doctor0E3W4I; independent committed feedback grounded. Source integration is bounded test retirement, not productionPython/native/adoption. Commit verification establishes reachability only, not rerun."
+    recorded_at: "2026-10-22T01:10:14.202Z"
+    exit_code: 0
+    commit_sha: c429e754fba4bf3822f0b39ba23c53a12d999525
