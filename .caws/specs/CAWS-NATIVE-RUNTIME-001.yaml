@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-22T02:30:22.366Z'
+updated_at: '2026-10-22T02:52:57.658Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -81,7 +81,6 @@ scope:
     - packages/caws-cli/tests/runtime/render-writer-client.test.js
     - packages/caws-cli/tests/runtime/runtime-asset-fixture.js
     - packages/caws-cli/tests/runtime/scheduler.test.js
-    - packages/caws-cli/tests/runtime/selection.test.js
     - packages/caws-cli/tests/runtime/service-client.test.js
     - packages/caws-cli/tests/runtime/service-image.test.js
     - packages/caws-cli/tests/runtime/service-offer.test.js
@@ -243,6 +242,7 @@ scope:
     - scripts/install-cli-snapshot.test.mjs
     - packages/caws-cli/.gitignore
     - packages/caws-cli/tests/docs/package-license-transport.test.js
+    - packages/caws-cli/tests/runtime/selection.test.js
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
