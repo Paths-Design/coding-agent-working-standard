@@ -11,6 +11,7 @@ blast_radius:
     - 'Ordinary store mutation runner and pinned Jest environment observer'
     - 'Run-bound baseline evidence validation and hostile-path contract tests'
     - 'Awaited public Stryker API launcher and explicit terminal outcome custody'
+    - 'Original-parent mutation witness and public-runner job and suite admission'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -40,8 +41,9 @@ invariants:
   - 'The launcher uses the pinned public Stryker API with the same configFile and logLevel; dryRunOnly is omitted when the CLI flag is absent, and successful Promise resolution never resets an existing nonzero process exit code.'
   - 'Only context-matched code submission to the compiler reference captured at observer module load and invocation of its returned module body can satisfy per-suite positives and the six-target union; missing, stale or unsupported bootstrap evidence fails closed.'
   - 'The trusted pinned bootstrap is an explicit component boundary, not intrinsic compiler identity or defense against arbitrary earlier code execution. Preserve the transforming pre-capture wrapper counterexample; broader compiler custody, native and child-consumer proof remain parent obligations accepted by lead c5d9aeae-7064-4cbb-a3f3-fc5670c8103b.'
-  - 'Bootstrap plugins are the two existing declared jest-runner and typescript-checker packages with appendPlugins empty; unrelated installed sibling packages cannot enter through wildcard discovery.'
   - 'Store qualification requires captured original bootstrap tools plus the actual worker startup and normalized constructor topology. Unsupported Node or JEST_JASMINE influence, package Jest configuration and selected-suite environment docblocks refuse before API execution or qualification.'
+  - 'Bootstrap plugins are the existing declared jest-runner and typescript-checker packages plus the captured original scripts/mutation-test-runner.mjs local descriptor for store, delegating the public stock Jest factory; appendPlugins remains empty and unrelated installed siblings cannot enter through wildcard discovery. No dependency, lockfile, shared runtime, global hook or additional production process changes are authorized by this descriptor.'
+  - 'Original-spawn admission, actual TestRunner job identity and preconstructor Jest suite health must reach the original parent private membership, successful-producer close byte pins and sticky refusal through both outer validation branches, report join and publication. A2 remains FAIL until genuine six-target/nine-suite healthy outer qualification and consequential fresh forged-client refusal; component, fixture-retention and socket probes cannot confer acceptance.'
 acceptance:
   - id: A1
     given: >-
