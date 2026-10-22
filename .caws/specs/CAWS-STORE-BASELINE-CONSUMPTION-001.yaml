@@ -50,9 +50,15 @@ acceptance:
       standing; intrinsic compiler identity and arbitrary prior monkeypatch defense
       are not inferred
   - id: A2
-    given: 'repeated loads, teardown, reattachment, foreign hook replacement and observation failures'
+    given: >-
+      repeated loads, teardown, reattachment, replacement of the captured VM hook
+      and observation failures within the trusted pinned bootstrap boundary
     when: 'observer lifetimes transition or artifacts are lost, replaced, malformed or exceed finite caps'
-    then: 'stale or incomplete evidence cannot qualify and subject return/throw identity plus owned restoration are preserved.'
+    then: >-
+      stale or incomplete observations cannot qualify, returned-body return/throw
+      identity and owned restoration are preserved, and replacement after
+      compiler-reference capture refuses new standing; an arbitrary pre-capture
+      wrapper is retained as an unsupported-influence counterexample
   - id: A3
     given: 'ordinary store runner inputs and sandbox build receipts'
     when: 'it completes its initial baseline'
@@ -90,10 +96,7 @@ evidence:
     recorded_at: "2026-10-22T10:38:52.003Z"
   - criterion_id: A2
     status: unchecked
-    evidence_ref: "UNVERIFIED pre-core foreign-hook custody. After-core replacement, lifetime and sink controls pass; before-core wrapper can become original and be restored without refusal. Ordinary bootstrap applicability and supported custody decision remain open."
-    recorded_at: "2026-10-22T10:32:13.280Z"
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/foreign-before-core-01/observation.json"
-    commit_sha: "6703e691fe5d7c8d10bba40b0777e4b7eba4f196"
+    recorded_at: "2026-10-22T10:38:53.295Z"
   - criterion_id: A3
     status: unchecked
     evidence_ref: "OPEN ordinary nine-suite six-target union execution. Candidate VM validator/observer fixture checks95 exit0, actual source hashes stable; synthetic retained-record admission does not establish real Stryker candidate loading."
