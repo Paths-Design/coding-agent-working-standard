@@ -80,17 +80,19 @@ acceptance:
   - id: A5
     given: >-
       the A1 and A4 fixture and a python3 that forwards to the real interpreter
-      except that one chosen realpath call exits 0 printing only line feeds or
-      nothing
+      except that one chosen realpath call exits 0 having written something other
+      than one absolute path and its single record line feed
     when: >-
       each reachable normalization in worktree-write-guard (foreign payload,
-      canonical-claim absolute and relative targets) and bash-write-guard (static
-      mutation target, Git metadata) is answered that way in turn
+      canonical-claim absolute and relative targets) and bash-write-guard (project
+      root, static mutation target, Git metadata) is answered that way in turn, and
+      the helper alone is answered with a lone line feed, two line feeds, a relative
+      path, nothing, or a path without its delimiter
     then: >-
-      every such run exits 2 with the empty-result class and the guard refusal
-      naming the input, and the target path stays absent. Against the pre-repair
-      helper the first normalization of each guard admitted with exit 0 and empty
-      output.
+      every guard run exits 2 with the guard refusal naming the input and the target
+      path stays absent; the helper returns 2 with class empty-result for a lone
+      line feed, non-absolute-result for two line feeds or a relative path, and
+      no-record-delimiter for nothing or a path without its delimiter.
 non_functional: {}
 contracts: []
 evidence:
@@ -111,7 +113,5 @@ evidence:
     recorded_at: "2026-10-22T01:13:10.661Z"
     commit_sha: "39d06b1a"
   - criterion_id: A5
-    status: pass
-    evidence_ref: "run-08 at 39d06b1a tests 26-28 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-08/bats.tap): with one realpath call answered by exit 0 and only LF, LF LF or no bytes, every reachable normalization (wwg git common dir, git dir, canonical root, spec-materialization, allowlist, operating directory, canonical-claim absolute and relative; bwg project root, mutation target, Git metadata) refuses exit 2 with empty-result and a guard refusal naming the input; target absent. Pre-repair red run-07 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-07-lf-red/bats.tap): first normalization of each guard exited 0 with empty output. Bounds: template guards run directly with precomputed HOOK_* and canonical helpers.bash, analysis CLI pinned to the shell owner built dist; not dispatcher, installed pack or native harness."
-    recorded_at: "2026-10-22T01:13:13.812Z"
-    commit_sha: "39d06b1a"
+    status: unchecked
+    recorded_at: "2026-10-22T03:16:27.207Z"
