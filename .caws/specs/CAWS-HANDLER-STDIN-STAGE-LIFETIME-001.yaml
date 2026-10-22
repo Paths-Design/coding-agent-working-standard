@@ -34,9 +34,13 @@ acceptance:
       broken-pipe text reaches stderr, the chain exits 0, and no
       caws-handler-stdin-* file remains in TMPDIR
   - id: A2
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given that staged inline payload, when a handler lists TMPDIR while it runs, or the dispatcher is sent TERM or KILL while a handler runs, then no caws-handler-stdin-* file exists during the handler or after the dispatcher is gone'
+    given: 'That staged inline payload'
+    when: 'A handler lists TMPDIR while it runs, or the dispatcher is sent TERM or KILL while a handler runs'
+    then: >-
+      No caws-handler-stdin-* pathname exists during the handler or after the
+      dispatcher is gone. Not claimed: a KILL delivered inside a handler's own stage
+      creation window (mktemp, write, open, unlink) cannot be trapped and can leave
+      one stage
   - id: A3
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
