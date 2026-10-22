@@ -648,6 +648,13 @@ rp_git_case() {
   id_guard worktree-write-guard.sh "$repo" "$self" Write "src/own.ts"
   [ "$status" -eq 0 ]
   refute_output --partial "BLOCKED"
+  # The coordinate is the payload cwd, not the session's project directory:
+  # with the project at the canonical root and the cwd in s-wt, the relative
+  # target still names f-wt's payload (against the root it would name a path
+  # outside the repository).
+  RP_ID_CWD="$self" id_guard worktree-write-guard.sh "$repo" "$repo" Write "../f-wt/src/payload.ts"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
 }
 
 @test "relative target: with no payload cwd a relative Write is asked about where the payload contract carries cwd" {
