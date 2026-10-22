@@ -4,7 +4,7 @@ mode: chore
 lifecycle_state: active
 worktree: cutover-progress-237-main
 created_at: '2026-10-22T01:56:52.197Z'
-updated_at: '2026-10-22T01:57:25.284Z'
+updated_at: '2026-10-22T02:23:22.825Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -13,10 +13,11 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'packages/caws-cli/src/init/machine-adapters.ts'
-    - 'packages/caws-cli/tests/adapter/machine-runtime.test.js'
     - 'docs/internal/caws-runtime-modernization.md'
   out: []
+  support:
+    - packages/caws-cli/src/init/machine-adapters.ts
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
 invariants:
   - 'Coverage, component acceptance, source integration, package qualification and machine adoption remain distinct.'
   - 'Import only the reviewed rollback2files; preserve concurrent native entry, actor and guard source ownership.'
