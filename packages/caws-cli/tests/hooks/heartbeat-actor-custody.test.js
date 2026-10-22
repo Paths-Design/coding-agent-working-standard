@@ -4,6 +4,20 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawn, spawnSync } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
+const { setTimeout: startTimer, clearTimeout: stopTimer } = require('node:timers');
+
+// A child that ignores its signal must fail the case in bounded time, not hang it.
+async function settled(exited, ms, what) {
+  let timer;
+  const expired = new Promise((_, reject) => {
+    timer = startTimer(() => reject(new Error(`${what} did not exit within ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([exited, expired]);
+  } finally {
+    stopTimer(timer);
+  }
+}
 const { AbortController } = globalThis;
 const { sendMessage, getMessageDeliveryState } = require('../../dist/store/messages-store');
 const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
@@ -444,7 +458,7 @@ test('a standalone spill run terminated during scalar extraction leaves no captu
     const reachedPause = fs.existsSync(paused);
     const whilePaused = captures();
     process.kill(-child.pid, 'SIGTERM');
-    const termination = await exited;
+    const termination = await settled(exited, 10_000, 'the heartbeat after SIGTERM');
     reaped = true;
     // bash runs its EXIT trap on SIGTERM and then re-raises it, so the child dies by signal.
     expect({ reachedPause, termination, whilePaused, afterTermination: captures() }).toEqual({
@@ -462,7 +476,7 @@ test('a standalone spill run terminated during scalar extraction leaves no captu
       } catch {
         /* the group already exited */
       }
-      await Promise.race([exited, delay(5_000)]);
+      await settled(exited, 5_000, 'the heartbeat after SIGKILL').catch(() => undefined);
     }
     for (const name of fs.readdirSync(env.TMPDIR))
       if (name.startsWith('caws-heartbeat-ingress-')) fs.rmSync(path.join(env.TMPDIR, name));
