@@ -115,16 +115,19 @@ function needsBootstrap(home: string, pointer: RuntimePointer | null, bootstrap:
 
 function activateRuntime(
   home: string,
-  pointer: RuntimePointer,
+  pointer: RuntimePointer | null,
   bootstrap: Buffer,
   installBootstrap: boolean
 ): void {
   // During first-install/legacy migration, the bootstrap can run the old
   // snapshot or fail safely until a pointer exists. Retry recognizes these
   // exact bytes. All subsequent updates and rollbacks have ONE commit point.
+  // A null pointer means the generation is already selected and only the
+  // stable entry is repaired: the pointer's previous_digest is the rollback
+  // target, so it is left untouched rather than rewritten to point at itself.
   if (installBootstrap)
     atomicMachineWrite(home, path.join(home, 'bin/caws-hook'), bootstrap, 0o755);
-  atomicMachineWrite(home, pointerPath(home), JSON.stringify(pointer));
+  if (pointer) atomicMachineWrite(home, pointerPath(home), JSON.stringify(pointer));
 }
 
 function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
@@ -233,11 +236,14 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   for (const file of [launcher, snapshot, pointerPath(home)]) assertMachinePath(home, file);
   const bootstrap = files.get('bootstrap.py') as Buffer;
   const installBootstrap = needsBootstrap(home, prior, bootstrap);
+  // Selecting the generation that is already current only repairs the entry;
+  // its rollback history is whatever the pointer already records.
+  const reselect = prior?.digest !== digest;
   const result: MachineRuntimeResult = {
     home,
     digest,
-    previousDigest: prior?.digest ?? null,
-    changed: prior?.digest !== digest || installBootstrap,
+    previousDigest: reselect ? (prior?.digest ?? null) : (prior?.previous_digest ?? null),
+    changed: reselect || installBootstrap,
     launcher,
     files: [...files.keys()],
   };
@@ -264,7 +270,7 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   }
   activateRuntime(
     home,
-    { version: 1, digest, previous_digest: prior?.digest ?? null },
+    reselect ? { version: 1, digest, previous_digest: prior?.digest ?? null } : null,
     bootstrap,
     installBootstrap
   );
@@ -282,6 +288,13 @@ function rollbackRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const home = path.resolve(options.home ?? machineHome());
   const current = readPointer(home);
   if (!current?.previous_digest) throw new Error('No previous machine runtime to restore');
+  // A pointer that names its own generation as the predecessor has no rollback
+  // target; reselecting it would report a rollback that changed nothing.
+  if (current.previous_digest === current.digest)
+    throw new Error(
+      `No previous machine runtime to restore: the recorded previous runtime is the current one (${current.digest}). ` +
+        'Select the intended runtime by running caws init adapters install from its CLI package.'
+    );
   const digest = current.previous_digest;
   const files = verifyRuntime(home, digest);
   const launcher = path.join(home, 'bin/caws-hook');
