@@ -320,6 +320,8 @@ test.each([
   ),
   ['shell', 'caws\\-hook-native'],
   ['shell', "'caws'-hook-native"],
+  ['shell-compound', 'caws\\-hook-native'],
+  ['shell-compound', "'caws'-hook-native"],
 ])(
   'PATH candidate %s %s adoption requires reconciliation before state or backup writes',
   (form, program) =>
@@ -329,8 +331,14 @@ test.each([
       const value = JSON.parse(fs.readFileSync(config));
       const args = ['claude-code', 'pre_tool_use', '--system'];
       value.hooks.PreToolUse[0].hooks[1] =
-        form === 'shell'
-          ? { type: 'command', command: program + ' claude-code pre_tool_use --system' }
+        form === 'shell' || form === 'shell-compound'
+          ? {
+              type: 'command',
+              command:
+                program +
+                ' claude-code pre_tool_use --system' +
+                (form === 'shell-compound' ? ' && echo ok' : ''),
+            }
           : {
               type: 'command',
               command: form === 'env' ? 'env' : program,

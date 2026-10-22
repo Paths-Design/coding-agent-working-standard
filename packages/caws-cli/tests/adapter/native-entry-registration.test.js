@@ -107,8 +107,14 @@ function pathCawsOperand(program) {
 function pathCawsHook(form, program) {
   program = pathCawsOperand(program);
   const args = ['claude-code', 'pre_tool_use', '--system'];
-  if (form === 'shell')
-    return { type: 'command', command: program + ' claude-code pre_tool_use --system' };
+  if (form === 'shell' || form === 'shell-compound')
+    return {
+      type: 'command',
+      command:
+        program +
+        ' claude-code pre_tool_use --system' +
+        (form === 'shell-compound' ? ' && echo ok' : ''),
+    };
   return {
     type: 'command',
     command: form === 'env' ? 'env' : program,
@@ -126,6 +132,8 @@ const pathCawsCases = [
   ),
   ['shell', 'caws\\-hook-native'],
   ['shell', "'caws'-hook-native"],
+  ['shell-compound', 'caws\\-hook-native'],
+  ['shell-compound', "'caws'-hook-native"],
 ];
 function nativeObservationFixture() {
   // Inert assets exercise registration/layout verification only. No fixture
@@ -801,6 +809,18 @@ test.each(['caws\\-hook-native', "'caws'-hook-native"])(
       expect(classifyCawsProducerHook(execHook, 'claude-code', 'pre_tool_use').kind).toBe(
         'unresolved'
       );
+    })
+);
+test.each(['caws\\-hook-native', "'caws'-hook-native"])(
+  'PATH compound suffix after %s retains discovery without admitting shell execution',
+  (program) =>
+    withPrivatePathWitness(() => {
+      pathCawsOperand(program);
+      const command = program + ' claude-code pre_tool_use --system && echo ok';
+      expect(() => nativeCommandWords(command)).toThrow(/compound command/);
+      const hook = { type: 'command', command };
+      expect(isCawsProducerHookCandidate(hook)).toBe(true);
+      expect(classifyCawsProducerHook(hook, 'claude-code', 'pre_tool_use').kind).toBe('unresolved');
     })
 );
 test.each(['legacy', 'native'])(

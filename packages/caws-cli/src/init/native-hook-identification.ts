@@ -225,16 +225,16 @@ export function isCawsProducerHookCandidate(hook: unknown): hook is NativeHook {
     (Array.isArray(value.args) ? value.args.some(possibleProducer) : possibleProducer(value.args))
   )
     return true;
-  // Only shell-form commands have decoded shell words. A complete supported
-  // literal spelling can hide a known basename behind escapes or split quotes;
-  // this remains a suspicion hint, never executable ownership or PATH lookup.
+  // Only shell-form commands have decoded shell words. A known basename emitted
+  // before unsupported syntax remains a suspicion hint, never executable
+  // ownership, a successful full parse or PATH lookup.
   if (Object.hasOwn(value, 'args') || typeof value.command !== 'string') return false;
   try {
-    return nativeCommandWords(value.command).some((word) =>
-      ['caws-hook-native', 'caws-hook'].includes(path.posix.basename(word.value))
-    );
+    for (const word of nativeCommandTokens(value.command))
+      if (['caws-hook-native', 'caws-hook'].includes(path.posix.basename(word.value))) return true;
+    return false;
   } catch {
-    // Unsupported shell syntax retains raw discovery without partial decoding.
+    // No known basename was emitted before the tokenizer stopped.
     return false;
   }
 }

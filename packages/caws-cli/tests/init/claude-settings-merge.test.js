@@ -284,6 +284,8 @@ test.each([
   ),
   ['shell', 'caws\\-hook-native'],
   ['shell', "'caws'-hook-native"],
+  ['shell-compound', 'caws\\-hook-native'],
+  ['shell-compound', "'caws'-hook-native"],
 ])(
   'PATH candidate %s %s merge requires typed reconciliation without writes or execution',
   (form, program) =>
@@ -292,8 +294,14 @@ test.each([
       const value = wired();
       const args = ['claude-code', 'pre_tool_use', '--system'];
       const hook =
-        form === 'shell'
-          ? { type: 'command', command: program + ' claude-code pre_tool_use --system' }
+        form === 'shell' || form === 'shell-compound'
+          ? {
+              type: 'command',
+              command:
+                program +
+                ' claude-code pre_tool_use --system' +
+                (form === 'shell-compound' ? ' && echo ok' : ''),
+            }
           : {
               type: 'command',
               command: form === 'env' ? 'env' : program,
