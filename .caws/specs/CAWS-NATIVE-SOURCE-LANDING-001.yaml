@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-source-landing
 created_at: '2026-10-22T22:51:57.793Z'
-updated_at: '2026-10-22T22:53:19.771Z'
+updated_at: '2026-10-22T23:36:09.003Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -281,6 +281,32 @@ scope:
     - packages/caws-native/tests/sqlite_identity.rs
     - scripts/install-cli-snapshot.mjs
     - scripts/install-cli-snapshot.test.mjs
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/guides/sterling-machine-runtime-migration.md
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/src/transcripts/harness-dsh.ts
+    - packages/caws-cli/src/transcripts/harness-kimi.ts
+    - packages/caws-cli/src/transcripts/harness-opencode.ts
+    - packages/caws-cli/src/transcripts/harness-qwen.ts
+    - packages/caws-cli/src/transcripts/harness-zcode.ts
+    - packages/caws-cli/src/transcripts/lossless-json.ts
+    - packages/caws-cli/src/transcripts/store-json.ts
+    - packages/caws-cli/templates/hook-packs/shared/advisory_truncate.py
+    - packages/caws-cli/templates/hook-packs/shared/lib/harness_kimi.py
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
+    - packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
+    - packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py
+    - packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js
+    - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/tests/tooling/sqlite-static-build.test.js
+    - packages/caws-cli/tests/transcripts/dsh.test.ts
+    - packages/caws-cli/tests/transcripts/kimi.test.ts
+    - packages/caws-cli/tests/transcripts/lossless-json.test.ts
+    - packages/caws-cli/tests/transcripts/opencode.test.ts
+    - packages/caws-cli/tests/transcripts/qwen.test.ts
+    - packages/caws-cli/tests/transcripts/store-json.test.js
+    - packages/caws-cli/tests/transcripts/zcode.test.ts
+    - packages/caws-cli/tsconfig.vnext.json
 invariants:
   - 'Preserve main fixes and matched producer/consumer/build contracts; preserve foreign worktrees and all parent publication, residency and machine-cutover obligations'
   - 'A coherent source landing does not accept full runtime cutover, first-party Python retirement, ordinary publication or thirteen-session four-repository qualification'
