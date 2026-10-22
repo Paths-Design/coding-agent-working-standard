@@ -226,10 +226,10 @@ evidence:
     commit_sha: "0a4cbe79"
   - criterion_id: A3
     status: pass
-    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) test 58: no command substitution of _realpath, caws_guard_realpath, abspath or resolve_canonical_dir in either write guard, and every out-parameter normalization call carries an explicit refusal."
-    recorded_at: "2026-10-22T05:41:48.283Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
-    commit_sha: "821bdeef"
+    evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) test 60: no command substitution of _realpath, caws_guard_realpath, abspath or resolve_canonical_dir in either guard; every out-parameter normalization or canonical resolution call carries an explicit refusal (_wwg/_bwg_normalize_refuse or the always-exiting _bwg_resolve_refuse)."
+    recorded_at: "2026-10-22T06:10:35.938Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-41-terminal-0a4cbe79/serial.tap"
+    commit_sha: "0a4cbe79"
   - criterion_id: A4
     status: pass
     evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) tests 47-54: bash-write-guard foreign mutation through dotdot with python3 present exits 2, owner 0; failing and absent python3 exit 2 with the refusal and block JSON; identity-drop control admits (test 51); static target, dynamic operand and Git metadata sweeps refuse at each normalization."
