@@ -55,7 +55,11 @@ function* nativeCommandTokens(
           continue;
         }
         if (!next || /[\r\n]/.test(next)) throw new Error('unsupported shell escape');
-        if (quoted && !/["\\$]/.test(next)) {
+        // A literal shell payload must receive the value its outer double
+        // quotes produce. Retaining this backslash would hide an inner
+        // substitution; the strict migration grammar keeps rejecting it.
+        const quotedEscape = /["\\$]/.test(next) || (literalData && next === '`');
+        if (quoted && !quotedEscape) {
           if (!literalData) throw new Error('unsupported shell escape');
           value += '\\' + next;
         } else value += next;

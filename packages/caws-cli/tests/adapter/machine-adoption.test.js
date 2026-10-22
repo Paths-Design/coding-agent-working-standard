@@ -408,6 +408,14 @@ test.each([
       "'/private/line\nbreak/bin/'" +
       String.raw`caws\-hook-native claude-code pre_tool_use --system`,
   ],
+  [
+    'literal shell escaped backtick substitution after quoted newline',
+    () => 'sh -c "printf \'first\nsecond\' \\`caws\\-hook-native\\` caws-hook"',
+  ],
+  [
+    'literal shell escaped backtick substitution',
+    () => 'sh -c "printf first \\`caws\\-hook-native\\` caws-hook"',
+  ],
 ])(
   'A4 preceding syntax %s adoption refuses before state or backup writes',
   (_name, commandForFixture) =>

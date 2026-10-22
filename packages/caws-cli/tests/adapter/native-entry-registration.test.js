@@ -169,6 +169,14 @@ const precedingSyntaxCases = [
       "'/private/line\nbreak/bin/'" +
       String.raw`caws\-hook-native claude-code pre_tool_use --system`,
   ],
+  [
+    'literal shell escaped backtick substitution after quoted newline',
+    () => 'sh -c "printf \'first\nsecond\' \\`caws\\-hook-native\\` caws-hook"',
+  ],
+  [
+    'literal shell escaped backtick substitution',
+    () => 'sh -c "printf first \\`caws\\-hook-native\\` caws-hook"',
+  ],
 ];
 function nativeObservationFixture() {
   // Inert assets exercise registration/layout verification only. No fixture
@@ -877,7 +885,9 @@ test.each(precedingSyntaxCases)(
         expect(words.map((word) => word.value).slice(0, 2)).toEqual(['bash', '-c']);
         expect(() => nativeCommandWords(words[2].value)).toThrow(/compound command/);
       } else
-        expect(() => nativeCommandWords(command)).toThrow(/compound command|multiline command/);
+        expect(() => nativeCommandWords(command)).toThrow(
+          /compound command|multiline command|unsupported shell escape/
+        );
       const before = fixtureBytes();
       expect(isCawsProducerHookCandidate(hook)).toBe(true);
       expect(classifyCawsProducerHook(hook, 'claude-code', 'pre_tool_use')).toEqual({
