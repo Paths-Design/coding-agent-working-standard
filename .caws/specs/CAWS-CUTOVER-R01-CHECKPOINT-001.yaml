@@ -2,6 +2,7 @@ id: CAWS-CUTOVER-R01-CHECKPOINT-001
 title: 'Record reviewed R01 discovery repair and qualification boundary'
 mode: doc
 lifecycle_state: active
+worktree: cutover-r01-main
 created_at: '2026-10-22T10:03:53.942Z'
 updated_at: '2026-10-22T10:04:02.723Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
