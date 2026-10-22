@@ -232,9 +232,10 @@ evidence:
     commit_sha: "821bdeef"
   - criterion_id: A5
     status: pass
-    evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) test 32: lone LF empty-result, two LFs and relative non-absolute-result, nothing and undelimited path no-record-delimiter, status 2, caller unchanged; tests 40-42 and 48-53: each reachable normalization answered alone refuses exit 2 naming its input (wwg git common dir, git dir, canonical root, write target, operating directory; bwg project root, mutation target, Git metadata). Mutants M17/M18 killed. Bound: bwg dynamic-prefix normalization unreachable (pinned ask, test 49)."
-    recorded_at: "2026-10-22T04:28:05.863Z"
-    commit_sha: "7d49da1d"
+    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) test 36 and LF-only sweeps 55-57: lone LF is empty-result, two LFs and a relative record are non-absolute-result, nothing and an undelimited path are no-record-delimiter; each guard refuses at every normalization when only that answer is malformed."
+    recorded_at: "2026-10-22T05:41:53.668Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
+    commit_sha: "821bdeef"
   - criterion_id: A6
     status: pass
     evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54) tests 1-16: LF root exists at fixture-built bytes, truncation names nothing; ordinary-root controls refuse or ask; wwg gives the LF root the control exact refusal from canonical, alias and s-wt; base-branch verdicts for apostrophe, bracket and LF roots equal the control, contention gets exactly src/new.ts, apostrophe branch reads registry order, -z fallback counts like the control, no -z LF root asks; bwg holds canonical, alias and s-wt operating directories naming the physical path, and from an outside cwd escalates ask_unrepresentable_target (2 under bypassPermissions). Red at 39d06b1a: /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-18-red-39d/bats.tap. Mutants M07-M14, M10b, M11b, M21 killed. NOT established: alias with ordinary cwd reaching ownership (held), dispatcher/native/real harness."
