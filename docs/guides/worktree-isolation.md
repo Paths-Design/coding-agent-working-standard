@@ -139,9 +139,11 @@ caws specs create experiment-new-orm --title "Experiment: new ORM"
 caws worktree create proj-experiment --spec experiment-new-orm
 cd .caws/worktrees/proj-experiment
 # ... try it ...
+# Leave the worktree before either merge or destroy removes it.
+cd ../../..
 # If it works — merge and auto-close the bound spec:
+caws worktree merge proj-experiment --dry-run
 caws worktree merge proj-experiment
-caws worktree destroy proj-experiment
 # If it fails — abandon:
 caws worktree destroy proj-experiment --abandon-unmerged
 ```
@@ -149,16 +151,24 @@ caws worktree destroy proj-experiment --abandon-unmerged
 ## Merging work back
 
 Use `caws worktree merge` — it merges the branch into base and auto-closes the
-bound spec in a single transaction. Then destroy the worktree:
+bound spec. A successful merge also removes the worktree and its registry
+binding. Run it from outside the worktree being merged:
 
 ```bash
 # From the canonical checkout (main working directory)
+caws worktree merge proj-auth --dry-run
 caws worktree merge proj-auth
-caws worktree destroy proj-auth
 
+caws worktree merge proj-payments --dry-run
 caws worktree merge proj-payments
-caws worktree destroy proj-payments
 ```
+
+`--dry-run` previews readiness without advancing refs, updating the index or
+working tree, or appending events; it can create unreachable Git objects.
+Without `--dry-run`, merge applies by default. `--apply` checks readiness and
+then applies in one call. `--no-close` applies the merge and removes the
+worktree while leaving its spec active for evidence recording and explicit
+closure.
 
 `caws worktree merge` emits a `worktree_merged` event and calls
 `caws specs close` on the bound spec automatically. The
