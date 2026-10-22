@@ -220,9 +220,10 @@ evidence:
     commit_sha: "821bdeef"
   - criterion_id: A3
     status: pass
-    evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) test 54: no command substitution of _realpath, caws_guard_realpath, abspath or resolve_canonical_dir; every caws_guard_realpath_into/abspath_into/caws_resolve_canonical_dir_into line carries a _wwg/_bwg refusal; tests 39 and 47: identity-drop tree admits with exit 0 under failing and absent python3. Bound: text scan; helper fallbacks exempt by design."
-    recorded_at: "2026-10-22T04:28:04.438Z"
-    commit_sha: "7d49da1d"
+    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) test 58: no command substitution of _realpath, caws_guard_realpath, abspath or resolve_canonical_dir in either write guard, and every out-parameter normalization call carries an explicit refusal."
+    recorded_at: "2026-10-22T05:41:48.283Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
+    commit_sha: "821bdeef"
   - criterion_id: A4
     status: pass
     evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) tests 43-46: bwg foreign mutation through dotdot python3 present exit 2; owner 0; failing exit 2 python3-exit-1 + project root refusal line; absent exit 2 python3-unavailable + project root refusal line + block JSON. Analysis CLI = shell-owner dist at 5ace5a52. Bounds: guards run directly with precomputed HOOK_*; not dispatcher, machine runtime, native entry or a real harness."
