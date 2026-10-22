@@ -352,7 +352,8 @@ fi
 # the program text: an apostrophe or line feed in either would break the parse
 # (and the catch default would answer for the registry), and a spliced value
 # is code.
-IS_REGISTERED_WORKTREE=$(CAWS_WWG_PROJECT_DIR="$PROJECT_DIR" CAWS_WWG_CURRENT_BRANCH="$CURRENT_BRANCH" node -e "
+export CAWS_WWG_PROJECT_DIR="$PROJECT_DIR" CAWS_WWG_CURRENT_BRANCH="$CURRENT_BRANCH"
+IS_REGISTERED_WORKTREE=$(node -e "
   $CAWS_NODE_ENTRIES_OF
   try {
     var reg = JSON.parse(require('fs').readFileSync(process.env.CAWS_WWG_PROJECT_DIR + '/.caws/worktrees.json', 'utf8'));
@@ -368,7 +369,7 @@ if [[ "$IS_REGISTERED_WORKTREE" == "1" ]]; then
   exit 0
 fi
 
-WT_INFO=$(CAWS_WWG_PROJECT_DIR="$PROJECT_DIR" CAWS_WWG_CURRENT_BRANCH="$CURRENT_BRANCH" node -e "
+WT_INFO=$(node -e "
   $CAWS_NODE_ENTRIES_OF
   var fs = require('fs');
   var path = require('path');
