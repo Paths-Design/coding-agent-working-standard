@@ -96,8 +96,10 @@ evidence:
     recorded_at: "2026-10-22T01:13:02.609Z"
     commit_sha: "39d06b1a"
   - criterion_id: A2
-    status: unchecked
-    recorded_at: "2026-10-22T01:10:59.888Z"
+    status: pass
+    evidence_ref: "run-08 at 39d06b1a tests 4-9 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-08/bats.tap): python-success stdout+status equal the interpreter and caller value equals _realpath for dotdot, symlinked ancestor, dotdot after symlink (climbs from link target), /tmp alias, relative, newline-ending path; empty-path, python3-unavailable, python3-exit-1 and LF / LF LF / zero-byte success each give status 2, no stdout byte, one stderr class line (test 8 trace: stdout x2). Red run-07 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-07-lf-red) showed the pre-repair helper returning 0 with a lone LF. Mutants M4 (status-only) and M5 (identity) fail these tests. Bound: one interpreter (3.11.13, macOS); non-UTF8 paths not exercised."
+    recorded_at: "2026-10-22T01:13:05.227Z"
+    commit_sha: "39d06b1a"
   - criterion_id: A3
     status: pass
     evidence_ref: "Contract test 25 at 73166c16 passes in run-06 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-06/bats.tap): neither guard has a dollar-paren _realpath call and every caws_guard_realpath/abspath substitution carries an explicit _wwg/_bwg refusal. Mutant M5 (helper prints input, returns 0; /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants/M5.tap) turns the A1 failing/absent cases (11, 12) and A4 failing/absent cases (19, 20) red. Handler-removal mutants M1-M3 are each killed by the runtime sweeps independently of the static contract. Bound: the contract is a text scan of these two guards only."
