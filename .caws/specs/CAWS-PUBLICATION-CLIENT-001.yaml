@@ -56,3 +56,9 @@ evidence:
     recorded_at: "2026-10-22T09:14:02.952Z"
     exit_code: 0
     commit_sha: "2a9f2093"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Normal child merge09a288b1b41866bef8d8060e55c79cc03b53f198 into caws/native-session-publication. Actual5path git diff2a9f2093 empty; linked target gitstatus clean afterCAS, no restore/discard or guard bypass. Exact premerge source/target cached patch hashes bothab4beb5889813e98eb76a8cff58ce744f08cdb0a0de3bd08c937c7762e8ae29c. Committed peer6649 discriminator finding grounded in actualsource and four executed red controls then strictcompile0/packageESLint0/177focusedgreen/gates5PASS5paths/doctor0E3W4I. Parent CAWS-NATIVE-SESSION-PUBLICATION-001 remains ACTIVE owning actualnative/originalcapture/dispatch/render/seal/workload. Components emptyproductionimports do not earn native authority or effects; machine unchanged. Review feedback itself is not acceptance."
+    recorded_at: "2026-10-22T09:17:30.846Z"
+    exit_code: 0
+    commit_sha: "09a288b1"
