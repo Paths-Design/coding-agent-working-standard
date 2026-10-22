@@ -1153,7 +1153,7 @@ const INIT_INSTALL: LeafCommandMeta = {
     {
       flag: '--native-image <file>',
       description:
-        'Install an explicit local pinned native image and complete production prefix. Keeps existing harness registration; configure --entry native opts in separately. Requires a reviewed native-image-input.v1 descriptor.',
+        'Install an explicit local pinned native image and complete production prefix. Accepts reviewed native-image-input.v1 descriptors or receipt-selected native-image-input.v2 descriptors. Keeps existing harness registration; configure --entry native opts in separately.',
     },
   ],
 };
