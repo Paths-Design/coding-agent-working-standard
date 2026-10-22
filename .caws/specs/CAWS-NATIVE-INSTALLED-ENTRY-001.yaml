@@ -59,6 +59,16 @@ acceptance:
     given: 'final committed source and exact packaged image'
     when: 'private integrated controls and independent review run'
     then: 'commands, statuses, artifacts and identities are retained, remaining compatibility limits are explicit, and no machine adoption is inferred'
+  - id: A6
+    given: >-
+      A configured native or legacy system surface and absent, disabled, restricted,
+      mixed, conditional or tampered registration controls
+    when: >-
+      Read-only system observation and the shared init/configure validator inspect
+      the same private configuration
+    then: >-
+      Valid transports agree, unsupported registration is diagnosed without changing
+      configuration, and absent or disabled surfaces remain inactive
 observability:
   - 'Raw commands and entry stdout/stderr/status, selected engine/handler execution witness, pointer/manifest/images before-after hashes and retained upgrade/rollback state'
 rollback:
