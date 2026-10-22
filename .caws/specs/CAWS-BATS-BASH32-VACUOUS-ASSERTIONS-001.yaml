@@ -1,0 +1,47 @@
+id: CAWS-BATS-BASH32-VACUOUS-ASSERTIONS-001
+title: 'Make standalone [[ assertions in hook bats suites fail under bash 3.2'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-22T21:39:10.320Z'
+updated_at: '2026-10-22T21:39:10.320Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/tests/hooks/bats'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous.bats'
+    - 'packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats'
+    - 'packages/caws-cli/tests/hooks/bats/kimi-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/parse-input.bats'
+    - 'packages/caws-cli/tests/hooks/bats/quiet-merge.bats'
+    - 'packages/caws-cli/tests/hooks/bats/qwen-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/reset-strikes.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scan-secrets.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scope-guard.bats'
+    - 'packages/caws-cli/tests/hooks/bats/helpers.bash'
+  out: []
+invariants:
+  - 'No file outside packages/caws-cli/tests/hooks/bats changes; hook pack templates, manifest version and fingerprints are untouched'
+  - 'Every rewritten assertion keeps its original predicate; only the statement form changes so a false predicate fails the test under bash 3.2'
+acceptance:
+  - id: A1
+    given: 'the 33 non-last standalone [[ statements listed in inventory.tsv across the nine suites'
+    when: 'each one is negated in turn in a mirrored copy and its test runs under /bin/bash 3.2.57 with bats-core 1.13.0'
+    then: 'the containing test reports not ok for every one of the 33, with the TAP output retained'
+  - id: A2
+    given: 'the rewritten nine suites unmodified'
+    when: 'bats runs each file under /bin/bash 3.2 from the lane'
+    then: 'every test passes with the same test count as before the rewrite'
+  - id: A3
+    given: 'the inventory classifier inventory.awk'
+    when: 'it runs over packages/caws-cli/tests/hooks/bats on the lane head'
+    then: 'it reports zero non-last standalone [[ rows'
+observability:
+  - 'TAP output per mutant and per unmodified suite retained under ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/'
+rollback:
+  - 'revert the lane merge commit; no runtime or pack bytes are affected'
+non_functional: {}
+contracts: []
