@@ -42,7 +42,7 @@ evidence:
     commit_sha: "008d68b7"
   - criterion_id: A2
     status: pass
-    evidence_ref: "Normal source merge8ba90e586a9f59bec315cf92c3c82a56a9145830 and local-main publisher44df55e0 normal merge2a803b45609c95f2dc8eaf52b858ba7ede856b69. Actual tracked ledger blobs equal6a13a50337fe32c1561b4a8fb58cc660fa7f1dd7; actual cmp main/source workingfiles exit0 SHA256e66f1c3de292fb10821d1c296b716af2302693f0f167a82e03d745dfa600236b. Source index safely refreshed from verified03d unchanged index/worktree via normal read-tree; source and main publishers5gatesPASS1doc. Parent remains0/8,33/37partial, installed408unchanged and actual native/package/fairness/cutover open. This is local publication only, no remote push."
-    recorded_at: "2026-10-22T09:17:25.284Z"
+    evidence_ref: "Final corrected source merge b9ac7043cb8f56d57f25a9c9c07082ab0dd5989a from008d and localmain publisherb6d94a30 normalmerge49da7f5022bad7bcf86bea29a79a2791129dc24f. Actual tracked ledger blobs both741ef0045231f20affe5ecb7c6b82bb2d305ab62; actual main/source workingfilecmp0 SHA25604c7314201defa95cf9fa8a8e606bd0289838bf042ea8e2ca1638f75c3552e04. Both normal source/main publisher5gatesPASS1doc; source safely refreshed from verified clean8ba index/worktree, main canonicalclean. Corrected recognized-case scope and unusedclient3PASS177 preserve parent0/8,33/37partial, fullnative/package/fairness/machinecutover obligations. Independent review feedback grounded on actualhelper/rawchecks. Localpublication only, no remote push."
+    recorded_at: "2026-10-22T09:38:32.860Z"
     exit_code: 0
-    commit_sha: "2a803b45"
+    commit_sha: "49da7f50"
