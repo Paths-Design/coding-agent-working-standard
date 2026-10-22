@@ -60,3 +60,8 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::repairing the stable entry of the selected runtime keeps its rollback target"
     commit_sha: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
     test_verified_at: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Mutation result, NOT mechanically re-derivable (only the commit is): retained raw log ~/.claude/artifacts/c843b9aa-c831-40ce-ac99-cae38f061436/rollback-probe/mutant-a.log. Mutant A alone (same-target install writes {digest, previous_digest: prior.digest}; source sha ae1fb6b7) rebuilt; focused jest exit 1: the A1 test fails at :692 (pointer bytes changed), the A2 test fails at :724 with expected previous_digest 9c4d3c53 (D0) received 29ff5676 (D1), i.e. {D1,D1}; the self-predecessor refusal test passes (independent). Source restored to sha b0ae151a (committed bytes), tree clean, dist rebuilt; tests pass again."
+    recorded_at: "2026-10-22T00:51:26.650Z"
+    commit_sha: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
