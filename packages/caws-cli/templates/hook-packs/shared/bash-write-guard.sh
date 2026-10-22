@@ -62,6 +62,16 @@ _bwg_git_failed_refuse() {
   printf '{"decision":"block","reason":"CAWS bash-write-guard: git could not determine the repository although a .git entry exists, so the canonical checkout and worktree ownership cannot be determined. Failing closed."}\n'
   exit 2
 }
+# Usage: _bwg_resolve_refuse <status> <start>: the canonical root could not be
+# resolved. Status 3 means git did not answer although a .git entry exists.
+_bwg_resolve_refuse() {
+  local evidence=""
+  if [[ "$1" == 3 ]]; then
+    caws_git_evidence_dir_into evidence "${_BWG_START_PHYSICAL:-}" || evidence="$2"
+    _bwg_git_failed_refuse "$2" "$evidence/.git"
+  fi
+  _bwg_normalize_refuse "project root" "$2"
+}
 _bwg_git_refuse() {
   echo "[bash-write-guard] git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED. Restore git on PATH." >&2
   printf '{"decision":"block","reason":"CAWS bash-write-guard: git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing closed. Restore git on PATH."}\n'
@@ -175,7 +185,7 @@ if ! caws_git_path_into _BWG_GIT_DIR "$_BWG_START" --git-dir &&
     caws_git_evidence_dir_into _BWG_GIT_EVIDENCE "$_BWG_START_PHYSICAL"; then
   _bwg_git_failed_refuse "$_BWG_START" "$_BWG_GIT_EVIDENCE/.git"
 fi
-caws_resolve_canonical_dir_into _BWG_PROJECT_RAW "$_BWG_START" || _bwg_normalize_refuse "project root" "$_BWG_START"
+caws_resolve_canonical_dir_into _BWG_PROJECT_RAW "$_BWG_START" || _bwg_resolve_refuse "$?" "$_BWG_START"
 # Compare the same physical identity used by abspath for mutation targets.
 # A logical alias such as /tmp or a symlinked project root is still this repo.
 caws_guard_realpath_into PROJECT_DIR "$_BWG_PROJECT_RAW" || _bwg_normalize_refuse "project root" "$_BWG_PROJECT_RAW"

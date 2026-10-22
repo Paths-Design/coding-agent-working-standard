@@ -1181,7 +1181,7 @@ rp_no_node() {
     [ "$status" -eq 1 ] || { printf '%s captures a path:\n%s\n' "$guard" "$output"; false; }
     lines="$(grep -E '(^|[^_[:alnum:]])(caws_guard_realpath_into|abspath_into|caws_resolve_canonical_dir_into) [A-Za-z_]' "$file")"
     [[ -n "$lines" ]]
-    unchecked="$(printf '%s\n' "$lines" | grep -v -E '\|\| _(wwg|bwg)_normalize_refuse ' || true)"
+    unchecked="$(printf '%s\n' "$lines" | grep -v -E '\|\| _(wwg|bwg)_(normalize|resolve)_refuse ' || true)"
     [[ -z "$unchecked" ]] || { printf '%s unchecked:\n%s\n' "$guard" "$unchecked"; false; }
   done
 }

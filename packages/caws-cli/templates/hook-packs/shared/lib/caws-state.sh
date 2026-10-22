@@ -371,16 +371,26 @@ caws_git_evidence_dir_into() {
 # caws_resolve_canonical_dir_into <var> <start-dir>
 #   resolve_canonical_dir's decision, assigned byte for byte: the canonical
 #   checkout containing .caws/ when <start-dir> is inside a linked worktree of
-#   one, otherwise <start-dir> itself. Returns 2 for an invalid out-parameter
-#   and 0 otherwise.
+#   one, otherwise <start-dir> itself. Git not answering means "not a linked
+#   worktree" only where neither <start-dir> nor an ancestor holds a .git
+#   entry; otherwise it returns 3. Returns 2 for an invalid out-parameter or a
+#   common directory that cannot be entered, and 0 when it assigns.
 caws_resolve_canonical_dir_into() {
   local _caws_cd_var="${1:-}" _caws_cd_start="${2:-}" _caws_cd_common="" _caws_cd_candidate=""
+  local _caws_cd_physical="" _caws_cd_evidence=""
   _caws_outparam_ok "$_caws_cd_var" _caws_cd_ || return 2
-  if [[ -n "$_caws_cd_start" ]] && command -v git >/dev/null 2>&1; then
-    caws_git_path_into _caws_cd_common "$_caws_cd_start" --git-common-dir || _caws_cd_common=""
+  if [[ -n "$_caws_cd_start" ]]; then
+    if ! command -v git >/dev/null 2>&1 ||
+        ! caws_git_path_into _caws_cd_common "$_caws_cd_start" --git-common-dir; then
+      _caws_cd_common=""
+      if caws_physical_dir_into _caws_cd_physical "$_caws_cd_start" &&
+          caws_git_evidence_dir_into _caws_cd_evidence "$_caws_cd_physical"; then
+        return 3
+      fi
+    fi
     if [[ -n "$_caws_cd_common" && "$_caws_cd_common" != .git ]]; then
       _caws_cd_candidate="$(CDPATH='' cd -- "$_caws_cd_start" 2>/dev/null &&
-        CDPATH='' cd -- "$_caws_cd_common/.." 2>/dev/null && printf '%sx' "$PWD")" || _caws_cd_candidate=""
+        CDPATH='' cd -- "$_caws_cd_common/.." 2>/dev/null && printf '%sx' "$PWD")" || return 2
       _caws_cd_candidate="${_caws_cd_candidate%x}"
       if [[ -n "$_caws_cd_candidate" && -d "$_caws_cd_candidate/.caws" ]]; then
         printf -v "$_caws_cd_var" '%s' "$_caws_cd_candidate"
