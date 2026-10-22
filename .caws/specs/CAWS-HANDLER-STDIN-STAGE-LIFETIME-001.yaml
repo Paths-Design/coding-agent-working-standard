@@ -8,7 +8,9 @@ updated_at: '2026-10-22T16:48:40.756Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'hook-packs shared lib/run-handlers.sh: handler stdin feed and stage lifetime'
+    - 'hook-packs shared lib/parse-input.sh: payload-file cleanup contract comment'
+    - 'tests/hooks/bats/handler-stdin-feed.bats: hostile stage-lifetime tests'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
