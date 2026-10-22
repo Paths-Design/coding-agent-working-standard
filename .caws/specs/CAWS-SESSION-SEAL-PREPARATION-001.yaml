@@ -1,0 +1,51 @@
+id: CAWS-SESSION-SEAL-PREPARATION-001
+title: 'Prepare exact SessionEnd metadata for native publication'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-22T07:54:07.396Z'
+updated_at: '2026-10-22T07:54:07.396Z'
+created_by_session: '01a1610b-97e1-7541-a942-31363c3a34f9'
+blast_radius:
+  modules:
+    - 'Exact SessionEnd metadata preparation and schema contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/session-seal-prepare.ts'
+    - 'packages/caws-cli/tests/transcripts/session-seal-prepare.test.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-log.schema.json'
+    - 'packages/caws-cli/templates/hook-packs/claude-code/README.md'
+  out: []
+invariants:
+  - 'Prepared bytes and correlation confer no filesystem or publication authority; helper tests do not complete the ordinary native consumer obligation'
+  - 'Preserve seven independent exact nonnegative mathematical JSON integer counts, ordered top-level turn models, historical summary provenance and unrelated raw metadata values'
+acceptance:
+  - id: A1
+    given: 'bounded metadata and ordered turn-v2 input including the retained 4300-digit count'
+    when: 'metadata preparation executes'
+    then: 'seven exact mathematical integer sums and ordered distinct models are emitted without invented zeros and unrelated metadata value spans remain exact'
+  - id: A2
+    given: 'zero turns or no usage and models contributions'
+    when: 'preparation seals existing metadata'
+    then: 'the historical summary is preserved with explicit preservation mode and reason while ended reason and timestamp are replaced'
+  - id: A3
+    given: 'duplicate members malformed inputs hostile numeric expansion and exhausted resource envelopes'
+    when: 'preparation is attempted'
+    then: 'a typed unavailable result exposes no partial output and every input and arithmetic allocation remains explicitly bounded'
+  - id: A4
+    given: 'the integrated native publication and ordinary SessionEnd consumer'
+    when: 'the prepared metadata traverses original binding anchored publication and the ordinary reader'
+    then: 'retained exact counts models preservation evidence and hostile publication controls are observed before completed closure'
+observability:
+  - 'Owned prepared bytes input and output digests summary mode and bounded unavailable reasons with retained raw focused checks'
+rollback:
+  - 'Revert owned source through normal governed history; preserve failed checks and the parent native consumer obligation'
+non_functional:
+  security:
+    - 'No filesystem authority or interpreter process creation; reject duplicates and bounded arithmetic exhaustion without partial effects'
+contracts:
+  - name: 'session-seal-preparation'
+    type: api
+  - name: 'session-seal-metadata'
+    type: schema
