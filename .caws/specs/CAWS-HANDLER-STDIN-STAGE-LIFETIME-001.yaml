@@ -114,6 +114,6 @@ evidence:
     commit_sha: ce5ced6c
   - criterion_id: A6
     status: pass
-    evidence_ref: "parse-input.sh _write_payload_file comment at ce5ced6c (f4168df9) names the EXIT trap, states it runs on TERM/INT/HUP but not KILL, and that no shipped dispatcher consumes CAWS_TEMP_FILES; source review: no CAWS_TEMP_FILES consumer under templates or src at 1169f7df"
-    recorded_at: "2026-10-22T19:40:15.859Z"
-    commit_sha: ce5ced6c
+    evidence_ref: "parse-input.sh _write_payload_file comment (f4168df9, unchanged through 50ba057b) names the EXIT trap, its TERM/INT/HUP vs KILL limit, and that no shipped dispatcher consumes CAWS_TEMP_FILES; source review at 1169f7df found no consumer under templates or src"
+    recorded_at: "2026-10-22T20:13:20.516Z"
+    commit_sha: "50ba057b"
