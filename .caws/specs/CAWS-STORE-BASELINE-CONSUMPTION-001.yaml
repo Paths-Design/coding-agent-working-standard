@@ -1,9 +1,10 @@
 id: CAWS-STORE-BASELINE-CONSUMPTION-001
 title: 'Retain context-bound in-process store baseline consumption evidence'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: store-baseline-consumption
 created_at: '2026-10-22T09:02:31.084Z'
-updated_at: '2026-10-22T09:02:31.084Z'
+updated_at: '2026-10-22T09:02:53.203Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
