@@ -47,3 +47,9 @@ evidence:
     recorded_at: "2026-10-22T16:56:46.315Z"
     artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a1620e-59d6-7373-b74b-25d9f5f7b1e9/native-build-stable-entry/attempt-03/terminal.json"
     commit_sha: "3a2422fcb5f9bcae0b392c7193b4760cb94ecbab"
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Actual79-case named suite exits0 on pinned3a2422fc, including duplicate/cached/wrong source/manifest/kind/profile/path/escaped Cargo-record controls and changed hash/mode/symlink/path/shape/oversize private-file controls. Production selector/verifier executed against synthetic Cargo records and real private filesystem files; no freshly built stable-entry Cargo record or successful complete v2 build/load was produced. Therefore the freshly built-entry premise of A2 remains unestablished and A2 stays unchecked. Lead01a15a2a retains actual fresh debug/release v2 artifact production and parent image/consumer qualification; component source landing does not establish that premise."
+    recorded_at: "2026-10-22T17:16:33.556Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a1620e-59d6-7373-b74b-25d9f5f7b1e9/native-build-stable-entry/attempt-03/terminal.json"
+    commit_sha: "3a2422fcb5f9bcae0b392c7193b4760cb94ecbab"
