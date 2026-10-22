@@ -6421,6 +6421,13 @@ Additional bounded evidence and unresolved dependencies:
   obligation under parent A3/A4. The observer component does not qualify every
   candidate consumer or process.
 
+  The active observer unit `CAWS-STORE-BASELINE-CONSUMPTION-001` retains an
+  additional A5 obligation: await the actual supported Stryker API and bind
+  terminal completion rather than accepting CLI exit0 or a surviving closed JSON
+  file alone. Its fixture mechanics do not qualify that production consumer. The
+  original ordinary positive/negative/restored sequence remains owed; no full
+  mutation campaign or score is established.
+
 - E256: Review of R01 candidate `f9a90160` reaches executable-position ownership
   and managed-header boundaries that its237 passing checks miss. The owner
   retains failing canonical and producer controls and repairs classification
@@ -6452,30 +6459,31 @@ Additional bounded evidence and unresolved dependencies:
   tested/committed patch hash
   `d38d6ff599746009a0ad2b39e7779d64c1f0847fa533a34b669d84ff1e721a22`. Seven
   focused suites pass427 checks; the retained Jest JSON hashes to
-  `f3be7432daad9a8c8bba639890afc13f2d34fc67678817ed2b9e4cb6edc7da55`. The
-  preceding ordinary CLI preview plans a second CAWS handler. After repair,
-  actual `configure --plan` and apply each exit1 with the reconciliation
-  diagnostic; `compound-cli-before.json` and `compound-cli-after.json` retain
-  identical16 file hashes and modes. These artifacts live under the existing
-  `claude-failure-policy/compound-*` paths. Node18.0 and22.19 each record22
-  built-helper decisions; neither executes the complete package or a native
-  callback. The committed review and root inspection support this bounded
-  repair, not complete discovery. Syntax before the encoded name, aliases and
-  indirect foreign invocation remain unqualified. The retained
-  `preceding-syntax-plan.stdout.json` plans another CAWS handler for the earlier
-  unsupported-syntax case; a preview does not establish duplicate execution.
-  Root retains the actual one-event invocation/guard-journal obligation under
-  parent A5, while R01 A4/A5 remain recorded unchecked. Source integration is
-  held; the owner prepares fresh private package qualification from the owned
-  candidate without depending on a source merge. The first invalid-Git run
-  retains complete JSON failure diagnostics, but its separate stdout/stderr were
-  overwritten by the corrected run; `exec-red-log-custody.json` identifies the
-  preserved and replaced streams. Combined-source qualification, fresh package
-  images, native callbacks and rollback qualification remain owed. No new R01
-  landing or actual-machine registration/selection change is inferred. AIM
-  delivery to c4 is confirmed; current sends to dd67 and c843 are refused for
-  stale leases, and dd67's earlier raw-carrier follow-up remains queued. Those
-  peers have not accepted these new handoffs.
+  `f3be7432daad9a8c8bba639890afc13f2d34fc67678817ed2b9e4cb6edc7da55`.
+  `compound-cli-valid-before-plan.stdout.json` retains the pre-repair preview of
+  a second CAWS handler. After repair, actual `configure --plan` and apply each
+  exit1 with the reconciliation diagnostic; `compound-cli-before.json` and
+  `compound-cli-after.json` retain identical16 file hashes and modes. These
+  artifacts live under the existing `claude-failure-policy/compound-*` paths.
+  Node18.0 and22.19 each record22 built-helper decisions; neither executes the
+  complete package or a native callback. The committed review and root
+  inspection support this bounded repair, not complete discovery. Syntax before
+  the encoded name, aliases and indirect foreign invocation remain unqualified.
+  The retained `preceding-syntax-plan.stdout.json` plans another CAWS handler
+  for the earlier unsupported-syntax case; a preview does not establish
+  duplicate execution. Root retains the actual one-event
+  invocation/guard-journal obligation under parent A5, while R01 A4/A5 remain
+  recorded unchecked. Source integration is held; the owner prepares fresh
+  private package qualification from the owned candidate without depending on a
+  source merge. The first invalid-Git run retains complete JSON failure
+  diagnostics, but its separate stdout/stderr were overwritten by the corrected
+  run; `exec-red-log-custody.json` identifies the preserved and replaced
+  streams. Combined-source qualification, fresh package images, native callbacks
+  and rollback qualification remain owed. No new R01 landing or actual-machine
+  registration/selection change is inferred. AIM delivery to c4 is confirmed;
+  current sends to dd67 and c843 are refused for stale leases, and dd67's
+  earlier raw-carrier follow-up remains queued. Those peers have not accepted
+  these new handoffs.
 
 - E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
   `native-session-publication`, based on `03d663b6`, for the continuous original
