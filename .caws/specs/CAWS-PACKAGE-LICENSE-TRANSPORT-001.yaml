@@ -1,10 +1,11 @@
 id: CAWS-PACKAGE-LICENSE-TRANSPORT-001
 title: 'Carry exact source licenses through CLI pack and snapshot lifecycle'
 mode: fix
-lifecycle_state: active
-worktree: package-license-transport
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded license transport qualified at29291227: ordinary and ignore-scripts private snapshot produce byte-identical3f17f60e tar with exact MIT/Unicode/HTML licenses; all1261 installed package files match tar.24 filesystem and9 snapshot scenarios, build, actual pack/install/version exit0; escaped-path cleaner no-op reproduced and repaired. A1-A4 recorded with raw artifact paths. Strict dependency no-mutation check failed on two new empty Prettier cache directories; existing file/mode/link and Node-image snapshots match; failure and directories retained, lead accepts remaining fullstore preflight consequence. No legal, native publication/shared adoption, active namespace race, power-loss or strict immutability claim.'
 created_at: '2026-10-22T02:40:58.291Z'
-updated_at: '2026-10-22T02:41:17.972Z'
+updated_at: '2026-10-22T03:44:11.637Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
