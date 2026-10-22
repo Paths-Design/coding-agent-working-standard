@@ -63,3 +63,9 @@ acceptance:
     then: 'the corresponding tests fail'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Mutants run against candidate 9aabcae9 bytes using disposable copies (shell: CAWS_HEARTBEAT_CUSTODY_SHARED_DIR copy differing by one line; typed: dist mutated, then restored and sha re-checked): shell guard removed -> 52/93 failed (9aabcae9-a7-guard.json); shell uncertain->main -> 37/93 failed, exactly the 35 uncertain rows plus both env-spoof tests (9aabcae9-a7-uncertain.json); typed custody check -> true -> 8/31 failed (9aabcae9-a7-typed.json); typed actor-context uncertain->main -> 27/60 failed (9aabcae9-a7-typed-uncertain.json). Receipt 9aabcae9-a7-receipt.txt. All under /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/subagent-mail-custody/. Re-derivation checks only the commit; the mutant outcomes are agent-run artifacts."
+    recorded_at: "2026-10-22T05:29:59.720Z"
+    commit_sha: "9aabcae99fd91c274fde35dbdb24a8d6a9ea892b"
