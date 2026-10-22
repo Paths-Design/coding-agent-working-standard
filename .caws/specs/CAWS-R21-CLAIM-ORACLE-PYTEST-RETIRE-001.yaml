@@ -65,3 +65,8 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js::bash-write-guard.sh refuses mutations inside a foreign-claimed directory"
     commit_sha: c66730a3
     test_verified_at: c66730a37f1c737a180eef774519ee6f6866b8d1
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Commit d4b17b1d deletes packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py, which is absent at c66730a3. git diff --name-status against merge-base a127aff0 lists exactly that deletion and the new tests/hooks/worktree-claim-oracle.test.js; merge-tree against main 2d58e00f is clean. Narrative (artifacts outside repo, not re-derived here): PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider --collect-only gives 444 on main 0d714b0b with 10 claim-oracle ids and 434 on c66730a3 with 0, both exit 0 and 0 collection errors (collect-main.txt, c66730a3-collect-candidate.txt). CI hook_pytest still runs the other modules."
+    recorded_at: "2026-10-22T00:12:43.790Z"
+    commit_sha: c66730a3
