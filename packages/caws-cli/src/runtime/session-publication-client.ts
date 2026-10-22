@@ -363,6 +363,12 @@ export async function continueNativeSessionPublication(
     cancelled();
     const preparation = await options.prepare(input);
     cancelled();
+    requireValue(
+      preparation !== null &&
+        typeof preparation === 'object' &&
+        (preparation.disposition === 'ready' || preparation.disposition === 'aborted'),
+      'Invalid publication preparation disposition'
+    );
     if (preparation.disposition === 'aborted') {
       requireValue(text(preparation.diagnostic, 4096), 'Invalid preparation diagnostic');
       aborted = true;

@@ -287,6 +287,36 @@ test.each([
   expect(state.writes).toEqual([]);
 });
 
+test.each([
+  { disposition: undefined },
+  { disposition: null },
+  { disposition: 'refused' },
+  { disposition: ['ready'] },
+])(
+  'unknown preparation disposition %j refuses before copying or writing output',
+  async ({ disposition }) => {
+    const state = setup(sealFrames());
+    const original = Buffer.from;
+    let copies = 0;
+    const spy = jest.spyOn(Buffer, 'from').mockImplementation((value, ...args) => {
+      if (value === outputBytes) {
+        copies++;
+        throw Error('copy of refused output');
+      }
+      return original(value, ...args);
+    });
+    try {
+      await expect(state.run(async () => ({ ...readyPreparation(), disposition }))).rejects.toThrow(
+        'Invalid publication preparation disposition'
+      );
+      expect(copies).toBe(0);
+      expect(state.writes).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+  }
+);
+
 test('aborted preparation sends no output bytes and consumes a definite refusal', async () => {
   const state = setup([
     prepareFrame(),
