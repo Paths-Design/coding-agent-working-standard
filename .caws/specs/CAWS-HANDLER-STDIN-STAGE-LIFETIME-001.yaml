@@ -102,3 +102,8 @@ evidence:
     evidence_ref: "t5 ok on ce5ced6c (mktemp stub refuses only the stage template; reader kind=pipe, bytes exact); m5 (fallback </dev/null) not ok 5 at cmp. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/attempts/*-m5-fallback-drop-ce5ced6c/run.tap"
     recorded_at: "2026-10-22T19:39:38.335Z"
     commit_sha: ce5ced6c
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "t6 ok on ce5ced6c (32768 chars -> pipe, 32769 -> regular file, wc exact); m6 (>= 32768) not ok 6 at kind=file for 32768; m2 not ok 6 at wc 32769. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/attempts/*-m6-bound-ge-ce5ced6c/run.tap"
+    recorded_at: "2026-10-22T19:39:40.525Z"
+    commit_sha: ce5ced6c
