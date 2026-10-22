@@ -73,6 +73,20 @@ acceptance:
       python3 present exits 2 with the foreign-worktree refusal, owner-self exits 0,
       failing and absent exit 2 with the [caws-guard-realpath] class, and the target
       path stays absent.
+  - id: A5
+    given: >-
+      the A1 and A4 fixture and a python3 that forwards to the real interpreter
+      except that one chosen realpath call exits 0 printing only line feeds or
+      nothing
+    when: >-
+      each reachable normalization in worktree-write-guard (foreign payload,
+      canonical-claim absolute and relative targets) and bash-write-guard (static
+      mutation target, Git metadata) is answered that way in turn
+    then: >-
+      every such run exits 2 with the empty-result class and the guard refusal
+      naming the input, and the target path stays absent. Against the pre-repair
+      helper the first normalization of each guard admitted with exit 0 and empty
+      output.
 non_functional: {}
 contracts: []
 evidence:
