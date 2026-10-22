@@ -119,7 +119,7 @@ evidence:
     commit_sha: "6703e691fe5d7c8d10bba40b0777e4b7eba4f196"
   - criterion_id: A5
     status: unchecked
-    evidence_ref: "PARTIAL awaited API mechanics: resolving, rejection, cleanup, warn-only, nonzero and publication-after-complete-bytes controls pass; actual child1 refuses despite resolved0 JSON. Public pinned API Promise source inspected; actual production Stryker API execution remains unverified."
-    recorded_at: "2026-10-22T10:32:17.508Z"
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-02/inspected-artifacts.json"
-    commit_sha: "6703e691fe5d7c8d10bba40b0777e4b7eba4f196"
+    evidence_ref: "Actual ordinary-positive-01 at547d now executes the pinned public API: current run89dd3c16-c3f4-4a80-b024-d6095590c6ad API resolved/exitCode0/errornull (SHA711bf6538f0d74304f0718e58d8a265ea3936b8438eac7670942e0344a77bce1), actual child status0/signalnull/errornull (SHA5f54eb1a34fa66592aa5fb7f5956f11342f5fe3d274c2d349c0f469e1fe36394). Outer qualification remains failed1 due observer tool arrayorder; no acceptance inferred. Earlier rejection/cleanup/warn/nonzero fixture controls at97f7 passed277, but distinguishing ordinary negative/restored remains owed. Raw receipts in ordinary-positive-01/inspected-artifacts.json SHAfe94885aff9323764141b4e9153c6096033022ca78cd768391bbb618aff5c6be under external store-baseline-consumption/attempt-01."
+    recorded_at: "2026-10-22T11:51:27.125Z"
+    exit_code: 1
+    commit_sha: "547d4f96b00bbaac7919a24a22476ac36b7c8a3a"
