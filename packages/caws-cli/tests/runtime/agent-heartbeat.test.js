@@ -90,9 +90,11 @@ beforeEach(() => {
   for (const root of [checkout, canonical])
     fs.mkdirSync(path.join(root, '.caws'), { recursive: true });
   now = Date.now();
+  const payload = { session_id: 'same-session', tool_name: 'Bash' };
   context = {
     request: {
-      payload: { session_id: 'same-session', tool_name: 'Bash' },
+      payload,
+      inputJson: JSON.stringify(payload),
       caller: { processId: 9876 },
       deadlineEpochMs: now + 60_000,
     },
@@ -400,12 +402,37 @@ test('redirected checkout sidecars cannot write outside the checkout and never s
   expect(fs.readdirSync(outside)).toEqual([]);
 });
 
+// The runtime guarantees payload is the parse of inputJson (or {} for empty input).
+function ingress(payload, inputJson = JSON.stringify(payload)) {
+  context.request.payload = payload;
+  context.request.inputJson = inputJson;
+}
+function offerRecords(cawsDir, id) {
+  return fs
+    .readFileSync(path.join(cawsDir, 'messages.jsonl'), 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .filter((record) => record.record === 'offer' && record.deliver_ids.includes(id));
+}
+function queue(text) {
+  const cawsDir = path.join(canonical, '.caws');
+  const sent = sendMessage(cawsDir, {
+    actor: { kind: 'agent', id: 'sender', session_id: 'sender' },
+    to: 'same-session',
+    text,
+    requireLive: false,
+  });
+  expect(sent.ok).toBe(true);
+  return { cawsDir, id: sent.value.message.id };
+}
+
 // A subagent's hooks carry the parent's session id; offering the parent's mail there
 // would settle it into a context the parent never reads.
 test.each([['sub-1'], [''], [7], [null]])(
   'agent_id %p keeps the lease write and peer notice but never polls the parent mailbox',
   async (agentId) => {
-    context.request.payload.agent_id = agentId;
+    ingress({ session_id: 'same-session', tool_name: 'Bash', agent_id: agentId });
     const p = ports({ heartbeat: jest.fn(() => summary([peer()])) });
     const result = await executeAgentHeartbeat(context, p);
     expect(p.heartbeat).toHaveBeenCalledTimes(1);
@@ -417,40 +444,55 @@ test.each([['sub-1'], [''], [7], [null]])(
 );
 test('real stores keep subagent-observed mail pending until the parent context offers it once', async () => {
   const p = ports({ heartbeat: heartbeatAgentActivity, poll: pollAgentMessages });
-  const cawsDir = path.join(canonical, '.caws');
-  const sent = sendMessage(cawsDir, {
-    actor: { kind: 'agent', id: 'sender', session_id: 'sender' },
-    to: 'same-session',
-    text: 'for the parent only',
-    requireLive: false,
-  });
-  expect(sent.ok).toBe(true);
-  const id = sent.value.message.id;
-  const offerRecords = () =>
-    fs
-      .readFileSync(path.join(cawsDir, 'messages.jsonl'), 'utf8')
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => JSON.parse(line))
-      .filter((record) => record.record === 'offer' && record.deliver_ids.includes(id));
+  const { cawsDir, id } = queue('for the parent only');
 
-  context.request.payload.agent_id = 'a13a6319c8155f001';
-  context.request.payload.agent_type = 'general-purpose';
+  ingress({
+    session_id: 'same-session',
+    tool_name: 'Bash',
+    agent_id: 'a13a6319c8155f001',
+    agent_type: 'general-purpose',
+  });
   const fromSubagent = await executeAgentHeartbeat(context, p);
   expect(output(fromSubagent)).not.toContain('for the parent only');
   expect(fromSubagent.offers).toEqual([]);
-  expect(offerRecords()).toEqual([]);
+  expect(offerRecords(cawsDir, id)).toEqual([]);
   expect(getMessageDeliveryState(cawsDir, id).value.delivered).toBe(false);
 
-  delete context.request.payload.agent_id;
-  delete context.request.payload.agent_type;
+  ingress({ session_id: 'same-session', tool_name: 'Bash' });
   const fromParent = await executeAgentHeartbeat(context, p);
   expect(output(fromParent)).toContain('for the parent only');
   expect(fromParent.offers).toHaveLength(1);
-  expect(offerRecords()).toHaveLength(1);
+  expect(offerRecords(cawsDir, id)).toHaveLength(1);
   const [offer] = fromParent.offers;
   expect(offer.recipient).toBe('same-session');
   expect(settleMessageOffer(cawsDir, offer.offerId, offer.recipient, 'delivered').ok).toBe(true);
   expect(getMessageDeliveryState(cawsDir, id).value.delivered).toBe(true);
   expect(output(await executeAgentHeartbeat(context, p))).not.toContain('for the parent only');
 });
+
+// Empty hook input is admitted as payload {}; custody follows the original text, so the
+// same session context is withheld for absent or unparseable input and offered once for
+// a valid main-thread object.
+test.each([
+  ['empty', ''],
+  ['malformed', '{"session_id":"same-session"'],
+  ['non-object', '[{"session_id":"same-session"}]'],
+])(
+  'real stores withhold for %s original input with session context, then offer a valid original once',
+  async (_, inputJson) => {
+    const p = ports({ heartbeat: heartbeatAgentActivity, poll: pollAgentMessages });
+    const { cawsDir, id } = queue('original-input custody');
+    ingress({ session_id: 'same-session', tool_name: 'Bash' }, inputJson);
+    const absent = await executeAgentHeartbeat(context, p);
+    expect(output(absent)).not.toContain('original-input custody');
+    expect(absent.offers).toEqual([]);
+    expect(offerRecords(cawsDir, id)).toEqual([]);
+    expect(getMessageDeliveryState(cawsDir, id).value.delivered).toBe(false);
+
+    ingress({ session_id: 'same-session', tool_name: 'Bash' });
+    const valid = await executeAgentHeartbeat(context, p);
+    expect(output(valid)).toContain('original-input custody');
+    expect(valid.offers).toHaveLength(1);
+    expect(offerRecords(cawsDir, id)).toHaveLength(1);
+  }
+);

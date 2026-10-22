@@ -8,7 +8,7 @@ const { sendMessage, getMessageDeliveryState } = require('../../dist/store/messa
 const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
 const { readGitDirInfo } = require('../../dist/store/repo-root');
 const { createHandlerExecutor } = require('../../dist/runtime/handler-executor');
-const { actorContext } = require('../../dist/runtime/actor-context');
+const { ingressActorContext } = require('../../dist/runtime/actor-context');
 const ROWS = require('./actor-context-rows.json');
 
 jest.setTimeout(180_000);
@@ -136,6 +136,11 @@ function offers(id) {
     .map((line) => JSON.parse(line))
     .filter((record) => record.record === 'offer' && record.deliver_ids.includes(id));
 }
+// A capture file holds a complete hook payload, so none may outlive its invocation.
+function captures() {
+  return fs.readdirSync(env.TMPDIR).filter((name) => name.startsWith('caws-heartbeat-ingress-'))
+    .length;
+}
 // The lease proves the heartbeat ran for this session, so a withheld result cannot
 // come from a handler that never executed.
 function custody(mail, stdout) {
@@ -146,11 +151,12 @@ function custody(mail, stdout) {
     shown: stdout.includes(mail.text),
     delivered: state.value.delivered,
     offers: offers(mail.id).length,
+    captures: captures(),
   };
 }
-const WITHHELD = { ran: true, shown: false, delivered: false, offers: 0 };
-const CONSUMED = { ran: true, shown: true, delivered: true, offers: 0 };
-const RESERVED = { ran: true, shown: true, delivered: false, offers: 1 };
+const WITHHELD = { ran: true, shown: false, delivered: false, offers: 0, captures: 0 };
+const CONSUMED = { ran: true, shown: true, delivered: true, offers: 0, captures: 0 };
+const RESERVED = { ran: true, shown: true, delivered: false, offers: 1, captures: 0 };
 
 function payload(sessionId, extra = {}) {
   return {
@@ -175,7 +181,7 @@ const heartbeat = (input, extra) =>
 const dispatcher = (input, extra) =>
   run('/bin/bash', [path.join(hooks, 'dispatch/pre_tool_use.sh')], { input, extra });
 
-async function typedExecutor(value, extra = {}) {
+async function typedExecutor(value, extra = {}, deadlineMs = 90_000) {
   const file = path.join(hooks, 'agent-heartbeat.sh');
   const selected = {
     name: 'agent-heartbeat.sh',
@@ -211,7 +217,7 @@ async function typedExecutor(value, extra = {}) {
     event: 'pre_tool_use',
     configuration: 'system',
     caller: { cwd: repo, environment },
-    deadlineEpochMs: Date.now() + 90_000,
+    deadlineEpochMs: Date.now() + deadlineMs,
     payload: value,
     inputJson: JSON.stringify(value),
   };
@@ -246,17 +252,43 @@ test.each(ROWS)(
   }
 );
 
+// Byte sequences no JSON string fixture can carry. The runtime rejects them before a
+// typed request exists; the shell classifier must decode just as strictly.
+const object = (middle) =>
+  Buffer.concat([
+    Buffer.from('{"session_id":"custody-session","note":"'),
+    Buffer.from(middle),
+    Buffer.from('"}'),
+  ]);
+const BYTE_ROWS = [
+  ['an invalid UTF-8 byte 0xFF in an ignored string', object([0xff])],
+  ['an overlong encoding of a slash', object([0xc0, 0xaf])],
+  ['a UTF-8-encoded lone surrogate', object([0xed, 0xa0, 0x80])],
+];
+test.each(BYTE_ROWS)('the shipped shell classifier rejects %s', (_, bytes) => {
+  const result = spawnSync(process.execPath, ['-e', shellClassifier()], { input: bytes });
+  expect(result.status).toBe(0);
+  expect(result.stdout.toString()).toBe('uncertain');
+});
+test.each(BYTE_ROWS)(
+  'undecodable ingress withholds on the standalone and fast paths: %s',
+  (_, bytes) => {
+    for (const fast of [false, true]) {
+      const sid = session();
+      const mail = seed(sid);
+      const input = Buffer.from(bytes.toString('latin1').replace(PLACEHOLDER, sid), 'latin1');
+      const result = heartbeat(input, fast ? fastPath(sid) : {});
+      expect(result.status).toBe(0);
+      expect(custody(mail, result.stdout)).toEqual(WITHHELD);
+    }
+  }
+);
+
 describe('shell heartbeat decides mail custody from its own ingress, matching actorContext', () => {
   test.each(ROWS.filter((row) => row.object))(
     'parsed by the handler: $label',
     ({ json, expected }) => {
-      let parsed;
-      try {
-        parsed = JSON.parse(json);
-      } catch {
-        parsed = undefined;
-      }
-      expect(actorContext(parsed)).toBe(expected);
+      expect(ingressActorContext(json)).toBe(expected);
       const sid = session();
       const mail = seed(sid);
       const result = heartbeat(json.replaceAll(PLACEHOLDER, sid));
@@ -374,6 +406,15 @@ test('a subagent call keeps the lease write and peer notice while the mail waits
   expect(result.stdout).toContain('custody-peer');
   expect(custody(mail, result.stdout)).toEqual(WITHHELD);
   expect(fs.existsSync(path.join(cawsDir, 'leases', `${sid}.json`))).toBe(true);
+});
+
+// The typed executor kills a handler at its deadline, so nothing the heartbeat wrote may
+// still hold the payload, and nothing unsettled may count as delivered.
+test('a typed invocation killed at its deadline leaves no capture file and undelivered mail', async () => {
+  const sid = session();
+  const mail = seed(sid);
+  await expect(typedExecutor(payload(sid), {}, 250)).rejects.toThrow('deadline expired');
+  expect(custody(mail, '')).toMatchObject({ shown: false, delivered: false, captures: 0 });
 });
 
 test('mail observed by a subagent call is offered exactly once at the next parent call', async () => {

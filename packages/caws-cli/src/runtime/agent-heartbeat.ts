@@ -16,7 +16,7 @@ import {
 } from '../application/agent-heartbeat';
 import { pollAgentMessages, type MessagePollApplicationPayload } from '../application/message-poll';
 import type { LeaseContext } from '../kernel';
-import { actorContext } from './actor-context';
+import { ingressActorContext } from './actor-context';
 import type { HandlerResult } from './composer';
 import { createContextGitPort } from './context';
 import {
@@ -334,7 +334,7 @@ export async function executeAgentHeartbeat(
   try {
     // Mail addressed to the session is offered only where its context will read it.
     if (
-      actorContext(request.payload) === 'main' &&
+      ingressActorContext(request.inputJson) === 'main' &&
       !signal.aborted &&
       ports.now().getTime() < request.deadlineEpochMs
     ) {

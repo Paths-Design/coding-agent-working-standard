@@ -138,5 +138,11 @@
     "expected": "uncertain",
     "json": "{\"session_id\":\"custody-session\""
   },
-  { "label": "uncertain: empty input", "object": false, "expected": "uncertain", "json": "" }
+  { "label": "uncertain: empty input", "object": false, "expected": "uncertain", "json": "" },
+  {
+    "label": "uncertain: byte order mark before a main object",
+    "object": false,
+    "expected": "uncertain",
+    "json": "﻿{\"session_id\":\"custody-session\"}"
+  }
 ]

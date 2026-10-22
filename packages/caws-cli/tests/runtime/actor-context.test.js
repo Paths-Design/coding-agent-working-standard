@@ -1,17 +1,11 @@
-const { actorContext } = require('../../dist/runtime/actor-context');
+const { actorContext, ingressActorContext } = require('../../dist/runtime/actor-context');
 
 // The JSON texts are the ingress contract; tests/hooks/heartbeat-actor-custody.test.js
 // feeds the same rows to the shell heartbeat and requires the same custody decision.
 const ROWS = require('../hooks/actor-context-rows.json');
 
 test.each(ROWS)('ingress $label', ({ json, expected }) => {
-  let payload;
-  try {
-    payload = JSON.parse(json);
-  } catch {
-    payload = undefined;
-  }
-  expect(actorContext(payload)).toBe(expected);
+  expect(ingressActorContext(json)).toBe(expected);
 });
 
 test('the contract table covers every class and the present-but-invalid ids', () => {
@@ -26,4 +20,12 @@ test('the contract table covers every class and the present-but-invalid ids', ()
 test('values outside a JSON object are uncertain, never main', () => {
   for (const value of [undefined, null, [], ['agent_id'], 'agent_id', 7, true])
     expect(actorContext(value)).toBe('uncertain');
+});
+
+// The runtime admits empty hook input as payload {}; only the original text decides.
+test('absent or empty original input is uncertain even though its normalized payload is {}', () => {
+  expect(actorContext({})).toBe('main');
+  expect(ingressActorContext('')).toBe('uncertain');
+  expect(ingressActorContext(undefined)).toBe('uncertain');
+  expect(ingressActorContext('{}')).toBe('main');
 });

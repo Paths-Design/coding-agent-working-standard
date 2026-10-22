@@ -59,12 +59,14 @@ caws_source_lib emit.sh 2>/dev/null || true
 # Mirrors src/runtime/actor-context.ts; the custody tests compare them row by row.
 _hb_classify_actor() {
   node -e '
-    let raw = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (c) => { raw += c; });
+    const chunks = [];
+    process.stdin.on("data", (c) => { chunks.push(c); });
     process.stdin.on("end", () => {
       let payload;
-      try { payload = JSON.parse(raw); } catch { payload = undefined; }
+      try {
+        const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+        payload = JSON.parse(text.decode(Buffer.concat(chunks)));
+      } catch { payload = undefined; }
       let actor = "uncertain";
       if (typeof payload === "object" && payload !== null && !Array.isArray(payload)) {
         const id = payload.agent_id;
@@ -76,27 +78,34 @@ _hb_classify_actor() {
   ' 2>/dev/null
 }
 
-# Mail custody is decided from the bytes this handler received on stdin, captured
-# before the parser runs: the parser repairs control bytes, so its output can lack
-# an agent_id the received bytes never validly carried. A preset HOOK_TOOL_NAME
-# means a dispatcher already parsed and piped the payload here. Without it, a
-# preset HOOK_INPUT_JSON would become the parsed identity although this handler
-# never received it. That, a TTY, or a failed capture stays uncertain.
+# Mail custody is decided from the bytes this handler received on stdin, before the
+# parser runs: the parser repairs control bytes and undecodable text, so its output
+# can lack an agent_id the received bytes never validly carried. A preset
+# HOOK_TOOL_NAME means a dispatcher already parsed and piped the payload here, so
+# stdin is classified directly and nothing is written. Without it, the same bytes
+# feed the parser through a trapped capture file. A preset HOOK_INPUT_JSON there
+# would become the parsed identity although this handler never received it; that, a
+# TTY, or a failed capture stays uncertain.
 _HB_FAST_PATH=0
 [[ -n "${HOOK_TOOL_NAME+set}" ]] && _HB_FAST_PATH=1
 _HB_ACTOR=uncertain
 _HB_INGRESS=""
-if [[ ! -t 0 && ( "$_HB_FAST_PATH" == 1 || -z "${HOOK_INPUT_JSON:-}" ) ]]; then
+if [[ -t 0 ]]; then
+  :
+elif [[ "$_HB_FAST_PATH" == 1 ]]; then
+  _HB_ACTOR="$(_hb_classify_actor)"
+elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
   _HB_INGRESS="$(mktemp "${TMPDIR:-/tmp}/caws-heartbeat-ingress-XXXXXX" 2>/dev/null)" || _HB_INGRESS=""
-  if [[ -n "$_HB_INGRESS" ]] && cat > "$_HB_INGRESS" 2>/dev/null; then
-    _HB_ACTOR="$(_hb_classify_actor < "$_HB_INGRESS")"
+  if [[ -n "$_HB_INGRESS" ]]; then
+    trap 'rm -f "$_HB_INGRESS"' EXIT
+    cat > "$_HB_INGRESS" 2>/dev/null && _HB_ACTOR="$(_hb_classify_actor < "$_HB_INGRESS")"
   fi
 fi
 case "$_HB_ACTOR" in
   main | subagent) ;;
   *) _HB_ACTOR=uncertain ;;
 esac
-if [[ "$_HB_FAST_PATH" == 0 && -n "$_HB_INGRESS" ]]; then
+if [[ -n "$_HB_INGRESS" ]]; then
   parse_hook_input < "$_HB_INGRESS"
 else
   parse_hook_input

@@ -15,3 +15,15 @@ export function actorContext(payload: unknown): ActorContext {
   const id = (payload as Readonly<Record<string, unknown>>).agent_id;
   return typeof id === 'string' && AGENT_ID.test(id) ? 'subagent' : 'uncertain';
 }
+
+/** Classifies the original hook input text rather than its normalized payload: the
+ * runtime admits empty input as payload {}, which must not read as a main-thread object.
+ */
+export function ingressActorContext(inputJson: unknown): ActorContext {
+  if (typeof inputJson !== 'string' || inputJson === '') return 'uncertain';
+  try {
+    return actorContext(JSON.parse(inputJson));
+  } catch {
+    return 'uncertain';
+  }
+}
