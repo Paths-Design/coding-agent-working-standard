@@ -418,6 +418,36 @@ _rh_record_execution() {
   return 0
 }
 
+# _rh_exec_staged <handler_path> <stderr_file> [args...]
+# Runs ONLY as the whole body of a handler's command substitution, whose subshell
+# it replaces with the handler. The inline payload is written to a stage this
+# subshell creates, opened as the subshell's stdin, and unlinked before the
+# handler starts. So no stage file exists while any handler runs, and killing
+# the dispatcher at any point a handler is running leaves none behind. Each
+# handler opens its own stage, so every reader starts at offset zero and a
+# handler that never reads cannot block a writer. The only path it removes is
+# the one its own mktemp returned. TERM, INT or HUP to this subshell before the
+# unlink still removes the stage through its EXIT trap; a KILL delivered in that
+# short window (mktemp, write, open) can leave one stage. If the stage cannot
+# be created or opened, the payload goes through the historical pipe instead.
+_rh_exec_staged() {
+  local handler_path="$1" stderr_file="$2"
+  shift 2
+  _rh_stage=$(mktemp "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || _rh_stage=""
+  if [[ -n "$_rh_stage" ]]; then
+    trap 'rm -f -- "$_rh_stage" 2>/dev/null' EXIT
+    if printf '%s' "${HOOK_INPUT_JSON-}" > "$_rh_stage" 2>/dev/null \
+      && exec 0<"$_rh_stage"; then
+      rm -f -- "$_rh_stage" 2>/dev/null
+      trap - EXIT
+      exec "$handler_path" "$@" 2>"$stderr_file"
+    fi
+    rm -f -- "$_rh_stage" 2>/dev/null
+    trap - EXIT
+  fi
+  printf '%s' "${HOOK_INPUT_JSON-}" | "$handler_path" "$@" 2>"$stderr_file"
+}
+
 run_handlers() {
   local short_circuit=0
   # Dispatch-scoped staging for dedup keys, declared with the other locals so it
@@ -533,32 +563,22 @@ run_handlers() {
   # dispatch on stderr, and in the command-substitution subshell the SIGPIPE
   # could take the whole dispatch down (exit 141). Feed handlers from a file
   # instead: the parse stage's payload file when transport already moved the
-  # bytes to disk, or a dispatch-scoped stage of the inline payload once it
+  # bytes to disk, or a per-handler stage of the inline payload once it
   # exceeds a pipe-safe bound (32KiB is below every kernel pipe buffer, so
-  # the pipe path never blocks). Small inline payloads keep the historical
-  # pipe: no temp I/O on the common path. Staging failure is fail-open --
-  # the pipe path still delivers, only the noise class remains.
-  # Declared unconditionally (see the bash 3.2 / set -u note above): this is
+  # the pipe path never blocks; see _rh_exec_staged). Small inline payloads
+  # keep the historical pipe: no temp I/O on the common path. Staging failure
+  # is fail-open -- the pipe path still delivers, only the noise class remains.
+  # Declared unconditionally (see the bash 3.2 / set -u note above): these are
   # read inside the handler loop on every path.
   local stdin_file="${HOOK_PAYLOAD_FILE:-}"
+  local stage_inline=0
   if [[ -z "$stdin_file" ]]; then
     # bash 3.2 has no ${#var-} length-with-default form; stage the value
     # first so the length expansion stays unset-safe under set -u.
     local _rh_payload_json="${HOOK_INPUT_JSON-}"
     local _rh_payload_len=${#_rh_payload_json}
     if (( _rh_payload_len > 32768 )); then
-      stdin_file=$(mktemp "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || stdin_file=""
-      if [[ -n "$stdin_file" ]] \
-        && printf '%s' "$HOOK_INPUT_JSON" > "$stdin_file" 2>/dev/null; then
-        if [[ -n "${CAWS_TEMP_FILES+x}" ]]; then
-          CAWS_TEMP_FILES+=("$stdin_file")
-        else
-          CAWS_TEMP_FILES=("$stdin_file")
-        fi
-      else
-        [[ -n "$stdin_file" ]] && rm -f "$stdin_file" 2>/dev/null
-        stdin_file=""
-      fi
+      stage_inline=1
     fi
   fi
   # Only a readable file may back stdin; anything else degrades to the pipe.
@@ -654,6 +674,8 @@ run_handlers() {
       # stdin comes from the file, so a handler that exits without reading it
       # cannot strand a blocked writer on a pipe.
       stdout_buf=$("$handler_path" "$@" < "$stdin_file" 2>"$stderr_file")
+    elif (( stage_inline )); then
+      stdout_buf=$(_rh_exec_staged "$handler_path" "$stderr_file" "$@")
     else
       stdout_buf=$(printf '%s' "$HOOK_INPUT_JSON" \
                     | "$handler_path" "$@" 2>"$stderr_file")
