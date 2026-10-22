@@ -49,3 +49,9 @@ rollback:
   - 'Revert this isolated source component through normal governed history; do not install a shared runtime.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Bounded resident acquisition: owned-validation-01/invoke-tests-6c5a.command.json/result.json/stdout under /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/resident-store-acquisition; Cargo actual invoke filter exit0,2 selected tests, frontend SIGKILL then same owned host retained full bound Failed/transport settlement264ms after guardian shutdown beyond idle100; 6 OpenCode/ZCode valid/invalid JSON/UTF8 variants actual CLOSED/status. Source6c before/after88ef68dc; aa53 differs only two bounded observation functions and test inputs, final candidate03 normalbuild+loader0 digest8e337dc4. Original caller binding precedes route/SQL; separate StoreAcquire/StoreStatus leave RenderOffer v1+EOF and Codex eligibility intact by inspected source. Commit verification establishes reachability only; cited raw checks were inspected. No publication, ordinary consumption, sustained capacity, crash recovery or adoption."
+    recorded_at: "2026-10-22T03:41:57.077Z"
+    commit_sha: aa53f0b1b8ed13b11035a42dded4f49898fa34bb
