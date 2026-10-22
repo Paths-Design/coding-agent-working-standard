@@ -58,7 +58,10 @@ setup_file() {
   chmod +x "$CAWS_TEST_HOME/failing-python/python3"
 
   # python3 that forwards to the real interpreter, counts each call of the
-  # exact realpath program, and fails only the RP_FAIL_NTH-th such call.
+  # exact realpath program, and answers only the RP_FAIL_NTH-th such call per
+  # RP_FAIL_MODE: exit1 fails; lf, lflf and empty exit 0 having printed only
+  # line feeds or nothing -- a "success" whose value a caller's command
+  # substitution reduces to the empty string.
   mkdir -p "$CAWS_TEST_HOME/counting-python"
   cat > "$CAWS_TEST_HOME/counting-python/python3" <<'SHIM'
 #!/bin/bash
@@ -67,7 +70,14 @@ if [[ "$1" == -c && "$2" == "$program" && -n "${RP_COUNT_FILE:-}" ]]; then
   n=$(( $(cat "$RP_COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
   printf '%s\n' "$n" > "$RP_COUNT_FILE"
   printf '%s\t%s\n' "$n" "$3" >> "$RP_COUNT_FILE.paths"
-  [[ "$n" == "${RP_FAIL_NTH:-0}" ]] && exit 1
+  if [[ "$n" == "${RP_FAIL_NTH:-0}" ]]; then
+    case "${RP_FAIL_MODE:-exit1}" in
+      lf) printf '\n'; exit 0 ;;
+      lflf) printf '\n\n'; exit 0 ;;
+      empty) exit 0 ;;
+      *) exit 1 ;;
+    esac
+  fi
 fi
 exec "$RP_REAL_PYTHON" "$@"
 SHIM
@@ -124,6 +134,7 @@ rp_guard() {
     HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws" PATH="$path_value" \
     CAWS_BIN="$RP_CLI" RP_REAL_PYTHON="$RP_REAL_PYTHON" \
     RP_COUNT_FILE="${RP_COUNT_FILE:-}" RP_FAIL_NTH="${RP_FAIL_NTH:-0}" \
+    RP_FAIL_MODE="${RP_FAIL_MODE:-exit1}" \
     CLAUDE_CODE_SESSION_ID="$session" HOOK_SESSION_ID="$session" \
     CLAUDE_PROJECT_DIR="$RP_SELF" CAWS_PROJECT_DIR="$RP_SELF" \
     CAWS_AGENT_SURFACE=claude-code HOOK_EVENT_NAME=PreToolUse \
@@ -138,14 +149,17 @@ rp_guard() {
   [[ ! -e "$RP_REPO/src" ]]
 }
 
-# Usage: rp_sweep <guard.sh> <session> <payload-json> <expected-pass-status> <label>...
+# Usage: rp_sweep <mode> <guard.sh> <session> <payload-json> <expected-pass-status> <label>...
 # Runs the scenario with every normalization passing through, then once per
-# normalization with only that one failing. Every failing run must refuse 2.
-# Each <label> must name a refusal some run produced, proving that caller ran.
+# normalization with only that one answered per <mode> (see the counting shim).
+# Every such run must refuse 2 naming the cause. Each <label> must name a
+# refusal some run produced, proving that caller ran.
 rp_sweep() {
-  local guard="$1" session="$2" payload="$3" expected="$4"
-  shift 4
-  local count n labels="" label
+  local mode="$1" guard="$2" session="$3" payload="$4" expected="$5"
+  shift 5
+  local count n labels="" label cause=empty-result
+  [[ "$mode" == exit1 ]] && cause=python3-exit-1
+  export RP_FAIL_MODE="$mode"
   export RP_COUNT_FILE="$BATS_TEST_TMPDIR/count.$guard"
   rm -f "$RP_COUNT_FILE" "$RP_COUNT_FILE.paths"
   RP_FAIL_NTH=0 rp_guard "$(guard_dir)" "$guard" "$CAWS_TEST_HOME/counting-python:$PATH" "$session" "$payload"
@@ -157,13 +171,13 @@ rp_sweep() {
     rm -f "$RP_COUNT_FILE" "$RP_COUNT_FILE.paths"
     RP_FAIL_NTH="$n" rp_guard "$(guard_dir)" "$guard" "$CAWS_TEST_HOME/counting-python:$PATH" "$session" "$payload"
     [ "$status" -eq 2 ] || { printf 'normalization %s of %s did not refuse\n' "$n" "$count"; false; }
-    assert_output --partial "[caws-guard-realpath] cannot normalize: python3-exit-1"
+    assert_output --partial "[caws-guard-realpath] cannot normalize: $cause"
     assert_output --partial "[${guard%.sh}] cannot normalize the "
     # The refusal names the input it could not normalize, never an empty path.
     refute_output --partial "path ''"
     labels+="$output"$'\n'
   done
-  unset RP_COUNT_FILE
+  unset RP_COUNT_FILE RP_FAIL_MODE
   for label in "$@"; do
     [[ "$labels" == *"cannot normalize the $label path"* ]] ||
       { printf 'no refusal from the %s normalization\n' "$label"; false; }
@@ -244,6 +258,22 @@ rp_sweep() {
   [ "$stderr" = "[caws-guard-realpath] cannot normalize: python3-unavailable" ]
 }
 
+@test "caws_guard_realpath: a python3 success with no non-LF output byte is refused as empty-result" {
+  local mode
+  for mode in lf lflf empty; do
+    rm -f "$BATS_TEST_TMPDIR/helper-count" "$BATS_TEST_TMPDIR/helper-count.paths"
+    run --separate-stderr env PATH="$CAWS_TEST_HOME/counting-python:$PATH" \
+      RP_REAL_PYTHON="$RP_REAL_PYTHON" RP_COUNT_FILE="$BATS_TEST_TMPDIR/helper-count" \
+      RP_FAIL_NTH=1 RP_FAIL_MODE="$mode" \
+      bash -c 'source "$1/lib/caws-state.sh"; caws_guard_realpath "$2"; printf "x%s" "$?"' \
+      _ "$(guard_dir)" "$RP_TARGET"
+    printf '# mode=%s stdout=%q stderr=%q\n' "$mode" "$output" "$stderr" >&3
+    # No stdout byte at all (not even a line feed), then status 2.
+    [ "$output" = "x2" ] || { printf '%s: stdout %q\n' "$mode" "$output"; false; }
+    [ "$stderr" = "[caws-guard-realpath] cannot normalize: empty-result" ]
+  done
+}
+
 @test "caws_guard_realpath: a failing python3 is refused with its exit status" {
   run --separate-stderr env PATH="$CAWS_TEST_HOME/failing-python:$PATH" \
     bash -c 'set -e; source "$1/lib/caws-state.sh"; caws_guard_realpath "$2"' _ "$(guard_dir)" "$RP_TARGET"
@@ -292,17 +322,17 @@ rp_sweep() {
 }
 
 @test "worktree-write-guard sweep: each normalization on the foreign-payload path refuses when it alone fails" {
-  rp_sweep worktree-write-guard.sh rp-session-s "$(write_payload "$RP_TARGET")" 2 \
+  rp_sweep exit1 worktree-write-guard.sh rp-session-s "$(write_payload "$RP_TARGET")" 2 \
     "git common dir" "git dir" "canonical root" "spec-materialization target" "allowlist target"
 }
 
 @test "worktree-write-guard sweep: each normalization on the canonical-claim path refuses when it alone fails" {
-  rp_sweep worktree-write-guard.sh rp-session-s "$(write_payload "$RP_REPO/src/claimed.ts")" 0 \
+  rp_sweep exit1 worktree-write-guard.sh rp-session-s "$(write_payload "$RP_REPO/src/claimed.ts")" 0 \
     "operating directory" "canonical-claim target"
 }
 
 @test "worktree-write-guard sweep: a relative target reaches the relative canonical-claim normalization" {
-  rp_sweep worktree-write-guard.sh rp-session-s "$(write_payload "src/claimed.ts")" 0 \
+  rp_sweep exit1 worktree-write-guard.sh rp-session-s "$(write_payload "src/claimed.ts")" 0 \
     "spec-materialization target" "operating directory" "canonical-claim target"
 }
 
@@ -346,7 +376,7 @@ rp_sweep() {
 }
 
 @test "bash-write-guard sweep: the static mutation target refuses when its normalization alone fails" {
-  rp_sweep bash-write-guard.sh rp-session-s "$(bash_payload "touch $RP_DOTDOT_TARGET")" 2 \
+  rp_sweep exit1 bash-write-guard.sh rp-session-s "$(bash_payload "touch $RP_DOTDOT_TARGET")" 2 \
     "project root" "mutation target"
 }
 
@@ -357,7 +387,7 @@ rp_sweep() {
 @test "bash-write-guard sweep: a dynamic operand is held for approval and every normalization it reaches refuses alone" {
   local payload
   payload="$(bash_payload "touch $RP_REPO/.caws/worktrees/f-wt/src/\$RP_UNSET_NAME")"
-  rp_sweep bash-write-guard.sh rp-session-s "$payload" 0 "project root"
+  rp_sweep exit1 bash-write-guard.sh rp-session-s "$payload" 0 "project root"
   RP_FAIL_NTH=0 rp_guard "$(guard_dir)" bash-write-guard.sh "$PATH" rp-session-s "$payload"
   [ "$status" -eq 0 ]
   assert_output --partial '"permissionDecision": "ask"'
@@ -366,9 +396,34 @@ rp_sweep() {
 }
 
 @test "bash-write-guard sweep: Git metadata refuses when its normalization alone fails" {
-  rp_sweep bash-write-guard.sh rp-session-s \
+  rp_sweep exit1 bash-write-guard.sh rp-session-s \
     "$(bash_payload "git -C $RP_REPO/.caws/worktrees/f-wt add README.md")" 2 \
     "project root" "git metadata"
+}
+
+# A normalization that "succeeds" with only line feeds hands its caller an empty
+# value once command substitution strips them. An empty project root, target or
+# metadata coordinate must refuse like a failed one, never reach a prefix arm.
+@test "worktree-write-guard LF-only success sweep: foreign-payload path refuses at each normalization" {
+  rp_sweep lf worktree-write-guard.sh rp-session-s "$(write_payload "$RP_TARGET")" 2 \
+    "git common dir" "git dir" "canonical root" "spec-materialization target" "allowlist target"
+}
+
+@test "worktree-write-guard LF-only success sweep: canonical-claim paths refuse at each normalization" {
+  rp_sweep lflf worktree-write-guard.sh rp-session-s "$(write_payload "$RP_REPO/src/claimed.ts")" 0 \
+    "operating directory" "canonical-claim target"
+  rp_sweep lf worktree-write-guard.sh rp-session-s "$(write_payload "src/claimed.ts")" 0 \
+    "spec-materialization target" "operating directory" "canonical-claim target"
+}
+
+@test "bash-write-guard LF-only success sweep: root, target and Git metadata refuse at each normalization" {
+  rp_sweep lf bash-write-guard.sh rp-session-s "$(bash_payload "touch $RP_DOTDOT_TARGET")" 2 \
+    "project root" "mutation target"
+  rp_sweep lflf bash-write-guard.sh rp-session-s \
+    "$(bash_payload "git -C $RP_REPO/.caws/worktrees/f-wt add README.md")" 2 \
+    "project root" "git metadata"
+  rp_sweep empty bash-write-guard.sh rp-session-s "$(bash_payload "touch $RP_DOTDOT_TARGET")" 2 \
+    "project root" "mutation target"
 }
 
 @test "contract: every normalization in both write guards is checked" {

@@ -226,7 +226,8 @@ _realpath() {
 #   When the path cannot be normalized it prints nothing on stdout, names the
 #   cause on stderr and returns 2: a write guard that compared the unresolved
 #   input instead would miss every prefix arm and admit the write. Causes:
-#   empty-path, python3-unavailable, python3-exit-<status>, empty-result.
+#   empty-path, python3-unavailable, python3-exit-<status>, and empty-result
+#   for output with no byte other than a line feed.
 caws_guard_realpath() {
   local p="${1:-}" out status
   if [[ -z "$p" ]]; then
@@ -248,7 +249,9 @@ caws_guard_realpath() {
     printf '[caws-guard-realpath] cannot normalize: python3-exit-%s\n' "$status" >&2
     return 2
   fi
-  if [[ -z "$out" ]]; then
+  # Callers strip trailing line feeds, so output holding no other byte reaches
+  # them as an empty path even though the interpreter exited 0.
+  if [[ -z "${out//$'\n'/}" ]]; then
     printf '[caws-guard-realpath] cannot normalize: empty-result\n' >&2
     return 2
   fi
