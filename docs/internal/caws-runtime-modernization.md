@@ -6360,12 +6360,19 @@ Additional bounded evidence and unresolved dependencies:
   gates pass; independent committed-candidate feedback supplies no acceptance by
   itself. All four component ACs remain unchecked and the lane remains active.
   Root allocates one real ordinary store `--dry-run-only` invocation with the
-  existing concurrency2 and build-slot coordination with R01. Production
-  build/Stryker composition, actual selected-test consumption, loaded candidate
-  bytes and distinguishing perturbation remain qualification obligations until
-  their artifacts are inspected. No full mutation campaign or score is inferred
-  from66 fixture checks; floors and license ownership validation remain
-  unchanged.
+  existing concurrency2 and build-slot coordination with R01. That actual
+  invocation exits1 before build/Stryker: dependency capture cannot resolve
+  declared npm dependency `buffer` from `bl/package.json`. Root reads
+  `real-dryrun-01/execution.json`, stdout/stderr and the actual
+  metadata-resolution counterexample: bare `buffer` resolves as a Node builtin
+  with no package search paths, while the metadata lookup finds installed npm
+  `buffer`5.7.1. The owner retains the failed run, released writer lock, absent
+  sandbox and unchanged dependencies, and accepts a scoped resolver repair plus
+  one coordinated retry. Production build/Stryker composition, actual
+  selected-test consumption, loaded candidate bytes and distinguishing
+  perturbation remain qualification obligations until their artifacts are
+  inspected. No full mutation campaign or score is inferred from66 fixture
+  checks; floors and license ownership validation remain unchanged.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
