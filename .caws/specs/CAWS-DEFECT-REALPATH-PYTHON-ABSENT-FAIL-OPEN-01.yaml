@@ -58,13 +58,16 @@ acceptance:
   - id: A3
     given: 'the shipped worktree-write-guard.sh and bash-write-guard.sh'
     when: >-
-      a contract test scans every caws_guard_realpath and abspath command
-      substitution and every _realpath reference, and a mutant replaces the helper
-      body with print-input-and-return-0
+      a contract test scans them for command substitution of _realpath,
+      caws_guard_realpath, abspath and resolve_canonical_dir and for every
+      caws_guard_realpath_into, abspath_into and caws_resolve_canonical_dir_into
+      call, and an identity-drop mutant replaces caws_guard_realpath_into with an
+      assignment of _realpath output
     then: >-
-      neither guard references _realpath, every substitution is followed by an
-      explicit refusal that exits 2, and under the mutant the A1 and A4
-      failing/absent cases turn red.
+      no normalization reaches either guard through command substitution, every
+      out-parameter call is followed on its line by a _wwg/_bwg refusal that exits
+      2, and under the identity-drop mutant the A1 and A4 failing/absent cases admit
+      the foreign write with exit 0.
   - id: A4
     given: 'the A1 fixture with HOOK_TOOL_NAME=Bash and HOOK_COMMAND touching f-wt/src/payload.ts from s-wt'
     when: >-
@@ -100,10 +103,8 @@ evidence:
     status: unchecked
     recorded_at: "2026-10-22T03:16:05.698Z"
   - criterion_id: A3
-    status: pass
-    evidence_ref: "run-08 test 29 at 39d06b1a: no dollar-paren _realpath call remains and every caws_guard_realpath/abspath substitution carries a _wwg/_bwg refusal. Guard bytes unchanged since the mutant runs (wwg 5fae7245, bwg 4771b04e). M5 (helper prints input, returns 0; /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants/M5.tap) turns the A1/A4 failing and absent cases red; handler-removal mutants M1-M3 are killed by runtime sweeps independently of the static scan. Bound: text scan of these two guards only."
-    recorded_at: "2026-10-22T01:13:07.483Z"
-    commit_sha: "39d06b1a"
+    status: unchecked
+    recorded_at: "2026-10-22T03:16:25.704Z"
   - criterion_id: A4
     status: pass
     evidence_ref: "run-08 at 39d06b1a tests 18-21, 23-25 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-08/bats.tap): bash-write-guard touch of the f-wt payload spelled via s-wt/.. python3 present exit 2 BLOCKED f-wt; owner exit 0; failing exit 2 python3-exit-1; absent exit 2 python3-unavailable; target absent. Per-normalization sweeps refuse at project root, static mutation target and both Git metadata coordinates; dynamic-prefix normalization unreachable at 5ace5a52 (analysis tokens carry basis none), test 24 pins ask_dynamic_unconfined. Bounds: template guards run directly with precomputed HOOK_* and canonical helpers.bash, analysis CLI pinned to the shell owner built dist; not dispatcher, installed pack or native harness."
