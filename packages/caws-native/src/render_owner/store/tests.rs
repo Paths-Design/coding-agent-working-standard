@@ -610,3 +610,554 @@ fn resident_store_barrier_retains_waiting_slot_until_renderer_cohort_drains() {
     assert_eq!(capacity.used.load(Ordering::Acquire), 0);
     f.can_lock();
 }
+
+// This qualification uses the producer's real sealed stages and native worker.
+// The ordinary unit selection does not establish this external-fixture contract.
+fn fifo_pin(value: &serde_json::Value) -> Vec<u8> {
+    let path = Path::new(value["path"].as_str().expect("fixture pin path"));
+    canonical(path).unwrap();
+    let metadata = fs::symlink_metadata(path).unwrap();
+    assert!(metadata.is_file() && metadata.len() <= 32 * 1024 * 1024);
+    let bytes = fs::read(path).unwrap();
+    assert_eq!(sha(&bytes), value["sha256"].as_str().unwrap());
+    if !value["bytes"].is_null() {
+        assert_eq!(bytes.len() as u64, value["bytes"].as_u64().unwrap());
+    }
+    bytes
+}
+fn fifo_observations(config: &OwnerConfig) -> Vec<serde_json::Value> {
+    fs::read_to_string(base(config).join("observations.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| {
+            let mut value: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert_eq!(value["schema"], "caws.render.owner.observation.v1");
+            assert!(value["observation"].is_object());
+            value["observation"].take()
+        })
+        .collect()
+}
+struct FifoActor {
+    sender: Option<SyncSender<Mailbox>>,
+    peers: Vec<UnixStream>,
+    readers: Vec<thread::JoinHandle<()>>,
+    actor: Option<thread::JoinHandle<()>>,
+}
+impl FifoActor {
+    fn render(
+        &mut self,
+        offer: Offer,
+        capacity: &Arc<ProjectCapacity>,
+        active: &Arc<AtomicUsize>,
+        observations: &Arc<ObservationLog>,
+        deadline: Instant,
+    ) -> UnixStream {
+        let (mut reader, caller) = UnixStream::pair().unwrap();
+        reader.set_nonblocking(true).unwrap();
+        caller.set_nonblocking(true).unwrap();
+        let stream = reader.try_clone().unwrap();
+        self.peers.push(caller.try_clone().unwrap());
+        active.fetch_add(1, Ordering::AcqRel);
+        let permit = Arc::new(ConnectionPermit(Arc::clone(active)));
+        let project = capacity.acquire().unwrap();
+        let (start_tx, start_rx) = mpsc::sync_channel(1);
+        let (bridge_tx, bridge_rx) = mpsc::sync_channel(1);
+        let invocation = offer.invocation_id.clone();
+        let log = Arc::clone(observations);
+        self.sender
+            .as_ref()
+            .unwrap()
+            .send(Mailbox::Render(Job {
+                stream,
+                offer,
+                expires: deadline,
+                reader_start: Some(start_tx),
+                bridge: bridge_rx,
+                _permit: Arc::clone(&permit),
+                _project_permit: Arc::clone(&project),
+            }))
+            .unwrap_or_else(|_| panic!("actual Actor mailbox closed"));
+        self.readers.push(thread::spawn(move || {
+            // The production reader waits on the Actor's actual activation.
+            read_prepared_bridge(
+                &mut reader,
+                start_rx,
+                bridge_tx,
+                deadline,
+                &log,
+                &invocation,
+            );
+            drop((reader, permit, project));
+        }));
+        caller
+    }
+    fn stop(&mut self) {
+        for peer in &self.peers {
+            let _ = peer.shutdown(std::net::Shutdown::Both);
+        }
+        self.sender.take();
+        if let Some(actor) = self.actor.take() {
+            assert!(actor.join().is_ok(), "actual Actor panicked");
+        }
+        for reader in self.readers.drain(..) {
+            assert!(reader.join().is_ok(), "actual bridge reader panicked");
+        }
+    }
+}
+impl Drop for FifoActor {
+    fn drop(&mut self) {
+        // Revoke the owned peers and mailbox on an assertion failure too.
+        for peer in &self.peers {
+            let _ = peer.shutdown(std::net::Shutdown::Both);
+        }
+        self.sender.take();
+        if let Some(actor) = self.actor.take() {
+            let _ = actor.join();
+        }
+        for reader in self.readers.drain(..) {
+            let _ = reader.join();
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires normally prepared reviewed external image fixture"]
+fn resident_actor_run_orders_prepared_renderer_store_and_later_renderer() {
+    let fixture_path = PathBuf::from(
+        std::env::var_os("CAWS_NATIVE_FIFO_FIXTURE")
+            .expect("CAWS_NATIVE_FIFO_FIXTURE must name the normally prepared fixture"),
+    );
+    canonical(&fixture_path).unwrap();
+    let fixture_metadata = fs::symlink_metadata(&fixture_path).unwrap();
+    assert!(fixture_metadata.is_file() && fixture_metadata.len() <= 2 * 1024 * 1024);
+    let fixture_bytes = fs::read(&fixture_path).unwrap();
+    assert!(fixture_bytes.len() <= 2 * 1024 * 1024);
+    let fixture: serde_json::Value = serde_json::from_slice(&fixture_bytes).unwrap();
+    assert_eq!(
+        fixture["schema"],
+        "caws.qualification.render-owner.prepared-fixture.v1"
+    );
+    assert_eq!(fixture["state"], "fixture_prepared");
+    assert_eq!(fixture["adoption"], "NOT_ADOPTED");
+    let artifact_root = PathBuf::from(fixture["artifactRoot"].as_str().unwrap());
+    canonical(&artifact_root).unwrap();
+    assert_eq!(fixture_path.parent(), Some(artifact_root.as_path()));
+    let config: OwnerConfig = serde_json::from_value(fixture["ownerConfig"].clone()).unwrap();
+    validate_config(&config).unwrap();
+    assert_eq!(config.home.to_str(), fixture["home"].as_str());
+    let project = PathBuf::from(fixture["project"].as_str().unwrap());
+    canonical(&project).unwrap();
+    let inputs = &fixture["inputs"];
+    assert!(inputs["nativeBuild"].is_object());
+    let request_digest = inputs["nativeBuild"]["requestDigest"].as_str().unwrap();
+    assert!(
+        request_digest.len() == 64 && request_digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+    );
+    let request_file = Path::new(inputs["nativeBuild"]["requestFile"].as_str().unwrap());
+    canonical(request_file).unwrap();
+    assert!(fs::symlink_metadata(request_file).unwrap().is_file());
+    fifo_pin(
+        &serde_json::json!({"path":inputs["qualifier"]["cliRootSource"],
+        "sha256":inputs["qualifier"]["cliRootSourceSha256"]}),
+    );
+    assert_eq!(inputs["transcript"]["path"], fixture["transcriptFile"]);
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&fifo_pin(&inputs["ownerConfig"])).unwrap(),
+        fixture["ownerConfig"]
+    );
+    for name in [
+        "qualifier",
+        "selection",
+        "policy",
+        "tools",
+        "sourceCustody",
+        "transcript",
+        "meta",
+    ] {
+        fifo_pin(&inputs[name]);
+    }
+    let offers = fixture["offers"].as_array().unwrap();
+    assert_eq!(offers.len(), 2);
+    let pinned_images = inputs["preparedImages"].as_array().unwrap();
+    assert_eq!(pinned_images.len(), 2);
+    let mut prepared_offers = Vec::new();
+    let mut arguments = Vec::new();
+    for (index, label) in ["A", "B"].into_iter().enumerate() {
+        assert_eq!(offers[index]["label"], label);
+        let offer: Offer = serde_json::from_value(offers[index]["offer"].clone()).unwrap();
+        validate_offer(&offer).unwrap();
+        assert_eq!(offer.invocation_id, format!("render-owner-fifo:{label}"));
+        assert_eq!(
+            offer.expected_selection.canonical_project,
+            project.to_str().unwrap()
+        );
+        assert_eq!(
+            Some(offer.session_id.as_str()),
+            fixture["sessionId"].as_str()
+        );
+        assert_eq!(
+            offer.policy_sha256,
+            inputs["policy"]["sha256"].as_str().unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(&offer.prepared).unwrap(),
+            serde_json::from_slice::<serde_json::Value>(&fifo_pin(&pinned_images[index])).unwrap()
+        );
+        let args: [String; 12] =
+            serde_json::from_value(offers[index]["renderArguments"].clone()).unwrap();
+        assert_eq!(Some(args[9].as_str()), fixture["transcriptFile"].as_str());
+        arguments.push(args);
+        prepared_offers.push(offer);
+    }
+    assert_eq!(
+        prepared_offers[0].expected_selection,
+        prepared_offers[1].expected_selection
+    );
+    assert_ne!(
+        prepared_offers[0].prepared.staging_root,
+        prepared_offers[1].prepared.staging_root
+    );
+    assert!(
+        prepared_offers
+            .iter()
+            .all(|offer| offer.prepared.staging_root.is_some())
+    );
+    let config = Arc::new(config);
+    let deadline = Instant::now() + Duration::from_millis(config.limits.request_ms as u64);
+    provision(&config, deadline).unwrap();
+    let custody = journal::Custody::acquire(&custody_path(&config), deadline).unwrap();
+    let key = wire::project_service_key(project.to_str().unwrap()).unwrap();
+    let journal = journal::Journal::open(
+        Arc::clone(&custody),
+        &key,
+        config.limits.max_retained_records,
+        deadline,
+    )
+    .unwrap();
+    assert!(!journal.has_unknown(deadline).unwrap());
+    let observations = Arc::new(ObservationLog::open(&config, Instant::now()).unwrap());
+    let budget = Arc::new(Mutex::new(Budget {
+        used: 0,
+        maximum: config.limits.max_backends as usize,
+    }));
+    let capacity = Arc::new(ProjectCapacity {
+        used: AtomicUsize::new(0),
+        maximum: 1 + config.limits.max_queue_per_project as usize,
+    });
+    let active = Arc::new(AtomicUsize::new(0));
+    let (sender, receiver) = mpsc::sync_channel(config.limits.max_queue_per_project as usize);
+    let actor = Actor {
+        config: Arc::clone(&config),
+        custody,
+        writer_custody: None,
+        writer_intent: None,
+        journal,
+        budget: Arc::clone(&budget),
+        process: None,
+        reserved: false,
+        unknown: false,
+        observations: Arc::clone(&observations),
+        phase: "test",
+        store_records: Vec::new(),
+    };
+    let mut running = FifoActor {
+        sender: Some(sender),
+        peers: Vec::new(),
+        readers: Vec::new(),
+        actor: Some(thread::spawn(move || actor.run(receiver))),
+    };
+    let mut a = running.render(
+        prepared_offers[0].clone(),
+        &capacity,
+        &active,
+        &observations,
+        deadline,
+    );
+    let a_bytes = frame(
+        &mut a,
+        &mut Vec::new(),
+        config.limits.max_frame_bytes as usize,
+        deadline,
+    )
+    .unwrap();
+    let a_prepared: OwnerPrepared = serde_json::from_slice(&a_bytes).unwrap();
+    validate_prepared(&prepared_offers[0], &a_prepared).unwrap();
+    assert!(arguments_bound(
+        &a_prepared.grant.request(arguments[0].clone()).unwrap(),
+        project.to_str().unwrap(),
+        &prepared_offers[0].checkout,
+        &prepared_offers[0].session_id
+    ));
+
+    let database = artifact_root.join("fifo-source.sqlite");
+    assert!(!database.exists(), "fixture is single-use; no replay");
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    connection.execute_batch("CREATE TABLE message(id,session_id,time_created,data);CREATE TABLE part(id,message_id,time_created,data);").unwrap();
+    connection
+        .execute(
+            "INSERT INTO message VALUES('m',?1,0,'{}')",
+            [&prepared_offers[0].session_id],
+        )
+        .unwrap();
+    connection
+        .execute_batch("INSERT INTO part VALUES('p','m',0,'{}')")
+        .unwrap();
+    connection.close().unwrap();
+    let database_before = fs::read(&database).unwrap();
+    let runtime = prepared_offers[0].expected_selection.runtime_digest.clone();
+    let payload = RawValue::from_string(
+        serde_json::json!({"session_id":prepared_offers[0].session_id,"cwd":project}).to_string(),
+    )
+    .unwrap();
+    let mut environment = prepared_offers[0].caller_environment.clone();
+    environment.insert(
+        "CAWS_TRANSCRIPT_DATABASE".into(),
+        database.to_str().unwrap().into(),
+    );
+    let id = "render-owner-fifo:S";
+    let request = serde_json::to_vec(&serde_json::json!({"schema":store::REQUEST_SCHEMA,"id":id,
+        "runtimeDigest":runtime,"token":"fifo-token","canonicalRoot":project,"profile":store::PROFILE})).unwrap();
+    let acquisition = StoreAcquire::capture(
+        &request,
+        store::Invocation {
+            id,
+            runtime_digest: &runtime,
+            original_payload: &payload,
+            surface: "opencode",
+            event: "stop",
+            configuration: "system",
+            ready_active: true,
+            ready_project_digest: Some(&sha(project.as_os_str().as_encoded_bytes())),
+            ready_session_id: Some(&prepared_offers[0].session_id),
+            dispatched: true,
+            database: database.to_str(),
+            caller_cwd: project.to_str().unwrap(),
+            caller_environment: &environment,
+        },
+        deadline,
+    );
+    let registry = Arc::new(Mutex::new(StoreRegistry::new(
+        config.limits.max_retained_records as usize,
+    )));
+    let record = registry.lock().unwrap().reserve(acquisition).unwrap();
+    let registration = record.lock().unwrap().registration.clone();
+    let query = StoreStatusQuery::new(id.into(), runtime.clone(), registration);
+    let (mut transport, mut store_caller, replies) = relay_pair();
+    transport.expires = deadline;
+    running.peers.push(store_caller.try_clone().unwrap());
+    active.fetch_add(1, Ordering::AcqRel);
+    running
+        .sender
+        .as_ref()
+        .unwrap()
+        .send(Mailbox::Store(StoreJob {
+            record: Arc::clone(&record),
+            registry: Arc::clone(&registry),
+            transport,
+            _connection: Arc::new(ConnectionPermit(Arc::clone(&active))),
+            _project: capacity.acquire().unwrap(),
+        }))
+        .unwrap_or_else(|_| panic!("actual Actor mailbox closed before S"));
+    drop(record); // Status below must depend on the Actor/queued job, not this caller.
+    let mut b = running.render(
+        prepared_offers[1].clone(),
+        &capacity,
+        &active,
+        &observations,
+        deadline,
+    );
+    let quiet_until = Instant::now() + Duration::from_millis(250);
+    while Instant::now() < quiet_until {
+        for caller in [&mut store_caller, &mut b] {
+            assert!(
+                matches!(caller.read(&mut [0u8; 1]), Err(error) if error.kind() == io::ErrorKind::WouldBlock),
+                "SQL relay or later renderer grant overtook prepared A"
+            );
+        }
+        thread::sleep(TICK);
+    }
+    let held = fifo_observations(&config);
+    assert!(
+        !held
+            .iter()
+            .any(|event| event["stage"] == "store_acquisition_start"
+                || (event["invocationId"] == "render-owner-fifo:B"
+                    && event["stage"] == "image_admission"))
+    );
+    assert_eq!(registry.lock().unwrap().status(&query).phase, "registered");
+    a.shutdown(std::net::Shutdown::Both).unwrap(); // Actual reader EOF revokes A.
+
+    let mut next = || -> OwnerFrame {
+        serde_json::from_slice(
+            &frame(
+                &mut store_caller,
+                &mut Vec::new(),
+                config.limits.max_frame_bytes as usize,
+                deadline,
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    assert!(matches!(next(), OwnerFrame::Credit { sequence: 1, .. }));
+    ack(&replies, 1, Ok(ReplyValue::Credited));
+    let OwnerFrame::WriteEngineFrame {
+        sequence: 2,
+        base64,
+    } = next()
+    else {
+        panic!("S must acquire an actual SQL row")
+    };
+    let row: serde_json::Value = serde_json::from_slice(&STANDARD.decode(base64).unwrap()).unwrap();
+    assert_eq!(row["schema"], store::ROW_SCHEMA);
+    assert_eq!(row["id"], id);
+    assert_eq!(row["ordinal"], 1);
+    assert_eq!(row["cells"][0]["base64"], STANDARD.encode(b"m"));
+    assert_eq!(row["cells"][2]["base64"], STANDARD.encode(b"p"));
+    ack(&replies, 2, Ok(ReplyValue::Written));
+    assert!(matches!(
+        next(),
+        OwnerFrame::ReadEngineFrame { sequence: 3 }
+    ));
+    let control = serde_json::to_vec(&serde_json::json!({"schema":store::CONTROL_SCHEMA,"id":id,
+        "runtimeDigest":runtime,"token":"fifo-token","ordinal":1,"action":"continue"}))
+    .unwrap();
+    ack(
+        &replies,
+        3,
+        Ok(ReplyValue::Read {
+            base64: STANDARD.encode(control),
+        }),
+    );
+    assert!(matches!(next(), OwnerFrame::Credit { sequence: 4, .. }));
+    ack(&replies, 4, Ok(ReplyValue::Credited));
+    let OwnerFrame::WriteEngineFrame {
+        sequence: 5,
+        base64,
+    } = next()
+    else {
+        panic!("S CLOSED missing")
+    };
+    let closed: serde_json::Value =
+        serde_json::from_slice(&STANDARD.decode(base64).unwrap()).unwrap();
+    assert_eq!(closed["schema"], store::CLOSED_SCHEMA);
+    assert_eq!(closed["end"], "exhausted");
+    assert_eq!(closed["closed"], true);
+    assert_eq!(closed["failure"], serde_json::Value::Null);
+    ack(&replies, 5, Ok(ReplyValue::Written));
+    let OwnerFrame::Complete { completion } = next() else {
+        panic!("S settlement missing")
+    };
+    assert!(completion.error.is_none());
+    assert!(completion.retained);
+    let acquisition = completion.acquisition.unwrap();
+    assert_eq!(acquisition.rows_delivered, 1);
+    assert_eq!(acquisition.close, "succeeded");
+    assert!(!acquisition.retained_handle && !acquisition.retained_uncertain);
+    let b_bytes = frame(
+        &mut b,
+        &mut Vec::new(),
+        config.limits.max_frame_bytes as usize,
+        deadline,
+    )
+    .unwrap();
+    let b_prepared: OwnerPrepared = serde_json::from_slice(&b_bytes).unwrap();
+    validate_prepared(&prepared_offers[1], &b_prepared).unwrap();
+    assert!(arguments_bound(
+        &b_prepared.grant.request(arguments[1].clone()).unwrap(),
+        project.to_str().unwrap(),
+        &prepared_offers[1].checkout,
+        &prepared_offers[1].session_id
+    ));
+    assert_eq!(registry.lock().unwrap().status(&query).phase, "settled");
+    b.shutdown(std::net::Shutdown::Both).unwrap();
+    running.stop();
+    assert_eq!(active.load(Ordering::Acquire), 0);
+    assert_eq!(capacity.used.load(Ordering::Acquire), 0);
+    assert_eq!(budget.lock().unwrap().used, 0);
+    assert_eq!(fs::read(&database).unwrap(), database_before);
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    connection
+        .execute_batch("BEGIN EXCLUSIVE;ROLLBACK")
+        .unwrap();
+    connection.close().unwrap();
+    drop(crate::render_writer::acquire(&config.home, &project, deadline).unwrap());
+    let events = fifo_observations(&config);
+    let position = |event: &str, invocation: &str, stage: Option<&str>| {
+        let matches: Vec<_> = events
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| {
+                value["event"] == event
+                    && value["invocationId"] == invocation
+                    && stage.is_none_or(|stage| value["stage"] == stage)
+            })
+            .collect();
+        assert_eq!(
+            matches.len(),
+            1,
+            "exact event {event}/{invocation}/{stage:?}"
+        );
+        matches[0].0
+    };
+    let order = [
+        position("prepared", "render-owner-fifo:A", None),
+        position("prepared_withdrawn", "render-owner-fifo:A", None),
+        position("actor_stage", "render-owner-fifo:A", Some("finish")),
+        position("actor_stage", id, Some("store_acquisition_start")),
+        position("actor_stage", id, Some("store_settlement_retained")),
+        position(
+            "actor_stage",
+            "render-owner-fifo:B",
+            Some("image_admission"),
+        ),
+        position("prepared", "render-owner-fifo:B", None),
+        position("prepared_withdrawn", "render-owner-fifo:B", None),
+    ];
+    assert!(
+        order.windows(2).all(|pair| pair[0] < pair[1]),
+        "actual Actor order: {order:?}"
+    );
+    let workers: Vec<_> = events
+        .iter()
+        .filter(|value| value["event"] == "worker_created")
+        .collect();
+    assert!(!workers.is_empty(), "actual admitted worker required");
+    for worker in workers {
+        let cleanups: Vec<_> = events
+            .iter()
+            .filter(|value| {
+                value["event"] == "worker_cleanup"
+                    && value["nativeWorkerPid"] == worker["nativeWorkerPid"]
+                    && value["backendPid"] == worker["backendPid"]
+            })
+            .collect();
+        assert_eq!(cleanups.len(), 1);
+        let receipt = &cleanups[0]["receipt"];
+        assert_eq!(receipt["directChildReaped"], true);
+        assert_eq!(receipt["stdout"]["eof"], true);
+        assert_eq!(receipt["stderr"]["eof"], true);
+        assert_eq!(receipt["deadlineExceeded"], false);
+        assert_eq!(
+            events
+                .iter()
+                .filter(|value| value["event"] == "worker_exit"
+                    && value["nativeWorkerPid"] == worker["nativeWorkerPid"])
+                .count(),
+            1
+        );
+    }
+    fs::write(
+        artifact_root.join("fifo-actor-order.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+        "fixtureSha256":sha(&fixture_bytes),"actualOrder":order,"sqlRow":row,"closed":closed,
+        "backendPids":[a_prepared.backend_pid,b_prepared.backend_pid],
+        "ownerPreparedFramesBase64":[STANDARD.encode(&a_bytes),STANDARD.encode(&b_bytes)],"events":events}))
+        .unwrap(),
+    )
+    .unwrap();
+    println!(
+        "actual Actor A withdrawal -> SQL row/CLOSED/retained -> B prepared; fixture={}; order={order:?}",
+        fixture_path.display()
+    );
+}
