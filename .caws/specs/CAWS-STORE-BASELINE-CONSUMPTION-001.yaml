@@ -102,7 +102,10 @@ evidence:
     commit_sha: "491bea053534e13b172436c4ae3ac9e889475e34"
   - criterion_id: A2
     status: unchecked
-    recorded_at: "2026-10-22T10:38:53.295Z"
+    evidence_ref: "Bounded installed-environment component checks at97f7 focused05 exit0/277 with source hashes stable. Four retained producer-closure controls: actualSnapshot.status refused, hook.restoration restored, actual host record-sink error despite retained disk closed; each raw disk SHA rederived. Manifest /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-05/inspected-artifacts.json SHA256d983d4b7a1f49c89352f0798cdd7480ed4f6ccfa4e2ba29360553d6e3c151edb. Subsequent547d conditional-shape controls not executed; ordinary lifecycle remains unverified. Commit existence verification is not test execution or external artifact verification."
+    recorded_at: "2026-10-22T11:27:52.966Z"
+    exit_code: 0
+    commit_sha: "97f7dca9a6e20912a5c19f8ec1699ffc02875308"
   - criterion_id: A3
     status: unchecked
     evidence_ref: "OPEN ordinary nine-suite six-target union execution. Candidate VM validator/observer fixture checks95 exit0, actual source hashes stable; synthetic retained-record admission does not establish real Stryker candidate loading."
