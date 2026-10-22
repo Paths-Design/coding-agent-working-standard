@@ -53,3 +53,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a newer package repairing an older package rollback keeps the older runtime reachable"
     commit_sha: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
     test_verified_at: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Same test asserts, before any damage, that installing a different generation records previous_digest == the replaced generation (ordinary upgrade history unchanged). Full machine-runtime.test.js 55/55 at 1bb584a8 includes the existing 'one runtime update reaches two projects...rollback restores the digest' and both process-termination retry/rollback tests. Runtime: after.log steps 2 record {29ff5676, prev 5ec11024}."
+    recorded_at: "2026-10-22T00:50:34.616Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::repairing the stable entry of the selected runtime keeps its rollback target"
+    commit_sha: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
+    test_verified_at: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
