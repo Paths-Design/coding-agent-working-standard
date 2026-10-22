@@ -35,3 +35,9 @@ non_functional: {}
 contracts:
   - name: 'cutover-ledger'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Reviewed02cda3f9 then grounded and repaired child-process gap in f6adbc59: actual messages-store.test.js729-780 child loads remain root parentA3/A4. Inspected actual mutation-binding real-dryrun-02 execution stdout receipt6d513f68 and merged six blobs03d; VM primitive actualresult/execution; R01exec-qualified actual307/0 rawJSON35a48463 and disclosed stream loss. Gates5PASS1doc and formatting/diff0; doctor0E3W4I. Parent0/8 and33/37 partial remain, no native/whole qualification claim. External artifacts under root/peerA/peerR01 Codex artifacts paths cited in E254-257. Commit verification proves reachability only; actual contents checked separately."
+    recorded_at: "2026-10-22T09:03:13.619Z"
+    commit_sha: f6adbc59
