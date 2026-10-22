@@ -117,6 +117,21 @@ acceptance:
       the analysis transport limit, and from outside the root escalates
       ask_unrepresentable_target (blocked when asking is impossible), never exit 0
       with empty output as at 39d06b1a.
+  - id: A7
+    given: >-
+      caws_guard_realpath_into, caws_physical_dir_into, caws_git_path_into and
+      caws_resolve_canonical_dir_into sourced from lib/caws-state.sh
+    when: >-
+      they are called with invalid out-parameter names, with a name under the helper
+      own local prefix, with caller names shared with common words or another helper
+      prefix, with a git path whose record ends after a line feed of its own, and
+      with directories that cannot be entered or are not in a repository
+    then: >-
+      invalid and own-prefix names return 2 and leave the caller variable unchanged;
+      every other name is assigned exactly; caws_git_path_into removes exactly one
+      record line feed; caws_resolve_canonical_dir_into yields the line-feed
+      canonical root from its linked worktree; a helper with no answer assigns
+      nothing and returns 1.
 non_functional: {}
 contracts: []
 evidence:
