@@ -316,8 +316,8 @@ evidence:
     commit_sha: "3800f59bcdd9b9a260c6cd9eea2f3f99d2290c87"
   - criterion_id: A4
     status: unchecked
-    evidence_ref: "No whole productionPython row retired. Observer6703e691 source/mechanics peerreported198/95 do notqualify ordinaryconsumer. Root inspected core19 capture plus foreign-before-core-01 actualprobe/execution/observation: recorded return1 but lowercompiler receives return2 and actualvalue2, closed/failures[]/foreignrestored. ExactUTF16 submittedtocapturedboundary is not intrinsiccompiler byteattestation under arbitraryprecorehook. Peer carries boundedtrustedNode/startup/dependencyclosure contract; broader actualcompiledbyte/native/childconsumer proof rootowed. Original ordinary positive/distinguishingatomic-write-negative/restored sequence and fullmutationquality remain unrun/unaccepted; no preload/directcandidate/dependency mutation allocated."
-    recorded_at: "2026-10-22T10:36:48.644Z"
+    evidence_ref: "WholePythonretirement0; observer6703mechanics198/95peerreports notordinaryqualification. Root grounded priorcompilewrapper primitive recordedreturn1/actualreturn2/closed[]; ownedcomponent contract capturesUTF16submittedtocore-loadreference+returnedbody under finitepinnedstartup/dependencyclosure, not pristineintrinsiccompileridentity. PeerA owns explicittwoexistingplugins/appendPlugins[], sourceclosure/actualworker/Jesttopology and unsupportedoverride refusals, controls and normalACamendments; no preload/vendor/dependencychanges. Originalordinarypositive/atomicnegative/restored sequence remainsunallocateduntilcontract/review; child/native/full proof rootowed. CI .github/workflows/mutation.yml106-114 retainsreport/indexonly and dropsmutation-run.json/runs/**/dryrunevidence. Exactpathownedforeignshell-analysis; rootAIMsendrefusedstale, noacceptedhandoff/noCIretentionproof. Root retains finite workflowrepair dependency; PeerA mustnotwriteforeignpath."
+    recorded_at: "2026-10-22T10:40:55.758Z"
     commit_sha: "3800f59bcdd9b9a260c6cd9eea2f3f99d2290c87"
   - criterion_id: A7
     status: unchecked
