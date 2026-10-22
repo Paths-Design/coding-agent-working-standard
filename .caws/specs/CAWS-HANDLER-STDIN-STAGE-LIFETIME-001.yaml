@@ -115,8 +115,10 @@ evidence:
     recorded_at: "2026-10-22T20:13:18.454Z"
     commit_sha: "50ba057b"
   - criterion_id: A7
-    status: unchecked
-    recorded_at: "2026-10-22T20:22:10.911Z"
+    status: pass
+    evidence_ref: "Persistent: t9 'a payload whose unlink keeps failing is reported before and after its handler' ok on helper 90945b5d (rm stub refuses every payload unlink; attempts log first=before-handler and >=1 after-handler; bytes exact; exit 0; payload remains; >=2 payload reports; foreign.txt untouched) and NOT OK on m10 (post-handler retry suppressed) at the after-handler assertion. Transient: t8 ok (first unlink refused, retry after the handler removes it, exactly one report); not ok on prior a5b4baee, m7, m10. Raw: ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/a7-20261022T202124Z (1-newcase-candidate.tap exit 0, 2-newcase-m10.tap exit 1, 3-full-candidate.tap 10/10 exit 0, pins.txt) and series-20261022T201036Z.json"
+    recorded_at: "2026-10-22T20:22:35.119Z"
+    commit_sha: c6164df3
   - criterion_id: A6
     status: pass
     evidence_ref: "parse-input.sh _write_payload_file comment (f4168df9, unchanged through 50ba057b) names the EXIT trap, its TERM/INT/HUP vs KILL limit, and that no shipped dispatcher consumes CAWS_TEMP_FILES; source review at 1169f7df found no consumer under templates or src"
