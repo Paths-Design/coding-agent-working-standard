@@ -6425,7 +6425,7 @@ Additional bounded evidence and unresolved dependencies:
   additional A5 obligation: await the actual supported Stryker API and bind
   terminal completion rather than accepting CLI exit0 or a surviving closed JSON
   file alone. Its fixture mechanics do not qualify that production consumer. The
-  original ordinary positive/negative/restored sequence remains owed; no full
+  ordinary positive/negative/restored sequence is tracked below; no full
   mutation campaign or score is established.
 
   The captured VM boundary does not establish intrinsic compiler identity. A
@@ -6455,9 +6455,9 @@ Additional bounded evidence and unresolved dependencies:
   `e3008b3180e1863b462a5234ee9004d8d47c1053244c7e4cca288a53687b9cc9`. Actual
   private imports select the Node/default branches and write their distinct
   markers; inspection then refuses the unsupported export shape. These VM
-  controls are separate from the preceding four-suite run. Actual ordinary
-  Stryker consumption, the semantic negative/restored sequence and full mutation
-  quality remain open. CI retention is also owed:
+  controls are separate from the preceding four-suite run and do not establish
+  ordinary Stryker consumption or the semantic negative/restored sequence. Full
+  mutation quality remains open. CI retention is also owed:
   `.github/workflows/mutation.yml` uploads report/index files but omits run
   receipts and `runs/**`. The foreign shell lane owns that path; coordination
   refuses its stale lease, so root retains the repair and no handoff is
@@ -6482,10 +6482,63 @@ Additional bounded evidence and unresolved dependencies:
   frozen-prefix/Node custody audit retains empty failure lists and the two
   explicitly admitted cache directories; it does not attest lane build output or
   continuous custody. These artifacts remain under the same `attempt-01/` root.
-  They do not rescue the failed ordinary receipt. Root allocates one fresh
-  ordinary positive attempt at `f07d6b1d` after the R01 package interval
-  releases. Its new run context, semantic source negative, restored run, child
-  consumers and full mutation quality remain owed.
+  They do not rescue the failed ordinary receipt.
+
+  The fresh ordinary positive at `f07d6b1d` exits0 under pinned Node22. Run
+  `fdae161a-7a08-4acc-837e-8f6088c7afd3` completes both normal builds,
+  discovers2678 mutants across six sources and nine suites, and passes385
+  initial tests. It executes zero mutants. Root reads the current run's
+  source/build context, nine closed baseline generations, submitted UTF16 and
+  returned-body records; the awaited supported API, actual child and outer
+  receipt each return0. `ordinary-positive-02/execution.json` hashes to
+  `db1d7142162b81c5a8918b809df6c308d1b6f8dd38f1463ea583083038992514`. Component
+  A3 records this bounded in-process proof as pass; parent acceptance remains
+  unchecked. The controller observes npm and retained child completion, not
+  universal descendant absence or native custody.
+
+  A separately allocated semantic negative changes only the exact-content write
+  in `src/store/atomic-write.ts`, through the existing owner's normally guarded
+  patch. Temporary scope amendments11432/11433 admit that exact path to the
+  child while excluding it from the parent's claim. Run
+  `53205c68-294b-4f22-9508-e2709743f05b` completes both builds with exit0 and
+  reaches the unchanged exact-byte assertion at `atomic-write.test.js:40`:
+  expected `hello world`, received `CAWS_BASELINE_CONTROL_WRONG_BYTES`. Its nine
+  generations retain385 test outcomes, with that sole failure,85 compilations
+  and85 returned-body invocations. Root rehashes45 retained artifact pins and
+  reads the atomic generation, effective submitted conditional and raw
+  API/child/outer results: rejection1, child1 and outer failed1. The negative
+  receipt remains explicitly unqualified. Its facts manifest is
+  `ordinary-negative-01/inspected-artifacts.json`, SHA256
+  `6d7f51ba058ed60a2aba9d2b1997063c89aabde2bbf5abe54993675ad8f619f3`.
+
+  After the leader terminates, the controller observes its actual owned process
+  group absent without sending signals. The owner restores the exact original
+  source through a guarded patch; root verifies source SHA256 `432dc551`,
+  unchanged test SHA256 `d850a0e6`, unchanged `f07d6b1d` HEAD and clean Git.
+  Scope reversals11435/11436 restore the declared memberships: child12 inputs,
+  parent110 inputs/3 exclusions/116 supporting paths. The parent's disjoint
+  plain `store/` prefix appends after the other109 entries, preserving admission
+  and matching-pattern behavior. Source restoration leaves generated outer
+  `dist/store/atomic-write.js` containing the marker. That output is quarantined
+  until the separately allocated fresh `ordinary-restored-01` build replaces it;
+  source-clean state alone does not establish restored runtime bytes.
+
+  Restored run `517fadc6-4e5b-4fc2-b23b-05924a94ba1a` then exits0 with both
+  builds successful and385 passing initial tests in nine closed baseline
+  generations. The named exact-content assertion passes, and root verifies the
+  control marker absent from its submitted UTF16 and current generated atomic
+  module. The latter returns to SHA256 `11e6c828`. The awaited API, actual child
+  and outer runner each return0; root rehashes24 current observation artifacts.
+  `ordinary-restored-01/execution.json` hashes to
+  `65e65574e6b67527ea9bfc95aa09c81e16011a68bd45c6dc8648c2a095f5c4bd`. Its
+  observations remain explicitly unqualified for a full mutation campaign. The
+  owned process group is observed absent without signals. The after-run custody
+  audit `03cf9ced` retains status pass and empty failure lists; it covers the
+  declared frozen dependency/Node and retained-evidence boundary. No mutant
+  executes. Child-process consumption, full mutation quality and later
+  integrated-parent qualification remain owed. Neither endpoint custody audits
+  nor observed group absence establish continuous custody or escaped-descendant
+  exclusion.
 
 - E256: Review of R01 candidate `f9a90160` reaches executable-position ownership
   and managed-header boundaries that its237 passing checks miss. The owner
@@ -6605,12 +6658,50 @@ Additional bounded evidence and unresolved dependencies:
   remains clean. `qualification-checkpoint.json` retains raw artifact hashes,
   exact commands and terminal statuses. These are payload, physical dependency
   and declared-range/engine checks, not dynamic-import or native behavior
-  qualification. Fresh descriptor commands receive separate review; descriptor
-  construction and public packaged readers have not executed for this candidate.
-  Actual native callbacks, upgrade/rollback, effective-event precedence,
-  combined-source packaging and machine adoption remain open. New AIM sends to
-  c4, dd67 and c843 refuse stale heartbeats; earlier queued assignments remain
-  unfinished under root ownership.
+  qualification.
+
+  Fresh Node18/22 descriptors construct successfully, with exact5704-file and
+  65-package inventories,55 native notices and one Node notice. Their45000ms
+  value is an inert preparation parameter, not an operational deadline. The
+  first reader attempt stops before either CLI command: observer `202e65d5`
+  assumes the nominal Codex hooks path is regular, while the agent-config
+  installer and validator require the observed managed symlink. Its failed exit1
+  and recovered raw diagnostic remain retained, with provenance in receipt
+  `3ffb00ed`. Repaired stdout-only observer `d2a52041` checks the exact known
+  link, target bytes and final ancestry without changing global configuration.
+
+  The separately reviewed retry executes the fresh private package's public
+  `init adapters install --plan --json --native-image` command under Node18 and
+  Node22. Both exit0 with empty stderr,5880 unique image members and83
+  executable members. Image digests are
+  `44b495bf1f89e5cb12501f5eb8d4dd488c4c08821ca76bd08c7fa909b1b6b017` and
+  `8198d52c21b368acf8c90f80cd06bd1ff75c9f2da6eab3cb7a2003881cd6821e`. Root reads
+  the command receipts and exact-image comparisons. Private install homes remain
+  absent; before/after source1577/build1254 and full-prefix5704 checks exit0,
+  and tracked `bfb548e6` stays clean. Raw global pointer/link/target endpoint
+  observations are identical, including hashes, modes, link counts, inodes and
+  timestamps. They do not prove continuous custody or effective
+  registration/trust. Expected-image comparisons share shipped helpers and
+  establish consistency, not independent policy correctness. Artifacts remain
+  under `package-bfb548e6/`; retained native inputs are feature-off binaries.
+
+  Normal source integration through `--no-close` and a recreated owned
+  verification lane precedes coherent guide/handler/fingerprint packaging. The
+  SQLite build receipt's exact v1 artifact inventory omits the stable
+  `caws-hook-native` entry. A fresh build must bind that target and its bytes in
+  an explicit version/capability contract while preserving bounded v1 consumers
+  and both build profiles. The separate native-image input accepts a
+  stable-entry pin without reading this receipt; its producer must derive that
+  pin from the verified build. Extending the receipt alone cannot qualify the
+  installed image. Borrowing retained feature-off entry bytes cannot establish
+  this source chain. A source-confirmed discovery gap also remains: an earlier
+  shell operator stops tokenization before an escaped or concatenated CAWS
+  basename, allowing the candidate gate to miss a possible producer. Strict
+  ownership parsing remains separate; a read-only finding does not prove actual
+  duplicate callbacks. Actual native callbacks, upgrade/rollback,
+  effective-event precedence, combined-source packaging and machine adoption
+  remain open. Fresh AIM sends to c4, dd67 and c843 refuse stale heartbeats;
+  earlier queued assignments remain unfinished under root ownership.
 
 - E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
   `native-session-publication`, based on `03d663b6`, for the continuous original
