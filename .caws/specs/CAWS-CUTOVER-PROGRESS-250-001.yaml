@@ -34,3 +34,9 @@ non_functional:
   security:
     - 'No installed registration, runtime selection, guard or ownership bypass changes'
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "E250-E253 actual private A/B install/configure/fixture doctor1, Claude2.1.308 timeout tool effects and stream hashes, R19 held0a4 source/raw controls, mutation caa655 fixture66 plus real-dryrun-01 exit1 beforebuild inspected. Shared registration observer and supported failure-policy repair ownedR01; resolver repair/retry ownedPeerA; root retains deadline/fullconsumer/cutover/docs. Independent Sol committed review b397 and directly grounded E253 correction d1e2f3ca; formatting/diff0, five gates1filePASS, doctor0E3W4I. 33/37partial,parent0/8,zero fullPython unchanged."
+    recorded_at: "2026-10-22T07:15:43.118Z"
+    commit_sha: d1e2f3ca
