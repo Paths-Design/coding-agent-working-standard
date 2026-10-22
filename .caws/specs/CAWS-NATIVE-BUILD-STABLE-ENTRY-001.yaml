@@ -2,7 +2,6 @@ id: CAWS-NATIVE-BUILD-STABLE-ENTRY-001
 title: 'Bind stable hook entry to versioned native build receipts'
 mode: feature
 lifecycle_state: active
-worktree: native-build-stable-entry
 created_at: '2026-10-22T15:26:58.512Z'
 updated_at: '2026-10-22T15:27:23.187Z'
 created_by_session: '01a1620e-59d6-7373-b74b-25d9f5f7b1e9'
