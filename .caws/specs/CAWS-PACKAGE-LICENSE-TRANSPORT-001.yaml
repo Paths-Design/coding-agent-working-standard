@@ -1,0 +1,53 @@
+id: CAWS-PACKAGE-LICENSE-TRANSPORT-001
+title: 'Carry exact source licenses through CLI pack and snapshot lifecycle'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-22T02:40:58.291Z'
+updated_at: '2026-10-22T02:40:58.291Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'CLI consumer artifact staging and ordinary npm pack'
+    - 'Standalone CLI snapshot staging and activation cleanup'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/stage-consumer-docs.mjs'
+    - 'packages/caws-cli/scripts/clean-staged-docs.mjs'
+    - 'packages/caws-cli/.gitignore'
+    - 'scripts/install-cli-snapshot.mjs'
+    - 'scripts/install-cli-snapshot.test.mjs'
+    - 'packages/caws-cli/tests/docs/package-license-transport.test.js'
+  out: []
+invariants:
+  - 'Root MIT and Unicode14/html311 source licenses are authoritative and unchanged; generated transports preserve exact bytes.'
+  - 'Only finite recorded owned files with unchanged identity and bytes may be removed; identical preexisting files remain unowned, conflicts and symlinks fail closed.'
+  - 'Snapshot failure and cleanup diagnostics remain observable and lock release is attempted; cleanup failure before activation preserves the active command.'
+acceptance:
+  - id: A1
+    given: 'authoritative root and vendored source licenses'
+    when: 'ordinary staging and npm packing execute'
+    then: 'the actual tar contains all three exact source-byte licenses at consumer locations and owned postpack transports are removed without changing sources'
+  - id: A2
+    given: 'preexisting identical files, conflicts, symlinks, interrupted ownership or replaced staged files'
+    when: 'staging or cleanup executes'
+    then: 'identical unowned bytes are preserved, uncertain ownership fails closed, and cleanup removes only unchanged recorded owned identities'
+  - id: A3
+    given: 'snapshot packing disables npm lifecycle scripts'
+    when: 'packing succeeds or staging, packing or cleanup fails'
+    then: 'explicit cleanup runs before activation, original and cleanup failures are retained, lock release is attempted, and preactivation failure preserves the previous command'
+  - id: A4
+    given: 'the committed six-path candidate'
+    when: 'focused real-file lifecycle checks, actual ordinary pack and isolated snapshot scenarios plus independent review execute'
+    then: 'retained commands, exits, byte comparisons, ownership and activation states support the bounded artifact claim and omission or wrong-byte controls fail'
+observability:
+  - 'Retain source and tar member SHA256, lifecycle stdout/stderr and before/after ownership, lock and activation state outside tracked source.'
+rollback:
+  - 'Revert only this bounded source unit through normal governed Git operations; remove only positively owned unchanged generated transports.'
+non_functional:
+  security:
+    - 'Never follow source/destination/ownership symlinks or delete foreign replacements; do not install to shared runtime or publish.'
+contracts:
+  - name: 'license-transport'
+    type: behavior
