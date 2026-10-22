@@ -85,13 +85,29 @@ function temporaryDirectory(prefix) {
   return directory;
 }
 
-// Inherited oracle inputs or node preloads would change what a case exercises.
+// Inherited oracle inputs, node preloads or Git storage/config overrides would
+// change what a case exercises; GIT_DIR in particular redirects even `git -C`.
 function baseEnvironment() {
   const environment = { ...process.env };
   for (const key of Object.keys(environment)) {
-    if (key.startsWith('CAWS_ORACLE_') || key === 'NODE_OPTIONS') delete environment[key];
+    if (key.startsWith('CAWS_ORACLE_') || key.startsWith('GIT_') || key === 'NODE_OPTIONS') {
+      delete environment[key];
+    }
   }
   return environment;
+}
+
+// Fixture Git and the guard's own Git calls read configuration only from the
+// fixture home, as tests/helpers/git-repo-factory.js does; that helper is not
+// reused here because it loads the built dist, which these checks do not need.
+function hermeticGitEnvironment(home) {
+  return {
+    ...baseEnvironment(),
+    HOME: home,
+    GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig'),
+    GIT_CONFIG_SYSTEM: '/dev/null',
+    GIT_TERMINAL_PROMPT: '0',
+  };
 }
 
 function makeRepo() {
@@ -383,31 +399,36 @@ describe('scope matcher parity between caws-state.sh and the oracle', () => {
 describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directory', () => {
   const SESSION = 'my-session';
 
-  function git(repo, args) {
-    const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', timeout: 30000 });
+  function git(repo, home, args) {
+    const result = spawnSync('git', ['-C', repo, ...args], {
+      encoding: 'utf8',
+      timeout: 30000,
+      env: hermeticGitEnvironment(home),
+    });
     expect(result.status).toBe(0);
   }
 
   function makeClaimedRepo() {
     const repo = makeRepo();
-    git(repo, ['init', '-q', '-b', 'main']);
-    git(repo, ['config', 'user.name', 'CAWS Test']);
-    git(repo, ['config', 'user.email', 'test@caws.invalid']);
-    git(repo, ['config', 'commit.gpgsign', 'false']);
-    git(repo, ['commit', '-q', '--allow-empty', '-m', 'root commit']);
+    const home = temporaryDirectory('caws-oracle-home-');
+    git(repo, home, ['init', '-q', '-b', 'main']);
+    git(repo, home, ['config', 'user.name', 'CAWS Test']);
+    git(repo, home, ['config', 'user.email', 'test@caws.invalid']);
+    git(repo, home, ['config', 'commit.gpgsign', 'false']);
+    git(repo, home, ['config', 'core.hooksPath', '/dev/null']);
+    git(repo, home, ['commit', '-q', '--allow-empty', '-m', 'root commit']);
     seedClaimant(repo, {
       name: 'wt-dir',
       specId: 'DIR-001',
       owner: 'foreign-session',
       scopeIn: ['packages/dir'],
     });
-    return repo;
+    return { repo, home };
   }
 
   // Mirrors the Bats guard harness: an isolated HOME and CAWS_HOME and a synthetic
   // session, so no real session state, registration or kill authority is borrowed.
-  function runGuard(repo, command) {
-    const home = temporaryDirectory('caws-oracle-home-');
+  function runGuard({ repo, home }, command) {
     const envelope = JSON.stringify({
       tool_name: 'Bash',
       tool_input: { command },
@@ -420,8 +441,7 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       encoding: 'utf8',
       timeout: 60000,
       env: {
-        ...baseEnvironment(),
-        HOME: home,
+        ...hermeticGitEnvironment(home),
         CAWS_HOME: path.join(home, '.caws'),
         CAWS_PROJECT_DIR: repo,
         CAWS_AGENT_SURFACE: 'claude-code',
@@ -437,19 +457,19 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
   }
 
   test('a mutation under the claimed directory is blocked, naming the claiming worktree and entry', () => {
-    const repo = makeClaimedRepo();
-    const result = runGuard(repo, 'touch packages/dir/file.py');
+    const result = runGuard(makeClaimedRepo(), 'touch packages/dir/file.py');
     expect(result.status).toBe(2);
     expect(result.stderr).toContain(
       "BLOCKED: this Bash command mutates 'wt-dir:packages/dir', claimed by an active worktree's scope.in."
     );
   });
 
-  test('a mutation of a sibling that only shares the prefix is admitted', () => {
-    const repo = makeClaimedRepo();
-    const result = runGuard(repo, 'touch packages/directory/file.py');
+  test('a mutation of a sibling that only shares the prefix is admitted without a decision', () => {
+    const result = runGuard(makeClaimedRepo(), 'touch packages/directory/file.py');
+    // An approval request also exits 0, but writes permissionDecision "ask" to
+    // stdout; admission writes no hook decision at all.
     expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
     expect(result.stderr).not.toContain('BLOCKED');
-    expect(result.stdout).not.toContain('"decision":"block"');
   });
 });
