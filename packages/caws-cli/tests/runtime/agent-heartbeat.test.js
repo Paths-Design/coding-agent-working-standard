@@ -470,15 +470,29 @@ test('real stores keep subagent-observed mail pending until the parent context o
   expect(output(await executeAgentHeartbeat(context, p))).not.toContain('for the parent only');
 });
 
-// Empty hook input is admitted as payload {}; custody follows the original text, so the
-// same session context is withheld for absent or unparseable input and offered once for
-// a valid main-thread object.
+// Protocol-valid requests: empty hook input is admitted as payload {}, and neither it
+// nor a literal {} carries a session, so the heartbeat is silent before custody.
+test.each([
+  ['empty input', ''],
+  ['an empty object', '{}'],
+])('a protocol-valid request with %s never polls', async (_, inputJson) => {
+  ingress({}, inputJson);
+  const p = ports();
+  const result = await executeAgentHeartbeat(context, p);
+  expect(output(result)).toBe('');
+  expect(p.heartbeat).not.toHaveBeenCalled();
+  expect(p.poll).not.toHaveBeenCalled();
+  expect(result.offers).toEqual([]);
+});
+// Deliberately inconsistent unit requests the runtime protocol never builds: session
+// context in the payload but an empty, malformed or non-object original text. Custody
+// follows the original text, so these withhold, and a valid original offers once.
 test.each([
   ['empty', ''],
   ['malformed', '{"session_id":"same-session"'],
   ['non-object', '[{"session_id":"same-session"}]'],
 ])(
-  'real stores withhold for %s original input with session context, then offer a valid original once',
+  'inconsistent unit request: real stores withhold for %s original input with session context, then offer a valid original once',
   async (_, inputJson) => {
     const p = ports({ heartbeat: heartbeatAgentActivity, poll: pollAgentMessages });
     const { cawsDir, id } = queue('original-input custody');
