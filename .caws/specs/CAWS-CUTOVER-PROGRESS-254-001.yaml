@@ -2,6 +2,7 @@ id: CAWS-CUTOVER-PROGRESS-254-001
 title: 'Publish verified binding closure and remaining native consumer obligations'
 mode: doc
 lifecycle_state: active
+worktree: cutover-progress-254-main
 created_at: '2026-10-22T08:41:19.961Z'
 updated_at: '2026-10-22T08:41:29.228Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
