@@ -5858,9 +5858,14 @@ Additional bounded evidence and unresolved dependencies:
   `73166c16`; source-owner integration, late-path evidence inspection, pack
   fingerprints, native library pins and the combined guard/docs qualification
   remain open. A child's recorded acceptance does not establish that
-  integration. The Python-dependent payload-parser sibling remains unexecuted,
-  and complete no-Python refusal parity is open. The selected408 runtime is
-  unchanged.
+  integration. Source-owner inspection and root's direct helper probe find
+  successful LF-only output becomes an empty caller value; raw nonempty-output
+  checking does not establish normalization. Repair and selective empty-output
+  refusal controls precede child landing. Dynamic-prefix normalization is
+  unreachable because required AST projection supplies no proven prefix; source
+  and a conservative ask falsifier establish that applicability boundary. The
+  Python-dependent payload-parser sibling remains unexecuted, and complete
+  no-Python refusal parity is open. The selected408 runtime is unchanged.
 
 - E235: Canonical transcript mutation registration and finite public export
   consumers integrate at `ff3c6180` from `90553b82`, with child acceptance A1–A3
@@ -6066,36 +6071,36 @@ progress and does not replace that transaction or its event readback.
    parity from pure arithmetic. E231 preserves the complete acquisition through
    later frontend failure and documents that bounded lifetime; its component is
    accepted and integrated. Root's active `CAWS-RESIDENT-STORE-ACQUISITION-001`
-   component owns the next surviving-actor acquisition slice; its scoped edits
-   await the human response to the unsupported bulk-wrapper refusal, and no
-   resident acquisition is qualified. The refused wrapper remains unexecuted.
-   Follow that slice with single-use exhausted-and-settled publication. The
-   accepted store call in `main.rs` owns acquisition in the transient frontend,
-   while `render_owner.rs`'s resident actor separately owns writer custody; the
-   engine custodian proxies bytes without original store context. A local return
-   object cannot transfer authority across those processes. Establish
-   native-original registration and a bounded row/control/publication exchange
-   in the surviving owner; generic confirmed close does not grant a permit.
-   Integrate atomic projection publication under compatible continuous writer
-   custody before the actual renderer opens its source, followed by receipt
-   serialization/delivery as distinct outcomes. E213 records why a separate
-   recursively acquired publisher lock or an early unlock is insufficient. E210
-   requires retaining publication truth even when later receipt encoding fails;
-   no failed invocation may select an old projection. Connect this owner to the
-   actual session-log renderer consumer while preserving normalization, selected
-   overrides and E165/E166 source/profile controls. E202/E206 component imports
-   and E208–E215 finite observations do not close complete native
-   calendar/error/path/profile behavior, WAL, asynchronous cleanup, release
-   packaging or ordinary consumer parity. R09's production consumer and R18
-   remain unreplaced. E214 retains the incomplete-profile publication reference.
-   E215 assigns coherent typed preparation and preserves the actual-reader
-   generation/closure obligation; a prepared result cannot stand in for that
-   integration. E219 grounds the exact missing entry/selection/actor/reader
-   connections. E225 lands the bounded embedded-profile, owned-spill and
-   output-conversion repairs; connect that prepared API to native publication
-   and the actual reader. Repair the source-grounded SessionEnd usage-schema
-   mismatch through its real metadata consumer, preserving provider counts and
-   top-level model ordering.
+   component owns the next surviving-actor acquisition slice; the human
+   authorizes scoped native patch continuation after an unsupported bulk-wrapper
+   refusal. No resident acquisition is qualified, and the refused wrapper
+   remains unexecuted. Follow that slice with single-use exhausted-and-settled
+   publication. The accepted store call in `main.rs` owns acquisition in the
+   transient frontend, while `render_owner.rs`'s resident actor separately owns
+   writer custody; the engine custodian proxies bytes without original store
+   context. A local return object cannot transfer authority across those
+   processes. Establish native-original registration and a bounded
+   row/control/publication exchange in the surviving owner; generic confirmed
+   close does not grant a permit. Integrate atomic projection publication under
+   compatible continuous writer custody before the actual renderer opens its
+   source, followed by receipt serialization/delivery as distinct outcomes. E213
+   records why a separate recursively acquired publisher lock or an early unlock
+   is insufficient. E210 requires retaining publication truth even when later
+   receipt encoding fails; no failed invocation may select an old projection.
+   Connect this owner to the actual session-log renderer consumer while
+   preserving normalization, selected overrides and E165/E166 source/profile
+   controls. E202/E206 component imports and E208–E215 finite observations do
+   not close complete native calendar/error/path/profile behavior, WAL,
+   asynchronous cleanup, release packaging or ordinary consumer parity. R09's
+   production consumer and R18 remain unreplaced. E214 retains the
+   incomplete-profile publication reference. E215 assigns coherent typed
+   preparation and preserves the actual-reader generation/closure obligation; a
+   prepared result cannot stand in for that integration. E219 grounds the exact
+   missing entry/selection/actor/reader connections. E225 lands the bounded
+   embedded-profile, owned-spill and output-conversion repairs; connect that
+   prepared API to native publication and the actual reader. Repair the
+   source-grounded SessionEnd usage-schema mismatch through its real metadata
+   consumer, preserving provider counts and top-level model ordering.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
