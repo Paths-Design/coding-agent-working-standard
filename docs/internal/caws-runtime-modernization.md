@@ -6540,6 +6540,20 @@ Additional bounded evidence and unresolved dependencies:
   nor observed group absence establish continuous custody or escaped-descendant
   exclusion.
 
+  Component A4 records the bounded semantic contrast as pass at event11448. A2
+  records the scoped lifetime/refusal proof as pass at event11459. Its
+  `a2-current-artifact-inspection.json` manifest hashes to
+  `d689de52b9b5d1db60927ab325c6edbe7316760e7421d5be5d8eb6dceda06f82`. Root
+  rehashes59 referenced files and reads ten actual observer scenarios, four
+  producer-finalization faults and the validator refusal inventory. Finalization
+  faults retain closed-looking disk records while the actual producer refuses
+  with `record-sink`; file presence does not establish closure. Current per-file
+  source pins support the older focused controls without promoting their entire
+  suites to current-candidate proof. The component has A2/A3/A4 pass and A1/A5
+  unchecked; it remains active and unmerged. Actual mutant context/body
+  isolation and the ordinary cleanup-failure/resolved-nonzero API matrix remain
+  owed alongside the parent obligations.
+
 - E256: Review of R01 candidate `f9a90160` reaches executable-position ownership
   and managed-header boundaries that its237 passing checks miss. The owner
   retains failing canonical and producer controls and repairs classification
