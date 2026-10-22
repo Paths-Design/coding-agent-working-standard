@@ -32,6 +32,10 @@ import {
   classifyAdapterProducerHook,
 } from './machine-adapter-policy';
 import { extractMachineHandlers } from './machine-handler-policy';
+import {
+  readNativeEntryFileIdentity,
+  readRetainedNativeEntryIdentity,
+} from './machine-runtime-state';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
 import {
   CANONICAL_HOOK_ENTRIES,
@@ -176,15 +180,23 @@ function requireNativeEntry(home: string, preserveLegacyTransport = false): void
     );
   };
   if (!fs.existsSync(stable)) return refuse();
-  const stat = fs.lstatSync(stable);
-  if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o7777) !== 0o755) return refuse();
-  const identity = createHash('sha256').update(fs.readFileSync(stable)).digest('hex');
+  let identity: string;
+  try {
+    const captured = readNativeEntryFileIdentity(home, stable);
+    if (captured.mode !== 0o755) return refuse();
+    identity = captured.sha256;
+  } catch {
+    return refuse();
+  }
   if (files['native-entry.json']) {
     if (files['native/caws-hook-native'] !== identity) return refuse();
     return;
   }
   // A retained transport may follow rollback into a verified legacy generation.
-  // This does not authorize fresh native opt-in or repair any installed bytes.
+  // Only manifest-bound metadata and entry identity are consumed here, under
+  // machine-home custody. Unused native payload health is not legacy readiness;
+  // this neither qualifies that native image nor authenticates publisher history.
+  // Fresh native opt-in still requires a fully verified selected native image.
   if (!preserveLegacyTransport || !files['bootstrap.py'] || !files['launcher.py']) return refuse();
   const runtimes = path.join(home, 'lib/runtimes');
   assertMachinePath(home, runtimes);
@@ -195,10 +207,9 @@ function requireNativeEntry(home: string, preserveLegacyTransport = false): void
   for (const digest of candidates) {
     if (!/^[a-f0-9]{64}$/.test(digest)) continue;
     try {
-      const retained = verifyRuntime(home, digest);
-      if (retained['native-entry.json'] && retained['native/caws-hook-native'] === identity) return;
+      if (readRetainedNativeEntryIdentity(home, digest).sha256 === identity) return;
     } catch {
-      // Corrupt or partial generations vouch for no compatibility identity.
+      // Invalid manifest-bound entry identity vouches for no compatibility.
     }
   }
   return refuse();

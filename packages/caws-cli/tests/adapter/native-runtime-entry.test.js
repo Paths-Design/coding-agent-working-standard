@@ -8,6 +8,10 @@ const { installMachineRuntime, rollbackMachineRuntime } = require(
   path.join(dist, 'init/machine-adapters')
 );
 const { verifyRuntime } = require(path.join(dist, 'init/machine-runtime-state'));
+const { configureSystemRuntime, systemSurfaceEnabled } = require(
+  path.join(dist, 'init/system-runtime')
+);
+const { observeSystemRuntime } = require(path.join(dist, 'store/system-runtime-observation'));
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const cli = 'node_modules/@paths.design/caws-cli';
 let root, input;
@@ -96,6 +100,215 @@ function install(home, native = true) {
     ...(native ? { nativeImage } : {}),
   });
 }
+function fixtureState(directory = root) {
+  const state = {};
+  function visit(parent) {
+    for (const name of fs.readdirSync(parent).sort()) {
+      const file = path.join(parent, name);
+      const stat = fs.lstatSync(file);
+      const key = path.relative(directory, file);
+      state[key] = { mode: stat.mode & 0o7777, nlink: stat.nlink };
+      if (stat.isDirectory()) visit(file);
+      else state[key].bytes = fs.readFileSync(file);
+    }
+  }
+  visit(directory);
+  return state;
+}
+function rewriteRetainedMetadata(home, digest, mutate) {
+  const previous = path.join(home, 'lib/runtimes', digest);
+  const manifest = JSON.parse(fs.readFileSync(path.join(previous, 'manifest.json')));
+  const metadata = JSON.parse(fs.readFileSync(path.join(previous, 'native-entry.json')));
+  mutate(metadata, manifest);
+  const bytes = JSON.stringify(metadata);
+  fs.writeFileSync(path.join(previous, 'native-entry.json'), bytes);
+  manifest['native-entry.json'] = sha(Buffer.from(bytes));
+  const manifestBytes = JSON.stringify(manifest);
+  const next = sha(Buffer.from(manifestBytes));
+  fs.writeFileSync(path.join(previous, 'manifest.json'), manifestBytes);
+  fs.renameSync(previous, path.join(home, 'lib/runtimes', next));
+  const pointer = path.join(home, 'state/adapter-runtime.json');
+  const value = JSON.parse(fs.readFileSync(pointer));
+  if (value.digest === digest) value.digest = next;
+  if (value.previous_digest === digest) value.previous_digest = next;
+  fs.writeFileSync(pointer, JSON.stringify(value));
+  return next;
+}
+test.each(['changed payload', 'missing payload', 'unused Node mode'])(
+  'ordinary legacy rollback keeps configured transport observable despite %s in unused native image',
+  (kind) => {
+    const home = path.join(root, 'machine');
+    const user = path.join(root, 'user');
+    const repo = path.join(root, 'repo');
+    fs.mkdirSync(user);
+    fs.mkdirSync(path.join(repo, '.caws/specs'), { recursive: true });
+    fs.writeFileSync(path.join(repo, '.caws/policy.yaml'), 'version: 1\n');
+    const legacy = install(home, false);
+    const native = install(home);
+    configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native' });
+    const entry = path.join(home, 'bin/caws-hook-native');
+    const stable = fs.readFileSync(entry);
+    const nativeRoot = path.join(home, 'lib/runtimes', native.digest);
+    const payload = path.join(nativeRoot, 'native-prefix', cli, 'dist/relative.json');
+    if (kind === 'changed payload') fs.writeFileSync(payload, '{"fixture":"changed"}');
+    if (kind === 'missing payload') fs.unlinkSync(payload);
+    if (kind === 'unused Node mode') fs.chmodSync(path.join(nativeRoot, 'native/node'), 0o644);
+    const failure = kind === 'unused Node mode' ? /mode mismatch/ : /modified|ENOENT/;
+    expect(() => verifyRuntime(home, native.digest)).toThrow(failure);
+    const retainedBefore = fixtureState(nativeRoot);
+    const result = rollbackMachineRuntime({
+      home,
+      templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+    });
+    expect(result.digest).toBe(legacy.digest);
+    expect(result.previousDigest).toBe(native.digest);
+    expect(JSON.parse(fs.readFileSync(path.join(home, 'state/adapter-runtime.json')))).toEqual({
+      version: 1,
+      digest: legacy.digest,
+      previous_digest: native.digest,
+    });
+    expect(fs.readFileSync(entry)).toEqual(stable);
+    expect(fs.statSync(entry).mode & 0o7777).toBe(0o755);
+    expect(fixtureState(nativeRoot)).toEqual(retainedBefore);
+    const before = fixtureState();
+    const priorHome = process.env.CAWS_HOME;
+    const homedir = jest.spyOn(os, 'homedir').mockReturnValue(user);
+    process.env.CAWS_HOME = home;
+    try {
+      expect(
+        configureSystemRuntime({ home, userHome: user, surface: 'codex', plan: true }).changed
+      ).toBe(false);
+      expect(systemSurfaceEnabled('codex', home, user)).toBe(true);
+      expect(observeSystemRuntime(repo)).toEqual({
+        surfaces: ['codex'],
+        legacySurfaces: [],
+        overrides: [],
+        digest: legacy.digest,
+      });
+      expect(verifyRuntime(home, legacy.digest)['bootstrap.py']).toMatch(/^[a-f0-9]{64}$/);
+      expect(() => verifyRuntime(home, native.digest)).toThrow(failure);
+      expect(() =>
+        configureSystemRuntime({
+          home,
+          userHome: user,
+          surface: 'codex',
+          entry: 'native',
+          plan: true,
+        })
+      ).toThrow(/native-image/);
+      expect(() =>
+        rollbackMachineRuntime({
+          home,
+          templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+        })
+      ).toThrow(failure);
+    } finally {
+      homedir.mockRestore();
+      if (priorHome === undefined) delete process.env.CAWS_HOME;
+      else process.env.CAWS_HOME = priorHome;
+    }
+    expect(fixtureState()).toEqual(before);
+  }
+);
+test.each([
+  'metadata hash',
+  'metadata schema',
+  'metadata timeout',
+  'metadata extra field',
+  'metadata traversal',
+  'metadata missing member pin',
+  'retained entry bytes',
+  'retained entry mode',
+  'retained entry hardlink',
+  'stable entry hardlink',
+])('ordinary legacy rollback refuses invalid compatibility identity: %s', (kind) => {
+  const home = path.join(root, 'machine');
+  install(home, false);
+  let native = install(home).digest;
+  if (kind.startsWith('metadata ') && kind !== 'metadata hash')
+    native = rewriteRetainedMetadata(home, native, (metadata, manifest) => {
+      if (kind === 'metadata schema') metadata.schema = 'unrecognized';
+      if (kind === 'metadata timeout') metadata.timeoutMs = 0;
+      if (kind === 'metadata extra field') metadata.unreviewed = true;
+      if (kind === 'metadata traversal') {
+        metadata.engineEntry = '../outside-engine.js';
+        manifest[metadata.engineEntry] = sha(Buffer.from('outside fixture'));
+      }
+      if (kind === 'metadata missing member pin') delete manifest[metadata.engineEntry];
+    });
+  const retained = path.join(home, 'lib/runtimes', native, 'native/caws-hook-native');
+  if (kind === 'metadata hash')
+    fs.writeFileSync(path.join(home, 'lib/runtimes', native, 'native-entry.json'), '{}');
+  if (kind === 'retained entry bytes') fs.writeFileSync(retained, 'Changed retained entry');
+  if (kind === 'retained entry mode') fs.chmodSync(retained, 0o644);
+  if (kind === 'retained entry hardlink')
+    fs.linkSync(retained, path.join(root, 'retained-hardlink'));
+  if (kind === 'stable entry hardlink')
+    fs.linkSync(path.join(home, 'bin/caws-hook-native'), path.join(root, 'stable-hardlink'));
+  const before = fixtureState();
+  expect(() =>
+    rollbackMachineRuntime({
+      home,
+      templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+    })
+  ).toThrow(/compatibility|identity|native|retained|link|metadata/i);
+  expect(fixtureState()).toEqual(before);
+});
+test('ordinary legacy rollback repairs known single-link stable mode from retained entry identity', () => {
+  const home = path.join(root, 'machine');
+  const legacy = install(home, false);
+  const native = install(home);
+  const stable = path.join(home, 'bin/caws-hook-native');
+  const bytes = fs.readFileSync(stable);
+  fs.chmodSync(stable, 0o700);
+  const result = rollbackMachineRuntime({
+    home,
+    templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+  });
+  expect(result.digest).toBe(legacy.digest);
+  expect(result.previousDigest).toBe(native.digest);
+  expect(fs.readFileSync(stable)).toEqual(bytes);
+  expect(fs.statSync(stable).mode & 0o7777).toBe(0o755);
+  expect(fs.statSync(stable).nlink).toBe(1);
+});
+test('legacy rollback refuses dangling native metadata in the selected target', () => {
+  const home = path.join(root, 'machine');
+  const legacy = install(home, false);
+  install(home);
+  const marker = path.join(home, 'lib/runtimes', legacy.digest, 'native-entry.json');
+  fs.symlinkSync('missing-native-metadata', marker);
+  const pointer = path.join(home, 'state/adapter-runtime.json');
+  const before = fs.readFileSync(pointer);
+  const entry = path.join(home, 'bin/caws-hook-native');
+  const bytes = fs.readFileSync(entry);
+  expect(fs.existsSync(marker)).toBe(false);
+  expect(fs.lstatSync(marker).isSymbolicLink()).toBe(true);
+  expect(() => verifyRuntime(home, legacy.digest)).toThrow(/Untracked native metadata/);
+  expect(() =>
+    rollbackMachineRuntime({
+      home,
+      templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+    })
+  ).toThrow(/Untracked native metadata/);
+  expect(fs.readFileSync(pointer)).toEqual(before);
+  expect(fs.readFileSync(entry)).toEqual(bytes);
+  expect(fs.readlinkSync(marker)).toBe('missing-native-metadata');
+});
+test('legacy install refuses an orphan dangling native metadata marker', () => {
+  const home = path.join(root, 'machine');
+  install(home, false);
+  const orphan = path.join(home, 'lib/runtimes', 'e'.repeat(64));
+  fs.mkdirSync(orphan);
+  const marker = path.join(orphan, 'native-entry.json');
+  fs.symlinkSync('missing-native-metadata', marker);
+  const pointer = path.join(home, 'state/adapter-runtime.json');
+  const before = fs.readFileSync(pointer);
+  expect(fs.existsSync(marker)).toBe(false);
+  expect(() => install(home, false)).toThrow(/Native compatibility identity/);
+  expect(fs.readFileSync(pointer)).toEqual(before);
+  expect(fs.readlinkSync(marker)).toBe('missing-native-metadata');
+  expect(fs.existsSync(path.join(home, 'bin/caws-hook-native'))).toBe(false);
+});
 test('preserves complete prefix layout, assets, licenses, executable membership and deterministic metadata', () => {
   write(cli + '/dist/index.js', '#!/usr/bin/env node\n', 0o755);
   const a = prepareNativeRuntimeEntry(input),

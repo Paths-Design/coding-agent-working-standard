@@ -9,6 +9,18 @@ export interface RuntimePointer {
   previous_digest: string | null;
 }
 
+export interface NativeEntryFileIdentity {
+  readonly sha256: string;
+  readonly bytes: Buffer;
+  readonly mode: number;
+}
+
+export interface RetainedNativeEntryIdentity {
+  readonly digest: string;
+  readonly sha256: string;
+  readonly bytes: Buffer;
+}
+
 export const sha = (bytes: Buffer | string): string =>
   createHash('sha256').update(bytes).digest('hex');
 const validDigest = (value: unknown): value is string =>
@@ -16,9 +28,11 @@ const validDigest = (value: unknown): value is string =>
 export const pointerPath = (home: string): string => path.join(home, 'state/adapter-runtime.json');
 
 /** Never block on a special file substituted into a selected generation. */
-function readRuntimeFile(file: string): Buffer {
+function captureRuntimeFile(file: string, singleLink = false): { bytes: Buffer; stat: fs.Stats } {
   const before = fs.lstatSync(file);
   if (!before.isFile()) throw new Error(`Runtime member is not a regular file: ${file}`);
+  if (singleLink && before.nlink !== 1)
+    throw new Error(`Native entry member is not single-link: ${file}`);
   const fd = fs.openSync(
     file,
     fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
@@ -32,7 +46,8 @@ function readRuntimeFile(file: string): Buffer {
       a.size === b.size &&
       a.mode === b.mode &&
       a.mtimeMs === b.mtimeMs &&
-      a.ctimeMs === b.ctimeMs;
+      a.ctimeMs === b.ctimeMs &&
+      (!singleLink || (a.nlink === 1 && b.nlink === 1));
     const opened = fs.fstatSync(fd);
     if (!same(before, opened)) throw new Error(`Runtime member replaced: ${file}`);
     const bytes = fs.readFileSync(fd);
@@ -42,10 +57,25 @@ function readRuntimeFile(file: string): Buffer {
       bytes.length !== opened.size
     )
       throw new Error(`Runtime member changed: ${file}`);
-    return bytes;
+    return { bytes, stat: opened };
   } finally {
     fs.closeSync(fd);
   }
+}
+
+function readRuntimeFile(file: string): Buffer {
+  return captureRuntimeFile(file).bytes;
+}
+
+/** Capture an entry under machine-home custody. Mode repair belongs only to
+ * the explicit installer after it recognizes these captured bytes. */
+export function readNativeEntryFileIdentity(home: string, file: string): NativeEntryFileIdentity {
+  if (!path.isAbsolute(home) || !path.isAbsolute(file))
+    throw new Error('Native entry capture requires absolute machine paths');
+  assertMachinePath(home, file);
+  const { bytes, stat } = captureRuntimeFile(file, true);
+  assertMachinePath(home, file);
+  return { sha256: sha(bytes), bytes, mode: stat.mode & 0o7777 };
 }
 
 export function readPointer(home: string): RuntimePointer | null {
@@ -82,17 +112,82 @@ export function readManifest(home: string, digest: string): Record<string, strin
   return files;
 }
 
+function validateRuntimeRelative(relative: unknown): asserts relative is string {
+  if (
+    typeof relative !== 'string' ||
+    !relative ||
+    /[\\\0]/.test(relative) ||
+    path.isAbsolute(relative) ||
+    relative.split('/').some((part) => !part || part === '.' || part === '..')
+  )
+    throw new Error(`Invalid machine runtime path: ${String(relative)}`);
+}
+
+function parseNativeEntryMetadata(
+  bytes: Buffer,
+  files: Record<string, string>
+): Record<string, unknown> {
+  const metadata: unknown = JSON.parse(bytes.toString('utf8'));
+  if (
+    !metadata ||
+    typeof metadata !== 'object' ||
+    Array.isArray(metadata) ||
+    Object.keys(metadata).sort().join(',') !==
+      'describeEntry,engineEntry,nativeExecutable,nodeExecutable,schema,timeoutMs'
+  )
+    throw new Error('Malformed native entry metadata');
+  const entry = metadata as Record<string, unknown>;
+  if (
+    entry.schema !== 'caws.runtime.native-entry.v1' ||
+    !Number.isSafeInteger(entry.timeoutMs) ||
+    (entry.timeoutMs as number) < 1 ||
+    (entry.timeoutMs as number) > 120000
+  )
+    throw new Error('Unsupported native entry schema or timeout');
+  for (const key of ['nativeExecutable', 'nodeExecutable', 'engineEntry', 'describeEntry']) {
+    const relative = entry[key];
+    validateRuntimeRelative(relative);
+    if (!Object.hasOwn(files, relative) || !validDigest(files[relative]))
+      throw new Error(`Native entry asset absent: ${key}`);
+  }
+  return entry;
+}
+
+/** Manifest-bound entry identity under machine-home custody, not authenticated
+ * publication history. Unselected generation payload is not consumed here. */
+export function readRetainedNativeEntryIdentity(
+  home: string,
+  digest: string
+): RetainedNativeEntryIdentity {
+  const files = readManifest(home, digest);
+  const root = path.join(home, 'lib/runtimes', digest);
+  assertMachinePath(home, path.join(root, 'manifest.json'));
+  for (const [relative, expected] of Object.entries(files)) {
+    validateRuntimeRelative(relative);
+    if (!validDigest(expected))
+      throw new Error(`Invalid retained runtime member hash: ${relative}`);
+  }
+  if (!files['native-entry.json'] || !files['native/caws-hook-native'])
+    throw new Error('Retained generation lacks native entry identity');
+  const metadataFile = path.join(root, 'native-entry.json');
+  assertMachinePath(home, metadataFile);
+  const metadataBytes = readRuntimeFile(metadataFile);
+  assertMachinePath(home, metadataFile);
+  if (sha(metadataBytes) !== files['native-entry.json'])
+    throw new Error('Retained native entry metadata integrity failure');
+  parseNativeEntryMetadata(metadataBytes, files);
+  const entry = readNativeEntryFileIdentity(home, path.join(root, 'native/caws-hook-native'));
+  if (entry.mode !== 0o755) throw new Error('Retained native entry mode mismatch');
+  if (entry.sha256 !== files['native/caws-hook-native'])
+    throw new Error('Retained native entry integrity failure');
+  return { digest, sha256: entry.sha256, bytes: entry.bytes };
+}
+
 export function verifyRuntime(home: string, digest: string): Record<string, string> {
   const files = readManifest(home, digest);
   const root = path.join(home, 'lib/runtimes', digest);
   for (const [relative, expected] of Object.entries(files)) {
-    if (
-      !relative ||
-      /[\\\0]/.test(relative) ||
-      path.isAbsolute(relative) ||
-      relative.split('/').some((part) => !part || part === '.' || part === '..')
-    )
-      throw new Error(`Invalid machine runtime path: ${relative}`);
+    validateRuntimeRelative(relative);
     const file = path.join(root, relative);
     assertMachinePath(root, file);
     if (!validDigest(expected) || sha(readRuntimeFile(file)) !== expected) {
@@ -102,7 +197,7 @@ export function verifyRuntime(home: string, digest: string): Record<string, stri
     }
   }
   if (files['native-entry.json']) verifyNativeLayout(root, files);
-  else if (fs.existsSync(path.join(root, 'native-entry.json')))
+  else if (fs.lstatSync(path.join(root, 'native-entry.json'), { throwIfNoEntry: false }))
     throw new Error('Untracked native metadata cannot select legacy compatibility');
   return files;
 }
@@ -143,29 +238,12 @@ function verifyNativeLayout(root: string, files: Record<string, string>): void {
   visit(root, '');
   if (actual.sort().join('\n') !== expected.join('\n'))
     throw new Error('Native runtime inventory differs from manifest');
-  const metadata: unknown = JSON.parse(
-    readRuntimeFile(path.join(root, 'native-entry.json')).toString('utf8')
+  const entry = parseNativeEntryMetadata(
+    readRuntimeFile(path.join(root, 'native-entry.json')),
+    files
   );
-  if (
-    !metadata ||
-    typeof metadata !== 'object' ||
-    Array.isArray(metadata) ||
-    Object.keys(metadata).sort().join(',') !==
-      'describeEntry,engineEntry,nativeExecutable,nodeExecutable,schema,timeoutMs'
-  )
-    throw new Error('Malformed native entry metadata');
-  const entry = metadata as Record<string, unknown>;
-  if (
-    entry.schema !== 'caws.runtime.native-entry.v1' ||
-    !Number.isSafeInteger(entry.timeoutMs) ||
-    (entry.timeoutMs as number) < 1 ||
-    (entry.timeoutMs as number) > 120000
-  )
-    throw new Error('Unsupported native entry schema or timeout');
   for (const key of ['nativeExecutable', 'nodeExecutable', 'engineEntry', 'describeEntry']) {
-    const relative = entry[key];
-    if (typeof relative !== 'string' || !Object.hasOwn(files, relative))
-      throw new Error(`Native entry asset absent: ${key}`);
+    const relative = entry[key] as string;
     if (
       (key === 'nativeExecutable' || key === 'nodeExecutable') &&
       (modes as Record<string, unknown>)[relative] !== 0o755

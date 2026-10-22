@@ -5,6 +5,8 @@ import {
   pointerPath,
   readPointer,
   readManifest,
+  readNativeEntryFileIdentity,
+  readRetainedNativeEntryIdentity,
   verifyRuntime,
   type RuntimePointer,
 } from './machine-runtime-state';
@@ -124,30 +126,29 @@ function needsNativeEntry(home: string, bytes: Buffer): boolean {
   const target = path.join(home, 'bin/caws-hook-native');
   assertMachinePath(home, target);
   if (!fs.existsSync(target)) return true;
-  if (!fs.lstatSync(target).isFile()) throw new Error('Native machine entry is not a regular file');
-  const installed = sha(fs.readFileSync(target));
-  if (installed === sha(bytes)) return (fs.statSync(target).mode & 0o7777) !== 0o755;
+  const installed = readNativeEntryFileIdentity(home, target);
+  if (installed.sha256 === sha(bytes)) return installed.mode !== 0o755;
   const runtimes = path.join(home, 'lib/runtimes');
   assertMachinePath(home, runtimes);
   const recognized =
     fs.existsSync(runtimes) &&
     fs.readdirSync(runtimes).some((digest) => {
       try {
-        return readManifest(home, digest)['native/caws-hook-native'] === installed;
+        return readRetainedNativeEntryIdentity(home, digest).sha256 === installed.sha256;
       } catch {
         return false;
       }
     });
   if (!recognized)
     throw new Error(
-      'Native machine entry matches no entry CAWS has shipped; preserve and reconcile local growth'
+      'Native machine entry matches no verified retained entry identity; preserve and reconcile local growth'
     );
   return true;
 }
 
 /** Cached native registrations outlive a rollback to a legacy generation.
- * Repair only a positively retained entry identity; never invent a fallback
- * after dispatch or overwrite unrecognized operator bytes.
+ * Repair only a manifest-bound retained entry identity under machine-home
+ * custody; never invent a fallback or overwrite unrecognized operator bytes.
  */
 function legacyCompatibilityEntry(
   home: string,
@@ -155,30 +156,47 @@ function legacyCompatibilityEntry(
 ): { bytes: Buffer; install: boolean } | undefined {
   const runtimes = path.join(home, 'lib/runtimes');
   assertMachinePath(home, runtimes);
-  if (!fs.existsSync(runtimes)) return undefined;
   const stable = path.join(home, 'bin/caws-hook-native');
   assertMachinePath(home, stable);
   const candidates = [
-    ...new Set([...(preferred ? [preferred] : []), ...fs.readdirSync(runtimes).sort()]),
+    ...new Set([
+      ...(preferred ? [preferred] : []),
+      ...(fs.existsSync(runtimes) ? fs.readdirSync(runtimes).sort() : []),
+    ]),
   ];
   const retained = candidates.flatMap((digest) => {
     try {
-      const manifest = readManifest(home, digest);
-      return manifest['native-entry.json'] && manifest['native/caws-hook-native']
-        ? [{ digest, expected: manifest['native/caws-hook-native']! }]
-        : [];
+      return [readRetainedNativeEntryIdentity(home, digest)];
     } catch {
+      // A corrupt candidate cannot vouch for entry bytes. Other retained
+      // identities may still provide the existing catalogue fallback.
       return [];
     }
   });
   if (!retained.length) {
     const unverifiedNative =
       fs.existsSync(stable) ||
-      candidates.some(
-        (digest) =>
-          /^[a-f0-9]{64}$/.test(digest) &&
-          fs.existsSync(path.join(runtimes, digest, 'native-entry.json'))
-      );
+      candidates.some((digest) => {
+        if (!/^[a-f0-9]{64}$/.test(digest)) return false;
+        if (
+          fs.lstatSync(path.join(runtimes, digest, 'native-entry.json'), {
+            throwIfNoEntry: false,
+          }) ||
+          fs.lstatSync(path.join(runtimes, digest, 'native/caws-hook-native'), {
+            throwIfNoEntry: false,
+          })
+        )
+          return true;
+        try {
+          const manifest = readManifest(home, digest);
+          return (
+            Object.hasOwn(manifest, 'native-entry.json') ||
+            Object.hasOwn(manifest, 'native/caws-hook-native')
+          );
+        } catch {
+          return false;
+        }
+      });
     if (unverifiedNative)
       throw new Error(
         'Native compatibility identity cannot be verified; preserve runtime state and reconcile before legacy selection'
@@ -186,27 +204,12 @@ function legacyCompatibilityEntry(
     return undefined; // Legacy-only homes have no native obligation.
   }
   if (fs.existsSync(stable)) {
-    if (!fs.lstatSync(stable).isFile())
-      throw new Error('Native compatibility entry is not a regular file');
-    const bytes = fs.readFileSync(stable);
-    if (!retained.some(({ expected }) => sha(bytes) === expected))
+    const installed = readNativeEntryFileIdentity(home, stable);
+    if (!retained.some(({ sha256 }) => installed.sha256 === sha256))
       throw new Error('Native compatibility entry has local growth; refusing legacy selection');
-    return { bytes, install: (fs.statSync(stable).mode & 0o7777) !== 0o755 };
+    return { bytes: installed.bytes, install: installed.mode !== 0o755 };
   }
-  for (const { digest, expected } of retained) {
-    const file = path.join(runtimes, digest, 'native/caws-hook-native');
-    try {
-      assertMachinePath(home, file);
-      if (!fs.lstatSync(file).isFile()) continue;
-      const bytes = fs.readFileSync(file);
-      if (sha(bytes) === expected) return { bytes, install: true };
-    } catch {
-      /* A partial retained generation vouches for no bytes. */
-    }
-  }
-  throw new Error(
-    'No verified native compatibility entry is available; repair an explicit native image before legacy selection'
-  );
+  return { bytes: retained[0]!.bytes, install: true };
 }
 
 function activateRuntime(
@@ -441,7 +444,7 @@ function rollbackRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const bootstrap = fs.readFileSync(bootstrapPath);
   const installBootstrap = needsBootstrap(home, current, bootstrap);
   const nativeBytes = files['native-entry.json']
-    ? fs.readFileSync(path.join(home, 'lib/runtimes', digest, 'native/caws-hook-native'))
+    ? readRetainedNativeEntryIdentity(home, digest).bytes
     : undefined;
   const nativeEntry = nativeBytes
     ? { bytes: nativeBytes, install: needsNativeEntry(home, nativeBytes) }

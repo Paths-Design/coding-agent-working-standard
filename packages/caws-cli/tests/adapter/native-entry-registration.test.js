@@ -8,6 +8,7 @@ const { configureSystemRuntime, systemSurfaceEnabled, migrateSystemProject } = r
   path.join(dist, 'init/system-runtime')
 );
 const { observeSystemRuntime } = require(path.join(dist, 'store/system-runtime-observation'));
+const { verifyRuntime } = require(path.join(dist, 'init/machine-runtime-state'));
 const {
   machineCommand,
   systemCommand,
@@ -194,10 +195,18 @@ function fixtureBytes() {
       const file = path.join(directory, name);
       const stat = fs.lstatSync(file);
       if (stat.isDirectory()) {
-        result[path.relative(root, file)] = { type: 'directory', mode: stat.mode };
+        result[path.relative(root, file)] = {
+          type: 'directory',
+          mode: stat.mode,
+          nlink: stat.nlink,
+        };
         visit(file);
       } else
-        result[path.relative(root, file)] = { sha256: sha(fs.readFileSync(file)), mode: stat.mode };
+        result[path.relative(root, file)] = {
+          sha256: sha(fs.readFileSync(file)),
+          mode: stat.mode,
+          nlink: stat.nlink,
+        };
     }
   };
   visit(root);
@@ -1027,24 +1036,71 @@ test.each([false, true])(
 test.each([
   'missing retained image',
   'corrupt retained manifest',
-  'corrupt retained member',
-  'invalid retained mode',
   'missing retained metadata',
   'orphan retained metadata',
+  'changed retained metadata',
+  'unsupported retained metadata schema',
+  'invalid retained metadata timeout',
+  'extra retained metadata field',
+  'retained metadata traversal',
+  'missing retained metadata member pin',
+  'changed retained entry',
+  'invalid retained entry mode',
+  'hardlinked retained entry',
   'missing stable entry',
   'changed stable entry',
   'invalid stable mode',
   'hardlinked stable entry',
   'changed selected legacy',
 ])('rollback observation refuses %s without repairing state', (kind) => {
-  const { nativeDigest } = rollbackObservationFixture();
+  let { nativeDigest } = rollbackObservationFixture();
+  if (
+    [
+      'unsupported retained metadata schema',
+      'invalid retained metadata timeout',
+      'extra retained metadata field',
+      'retained metadata traversal',
+      'missing retained metadata member pin',
+    ].includes(kind)
+  ) {
+    const prior = path.join(home, 'lib/runtimes', nativeDigest);
+    const manifest = JSON.parse(fs.readFileSync(path.join(prior, 'manifest.json')));
+    const metadata = JSON.parse(fs.readFileSync(path.join(prior, 'native-entry.json')));
+    if (kind === 'unsupported retained metadata schema') metadata.schema = 'unrecognized';
+    if (kind === 'invalid retained metadata timeout') metadata.timeoutMs = 120001;
+    if (kind === 'extra retained metadata field') metadata.unreviewed = true;
+    if (kind === 'retained metadata traversal') {
+      metadata.engineEntry = '../outside-engine.js';
+      manifest[metadata.engineEntry] = sha('outside fixture');
+    }
+    if (kind === 'missing retained metadata member pin') delete manifest[metadata.nodeExecutable];
+    const bytes = JSON.stringify(metadata);
+    write(path.join(prior, 'native-entry.json'), bytes);
+    manifest['native-entry.json'] = sha(bytes);
+    const manifestBytes = JSON.stringify(manifest);
+    nativeDigest = sha(manifestBytes);
+    write(path.join(prior, 'manifest.json'), manifestBytes);
+    fs.renameSync(prior, path.join(home, 'lib/runtimes', nativeDigest));
+    write(path.join(home, 'state/adapter-runtime.json'), {
+      version: 1,
+      digest: options.runtimeDigest,
+      previous_digest: nativeDigest,
+    });
+  }
   const retained = path.join(home, 'lib/runtimes', nativeDigest);
   const stable = path.join(home, 'bin/caws-hook-native');
   if (kind === 'missing retained image') fs.rmSync(retained, { recursive: true });
   if (kind === 'corrupt retained manifest') write(path.join(retained, 'manifest.json'), '{}');
-  if (kind === 'corrupt retained member')
-    write(path.join(retained, 'guard.sh'), '# changed\n', 0o755);
-  if (kind === 'invalid retained mode') fs.chmodSync(path.join(retained, 'native/node'), 0o644);
+  if (kind === 'changed retained metadata') write(path.join(retained, 'native-entry.json'), '{}');
+  if (kind === 'changed retained entry')
+    write(path.join(retained, 'native/caws-hook-native'), '# changed\n', 0o755);
+  if (kind === 'invalid retained entry mode')
+    fs.chmodSync(path.join(retained, 'native/caws-hook-native'), 0o644);
+  if (kind === 'hardlinked retained entry')
+    fs.linkSync(
+      path.join(retained, 'native/caws-hook-native'),
+      path.join(root, 'retained-hardlink')
+    );
   if (kind === 'missing retained metadata') fs.unlinkSync(path.join(retained, 'native-entry.json'));
   if (kind === 'orphan retained metadata') {
     fs.rmSync(retained, { recursive: true });
@@ -1070,6 +1126,38 @@ test.each([
   });
   expect(fixtureBytes()).toEqual(before);
 });
+test.each(['unrelated payload bytes', 'unused Node mode'])(
+  'legacy transport observation remains valid despite damaged %s in retained native image',
+  (kind) => {
+    const { nativeDigest } = rollbackObservationFixture();
+    const retained = path.join(home, 'lib/runtimes', nativeDigest);
+    if (kind === 'unrelated payload bytes')
+      write(path.join(retained, 'guard.sh'), '# changed\n', 0o755);
+    else fs.chmodSync(path.join(retained, 'native/node'), 0o644);
+    const failure = kind === 'unused Node mode' ? /mode mismatch/ : /modified/;
+    const before = fixtureBytes();
+    withObservationHome(() => {
+      expect(() => verifyRuntime(home, nativeDigest)).toThrow(failure);
+      expect(configureSystemRuntime({ home, surface: 'codex', plan: true }).changed).toBe(false);
+      expect(systemSurfaceEnabled('codex', home)).toBe(true);
+      expect(observeSystemRuntime(canonical)).toEqual({
+        surfaces: ['codex'],
+        legacySurfaces: [],
+        overrides: [],
+        digest: options.runtimeDigest,
+      });
+      expect(() =>
+        configureSystemRuntime({
+          home,
+          surface: 'codex',
+          entry: 'native',
+          plan: true,
+        })
+      ).toThrow(/native-image/);
+    });
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
 test.each(['absent', 'disabled'])(
   'system observation leaves %s system surface settings inactive and untouched',
   (state) => {
