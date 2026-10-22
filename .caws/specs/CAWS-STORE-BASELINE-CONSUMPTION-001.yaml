@@ -107,10 +107,10 @@ evidence:
     commit_sha: "547d4f96b00bbaac7919a24a22476ac36b7c8a3a"
   - criterion_id: A3
     status: unchecked
-    evidence_ref: "Actual ordinary-positive-01 at547d failed outer qualification exit1: current run89dd3c16-c3f4-4a80-b024-d6095590c6ad. Normal build completed; public Stryker API resolved0 and actualchild0; stdout385 initialtests succeeded,6sources/9suites/2678 discoverablemutants. Nine raw closed generation records carry385 testevents with matching role-keyed tool descriptors but different arrayorder; validator correctly remains blocking until code/test disagreement derived and repaired. Execution SHA256d81cb0db6533497ad377859e9a249fafaef7b70bf1509e6a7a6015070108c412; inspected-artifacts.json SHA256fe94885aff9323764141b4e9153c6096033022ca78cd768391bbb618aff5c6be under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/ordinary-positive-01. Gitclean/no lock/no sandbox residue. No positive qualification, no retry or source perturbation."
-    recorded_at: "2026-10-22T11:49:04.552Z"
-    exit_code: 1
-    commit_sha: "547d4f96b00bbaac7919a24a22476ac36b7c8a3a"
+    evidence_ref: "First actual ordinary89dd at547d remains failed1 despite API0/child0/385 initialtests; raw nine generations match exact descriptors by role but enumeration differs. Source f07 repairs ONLY role-keyed generation identity comparison, preserving exact six roles/four fields/uniqueness/full descriptor values. Independent committed review found no scoped false acceptance. Actual focused07 validator-only113 exits0 with stable11 source hashes; real capture-to-verify composition and independent permutations admit, eight hostile inventories refuse with exact diagnostics. Runtime manifest /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-07/inspected-artifacts.json SHAdeb7b2172e2a79412c1735896c20442f7a2d2b2ea87fd09ae0fea47c6e4b36f7. Fresh ordinary retry is prepared but unexecuted; no positive qualification or old-receipt rescue."
+    recorded_at: "2026-10-22T12:02:59.380Z"
+    exit_code: 0
+    commit_sha: f07d6b1d007c6850708b49892f5d7522a81aca6f
   - criterion_id: A4
     status: unchecked
     evidence_ref: "Original ordinary positive -> prepared distinguishing atomic-write source negative -> restored sequence remains OPEN. First actual positive attempt89dd3c16 at547d exits1 at outer tool-order comparison despite API0/child0/385 initialtests; preserved execution SHAd81cb0db6533497ad377859e9a249fafaef7b70bf1509e6a7a6015070108c412. No semantic source-control write, no negative, no restored run, no full mutation score or child/native qualification. Scope contention shows atomic-write source currently claimed by parent CAWS-NATIVE-RUNTIME-001; no scope amendment or control action assumed. Root lead retains sequence allocation."
