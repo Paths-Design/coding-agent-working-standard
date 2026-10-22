@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-22T00:47:45.528Z'
+updated_at: '2026-10-22T01:40:41.676Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -14,7 +14,6 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'packages/caws-cli/scripts/'
-    - 'packages/caws-cli/src/init/'
     - 'packages/caws-cli/src/store/'
     - 'packages/caws-cli/package.json'
     - packages/caws-cli/tests/init/repo-hook-policy.test.js
@@ -61,7 +60,6 @@ scope:
     - packages/caws-cli/src/runtime/operational-files.ts
     - packages/caws-cli/src/runtime/protocol.ts
     - packages/caws-cli/src/runtime/scheduler.ts
-    - packages/caws-cli/src/runtime/selection.ts
     - packages/caws-cli/src/runtime/service-client.ts
     - packages/caws-cli/src/runtime/service-image.ts
     - packages/caws-cli/src/runtime/service-offer.ts
@@ -242,6 +240,9 @@ scope:
     - packages/caws-cli/tests/transcripts/exports.test.ts
     - packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js
     - packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py
+    - packages/caws-cli/src/init/
+    - packages/caws-cli/src/runtime/selection.ts
+    - packages/caws-cli/src/shell/commands/init.ts
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
