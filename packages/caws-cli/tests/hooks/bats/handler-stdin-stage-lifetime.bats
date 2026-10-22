@@ -74,6 +74,19 @@ _chain() { # $1 = payload, rest = handlers
     /bin/bash -c 'set -uo pipefail; source "$RUN_HANDLERS"; run_handlers "$@"' _ "$@"
 }
 
+# Substring assertions as simple commands. Under /bin/bash 3.2 a false `[[ ... ]]`
+# that is not the test's last line does not fail the test (set -e ignores it), so
+# every pattern check here goes through these functions instead.
+_has() { # $1 = text, $2 = required substring
+  case "$1" in *"$2"*) return 0 ;; esac
+  echo "expected to find: $2" >&2
+  return 1
+}
+_lacks() { # $1 = text, $2 = forbidden substring
+  case "$1" in *"$2"*) echo "found forbidden: $2" >&2; return 1 ;; esac
+  return 0
+}
+
 _no_stage_in() { # $1 = directory or listing file; fails when a stage name appears
   local listing
   if [ -d "$1" ]; then listing=$(ls -A "$1"); else listing=$(cat "$1"); fi
@@ -96,7 +109,7 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   printf '%s' "$big" > "$expected"
   _chain "$big" reader.sh early-exit.sh reader.sh
   [ "$status" -eq 0 ]
-  [[ "$output" != *'Broken pipe'* ]]
+  _lacks "$output" 'Broken pipe'
   local readers=("$OUT_DIR"/reader-*.bytes)
   [ "${#readers[@]}" -eq 2 ]
   # Each reader starts at offset zero of a regular file holding the payload with
@@ -220,10 +233,10 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   [ -z "$(find "$STAGE_TMP" -type f)" ]
   # What remains is one empty stage directory, named on stderr.
   left=$(ls -A "$STAGE_TMP")
-  [[ "$left" == caws-handler-stdin-* ]]
+  [ "${left#caws-handler-stdin-}" != "$left" ]
   [ -d "$STAGE_TMP/$left" ]
   [ -z "$(ls -A "$STAGE_TMP/$left")" ]
-  [[ "$output" == *"[caws run-handlers] could not remove handler stdin stage directory $STAGE_TMP/$left"* ]]
+  _has "$output" "[caws run-handlers] could not remove handler stdin stage directory $STAGE_TMP/$left"
 }
 
 @test "a payload whose first unlink fails is named, its handler still runs, and the retry after the handler removes it" {
@@ -278,6 +291,7 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   # The decoy was never touched through the replaced path.
   [ "$(cat "$decoy/payload")" = foreign ]
   # The replacement was reported, and the moved stage was left in place.
-  [[ "$output" == *"handler stdin stage $STAGE_TMP/caws-handler-stdin-"*" was replaced by a link; left in place"* ]]
+  _has "$output" "[caws run-handlers] handler stdin stage $STAGE_TMP/caws-handler-stdin-"
+  _has "$output" " was replaced by a link; left in place"
   [ -n "$(find "$STAGE_TMP" -type f -name payload -path '*.moved/*')" ]
 }
