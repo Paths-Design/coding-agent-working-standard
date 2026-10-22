@@ -39,3 +39,8 @@ evidence:
     evidence_ref: "E250-E253 actual private A/B install/configure/fixture doctor1, Claude2.1.308 timeout tool effects and stream hashes, R19 held0a4 source/raw controls, mutation caa655 fixture66 plus real-dryrun-01 exit1 beforebuild inspected. Shared registration observer and supported failure-policy repair ownedR01; resolver repair/retry ownedPeerA; root retains deadline/fullconsumer/cutover/docs. Independent Sol committed review b397 and directly grounded E253 correction d1e2f3ca; formatting/diff0, five gates1filePASS, doctor0E3W4I. 33/37partial,parent0/8,zero fullPython unchanged."
     recorded_at: "2026-10-22T07:15:43.118Z"
     commit_sha: d1e2f3ca
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Normal source merge ed3d0bb0 and local main publication merge e00c0924 retain reviewed E250-E253. Actual canonical/source cmp0 and SHA256 f57e8c8d09b935df5d7a084677b82babf5ce40c60b3d476189992d41e8294796; both checkouts clean. Five scoped gates PASS1file each source/main; independent committed review plus source-grounded correction retained in agent context. A1 spec/event11073 read back. Local publication only; no remote push, runtime/harness qualification or parent acceptance inferred. A2 spec/event and close transaction read back before reporting closure."
+    recorded_at: "2026-10-22T07:20:07.300Z"
+    commit_sha: e00c0924567d364917e8f79dd73e021faeaa0d4d
