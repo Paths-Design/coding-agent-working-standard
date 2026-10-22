@@ -226,9 +226,10 @@ evidence:
     commit_sha: "821bdeef"
   - criterion_id: A4
     status: pass
-    evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) tests 43-46: bwg foreign mutation through dotdot python3 present exit 2; owner 0; failing exit 2 python3-exit-1 + project root refusal line; absent exit 2 python3-unavailable + project root refusal line + block JSON. Analysis CLI = shell-owner dist at 5ace5a52. Bounds: guards run directly with precomputed HOOK_*; not dispatcher, machine runtime, native entry or a real harness."
-    recorded_at: "2026-10-22T04:28:01.208Z"
-    commit_sha: "7d49da1d"
+    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) tests 47-54: bash-write-guard foreign mutation through dotdot with python3 present exits 2, owner 0; failing and absent python3 exit 2 with the refusal and block JSON; identity-drop control admits (test 51); static target, dynamic operand and Git metadata sweeps refuse at each normalization."
+    recorded_at: "2026-10-22T05:41:50.904Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
+    commit_sha: "821bdeef"
   - criterion_id: A5
     status: pass
     evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) test 32: lone LF empty-result, two LFs and relative non-absolute-result, nothing and undelimited path no-record-delimiter, status 2, caller unchanged; tests 40-42 and 48-53: each reachable normalization answered alone refuses exit 2 naming its input (wwg git common dir, git dir, canonical root, write target, operating directory; bwg project root, mutation target, Git metadata). Mutants M17/M18 killed. Bound: bwg dynamic-prefix normalization unreachable (pinned ask, test 49)."
