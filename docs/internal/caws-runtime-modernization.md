@@ -6784,6 +6784,19 @@ Additional bounded evidence and unresolved dependencies:
   implementation, ordinary dispatch, current-reader artifacts and actual
   terminal consumption remain open; source integration does not qualify them.
 
+- E258: The baseline observer's new both-phase candidate `97967861` is
+  source-only. All five current child criteria are unchecked; the earlier
+  `f07d6b1d` positive/negative/restored evidence retains its historical
+  revision. Root inspects a completeness gap: generation-directory enumeration
+  plus a report-to-mutant-ID set cannot detect loss of one whole generation when
+  another generation retains the same mutant ID. Independent start inventory and
+  terminal receipt binding remain owed before fresh qualification. R01's later
+  discovery candidate also remains unqualified: source inspection finds opaque
+  substitution can stop discovery before an encoded basename, while a trailing
+  plain name can make a test pass without exercising that discovery. Both owners
+  retain bounded repairs and fresh checks; R01 retains the heavy runtime
+  interval. Neither candidate borrows earlier package or runtime proof.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
