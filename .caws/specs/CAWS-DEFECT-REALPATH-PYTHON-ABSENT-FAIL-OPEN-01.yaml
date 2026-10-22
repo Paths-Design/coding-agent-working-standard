@@ -195,9 +195,9 @@ evidence:
     commit_sha: "7d49da1d"
   - criterion_id: A2
     status: pass
-    evidence_ref: "At 8dbe29c1, /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-26-8dbe29c1/serial.tap (sha 65d5c249; TERMINAL 51/51 template dir, guard-realpath 51/51 installed pack) tests 24-28: assigned bytes equal _realpath exact output minus its one record LF for dotdot, symlinked ancestor, link/.., /tmp leaf, relative, a path ending in LF and an alias of the LF root (%q in receipt); empty-path, python3-unavailable, python3-exit-1, python3-exit-7 return 2 leaving the caller variable unchanged with one stderr class line. Mutants (R/mutants-id/mutants.tap): M06 strip-all and M16 hard-coded status killed. Bounds: python 3.11.13 macOS; non-UTF-8 names untested (APFS rejects them)."
-    recorded_at: "2026-10-22T04:08:16.834Z"
-    commit_sha: "8dbe29c1"
+    evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) tests 27-31: assigned bytes equal _realpath exact output minus its one record LF (dotdot, symlinked ancestor, link/.., /tmp leaf, relative, LF-ending path, alias of the LF root); empty-path, python3-unavailable, python3-exit-1, python3-exit-7 return 2, caller variable unchanged, one stderr class line. Mutants M06/M16 killed (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants-id/mutants.tap). Bounds: python 3.11.13 macOS; non-UTF-8 names untested."
+    recorded_at: "2026-10-22T04:28:02.998Z"
+    commit_sha: "7d49da1d"
   - criterion_id: A3
     status: pass
     evidence_ref: "At 8dbe29c1, /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-26-8dbe29c1/serial.tap (sha 65d5c249; TERMINAL 51/51 template dir, guard-realpath 51/51 installed pack) test 51: no command substitution of _realpath, caws_guard_realpath, abspath or resolve_canonical_dir; every caws_guard_realpath_into/abspath_into/caws_resolve_canonical_dir_into line carries a _wwg/_bwg refusal; tests 36 and 44: the identity-drop tree admits with exit 0 under failing and absent python3. Bound: text scan of the two guards; helper fallbacks (physical dir to raw spelling, git path to empty) are exempt by design."
