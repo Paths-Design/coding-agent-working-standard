@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-22T01:51:48.833Z'
+updated_at: '2026-10-22T01:55:17.718Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -19,7 +19,6 @@ scope:
     - 'packages/caws-cli/src/init/native-runtime-entry.ts'
     - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
     - 'packages/caws-cli/tests/adapter/native-entry-registration.test.js'
-    - 'packages/caws-cli/src/init/machine-adapters.ts'
     - 'packages/caws-cli/src/init/machine-runtime-state.ts'
     - 'packages/caws-cli/src/init/native-hook-identification.ts'
     - 'packages/caws-cli/src/init/machine-adapter-policy.ts'
@@ -31,6 +30,8 @@ scope:
     - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/command-metadata.ts
   out: []
+  support:
+    - packages/caws-cli/src/init/machine-adapters.ts
 invariants:
   - 'Existing Python-readable bin/caws-hook and legacy registrations remain intact during staged installation; no native failure triggers legacy fallback'
   - 'Selected native image identities derive from one verified generation manifest; per-generation metadata contains no self-referential runtime digest'
