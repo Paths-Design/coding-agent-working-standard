@@ -58,3 +58,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js::scope matcher parity between caws-state.sh and the oracle"
     commit_sha: c66730a3
     test_verified_at: c66730a37f1c737a180eef774519ee6f6866b8d1
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "In a hermetic git fixture (GIT_* stripped, isolated HOME and global/system config, hooksPath /dev/null, synthetic session), bash-write-guard.sh exits 2 for touch packages/dir/file.py with the BLOCKED message naming wt-dir:packages/dir, and exits 0 with empty stdout for packages/directory/file.py. Control A (oracle containment suffix removed) fails the refusal case, receiving exit 0; control D (sibling yields ask) fails the admission case on permissionDecision ask stdout; a hostile GIT_DIR plus global hook gives 15/15 with no escape. Artifacts under ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/r21-claim-oracle/ (c66730a3-control-a, -control-d, -r1-hostile-git). The consumer path still invokes python3 via _realpath and guard-config.py."
+    recorded_at: "2026-10-22T00:12:32.676Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js::bash-write-guard.sh refuses mutations inside a foreign-claimed directory"
+    commit_sha: c66730a3
+    test_verified_at: c66730a37f1c737a180eef774519ee6f6866b8d1
