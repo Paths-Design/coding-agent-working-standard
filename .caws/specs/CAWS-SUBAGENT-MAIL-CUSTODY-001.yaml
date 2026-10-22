@@ -69,3 +69,10 @@ evidence:
     evidence_ref: "Mutants run against candidate 9aabcae9 bytes using disposable copies (shell: CAWS_HEARTBEAT_CUSTODY_SHARED_DIR copy differing by one line; typed: dist mutated, then restored and sha re-checked): shell guard removed -> 52/93 failed (9aabcae9-a7-guard.json); shell uncertain->main -> 37/93 failed, exactly the 35 uncertain rows plus both env-spoof tests (9aabcae9-a7-uncertain.json); typed custody check -> true -> 8/31 failed (9aabcae9-a7-typed.json); typed actor-context uncertain->main -> 27/60 failed (9aabcae9-a7-typed-uncertain.json). Receipt 9aabcae9-a7-receipt.txt. All under /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/subagent-mail-custody/. Re-derivation checks only the commit; the mutant outcomes are agent-run artifacts."
     recorded_at: "2026-10-22T05:29:59.720Z"
     commit_sha: "9aabcae99fd91c274fde35dbdb24a8d6a9ea892b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Shell heartbeat at candidate 9aabcae9 (heartbeat and pin bytes as at 4bb1c854). The cited test runs a subagent call and then a parent call on one queued message. The subagent stdout carries no MESSAGE and writes no offer. The parent stdout carries the text exactly once (split length 2), with one offer record. Passed in the full custody run at 20eaa26d (93/0, /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/subagent-mail-custody/20eaa26d-green-custody.json). Fails under the guard-removed mutant at 9aabcae9 (/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/subagent-mail-custody/9aabcae9-a7-guard.json). Not verified: delivery through the installed Claude Code runtime."
+    recorded_at: "2026-10-22T05:30:41.737Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/heartbeat-actor-custody.test.js::mail observed by a subagent call is offered exactly once at the next parent call"
+    commit_sha: "9aabcae99fd91c274fde35dbdb24a8d6a9ea892b"
+    test_verified_at: "9aabcae99fd91c274fde35dbdb24a8d6a9ea892b"
