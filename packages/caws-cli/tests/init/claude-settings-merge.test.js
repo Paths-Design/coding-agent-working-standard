@@ -368,6 +368,10 @@ test.each([
     () => 'printf first\n' + String.raw`caws\-hook-native claude-code pre_tool_use --system`,
   ],
   [
+    'empty quoted program before continuation',
+    () => "'' " + '\\' + '\n printf first ' + String.raw`caws\-hook-native`,
+  ],
+  [
     'quoted multiline native pathname',
     () =>
       "'/private/line\nbreak/bin/'" +
@@ -408,6 +412,8 @@ test.each([
   "echo 'first\nsecond' " + String.raw`caws\-hook-native`,
   'printf first ' + '\\' + '\n' + String.raw`caws\-hook-native`,
   'sh -c \'printf "first\nsecond" caws\\-hook-native\'',
+  '\\' + '\n printf first ' + String.raw`caws\-hook-native`,
+  'env ' + '\\' + '\n printf first ' + String.raw`caws\-hook-native`,
 ])('A4 preceding syntax quoted operator and comment data survives merge: %s', (command) => {
   const value = wired();
   value.hooks.PreToolUse[0].hooks.unshift({ type: 'command', command, onFailure: 'continue' });

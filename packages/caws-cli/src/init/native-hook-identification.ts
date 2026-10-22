@@ -22,8 +22,8 @@ interface NativeCommandWord {
   readonly value: string;
 }
 
-/** Tokenize without expanding or executing shell. Lazy consumption lets an
- * ownership probe stop at a foreign executable rather than inspect its data. */
+/** Tokenize without expanding or executing shell. The default grammar governs
+ * migration; optional data decoding does not establish producer ownership. */
 function* nativeCommandTokens(
   command: string,
   literalData = false,
@@ -38,6 +38,7 @@ function* nativeCommandTokens(
     const start = index;
     let value = '';
     let quoted: string | null = null;
+    let hasWord = false;
     while (index < command.length) {
       const char = command[index] as string;
       if (!quoted && /[ \t]/.test(char)) break;
@@ -74,10 +75,12 @@ function* nativeCommandTokens(
         }
         value += char;
       }
+      hasWord = true;
       index++;
     }
     if (quoted) throw new Error('unclosed shell quote');
-    yield { raw: command.slice(start, index), value };
+    // A continuation alone creates no word; even empty quotes create one.
+    if (hasWord) yield { raw: command.slice(start, index), value };
   }
 }
 
@@ -207,7 +210,8 @@ function literalShellWord(word: NativeCommandWord): boolean {
 
 /** Multiline literal data can be foreign without becoming an admitted producer.
  * This complete parse alone permits quoted newlines and line continuations;
- * operators, substitutions and extra shell operands remain unresolved. */
+ * operators and substitutions stay unsupported. A shell wrapper accepts
+ * exactly one literal payload. */
 function isLiteralForeignDataCommand(command: string, inspectWrapper: boolean): boolean {
   try {
     const words = [...nativeCommandTokens(command, true, true)];
