@@ -95,7 +95,11 @@ contracts:
 evidence:
   - criterion_id: A1
     status: unchecked
-    recorded_at: "2026-10-22T10:38:52.003Z"
+    evidence_ref: "Committed491bea focused-04 four-suite command exited1:247pass28fail0pending. Bootstrap ESM export registry and duplicate-role fixture defect found; observer lifecycle not qualified. Raw execution.json SHA25685fa5f17ebd3d535912e16234e23201636bf5cc7e0fc22a97b0825569a68d6a6 and inspected-artifacts.json at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-04. Ordinary sequence remains owed."
+    recorded_at: "2026-10-22T11:15:28.061Z"
+    command: "pinned Node22 Jest --selectProjects caws-cli --runTestsByPath four mutation CI suites --runInBand --no-cache (full argv in focused-04/execution.json)"
+    exit_code: 1
+    commit_sha: "491bea053534e13b172436c4ae3ac9e889475e34"
   - criterion_id: A2
     status: unchecked
     recorded_at: "2026-10-22T10:38:53.295Z"
