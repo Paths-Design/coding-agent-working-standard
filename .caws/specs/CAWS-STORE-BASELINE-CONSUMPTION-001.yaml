@@ -1,0 +1,59 @@
+id: CAWS-STORE-BASELINE-CONSUMPTION-001
+title: 'Retain context-bound in-process store baseline consumption evidence'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-22T09:02:31.084Z'
+updated_at: '2026-10-22T09:02:31.084Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Ordinary store mutation runner and pinned Jest environment observer'
+    - 'Run-bound baseline evidence validation and hostile-path contract tests'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/mutation-vm-observer.cjs'
+    - 'packages/caws-cli/scripts/mutation-jest-environment.cjs'
+    - 'packages/caws-cli/scripts/mutation-vm-evidence.mjs'
+    - 'packages/caws-cli/scripts/run-mutation.mjs'
+    - 'packages/caws-cli/scripts/stryker-config.cjs'
+    - 'packages/caws-cli/scripts/mutation-input-identity.mjs'
+    - 'packages/caws-cli/scripts/assert-mutation-report.mjs'
+    - 'packages/caws-cli/tests/ci/mutation-vm-observer.test.js'
+    - 'packages/caws-cli/tests/ci/mutation-vm-evidence.test.js'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+  out: []
+invariants:
+  - 'All six store targets, nine selected suites, perTest coverage, concurrency two, incremental false and per-file mutation floors remain unchanged.'
+  - 'Only actual context-matched baseline compilation and invocation can satisfy per-suite positives and the six-target union; missing or stale evidence fails closed.'
+  - 'Observer qualification never confers child-process, full-campaign, exported-function semantic, native-adoption or cutover authority.'
+  - 'No child test edits, candidate direct imports, preloads, dependency changes, foreign hooks or shared runtime configuration changes.'
+acceptance:
+  - id: A1
+    given: 'the pinned Node and Jest/Stryker boundary'
+    when: 'baseline and mutant environments compile and invoke target bodies'
+    then: 'exact submitted UTF16 units, parameters, target/test/context/run/phase/generation identity and invocation outcomes are retained, while mutant and unrelated contexts cannot borrow baseline standing.'
+  - id: A2
+    given: 'repeated loads, teardown, reattachment, foreign hook replacement and observation failures'
+    when: 'observer lifetimes transition or artifacts are lost, replaced, malformed or exceed finite caps'
+    then: 'stale or incomplete evidence cannot qualify and subject return/throw identity plus owned restoration are preserved.'
+  - id: A3
+    given: 'ordinary store runner inputs and sandbox build receipts'
+    when: 'it completes its initial baseline'
+    then: 'validation requires the actual expected nine-suite target matrix and six-target union bound to current run and sandbox outputs with original observer tool identity, while fixture-only checks remain labeled.'
+  - id: A4
+    given: 'a fresh ordinary pinned store baseline and a separately prepared distinguishing atomic-write source control'
+    when: 'normal build and baseline execute'
+    then: 'retained actual code and named test outcomes distinguish positive consumption from semantic failure without weakening production policy; child-process consumption and full mutation quality remain parent obligations.'
+observability:
+  - 'Retained current-attempt source/output identities, exact compiled code units, finite environment/test lifecycle records, semantic test event and refusals outside source ledger.'
+rollback:
+  - 'Revert the isolated observer component through normal governed source history; preserve raw failed and successful attempts and parent qualification obligations.'
+non_functional:
+  security:
+    - 'Reject unbound, stale, foreign, missing and inconsistent observations; never install global preloads or overwrite a foreign VM hook.'
+contracts:
+  - name: 'baseline-vm-consumption'
+    type: behavior
+    path: 'packages/caws-cli/scripts/mutation-vm-observer.cjs'
