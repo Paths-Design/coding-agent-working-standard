@@ -89,9 +89,9 @@ evidence:
     commit_sha: "50ba057b"
   - criterion_id: A2
     status: pass
-    evidence_ref: "t2 (no stage while handler runs, recursive find) and t3 (TERM/KILL mid-handler) ok on ce5ced6c; t7 (parent TMPDIR loses write after mktemp -d: no payload file during/after, empty dir named on stderr) ok on ce5ced6c and NOT OK on prior a5b4baee (completion-review R1 counterexample, retained as FAIL for a5b4baee); baseline not ok 2,3,7; m1 (no pre-exec unlink) not ok 2,3,7; m8 (silent dir) not ok 7. Real dispatcher: f3-dispatcher/attempts/20261022T193700Z-ce5ced6c c11/c12/c13 tmp-after empty, c12 TERM/c13 KILL tmp-during empty. Not claimed: signal during mktemp -d (empty dir), KILL between payload write and unlink (payload file)"
-    recorded_at: "2026-10-22T19:39:34.981Z"
-    commit_sha: ce5ced6c
+    evidence_ref: "t2, t3, t7 ok at 50ba057b; t9 (stage dir swapped for a link to a decoy during the handler: decoy untouched, replacement named, moved stage left) ok at 50ba057b and NOT OK on prior ce5ced6c and on m9 (link guard removed); baseline fails 2,3,7,9; m1 fails 2,3,7,8,9; m8 fails 7; prior a5b4baee fails 7,8,9. Real dispatcher at ce5ced6c tree (run-handlers blob 381f72f6): ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-dispatcher/attempts/20261022T193700Z-ce5ced6c c11/c12/c13 tmp-after empty. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/series-20261022T201036Z.json. Not claimed: signal during mktemp -d (empty dir), KILL between payload write and unlink (payload file), link replacement between the check and the removal"
+    recorded_at: "2026-10-22T20:13:11.496Z"
+    commit_sha: "50ba057b"
   - criterion_id: A3
     status: pass
     evidence_ref: "t4 ok on ce5ced6c; m3 (global CAWS_TEMP_FILES rm before return) not ok 4 at [ -f foreign_listed ]; inherited HOOK_PAYLOAD_FILE read and kept on the spill path. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/attempts/*-m3-global-temp-cleanup-ce5ced6c/run.tap"
