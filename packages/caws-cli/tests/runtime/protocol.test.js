@@ -33,6 +33,23 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('preserves the exact publication capability independently of cache and store', () => {
+    expect(decode().sessionPublication).toBeUndefined();
+    const decoded = decode({ sessionPublication: 'caws.runtime.session-publication.v1' });
+    expect(decoded.sessionPublication).toBe('caws.runtime.session-publication.v1');
+    expect(decoded.sessionCache).toBeUndefined();
+    expect(decoded.sessionStore).toBeUndefined();
+    for (const sessionPublication of [
+      null,
+      false,
+      true,
+      '',
+      [],
+      {},
+      'caws.runtime.session-publication.v2',
+    ])
+      expect(() => decode({ sessionPublication })).toThrow(/session publication capability/);
+  });
   test('preserves the optional native store capability without borrowing cache authority', () => {
     expect(decode().sessionStore).toBeUndefined();
     expect(decode({ sessionStore: 'caws.runtime.transcript-store.v1' }).sessionStore).toBe(

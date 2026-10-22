@@ -15,6 +15,7 @@ export const REQUEST_SCHEMA = 'caws.runtime.request.v1';
 export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
 export const SESSION_CACHE_CAPABILITY = 'caws.runtime.session-cache.v1';
 export const TRANSCRIPT_STORE_CAPABILITY = 'caws.runtime.transcript-store.v1';
+export const SESSION_PUBLICATION_CAPABILITY = 'caws.runtime.session-publication.v1';
 export const MAX_INPUT_BYTES = 1024 * 1024;
 export const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -44,6 +45,8 @@ export interface RuntimeRequest {
   readonly sessionCache?: typeof SESSION_CACHE_CAPABILITY;
   /** Optional finite native query profile; this does not select a stock consumer. */
   readonly sessionStore?: typeof TRANSCRIPT_STORE_CAPABILITY;
+  /** Native-owned publication exchange; prepared bytes confer no path authority. */
+  readonly sessionPublication?: typeof SESSION_PUBLICATION_CAPABILITY;
   /** Ephemeral native caller snapshot: never include in durable request journals. */
   readonly caller: InvocationCaller & { readonly processId: number };
   readonly deadlineEpochMs: number;
@@ -147,6 +150,7 @@ export function decodeRuntimeRequest(
       'payload',
       ...(Object.hasOwn(value, 'sessionCache') ? ['sessionCache'] : []),
       ...(Object.hasOwn(value, 'sessionStore') ? ['sessionStore'] : []),
+      ...(Object.hasOwn(value, 'sessionPublication') ? ['sessionPublication'] : []),
     ]) ||
     value.schema !== REQUEST_SCHEMA
   ) {
@@ -159,6 +163,11 @@ export function decodeRuntimeRequest(
     throw new RuntimeProtocolError('Unsupported session cache capability');
   if (Object.hasOwn(value, 'sessionStore') && value.sessionStore !== TRANSCRIPT_STORE_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported transcript store capability');
+  if (
+    Object.hasOwn(value, 'sessionPublication') &&
+    value.sessionPublication !== SESSION_PUBLICATION_CAPABILITY
+  )
+    throw new RuntimeProtocolError('Unsupported session publication capability');
   const wireText = new TextDecoder('utf-8', { fatal: true }).decode(
     typeof frame === 'string' ? Buffer.from(frame, 'utf8') : frame
   );
@@ -234,6 +243,9 @@ export function decodeRuntimeRequest(
       : {}),
     ...(value.sessionStore === TRANSCRIPT_STORE_CAPABILITY
       ? { sessionStore: TRANSCRIPT_STORE_CAPABILITY }
+      : {}),
+    ...(value.sessionPublication === SESSION_PUBLICATION_CAPABILITY
+      ? { sessionPublication: SESSION_PUBLICATION_CAPABILITY }
       : {}),
     caller: Object.freeze({ ...caller, processId: value.caller.processId as number }),
     deadlineEpochMs: value.deadlineEpochMs,
