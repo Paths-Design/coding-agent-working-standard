@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: store-baseline-consumption
 created_at: '2026-10-22T09:02:31.084Z'
-updated_at: '2026-10-22T09:02:53.203Z'
+updated_at: '2026-10-22T09:52:55.227Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
@@ -24,6 +24,8 @@ scope:
     - 'packages/caws-cli/tests/ci/mutation-vm-observer.test.js'
     - 'packages/caws-cli/tests/ci/mutation-vm-evidence.test.js'
     - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+    - packages/caws-cli/scripts/run-stryker.mjs
+    - packages/caws-cli/tests/ci/mutation-stryker-launcher.test.js
   out: []
 invariants:
   - 'All six store targets, nine selected suites, perTest coverage, concurrency two, incremental false and per-file mutation floors remain unchanged.'
