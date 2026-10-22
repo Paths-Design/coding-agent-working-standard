@@ -52,6 +52,11 @@
 #       Best-effort realpath (python3-backed, falls back to the input).
 #       Resolves the existing prefix even when the leaf does not exist.
 #
+#   caws_guard_realpath <path>
+#       Checked realpath for authority decisions: the same result as
+#       _realpath when python3 succeeds, otherwise empty stdout, a cause on
+#       stderr and exit 2. Never falls back to the unresolved input.
+#
 #   caws_current_branch [dir]
 #       Prints the current branch of the checkout at [dir] (default cwd),
 #       or "unknown" if git is unavailable.
@@ -212,6 +217,42 @@ _realpath() {
   else
     printf '%s\n' "$p"
   fi
+}
+
+# caws_guard_realpath <path>
+#   Checked normalization for ownership and containment decisions
+#   (CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01). It runs the same python3
+#   program as _realpath, so a successful result reaches the caller unchanged.
+#   When the path cannot be normalized it prints nothing on stdout, names the
+#   cause on stderr and returns 2: a write guard that compared the unresolved
+#   input instead would miss every prefix arm and admit the write. Causes:
+#   empty-path, python3-unavailable, python3-exit-<status>, empty-result.
+caws_guard_realpath() {
+  local p="${1:-}" out status
+  if [[ -z "$p" ]]; then
+    printf '[caws-guard-realpath] cannot normalize: empty-path\n' >&2
+    return 2
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf '[caws-guard-realpath] cannot normalize: python3-unavailable\n' >&2
+    return 2
+  fi
+  # The status sentinel keeps trailing newlines, so the bytes printed below are
+  # exactly the interpreter's. The && / || list keeps a failing interpreter from
+  # tripping an inherited errexit before its status is recorded.
+  out="$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$p" 2>/dev/null &&
+    printf 'x0' || printf 'x%s' "$?")"
+  status="${out##*x}"
+  out="${out%x*}"
+  if [[ "$status" != 0 ]]; then
+    printf '[caws-guard-realpath] cannot normalize: python3-exit-%s\n' "$status" >&2
+    return 2
+  fi
+  if [[ -z "$out" ]]; then
+    printf '[caws-guard-realpath] cannot normalize: empty-result\n' >&2
+    return 2
+  fi
+  printf '%s' "$out"
 }
 
 # caws_current_branch [dir]

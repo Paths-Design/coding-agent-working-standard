@@ -51,6 +51,14 @@ else
   printf '{"decision":"block","reason":"CAWS worktree-write-guard: cannot load lib/caws-state.sh, so cross-worktree write isolation cannot be evaluated. Failing closed. Restore the hook pack: caws init adapters install"}\n'
   exit 2
 fi
+# Every ownership decision below compares normalized paths. A path that cannot
+# be normalized is refused here: compared unresolved, it misses every prefix arm
+# and the write is admitted (CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01).
+_wwg_normalize_refuse() {
+  echo "[worktree-write-guard] cannot normalize the $1 path '$2', so worktree ownership cannot be evaluated. Failing CLOSED (refusing the write). Restore a working python3 on PATH." >&2
+  printf '{"decision":"block","reason":"CAWS worktree-write-guard: a path could not be normalized, so worktree ownership cannot be evaluated. Failing closed. Restore a working python3 on PATH."}\n'
+  exit 2
+}
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR, CAWS_VENDOR_DIR, and caws_source_lib — load-bearing.
 # Must come before caws_source_lib calls. Guard the source (a fatal `source
@@ -121,11 +129,11 @@ if command -v git >/dev/null 2>&1; then
       /*) GIT_DIR_ABS="$GIT_DIR_RAW" ;;
       *)  GIT_DIR_ABS="$WORKTREE_ROOT/$GIT_DIR_RAW" ;;
     esac
-    GIT_COMMON_DIR="$(_realpath "$GIT_COMMON_DIR_ABS")"
-    GIT_DIR="$(_realpath "$GIT_DIR_ABS")"
+    GIT_COMMON_DIR="$(caws_guard_realpath "$GIT_COMMON_DIR_ABS")" || _wwg_normalize_refuse "git common dir" "$GIT_COMMON_DIR_ABS"
+    GIT_DIR="$(caws_guard_realpath "$GIT_DIR_ABS")" || _wwg_normalize_refuse "git dir" "$GIT_DIR_ABS"
     if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != "$GIT_DIR" ]]; then
       IS_LINKED_WORKTREE=1
-      CANONICAL_CANDIDATE="$(_realpath "$GIT_COMMON_DIR/..")"
+      CANONICAL_CANDIDATE="$(caws_guard_realpath "$GIT_COMMON_DIR/..")" || _wwg_normalize_refuse "canonical root" "$GIT_COMMON_DIR/.."
       if [[ -n "$CANONICAL_CANDIDATE" ]] && [[ -d "$CANONICAL_CANDIDATE/.caws" ]]; then
         CANONICAL_ROOT="$CANONICAL_CANDIDATE"
       fi
@@ -140,7 +148,8 @@ if [[ "$IS_LINKED_WORKTREE" == "1" ]] && [[ -n "$FILE_PATH" ]]; then
     /*) FILE_PATH_ABS="$FILE_PATH" ;;
     *)  FILE_PATH_ABS="$WORKTREE_ROOT/$FILE_PATH" ;;
   esac
-  FILE_PATH_ABS="$(_realpath "$FILE_PATH_ABS")"
+  _WWG_SPEC_RAW="$FILE_PATH_ABS"
+  FILE_PATH_ABS="$(caws_guard_realpath "$_WWG_SPEC_RAW")" || _wwg_normalize_refuse "spec-materialization target" "$_WWG_SPEC_RAW"
   case "$FILE_PATH_ABS" in
     "$SPEC_ROOT"/*|"$SPEC_ROOT")
       echo "[worktree-write-guard.sh] BLOCKED: $FILE_PATH" >&2
@@ -179,7 +188,7 @@ fi
 # allowlist so a payload path is not swept up by the .caws/* allow arm.
 if [[ -n "$FILE_PATH" ]]; then
   case "$FILE_PATH" in
-    /*) FILE_PATH_FOR_ALLOWLIST="$(_realpath "$FILE_PATH")" ;;
+    /*) FILE_PATH_FOR_ALLOWLIST="$(caws_guard_realpath "$FILE_PATH")" || _wwg_normalize_refuse "allowlist target" "$FILE_PATH" ;;
     *)  FILE_PATH_FOR_ALLOWLIST="$FILE_PATH" ;;
   esac
 
@@ -294,15 +303,17 @@ if ! command -v node >/dev/null 2>&1; then
   exit 0
 fi
 
-AGENT_DIR="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
-AGENT_DIR="$(_realpath "$AGENT_DIR")"
+_WWG_AGENT_RAW="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
+AGENT_DIR="$(caws_guard_realpath "$_WWG_AGENT_RAW")" || _wwg_normalize_refuse "operating directory" "$_WWG_AGENT_RAW"
 CURRENT_BRANCH=$(caws_current_branch "$AGENT_DIR")  # HOOK-LIB-CONSOLIDATION-001 T2b
 WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
 
 if [[ -n "$AGENT_DIR" ]] && [[ "$AGENT_DIR" == "$WORKTREE_BASE"/* ]]; then
   # Being in a worktree does not authorize edits to a different canonical claim.
-  case "$FILE_PATH" in /*) _CANON_TARGET="$(_realpath "$FILE_PATH")" ;;
-    *) _CANON_TARGET="$(_realpath "$AGENT_DIR/$FILE_PATH")" ;; esac
+  case "$FILE_PATH" in
+    /*) _CANON_TARGET="$(caws_guard_realpath "$FILE_PATH")" || _wwg_normalize_refuse "canonical-claim target" "$FILE_PATH" ;;
+    *) _CANON_TARGET="$(caws_guard_realpath "$AGENT_DIR/$FILE_PATH")" || _wwg_normalize_refuse "canonical-claim target" "$AGENT_DIR/$FILE_PATH" ;;
+  esac
   case "$_CANON_TARGET" in "$WORKTREE_BASE"/*) exit 0 ;; esac
   case "$_CANON_TARGET" in
     "$PROJECT_DIR"/*)

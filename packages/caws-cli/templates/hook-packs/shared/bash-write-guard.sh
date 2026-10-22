@@ -49,6 +49,14 @@ if ! { [[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-
   printf '{"decision":"block","reason":"CAWS bash-write-guard: cannot load lib/caws-state.sh, so Bash-mutation worktree isolation cannot be evaluated. Failing closed. Restore the hook pack: caws init adapters install"}\n'
   exit 2
 fi
+# Ownership and containment below compare normalized paths. A path that cannot
+# be normalized is refused here: compared unresolved, a foreign target can read
+# as this session's own (CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01).
+_bwg_normalize_refuse() {
+  echo "[bash-write-guard] cannot normalize the $1 path '$2', so Bash-mutation ownership cannot be evaluated. Failing CLOSED. Restore a working python3 on PATH." >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: a path could not be normalized, so Bash-mutation ownership cannot be evaluated. Failing closed. Restore a working python3 on PATH."}\n'
+  exit 2
+}
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR and caws_source_lib — load-bearing. Guard the source
 # (a fatal `source <missing>` is not caught by `|| true` under set -e) and fail
@@ -146,7 +154,8 @@ else
 fi
 # Compare the same physical identity used by abspath for mutation targets.
 # A logical alias such as /tmp or a symlinked project root is still this repo.
-PROJECT_DIR="$(_realpath "$PROJECT_DIR")"
+_BWG_PROJECT_RAW="$PROJECT_DIR"
+PROJECT_DIR="$(caws_guard_realpath "$_BWG_PROJECT_RAW")" || _bwg_normalize_refuse "project root" "$_BWG_PROJECT_RAW"
 
 [[ -d "$PROJECT_DIR/.caws" ]] || exit 0
 if [[ ! -f "$CAWS_CLAIM_ORACLE" ]] || ! command -v node >/dev/null 2>&1; then
@@ -262,11 +271,12 @@ extract_targets() {
   fi
 }
 
+# Returns caws_guard_realpath's status; every caller refuses on failure.
 abspath() {
   local p="$1"
   case "$p" in
-    /*) _realpath "$p" ;;
-    *)  _realpath "$AGENT_CWD/$p" ;;
+    /*) caws_guard_realpath "$p" ;;
+    *)  caws_guard_realpath "$AGENT_CWD/$p" ;;
   esac
 }
 
@@ -298,7 +308,7 @@ while IFS= read -r cand; do
     escalate ask "cwd-unresolved:$cand" "ask_uncertain"
     continue
   fi
-  abs="$(abspath "$cand")"
+  abs="$(abspath "$cand")" || _bwg_normalize_refuse "mutation target" "$cand"
   # CAWS-GUARD-ALLOWLIST-SYNC-001 + CAWS-GUARD-SCOPE-PRIORITY-001: record
   # whether this target is on the unconditional allowlist (docs/*, .caws/*
   # minus payload, .tmp/*, .github/*, vendor dir, instruction files,
@@ -382,7 +392,14 @@ while [[ $_GM_INDEX -lt ${#CAWS_AST_GIT_WORKTREE[@]} ]]; do
   _GM_COMMON="${CAWS_AST_GIT_COMMON[$_GM_INDEX]}"
   _GM_FOREIGN=''
   for _GM_PATH in "$_GM_DIRECTORY" "$_GM_COMMON"; do
-    if ! _GM_PHYSICAL="$(_realpath "$_GM_PATH")" || [[ "$_GM_PHYSICAL" != /* ]]; then
+    # An absent coordinate stays an uncertainty for approval; a coordinate that
+    # cannot be normalized is refused like every other ownership path.
+    if [[ -z "$_GM_PATH" ]]; then
+      escalate ask metadata-path-unresolved ask_git_metadata
+      continue
+    fi
+    _GM_PHYSICAL="$(caws_guard_realpath "$_GM_PATH")" || _bwg_normalize_refuse "git metadata" "$_GM_PATH"
+    if [[ "$_GM_PHYSICAL" != /* ]]; then
       escalate ask metadata-path-unresolved ask_git_metadata
       continue
     fi
@@ -496,7 +513,7 @@ if declare -F caws_bash_dynamic_mutations >/dev/null 2>&1; then
       escalate ask "$_pat (${_reskind:-runtime}-resolved; no lexically proven prefix, so no region is proven admissible)" "ask_dynamic_unconfined"
       continue
     fi
-    _pabs="$(abspath "$_prefix")"
+    _pabs="$(abspath "$_prefix")" || _bwg_normalize_refuse "dynamic mutation prefix" "$_prefix"
     _dout="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
       CAWS_ORACLE_CURRENT_BRANCH="" \
       CAWS_ORACLE_REL_PATH="$_pabs" \
