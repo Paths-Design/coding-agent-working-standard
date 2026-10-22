@@ -39,6 +39,6 @@ evidence:
     commit_sha: "2e618de4b49502034de2426ae38939398a1db660"
   - criterion_id: A2
     status: pass
-    evidence_ref: "Final reviewed candidatec53b678b normally merged parentf5ad036e, then identical doc-only publisher024faecc normally merged main32e608c2. Root independently read all3 Git blobs candidate/parent/main equal54efe69fc290b65ae004be5a2329161e209e5e1c; physical main/parent SHA2563fadd4c31e830b048412591d58dcd51cd2042a64c315d89f9bfe634235de4696 and cmp exit0. Main merge first-parent diff contains only docs/internal/caws-runtime-modernization.md; parent and canonical clean. Publisher diffcheck0, formatting0, five one-file gates PASS, doctor0E/3W/4I exit0. No native source landed on main and no parent acceptance promoted."
-    recorded_at: "2026-10-22T17:16:55.618Z"
-    commit_sha: "32e608c28968f2a4da1fbad1a1b99d79cbd7da86"
+    evidence_ref: "Final incremental candidate2e618de4 normallymergedparentf47aa93f and exactdoc-only publisher7f6f063f normallymergedmaine4dab412. Actual candidate/parent/main Gitblobs all6f93c94bb93403afe3937ba3b020ddd4490ee2b8; physicalmain/parent SHA2561510beccf8fa69a4bfae90d7804a357da89333e2578f84b216bf7477bc7c7109/cmp0. Root verified whole old431index and unchangedworktree before safe2treeparentrefresh, nowclean. Mainmergefirstparentdiff only existingledger. Normalformatting/diffcheck0, five1filegatesPASS, doctor0E3W4I; committedincrementalreadonlyreview groundedactualsource/checks/observerFAIL without contradiction. All source/native/image/collector/dispatcher/fourguide obligations retained. No new source landed onmain, no parentacceptance or adoption promoted."
+    recorded_at: "2026-10-22T17:59:53.665Z"
+    commit_sha: e4dab4126134b2a07c4f7e350cf96195fe723d66
