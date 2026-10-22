@@ -35,13 +35,19 @@ acceptance:
       broken-pipe text reaches stderr, the chain exits 0, and no
       caws-handler-stdin-* file remains in TMPDIR
   - id: A2
-    given: 'That staged inline payload'
-    when: 'A handler lists TMPDIR while it runs, or the dispatcher is sent TERM or KILL while a handler runs'
+    given: >-
+      That staged inline payload, including a TMPDIR that stops accepting removals
+      after the stage directory is created
+    when: >-
+      A handler lists TMPDIR and every regular file under it while it runs, or the
+      dispatcher is sent TERM or KILL while a handler runs
     then: >-
-      No caws-handler-stdin-* pathname exists during the handler or after the
-      dispatcher is gone. Not claimed: a KILL delivered inside a handler's own stage
-      creation window (mktemp, write, open, unlink) cannot be trapped and can leave
-      one stage
+      No caws-handler-stdin-* payload file exists during the handler or after the
+      dispatcher is gone. An empty owned stage directory that cannot be removed may
+      remain only when stderr names its path. Not claimed: a signal while mktemp -d
+      runs can leave one empty directory; a KILL between the payload write and its
+      unlink can leave the payload file; a payload whose unlink fails (A7) remains a
+      reported failure of this criterion, never a pass
   - id: A3
     given: >-
       An inherited HOOK_PAYLOAD_FILE, and a caller CAWS_TEMP_FILES naming a file
