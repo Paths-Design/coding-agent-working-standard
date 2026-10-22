@@ -208,9 +208,10 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) tests 35-38: wwg foreign payload Write python3 present exit 2 BLOCKED; owner 0; failing python3 exit 2 python3-exit-1 + guard refusal line; absent exit 2 python3-unavailable + guard refusal line + block JSON. Pre-repair run-01/run-02 exit 0. Bounds: guards run directly with precomputed HOOK_*; not dispatcher, machine runtime, native entry or a real harness."
-    recorded_at: "2026-10-22T04:27:59.037Z"
-    commit_sha: "7d49da1d"
+    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) tests 39-46: worktree-write-guard foreign payload Write with python3 present exits 2 BLOCKED, owner exits 0; failing python3 and absent python3 each exit 2 with the guard refusal line and block JSON; identity-drop control admits the foreign write (test 43); sweeps refuse at each normalization on the payload, canonical-claim and relative-target paths."
+    recorded_at: "2026-10-22T05:41:42.688Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
+    commit_sha: "821bdeef"
   - criterion_id: A2
     status: pass
     evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) tests 27-31: assigned bytes equal _realpath exact output minus its one record LF (dotdot, symlinked ancestor, link/.., /tmp leaf, relative, LF-ending path, alias of the LF root); empty-path, python3-unavailable, python3-exit-1, python3-exit-7 return 2, caller variable unchanged, one stderr class line. Mutants M06/M16 killed (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants-id/mutants.tap). Bounds: python 3.11.13 macOS; non-UTF-8 names untested."
