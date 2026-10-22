@@ -1,10 +1,11 @@
 id: CAWS-R21-CLAIM-ORACLE-PYTEST-RETIRE-001
 title: 'Retire the claim-oracle pytest with Python-free verdict, matcher-parity and consumer checks'
 mode: refactor
-lifecycle_state: active
-worktree: r21-claim-oracle
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge r21-claim-oracle at 5af9757eb4c7d72b7d43e5b34b0f110481258a3e'
 created_at: '2026-10-21T23:31:04.042Z'
-updated_at: '2026-10-21T23:31:10.127Z'
+updated_at: '2026-10-22T00:38:43.683Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
