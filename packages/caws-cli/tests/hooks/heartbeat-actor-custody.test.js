@@ -294,9 +294,9 @@ describe('every carrier preserves the original actor context', () => {
 });
 
 describe('inherited environment never vouches for main-thread ingress', () => {
-  // The dispatcher's own response to this environment is outside this contract (it does
-  // not currently reach its handlers); only the parent's mail outcome is pinned here. The
-  // handler-level case below and the empty-stdin fast-path row pin the heartbeat's decision.
+  // The inherited marker makes the dispatcher skip parsing, so the heartbeat still runs
+  // but receives no payload bytes. The dispatcher's exit status under this environment is
+  // outside this contract; only the parent's mail outcome is pinned.
   test('project dispatcher with inherited HOOK_TOOL_NAME and HOOK_ACTOR_CONTEXT=main', () => {
     const sid = session();
     const mail = seed(sid);
@@ -305,11 +305,7 @@ describe('inherited environment never vouches for main-thread ingress', () => {
       HOOK_SESSION_ID: sid,
       HOOK_ACTOR_CONTEXT: 'main',
     });
-    expect(custody(mail, result.stdout)).toMatchObject({
-      shown: false,
-      delivered: false,
-      offers: 0,
-    });
+    expect(custody(mail, result.stdout)).toEqual(WITHHELD);
   });
 
   test('handler fast path with HOOK_ACTOR_CONTEXT=main still reads the subagent bytes on stdin', () => {
