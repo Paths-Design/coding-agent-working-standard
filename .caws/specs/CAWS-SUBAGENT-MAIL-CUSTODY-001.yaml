@@ -1,0 +1,58 @@
+id: CAWS-SUBAGENT-MAIL-CUSTODY-001
+title: 'Withhold CAWS message auto-delivery from subagent and uncertain actor contexts'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-22T01:54:44.222Z'
+updated_at: '2026-10-22T01:54:44.222Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'hook-packs/shared agent-heartbeat mail custody'
+    - 'runtime typed in-process heartbeat'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh'
+    - 'packages/caws-cli/src/runtime/agent-heartbeat.ts'
+    - 'packages/caws-cli/src/runtime/actor-context.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/tests/runtime/actor-context.test.js'
+    - 'packages/caws-cli/tests/runtime/agent-heartbeat.test.js'
+    - 'packages/caws-cli/tests/hooks/heartbeat-actor-custody.test.js'
+  out: []
+invariants:
+  - 'Mail custody (poll, reserve, settle) is decided from the handler''s own ingress payload, never from an inherited or producer-set environment variable'
+  - 'Only an ingress payload with no top-level agent_id key is main-thread; a present agent_id that is empty, non-string, over-limit or outside the charset, and an unparseable or non-object payload, are uncertain and retain mail'
+  - 'The heartbeat lease write and peer notice stay independent of mail custody; no lease, identity or admission change'
+acceptance:
+  - id: A1
+    given: 'a queued message for session S'
+    when: 'the shell heartbeat runs on a PreToolUse payload for S carrying a top-level agent_id that is valid, empty or non-string'
+    then: 'it emits no MESSAGE context, appends no offer record, the message stays pending, and the peer-notice path is unchanged'
+  - id: A2
+    given: 'that message still pending'
+    when: 'the heartbeat next runs on a payload for S without agent_id'
+    then: 'exactly one MESSAGE for that id is emitted and exactly one offer record names it'
+  - id: A3
+    given: 'inherited HOOK_TOOL_NAME and HOOK_ACTOR_CONTEXT=main with an original subagent payload on the project dispatcher fast path'
+    when: 'the dispatcher runs the heartbeat'
+    then: 'the message stays pending with no offer'
+  - id: A4
+    given: 'inline, spill (inline threshold 0) and typed per-handler executor carriers'
+    when: 'the ingress payload carries agent_id'
+    then: 'custody is withheld on every carrier, and the same payload without agent_id delivers on every carrier'
+  - id: A5
+    given: 'the typed in-process heartbeat with real stores'
+    when: 'request.payload carries agent_id (valid or invalid)'
+    then: 'the poll port is not called and the message stays pending; without agent_id the offer is made and settled exactly once'
+  - id: A6
+    given: 'the actor-context contract table (absent, valid, empty, non-string, null, over-limit, bad charset, unicode-escaped key, non-object payload)'
+    when: 'evaluated by actorContext and by the shell heartbeat'
+    then: 'both give the exact expected class on every row'
+  - id: A7
+    given: 'disposable copies with the shell guard removed, the typed check removed, or uncertain mapped to main'
+    when: 'the custody tests run against each'
+    then: 'the corresponding tests fail'
+non_functional: {}
+contracts: []
