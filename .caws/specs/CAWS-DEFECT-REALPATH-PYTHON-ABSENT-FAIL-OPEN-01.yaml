@@ -173,19 +173,25 @@ acceptance:
     given: >-
       governed repositories with real linked worktrees s-wt and f-wt owned by
       different sessions, one of them with the s-wt admin directory removed, a git
-      on PATH that exits 1 for every call, a project directory nested inside s-wt,
-      and a directory outside every repository
+      on PATH that exits 1 for every call, a git that answers --git-dir but fails
+      the guards exact rev-parse --git-common-dir query, a project directory nested
+      inside s-wt, and a directory outside every repository
     when: >-
       both write guards adjudicate a foreign write and the owner own write from s-wt
       and from the nested directory with the failing git, a foreign write from the
-      admin-loss s-wt with working git, and a write in the non-repository directory
-      with the failing git
+      admin-loss s-wt with working git, a foreign-session write into s-wt with only
+      the common-dir query failing, and a write in the non-repository directory with
+      the failing git; and caws_resolve_canonical_dir_into resolves s-wt with that
+      partial git and with a git naming a common directory that cannot be entered
     then: >-
       every run inside a repository exits 2 naming the failed git discovery and the
       .git entry found on the directory or an ancestor (the owner write included);
-      the non-repository directory stays ungoverned with exit 0 and no git-failure
-      diagnosis; at 8dbe29c1 the failing-git and admin-loss foreign writes exited 0
-      with empty output.
+      the helper assigns nothing and returns 3 for the failed query and 2 for the
+      unenterable common directory, and resolves s-wt to its canonical root with
+      working git; the non-repository directory stays ungoverned with exit 0 and no
+      git-failure diagnosis; at 8dbe29c1 the failing-git and admin-loss foreign
+      writes, and at 821bdeef the common-dir-only failure in bash-write-guard,
+      exited 0 with empty output.
   - id: A11
     given: >-
       a governed repository with real linked worktrees s-wt and f-wt owned by
@@ -261,11 +267,8 @@ evidence:
     artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
     commit_sha: "821bdeef"
   - criterion_id: A10
-    status: pass
-    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) tests 19-21: a git that exits 1 for every call: foreign and owner writes from s-wt and from s-wt/src/nested are refused 2 by both guards naming the failed discovery and the .git entry; admin-loss s-wt (rev-parse fails with working git) refused 2 by both; a directory with no .git on itself or any ancestor stays ungoverned (0)."
-    recorded_at: "2026-10-22T05:42:07.542Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
-    commit_sha: "821bdeef"
+    status: unchecked
+    recorded_at: "2026-10-22T06:00:10.050Z"
   - criterion_id: A11
     status: pass
     evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 from the template dir and 58/58 against the installed pack) tests 22-25: in the simulated tree the guard runtime discovery finds no node (the shipped discovery finds /usr/local/bin/node with the same PATH; only runtime-paths.sh differs, checked by diff -r); with node the s-wt Write to claimed src/claimed.ts exits 2 naming claimed:f-wt:src/claimed.ts, the claimant f-wt write exits 0 and the base-branch src/new.ts write is asked about; without node the s-wt, claimant and base-branch writes exit 2 with the node diagnosis and block JSON; a directory without a registry exits 0. Red at 7d49da1d: run-34-node-red/bats.tap (sha b6f1e14f) no-node claimed and base-branch writes exit 0 empty. Mutants run-36-node-mutants/mutants.tap (sha 4f23775a): revert to exit 0 killed by 23-24; refusal before the registry check killed by 25; ask instead of refusal killed by 23-24. Not covered: a real machine without node; a node that is present but failing."
