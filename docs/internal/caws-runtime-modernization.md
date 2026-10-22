@@ -6718,8 +6718,11 @@ Additional bounded evidence and unresolved dependencies:
   ownership parsing remains separate; a read-only finding does not prove actual
   duplicate callbacks. Actual native callbacks, upgrade/rollback,
   effective-event precedence, combined-source packaging and machine adoption
-  remain open. Fresh AIM sends to c4, dd67 and c843 refuse stale heartbeats;
-  earlier queued assignments remain unfinished under root ownership.
+  remain open. AIM attempts to c4, dd67 and c843 retain their stale-heartbeat
+  refusals. Later sends reach c4 and c843. Root receives their read-only status
+  and registration-review replies; neither accepts an implementation handoff.
+  Reported findings require source/runtime grounding before reliance. Earlier
+  queued assignments remain unfinished under root ownership.
 
 - E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
   `native-session-publication`, based on `03d663b6`, for the continuous original
@@ -6743,12 +6746,56 @@ Additional bounded evidence and unresolved dependencies:
   criteria remain unchecked. The separate native boundary lane passes37
   feature-off custody tests, not SQLite/publication qualification. Its write is
   refused by hook identity despite its CLI claim; the preparation lane has the
-  same identity disagreement and a separately refused baseline recorder. Both
-  child lanes remain untouched. Root requests explicit human authorization for
-  ownership transfer, retains the independent integration lane and all original
-  consumer obligations, and does not retry refused child writes through another
-  carrier. Native implementation, exact sealer, ordinary dispatch,
-  current-reader artifacts and actual terminal consumption remain open.
+  same identity disagreement and a separately refused baseline recorder. The
+  human authorizes both clean component-lane ownership transfers. Normal
+  `claim --takeover` events11486/11487 retain the prior owners and establish
+  root ownership without changing guard or identity configuration. Prior worker
+  notices are unavailable through the app and AIM reports no leases; no worker
+  is started and no directive delivery is inferred. Both original refusals
+  remain retained.
+
+  Root implements pure bounded SessionEnd preparation in `42e2fa50`. Seven
+  independent mathematical integer counts remain exact, absent counts stay
+  absent, and top-level models retain first-use order. Unrelated metadata value
+  tokens pass through exactly; no-contribution summaries retain their historical
+  values with explicit provenance. The string API bounds UTF16 input, parser
+  structure, arithmetic, model and output work and returns no partial output on
+  refusal. These bounds confer no input-capture or filesystem authority.
+  Independent committed review exposes historical-fraction schema rejection and
+  rejection of mathematical version2 spellings. Root grounds both findings and
+  repairs schema compatibility and version admission before acceptance. Strict
+  compilation, scoped lint and five three-path gates exit0. The actual focused
+  Node22.22.2 run passes42 checks with0 skips, including the retained real
+  4300-digit turn. Ajv schema controls preserve historical fractional summaries
+  while refusing fractional recomputed counts. An isolated compiled
+  Number-coercion fault causes the exact large-addition test to fail; this is a
+  targeted sensitivity control, not a full mutation score. Raw outputs remain
+  outside source under root artifacts `session-seal-preparation/check-03/` and
+  `number-coercion-01/`.
+
+  Normal `--no-close` merge `abdb0338` lands the three identical helper/schema/
+  test blobs into the publication integration lane. Events11512/11513 retain
+  source integration and physical teardown; supported recreation binds the
+  preparation verification lane at that revision. Child A1/A2/A3 have pass
+  records11509/11510/11511 with spec/event readback. Child A4 remains unchecked
+  in11516: independently captured original SessionEnd binding, writer barrier,
+  anchored metadata replacement and ordinary reader consumption remain owed. The
+  root-owned native boundary lane remains clean at `03d663b6`. Native
+  implementation, ordinary dispatch, current-reader artifacts and actual
+  terminal consumption remain open; source integration does not qualify them.
+
+- E258: The baseline observer's new both-phase candidate `97967861` is
+  source-only. All five current child criteria are unchecked; the earlier
+  `f07d6b1d` positive/negative/restored evidence retains its historical
+  revision. Root inspects a completeness gap: generation-directory enumeration
+  plus a report-to-mutant-ID set cannot detect loss of one whole generation when
+  another generation retains the same mutant ID. Independent start inventory and
+  terminal receipt binding remain owed before fresh qualification. R01's later
+  discovery candidate also remains unqualified: source inspection finds opaque
+  substitution can stop discovery before an encoded basename, while a trailing
+  plain name can make a test pass without exercising that discovery. Both owners
+  retain bounded repairs and fresh checks; R01 retains the heavy runtime
+  interval. Neither candidate borrows earlier package or runtime proof.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
