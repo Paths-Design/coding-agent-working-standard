@@ -247,7 +247,10 @@ fn store_actor_survives_frontend_death_and_reports_actual_retained_sql_settlemen
     assert_eq!(retained.error.as_deref(), Some("Exchange"));
     let acquisition = retained.acquisition.as_ref().unwrap();
     assert_eq!(acquisition.rows_copied, 1);
-    assert_eq!(acquisition.rows_delivered, 0);
+    assert_eq!(
+        acquisition.rows_delivered, 1,
+        "native visitor count is not an engine delivery receipt"
+    );
     assert_eq!(acquisition.first_failure.as_deref(), Some("transport"));
     assert_eq!(acquisition.close, "succeeded");
     assert!(!acquisition.retained_handle);

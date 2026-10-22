@@ -291,6 +291,7 @@ fn resident_actor_retains_full_sql_failure_after_frontend_write_loss() {
                     serde_json::from_slice(&STANDARD.decode(base64).unwrap()).unwrap();
                 assert_eq!(row["schema"], store::ROW_SCHEMA);
                 assert_eq!(row["ordinal"], 1);
+                assert_eq!(row["cells"][0]["base64"], "bQ==");
             }
             _ => panic!("no real row"),
         }
@@ -317,11 +318,18 @@ fn resident_actor_retains_full_sql_failure_after_frontend_write_loss() {
     };
     assert_eq!(*phase, store::ServeFailurePhase::Exchange);
     assert_eq!(message, "frontend actual write failed");
+    assert_eq!(outcome.end, sql::End::Failed);
     assert!(
         matches!(&outcome.first_failure, Some(sql::Failure::Transport(message)) if message == "frontend actual write failed")
     );
     assert_eq!(outcome.metrics.rows_copied, 1);
-    assert_eq!(outcome.metrics.rows_delivered, 0);
+    // The source handed one row to the native visitor. The exact failed-write
+    // acknowledgement and Transport first failure above prohibit a delivery claim.
+    assert_eq!(outcome.metrics.rows_delivered, 1);
+    assert!(matches!(
+        outcome.cleanup.rollback,
+        sql::CleanupCall::Succeeded
+    ));
     assert!(matches!(outcome.cleanup.close, sql::CleanupCall::Succeeded));
     assert!(outcome.retained.is_none());
     drop(retained);
@@ -332,7 +340,7 @@ fn resident_actor_retains_full_sql_failure_after_frontend_write_loss() {
     let result = status.completion.unwrap();
     assert!(result.original_project_bound);
     assert_eq!(result.error.as_deref(), Some("Exchange"));
-    assert_eq!(result.acquisition.unwrap().rows_delivered, 0);
+    assert_eq!(result.acquisition.unwrap().rows_delivered, 1);
     assert_eq!(capacity.used.load(Ordering::Acquire), 0);
     f.can_lock();
     assert_eq!(fs::read(&f.database).unwrap(), before);
@@ -343,8 +351,18 @@ fn resident_actor_retains_full_sql_failure_after_frontend_write_loss() {
 #[test]
 fn resident_request_cancellation_is_not_global_and_owns_sql_callback() {
     let f = Fixture::new();
+    let connection = rusqlite::Connection::open(&f.database).unwrap();
+    connection
+        .execute_batch("INSERT INTO part VALUES('p2','m',1,'{\"second\":true}')")
+        .unwrap();
+    connection.close().unwrap();
     let cancelled = Arc::new(AtomicBool::new(false));
     let callback = Arc::clone(&cancelled);
+    let part_cells = |row: &sql::StoreRow| match (&row.cells[2], &row.cells[3]) {
+        (sql::SqlCell::Text(id), sql::SqlCell::Text(data)) => (id.clone(), data.clone()),
+        other => panic!("wrong source storage classes: {other:?}"),
+    };
+    let mut visited = Vec::new();
     let outcome = sql::acquire_owned(
         f.database.to_str().unwrap(),
         "s",
@@ -357,7 +375,10 @@ fn resident_request_cancellation_is_not_global_and_owns_sql_callback() {
             is_cancelled: Arc::new(move || callback.load(Ordering::Acquire)),
             deadline: expires(),
         },
-        |_| {
+        |row| {
+            assert_eq!(row.ordinal, 1);
+            assert!(matches!(&row.cells[0], sql::SqlCell::Text(id) if id == b"m"));
+            visited.push(part_cells(&row));
             cancelled.store(true, Ordering::Release);
             Ok::<_, sql::VisitorFailure<String>>(sql::Visit::Continue)
         },
@@ -366,7 +387,16 @@ fn resident_request_cancellation_is_not_global_and_owns_sql_callback() {
         outcome.first_failure,
         Some(sql::Failure::Cancelled(sql::CancelReason::Requested))
     ));
+    assert_eq!(
+        visited,
+        vec![(b"p".to_vec(), b"{}".to_vec())],
+        "cancellation must precede the second visitor"
+    );
+    assert_eq!(outcome.metrics.rows_copied, 1);
+    assert_eq!(outcome.metrics.rows_delivered, 1);
     assert!(matches!(outcome.cleanup.close, sql::CleanupCall::Succeeded));
+    f.can_lock();
+    let mut unrelated = Vec::new();
     let other = sql::acquire(
         f.database.to_str().unwrap(),
         "s",
@@ -379,10 +409,20 @@ fn resident_request_cancellation_is_not_global_and_owns_sql_callback() {
             is_cancelled: || false,
             deadline: expires(),
         },
-        |_| Ok::<_, sql::VisitorFailure<String>>(sql::Visit::Continue),
+        |row| {
+            unrelated.push(part_cells(&row));
+            Ok::<_, sql::VisitorFailure<String>>(sql::Visit::Continue)
+        },
     );
     assert_eq!(other.end, sql::End::Exhausted);
-    assert_eq!(other.metrics.rows_delivered, 1);
+    assert_eq!(other.metrics.rows_delivered, 2);
+    assert_eq!(
+        unrelated,
+        vec![
+            (b"p".to_vec(), b"{}".to_vec()),
+            (b"p2".to_vec(), b"{\"second\":true}".to_vec())
+        ]
+    );
     f.can_lock();
 }
 

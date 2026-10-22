@@ -184,6 +184,8 @@ pub enum End {
 #[derive(Debug, Default)]
 pub struct Metrics {
     pub rows_copied: u64,
+    /// Rows handed to the native visitor, including visitor/transport failures.
+    /// This is not a successful engine-write or consumer-delivery receipt.
     pub rows_delivered: u64,
     /// TEXT/BLOB byte lengths; INTEGER/REAL charge eight bytes; NULL charges zero.
     pub accounted_cell_bytes: usize,

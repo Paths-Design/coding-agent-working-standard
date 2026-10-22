@@ -441,7 +441,11 @@ correlated and bounded. Confirmed source close and delivered CLOSED can
 accompany an exhausted, stopped or failed acquisition. Full acquisition and
 ServeError values stay in strong Actor records; the frontend receives finite
 metadata and preserves the last independently observed project binding if its
-relay fails. Neither delivery of a row nor CLOSED grants publication.
+relay fails. Neither delivery of a row nor CLOSED grants publication. The
+acquisition's `rows_delivered` metric counts rows handed to the native visitor
+before that visitor returns, including transport failures. Successful engine
+delivery requires its separate matching actual-write acknowledgement; the source
+visitor count supplies no such receipt.
 
 A bounded read-only `StoreStatus` first-message requires exact native
 invocation, runtime and registration correlation and uses the existing

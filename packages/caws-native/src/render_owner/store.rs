@@ -102,6 +102,7 @@ pub struct AcquisitionSummary {
     pub end: String,
     pub first_failure: Option<String>,
     pub rows_copied: u64,
+    /// Native visitor invocations, not acknowledged engine delivery.
     pub rows_delivered: u64,
     pub progress_unregistered: bool,
     pub busy_unregistered: String,
