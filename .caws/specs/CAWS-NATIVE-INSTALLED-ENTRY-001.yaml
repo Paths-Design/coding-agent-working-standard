@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-22T01:44:31.877Z'
+updated_at: '2026-10-22T01:47:03.147Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -13,7 +13,6 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'packages/caws-native/src/bin/caws-hook-native.rs'
     - 'packages/caws-native/src/installed_entry.rs'
     - 'packages/caws-native/tests/installed_entry.rs'
     - 'packages/caws-native/Cargo.toml'
