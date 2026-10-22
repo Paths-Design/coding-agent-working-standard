@@ -70,7 +70,7 @@ function initializeCanonicalGitFixture() {
 function withPrivatePathWitness(run) {
   const directory = path.join(root, 'path-bin');
   const witness =
-    '#!/bin/sh\n# PATH resolution witness only; registration tests never execute it.\nexit 97\n';
+    '#!/bin/sh\n# PATH resolution witness only; registration tests never execute it.\nprintf executed > "$(dirname "$0")/executed"\nexit 97\n';
   for (const name of ['caws-hook-native', 'caws-hook']) {
     write(path.join(directory, name), witness, 0o755);
     write(path.join(canonical, name), witness, 0o755);
@@ -135,6 +135,30 @@ const pathCawsCases = [
   ['shell', "'caws'-hook-native"],
   ['shell-compound', 'caws\\-hook-native'],
   ['shell-compound', "'caws'-hook-native"],
+];
+const precedingSyntaxCases = [
+  [
+    'and escaped native',
+    () => String.raw`true && caws\-hook-native claude-code pre_tool_use --system`,
+  ],
+  ['and split quote native', () => "true && 'caws'-hook-native claude-code pre_tool_use --system"],
+  [
+    'semicolon absolute concatenation',
+    () =>
+      `true; '${path.join(root, 'path-bin')}/'caws\\-hook-native claude-code pre_tool_use --system`,
+  ],
+  [
+    'pipeline escaped legacy',
+    () => String.raw`true | caws\-hook claude-code pre_tool_use --system`,
+  ],
+  [
+    'comment and newline escaped legacy',
+    () => 'true # operator comment\n' + String.raw`caws\-hook claude-code pre_tool_use --system`,
+  ],
+  [
+    'literal shell payload',
+    () => String.raw`bash -c 'true && caws\-hook-native claude-code pre_tool_use --system'`,
+  ],
 ];
 function nativeObservationFixture() {
   // Inert assets exercise registration/layout verification only. No fixture
@@ -832,6 +856,94 @@ test.each(['caws\\-hook-native', "'caws'-hook-native"])(
       expect(classifyCawsProducerHook(hook, 'claude-code', 'pre_tool_use').kind).toBe('unresolved');
     })
 );
+test.each(precedingSyntaxCases)(
+  'A4 preceding syntax %s remains a candidate with unresolved ownership',
+  (_name, commandForFixture) =>
+    withPrivatePathWitness(() => {
+      const command = commandForFixture();
+      const hook = { type: 'command', command };
+      const words = command.startsWith('bash -c ') ? nativeCommandWords(command) : undefined;
+      if (words) {
+        expect(words.map((word) => word.value).slice(0, 2)).toEqual(['bash', '-c']);
+        expect(() => nativeCommandWords(words[2].value)).toThrow(/compound command/);
+      } else
+        expect(() => nativeCommandWords(command)).toThrow(/compound command|multiline command/);
+      const before = fixtureBytes();
+      expect(isCawsProducerHookCandidate(hook)).toBe(true);
+      expect(classifyCawsProducerHook(hook, 'claude-code', 'pre_tool_use')).toEqual({
+        kind: 'unresolved',
+      });
+      expect(() =>
+        migrateNativeCommand(command, canonical, home, 'claude-code', 'pre_tool_use')
+      ).toThrow(/reconcil|unsupported/i);
+      expect(fixtureBytes()).toEqual(before);
+    })
+);
+test.each(precedingSyntaxCases)(
+  'A4 preceding syntax %s configuration refuses plan and apply without writes',
+  (_name, commandForFixture) =>
+    withPrivatePathWitness(() => {
+      registration(path.join(user, '.claude/settings.json'), commandForFixture());
+      const before = fixtureBytes();
+      for (const plan of [true, false]) {
+        expect(() =>
+          configureSystemRuntime({
+            home,
+            userHome: user,
+            surface: 'claude-code',
+            entry: 'legacy',
+            plan,
+          })
+        ).toThrow(/reconcil/i);
+        expect(fixtureBytes()).toEqual(before);
+      }
+    })
+);
+test.each(precedingSyntaxCases)(
+  'A4 preceding syntax %s selection and migration preserve unresolved project registration',
+  (_name, commandForFixture) =>
+    withPrivatePathWitness(() => {
+      initializeCanonicalGitFixture();
+      configureSystemRuntime({ home, userHome: user, surface: 'claude-code', entry: 'legacy' });
+      registration(path.join(canonical, '.claude/settings.json'), commandForFixture());
+      const before = fixtureBytes();
+      expect(() => resolveInvocationSelection({ ...options, surface: 'claude-code' })).toThrow(
+        /reconcil/i
+      );
+      expect(fixtureBytes()).toEqual(before);
+      for (const plan of [true, false]) {
+        expect(() =>
+          migrateSystemProject({
+            home,
+            userHome: user,
+            repo: canonical,
+            surface: 'claude-code',
+            plan,
+          })
+        ).toThrow(/reconcil/i);
+        expect(fixtureBytes()).toEqual(before);
+      }
+    })
+);
+test.each([
+  String.raw`printf '%s\n' 'true && caws\-hook-native' 'caws-hook'`,
+  String.raw`echo '# caws-hook-native' 'true | caws\-hook'`,
+  String.raw`sh -c 'printf "%s\n" "# caws-hook-native" "true && caws\-hook"'`,
+])('A4 preceding syntax quoted operator and comment data stays foreign: %s', (command) => {
+  const hook = { type: 'command', command };
+  expect(isCawsProducerHookCandidate(hook)).toBe(true);
+  expect(classifyCawsProducerHook(hook, 'claude-code', 'pre_tool_use')).toEqual({
+    kind: 'foreign',
+  });
+  const execHook = {
+    type: 'command',
+    command: 'printf',
+    args: [command, String.raw`caws\-hook-native`],
+  };
+  expect(classifyCawsProducerHook(execHook, 'claude-code', 'pre_tool_use')).toEqual({
+    kind: 'foreign',
+  });
+});
 test.each(['legacy', 'native'])(
   'Claude failure policy retrofits absent %s policy through read-only plan then idempotent apply',
   (entry) => {

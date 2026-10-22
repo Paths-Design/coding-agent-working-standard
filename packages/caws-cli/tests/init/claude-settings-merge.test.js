@@ -33,7 +33,7 @@ function withPrivatePathWitness(run) {
     const file = path.join(directory, name);
     fs.writeFileSync(
       file,
-      '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nexit 97\n',
+      '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nprintf executed > "$(dirname "$0")/executed"\nexit 97\n',
       { mode: 0o755 }
     );
     fs.copyFileSync(file, path.join(root, name));
@@ -340,6 +340,65 @@ test.each(['printf', 'echo'])(
     });
   }
 );
+test.each([
+  [
+    'and escaped native',
+    () => String.raw`true && caws\-hook-native claude-code pre_tool_use --system`,
+  ],
+  ['and split quote native', () => "true && 'caws'-hook-native claude-code pre_tool_use --system"],
+  [
+    'semicolon absolute concatenation',
+    () =>
+      `true; '${path.join(fixtureContainer, 'path-bin')}/'caws\\-hook-native claude-code pre_tool_use --system`,
+  ],
+  [
+    'pipeline escaped legacy',
+    () => String.raw`true | caws\-hook claude-code pre_tool_use --system`,
+  ],
+  [
+    'comment and newline escaped legacy',
+    () => 'true # operator comment\n' + String.raw`caws\-hook claude-code pre_tool_use --system`,
+  ],
+  [
+    'literal shell payload',
+    () => String.raw`bash -c 'true && caws\-hook-native claude-code pre_tool_use --system'`,
+  ],
+])(
+  'A4 preceding syntax %s merge refuses with typed reconciliation and unchanged bytes',
+  (_name, commandForFixture) =>
+    withPrivatePathWitness(() => {
+      const value = wired();
+      delete value.hooks.PreToolUse[0].hooks[0].onFailure;
+      value.hooks.PreToolUse.push({ hooks: [{ type: 'command', command: commandForFixture() }] });
+      write(value);
+      const before = fs.readFileSync(settings);
+      for (const operation of [planClaudeSettingsMerge, mergeClaudeSettings]) {
+        expect(operation(root)).toMatchObject({
+          kind: 'invalid',
+          reason: 'registration-reconciliation',
+        });
+        expect(fs.readFileSync(settings)).toEqual(before);
+        expect(fs.readdirSync(path.dirname(settings))).toEqual(['settings.json']);
+        expect(fs.existsSync(path.join(fixtureContainer, 'path-bin/executed'))).toBe(false);
+      }
+    })
+);
+test.each([
+  String.raw`printf '%s\n' 'true && caws\-hook-native' 'caws-hook'`,
+  String.raw`echo '# caws-hook-native' 'true | caws\-hook'`,
+])('A4 preceding syntax quoted operator and comment data survives merge: %s', (command) => {
+  const value = wired();
+  value.hooks.PreToolUse[0].hooks.unshift({ type: 'command', command, onFailure: 'continue' });
+  write(value);
+  const before = fs.readFileSync(settings);
+  expect(planClaudeSettingsMerge(root)).toEqual({
+    kind: 'unchanged',
+    path: settings,
+    readOnly: true,
+  });
+  expect(mergeClaudeSettings(root)).toEqual({ kind: 'unchanged', path: settings });
+  expect(fs.readFileSync(settings)).toEqual(before);
+});
 test('Claude project policy rendering names repairs and separates policy refusal from JSON parse errors', () => {
   const repaired = renderSettingsWiring(
     { kind: 'wired' },

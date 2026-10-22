@@ -129,7 +129,7 @@ function withPrivatePathWitness(run) {
     const file = path.join(directory, name);
     fs.writeFileSync(
       file,
-      '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nexit 97\n',
+      '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nprintf executed > "$(dirname "$0")/executed"\nexit 97\n',
       { mode: 0o755 }
     );
     fs.copyFileSync(file, path.join(repo, name));
@@ -375,6 +375,60 @@ test.each(['printf', 'echo'])(
     });
   }
 );
+test.each([
+  [
+    'and escaped native',
+    () => String.raw`true && caws\-hook-native claude-code pre_tool_use --system`,
+  ],
+  ['and split quote native', () => "true && 'caws'-hook-native claude-code pre_tool_use --system"],
+  [
+    'semicolon absolute concatenation',
+    () =>
+      `true; '${path.join(root, 'path-bin')}/'caws\\-hook-native claude-code pre_tool_use --system`,
+  ],
+  [
+    'pipeline escaped legacy',
+    () => String.raw`true | caws\-hook claude-code pre_tool_use --system`,
+  ],
+  [
+    'comment and newline escaped legacy',
+    () => 'true # operator comment\n' + String.raw`caws\-hook claude-code pre_tool_use --system`,
+  ],
+  [
+    'literal shell payload',
+    () => String.raw`bash -c 'true && caws\-hook-native claude-code pre_tool_use --system'`,
+  ],
+])(
+  'A4 preceding syntax %s adoption refuses before state or backup writes',
+  (_name, commandForFixture) =>
+    withPrivatePathWitness(() => {
+      const { config, options } = seededClaudePolicy();
+      const value = JSON.parse(fs.readFileSync(config));
+      value.hooks.PreToolUse[0].hooks[1].command = commandForFixture();
+      fs.writeFileSync(config, JSON.stringify(value));
+      const before = bytes();
+      const backups = backupBytes();
+      for (const plan of [true, false]) {
+        expect(() => adoptMachineAdapter({ ...options, plan })).toThrow(/reconcil/i);
+        expect(bytes()).toEqual(before);
+        expect(backupBytes()).toEqual(backups);
+        expect(fs.existsSync(path.join(root, 'path-bin/executed'))).toBe(false);
+      }
+    })
+);
+test.each([
+  String.raw`printf '%s\n' 'true && caws\-hook-native' 'caws-hook'`,
+  String.raw`echo '# caws-hook-native' 'true | caws\-hook'`,
+])('A4 preceding syntax quoted operator and comment data survives adoption: %s', (command) => {
+  const { config, options } = seededClaudePolicy();
+  const value = JSON.parse(fs.readFileSync(config));
+  const foreign = { type: 'command', command, onFailure: 'continue' };
+  value.hooks.PreToolUse[0].hooks.unshift(foreign);
+  fs.writeFileSync(config, JSON.stringify(value));
+  expect(adoptMachineAdapter(options).changed).toBe(true);
+  value.hooks.PreToolUse[0].hooks[2].onFailure = 'block';
+  expect(JSON.parse(fs.readFileSync(config))).toEqual(value);
+});
 test.each(['continue', null, { action: 'block' }])(
   'seeded Claude adoption refuses supplied policy %j before registration, policy or backup writes',
   (onFailure) => {
