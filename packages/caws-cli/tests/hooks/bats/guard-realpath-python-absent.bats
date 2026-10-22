@@ -231,6 +231,24 @@ exec "$RP_REAL_GIT" "$@"
 SHIM
   chmod +x "$CAWS_TEST_HOME/git-without-z/git"
 
+  # Git that answers every query but the guards' exact `rev-parse
+  # --git-common-dir` (failing, or naming a directory that does not exist);
+  # the analyzer's multi-option query is a different call and still answers.
+  mkdir -p "$CAWS_TEST_HOME/partial-git" "$CAWS_TEST_HOME/bogus-common-git"
+  cat > "$CAWS_TEST_HOME/partial-git/git" <<'SHIM'
+#!/bin/bash
+[[ $# -eq 2 && "$1" == rev-parse && "$2" == --git-common-dir ]] && exit 128
+exec "$RP_REAL_GIT" "$@"
+SHIM
+  cat > "$CAWS_TEST_HOME/bogus-common-git/git" <<'SHIM'
+#!/bin/bash
+if [[ $# -eq 2 && "$1" == rev-parse && "$2" == --git-common-dir ]]; then
+  printf '/nonexistent-caws-common/.git\n'; exit 0
+fi
+exec "$RP_REAL_GIT" "$@"
+SHIM
+  chmod +x "$CAWS_TEST_HOME/partial-git/git" "$CAWS_TEST_HOME/bogus-common-git/git"
+
   # Instrumentation for base-branch enforcement: a caws that records, NUL
   # terminated, the path worktree-write-guard hands to `scope contention` and
   # answers clear; every other subcommand goes to the real CLI.
@@ -718,6 +736,38 @@ rp_git_failed_case() {
   rp_git_failed_case worktree-write-guard.sh Write "$repo" "$self" "$PATH" "$repo/.caws/worktrees/f-wt/src/payload.ts"
   rp_git_failed_case worktree-write-guard.sh Write "$repo" "$self" "$PATH" "$self/src/own.ts"
   rp_git_failed_case bash-write-guard.sh Bash "$repo" "$self" "$PATH" "$repo/.caws/worktrees/f-wt/src/payload.ts"
+}
+
+@test "git failing: a git that answers --git-dir but fails --git-common-dir is refused, not read as an unlinked worktree" {
+  local repo="$RP_PLAIN_REPO" self="$RP_PLAIN_REPO/.caws/worktrees/s-wt"
+  local partial="$CAWS_TEST_HOME/partial-git:$PATH" own="$RP_PLAIN_REPO/.caws/worktrees/s-wt/src/own.ts"
+  # The shim fails only the guards' exact query: --git-dir and the analyzer's
+  # multi-option query still answer.
+  run env PATH="$partial" RP_REAL_GIT="$RP_REAL_GIT" bash -c 'cd "$1" && git rev-parse --git-dir &&
+    ! git rev-parse --git-common-dir &&
+    git --no-pager -C . rev-parse --path-format=absolute --absolute-git-dir --git-common-dir' _ "$self"
+  [ "$status" -eq 0 ]
+  # With working git, a session that does not own s-wt is refused by ownership.
+  RP_ID_SESSION=rp-session-f id_guard bash-write-guard.sh "$repo" "$self" Bash "touch \"$own\""
+  [ "$status" -eq 2 ]
+  assert_output --partial "BLOCKED: this Bash command mutates worktree 's-wt''s payload"
+  RP_ID_SESSION=rp-session-f id_guard worktree-write-guard.sh "$repo" "$self" Write "$own"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
+  # With only the common-dir query failing, the worktree must not become the
+  # project root (it has no registry): both guards refuse naming the failure.
+  RP_ID_SESSION=rp-session-f rp_git_failed_case bash-write-guard.sh Bash "$repo" "$self" "$partial" "$own"
+  RP_ID_SESSION=rp-session-f rp_git_failed_case worktree-write-guard.sh Write "$repo" "$self" "$partial" "$own"
+}
+
+@test "caws_resolve_canonical_dir_into: a failed common-dir query or an unenterable common dir assigns nothing" {
+  local self="$RP_PLAIN_REPO/.caws/worktrees/s-wt"
+  # Git failed where a .git entry exists: status 3, caller value unchanged.
+  rp_refusal "$CAWS_TEST_HOME/partial-git:$PATH" caws_resolve_canonical_dir_into v "$self" 3 ''
+  # Git named a common directory that cannot be entered: status 2.
+  rp_refusal "$CAWS_TEST_HOME/bogus-common-git:$PATH" caws_resolve_canonical_dir_into v "$self" 2 ''
+  # Control: working git resolves the worktree to its canonical root.
+  rp_expect_into caws_resolve_canonical_dir_into '' "$self" "$RP_PLAIN_REPO"
 }
 
 @test "git failing: a directory outside every repository stays ungoverned" {
