@@ -6719,9 +6719,10 @@ Additional bounded evidence and unresolved dependencies:
   duplicate callbacks. Actual native callbacks, upgrade/rollback,
   effective-event precedence, combined-source packaging and machine adoption
   remain open. AIM attempts to c4, dd67 and c843 retain their stale-heartbeat
-  refusals. A later c4 send `1e781d39` is delivered; no reply or accepted
-  handoff is observed. Earlier queued assignments remain unfinished under root
-  ownership.
+  refusals. Later sends reach c4 and c843. Root receives their read-only status
+  and registration-review replies; neither accepts an implementation handoff.
+  Reported findings require source/runtime grounding before reliance. Earlier
+  queued assignments remain unfinished under root ownership.
 
 - E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
   `native-session-publication`, based on `03d663b6`, for the continuous original
