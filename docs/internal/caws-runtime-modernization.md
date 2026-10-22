@@ -6084,30 +6084,38 @@ Additional bounded evidence and unresolved dependencies:
   carrier and pre-pointer protective rollback refusals. Strict private TS
   exits0; the direct five-suite Jest run executes172 tests,148 pass and24 fail.
   Three complete new/selection suites account for101 passes;47 machine-runtime
-  cases also pass. Missing private sibling templates and subprocess entry paths
-  reach the failed checks; ordinary package-layout build and rerun are owed,
-  rather than changing their assertions. Two opaque orchestration wrappers are
-  refused before execution and retained; the separately inspected transparent
-  normal test entry runs under fresh guard admission. Source hashes, modes and
-  unit fixtures do not establish actual installed native dispatch or rollback.
-  R19 `4ac64fbf` has47 focused cases and15 identity mutants, with bounded alias
-  transport holds and helper-only Git-path controls explicitly distinguished.
-  Missing-Git canonical discovery and relative foreign-worktree paths remain
-  consequential source/probe findings under owner c4; repair and fresh evidence
-  precede merge. Missing-Python parser ingress and the LF sibling walker remain
-  parent/source-owner obligations. The shell lane's account/system error grants
-  no takeover; coherent source/four-document landing and final six-file quality
-  remain held. Mail-custody owner dd67's `83b6cdba` adds strict original-text
-  and fatal UTF8 classification plus cleanup controls; that candidate's runtime
-  checks are pending. Older8afd's237 passing checks do not qualify83b. Root
-  source inspection confirms project dispatchers can repair original invalid
-  bytes before heartbeat classification. A separate original-byte carrier and
-  inherited-marker scrubbing require implementation and actual dispatcher
-  falsifiers; the normal payload channel cannot prove its own original bytes.
-  Empty original text defaults to an object upstream, but the inspected typed
-  heartbeat also requires a session id: its empty-input delivery seam is latent,
-  not an observed live misdelivery. Refused artifact export remains a retained
-  guard prerequisite, without installed guard changes or a bypass claim.
+  cases also pass. Nineteen failures explicitly name missing private templates;
+  five child-status failures omit child stderr. Missing normal subprocess entry
+  paths are a plausible contributor to those five, not established causation.
+  Ordinary package-layout build and rerun are owed, rather than changing their
+  assertions. Registration artifacts use the legacy default entry and producer
+  fixtures use a shell sentinel; they are not native callback evidence. Two
+  opaque orchestration wrappers are refused before execution and retained; the
+  separately inspected transparent normal test entry runs under fresh guard
+  admission. Source hashes, modes and unit fixtures do not establish actual
+  installed native dispatch or rollback. R19 `4ac64fbf` has47 focused cases
+  and15 identity mutants, with bounded alias transport holds and helper-only
+  Git-path controls explicitly distinguished. Missing-Git canonical discovery
+  and relative foreign-worktree paths remain consequential source/probe findings
+  under owner c4; repair and fresh evidence precede merge. Missing-Python parser
+  ingress and the LF sibling walker remain parent/source-owner obligations. The
+  shell lane's account/system error grants no takeover; coherent
+  source/four-document landing and final six-file quality remain held.
+  Mail-custody owner dd67's `83b6cdba` adds strict original-text and fatal UTF8
+  classification plus cleanup controls. Its six-suite251-case run exits0 and
+  five matched falsifiers fail; fingerprint check1 is retained. Root consumer
+  inspection, protocol-valid empty-input pairs and integration remain owed.
+  Deliberately inconsistent unit requests exercise defense in depth, not a
+  protocol-reachable empty-input misdelivery. Older8afd's237 passing checks do
+  not qualify83b. Root source inspection confirms project dispatchers can repair
+  original invalid bytes before heartbeat classification. A separate
+  original-byte carrier and inherited-marker scrubbing require implementation
+  and actual dispatcher falsifiers; the normal payload channel cannot prove its
+  own original bytes. Empty original text defaults to an object upstream, but
+  the inspected typed heartbeat also requires a session id: its empty-input
+  delivery seam is latent, not an observed live misdelivery. Refused artifact
+  export remains a retained guard prerequisite, without installed guard changes
+  or a bypass claim.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
