@@ -1,0 +1,44 @@
+id: CAWS-PUBLICATION-CLIENT-001
+title: 'Define and verify bounded native publication client protocol'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-22T08:52:41.467Z'
+updated_at: '2026-10-22T08:52:41.467Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Native publication framing and preparation client'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/protocol.ts'
+    - 'packages/caws-cli/src/runtime/session-publication-client.ts'
+    - 'packages/caws-cli/src/runtime/session-publication-wire.ts'
+    - 'packages/caws-cli/tests/runtime/protocol.test.js'
+    - 'packages/caws-cli/tests/runtime/session-publication-client.test.js'
+  out: []
+invariants:
+  - 'The client grants no filesystem authority and cannot accept contradictory or unobserved terminal artifacts'
+  - 'Native implementation original capture ordinary dispatch and actual consumer qualification remain with CAWS-NATIVE-SESSION-PUBLICATION-001'
+acceptance:
+  - id: A1
+    given: 'complete correlated controlled frames'
+    when: 'preparation and terminal consumption run'
+    then: 'exact input and output bytes complete inventories ordered phases and consumption are preserved'
+  - id: A2
+    given: 'abort malformed correlation status inventory resources or delivery loss'
+    when: 'controlled exchanges execute'
+    then: 'invalid state is refused before preparation output copies or terminal consumption as applicable'
+  - id: A3
+    given: 'committed protocol component'
+    when: 'focused compilation tests gates doctor and independent review execute'
+    then: 'checked source is integrated through the owned leaf while parent actual native consumer obligations remain open'
+observability:
+  - 'Raw Jest results source identities compiler result gate basis and reviewed committed candidate'
+rollback:
+  - 'Revert this source component through ordinary governed history before production wiring'
+non_functional: {}
+contracts:
+  - name: 'publication-preparation-client'
+    type: behavior
