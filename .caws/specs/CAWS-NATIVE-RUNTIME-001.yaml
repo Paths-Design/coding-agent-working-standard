@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-22T13:23:15.397Z'
+updated_at: '2026-10-22T20:35:28.105Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -244,6 +244,36 @@ scope:
     - packages/caws-cli/tests/docs/package-license-transport.test.js
     - packages/caws-cli/tests/runtime/selection.test.js
     - docs/guides/sterling-machine-runtime-migration.md
+    - docs/agents/full-guide.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/failure-lineage.md
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/src/transcripts/render-accumulator.ts
+    - packages/caws-cli/src/transcripts/render-artifacts.ts
+    - packages/caws-cli/src/transcripts/render-prepare.ts
+    - packages/caws-cli/src/transcripts/render-reader.ts
+    - packages/caws-cli/src/transcripts/render-values.ts
+    - packages/caws-cli/src/transcripts/transcript-json-profile.ts
+    - packages/caws-cli/tests/adapter/machine-adoption.test.js
+    - packages/caws-cli/tests/adapter/native-entry-registration.test.js
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/tests/hooks/actor-context-rows.json
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-feed.bats
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-stage-lifetime.bats
+    - packages/caws-cli/tests/hooks/heartbeat-actor-custody.test.js
+    - packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
+    - packages/caws-cli/tests/init/claude-settings-merge.test.js
+    - packages/caws-cli/tests/init/init-hook-pack-render.test.js
+    - packages/caws-cli/tests/shell/init-plan.test.js
+    - packages/caws-cli/tests/transcripts/render-accumulator.test.ts
+    - packages/caws-cli/tests/transcripts/render-artifacts.test.ts
+    - packages/caws-cli/tests/transcripts/render-prepare.test.ts
+    - packages/caws-cli/tests/transcripts/render-reader.test.ts
+    - packages/caws-cli/tests/transcripts/render-values.test.ts
+    - packages/caws-cli/tests/transcripts/transcript-json-profile.test.ts
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
