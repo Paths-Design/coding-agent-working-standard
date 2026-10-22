@@ -268,6 +268,36 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   [ "$(printf '%s\n' "$output" | grep -cF "[caws run-handlers] could not remove handler stdin stage $STAGE_TMP/")" -eq 1 ]
 }
 
+@test "a payload whose unlink keeps failing is reported before and after its handler, which still runs" {
+  local big expected real_rm stub attempts foreign
+  big=$(_payload)
+  expected="$BATS_TEST_TMPDIR/expected.bytes"
+  printf '%s' "$big" > "$expected"
+  foreign="$STAGE_TMP/foreign.txt"
+  printf 'not ours' > "$foreign"
+  real_rm=$(command -v rm)
+  stub="$BATS_TEST_TMPDIR/rm-stub"
+  attempts="$BATS_TEST_TMPDIR/unlink-attempts"
+  mkdir -p "$stub"
+  # Every removal of the stage payload is refused. Each refusal records whether
+  # the handler had already written its bytes, which places the attempt before
+  # or after the handler without relying on report order.
+  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */caws-handler-stdin-*/payload) if ls "$OUT_DIR"/reader-*.bytes >/dev/null 2>&1; then echo after-handler; else echo before-handler; fi >> "$ATTEMPTS"; exit 1 ;; esac; done\nexec %q "$@"\n' \
+    "$real_rm" > "$stub/rm"
+  chmod +x "$stub/rm"
+  ATTEMPTS="$attempts" STAGE_PATH="$stub:$PATH" _chain "$big" reader.sh
+  [ "$status" -eq 0 ]
+  cmp "$expected" "$OUT_DIR"/reader-*.bytes
+  # One refused attempt before the handler and at least one after it.
+  [ "$(head -1 "$attempts")" = before-handler ]
+  [ "$(grep -c '^after-handler$' "$attempts")" -ge 1 ]
+  # The payload remains, is reported for each refused attempt, and nothing that
+  # run_handlers did not create was removed.
+  [ -n "$(find "$STAGE_TMP" -type f -name payload)" ]
+  [ "$(printf '%s\n' "$output" | grep -cF "[caws run-handlers] could not remove handler stdin stage $STAGE_TMP/")" -ge 2 ]
+  [ "$(cat "$foreign")" = 'not ours' ]
+}
+
 @test "a stage directory replaced by a link during the handler is left in place and named, never followed" {
   local big expected real_rm stub decoy
   big=$(_payload)
