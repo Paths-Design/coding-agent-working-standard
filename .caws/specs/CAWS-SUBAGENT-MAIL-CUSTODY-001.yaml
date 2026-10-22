@@ -47,8 +47,11 @@ acceptance:
     when: 'the ingress payload carries agent_id'
     then: 'custody is withheld on every carrier, and the same payload without agent_id delivers on every carrier'
   - id: A5
-    given: 'the typed in-process heartbeat with real stores'
-    when: 'request.payload carries agent_id (valid or invalid)'
+    given: >-
+      the typed in-process heartbeat with real stores and a protocol-consistent
+      request, whose original inputJson is the authoritative ingress
+      (request.payload is only its parse)
+    when: 'the original inputJson carries a top-level agent_id (valid or invalid)'
     then: 'the poll port is not called and the message stays pending; without agent_id the offer is made and settled exactly once'
   - id: A6
     given: 'the actor-context contract table (absent, valid, empty, non-string, null, over-limit, bad charset, unicode-escaped key, non-object payload)'
