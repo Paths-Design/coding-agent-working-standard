@@ -15,6 +15,9 @@ const {
   qualifiedHookTimeout,
   unconditionalCommandHook,
   MACHINE_EVENTS,
+  isCawsProducerHookCandidate,
+  classifyCawsProducerHook,
+  nativeCommandWords,
 } = require(path.join(dist, 'init/native-hook-identification'));
 const { migrateNativeCommand } = require(path.join(dist, 'init/machine-adapter-policy'));
 const { resolveInvocationSelection } = require(path.join(dist, 'runtime/selection'));
@@ -69,6 +72,7 @@ function withPrivatePathWitness(run) {
     '#!/bin/sh\n# PATH resolution witness only; registration tests never execute it.\nexit 97\n';
   for (const name of ['caws-hook-native', 'caws-hook']) {
     write(path.join(directory, name), witness, 0o755);
+    write(path.join(canonical, name), witness, 0o755);
     expect(fs.statSync(path.join(directory, name)).mode & 0o777).toBe(0o755);
   }
   const previous = process.env.PATH;
@@ -81,7 +85,27 @@ function withPrivatePathWitness(run) {
     else process.env.PATH = previous;
   }
 }
+function pathCawsOperand(program) {
+  const shellSpelling = program === 'caws\\-hook-native' || program === "'caws'-hook-native";
+  const name = shellSpelling
+    ? 'caws-hook-native'
+    : path.basename(program.replace(/^absolute:/, ''));
+  const operand = program.startsWith('absolute:') ? path.join(root, 'path-bin', name) : program;
+  // Relative forms are witnessed against this explicit prospective project
+  // directory. No registration API executes them or establishes callback cwd.
+  const expected = program.startsWith('./')
+    ? path.join(canonical, name)
+    : path.join(root, 'path-bin', name);
+  const file =
+    program.startsWith('./') || program.startsWith('../') || path.isAbsolute(operand)
+      ? path.resolve(canonical, operand)
+      : path.join(root, 'path-bin', name);
+  expect(fs.realpathSync(file)).toBe(fs.realpathSync(expected));
+  expect(fs.statSync(file).isFile()).toBe(true);
+  return operand;
+}
 function pathCawsHook(form, program) {
+  program = pathCawsOperand(program);
   const args = ['claude-code', 'pre_tool_use', '--system'];
   if (form === 'shell')
     return { type: 'command', command: program + ' claude-code pre_tool_use --system' };
@@ -91,9 +115,18 @@ function pathCawsHook(form, program) {
     args: form === 'env' ? [program, ...args] : args,
   };
 }
-const pathCawsCases = ['exec', 'env', 'shell'].flatMap((form) =>
-  ['caws-hook-native', 'caws-hook'].map((program) => [form, program])
-);
+const pathCawsCases = [
+  ...['exec', 'env', 'shell'].flatMap((form) =>
+    ['caws-hook-native', 'caws-hook'].map((program) => [form, program])
+  ),
+  ...['exec', 'shell'].flatMap((form) =>
+    ['caws-hook-native', 'caws-hook'].flatMap((name) =>
+      ['./' + name, '../path-bin/' + name, 'absolute:' + name].map((program) => [form, program])
+    )
+  ),
+  ['shell', 'caws\\-hook-native'],
+  ['shell', "'caws'-hook-native"],
+];
 function nativeObservationFixture() {
   // Inert assets exercise registration/layout verification only. No fixture
   // executable is invoked and this is not a native-image execution witness.
@@ -662,7 +695,7 @@ test('Codex args on a recognized CAWS command remains unsupported and refuses be
   expect(fixtureBytes()).toEqual(before);
 });
 test.each(pathCawsCases)(
-  'PATH-resolved %s %s configuration requires reconciliation before writes',
+  'PATH candidate %s %s configuration requires reconciliation before writes or execution',
   (form, program) => {
     withPrivatePathWitness(() => {
       write(path.join(user, '.claude/settings.json'), {
@@ -684,7 +717,7 @@ test.each(pathCawsCases)(
   }
 );
 test.each(pathCawsCases)(
-  'PATH-resolved %s %s selection requires reconciliation before writes',
+  'PATH candidate %s %s selection requires reconciliation before writes or execution',
   (form, program) => {
     withPrivatePathWitness(() => {
       configureSystemRuntime({ home, userHome: user, surface: 'claude-code', entry: 'legacy' });
@@ -700,7 +733,7 @@ test.each(pathCawsCases)(
   }
 );
 test.each(pathCawsCases)(
-  'PATH-resolved %s %s migration requires reconciliation before writes',
+  'PATH candidate %s %s migration requires reconciliation before writes or execution',
   (form, program) => {
     withPrivatePathWitness(() => {
       initializeCanonicalGitFixture();
@@ -730,7 +763,9 @@ test.each(['printf', 'echo'])(
       const foreign = {
         type: 'command',
         command,
-        args: ['caws-hook-native', 'caws-hook'],
+        args: ['caws-hook-native', 'caws-hook'].flatMap((name) =>
+          [name, './' + name, '../path-bin/' + name, 'absolute:' + name].map(pathCawsOperand)
+        ),
         onFailure: 'continue',
       };
       const file = path.join(user, '.claude/settings.json');
@@ -747,6 +782,26 @@ test.each(['printf', 'echo'])(
       expect(fixtureBytes()).toEqual(before);
     });
   }
+);
+test.each(['caws\\-hook-native', "'caws'-hook-native"])(
+  'PATH shell spelling %s is decoded for discovery only; no hook executes',
+  (program) =>
+    withPrivatePathWitness(() => {
+      pathCawsOperand(program);
+      const command = program + ' claude-code pre_tool_use --system';
+      expect(nativeCommandWords(command)[0].value).toBe('caws-hook-native');
+      const shellHook = { type: 'command', command };
+      expect(isCawsProducerHookCandidate(shellHook)).toBe(true);
+      expect(classifyCawsProducerHook(shellHook, 'claude-code', 'pre_tool_use').kind).toBe(
+        'unresolved'
+      );
+      // Exec argv is literal. A conservative discovery hint is allowed, but
+      // quote/backslash spellings never establish an owned executable.
+      const execHook = { type: 'command', command: program, args: ['claude-code', 'pre_tool_use'] };
+      expect(classifyCawsProducerHook(execHook, 'claude-code', 'pre_tool_use').kind).toBe(
+        'unresolved'
+      );
+    })
 );
 test.each(['legacy', 'native'])(
   'Claude failure policy retrofits absent %s policy through read-only plan then idempotent apply',

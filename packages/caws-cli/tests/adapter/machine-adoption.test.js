@@ -132,6 +132,8 @@ function withPrivatePathWitness(run) {
       '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nexit 97\n',
       { mode: 0o755 }
     );
+    fs.copyFileSync(file, path.join(repo, name));
+    fs.chmodSync(path.join(repo, name), 0o755);
     expect(fs.statSync(file).mode & 0o777).toBe(0o755);
   }
   const previous = process.env.PATH;
@@ -143,6 +145,24 @@ function withPrivatePathWitness(run) {
     if (previous === undefined) delete process.env.PATH;
     else process.env.PATH = previous;
   }
+}
+function pathCawsOperand(program) {
+  const shellSpelling = program === 'caws\\-hook-native' || program === "'caws'-hook-native";
+  const name = shellSpelling
+    ? 'caws-hook-native'
+    : path.basename(program.replace(/^absolute:/, ''));
+  const operand = program.startsWith('absolute:') ? path.join(root, 'path-bin', name) : program;
+  // This prospective project cwd witnesses relative paths without executing them.
+  const expected = program.startsWith('./')
+    ? path.join(repo, name)
+    : path.join(root, 'path-bin', name);
+  const file =
+    program.startsWith('./') || program.startsWith('../') || path.isAbsolute(operand)
+      ? path.resolve(repo, operand)
+      : path.join(root, 'path-bin', name);
+  expect(fs.realpathSync(file)).toBe(fs.realpathSync(expected));
+  expect(fs.statSync(file).isFile()).toBe(true);
+  return operand;
 }
 test('seeded Claude adoption retrofits absent managed Pre policy and preserves foreign and other-event fields', () => {
   const { config, options } = seededClaudePolicy();
@@ -289,14 +309,22 @@ test.each(['printf', 'echo'])(
     expect(JSON.parse(fs.readFileSync(config))).toEqual(value);
   }
 );
-test.each(
-  ['exec', 'env', 'shell'].flatMap((form) =>
+test.each([
+  ...['exec', 'env', 'shell'].flatMap((form) =>
     ['caws-hook-native', 'caws-hook'].map((program) => [form, program])
-  )
-)(
-  'PATH-resolved %s %s adoption requires reconciliation before state or backup writes',
+  ),
+  ...['exec', 'shell'].flatMap((form) =>
+    ['caws-hook-native', 'caws-hook'].flatMap((name) =>
+      ['./' + name, '../path-bin/' + name, 'absolute:' + name].map((program) => [form, program])
+    )
+  ),
+  ['shell', 'caws\\-hook-native'],
+  ['shell', "'caws'-hook-native"],
+])(
+  'PATH candidate %s %s adoption requires reconciliation before state or backup writes',
   (form, program) =>
     withPrivatePathWitness(() => {
+      program = pathCawsOperand(program);
       const { config, options } = seededClaudePolicy();
       const value = JSON.parse(fs.readFileSync(config));
       const args = ['claude-code', 'pre_tool_use', '--system'];
@@ -326,7 +354,9 @@ test.each(['printf', 'echo'])(
       const foreign = {
         type: 'command',
         command,
-        args: ['caws-hook-native', 'caws-hook'],
+        args: ['caws-hook-native', 'caws-hook'].flatMap((name) =>
+          [name, './' + name, '../path-bin/' + name, 'absolute:' + name].map(pathCawsOperand)
+        ),
         onFailure: 'continue',
       };
       value.hooks.PreToolUse[0].hooks.unshift(foreign);

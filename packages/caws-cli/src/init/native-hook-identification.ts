@@ -219,11 +219,24 @@ export function isCawsProducerHookCandidate(hook: unknown): hook is NativeHook {
   const possibleProducer = (text: unknown): boolean =>
     isCawsNativeCommand(text) ||
     (typeof text === 'string' &&
-      /(?:^|[\s"'`;&|<>()])caws-hook(?:-native)?(?=$|[\s"'`;&|<>()])/.test(text));
-  return (
+      /(?:^|[\s/"'`;&|<>()])caws-hook(?:-native)?(?=$|[\s"'`;&|<>()])/.test(text));
+  if (
     possibleProducer(value.command) ||
     (Array.isArray(value.args) ? value.args.some(possibleProducer) : possibleProducer(value.args))
-  );
+  )
+    return true;
+  // Only shell-form commands have decoded shell words. A complete supported
+  // literal spelling can hide a known basename behind escapes or split quotes;
+  // this remains a suspicion hint, never executable ownership or PATH lookup.
+  if (Object.hasOwn(value, 'args') || typeof value.command !== 'string') return false;
+  try {
+    return nativeCommandWords(value.command).some((word) =>
+      ['caws-hook-native', 'caws-hook'].includes(path.posix.basename(word.value))
+    );
+  } catch {
+    // Unsupported shell syntax retains raw discovery without partial decoding.
+    return false;
+  }
 }
 
 /** Exec-form CAWS registration is not an admitted migration format. Only

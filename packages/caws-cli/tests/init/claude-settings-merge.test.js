@@ -11,12 +11,14 @@ const {
 } = require(path.join(dist, 'init/hook-install'));
 const { renderSettingsWiring } = require(path.join(dist, 'shell/render/init-hook-pack'));
 
-let root, settings;
+let fixtureContainer, root, settings;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-claude-settings-'));
+  fixtureContainer = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-claude-settings-'));
+  root = path.join(fixtureContainer, 'repo');
+  fs.mkdirSync(root);
   settings = path.join(root, '.claude/settings.json');
 });
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+afterEach(() => fs.rmSync(fixtureContainer, { recursive: true, force: true }));
 function write(value) {
   fs.mkdirSync(path.dirname(settings), { recursive: true });
   fs.writeFileSync(settings, JSON.stringify(value));
@@ -25,7 +27,7 @@ function wired() {
   return JSON.parse(CANONICAL_SETTINGS_SNIPPET);
 }
 function withPrivatePathWitness(run) {
-  const directory = path.join(root, 'path-bin');
+  const directory = path.join(fixtureContainer, 'path-bin');
   fs.mkdirSync(directory);
   for (const name of ['caws-hook-native', 'caws-hook']) {
     const file = path.join(directory, name);
@@ -34,6 +36,8 @@ function withPrivatePathWitness(run) {
       '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nexit 97\n',
       { mode: 0o755 }
     );
+    fs.copyFileSync(file, path.join(root, name));
+    fs.chmodSync(path.join(root, name), 0o755);
     expect(fs.statSync(file).mode & 0o777).toBe(0o755);
   }
   const previous = process.env.PATH;
@@ -45,6 +49,26 @@ function withPrivatePathWitness(run) {
     if (previous === undefined) delete process.env.PATH;
     else process.env.PATH = previous;
   }
+}
+function pathCawsOperand(program) {
+  const shellSpelling = program === 'caws\\-hook-native' || program === "'caws'-hook-native";
+  const name = shellSpelling
+    ? 'caws-hook-native'
+    : path.basename(program.replace(/^absolute:/, ''));
+  const operand = program.startsWith('absolute:')
+    ? path.join(fixtureContainer, 'path-bin', name)
+    : program;
+  // This prospective project cwd witnesses relative paths without executing them.
+  const expected = program.startsWith('./')
+    ? path.join(root, name)
+    : path.join(fixtureContainer, 'path-bin', name);
+  const file =
+    program.startsWith('./') || program.startsWith('../') || path.isAbsolute(operand)
+      ? path.resolve(root, operand)
+      : path.join(fixtureContainer, 'path-bin', name);
+  expect(fs.realpathSync(file)).toBe(fs.realpathSync(expected));
+  expect(fs.statSync(file).isFile()).toBe(true);
+  return operand;
 }
 
 test('fresh Claude settings and rendered references put block only on the managed PreToolUse hook', () => {
@@ -249,33 +273,43 @@ test.each(['printf', 'echo'])(
     expect(JSON.parse(fs.readFileSync(settings))).toEqual(value);
   }
 );
-test.each(
-  ['exec', 'env', 'shell'].flatMap((form) =>
+test.each([
+  ...['exec', 'env', 'shell'].flatMap((form) =>
     ['caws-hook-native', 'caws-hook'].map((program) => [form, program])
-  )
-)('PATH-resolved %s %s merge requires typed reconciliation without writes', (form, program) =>
-  withPrivatePathWitness(() => {
-    const value = wired();
-    const args = ['claude-code', 'pre_tool_use', '--system'];
-    const hook =
-      form === 'shell'
-        ? { type: 'command', command: program + ' claude-code pre_tool_use --system' }
-        : {
-            type: 'command',
-            command: form === 'env' ? 'env' : program,
-            args: form === 'env' ? [program, ...args] : args,
-          };
-    value.hooks.PreToolUse = [{ hooks: [hook] }];
-    write(value);
-    const before = fs.readFileSync(settings);
-    for (const operation of [planClaudeSettingsMerge, mergeClaudeSettings]) {
-      expect(operation(root)).toMatchObject({
-        kind: 'invalid',
-        reason: 'registration-reconciliation',
-      });
-      expect(fs.readFileSync(settings)).toEqual(before);
-    }
-  })
+  ),
+  ...['exec', 'shell'].flatMap((form) =>
+    ['caws-hook-native', 'caws-hook'].flatMap((name) =>
+      ['./' + name, '../path-bin/' + name, 'absolute:' + name].map((program) => [form, program])
+    )
+  ),
+  ['shell', 'caws\\-hook-native'],
+  ['shell', "'caws'-hook-native"],
+])(
+  'PATH candidate %s %s merge requires typed reconciliation without writes or execution',
+  (form, program) =>
+    withPrivatePathWitness(() => {
+      program = pathCawsOperand(program);
+      const value = wired();
+      const args = ['claude-code', 'pre_tool_use', '--system'];
+      const hook =
+        form === 'shell'
+          ? { type: 'command', command: program + ' claude-code pre_tool_use --system' }
+          : {
+              type: 'command',
+              command: form === 'env' ? 'env' : program,
+              args: form === 'env' ? [program, ...args] : args,
+            };
+      value.hooks.PreToolUse = [{ hooks: [hook] }];
+      write(value);
+      const before = fs.readFileSync(settings);
+      for (const operation of [planClaudeSettingsMerge, mergeClaudeSettings]) {
+        expect(operation(root)).toMatchObject({
+          kind: 'invalid',
+          reason: 'registration-reconciliation',
+        });
+        expect(fs.readFileSync(settings)).toEqual(before);
+      }
+    })
 );
 test.each(['printf', 'echo'])(
   'PATH-name data passed to literal %s merge is preserved',
@@ -285,7 +319,9 @@ test.each(['printf', 'echo'])(
       const foreign = {
         type: 'command',
         command,
-        args: ['caws-hook-native', 'caws-hook'],
+        args: ['caws-hook-native', 'caws-hook'].flatMap((name) =>
+          [name, './' + name, '../path-bin/' + name, 'absolute:' + name].map(pathCawsOperand)
+        ),
         onFailure: 'continue',
       };
       value.hooks.PreToolUse[0].hooks.unshift(foreign);
