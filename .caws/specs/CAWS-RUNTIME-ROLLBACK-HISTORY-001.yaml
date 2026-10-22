@@ -38,3 +38,11 @@ acceptance:
     then: 'the A1 and A2 tests fail with the observed {D1, D1} pointer.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Test asserts, after deleting bin/caws-hook and reinstalling the selected generation: entry bytes equal the shipped bootstrap AND pointer bytes identical to before (previous_digest stays the prior generation); rollback then runs the prior generation's guard marker. Runtime (outside repo, ~/.claude/artifacts/c843b9aa-c831-40ce-ac99-cae38f061436/rollback-probe): after.log AFTER S1 step 4 pointer {29ff5676, prev 5ec11024} on the fixed build; before-fix s1.log step 4 {408c06a7,408c06a7} on selected CLI 89061bdd. Counterexample killed: mutant-a.log, test fails at :692."
+    recorded_at: "2026-10-22T00:49:39.615Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::repairing the stable entry of the selected runtime keeps its rollback target"
+    commit_sha: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
+    test_verified_at: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
