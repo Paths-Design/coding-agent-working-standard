@@ -72,7 +72,7 @@ function write(file, bytes) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, bytes);
 }
-function invoke(operation, prefix = '') {
+function invoke(operation, prefix = '', cli = false) {
   const source = `${prefix}
     const transport = await import(${JSON.stringify(pathToFileURL(script).href)});
     try {
@@ -81,7 +81,7 @@ function invoke(operation, prefix = '') {
       console.error(JSON.stringify({ message: error.message, faults: typeof faults === 'undefined' ? null : faults }));
       process.exitCode = 1;
     }`;
-  const argv = ['--input-type=module', '-e', source];
+  const argv = cli ? [script] : ['--input-type=module', '-e', source];
   const before = artifactRoot ? observedState() : undefined;
   const result = spawnSync(process.execPath, argv, {
     cwd: root,
@@ -157,7 +157,7 @@ beforeAll(() => {
 });
 beforeEach(() => {
   root = fs.realpathSync(
-    fs.mkdtempSync(path.join(artifactRoot || os.tmpdir(), 'caws-license-transport-'))
+    fs.mkdtempSync(path.join(artifactRoot || os.tmpdir(), 'caws-license-transport- # %-'))
   );
   invocation = 0;
   pkg = path.join(root, 'packages/caws-cli');
@@ -205,6 +205,19 @@ test('stages exact authoritative bytes, repeats without adoption, and cleans own
   expect(fs.existsSync(path.join(pkg, markerName))).toBe(false);
   expect(fs.existsSync(path.join(pkg, lockName))).toBe(false);
   expect(successful(clean())).toEqual({ removed: [] });
+  assertSources();
+});
+
+test('cleaner CLI removes owned transports under URL-escaped package paths', () => {
+  successful(stage());
+  expect(script).toContain(' # %');
+  const result = invoke('cleanLicenseTransport', '', true);
+  expect(result.error).toBeUndefined();
+  expect(result.signal).toBeNull();
+  expect(result.status).toBe(0);
+  for (const [name] of transports) expect(fs.existsSync(path.join(pkg, name))).toBe(false);
+  expect(fs.existsSync(path.join(pkg, markerName))).toBe(false);
+  expect(fs.existsSync(path.join(pkg, lockName))).toBe(false);
   assertSources();
 });
 
