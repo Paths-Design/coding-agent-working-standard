@@ -30,15 +30,25 @@ scope:
   out: []
 invariants:
   - 'All six store targets, nine selected suites, perTest coverage, concurrency two, incremental false and per-file mutation floors remain unchanged.'
-  - 'Only actual context-matched baseline compilation and invocation can satisfy per-suite positives and the six-target union; missing or stale evidence fails closed.'
   - 'Observer qualification never confers child-process, full-campaign, exported-function semantic, native-adoption or cutover authority.'
   - 'No child test edits, candidate direct imports, preloads, dependency changes, foreign hooks or shared runtime configuration changes.'
   - 'The launcher uses the pinned public Stryker API with the same configFile and logLevel; dryRunOnly is omitted when the CLI flag is absent, and successful Promise resolution never resets an existing nonzero process exit code.'
+  - 'Only context-matched code submission to the compiler reference captured at observer module load and invocation of its returned module body can satisfy per-suite positives and the six-target union; missing, stale or unsupported bootstrap evidence fails closed.'
+  - 'The trusted pinned bootstrap is an explicit component boundary, not intrinsic compiler identity or defense against arbitrary earlier code execution. Preserve the transforming pre-capture wrapper counterexample; broader compiler custody, native and child-consumer proof remain parent obligations accepted by lead c5d9aeae-7064-4cbb-a3f3-fc5670c8103b.'
 acceptance:
   - id: A1
-    given: 'the pinned Node and Jest/Stryker boundary'
-    when: 'baseline and mutant environments compile and invoke target bodies'
-    then: 'exact submitted UTF16 units, parameters, target/test/context/run/phase/generation identity and invocation outcomes are retained, while mutant and unrelated contexts cannot borrow baseline standing.'
+    given: >-
+      the pinned Node and Jest/Stryker boundary under the audited trusted bootstrap,
+      restricted startup influence and captured dependency closure
+    when: >-
+      baseline and mutant environments submit module code to the compiler reference
+      captured at observer module load and invoke its returned body
+    then: >-
+      exact submitted UTF16 units, parameters,
+      target/test/context/run/phase/generation identity and returned-body invocation
+      outcomes are retained; mutant and unrelated contexts cannot borrow baseline
+      standing; intrinsic compiler identity and arbitrary prior monkeypatch defense
+      are not inferred
   - id: A2
     given: 'repeated loads, teardown, reattachment, foreign hook replacement and observation failures'
     when: 'observer lifetimes transition or artifacts are lost, replaced, malformed or exceed finite caps'
@@ -77,10 +87,7 @@ contracts:
 evidence:
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "UNVERIFIED broad compiler-input custody: pinned Node counterexample records return1 while pre-core wrapper compiles return2 and returns2, closes without failure. No ordinary pinned dependency patch established; trusted-bootstrap boundary unresolved. 95 candidate VM fixtures pass, not ordinary consumption proof."
-    recorded_at: "2026-10-22T10:32:11.874Z"
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/foreign-before-core-01/observation.json"
-    commit_sha: "6703e691fe5d7c8d10bba40b0777e4b7eba4f196"
+    recorded_at: "2026-10-22T10:38:52.003Z"
   - criterion_id: A2
     status: unchecked
     evidence_ref: "UNVERIFIED pre-core foreign-hook custody. After-core replacement, lifetime and sink controls pass; before-core wrapper can become original and be restored without refusal. Ordinary bootstrap applicability and supported custody decision remain open."
