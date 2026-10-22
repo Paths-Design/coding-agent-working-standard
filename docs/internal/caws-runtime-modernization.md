@@ -5967,8 +5967,11 @@ Additional bounded evidence and unresolved dependencies:
     pass, two new oracles fail. Existing SQL metrics count native visitor calls
     before transport success, and cancellation after the only row need not
     prevent exhaustion. Test corrections must preserve those contracts and
-    independently assert write failure and cancellation before a second row. Raw
-    commands, streams and inventories:
+    independently assert write failure and cancellation before a second row.
+    Correction `e46880b5` changes those oracles and documents visitor metrics;
+    it does not change SQL ordering. Its behavioral run is separate from the
+    failed baseline and the historical560 coordinator build. Raw commands,
+    streams and inventories:
     `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/resident-store-acquisition/`.
     Surviving-actor acceptance, publication, ordinary reader use and adoption
     remain open. Refused bulk-edit and fixture-copy commands remain unexecuted.
@@ -5980,9 +5983,17 @@ Additional bounded evidence and unresolved dependencies:
     release-key fingerprint over HTTPS. This trust basis is not preexisting
     offline ownertrust. Startup prints9.6.1 and loads the actual nested
     dependency; an overstrict environment-key assertion fails and is retained.
-    No inherited Node/npm execution overrides are observed. Native dependency
-    readiness, full six-source/nine-test mutation execution and per-file floors
-    remain unqualified; preparation is not a mutation result.
+    No inherited Node/npm execution overrides are observed. Terminal readiness
+    checks exit0: esbuild reports0.25.10, Parcel and unrs load their actual
+    ARM64 native bindings, and unrs selects the native exports. A minimal clean
+    environment comparison observes the added CF key without attributing its
+    exact current setter or claiming hermetic execution. Raw commands and
+    outputs are retained under
+    `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/`.
+    No watcher subscription, resolver operation or esbuild transformation ran.
+    Full six-source/nine-test mutation execution and per-file floors remain
+    unqualified; preparation is not a mutation result. Rehash the complete
+    private source/dependency/tool trees before an allocated quality run.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
