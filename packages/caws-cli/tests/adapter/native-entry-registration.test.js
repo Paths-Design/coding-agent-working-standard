@@ -18,6 +18,7 @@ const {
   MACHINE_EVENTS,
   isCawsProducerHookCandidate,
   classifyCawsProducerHook,
+  classifyClaudeDispatcherHook,
   nativeCommandWords,
 } = require(path.join(dist, 'init/native-hook-identification'));
 const { migrateNativeCommand } = require(path.join(dist, 'init/machine-adapter-policy'));
@@ -180,6 +181,18 @@ const precedingSyntaxCases = [
   [
     'literal shell escaped backtick substitution',
     () => 'sh -c "printf first \\`caws\\-hook-native\\` caws-hook"',
+  ],
+  [
+    'literal shell escaped backtick substitution after quoted newline without plain tail',
+    () => 'sh -c "printf \'first\nsecond\' \\`caws\\-hook-native\\`"',
+  ],
+  [
+    'literal shell escaped backtick substitution without plain tail',
+    () => 'sh -c "printf first \\`caws\\-hook-native\\`"',
+  ],
+  [
+    'substitution before encoded executable',
+    () => String.raw`echo $(true); caws\-hook-native claude-code pre_tool_use --system`,
   ],
 ];
 function nativeObservationFixture() {
@@ -517,6 +530,45 @@ test('fresh configure remains legacy and installing an image is not implicit nat
   ).toThrow(/native-image/);
   expect(fs.readFileSync(path.join(user, '.codex/hooks.json'))).toEqual(bytes);
 });
+test.each([
+  String.raw`printf x # caws\-hook-native`,
+  String.raw`printf x # $(true); caws\-hook-native`,
+])(
+  'A4 preceding syntax examined comment preserves foreign hook during configuration: %s',
+  (command) => {
+    const foreign = { type: 'command', command, onFailure: 'continue' };
+    expect(isCawsProducerHookCandidate(foreign)).toBe(false);
+    expect(classifyCawsProducerHook(foreign, 'claude-code', 'pre_tool_use')).toEqual({
+      kind: 'unresolved',
+    });
+    expect(classifyClaudeDispatcherHook(foreign, 'pre_tool_use')).toBe('foreign');
+    const file = path.join(user, '.claude/settings.json');
+    const group = { matcher: '.*', hooks: [foreign] };
+    write(file, { hooks: { PreToolUse: [group] } });
+    const before = fixtureBytes();
+    expect(
+      configureSystemRuntime({
+        home,
+        userHome: user,
+        surface: 'claude-code',
+        entry: 'legacy',
+        plan: true,
+      }).changed
+    ).toBe(true);
+    expect(fixtureBytes()).toEqual(before);
+    expect(
+      configureSystemRuntime({ home, userHome: user, surface: 'claude-code', entry: 'legacy' })
+        .changed
+    ).toBe(true);
+    const groups = JSON.parse(fs.readFileSync(file)).hooks.PreToolUse;
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toEqual(group);
+    expect(groups[1].hooks[0]).toMatchObject({
+      command: systemCommand(home, 'claude-code', 'pre_tool_use', 'legacy'),
+      onFailure: 'block',
+    });
+  }
+);
 test.each(['legacy', 'native'])(
   'Claude failure policy blocks new %s PreToolUse handlers and retains foreign hooks',
   (entry) => {
@@ -890,7 +942,7 @@ test.each(precedingSyntaxCases)(
         expect(() => nativeCommandWords(words[2].value)).toThrow(/compound command/);
       } else
         expect(() => nativeCommandWords(command)).toThrow(
-          /compound command|multiline command|unsupported shell escape/
+          /compound command|multiline command|unsupported shell escape|command substitution/
         );
       const before = fixtureBytes();
       expect(isCawsProducerHookCandidate(hook)).toBe(true);

@@ -385,6 +385,18 @@ test.each([
     'literal shell escaped backtick substitution',
     () => 'sh -c "printf first \\`caws\\-hook-native\\` caws-hook"',
   ],
+  [
+    'literal shell escaped backtick substitution after quoted newline without plain tail',
+    () => 'sh -c "printf \'first\nsecond\' \\`caws\\-hook-native\\`"',
+  ],
+  [
+    'literal shell escaped backtick substitution without plain tail',
+    () => 'sh -c "printf first \\`caws\\-hook-native\\`"',
+  ],
+  [
+    'substitution before encoded executable',
+    () => String.raw`echo $(true); caws\-hook-native claude-code pre_tool_use --system`,
+  ],
 ])(
   'A4 preceding syntax %s merge refuses with typed reconciliation and unchanged bytes',
   (_name, commandForFixture) =>
@@ -426,6 +438,25 @@ test.each([
   });
   expect(mergeClaudeSettings(root)).toEqual({ kind: 'unchanged', path: settings });
   expect(fs.readFileSync(settings)).toEqual(before);
+});
+test.each([
+  String.raw`printf x # caws\-hook-native`,
+  String.raw`printf x # $(true); caws\-hook-native`,
+])('A4 preceding syntax examined comment preserves foreign hook during merge: %s', (command) => {
+  const group = { matcher: 'Read', hooks: [{ type: 'command', command, onFailure: 'continue' }] };
+  write({ hooks: { PreToolUse: [group] }, permissions: { allow: ['Read'] } });
+  const before = fs.readFileSync(settings);
+  const expected = {
+    kind: 'merged',
+    path: settings,
+    added: Object.keys(CANONICAL_HOOK_ENTRIES),
+  };
+  expect(planClaudeSettingsMerge(root)).toEqual({ ...expected, readOnly: true });
+  expect(fs.readFileSync(settings)).toEqual(before);
+  expect(mergeClaudeSettings(root)).toEqual(expected);
+  const applied = JSON.parse(fs.readFileSync(settings));
+  expect(applied.hooks.PreToolUse).toEqual([group, CANONICAL_HOOK_ENTRIES.PreToolUse]);
+  expect(applied.permissions).toEqual({ allow: ['Read'] });
 });
 test('Claude project policy rendering names repairs and separates policy refusal from JSON parse errors', () => {
   const repaired = renderSettingsWiring(

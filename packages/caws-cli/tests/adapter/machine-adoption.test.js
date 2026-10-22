@@ -420,6 +420,18 @@ test.each([
     'literal shell escaped backtick substitution',
     () => 'sh -c "printf first \\`caws\\-hook-native\\` caws-hook"',
   ],
+  [
+    'literal shell escaped backtick substitution after quoted newline without plain tail',
+    () => 'sh -c "printf \'first\nsecond\' \\`caws\\-hook-native\\`"',
+  ],
+  [
+    'literal shell escaped backtick substitution without plain tail',
+    () => 'sh -c "printf first \\`caws\\-hook-native\\`"',
+  ],
+  [
+    'substitution before encoded executable',
+    () => String.raw`echo $(true); caws\-hook-native claude-code pre_tool_use --system`,
+  ],
 ])(
   'A4 preceding syntax %s adoption refuses before state or backup writes',
   (_name, commandForFixture) =>
@@ -456,6 +468,31 @@ test.each([
   expect(adoptMachineAdapter(options).changed).toBe(true);
   value.hooks.PreToolUse[0].hooks[2].onFailure = 'block';
   expect(JSON.parse(fs.readFileSync(config))).toEqual(value);
+});
+test.each([
+  String.raw`printf x # caws\-hook-native`,
+  String.raw`printf x # $(true); caws\-hook-native`,
+])('A4 preceding syntax examined comment preserves foreign hook during adoption: %s', (command) => {
+  const { config, options } = seededClaudePolicy();
+  const value = JSON.parse(fs.readFileSync(config));
+  const group = { matcher: 'Read', hooks: [{ type: 'command', command, onFailure: 'continue' }] };
+  value.hooks.PreToolUse = [group];
+  fs.writeFileSync(config, JSON.stringify(value));
+  const before = bytes();
+  const backups = backupBytes();
+  expect(adoptMachineAdapter({ ...options, plan: true }).changed).toBe(true);
+  expect(bytes()).toEqual(before);
+  expect(backupBytes()).toEqual(backups);
+  expect(adoptMachineAdapter(options).changed).toBe(true);
+  const applied = JSON.parse(fs.readFileSync(config));
+  expect(applied.hooks.PreToolUse).toHaveLength(2);
+  expect(applied.hooks.PreToolUse[0]).toEqual(group);
+  expect(applied.hooks.PreToolUse[1].hooks[0]).toMatchObject({
+    command: `CAWS_HOME='${home}' python3 '${home}/bin/caws-hook' claude-code pre_tool_use`,
+    onFailure: 'block',
+  });
+  expect(applied.hooks.Stop).toEqual(value.hooks.Stop);
+  expect(applied.permissions).toEqual(value.permissions);
 });
 test.each(['continue', null, { action: 'block' }])(
   'seeded Claude adoption refuses supplied policy %j before registration, policy or backup writes',
