@@ -277,7 +277,7 @@ fn stamp(m: &fs::Metadata) -> (u64, u64, u64, u32, i64, i64, i64, i64) {
         m.ctime_nsec(),
     )
 }
-fn read_config(path: &Path) -> Result<OwnerConfig> {
+pub fn read_config(path: &Path) -> Result<OwnerConfig> {
     let f = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
@@ -505,14 +505,14 @@ fn encoded<T: Serialize>(v: &T, limit: usize) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 /// Connect/start only the native-derived resident owner; no custody initialization.
-pub fn prepare(c: &OwnerConfig, offer: Offer, expires: Instant) -> Result<PreparedConnection> {
+fn connect(c: &OwnerConfig, expires: Instant) -> Result<UnixStream> {
     validate_config(c)?;
     same_config(c, &read_config(&config_path(c))?)?;
     check(expires)?;
     let startup = until(c.limits.startup_ms as u64, expires);
     let mut launched: Option<Child> = None;
     let mut start_lock: Option<File> = None;
-    let mut stream = loop {
+    let stream = loop {
         check(startup)?;
         match UnixStream::connect(socket_path(c)) {
             Ok(s) => break s,
@@ -589,6 +589,10 @@ pub fn prepare(c: &OwnerConfig, offer: Offer, expires: Instant) -> Result<Prepar
     drop(start_lock);
     peer(&stream)?;
     stream.set_nonblocking(true).map_err(err)?;
+    Ok(stream)
+}
+pub fn prepare(c: &OwnerConfig, offer: Offer, expires: Instant) -> Result<PreparedConnection> {
+    let mut stream = connect(c, expires)?;
     let bytes = encoded(&offer, c.limits.max_frame_bytes as usize)?;
     write_all(&stream, &bytes, expires)?;
     let mut pending = Vec::new();
@@ -653,6 +657,13 @@ fn validate_prepared(offer: &Offer, prepared: &OwnerPrepared) -> Result<()> {
     grant.validate().map_err(err)
 }
 
+#[cfg(feature = "sqlite-store")]
+mod store;
+#[cfg(feature = "sqlite-store")]
+pub use store::{
+    StoreAcquire, StoreCompletion, StoreStatus, StoreStatusQuery, acquire_store, store_status,
+};
+
 mod pending;
 use pending::*;
 
@@ -698,6 +709,8 @@ struct Actor {
     unknown: bool,
     observations: Arc<ObservationLog>,
     phase: &'static str,
+    #[cfg(feature = "sqlite-store")]
+    store_records: Vec<Arc<Mutex<store::StoreRecord>>>,
 }
 struct BackendProcess {
     child: Option<Child>,
@@ -1984,6 +1997,8 @@ impl Routing {
             unknown,
             observations: Arc::clone(&self.observations),
             phase: "waiting",
+            #[cfg(feature = "sqlite-store")]
+            store_records: Vec::new(),
         };
         self.joins.push(thread::spawn(move || actor.run(rx)));
         self.actors.insert(key, route.clone());
@@ -2083,9 +2098,20 @@ pub fn host(path: &Path) -> Result<()> {
     listener.set_nonblocking(true).map_err(err)?;
     let routing = Arc::new(Mutex::new(routing));
     let active = Arc::new(AtomicUsize::new(0));
+    #[cfg(feature = "sqlite-store")]
+    let store_registry = Arc::new(Mutex::new(store::StoreRegistry::new(
+        c.limits.max_retained_records as usize,
+    )));
     let mut idle_since = Instant::now();
     loop {
-        if active.load(Ordering::Acquire) > 0 {
+        #[cfg(feature = "sqlite-store")]
+        let retained_store = !store_registry
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty();
+        #[cfg(not(feature = "sqlite-store"))]
+        let retained_store = false;
+        if active.load(Ordering::Acquire) > 0 || retained_store {
             idle_since = Instant::now();
         } else if idle_since.elapsed() >= Duration::from_millis(c.limits.idle_ms as u64) {
             break;
@@ -2103,6 +2129,8 @@ pub fn host(path: &Path) -> Result<()> {
                 let routing = Arc::clone(&routing);
                 let c = Arc::clone(&c);
                 let observations = Arc::clone(&observations);
+                #[cfg(feature = "sqlite-store")]
+                let store_registry = Arc::clone(&store_registry);
                 let received_at = Instant::now();
                 thread::spawn(move || {
                     let receive =
@@ -2113,8 +2141,24 @@ pub fn host(path: &Path) -> Result<()> {
                         &mut pending,
                         c.limits.max_frame_bytes as usize,
                         receive,
-                    )
-                    .and_then(|bytes| serde_json::from_slice::<Offer>(&bytes).map_err(err));
+                    );
+                    #[cfg(feature = "sqlite-store")]
+                    if let Ok(bytes) = &offer {
+                        if store::receive_first(
+                            &mut stream,
+                            bytes,
+                            &pending,
+                            received_at,
+                            &c,
+                            &routing,
+                            &permit,
+                            &store_registry,
+                        ) {
+                            return;
+                        }
+                    }
+                    let offer = offer
+                        .and_then(|bytes| serde_json::from_slice::<Offer>(&bytes).map_err(err));
                     let offer = match offer {
                         Ok(offer) => offer,
                         Err(reason) => {
@@ -2162,7 +2206,7 @@ pub fn host(path: &Path) -> Result<()> {
                             };
                             let (start_tx, start_rx) = mpsc::sync_channel(1);
                             let (bridge_tx, bridge_rx) = mpsc::sync_channel(1);
-                            match sender.sender.try_send(Job {
+                            match sender.sender.try_send(Mailbox::Render(Job {
                                 stream: owner_stream,
                                 offer,
                                 expires,
@@ -2170,7 +2214,7 @@ pub fn host(path: &Path) -> Result<()> {
                                 bridge: bridge_rx,
                                 _permit: Arc::clone(&permit),
                                 _project_permit: Arc::clone(&project_permit),
-                            }) {
+                            })) {
                                 Err(refusal) => {
                                     let reason = match refusal {
                                         mpsc::TrySendError::Full(_) => "queue_full",

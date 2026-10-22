@@ -21,6 +21,12 @@ pub(super) enum AdmissionDenial {
     rename_all_fields = "camelCase"
 )]
 pub(super) enum Observation<'a> {
+    #[cfg(feature = "sqlite-store")]
+    StoreRegistered {
+        invocation_id: &'a str,
+        runtime_digest: &'a str,
+        registration: &'a str,
+    },
     HostStarted {
         host_pid: u32,
     },

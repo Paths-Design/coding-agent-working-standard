@@ -646,6 +646,111 @@ test('one runtime update reaches two projects without project edits; rollback re
   expect(invoke(home, a).stderr).toContain('original');
 });
 
+function generationSources(name) {
+  const sources = path.join(root, name);
+  fs.cpSync(templatesRoot, sources, {
+    recursive: true,
+    filter: (p) =>
+      !path.relative(templatesRoot, p).includes('__pycache__') &&
+      !path.relative(templatesRoot, p).includes('.caws/'),
+  });
+  return sources;
+}
+
+// The guard reports the selected digest and a marker exported by a library the
+// generation itself ships, so each assertion names the code that actually ran.
+const reportGeneration =
+  'echo "$CAWS_ADAPTER_RUNTIME_DIGEST ${CAWS_TEST_ADAPTER_REVISION:-original}" >&2\n';
+
+test('repairing the stable entry of the selected runtime keeps its rollback target', () => {
+  const home = path.join(root, 'home');
+  const sources = generationSources('templates');
+  const pointer = path.join(home, 'state/adapter-runtime.json');
+  const launcher = path.join(home, 'bin/caws-hook');
+  const first = installMachineRuntime({ home, templatesRoot: sources });
+  fs.appendFileSync(
+    path.join(sources, 'shared/lib/session-id.sh'),
+    '\nexport CAWS_TEST_ADAPTER_REVISION=updated\n'
+  );
+  const second = installMachineRuntime({ home, templatesRoot: sources });
+  expect(second.digest).not.toBe(first.digest);
+  // An ordinary upgrade still records the generation it replaced.
+  expect(JSON.parse(fs.readFileSync(pointer, 'utf8')).previous_digest).toBe(first.digest);
+  const selected = fs.readFileSync(pointer);
+  const shipped = fs.readFileSync(launcher);
+
+  fs.unlinkSync(launcher);
+  const repair = installMachineRuntime({ home, templatesRoot: sources });
+
+  expect(repair).toMatchObject({
+    digest: second.digest,
+    previousDigest: first.digest,
+    changed: true,
+  });
+  expect(fs.readFileSync(launcher)).toEqual(shipped);
+  // Restoring the entry must not record the current runtime as its own predecessor.
+  expect(fs.readFileSync(pointer)).toEqual(selected);
+  const repo = repository('a', { 'report.sh': reportGeneration });
+  expect(invoke(home, repo).stderr).toContain(`${second.digest} updated`);
+  expect(rollbackMachineRuntime({ home, templatesRoot: sources }).digest).toBe(first.digest);
+  const restored = invoke(home, repo);
+  expect(restored.status).toBe(0);
+  expect(restored.stderr).toContain(`${first.digest} original`);
+});
+
+test('a newer package repairing an older package rollback keeps the older runtime reachable', () => {
+  const home = path.join(root, 'home');
+  const newer = generationSources('newer');
+  const older = generationSources('older');
+  fs.appendFileSync(path.join(older, 'runtime/bootstrap.py'), '\n# older package bootstrap\n');
+  fs.appendFileSync(
+    path.join(older, 'shared/lib/session-id.sh'),
+    '\nexport CAWS_TEST_ADAPTER_REVISION=older\n'
+  );
+  const launcher = path.join(home, 'bin/caws-hook');
+  const pointer = path.join(home, 'state/adapter-runtime.json');
+
+  const d1 = installMachineRuntime({ home, templatesRoot: newer });
+  const d0 = installMachineRuntime({ home, templatesRoot: older });
+  expect(d0.digest).not.toBe(d1.digest);
+  // The older package rolls back to D1 but leaves its own bootstrap installed.
+  expect(rollbackMachineRuntime({ home, templatesRoot: older }).digest).toBe(d1.digest);
+  expect(fs.readFileSync(launcher, 'utf8')).toContain('# older package bootstrap');
+
+  const repair = installMachineRuntime({ home, templatesRoot: newer });
+
+  expect(repair).toMatchObject({ digest: d1.digest, previousDigest: d0.digest, changed: true });
+  expect(fs.readFileSync(launcher, 'utf8')).not.toContain('# older package bootstrap');
+  expect(JSON.parse(fs.readFileSync(pointer, 'utf8'))).toEqual({
+    version: 1,
+    digest: d1.digest,
+    previous_digest: d0.digest,
+  });
+  const repo = repository('a', { 'report.sh': reportGeneration });
+  expect(rollbackMachineRuntime({ home, templatesRoot: newer }).digest).toBe(d0.digest);
+  const restored = invoke(home, repo);
+  expect(restored.status).toBe(0);
+  expect(restored.stderr).toContain(`${d0.digest} older`);
+});
+
+test('rollback refuses a pointer whose recorded previous runtime is the current one', () => {
+  const home = path.join(root, 'home');
+  const installed = installMachineRuntime({ home, templatesRoot });
+  const pointer = path.join(home, 'state/adapter-runtime.json');
+  // The state an entry-only repair wrote before same-target installs kept history.
+  fs.writeFileSync(
+    pointer,
+    JSON.stringify({ version: 1, digest: installed.digest, previous_digest: installed.digest })
+  );
+  const before = fs.readFileSync(pointer);
+  for (const plan of [true, false]) {
+    expect(() => rollbackMachineRuntime({ home, templatesRoot, plan })).toThrow(
+      /No previous machine runtime to restore: the recorded previous runtime is the current one/
+    );
+  }
+  expect(fs.readFileSync(pointer)).toEqual(before);
+});
+
 test('corrupt runtime and missing declared guards fail closed; unadopted projects are identified', () => {
   const home = path.join(root, 'home');
   const installed = installMachineRuntime({ home, templatesRoot });

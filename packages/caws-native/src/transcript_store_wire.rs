@@ -3,7 +3,7 @@
 //! publication. Its database and session come from the original native request.
 
 use crate::transcript_store::{
-    self, AcquisitionLimits, Cancellation, CleanupCall, SqlCell, Visit, VisitorFailure,
+    self, AcquisitionLimits, CleanupCall, OwnedCancellation, SqlCell, Visit, VisitorFailure,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::Deserialize;
@@ -13,6 +13,7 @@ use std::{
     collections::BTreeMap,
     ffi::CStr,
     path::{Component, Path},
+    sync::Arc,
     time::Instant,
 };
 
@@ -205,6 +206,54 @@ fn canonical_root(value: &str) -> bool {
         && (value == "/" || !value.ends_with('/'))
         && !value.contains("//")
 }
+/// Pure correlation validation before a resident owner observes/routs the
+/// original invocation. This function opens no database or project state.
+pub(crate) fn correlation_root(
+    bytes: &[u8],
+    invocation: &Invocation<'_>,
+) -> Result<String, ServeError> {
+    if bytes.len() > MAX_REQUEST_BYTES {
+        return Err("store request exceeds byte bound".into());
+    }
+    if !invocation.ready_active
+        || !invocation.dispatched
+        || !supports_invocation(
+            invocation.surface,
+            invocation.event,
+            invocation.configuration,
+        )
+    {
+        return Err("store operation outside active dispatched system OpenCode/ZCode Stop".into());
+    }
+    let request: Request =
+        serde_json::from_slice(bytes).map_err(|error| format!("invalid store request: {error}"))?;
+    if request.schema != REQUEST_SCHEMA
+        || request.id != invocation.id
+        || request.runtime_digest != invocation.runtime_digest
+        || request.profile != PROFILE
+        || request.token.is_empty()
+        || request.token.len() > 128
+        || !request
+            .token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
+        || !canonical_root(&request.canonical_root)
+        || Some(format!("{:x}", Sha256::digest(request.canonical_root.as_bytes())).as_str())
+            != invocation.ready_project_digest
+    {
+        return Err("store request binding mismatch".into());
+    }
+    let sid = crate::invocation_project::payload_string(invocation.original_payload, "session_id")?
+        .ok_or("store requires original string session_id")?;
+    if !safe_sid(&sid) || Some(sid.as_str()) != invocation.ready_session_id {
+        return Err("store original session binding mismatch".into());
+    }
+    invocation
+        .database
+        .filter(|value| !value.is_empty() && !value.contains('\0'))
+        .ok_or("captured store database unavailable")?;
+    Ok(request.canonical_root)
+}
 fn encode(value: Value) -> Result<Vec<u8>, String> {
     let mut bytes = serde_json::to_vec(&value).map_err(|error| error.to_string())?;
     if bytes.len() > 2 * 1024 * 1024 {
@@ -282,13 +331,14 @@ fn utc(seconds: i64) -> Result<Value, String> {
 /// Ok retains the complete acquisition after CLOSED was written and source
 /// close was confirmed. It can contain Stopped or Failed; it is not an
 /// exhausted-source assertion, engine-consumption receipt or publication grant.
-pub fn serve(
+pub fn serve<C: Fn() -> bool + Send + Sync + 'static>(
     bytes: &[u8],
     invocation: Invocation<'_>,
     deadline: Instant,
-    is_cancelled: fn() -> bool,
+    is_cancelled: C,
     transport: &mut impl Transport,
 ) -> Result<transcript_store::Acquisition<String>, ServeError> {
+    let is_cancelled: Arc<dyn Fn() -> bool + Send + Sync> = Arc::new(is_cancelled);
     if bytes.len() > MAX_REQUEST_BYTES {
         return Err("store request exceeds byte bound".into());
     }
@@ -334,7 +384,7 @@ pub fn serve(
         invocation.caller_environment,
         invocation.original_payload,
         deadline,
-        &is_cancelled,
+        &|| is_cancelled(),
     )
     .map_err(|error| ServeError::ProjectObservation(Box::new(error)))?;
     // Ready/root agreement alone is an engine assertion. Correlate both with
@@ -365,7 +415,7 @@ pub fn serve(
         transport.credit(bytes.len() + 1)?;
         let common = |schema: &str| json!({"schema":schema,"id":request.id,"runtimeDigest":request.runtime_digest,"token":request.token});
         let mut exchange_error = None;
-        let outcome = transcript_store::acquire(
+        let outcome = transcript_store::acquire_owned(
             path,
             &sid,
             AcquisitionLimits {
@@ -373,8 +423,8 @@ pub fn serve(
                 max_cell_bytes: MAX_CELL_BYTES,
                 max_total_bytes: MAX_TOTAL_CELL_BYTES,
             },
-            Cancellation {
-                is_cancelled,
+            OwnedCancellation {
+                is_cancelled: Arc::clone(&is_cancelled),
                 deadline,
             },
             |row| {
