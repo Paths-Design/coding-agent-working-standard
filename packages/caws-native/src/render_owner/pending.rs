@@ -2,9 +2,11 @@
 use super::*;
 
 impl Actor {
-    pub(super) fn run(mut self, rx: mpsc::Receiver<Job>) {
+    pub(super) fn run(mut self, rx: mpsc::Receiver<Mailbox>) {
         let mut pending: VecDeque<PendingJob> = VecDeque::new();
         let mut waiting: Option<Job> = None;
+        #[cfg(feature = "sqlite-store")]
+        let mut store_waiting: Option<store::StoreJob> = None;
         let mut barrier = false;
         loop {
             if let Some(arrival) = bridge_head(pending.iter().map(|entry| &entry.job)) {
@@ -41,6 +43,16 @@ impl Actor {
                 }
                 continue;
             }
+            #[cfg(feature = "sqlite-store")]
+            if store_waiting.is_some() {
+                if let Some(job) = store::take_after_cohort(&mut store_waiting, pending.len()) {
+                    self.acquire_store_job(job);
+                    barrier = false;
+                } else {
+                    thread::sleep(TICK);
+                }
+                continue;
+            }
             if waiting.is_none() {
                 let timeout = if pending.is_empty() {
                     Duration::from_millis(self.config.limits.idle_ms as u64)
@@ -48,7 +60,13 @@ impl Actor {
                     TICK
                 };
                 match rx.recv_timeout(timeout) {
-                    Ok(job) => waiting = Some(job),
+                    Ok(Mailbox::Render(job)) => waiting = Some(job),
+                    #[cfg(feature = "sqlite-store")]
+                    Ok(Mailbox::Store(job)) => {
+                        store_waiting = Some(job);
+                        barrier = true;
+                        continue;
+                    }
                     Err(mpsc::RecvTimeoutError::Timeout) => {
                         if pending.is_empty() {
                             self.retire();
@@ -119,7 +137,7 @@ impl Actor {
         &self,
         pending: &mut VecDeque<PendingJob>,
         waiting: &mut Option<Job>,
-        inbox: &mpsc::Receiver<Job>,
+        inbox: &mpsc::Receiver<Mailbox>,
     ) {
         self.withdraw_pending(pending, "unknown_fence");
         if let Some(job) = waiting.take() {
@@ -132,10 +150,14 @@ impl Actor {
         // the existing unknown fence; quarantine never spins awaiting arrivals.
         for _ in 0..self.config.limits.max_queue_per_project {
             let Ok(job) = inbox.try_recv() else { break };
-            self.observations.emit(Observation::QueuedOfferWithdrawn {
-                invocation_id: &job.offer.invocation_id,
-                reason: "unknown_fence",
-            });
+            match job {
+                Mailbox::Render(job) => self.observations.emit(Observation::QueuedOfferWithdrawn {
+                    invocation_id: &job.offer.invocation_id,
+                    reason: "unknown_fence",
+                }),
+                #[cfg(feature = "sqlite-store")]
+                Mailbox::Store(job) => job.refuse("renderer unknown fence"),
+            }
         }
         // No backend reservation, writer intent, or durable Unknown is released.
     }
@@ -153,7 +175,7 @@ pub(super) struct ProjectCapacity {
 }
 #[derive(Clone)]
 pub(super) struct ProjectRoute {
-    pub(super) sender: SyncSender<Job>,
+    pub(super) sender: SyncSender<Mailbox>,
     pub(super) capacity: Arc<ProjectCapacity>,
 }
 impl ProjectCapacity {
@@ -171,6 +193,11 @@ impl Drop for ProjectPermit {
     fn drop(&mut self) {
         self.0.used.fetch_sub(1, Ordering::AcqRel);
     }
+}
+pub(super) enum Mailbox {
+    Render(Job),
+    #[cfg(feature = "sqlite-store")]
+    Store(store::StoreJob),
 }
 pub(super) struct Job {
     pub(super) stream: UnixStream,
