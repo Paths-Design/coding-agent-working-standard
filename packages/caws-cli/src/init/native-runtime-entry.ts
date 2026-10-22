@@ -94,7 +94,7 @@ function same(a: fs.Stats, b: fs.Stats): boolean {
     a.ctimeMs === b.ctimeMs
   );
 }
-/** Ancestors, descriptor identity, and the final path must name the same regular input. */
+/** Capture regular bytes; receipt-bound artifacts repeat canonical-path observation. */
 function capture(file: string, expected?: ReviewedFile): { bytes: Buffer; stat: fs.Stats } {
   if (!path.isAbsolute(file) || path.resolve(file) !== file || fs.realpathSync(file) !== file)
     throw new Error(`Native image input must be canonical and contain no symlink: ${file}`);
@@ -127,7 +127,11 @@ function capture(file: string, expected?: ReviewedFile): { bytes: Buffer; stat: 
       !same(opened, afterDescriptor) ||
       !same(opened, afterPath) ||
       bytes.length !== opened.size ||
-      (expected && (opened.nlink !== 1 || afterDescriptor.nlink !== 1 || afterPath.nlink !== 1))
+      (expected &&
+        (opened.nlink !== 1 ||
+          afterDescriptor.nlink !== 1 ||
+          afterPath.nlink !== 1 ||
+          fs.realpathSync(file) !== file))
     )
       throw new Error(`Changed native image input: ${file}`);
     return { bytes, stat: opened };

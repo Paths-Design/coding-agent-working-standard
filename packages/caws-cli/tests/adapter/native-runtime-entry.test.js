@@ -911,4 +911,86 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     expect(loader).toHaveBeenCalledTimes(1);
     expect(fixtureState(home)).toEqual(before);
   });
+
+  test.each(['native', 'stableEntry'])(
+    'refuses %s ancestor redirection during bounded capture despite unchanged leaf identity',
+    (artifact) => {
+      const home = existingHome();
+      const pin = loaded.build.artifacts[artifact];
+      const parent = path.join(root, 'artifact-input');
+      const retainedParent = parent + '-retained';
+      fs.mkdirSync(parent, { mode: 0o700 });
+      const artifactPath = path.join(parent, path.basename(pin.path));
+      fs.renameSync(pin.path, artifactPath);
+      pin.path = artifactPath;
+      const leafIdentity = () => {
+        const stat = fs.statSync(artifactPath);
+        const bytes = fs.readFileSync(artifactPath);
+        return {
+          dev: stat.dev,
+          ino: stat.ino,
+          mode: stat.mode,
+          nlink: stat.nlink,
+          sizeBytes: stat.size,
+          mtimeMs: stat.mtimeMs,
+          ctimeMs: stat.ctimeMs,
+          sha256: sha(bytes),
+        };
+      };
+      const selectedLeaf = leafIdentity();
+      const selectedRealpath = fs.realpathSync(artifactPath);
+      expect(selectedRealpath).toBe(artifactPath);
+      expect(selectedLeaf.sha256).toBe(pin.sha256);
+      expect(selectedLeaf.sizeBytes).toBe(pin.sizeBytes);
+      const nativeImage = imageFile();
+      const before = fixtureState(home);
+      const originalRead = fs.readSync;
+      const originalFstat = fs.fstatSync;
+      let swapped = false;
+      const read = jest.spyOn(fs, 'readSync').mockImplementation((fd, ...args) => {
+        const stat = originalFstat(fd);
+        const count = originalRead(fd, ...args);
+        if (
+          !swapped &&
+          count > 0 &&
+          stat.dev === selectedLeaf.dev &&
+          stat.ino === selectedLeaf.ino
+        ) {
+          fs.renameSync(parent, retainedParent);
+          fs.symlinkSync(retainedParent, parent, 'dir');
+          swapped = true;
+        }
+        return count;
+      });
+      let failure, witness;
+      try {
+        installDescriptor(home, nativeImage);
+      } catch (error) {
+        failure = error;
+      } finally {
+        read.mockRestore();
+        witness = {
+          artifact,
+          artifactPath,
+          parent,
+          retainedParent,
+          swapped,
+          beforeRealpath: selectedRealpath,
+          afterRealpath: fs.realpathSync(artifactPath),
+          beforeLeaf: selectedLeaf,
+          afterLeaf: leafIdentity(),
+          ...(failure ? { error: errorIdentity(failure) } : {}),
+        };
+        if (process.env.CAWS_NATIVE_IMAGE_ARTIFACT_DIR) observation.ancestorSwap = witness;
+      }
+      expect(witness.swapped).toBe(true);
+      expect(witness.afterLeaf).toEqual(witness.beforeLeaf);
+      expect(witness.afterRealpath).toBe(path.join(retainedParent, path.basename(artifactPath)));
+      expect(witness.afterRealpath).not.toBe(witness.beforeRealpath);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toMatch(/canonical|changed/i);
+      expect(loader).toHaveBeenCalledTimes(1);
+      expect(fixtureState(home)).toEqual(before);
+    }
+  );
 });
