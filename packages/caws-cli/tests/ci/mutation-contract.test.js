@@ -133,16 +133,16 @@ function executableWorkflowText(parsed) {
 }
 
 describe('mutation policy topology contract', () => {
-  test('the live policy accounts for every kernel/store/shell source exactly once', () => {
+  test('the live policy accounts for every kernel/store/shell/transcript source exactly once', () => {
     const result = runNode(VALIDATOR, ['--policy', POLICY, '--root', PACKAGE_ROOT]);
 
     expect(result.status).toBe(0);
-    // Counts are pinned on purpose: adding a kernel/store/shell source or a
+    // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change
     // (6abff54f reconciled the policy for agents-conjoining.ts but not the
     // pin — the pin is the forcing function, so bump it consciously).
-    expect(result.stdout).toMatch(/PASS: 161 source files accounted for exactly once/);
-    expect(result.stdout).toMatch(/20 mutation targets across 3 surfaces/);
+    expect(result.stdout).toMatch(/PASS: 192 source files accounted for exactly once/);
+    expect(result.stdout).toMatch(/21 mutation targets across 3 surfaces/);
   });
 
   test('an unclassified production source is a hard failure', () => {
@@ -186,14 +186,46 @@ describe('mutation policy topology contract', () => {
     );
   });
 
-  test('store mutation recomputes evidence using only in-process store contracts', () => {
+  test('store mutation recomputes evidence using in-process store and timestamp contracts', () => {
     const config = createStrykerConfig('store');
 
     expect(config.incremental).toBe(false);
     expect(config.testFiles).not.toHaveLength(0);
-    expect(config.testFiles.every((file) => file.startsWith('tests/store/'))).toBe(true);
+    expect(
+      config.testFiles.every(
+        (file) =>
+          file.startsWith('tests/store/') || file === 'tests/transcripts/store-timestamp.test.js'
+      )
+    ).toBe(true);
     expect(config.testFiles).toContain('tests/store/messages-behavior-store.test.js');
     expect(config.testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
+    expect(config.testFiles).toContain('tests/transcripts/store-timestamp.test.js');
+    expect(config.mutate).toContain('src/transcripts/store-timestamp.ts');
+    expect(config.jest.config.testMatch).toContain(
+      '<rootDir>/tests/transcripts/store-timestamp.test.js'
+    );
+    expect(config.buildCommand).toBe('node scripts/build-cli.js');
+    const store = loadPolicy().surfaces.store;
+    expect(store.threshold).toBe(80);
+    expect(
+      store.targets.find((target) => target.source === 'src/transcripts/store-timestamp.ts')
+    ).toEqual({ source: 'src/transcripts/store-timestamp.ts' });
+  });
+
+  test('omitting the timestamp mutation target leaves an uncovered mutation obligation', () => {
+    const policy = loadPolicy();
+    policy.surfaces.store.targets = policy.surfaces.store.targets.filter(
+      (target) => target.source !== 'src/transcripts/store-timestamp.ts'
+    );
+    const dir = makeTempDir();
+    const policyFile = writeJson(dir, 'policy.json', policy);
+
+    const result = runNode(VALIDATOR, ['--policy', policyFile, '--root', PACKAGE_ROOT]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      'mutation-classified source has no surface target: src/transcripts/store-timestamp.ts'
+    );
   });
 
   test.each(['kernel', 'store', 'shell'])(
