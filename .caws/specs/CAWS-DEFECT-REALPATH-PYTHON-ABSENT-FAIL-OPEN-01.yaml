@@ -167,6 +167,23 @@ acceptance:
       resolves against the session project directory and refuses by ownership; at
       2ce7b7ef the relative foreign write and the missing-cwd write exited 0 with
       empty output.
+  - id: A10
+    given: >-
+      governed repositories with real linked worktrees s-wt and f-wt owned by
+      different sessions, one of them with the s-wt admin directory removed, a git
+      on PATH that exits 1 for every call, a project directory nested inside s-wt,
+      and a directory outside every repository
+    when: >-
+      both write guards adjudicate a foreign write and the owner own write from s-wt
+      and from the nested directory with the failing git, a foreign write from the
+      admin-loss s-wt with working git, and a write in the non-repository directory
+      with the failing git
+    then: >-
+      every run inside a repository exits 2 naming the failed git discovery and the
+      .git entry found on the directory or an ancestor (the owner write included);
+      the non-repository directory stays ungoverned with exit 0 and no git-failure
+      diagnosis; at 8dbe29c1 the failing-git and admin-loss foreign writes exited 0
+      with empty output.
 non_functional: {}
 contracts: []
 evidence:
