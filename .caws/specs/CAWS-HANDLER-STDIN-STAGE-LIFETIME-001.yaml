@@ -25,9 +25,14 @@ invariants:
   - 'No interpreter is spawned per handler and no payload is exported into the environment'
 acceptance:
   - id: A1
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given an inline payload over 32768 characters and no payload file, when run_handlers runs a reading handler, a handler that exits without reading, and a second reading handler, then both readers receive the payload byte for byte, no broken-pipe text reaches stderr, the chain exits 0, and no caws-handler-stdin-* file remains in TMPDIR'
+    given: 'An inline HOOK_INPUT_JSON over 32768 characters and no HOOK_PAYLOAD_FILE'
+    when: >-
+      run_handlers runs a reading handler, a handler that exits without reading, and
+      a second reading handler
+    then: >-
+      Both readers receive the payload byte for byte from regular-file stdin, no
+      broken-pipe text reaches stderr, the chain exits 0, and no
+      caws-handler-stdin-* file remains in TMPDIR
   - id: A2
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
