@@ -31,11 +31,11 @@ passing unit tests, or the existence of this document.
 
 This working ledger is published on `main` independently of candidate source.
 The integration branch is `native-runtime-modernization`; its source-tree
-checkpoint is `cc95efeb415e56989635e6fe5cc2bbb84ff29a3b`. Later branch commits
+checkpoint is `1a023e330093318f1635d671767b610759d57aaf`. Later branch commits
 that change only this ledger leave that checkpoint unchanged. Evidence entries
 identify their actual component branch or historical revision. Publishing this
 document does not land those implementations on `main`. Inspect the candidate
-architecture with `git show cc95efeb:docs/architecture/caws-native-runtime.md`;
+architecture with `git show 1a023e33:docs/architecture/caws-native-runtime.md`;
 the relative architecture link follows the branch containing this document.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
@@ -5913,6 +5913,77 @@ Additional bounded evidence and unresolved dependencies:
   pytest modules and the tested guard's Python dependencies remain obligations.
   No production Python row, installed/native result or parent criterion closes.
 
+- E237: Same-target runtime entry repair preserves rollback history. Candidate
+  `1bb584a8` lands on main at `a451ba15`; close event10724 and merge event10725
+  identify the actual candidate and target. Source integration `1a023e33`
+  carries exactly the two reviewed blobs: `machine-adapters.ts` is
+  `e7cf08e265a4d0e6ca20f53fafbf73748caadc62` and its regression test is
+  `74df1748a3ea7c97596a84f0547e67696e3cce83`. Entry-only repair leaves pointer
+  bytes and the previous generation unchanged; a self-predecessor rollback is
+  explicitly refused. Root reads the full55-case raw run, terminal0, and the
+  same-target assignment mutant's two intended failures. The retained real
+  older-CLI sequence is supplemented by an actual invocation of its restored
+  stable entry: selected generation `5ec11024`, generation-owned library path
+  and `run-handlers.sh` hash `9d7c5fea` agree; allowed input exits0 and the
+  protected control exits2 with `WITNESS-GUARD-BLOCK`. Raw files:
+  `/Users/darianrosebrook/.claude/artifacts/c843b9aa-c831-40ce-ac99-cae38f061436/rollback-probe/`.
+  `witness.log` hashes
+  `03dada81a27a9c07daed15283796190113379e1d6a462c1724e6e7844ff997a4`; the
+  witness includes a temporary test delta, separate from the committed55 cases.
+  This establishes bounded Python-entry rollback behavior, not complete native
+  entry compatibility, installation qualification or parent A7. The R01 owner
+  `01a15984-840d-7301-a25a-7e681fd83b29` implements the staged replacement under
+  `CAWS-NATIVE-INSTALLED-ENTRY-001`: separate native entry, manifest-owned
+  relative image metadata, explicit install/configure opt-in, honest later
+  legacy selection and no fallback after native dispatch.
+
+- E238: Parent evidence A1/A4/A5 is refreshed unchecked, events10728–10730;
+  coverage remains33/37 partial and parent acceptance0/8. Concrete current gaps
+  remain assigned rather than transferred by a message:
+  - The R19 child's exact-byte fixtures demonstrate successful normalization
+    losing a valid trailing line-feed path byte, then five foreign Write/Bash
+    guard admissions0 with empty output while ordinary-root controls refuse2.
+    Root reads `realpath-v2/run-09/bats.tap`; the linked Bash case's refusal2 is
+    an invalid analysis contract, not an ownership verdict. Owner c4's test-only
+    `9fc50375` and proposed byte-preserving output-variable helpers retain the
+    red evidence. Explicit unsupported-path diagnostics, apostrophe
+    interpolation and quoted-prefix repairs are part of that four-file child;
+    the shell owner retains reached sibling-repository normalization and final
+    combined source/four-document qualification. No repaired child is accepted.
+  - Installed invocation `de5bece4` and the actual Claude subagent transcript
+    show parent-directed message `3d74b7f0` offered and adapter-settled into a
+    child's hook context. Root accepts the custody defect. Owner dd67's
+    `CAWS-SUBAGENT-MAIL-CUSTODY-001` derives tri-state actor context from actual
+    payload bytes and withholds auto-polling for subagent or uncertain context;
+    implementation and sequential real-mail falsifiers remain unqualified.
+    Project fast-path inherited payload provenance remains root owed. Sterling's
+    reviewed project parser pin stays frozen: it is a distinct producer from the
+    shared template, and changing that pin would require new qualification.
+  - Resident candidate `56026c56` builds through the ordinary typed SQLite
+    coordinator, terminal0, request digest `039bd22b`, `NOT_ADOPTED`. Its
+    native-only snapshot cannot compile tests with undeclared sibling inputs;
+    that attempt exits101 with zero tests. A direct owned-source test using
+    fresh external Cargo state and the verified prefix runs34 owner tests: 32
+    pass, two new oracles fail. Existing SQL metrics count native visitor calls
+    before transport success, and cancellation after the only row need not
+    prevent exhaustion. Test corrections must preserve those contracts and
+    independently assert write failure and cancellation before a second row. Raw
+    commands, streams and inventories:
+    `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/resident-store-acquisition/`.
+    Surviving-actor acceptance, publication, ordinary reader use and adoption
+    remain open. Refused bulk-edit and fixture-copy commands remain unexecuted.
+  - Canonical store mutation preparation retains its frozen refused bulk
+    program. Separately guarded ordinary preparation completes a private
+    dependency install with source/lock hashes unchanged. Stryker's eager
+    dependency requires a supported Node image; private official Node22.22.2 is
+    verified against signed release checksums and the official GitHub-pinned
+    release-key fingerprint over HTTPS. This trust basis is not preexisting
+    offline ownertrust. Startup prints9.6.1 and loads the actual nested
+    dependency; an overstrict environment-key assertion fails and is retained.
+    No inherited Node/npm execution overrides are observed. Native dependency
+    readiness, full six-source/nine-test mutation execution and per-file floors
+    remain unqualified; preparation is not a mutation result.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -6106,7 +6177,7 @@ progress and does not replace that transaction or its event readback.
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E236 retain the historical candidates, failures and bounded observations;
+E167–E238 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is33/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
@@ -6304,7 +6375,7 @@ operational correctness or selected execution.
 | `README.md`, `hook-pack-shared-core.md`, `hook-packs.md`, `command-analysis.md` | Four-file candidate `063991aa` is committed and reviewed, E230.                                          | Land coherently with qualified guard source; reconcile the checked-normalization interface and command-specific failure exits before final checks.                                                                                                 |
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend-local settlement and precise diagnostic metadata contract land with source in `87b70fcc`, E231. | Update actor acquisition, cancellation/retention, publication permit and actual-reader contracts as their implementations land; present-tense claims require corresponding consumer evidence.                                                      |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.          | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
-| This tracker and canonical parent acceptance                                    | E231–E236 retain bounded progress, failed attempts, owners and open consequences.                        | Synchronize main/source bytes after durable changes; keep 33/37 partial coverage separate from 0/8 parent acceptance, complete Python retirement and installed adoption.                                                                           |
+| This tracker and canonical parent acceptance                                    | E231–E238 retain bounded progress, failed attempts, owners and open consequences.                        | Synchronize main/source bytes after durable changes; keep 33/37 partial coverage separate from 0/8 parent acceptance, complete Python retirement and installed adoption.                                                                           |
 
 ## Landing obligations
 
