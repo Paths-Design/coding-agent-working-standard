@@ -69,6 +69,14 @@ acceptance:
     then: >-
       Valid transports agree, unsupported registration is diagnosed without changing
       configuration, and absent or disabled surfaces remain inactive
+  - id: A7
+    given: 'A supported Claude Code PreToolUse CAWS registration using either native or legacy transport'
+    when: 'Configure creates or reviews new and existing managed handlers'
+    then: >-
+      New and absent-field handlers require onFailure block, existing block is
+      idempotent, explicit continue or invalid policy refuses before writes, foreign
+      handlers stay unchanged, and other events and harnesses gain no unsupported
+      field
 observability:
   - 'Raw commands and entry stdout/stderr/status, selected engine/handler execution witness, pointer/manifest/images before-after hashes and retained upgrade/rollback state'
 rollback:
