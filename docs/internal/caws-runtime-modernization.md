@@ -6437,17 +6437,24 @@ Additional bounded evidence and unresolved dependencies:
   result:307 checks pass, exit0; its JSON hashes to
   `35a484638d6e4ddcf86096fa7fd6dcc1274410e500dab6ce4d5899bab84e5dd3`. Normal
   build and scoped lint exit0. These configuration/selection API checks use
-  inert images and do not execute native hooks or harness callbacks. Exec-form
-  CAWS requires reconciliation; supported exec-form migration or Codex argument
-  semantics are not inferred. The first invalid-Git run retains complete JSON
-  failure diagnostics, but its separate stdout/stderr were overwritten by the
-  corrected run; `exec-red-log-custody.json` identifies the preserved and
-  replaced streams. Independent committed review, fresh package images, native
-  callbacks and rollback qualification remain owed. No new R01 landing or
-  actual-machine registration/selection change is inferred. AIM delivery to c4
-  is confirmed; current sends to dd67 and c843 are refused for stale leases, and
-  dd67's earlier raw-carrier follow-up remains queued. Those peers have not
-  accepted these new handoffs.
+  inert images and do not execute native hooks or harness callbacks. Recognized
+  exec-form CAWS cases require reconciliation; supported exec-form migration or
+  Codex argument semantics are not inferred. Review finds that `43f560a7` misses
+  bare PATH names; repair `a6f690a5` passes343 API checks in seven suites,
+  exit0, recorded in `path-qualified-jest.stderr.log`. Its candidate hint
+  recognizes the covered bare-name spelling without resolving PATH or granting
+  ownership. Root reads that helper and raw result; literal relative or custom
+  directory names and equivalent decoded shell words remain open discovery
+  controls. The owner carries their tests-first repair and the source candidate
+  remains held. The first invalid-Git run retains complete JSON failure
+  diagnostics, but its separate stdout/stderr were overwritten by the corrected
+  run; `exec-red-log-custody.json` identifies the preserved and replaced
+  streams. Independent committed review, fresh package images, native callbacks
+  and rollback qualification remain owed. No new R01 landing or actual-machine
+  registration/selection change is inferred. AIM delivery to c4 is confirmed;
+  current sends to dd67 and c843 are refused for stale leases, and dd67's
+  earlier raw-carrier follow-up remains queued. Those peers have not accepted
+  these new handoffs.
 
 - E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
   `native-session-publication`, based on `03d663b6`, for the continuous original
@@ -6458,16 +6465,25 @@ Additional bounded evidence and unresolved dependencies:
   definite refusal after abort, exact status types, complete retained/output
   inventory and bounds before output copies. Existing protocol/store and new
   client checks exercise framed bytes and consumption; they do not execute
-  native publication or the ordinary renderer/sealer. The separate native
-  boundary lane passes37 feature-off custody tests, not SQLite/publication
-  qualification. Its write is refused by hook identity despite its CLI claim;
-  the preparation lane has the same identity disagreement and a separately
-  refused baseline recorder. Both child lanes remain untouched. Root requests
-  explicit human authorization for ownership transfer, retains the independent
-  integration lane and all original consumer obligations, and does not retry
-  refused child writes through another carrier. Native implementation, exact
-  sealer, ordinary dispatch, current-reader artifacts and actual terminal
-  consumption remain open.
+  native publication or the ordinary renderer/sealer. The bounded client
+  component lands at `09a288b1` in the integration lane and closes with3 pass
+  records. Committed review exposes an unknown preparation discriminator; four
+  executed negative controls reach an invalid output copy. Exact
+  ready-or-aborted validation repairs that transition before copying or writing.
+  The complete focused client/store/protocol run passes177 checks, exit0, in
+  `native-session-publication/client-red/jest-disposition-green.json`; strict
+  compilation, scoped lint and five-path gates exit0. Root checks the integrated
+  five blobs against tested `2a9f2093` and the clean linked checkout. This earns
+  the unused client component; actual native effect and ordinary consumer
+  criteria remain unchecked. The separate native boundary lane passes37
+  feature-off custody tests, not SQLite/publication qualification. Its write is
+  refused by hook identity despite its CLI claim; the preparation lane has the
+  same identity disagreement and a separately refused baseline recorder. Both
+  child lanes remain untouched. Root requests explicit human authorization for
+  ownership transfer, retains the independent integration lane and all original
+  consumer obligations, and does not retry refused child writes through another
+  carrier. Native implementation, exact sealer, ordinary dispatch,
+  current-reader artifacts and actual terminal consumption remain open.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
