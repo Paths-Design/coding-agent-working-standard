@@ -35,3 +35,8 @@ evidence:
     evidence_ref: "Root inspected R01bfb sharedentrysource/red15of34+dangling2, TEN561/2, retainedPythonTypeErrorchildren, exact8a758936portblobs, AST1fail→4pass, correctedlegacy2pass, finalTEN563/0 SHA4dd6bb32+rawterminald30d20 transcript26134. Rootread Node18/22 currentsourceAPI343entrymaps identical and outcomes; independentreview grounded05/06raw159source11/SHAe300 and actualprivateimportmarkers/refusals. Historicalddpackage bounded, ordinaryStryker/CI/native/sourceintegration/guidecoherentlanding remainopen. Independent committedtracker review e20 foundno conflictingclaim; tableformatter changesonlyR14semantics. Prettier/diff0, fivegates1docPASS, doctor0E3W4I. Commitverification isreachability, not testexecution."
     recorded_at: "2026-10-22T11:40:54.658Z"
     commit_sha: e20f411a3eb496fbd1b3656092187bf230c404b0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Normal source merge3f1a458747568f3404218dbcaa5e3d10d1fa9582 and localmain57419da5d6212e3b6174aae4aa569a080dd12e18 retain equal trackerblob9336430ce61d40b2c6f6db48746d8f4cbda66304. Actualworkingfilecmp0 and SHA2569faa5f177d43eeed201025b0fcf27c39da08c1f6c3325d6cf065883d66d761f7 both; source/main checkouts clean. Both finite publisher gate5PASS1doc, committed independentreview+primaryrawgrounding. Parent0/8 and33/37partial unchanged; no native/sourceR01/guidecoherentlanding or ordinaryStryker acceptance inferred."
+    recorded_at: "2026-10-22T11:44:08.817Z"
+    commit_sha: "57419da5d6212e3b6174aae4aa569a080dd12e18"
