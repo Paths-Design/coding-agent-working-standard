@@ -34,3 +34,8 @@ evidence:
     evidence_ref: "Source inspection at 84079dfbf2972898e0a5a48aae3eff0a672ea718: guide lines203-204 lists all six events including session_end, matching src/init/native-hook-identification.ts53-60 and system-project-policy.ts23-32. The added vocabulary makes no execution or sealing qualification claim. Raw formatting, source/help, diff, one-file gates and doctor commands/exits are in /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/migration-guide-lifecycle/attempt-01/execution.json. No machine or harness operation ran. --verify rederives commit existence/reachability only; source semantics were inspected separately."
     recorded_at: "2026-10-22T04:52:42.399Z"
     commit_sha: "84079dfbf2972898e0a5a48aae3eff0a672ea718"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Source inspection at 84079dfbf2972898e0a5a48aae3eff0a672ea718: guide223-240 requires CLI package before reviewed/authorized runtime install, configure preview, authorized apply if changed and repeated unchanged preview before migration; guide258-262 preserves migration authorization. Matches system-runtime.ts438-443 apply-only refusal and550-564 stale-CLI ordering, init.ts1090-1115 and1168-1184 separate configure/install branches, plus installed configure --help0 supporting --agent-surface/--plan/--json. Raw commands/exits at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/migration-guide-lifecycle/attempt-01/execution.json. No install/configure/migrate ran; --verify only checks cited commit."
+    recorded_at: "2026-10-22T04:53:16.198Z"
+    commit_sha: "84079dfbf2972898e0a5a48aae3eff0a672ea718"
