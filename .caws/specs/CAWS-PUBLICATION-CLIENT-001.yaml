@@ -1,9 +1,10 @@
 id: CAWS-PUBLICATION-CLIENT-001
 title: 'Define and verify bounded native publication client protocol'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: publication-client
 created_at: '2026-10-22T08:52:41.467Z'
-updated_at: '2026-10-22T08:52:41.467Z'
+updated_at: '2026-10-22T08:52:51.216Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
