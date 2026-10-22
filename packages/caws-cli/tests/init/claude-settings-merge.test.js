@@ -24,6 +24,28 @@ function write(value) {
 function wired() {
   return JSON.parse(CANONICAL_SETTINGS_SNIPPET);
 }
+function withPrivatePathWitness(run) {
+  const directory = path.join(root, 'path-bin');
+  fs.mkdirSync(directory);
+  for (const name of ['caws-hook-native', 'caws-hook']) {
+    const file = path.join(directory, name);
+    fs.writeFileSync(
+      file,
+      '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nexit 97\n',
+      { mode: 0o755 }
+    );
+    expect(fs.statSync(file).mode & 0o777).toBe(0o755);
+  }
+  const previous = process.env.PATH;
+  process.env.PATH = directory + path.delimiter + (previous || '');
+  try {
+    expect(process.env.PATH.split(path.delimiter)[0]).toBe(directory);
+    return run();
+  } finally {
+    if (previous === undefined) delete process.env.PATH;
+    else process.env.PATH = previous;
+  }
+}
 
 test('fresh Claude settings and rendered references put block only on the managed PreToolUse hook', () => {
   expect(planClaudeSettingsMerge(root)).toEqual({
@@ -225,6 +247,53 @@ test.each(['printf', 'echo'])(
     });
     managed.onFailure = 'block';
     expect(JSON.parse(fs.readFileSync(settings))).toEqual(value);
+  }
+);
+test.each(
+  ['exec', 'env', 'shell'].flatMap((form) =>
+    ['caws-hook-native', 'caws-hook'].map((program) => [form, program])
+  )
+)('PATH-resolved %s %s merge requires typed reconciliation without writes', (form, program) =>
+  withPrivatePathWitness(() => {
+    const value = wired();
+    const args = ['claude-code', 'pre_tool_use', '--system'];
+    const hook =
+      form === 'shell'
+        ? { type: 'command', command: program + ' claude-code pre_tool_use --system' }
+        : {
+            type: 'command',
+            command: form === 'env' ? 'env' : program,
+            args: form === 'env' ? [program, ...args] : args,
+          };
+    value.hooks.PreToolUse = [{ hooks: [hook] }];
+    write(value);
+    const before = fs.readFileSync(settings);
+    for (const operation of [planClaudeSettingsMerge, mergeClaudeSettings]) {
+      expect(operation(root)).toMatchObject({
+        kind: 'invalid',
+        reason: 'registration-reconciliation',
+      });
+      expect(fs.readFileSync(settings)).toEqual(before);
+    }
+  })
+);
+test.each(['printf', 'echo'])(
+  'PATH-name data passed to literal %s merge is preserved',
+  (command) => {
+    withPrivatePathWitness(() => {
+      const value = wired();
+      const foreign = {
+        type: 'command',
+        command,
+        args: ['caws-hook-native', 'caws-hook'],
+        onFailure: 'continue',
+      };
+      value.hooks.PreToolUse[0].hooks.unshift(foreign);
+      write(value);
+      const before = fs.readFileSync(settings);
+      expect(mergeClaudeSettings(root)).toEqual({ kind: 'unchanged', path: settings });
+      expect(fs.readFileSync(settings)).toEqual(before);
+    });
   }
 );
 test('Claude project policy rendering names repairs and separates policy refusal from JSON parse errors', () => {

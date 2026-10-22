@@ -213,11 +213,16 @@ export function classifyCawsProducerCommand(
 export function isCawsProducerHookCandidate(hook: unknown): hook is NativeHook {
   if (!hook || typeof hook !== 'object') return false;
   const value = hook as NativeHook;
+  // Known executable names are possible PATH invocations, not ownership
+  // witnesses. Discovery neither resolves PATH nor admits their migration;
+  // the existing classifier keeps non-data invocations unresolved.
+  const possibleProducer = (text: unknown): boolean =>
+    isCawsNativeCommand(text) ||
+    (typeof text === 'string' &&
+      /(?:^|[\s"'`;&|<>()])caws-hook(?:-native)?(?=$|[\s"'`;&|<>()])/.test(text));
   return (
-    isCawsNativeCommand(value.command) ||
-    (Array.isArray(value.args)
-      ? value.args.some((argument) => isCawsNativeCommand(argument))
-      : isCawsNativeCommand(value.args))
+    possibleProducer(value.command) ||
+    (Array.isArray(value.args) ? value.args.some(possibleProducer) : possibleProducer(value.args))
   );
 }
 
