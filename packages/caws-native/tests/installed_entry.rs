@@ -146,6 +146,7 @@ fn invalid_invocation_precedes_missing_pointer() {
         vec!["codex"],
         vec!["codex", "stop", "--system", "--system"],
         vec!["unknown", "stop"],
+        vec!["codex", "unknown"],
         vec!["codex", "stop", "--engine", "caller.js"],
         vec!["codex", "stop", "--describe", "--describe"],
     ] {
