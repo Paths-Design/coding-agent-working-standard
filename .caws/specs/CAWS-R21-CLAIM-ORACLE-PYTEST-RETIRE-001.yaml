@@ -43,3 +43,11 @@ rollback:
   - 'Revert the commit through a governed follow-up, restoring the pytest module.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "The ten verdict tests at c66730a3 assert exact lines: degraded_no_yaml:no-js-yaml (x2, js-yaml require blocker), block_foreign_worktree:wt-other:foreign-sess, pass:owner-self:wt-mine, pass:unclaimed, pass:no-registry, block_claimed:wt-dir:packages/dir/ and :packages/dir, pass:unclaimed for packages/directory and for entry /. Control B (degrade emits pass) fails exactly the two degrade tests; artifact outside repo at ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/r21-claim-oracle/c66730a3-control-b.txt."
+    recorded_at: "2026-10-22T00:11:46.880Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js::worktree-claim-oracle verdicts"
+    commit_sha: c66730a3
+    test_verified_at: c66730a37f1c737a180eef774519ee6f6866b8d1
