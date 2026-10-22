@@ -4,3 +4,10 @@
 # transport artifact so npm `files: docs/**` can ship them (npm cannot reference
 # paths outside the package). This staged tree is generated, never committed.
 /docs/
+
+# Finite license transport and its ownership records; source licenses stay authoritative.
+/LICENSE
+/.license-transport.json
+/.license-transport.lock
+/dist/transcripts/unicode14/LICENSE.txt
+/dist/transcripts/html311/LICENSE.txt

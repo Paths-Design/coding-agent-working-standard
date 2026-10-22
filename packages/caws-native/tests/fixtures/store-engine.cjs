@@ -59,6 +59,8 @@ async function main() {
   const read = async () => {
     const bytes = await reader.read(controller.signal);
     record('native_to_engine', bytes);
+    if (process.env.CAWS_NATIVE_STORE_HOLD_ROW_MS && JSON.parse(bytes).schema === 'caws.runtime.transcript-store.row.v1')
+      await new Promise(resolve => setTimeout(resolve, Number(process.env.CAWS_NATIVE_STORE_HOLD_ROW_MS)));
     return bytes;
   };
   try {

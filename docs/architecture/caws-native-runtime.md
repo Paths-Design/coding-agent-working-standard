@@ -352,13 +352,14 @@ qualification path.
 ## Native transcript-store ownership
 
 The default-off SQLite feature exposes a finite development exchange through the
-frontend's existing pre-proposal reader. It does not select a stock handler or
-replace compatibility dispatch. Native observations bind one active dispatched
-system OpenCode/ZCode Stop to its original safe session, captured database/cwd,
-Ready root digest and exchange token. A store request additionally observes the
-project from the original caller environment, cwd and raw payload. Payload cwd
-precedes `CAWS_PROJECT_DIR`, then caller cwd; unrelated JSON values remain raw.
-The observer selects Git from that caller's environment, removes inherited
+frontend's existing pre-proposal reader and the private resident project Actor.
+It does not select a stock handler or replace compatibility dispatch. Native
+observations bind one active dispatched system OpenCode/ZCode Stop to its
+original safe session, captured database/cwd, Ready root digest and exchange
+token. A store request additionally observes the project from the original
+caller environment, cwd and raw payload. Payload cwd precedes
+`CAWS_PROJECT_DIR`, then caller cwd; unrelated JSON values remain raw. The
+observer selects Git from that caller's environment, removes inherited
 `GIT_*`/`HOOK_*` routing, queries checkout and absolute common directory, and
 derives the canonical root as the common directory's parent. The finite
 physical-path profile compares that observed root with the engine root before
@@ -372,12 +373,14 @@ ceiling remain capped by the original invocation deadline. Cleanup records stop,
 group settlement and reap separately; an accepted signal cannot establish group
 exit. A typed failure carries uncertain query ownership across independent
 engine cleanup and final error delivery, with a bounded retry rather than an
-unbounded destructor. This supplies in-process custody, not durable custody
-after owner destruction. Executable pathname/metadata/hash checks around launch
-are not atomic execution-image attestation. Physical root strings do not anchor
-directory identity against concurrent replacement, and lexical symlink aliases
-outside this profile remain unqualified. These observations confer no
-publication permit.
+unbounded destructor. A failed routing observation stays in the surviving
+owner's bounded quarantine; an Actor observation or SQL failure stays in its
+retained record. This supplies process-lifetime custody, not crash recovery or
+durable custody after owner destruction. Executable pathname/metadata/hash
+checks around launch are not atomic execution-image attestation. Physical root
+strings do not anchor directory identity against concurrent replacement, and
+lexical symlink aliases outside this profile remain unqualified. These
+observations confer no publication permit.
 
 Store errors preserve whether original-project agreement was established. The
 original store-eligible invocation starts unbound before frame acquisition;
@@ -401,25 +404,59 @@ Reconstruction preserves storage classes, numeric/codepoint profiles and failure
 order. It checks native settlement independently of IteratorClose and retains
 the first operation failure, separate cleanup detail and confirmed-close state.
 Native exchange and CLOSED-delivery errors retain the complete acquisition
-settlement, including any uncertain cleanup owner, through the frontend's final
-error delivery. Failure to deliver CLOSED does not erase an observed SQL close;
-successful refusal does not establish closure of an uncertain connection. Event
-encoding follows reconstruction and close acknowledgment. Atomic projection
-publication, later receipt serialization and actual renderer selection require
-their own integrated owner and evidence; encoded event bytes alone confer no
-publication, delivery or cutover claim.
+settlement, including any uncertain cleanup owner, in the resident Actor beyond
+frontend termination. Failure to deliver CLOSED does not erase an observed SQL
+close; successful refusal does not establish closure of an uncertain connection.
+Event encoding follows reconstruction and close acknowledgment. Atomic
+projection publication, later receipt serialization and actual renderer
+selection require their own integrated owner and evidence; encoded event bytes
+alone confer no publication, delivery or cutover claim.
 
-A completed wire exchange returns the complete owned acquisition rather than
-discarding it. Confirmed source close and a written CLOSED frame can accompany
-an exhausted, stopped or failed acquisition; the first acquisition failure and
-row metrics retain that distinction. The original frontend keeps this result
-through its remaining output, handoff and cleanup, including a later engine
-protocol failure. The additional completion metadata contains the end, a
-failure-presence flag and delivered-row count; it does not serialize the
-retained acquisition's cell or error payloads. This is frontend-local retention,
-not resident ownership, engine-consumption proof or an exhausted-and-settled
-publication permit. Moving acquisition and settlement into the surviving actor
-remains an integration obligation.
+The actual native store arm sends a distinct `StoreAcquire` first-message on the
+existing private owner socket. It carries the original raw payload, cwd,
+environment and captured database, native invocation/runtime identity and Ready
+correlation. It does not reuse RenderOffer v1, alter its LF+EOF bridge framing,
+or admit OpenCode/ZCode to the Codex renderer. The owner reserves an unreleased
+record before original-project observation, independently observes the native
+project before creating a project route/journal, and reports a typed
+`ProjectBound` observation. The Actor independently validates original project
+and database binding before its sole SQL acquisition. Frontend EOF sets a
+request-owned cancellation flag; it never consults a global process flag.
+
+Store work is a FIFO barrier behind the pending renderer cohort in the same
+project mailbox. Later renderer work cannot overtake it. Existing connection,
+project, queue and backend accounting retain their bounds. The separate store
+registry admits at most `max_retained_records` invocations across the owner;
+duplicates and saturation fail before SQL. Records have no eviction, release or
+retry surface and pin the resident owner beyond its idle timeout. This stricter
+finite bound qualifies a bounded acquisition slice, not sustained workload
+capacity. Publication, consumption and an explicit record-release lifecycle
+remain integration obligations.
+
+The Actor owns SQL and cleanup; the frontend relays sequenced write, read and
+credit operations over its existing engine transport. A write succeeds only
+after the frontend's actual `Session.send` completes and its matching
+acknowledgement arrives. Controls, acknowledgements and validated credit remain
+correlated and bounded. Confirmed source close and delivered CLOSED can
+accompany an exhausted, stopped or failed acquisition. Full acquisition and
+ServeError values stay in strong Actor records; the frontend receives finite
+metadata and preserves the last independently observed project binding if its
+relay fails. Neither delivery of a row nor CLOSED grants publication. The
+acquisition's `rows_delivered` metric counts rows handed to the native visitor
+before that visitor returns, including transport failures. Successful engine
+delivery requires its separate matching actual-write acknowledgement; the source
+visitor count supplies no such receipt.
+
+A bounded read-only `StoreStatus` first-message requires exact native
+invocation, runtime and registration correlation and uses the existing
+connection admission. It reads the actual retained record through a weak
+registry reference, reporting explicit missing when that owner is absent. It
+exposes phase, binding, end, first-failure category, row metrics and cleanup
+state without raw payloads, database handles, replay, release or authority.
+Status never starts a replacement owner. Process liveness and historical
+diagnostic events cannot substitute for that retained-record observation.
+Ordinary reader consumption, atomic projection publication, permit issuance and
+machine adoption remain unqualified.
 
 ## Functional acceptance and proof
 

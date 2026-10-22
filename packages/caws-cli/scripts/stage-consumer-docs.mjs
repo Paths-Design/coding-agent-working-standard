@@ -11,6 +11,9 @@
 // transport artifact). The package `files` array ships `docs/**`; this script
 // decides WHICH docs are there. ONE curation surface — the front-matter — not
 // two. The staging directory is transport, never a second curation list.
+// Root and vendored source licenses travel beside their compiled consumers.
+// The cleaner owns their finite identity records; identical preexisting files
+// remain unowned and are preserved across both lifecycle operations.
 //
 // FAIL-CLOSED. The script asserts, before exiting 0, that the staged set
 // exactly equals the front-matter-derived set and that known exclusions
@@ -26,6 +29,9 @@ import { fileURLToPath } from 'node:url';
 import { extractFrontMatter } from './validate-docs.mjs';
 import yaml from 'js-yaml';
 import { renderReference, loadMetadata } from './generate-command-reference.mjs';
+import { stageLicenseTransport } from './clean-staged-docs.mjs';
+
+export { stageLicenseTransport } from './clean-staged-docs.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(__dirname, '..');
@@ -69,6 +75,7 @@ export function deriveConsumerDocs(srcDocs = SRC_DOCS, repoRoot = REPO_ROOT) {
 }
 
 function main() {
+  stageLicenseTransport();
   // 1+4. Beginning-clean.
   fs.rmSync(STAGED_DOCS, { recursive: true, force: true });
 

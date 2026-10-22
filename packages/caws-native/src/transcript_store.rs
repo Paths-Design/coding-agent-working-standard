@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::ptr;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -58,6 +59,21 @@ pub struct Cancellation {
     /// Atomic state reads are the intended implementation.
     pub is_cancelled: fn() -> bool,
     pub deadline: Instant,
+}
+
+/// Request-owned cancellation remains alive with uncertain cleanup handles.
+#[derive(Clone)]
+pub struct OwnedCancellation {
+    pub is_cancelled: Arc<dyn Fn() -> bool + Send + Sync>,
+    pub deadline: Instant,
+}
+impl From<Cancellation> for OwnedCancellation {
+    fn from(value: Cancellation) -> Self {
+        Self {
+            is_cancelled: Arc::new(value.is_cancelled),
+            deadline: value.deadline,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -168,6 +184,8 @@ pub enum End {
 #[derive(Debug, Default)]
 pub struct Metrics {
     pub rows_copied: u64,
+    /// Rows handed to the native visitor, including visitor/transport failures.
+    /// This is not a successful engine-write or consumer-delivery receipt.
     pub rows_delivered: u64,
     /// TEXT/BLOB byte lengths; INTEGER/REAL charge eight bytes; NULL charges zero.
     pub accounted_cell_bytes: usize,
@@ -196,15 +214,15 @@ impl<E> Acquisition<E> {
 }
 
 struct Control {
-    cancellation: Cancellation,
+    cancellation: OwnedCancellation,
     first_failure: Cell<Option<ControlFailure>>,
     busy_started: Cell<Option<Instant>>,
 }
 
 impl Control {
-    fn new(cancellation: Cancellation) -> Self {
+    fn new(cancellation: impl Into<OwnedCancellation>) -> Self {
         Self {
-            cancellation,
+            cancellation: cancellation.into(),
             first_failure: Cell::new(None),
             busy_started: Cell::new(None),
         }
@@ -604,6 +622,19 @@ pub fn acquire<E, F>(
     session: &str,
     limits: AcquisitionLimits,
     cancellation: Cancellation,
+    visitor: F,
+) -> Acquisition<E>
+where
+    F: FnMut(StoreRow) -> Result<Visit, VisitorFailure<E>>,
+{
+    acquire_owned(database, session, limits, cancellation.into(), visitor)
+}
+
+pub fn acquire_owned<E, F>(
+    database: &str,
+    session: &str,
+    limits: AcquisitionLimits,
+    cancellation: OwnedCancellation,
     mut visitor: F,
 ) -> Acquisition<E>
 where

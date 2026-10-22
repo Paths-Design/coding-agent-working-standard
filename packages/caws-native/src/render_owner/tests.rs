@@ -83,7 +83,7 @@ fn offered() -> Offer {
         "invocationId":"owner-test:prepared","callerEnvironment":{},"remainingBudgetMs":10000})).unwrap()
 }
 
-fn pending_job_fixture(
+pub(super) fn pending_job_fixture(
     invocation: &str,
 ) -> (
     Job,
@@ -368,6 +368,8 @@ fn pending_unknown_withdraws_waiting_and_bounded_inbox_without_releasing_fence_o
         unknown: true,
         observations,
         phase: "test",
+        #[cfg(feature = "sqlite-store")]
+        store_records: Vec::new(),
     };
     let (waiting, mut waiting_caller, _waiting_result, _waiting_start) =
         pending_job_fixture("waiting");
@@ -376,8 +378,8 @@ fn pending_unknown_withdraws_waiting_and_bounded_inbox_without_releasing_fence_o
     let (second, mut second_caller, _second_result, _second_start) =
         pending_job_fixture("queued-second");
     let (sender, inbox) = mpsc::sync_channel(2);
-    assert!(sender.try_send(first).is_ok());
-    assert!(sender.try_send(second).is_ok());
+    assert!(sender.try_send(Mailbox::Render(first)).is_ok());
+    assert!(sender.try_send(Mailbox::Render(second)).is_ok());
     let mut waiting = Some(waiting);
     actor.withdraw_for_unknown(&mut VecDeque::new(), &mut waiting, &inbox);
     assert!(waiting.is_none());
@@ -788,6 +790,8 @@ fn known_idle_actor_releases_project_writer_custody_but_unknown_actor_retains_it
             unknown,
             observations: Arc::new(ObservationLog::unavailable(Instant::now())),
             phase: "test",
+            #[cfg(feature = "sqlite-store")]
+            store_records: Vec::new(),
         };
         actor.retire();
         let reacquire = crate::render_writer::acquire(
@@ -917,6 +921,8 @@ fn missing_worker_exec_is_known_not_started_and_same_writer_anchor_accepts_valid
         unknown: false,
         observations,
         phase: "test",
+        #[cfg(feature = "sqlite-store")]
+        store_records: Vec::new(),
     };
     actor.startup_failed(failure);
     assert!(!actor.unknown);
@@ -1127,6 +1133,8 @@ fn admission_denials_bind_invocation_and_actual_unknown_or_capacity_branch() {
         unknown: false,
         observations,
         phase: "test",
+        #[cfg(feature = "sqlite-store")]
+        store_records: Vec::new(),
     };
     actor.check_unknown_fence("healthy", expires()).unwrap();
     actor.reserve_backend("healthy").unwrap();
