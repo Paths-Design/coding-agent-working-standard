@@ -1,9 +1,10 @@
 id: CAWS-CUTOVER-PROGRESS-235-001
 title: 'Integrate claim-oracle retirement and synchronize cutover obligations'
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
+worktree: cutover-progress-235-source
 created_at: '2026-10-22T00:47:49.298Z'
-updated_at: '2026-10-22T00:47:49.298Z'
+updated_at: '2026-10-22T00:48:12.254Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
