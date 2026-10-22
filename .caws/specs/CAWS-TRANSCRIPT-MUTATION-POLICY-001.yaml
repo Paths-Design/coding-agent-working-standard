@@ -1,10 +1,11 @@
 id: CAWS-TRANSCRIPT-MUTATION-POLICY-001
 title: 'Register transcript timestamp in canonical mutation policy'
 mode: fix
-lifecycle_state: active
-worktree: transcript-mutation-policy
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed canonical transcript mutation registration and finite public export contracts at 90553b82 after committed review. Inventory192/21/3 and exact store timestamp selection preserve80 floor. Valid wrong121-target policy falsely passed old count pin and is rejected by repaired pin. Child A1-A3 evidence/events10666-10668 read back; scoped gates and doctor exit0. Retained493 runtime/build/93Jest/286transcript/fourcontrol artifacts apply to unchanged runtime/export bytes; fresh905 CI25 and wrong-count control qualify the two-line follow-up. Full canonical six-target mutation execution, independent generator correctness, CI, installed/native parity and cutover remain parent-owned obligations.'
 created_at: '2026-10-22T00:02:22.356Z'
-updated_at: '2026-10-22T00:02:43.479Z'
+updated_at: '2026-10-22T00:43:36.000Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
