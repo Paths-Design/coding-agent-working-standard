@@ -6921,7 +6921,7 @@ Additional bounded evidence and unresolved dependencies:
   under the observer's existing `store-baseline-consumption/attempt-01` artifact
   root). These exercise synthetic producer membership and hostile protocol
   boundaries, not the genuine six-target/nine-suite outer run. Child A2 remains
-  FAIL in event 11754 until that healthy run and a consequential forged-client
+  FAIL in event 11805 until that healthy run and a consequential forged-client
   refusal traverse both outer branches and publication. Capability deletion does
   not establish isolation from arbitrary VM host-builtin interception or
   same-uid processes. The observer owns this bounded implementation; root
@@ -6933,14 +6933,17 @@ Additional bounded evidence and unresolved dependencies:
   candidate `d80d3996` describes v1 compatibility and receipt-selected v2 input;
   its focused Node 18/22 help/generator checks do not replace the fresh physical
   prefix. The prepared shared v105 fingerprint is `b706339e` over 75 files; all
-  seven other pack fingerprints match. Packaging waits on the explicit two-path
-  claim partition with archived `shell-analysis`: the installed guard refuses
-  the overlapping claims despite parent CLI admission. Root preserves the staged
-  two-file patch and all foreign work, and owns `shared-pack-105` for normal
-  landing. The earlier full-basis scope failure (event 11772) is retained; 30
-  exact imported paths are reconciled through the CLI and all five gates pass
-  against the same 288-file input and index. Neither commit-prefix substitution
-  nor a guard bypass is used.
+  seven other pack fingerprints match. The human-authorized two-path claim
+  partition retains those paths as support in archived `shell-analysis`; its
+  head, dirty file list, pack bytes and tracked diff hashes are unchanged.
+  Root's `shared-pack-105` lane holds the exclusive claims and source patch; the
+  parent checkout is clean. The installed guard resolves relative targets
+  against the hook cwd, so normal guarded cleanup uses explicit absolute
+  owned-worktree coordinates. No guard, identity or foreign source changes are
+  made. The earlier full-basis scope failure (event 11772) is retained; 30 exact
+  imported paths are reconciled through the CLI and all five gates pass against
+  the same 288-file input and index. Neither commit-prefix substitution nor a
+  guard bypass is used.
 
   Execution converges on three owned outcomes: root and the installer peer
   complete coherent package → actual v2 image → isolated native invocation,
@@ -6948,8 +6951,8 @@ Additional bounded evidence and unresolved dependencies:
   publication → ordinary reader consumption/release, including both 256-entry
   capacity limits; root connects resident admission to the actual engine and
   exercises thirteen sessions across four repositories. The installer retains
-  its clean help candidate while the claim decision is pending. No machine
-  install or whole-migration acceptance is inferred from these source units.
+  its clean help candidate for reserved source integration. No machine install
+  or whole-migration acceptance is inferred from these source units.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
