@@ -36,3 +36,9 @@ contracts:
   - name: 'native-cutover-ledger'
     type: behavior
     path: 'docs/internal/caws-runtime-modernization.md'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Existing E255/E256 reconciliation at candidate902491ea (47f75da8 plus observed R01 integration wording). Root directly inspected positive fdae executiondb1d7142, negative53205 manifest6d7f51ba and45 retained pins/raw atomic generation/code/API-child-outer1, restored517f execution65e65574 and24 current pins/raw ninegens385pass/namedt1pass/no marker/API-child-outer0, exact source restoration and scope11435/11436. Public packaged Node18/22 readers0 with5880/83, endpoint and source/prefix checks grounded under parent A7 event11431; stable-entry receipt/image-producer gap grounded against actual source. R01 mergeaea8dcda parents18b9/bfb,14commits, events11450/11451 and clean safe-refreshed parent inspected; specactive/runtime unchecked. Independent read-only peer inspected both committed diffs and raw boundaries; root discharged its limited tokenizer corroboration by own direct branch inspection. Prettier check and diff check0; five gates PASS against actual one-doc committed branch; doctor0E/3W/4I exit0. These documentation checks do not establish native runtime/cutover; parent0/8 and zero Python retirements preserved. Verify checks reachable commit, not raw test execution."
+    recorded_at: "2026-10-22T13:44:36.909Z"
+    commit_sha: "902491eafc573ff6224db031d1d2f8e6dd6e7d09"
