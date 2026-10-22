@@ -1,9 +1,10 @@
 id: CAWS-PACKAGE-LICENSE-TRANSPORT-001
 title: 'Carry exact source licenses through CLI pack and snapshot lifecycle'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: package-license-transport
 created_at: '2026-10-22T02:40:58.291Z'
-updated_at: '2026-10-22T02:40:58.291Z'
+updated_at: '2026-10-22T02:41:17.972Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
