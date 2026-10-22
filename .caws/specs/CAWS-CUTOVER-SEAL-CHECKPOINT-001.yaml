@@ -2,6 +2,7 @@ id: CAWS-CUTOVER-SEAL-CHECKPOINT-001
 title: 'Publish exact seal preparation and ownership checkpoint'
 mode: doc
 lifecycle_state: active
+worktree: cutover-seal-publication
 created_at: '2026-10-22T15:06:24.931Z'
 updated_at: '2026-10-22T16:42:56.236Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
