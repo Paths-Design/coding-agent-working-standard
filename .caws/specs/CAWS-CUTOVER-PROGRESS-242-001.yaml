@@ -33,3 +33,8 @@ evidence:
     evidence_ref: "Reconciled E242-E249 source checkpoint2245d59d, normal main publication64d3a2bd and normal source resync52d7164a include actual mail integrationf419e392 (all10blobs match qualified57056cb5). Root grounded independent review candidate-vs-installed scope finding against actual callers and corrected it; formatting/diff0 and5scoped gatesPASS over1file. Source checkout clean after integrity-checked ref/index refresh. Actual source/main tracker SHA256f0951bfb52182f54446e7700a099731fc18bd7ce76d51d2a8f04fdb896e48186; retained failures/owners/nonclaims remain.33/37partial,parent0/8,zero completePythonretirements; real408 unchanged. Original A1 raw artifact inspections remain in prior event11000; commit rederivation establishes reachability only."
     recorded_at: "2026-10-22T06:29:31.251Z"
     commit_sha: "52d7164ada7af68b3d4bab7e88e98d082d08cfe4"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Normal main-only tracker lane merged64d3a2bd; subsequent owned source resync52d7164a incorporates actual custody component receipt. Actual cmp source/main exit0, both SHA256f0951bfb52182f54446e7700a099731fc18bd7ce76d51d2a8f04fdb896e48186. Parent CAWS-NATIVE-RUNTIME-001 lifecycle active; direct machine adapter-runtime.json read remains digest408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0 with priorae35293b. These establish local main/source documentation equality, not remote publication, native installation, harness or fullcutover."
+    recorded_at: "2026-10-22T06:29:33.316Z"
+    commit_sha: "64d3a2bda681aac5120e3f1b6b93fbdfb8b12a3c"
