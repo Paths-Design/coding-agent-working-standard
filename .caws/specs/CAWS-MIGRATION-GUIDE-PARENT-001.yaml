@@ -23,3 +23,9 @@ acceptance:
     then: 'source guide bytes match the qualified main guide SHA1d5041f4 and the parent remains active with the selected408 runtime unchanged.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Normal CAWS source merge169816277e19 from committed guide dbd8891d. Actual cmp source/main guide exit0 and both SHA2561d5041f4b228d40e26fb0961d1a03aa809d51b09a4b4eaddae03cf3e577cc74e; source HEAD16981627 clean. Parent CAWS-NATIVE-RUNTIME-001 lifecycle active. Actual ~/.caws/state/adapter-runtime.json digest408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0 unchanged. Independent committed-candidate review and scoped gates inspected before merge. Commit rederivation establishes reachability; actual cmp and pointer reads establish this bounded documentation criterion, not installation, native lifecycle or cutover."
+    recorded_at: "2026-10-22T05:40:20.889Z"
+    commit_sha: "169816277e19cae6fbceef3c4ec3de065a5561a4"
