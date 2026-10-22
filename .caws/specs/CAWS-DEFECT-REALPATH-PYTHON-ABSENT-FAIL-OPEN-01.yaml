@@ -177,9 +177,9 @@ evidence:
     commit_sha: "8dbe29c1"
   - criterion_id: A2
     status: pass
-    evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) tests 20-24: assigned bytes equal _realpath exact output minus its one record LF for dotdot, symlinked ancestor, link/.., /tmp leaf, relative, a path ending in LF and an alias of the LF root (printed with %q in the receipt); dotdot after a symlink climbs from the link target; empty-path, python3-unavailable, python3-exit-1 and python3-exit-7 (counting shim) return 2 with the caller variable unchanged and one stderr class line. Mutants on 8c7366c2 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants-id/mutants.tap): M06 (strip every trailing LF) fails 7 tests including the exact-parity and LF-root identity tests; M16 (status hard-coded to 1) fails the exit-7 test. Bounds: python 3.11.13 macOS; non-UTF-8 names untested (APFS rejects them)."
-    recorded_at: "2026-10-22T03:18:41.265Z"
-    commit_sha: "4ac64fbf"
+    evidence_ref: "At 8dbe29c1, /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-26-8dbe29c1/serial.tap (sha 65d5c249; TERMINAL 51/51 template dir, guard-realpath 51/51 installed pack) tests 24-28: assigned bytes equal _realpath exact output minus its one record LF for dotdot, symlinked ancestor, link/.., /tmp leaf, relative, a path ending in LF and an alias of the LF root (%q in receipt); empty-path, python3-unavailable, python3-exit-1, python3-exit-7 return 2 leaving the caller variable unchanged with one stderr class line. Mutants (R/mutants-id/mutants.tap): M06 strip-all and M16 hard-coded status killed. Bounds: python 3.11.13 macOS; non-UTF-8 names untested (APFS rejects them)."
+    recorded_at: "2026-10-22T04:08:16.834Z"
+    commit_sha: "8dbe29c1"
   - criterion_id: A3
     status: pass
     evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) test 47: neither guard command-substitutes _realpath, caws_guard_realpath, abspath or resolve_canonical_dir, and every caws_guard_realpath_into/abspath_into/caws_resolve_canonical_dir_into line carries a _wwg/_bwg refusal; tests 32 and 40: the identity-drop tree (caws_guard_realpath_into assigning _realpath output) admits the foreign write and mutation with exit 0 under failing and absent python3. Bound: text scan of these two guards only."
