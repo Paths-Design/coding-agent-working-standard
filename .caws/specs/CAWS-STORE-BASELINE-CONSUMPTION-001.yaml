@@ -101,10 +101,10 @@ evidence:
     commit_sha: "547d4f96b00bbaac7919a24a22476ac36b7c8a3a"
   - criterion_id: A2
     status: unchecked
-    evidence_ref: "Bounded installed-environment component checks at97f7 focused05 exit0/277 with source hashes stable. Four retained producer-closure controls: actualSnapshot.status refused, hook.restoration restored, actual host record-sink error despite retained disk closed; each raw disk SHA rederived. Manifest /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-05/inspected-artifacts.json SHA256d983d4b7a1f49c89352f0798cdd7480ed4f6ccfa4e2ba29360553d6e3c151edb. Subsequent547d conditional-shape controls not executed; ordinary lifecycle remains unverified. Commit existence verification is not test execution or external artifact verification."
-    recorded_at: "2026-10-22T11:27:52.966Z"
-    exit_code: 0
-    commit_sha: "97f7dca9a6e20912a5c19f8ec1699ffc02875308"
+    evidence_ref: "Actual focused06 at547d exited0/159 source-stable; focused05 at97f7 exited0/277. Four installed-environment closure controls retain refused memory/record-sink host error/restored hook despite closed disk bytes, manifest SHAd983d4b7a1f49c89352f0798cdd7480ed4f6ccfa4e2ba29360553d6e3c151edb. Extra node/default condition selection is now executed with exact retained markers and specific shape refusal, manifest SHA69c9bd6e283ed42c6c6ec27db2d6a079475d3c0d6c421459c9c35446d160b0bc. First ordinary89dd attempt remains failed1 due independent observer-tool ordering mismatch. Hostile component results do not establish full ordinary lifecycle or pre-capture intrinsic identity; prior wrapper counterexample remains supported nonclaim."
+    recorded_at: "2026-10-22T11:51:43.803Z"
+    exit_code: 1
+    commit_sha: "547d4f96b00bbaac7919a24a22476ac36b7c8a3a"
   - criterion_id: A3
     status: unchecked
     evidence_ref: "Actual ordinary-positive-01 at547d failed outer qualification exit1: current run89dd3c16-c3f4-4a80-b024-d6095590c6ad. Normal build completed; public Stryker API resolved0 and actualchild0; stdout385 initialtests succeeded,6sources/9suites/2678 discoverablemutants. Nine raw closed generation records carry385 testevents with matching role-keyed tool descriptors but different arrayorder; validator correctly remains blocking until code/test disagreement derived and repaired. Execution SHA256d81cb0db6533497ad377859e9a249fafaef7b70bf1509e6a7a6015070108c412; inspected-artifacts.json SHA256fe94885aff9323764141b4e9153c6096033022ca78cd768391bbb618aff5c6be under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/ordinary-positive-01. Gitclean/no lock/no sandbox residue. No positive qualification, no retry or source perturbation."
