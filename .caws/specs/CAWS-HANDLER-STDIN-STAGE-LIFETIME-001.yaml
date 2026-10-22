@@ -87,3 +87,8 @@ evidence:
     evidence_ref: "handler-stdin-stage-lifetime.bats t1 ok on ce5ced6c; baseline 1169f7df not ok 1 at _no_stage_in; mutants m2 (appended newline, cmp) and m4 (never stage, kind!=file) red at t1. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/series-20261022T193531Z.json; attempts/*-candidate-ce5ced6c, *-baseline-1169f7df, *-m2-*, *-m4-*; pinned run-handlers blob 381f72f6, bash 3.2.57, bats 1.13.0"
     recorded_at: "2026-10-22T19:39:33.296Z"
     commit_sha: ce5ced6c
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "t2 (no stage while handler runs, recursive find) and t3 (TERM/KILL mid-handler) ok on ce5ced6c; t7 (parent TMPDIR loses write after mktemp -d: no payload file during/after, empty dir named on stderr) ok on ce5ced6c and NOT OK on prior a5b4baee (completion-review R1 counterexample, retained as FAIL for a5b4baee); baseline not ok 2,3,7; m1 (no pre-exec unlink) not ok 2,3,7; m8 (silent dir) not ok 7. Real dispatcher: f3-dispatcher/attempts/20261022T193700Z-ce5ced6c c11/c12/c13 tmp-after empty, c12 TERM/c13 KILL tmp-during empty. Not claimed: signal during mktemp -d (empty dir), KILL between payload write and unlink (payload file)"
+    recorded_at: "2026-10-22T19:39:34.981Z"
+    commit_sha: ce5ced6c
