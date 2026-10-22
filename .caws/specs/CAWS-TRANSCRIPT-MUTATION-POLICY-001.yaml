@@ -42,3 +42,11 @@ contracts:
   - name: 'transcript-mutation-registration'
     type: contract-test
     path: 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "49329541 private commands.json validator exit0 gives192/21/3; jest-report.json CI hostile topology checks pass;15source images and1135+53emitted files independently checked. Artifact root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/4932954144212ea4739de31c164568e732b2a6b9. Commit verification is reachability, not test execution."
+    recorded_at: "2026-10-22T00:14:17.871Z"
+    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/run-private.cjs
+    exit_code: 0
+    commit_sha: "4932954144212ea4739de31c164568e732b2a6b9"
