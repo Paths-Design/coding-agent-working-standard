@@ -213,10 +213,9 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) tests 41-48: wwg foreign payload Write python3 present 2 BLOCKED, owner 0; failing and absent python3 each 2 with refusal line and block JSON; identity-drop control admits (45); sweeps refuse at each normalization on payload, canonical-claim and relative-target paths."
-    recorded_at: "2026-10-22T06:10:30.269Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-41-terminal-0a4cbe79/serial.tap"
-    commit_sha: "0a4cbe79"
+    evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) tests 41-48: wwg foreign payload Write python3 present 2 BLOCKED, owner 0; failing and absent python3 each 2 with refusal line and block JSON; identity-drop control admits (45); sweeps refuse at each normalization on payload, canonical-claim and relative-target paths. Raw artifact is outside the repository and not re-derivable by CAWS: ~/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-41-terminal-0a4cbe79/serial.tap (sha256 ae48521d...; its 7 not-ok lines are exactly those baseline reds). Re-derivable citation: commit 0a4cbe79, landed by governed merge b5b9cc69 into caws/shell-analysis."
+    recorded_at: "2026-10-22T16:15:26.371Z"
+    commit_sha: "0a4cbe79f38877c08b4cd61b42ae6f177aff3afb"
   - criterion_id: A2
     status: pass
     evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) tests 33-37: assigned bytes equal the exact _realpath output minus its one record LF (dotdot, symlinked ancestor, dotdot after a symlink); empty path, python3 absent and failing python3 (own exit status) refused by class with the caller value unchanged."
