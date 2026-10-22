@@ -20,9 +20,11 @@ function write(file, value, mode = 0o644) {
   fs.writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value));
   fs.chmodSync(file, mode);
 }
-function registration(file, command, matcher = '.*', extra = {}) {
+function registration(file, command, matcher = '.*', extra = {}, hookExtra = {}) {
   write(file, {
-    hooks: { PreToolUse: [{ matcher, hooks: [{ type: 'command', command }], ...extra }] },
+    hooks: {
+      PreToolUse: [{ matcher, hooks: [{ type: 'command', command, ...hookExtra }], ...extra }],
+    },
   });
 }
 beforeEach(() => {
@@ -121,7 +123,13 @@ test.each([
   'restricted %s registration refuses before enabling system state',
   (surface, relative, matcher) => {
     const file = path.join(user, relative);
-    registration(file, machineCommand(home, surface, 'pre_tool_use'), matcher);
+    registration(
+      file,
+      machineCommand(home, surface, 'pre_tool_use'),
+      matcher,
+      {},
+      surface === 'qwen-code' ? { timeout: 45000 } : {}
+    );
     const bytes = fs.readFileSync(file);
     const settings = path.join(home, 'surfaces', surface, 'settings.json');
     const previous = fs.existsSync(settings) ? fs.readFileSync(settings) : null;

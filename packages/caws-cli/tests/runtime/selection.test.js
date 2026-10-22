@@ -284,8 +284,11 @@ test('legacy governance and disabled system surfaces do not silently adopt proje
 test('legacy native duplicate avoidance is event-specific and respects disabled registrations', () => {
   const f = fixture();
   const native = path.join(f.options.canonical, '.codex/hooks.json');
-  const hook = { command: machineCommand(f.options.home, 'codex', 'pre_tool_use') };
-  write(native, { hooks: { PreToolUse: [{ hooks: [hook] }] } });
+  const hook = {
+    type: 'command',
+    command: machineCommand(f.options.home, 'codex', 'pre_tool_use'),
+  };
+  write(native, { hooks: { PreToolUse: [{ matcher: '.*', hooks: [hook] }] } });
   expect(resolveInvocationSelection(f.options)).toEqual({
     status: 'inactive',
     reason: 'legacy native registration remains selected',
