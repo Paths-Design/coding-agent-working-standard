@@ -226,7 +226,7 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   [[ "$output" == *"[caws run-handlers] could not remove handler stdin stage directory $STAGE_TMP/$left"* ]]
 }
 
-@test "a payload that cannot be unlinked is named on stderr and its handler still runs" {
+@test "a payload whose first unlink fails is named, its handler still runs, and the retry after the handler removes it" {
   local big expected real_rm stub
   big=$(_payload)
   expected="$BATS_TEST_TMPDIR/expected.bytes"
@@ -234,18 +234,50 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   real_rm=$(command -v rm)
   stub="$BATS_TEST_TMPDIR/rm-stub"
   mkdir -p "$stub"
-  # Stands in for a private directory altered after creation: only the payload
-  # inside a stage directory refuses removal; every other rm works.
-  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */caws-handler-stdin-*/payload) exit 1 ;; esac; done\nexec %q "$@"\n' \
+  # Stands in for a private directory altered after creation and restored later:
+  # the FIRST removal of a stage payload is refused, every later one works. Only
+  # a removal attempted after the handler can therefore succeed, so "payload seen
+  # by the handler" plus "payload absent afterwards" proves the post-handler retry.
+  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */caws-handler-stdin-*/payload) if [ ! -e "$RM_STUB_ONCE" ]; then : > "$RM_STUB_ONCE"; exit 1; fi ;; esac; done\nexec %q "$@"\n' \
     "$real_rm" > "$stub/rm"
   chmod +x "$stub/rm"
-  STAGE_PATH="$stub:$PATH" _chain "$big" reader.sh
+  RM_STUB_ONCE="$BATS_TEST_TMPDIR/rm-refused-once" STAGE_PATH="$stub:$PATH" _chain "$big" reader.sh
   [ "$status" -eq 0 ]
   cmp "$expected" "$OUT_DIR"/reader-*.bytes
-  # The failure is explicit, not hidden: the payload was present while the handler
-  # ran, is still present, and was named on stderr before and after the handler.
+  [ -e "$BATS_TEST_TMPDIR/rm-refused-once" ]
+  # The handler saw the payload (its first unlink was refused) and was still run.
   [ -s "$(ls "$OUT_DIR"/reader-*.files)" ]
-  [ -n "$(find "$STAGE_TMP" -type f -name payload)" ]
-  # Count payload reports only; the directory report names "stage directory".
-  [ "$(printf '%s\n' "$output" | grep -cF "[caws run-handlers] could not remove handler stdin stage $STAGE_TMP/")" -ge 2 ]
+  # The retry after the handler removed the payload and its directory.
+  [ -z "$(find "$STAGE_TMP" -type f -name payload)" ]
+  _no_stage_in "$STAGE_TMP"
+  # The refused unlink was reported exactly once; the directory report shares the
+  # prefix but names "stage directory", so the payload report is matched by path.
+  [ "$(printf '%s\n' "$output" | grep -cF "[caws run-handlers] could not remove handler stdin stage $STAGE_TMP/")" -eq 1 ]
+}
+
+@test "a stage directory replaced by a link during the handler is left in place and named, never followed" {
+  local big expected real_rm stub decoy
+  big=$(_payload)
+  expected="$BATS_TEST_TMPDIR/expected.bytes"
+  printf '%s' "$big" > "$expected"
+  decoy="$BATS_TEST_TMPDIR/decoy"
+  mkdir -p "$decoy"
+  printf 'foreign' > "$decoy/payload"
+  real_rm=$(command -v rm)
+  stub="$BATS_TEST_TMPDIR/rm-stub"
+  mkdir -p "$stub"
+  # The first removal of the stage payload is refused (so the handler runs as a
+  # child and the retry happens), and that refusal also swaps the stage directory
+  # for a link to the decoy, as a same-uid actor could between the two attempts.
+  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */caws-handler-stdin-*/payload) if [ ! -e "$RM_STUB_ONCE" ]; then : > "$RM_STUB_ONCE"; d="${a%%/payload}"; mv "$d" "$d.moved"; ln -s %q "$d"; exit 1; fi ;; esac; done\nexec %q "$@"\n' \
+    "$decoy" "$real_rm" > "$stub/rm"
+  chmod +x "$stub/rm"
+  RM_STUB_ONCE="$BATS_TEST_TMPDIR/rm-refused-once" STAGE_PATH="$stub:$PATH" _chain "$big" reader.sh
+  [ "$status" -eq 0 ]
+  cmp "$expected" "$OUT_DIR"/reader-*.bytes
+  # The decoy was never touched through the replaced path.
+  [ "$(cat "$decoy/payload")" = foreign ]
+  # The replacement was reported, and the moved stage was left in place.
+  [[ "$output" == *"handler stdin stage $STAGE_TMP/caws-handler-stdin-"*" was replaced by a link; left in place"* ]]
+  [ -n "$(find "$STAGE_TMP" -type f -name payload -path '*.moved/*')" ]
 }

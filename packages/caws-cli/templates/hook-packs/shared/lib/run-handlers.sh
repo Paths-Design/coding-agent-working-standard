@@ -466,7 +466,16 @@ _rh_exec_staged() {
 
 # _rh_remove_stage: removes the current subshell's payload and its private
 # directory, and names on stderr whichever of the two is still present afterwards.
+# Both are addressed by pathname, so a directory entry replaced with a symbolic
+# link after creation (possible for the same uid) would make the removal reach a
+# foreign file; a stage whose directory or payload path has become a link is
+# left in place and named instead. The check and the removal are separate
+# operations, so a replacement between them is not excluded.
 _rh_remove_stage() {
+  if [[ -L "$_rh_stage_dir" || -L "$_rh_stage" ]]; then
+    printf '[caws run-handlers] handler stdin stage %s was replaced by a link; left in place\n' "$_rh_stage_dir" >&2
+    return 0
+  fi
   rm -f -- "$_rh_stage" 2>/dev/null
   if [[ -e "$_rh_stage" ]]; then
     printf '[caws run-handlers] could not remove handler stdin stage %s\n' "$_rh_stage" >&2
