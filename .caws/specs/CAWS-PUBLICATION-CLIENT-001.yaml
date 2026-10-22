@@ -46,9 +46,9 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Actual controlled-transport Jest177/0 in root native-session-publication/client-red/jest-disposition-green.json, cwd publication-client/packages/caws-cli; exact byte copies/chunk offsets/digests, projection-render ordering, prior inventory/removals, terminal consumption and single-attempt seal. Source2a9f2093 strict full TS compilation0 and package five-file ESLint0. These prove client mechanics only: actual exhausted CLOSED/native capture/publication/current reader/ordinary dispatch remain CAWS-NATIVE-SESSION-PUBLICATION-001 obligations. Commit verification is reachability, not test rerun."
-    recorded_at: "2026-10-22T09:13:57.412Z"
-    command: node canonical/node_modules/jest/bin/jest.js --config jest.config.js --selectProjects caws-cli --runInBand --runTestsByPath tests/runtime/session-publication-client.test.js tests/runtime/transcript-store-client.test.js tests/runtime/protocol.test.js
+    evidence_ref: "Correct exact executed command replaces earlier canonical-path shorthand. Cwd publication-client/packages/caws-cli, actual3suite177/0 client protocol store; controlled byte copies offsets hashes ordering inventory/removals consumption single-attempt seal. Source2a9 strict full TS compile0 and exact5file package ESLint0. Existing compiled code emitted before tests; normal commit adds only tested guard/test edits. Client mechanics only; actual capture exhausted CLOSED/native effects/reader/ordinarydispatch remain parentunit. Commit verification proves reachability only; supplied command never rerun by evidence writer."
+    recorded_at: "2026-10-22T09:15:07.728Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --config jest.config.js --selectProjects caws-cli --runInBand --runTestsByPath tests/runtime/session-publication-client.test.js tests/runtime/transcript-store-client.test.js tests/runtime/protocol.test.js --json --outputFile /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-session-publication/client-red/jest-disposition-green.json
     exit_code: 0
     commit_sha: "2a9f2093"
   - criterion_id: A2
