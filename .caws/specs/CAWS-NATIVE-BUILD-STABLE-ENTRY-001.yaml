@@ -1,0 +1,41 @@
+id: CAWS-NATIVE-BUILD-STABLE-ENTRY-001
+title: 'Bind stable hook entry to versioned native build receipts'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-22T15:26:58.512Z'
+updated_at: '2026-10-22T15:26:58.512Z'
+created_by_session: '01a1620e-59d6-7373-b74b-25d9f5f7b1e9'
+blast_radius:
+  modules:
+    - 'Native SQLite build request, Cargo selection and receipt loading'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/tooling/native-sqlite-build.ts'
+    - 'packages/caws-cli/src/tooling/native-sqlite-build-entry.ts'
+    - 'packages/caws-cli/tests/tooling/native-sqlite-build.test.js'
+  out: []
+invariants:
+  - 'Legacy v1 request and seven-artifact completion remain exact; stable entry capability requires explicit versioned source-bound receipt and confers no adoption authority.'
+acceptance:
+  - id: A1
+    given: 'legacy v1 and explicit v2 requests for debug and release'
+    when: 'coordinator selects targets and versioned receipts are loaded'
+    then: 'v1 retains its original artifact contract while v2 requires the stable hook entry and refuses version downgrade or unknown schemas.'
+  - id: A2
+    given: 'retained Cargo records for a freshly built stable hook entry'
+    when: 'source target profile path freshness uniqueness or executable identity differ'
+    then: 'selection and artifact loading refuse the mismatch and produce no usable stable-entry capability.'
+  - id: A3
+    given: 'focused source and boundary test results'
+    when: 'component evidence is recorded and handed to the cutover lead'
+    then: 'exact commands revisions raw outputs and remaining actual build image producer and runtime qualification obligations are preserved without claiming parity or adoption.'
+observability:
+  - 'Versioned request and receipt identities, exact selected Cargo record and executable hash, raw targeted test output and retained hostile controls.'
+rollback:
+  - 'Continue selecting legacy v1 build requests; preserve prior qualified requests and artifacts without rewriting or adopting any runtime.'
+non_functional: {}
+contracts:
+  - name: 'native-build-receipt'
+    type: behavior
