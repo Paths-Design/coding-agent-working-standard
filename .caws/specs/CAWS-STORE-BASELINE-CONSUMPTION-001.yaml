@@ -106,9 +106,10 @@ evidence:
     exit_code: 1
     commit_sha: "547d4f96b00bbaac7919a24a22476ac36b7c8a3a"
   - criterion_id: A3
-    status: unchecked
-    evidence_ref: "First actual ordinary89dd at547d remains failed1 despite API0/child0/385 initialtests; raw nine generations match exact descriptors by role but enumeration differs. Source f07 repairs ONLY role-keyed generation identity comparison, preserving exact six roles/four fields/uniqueness/full descriptor values. Independent committed review found no scoped false acceptance. Actual focused07 validator-only113 exits0 with stable11 source hashes; real capture-to-verify composition and independent permutations admit, eight hostile inventories refuse with exact diagnostics. Runtime manifest /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-07/inspected-artifacts.json SHAdeb7b2172e2a79412c1735896c20442f7a2d2b2ea87fd09ae0fea47c6e4b36f7. Fresh ordinary retry is prepared but unexecuted; no positive qualification or old-receipt rescue."
-    recorded_at: "2026-10-22T12:02:59.380Z"
+    status: pass
+    evidence_ref: "BOUNDED A3 PASS at committed f07: actual ordinary-positive02 run fdae161a-7a08-4acc-837e-8f6088c7afd3, pinned Node22/npm mutation:dry-run -- --surface store --sha f07. API resolved0, actualchild0, outer0. Independently inspected nine current closed unique-context baseline generations, expected suite matrix/exact six-target union,385 passed testevents,85 compilations/returned-body invocations; all85 UTF16 references and emitted-sample/disk/build bindings checked. All11 source/config/Node pins unchanged; current25 observer/bootstrap/launcher role descriptors match captured hashes/sizes/modes. External ordinary-positive-02/inspected-artifacts.json SHAdfb4199bdbf46646e4c507cb73d878d9f0b8bcf9fbde0b4b5df52e6fb5537db9; current-tool-recheck.json SHA42ba55f032c58de4be8b7e00f27856cb2fa1feff0e146904337afbf0dc0f5898; executiondb1d7142162b81c5a8918b809df6c308d1b6f8dd38f1463ea583083038992514. Independent read-only challenge corroborated raw artifacts; root grounded decisive fields. This records only current ordinary IN-PROCESS consumption under trusted bootstrap. A4 semantic negative/restored, child/full/native/CI/integrated-parent/cutover remain open. Failed89dd28 files unchanged. Commit verify below establishes existence only; external runtime evidence was inspected, not mechanically test-verified."
+    recorded_at: "2026-10-22T12:32:08.418Z"
+    command: "Pinned Node22/npm run mutation:dry-run -- --surface store --sha f07d6b1d007c6850708b49892f5d7522a81aca6f; full absolute argv in ordinary-positive-02/execution.json"
     exit_code: 0
     commit_sha: f07d6b1d007c6850708b49892f5d7522a81aca6f
   - criterion_id: A4
