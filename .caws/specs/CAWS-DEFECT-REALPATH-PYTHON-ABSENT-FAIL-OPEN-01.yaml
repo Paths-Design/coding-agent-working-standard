@@ -79,3 +79,8 @@ evidence:
     evidence_ref: "guard-realpath-python-absent.bats tests 9-12 at 73166c16, run-06 bats exit 0 25/25 (receipt outside repo: /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-06/bats.tap): worktree-write-guard foreign payload write python3 present exit 2 BLOCKED f-wt; owner exit 0 empty; failing python3 exit 2 class python3-exit-1; absent exit 2 class python3-unavailable; target absent asserted every run. Pre-repair run-01 (selected 408) and red baseline run-02 exited 0. Bounds: template guard run directly with precomputed HOOK_* and canonical helpers.bash; not dispatcher, installed pack or native harness."
     recorded_at: "2026-10-22T00:50:11.359Z"
     commit_sha: "73166c16"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "guard-realpath-python-absent.bats tests 4-8 at 73166c16, run-06 bats exit 0 (receipt outside repo: /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-06/bats.tap): with python3 present caws_guard_realpath raw stdout plus status equals the interpreter's and the caller-observed value equals _realpath for dotdot, symlinked ancestor with missing leaf, dotdot after a symlink (climbs from the link target, not lexically), /tmp alias, relative input and a newline-ending path, all status 0; empty, absent and failing return 2 with empty stdout and exactly one stderr class line. Status-only mutant M4 and identity mutant M5 fail these tests (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants/M4.tap, M5.tap). Bounds: one interpreter (python3 3.11.13, macOS); non-UTF8 paths not exercised."
+    recorded_at: "2026-10-22T00:50:40.430Z"
+    commit_sha: "73166c16"
