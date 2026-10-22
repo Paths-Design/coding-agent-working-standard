@@ -1,0 +1,49 @@
+id: CAWS-HANDLER-STDIN-STAGE-LIFETIME-001
+title: 'Handler stdin stage leaves no file behind'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-22T16:48:10.968Z'
+updated_at: '2026-10-22T16:48:10.968Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
+    - 'packages/caws-cli/tests/hooks/bats/handler-stdin-feed.bats'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh'
+  out: []
+invariants:
+  - 'run_handlers deletes only paths its own mktemp created; it never removes an inherited HOOK_PAYLOAD_FILE or any CAWS_TEMP_FILES entry'
+  - 'Each handler reads the exact HOOK_INPUT_JSON bytes from its own file offset, with nothing appended'
+  - 'No interpreter is spawned per handler and no payload is exported into the environment'
+acceptance:
+  - id: A1
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given an inline payload over 32768 characters and no payload file, when run_handlers runs a reading handler, a handler that exits without reading, and a second reading handler, then both readers receive the payload byte for byte, no broken-pipe text reaches stderr, the chain exits 0, and no caws-handler-stdin-* file remains in TMPDIR'
+  - id: A2
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given that staged inline payload, when a handler lists TMPDIR while it runs, or the dispatcher is sent TERM or KILL while a handler runs, then no caws-handler-stdin-* file exists during the handler or after the dispatcher is gone'
+  - id: A3
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given an inherited HOOK_PAYLOAD_FILE and a caller CAWS_TEMP_FILES naming files run_handlers did not create, when run_handlers runs, then handlers read the payload file and neither that file nor any CAWS_TEMP_FILES entry is deleted'
+  - id: A4
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given TMPDIR where no stage can be created, when run_handlers runs a reading handler over a staged-size payload, then the handler still receives the payload byte for byte through the pipe fallback'
+  - id: A5
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given a payload of at most 32768 characters, when run_handlers runs, then the historical pipe path delivers it and no stage file is created'
+  - id: A6
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given the cleanup contract comment in parse-input.sh, when it describes temp-file removal, then it names the single payload-file EXIT trap and states that nothing consumes CAWS_TEMP_FILES'
+non_functional: {}
+contracts: []
