@@ -53,3 +53,9 @@ evidence:
     recorded_at: "2026-10-22T22:16:56.738Z"
     artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/repair/mutants.tsv"
     commit_sha: fb1ba781ff093cad38a8823a416ff6cccf3521f4
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Per file, <file>-baseline.tap (git show 7195f14f) and <file>-rewritten.tap (fb1ba781 bytes) carry the same 1..N and the same ok lines: 64, 26, 19, 11, 7, 15, 8, 7, 22 tests, 179 total, all ok, exit 0 both sides (baseline/ and rewritten/ dirs). Run 21:57:03 to 22:01:17Z, same pins and non-claims as A1; the two scope-guard attempts under a ~/.claude TMPDIR (dbg.tap, 12 failures each side, environment cause) are retained, not counted."
+    recorded_at: "2026-10-22T22:16:58.857Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/repair/run-all.log"
+    commit_sha: fb1ba781ff093cad38a8823a416ff6cccf3521f4
