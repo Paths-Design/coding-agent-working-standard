@@ -94,9 +94,9 @@ evidence:
     commit_sha: "50ba057b"
   - criterion_id: A3
     status: pass
-    evidence_ref: "t4 ok on ce5ced6c; m3 (global CAWS_TEMP_FILES rm before return) not ok 4 at [ -f foreign_listed ]; inherited HOOK_PAYLOAD_FILE read and kept on the spill path. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/attempts/*-m3-global-temp-cleanup-ce5ced6c/run.tap"
-    recorded_at: "2026-10-22T19:39:36.628Z"
-    commit_sha: ce5ced6c
+    evidence_ref: "t4 ok at 50ba057b; m3 (global CAWS_TEMP_FILES rm) fails only t4. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/series-20261022T201036Z.json"
+    recorded_at: "2026-10-22T20:13:13.376Z"
+    commit_sha: "50ba057b"
   - criterion_id: A4
     status: pass
     evidence_ref: "t5 ok on ce5ced6c (mktemp stub refuses only the stage template; reader kind=pipe, bytes exact); m5 (fallback </dev/null) not ok 5 at cmp. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/attempts/*-m5-fallback-drop-ce5ced6c/run.tap"
