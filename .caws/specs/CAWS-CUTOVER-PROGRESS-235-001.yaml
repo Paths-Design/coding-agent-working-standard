@@ -37,3 +37,9 @@ evidence:
     recorded_at: "2026-10-22T01:10:14.202Z"
     exit_code: 0
     commit_sha: c429e754fba4bf3822f0b39ba23c53a12d999525
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Actual source merge174672d9 and main mergeffa4df68 both land reviewed E235/E236 ledger bytes; cmp exit0 and SHAe088ad7526ac33a13c5b8b2e6e4067e68693ae277d884d5036ee1a7a02a96d44. Source c429 commits include exact R21 importcc95, main81eb ledger-only copy matches. Gates0 source3paths/main1path; doctor0E3W4I; independent committed review grounded raw source/tests/events and final LF-only applicability/human authorization delta. Feature37 unique rows/partial33/37, parent0/8 and selected408 unchanged. Full store mutation/resident acquisition/native install not qualified. Commit verification is reachability only."
+    recorded_at: "2026-10-22T01:28:10.144Z"
+    exit_code: 0
+    commit_sha: "81ebbd67e5a5f564d401f49f612c20860626aaac"
