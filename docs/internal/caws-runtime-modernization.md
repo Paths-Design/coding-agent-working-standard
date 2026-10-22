@@ -6287,6 +6287,86 @@ Additional bounded evidence and unresolved dependencies:
   bounded private legacy/native installation allocation; callback,
   upgrade/rollback, trust and machine adoption remain unverified.
 
+- E250: R01's packaged `b71dd82f` CLI performs the private legacy A installation
+  and native Node18 B installation, both exit0. A selects `ef2d1eb1` with115
+  members and no predecessor; B selects E249's `7fccdee8` with5,880 members and
+  A as predecessor. Root inspects `publication-execution.json`, the pointer and
+  supplemental notice/schema/mode comparisons under E243's artifact root, and
+  independently hashes the published stable entry, native binary and Node18.
+  Private native configuration preview and apply exit0; the two written files
+  match the preview and contain six native event commands. The real machine
+  pointer and registration bytes remain unchanged. Ordinary fixture init and
+  corrected `IMAGE-OWNED-001` creation/binding use peer15984's genuine identity;
+  the rejected initial spec ID and its no-mutation outcome remain retained.
+  Fixture doctor exits1 with
+  `doctor.hooks.system_runtime_invalid: System native registration missing or customized for codex/PreToolUse`.
+  Root inspects the observer: its default legacy command comparison rejects
+  native registration. Peer15984 accepts the exact observer-path allocation and
+  normal scope amendment for a shared read-only registration-validator repair
+  with hostile controls. The b71 package receipts retain their original
+  identity; a repaired candidate requires fresh build/package/image and private
+  qualification. No callback executes. Native startup verification precedes the
+  frontend timer, and the45s inner budget leaves no demonstrated reserve before
+  the45s outer hook timeout. Root retains that deadline/delivery contract,
+  Node22 upgrade, rollback, actual harness refusal and machine cutover.
+
+- E251: Checked-normalization final candidate `0a4cbe79` repairs two reached
+  refusal gaps: Node absence after registry detection, and failed or unenterable
+  Git common-directory resolution. The owner retains red-before-fix traces,
+  killed fallback/refusal mutants and terminal60/60 template plus60/60 installed
+  pack runs under c4's `realpath-v2/`. Root inspects the actual patch, raw
+  terminal evidence and A1–A11 records/events11012–11022. Independent committed
+  review finds the earlier common-directory counterexample; root grounds its
+  final repair in source and retained controls. Merge remains held because the
+  shell owner's latest continuation fails at the account/security boundary; its
+  lane and dirty LF probe retain that owner's authority. No takeover occurs.
+  Seven broader red expectations reach the source's deliberate native-Codex
+  execution-contract refusal, missing-cwd handling or malformed metadata refusal
+  before normalization. This explains their relationship to the bounded repair;
+  it does not qualify the full producer/guard chain. Root and the shell owner
+  retain those fixture contracts, Write/Bash cwd consistency, reached LF
+  callers, coherent four-document landing and final six-file qualification.
+  Python normalization remains in production.
+
+- E252: An actual Claude Code2.1.308 timeout falsifier distinguishes hook
+  completion from required enforcement. Two fresh non-repository fixtures retain
+  normal global/user hooks and identical Write handlers that sleep5s with a1s
+  timeout. Their only settings difference is `onFailure: "block"`. Both CLI
+  children exit0. With the field unset, the raw stream records the cancelled
+  hook and a successful Write; `probe.txt` contains `x`, SHA256
+  `2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881`. With
+  block, both Write attempts return `is_error: true` with the timeout refusal
+  and the target is absent. Root reads pre/post receipts, settings and raw
+  streams and rehashes the streams: unset
+  `febc1bbe3163907b4587bfec6d882e72c0ef9d3b6eb7f0850d79cb3f34d960fb`, block
+  `e64688f4331fc088ce2f676ed4737b0d8e98312f5128cb586be49f1b413b0faa`. Artifacts
+  remain under c4's `realpath-v2/harness-onfailure/`; the read-only
+  `proposal-onfailure-registration.md` maps source and rollout obligations. The
+  machine CAWS hook succeeds in both non-repository fixtures, so this does not
+  execute a CAWS-owned timeout refusal. Root inspects the generator's missing
+  field and existing-entry preservation, coordinates a Claude-only PreToolUse
+  source repair with R01's owner, and retains minimum-version, legacy
+  registration and migration documentation obligations. No installed settings
+  change. Can't-start, other exit/JSON failure classes, Codex behavior and
+  actual CAWS registration under timeout remain unexecuted.
+
+- E253: Mutation-binding candidate `caa655a3` commits six scoped runner, scorer,
+  sandbox-configuration, input-identity and focused-test paths. Root reads the
+  committed runner, actual `candidate-02.json` and read-only integration
+  preflight under peerA's `mutation-qualification-binding/attempt-01/`. The
+  serial66-case mechanics run exits0 with identical source hashes before and
+  after; normal build/core children in these tests are fixtures. The earlier
+  one-failure candidate and hostile child outcomes remain retained. Five scoped
+  gates pass; independent committed-candidate feedback supplies no acceptance by
+  itself. All four component ACs remain unchecked and the lane remains active.
+  Root allocates one real ordinary store `--dry-run-only` invocation with the
+  existing concurrency2 and build-slot coordination with R01. Production
+  build/Stryker composition, actual selected-test consumption, loaded candidate
+  bytes and distinguishing perturbation remain qualification obligations until
+  their artifacts are inspected. No full mutation campaign or score is inferred
+  from66 fixture checks; floors and license ownership validation remain
+  unchanged.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -6679,7 +6759,7 @@ operational correctness or selected execution.
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend settlement lands in87b70fcc; resident acquisition, cancellation, bounded retention and status contract land with bb3a8b99, E240. | Update publication permit, record release and actual-reader contracts with their implementations and consumer evidence.                                                                                                                            |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.                                           | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
 | `docs/guides/sterling-machine-runtime-migration.md`                             | Qualified main84079dfb and source16981627 match actual SHA1d5041f4, E242.                                                                 | Recheck operations against the eventual combined package and isolated native/harness execution before machine cutover.                                                                                                                             |
-| This tracker and canonical parent acceptance                                    | E231–E249 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
+| This tracker and canonical parent acceptance                                    | E231–E253 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
 
 ## Landing obligations
 
