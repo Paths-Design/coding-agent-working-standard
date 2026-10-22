@@ -38,9 +38,9 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Reviewed02cda3f9 then grounded and repaired child-process gap in f6adbc59: actual messages-store.test.js729-780 child loads remain root parentA3/A4. Inspected actual mutation-binding real-dryrun-02 execution stdout receipt6d513f68 and merged six blobs03d; VM primitive actualresult/execution; R01exec-qualified actual307/0 rawJSON35a48463 and disclosed stream loss. Gates5PASS1doc and formatting/diff0; doctor0E3W4I. Parent0/8 and33/37 partial remain, no native/whole qualification claim. External artifacts under root/peerA/peerR01 Codex artifacts paths cited in E254-257. Commit verification proves reachability only; actual contents checked separately."
-    recorded_at: "2026-10-22T09:03:13.619Z"
-    commit_sha: f6adbc59
+    evidence_ref: "Supersedes f6 snapshot with finite correction008d: independent committed wording follow-up grounded actuala6 helper213-225 and7suite343 rawstderr; recognized exec cases only, relative/customdir/decodedword discovery explicitlyopen. Actual unused client09a3PASS close11197, four output-copy red controls then177green, exact5blobs2a9 and cleanintegration; ordinary native remainsunchecked. Prior E254 binding6dreceipt/385/2678discovered0executed and E255 VMscope/child-consumption gap unchanged. New1doc5gates0/prettier/diff0; no native/package/cutover acceptance. Reviewer feedback separately source-grounded, not a clearance."
+    recorded_at: "2026-10-22T09:28:41.949Z"
+    commit_sha: "008d68b7"
   - criterion_id: A2
     status: pass
     evidence_ref: "Normal source merge8ba90e586a9f59bec315cf92c3c82a56a9145830 and local-main publisher44df55e0 normal merge2a803b45609c95f2dc8eaf52b858ba7ede856b69. Actual tracked ledger blobs equal6a13a50337fe32c1561b4a8fb58cc660fa7f1dd7; actual cmp main/source workingfiles exit0 SHA256e66f1c3de292fb10821d1c296b716af2302693f0f167a82e03d745dfa600236b. Source index safely refreshed from verified03d unchanged index/worktree via normal read-tree; source and main publishers5gatesPASS1doc. Parent remains0/8,33/37partial, installed408unchanged and actual native/package/fairness/cutover open. This is local publication only, no remote push."
