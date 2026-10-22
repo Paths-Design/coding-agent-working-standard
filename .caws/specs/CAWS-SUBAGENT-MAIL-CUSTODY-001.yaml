@@ -1,10 +1,11 @@
 id: CAWS-SUBAGENT-MAIL-CUSTODY-001
 title: 'Withhold CAWS message auto-delivery from subagent and uncertain actor contexts'
 mode: fix
-lifecycle_state: active
-worktree: subagent-mail-custody
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge subagent-mail-custody at f419e39249be7b4b5cb833ce1f822bed2cec3034'
 created_at: '2026-10-22T01:54:44.222Z'
-updated_at: '2026-10-22T05:01:53.562Z'
+updated_at: '2026-10-22T06:05:56.828Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
