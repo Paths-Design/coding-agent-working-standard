@@ -238,10 +238,10 @@ evidence:
     commit_sha: "0a4cbe79"
   - criterion_id: A5
     status: pass
-    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) test 36 and LF-only sweeps 55-57: lone LF is empty-result, two LFs and a relative record are non-absolute-result, nothing and an undelimited path are no-record-delimiter; each guard refuses at every normalization when only that answer is malformed."
-    recorded_at: "2026-10-22T05:41:53.668Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
-    commit_sha: "821bdeef"
+    evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) test 38 and LF-only sweeps 57-59: lone LF empty-result; two LFs and a relative record non-absolute-result; nothing and an undelimited path no-record-delimiter; each guard refuses at every normalization when only that answer is malformed."
+    recorded_at: "2026-10-22T06:10:42.489Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-41-terminal-0a4cbe79/serial.tap"
+    commit_sha: "0a4cbe79"
   - criterion_id: A6
     status: pass
     evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) tests 1-16: the LF root exists at fixture-built bytes and reaches callers with that byte; ordinary-root controls refuse or ask; worktree-write-guard gives the LF root the control exact refusal; bash-write-guard holds LF operating directories for the transport; base-branch enforcement handles apostrophe, bracket and LF roots and an apostrophe branch; git -z fallback counts LF roots, no -z asks for an LF root."
