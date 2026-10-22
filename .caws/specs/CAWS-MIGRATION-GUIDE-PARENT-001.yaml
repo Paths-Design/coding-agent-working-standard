@@ -2,7 +2,6 @@ id: CAWS-MIGRATION-GUIDE-PARENT-001
 title: 'Integrate qualified migration guide into runtime source'
 mode: doc
 lifecycle_state: active
-worktree: migration-guide-parent
 created_at: '2026-10-22T05:22:12.354Z'
 updated_at: '2026-10-22T05:22:26.268Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
