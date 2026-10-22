@@ -6449,14 +6449,19 @@ Additional bounded evidence and unresolved dependencies:
   receipts live under `store-baseline-consumption/attempt-01/` and retain the
   failed attempt. Candidate `547d4f96` tightens the audited two-key conditional
   export shape after review finds that an earlier Node/default branch can
-  precede the expected import branch. Its two actual private-import controls
-  await the allocated159-case VM run; passing mechanics at `97f7dca9` do not
-  qualify this later candidate. Actual ordinary Stryker consumption, the
-  semantic negative/restored sequence and full mutation quality remain open. CI
-  retention is also owed: `.github/workflows/mutation.yml` uploads report/index
-  files but omits run receipts and `runs/**`. The foreign shell lane owns that
-  path; coordination refuses its stale lease, so root retains the repair and no
-  handoff is accepted.
+  precede the expected import branch. The two-suite `focused-06` run on
+  `547d4f96` exits0 with159 passing checks and stable11 source hashes; its
+  execution receipt hashes to
+  `e3008b3180e1863b462a5234ee9004d8d47c1053244c7e4cca288a53687b9cc9`. Actual
+  private imports select the Node/default branches and write their distinct
+  markers; inspection then refuses the unsupported export shape. These VM
+  controls are separate from the preceding four-suite run. Actual ordinary
+  Stryker consumption, the semantic negative/restored sequence and full mutation
+  quality remain open. CI retention is also owed:
+  `.github/workflows/mutation.yml` uploads report/index files but omits run
+  receipts and `runs/**`. The foreign shell lane owns that path; coordination
+  refuses its stale lease, so root retains the repair and no handoff is
+  accepted.
 
 - E256: Review of R01 candidate `f9a90160` reaches executable-position ownership
   and managed-header boundaries that its237 passing checks miss. The owner
@@ -6547,13 +6552,18 @@ Additional bounded evidence and unresolved dependencies:
   with563 passing checks, zero failures and no pending tests.
   `final-qualified-jest.json` hashes to
   `4dd6bb32a5e81fa518afbbb05b886620b7760d855ba610cf13b1dca859bf8f85`; root
-  checks the actual exit0 terminal as well as that retained JSON. Raw attempts
-  and source/build identities live under
-  `r01-installed-entry/rollback-identity/`. The existing four-guide unit commits
-  the bounded recovery wording at `3f6f234c`, with independent source review;
-  coherent source/guide landing remains held. Fresh repaired packages, actual
-  native callbacks, upgrade/rollback, effective-event precedence and machine
-  adoption remain open.
+  checks the actual exit0 terminal as well as that retained JSON. Read-only
+  built-API observations under Node18/22 retain identical343-entry before/after
+  filesystem maps. Selected legacy A verifies, unused native B fails full
+  verification, retained entry identity verifies, and existing configuration and
+  observation agree without changes. Explicit fresh native opt-in refuses. These
+  source-API observations use repository dependencies and inert entry bytes;
+  they are not a fresh packaged image or native dispatch. Raw attempts and
+  source/build identities live under `r01-installed-entry/rollback-identity/`.
+  The existing four-guide unit commits the bounded recovery wording at
+  `3f6f234c`, with independent source review; coherent source/guide landing
+  remains held. Fresh repaired packages, actual native callbacks,
+  upgrade/rollback, effective-event precedence and machine adoption remain open.
 
 - E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
   `native-session-publication`, based on `03d663b6`, for the continuous original
