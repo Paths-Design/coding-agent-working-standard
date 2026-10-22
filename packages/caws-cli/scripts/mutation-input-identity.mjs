@@ -110,8 +110,10 @@ export function resolveNpmCommand() {
 function resolvePackage(name, from) {
   const require = createRequire(from);
   // Reading package metadata also handles packages which hide package.json
-  // behind exports. The lookup paths are Node's actual dependency search path.
-  for (const directory of require.resolve.paths(name) || []) {
+  // behind exports. Ask for metadata search paths so npm packages named like
+  // built-ins (for example buffer) do not get the built-in's null search path.
+  // The declared physical package must exist; the built-in cannot satisfy it.
+  for (const directory of require.resolve.paths(`${name}/package.json`) || []) {
     const candidate = path.join(directory, name, 'package.json');
     if (fs.existsSync(candidate)) return fs.realpathSync(candidate);
   }

@@ -13,6 +13,7 @@
  */
 
 const { spawnSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -285,6 +286,73 @@ function addSplitDependencyFixture(fixture) {
     { 'ansi-styles': '5.0.0' }
   );
   writePackage(fixture.repoRoot, 'ansi-styles', '5.0.0', "module.exports = 'hoisted-ansi-5';\n");
+}
+
+function addBuiltinNamedPackageFixture(fixture, { installed = true } = {}) {
+  const metadata = JSON.parse(
+    fs.readFileSync(path.join(fixture.packageRoot, 'package.json'), 'utf8')
+  );
+  metadata.devDependencies.bl = '4.1.0';
+  fixture.put('package.json', JSON.stringify(metadata));
+  const blManifestPath = fixture.put(
+    'node_modules/bl/package.json',
+    JSON.stringify({
+      name: 'bl',
+      version: '4.1.0',
+      main: 'index.cjs',
+      dependencies: { buffer: '5.7.1' },
+    })
+  );
+  fixture.put('node_modules/bl/index.cjs', "module.exports = require('buffer/');\n");
+  const bufferSource = "module.exports = 'physical-buffer-package-5.7.1';\n";
+  const bufferEntryPath = path.join(fixture.packageRoot, 'node_modules/buffer/index.cjs');
+  if (installed) {
+    fixture.put(
+      'node_modules/buffer/package.json',
+      JSON.stringify({
+        name: 'buffer',
+        version: '5.7.1',
+        main: 'index.cjs',
+      })
+    );
+    fixture.put('node_modules/buffer/index.cjs', bufferSource);
+  }
+  return { blManifestPath, bufferEntryPath, bufferSource };
+}
+
+function runBuiltinNamedPackageCapture(fixture, dependency, { changeBytes = false } = {}) {
+  const script = `
+    import fs from 'node:fs';
+    import path from 'node:path';
+    import { createRequire } from 'node:module';
+    import { pathToFileURL } from 'node:url';
+    const packageRoot = ${JSON.stringify(fixture.packageRoot)};
+    const { captureMutationInputs, assertInputsUnchanged } = await import(pathToFileURL(path.join(packageRoot, 'scripts/mutation-input-identity.mjs')));
+    const policy = JSON.parse(fs.readFileSync(path.join(packageRoot, 'mutation-policy.json'), 'utf8'));
+    try {
+      const inputIdentity = captureMutationInputs({ packageRoot, policy, surfaceId: 'store' });
+      fs.writeFileSync(${JSON.stringify(path.join(fixture.repoRoot, 'captured-inputs.json'))}, JSON.stringify(inputIdentity));
+      const require = createRequire(${JSON.stringify(dependency.blManifestPath)});
+      const entry = ${JSON.stringify(dependency.bufferEntryPath)};
+      console.log(JSON.stringify({
+        builtinResolution: require.resolve('buffer'),
+        installedResolution: require.resolve('buffer/'),
+        installedValue: require('buffer/'),
+        files: inputIdentity.files.filter(file => file.path === 'dependency:' + entry.split(path.sep).join('/')),
+      }));
+      if (${JSON.stringify(changeBytes)}) {
+        fs.writeFileSync(entry, "module.exports = 'changed-buffer-package-bytes';\\n");
+        assertInputsUnchanged(inputIdentity, { packageRoot, policy, surfaceId: 'store' });
+      }
+    } catch (error) { console.error(error.message); process.exitCode = 1; }
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: fixture.packageRoot,
+    encoding: 'utf8',
+    timeout: 15000,
+  });
+  retainChildObservation(fixture.repoRoot, result);
+  return result;
 }
 
 function fixtureCoreBody({
@@ -922,6 +990,61 @@ describe('captured-input mutation report qualification', () => {
     expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout).errors).toEqual([]);
+  });
+});
+
+describe('builtin-named package dependency capture', () => {
+  test('builtin-named package captures the installed required package and its exact entry bytes', () => {
+    const fixture = qualificationFixture();
+    const dependency = addBuiltinNamedPackageFixture(fixture);
+    const result = runBuiltinNamedPackageCapture(fixture, dependency);
+
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    const observed = JSON.parse(result.stdout);
+    expect(observed.builtinResolution).toBe('buffer');
+    expect(observed.installedResolution).toBe(dependency.bufferEntryPath);
+    expect(observed.installedValue).toBe('physical-buffer-package-5.7.1');
+    expect(observed.files).toEqual([
+      {
+        path: 'dependency:' + dependency.bufferEntryPath.split(path.sep).join('/'),
+        sha256: createHash('sha256').update(dependency.bufferSource).digest('hex'),
+        size: Buffer.byteLength(dependency.bufferSource),
+        mode: fs.statSync(dependency.bufferEntryPath).mode & 0o777,
+      },
+    ]);
+  });
+
+  test('builtin-named package detects installed entry-byte drift after capture', () => {
+    const fixture = qualificationFixture();
+    const dependency = addBuiltinNamedPackageFixture(fixture);
+    const result = runBuiltinNamedPackageCapture(fixture, dependency, { changeBytes: true });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout).installedValue).toBe('physical-buffer-package-5.7.1');
+    expect(result.stderr).toContain(
+      'persistent authored/input drift: dependency:' +
+        dependency.bufferEntryPath.split(path.sep).join('/')
+    );
+    expect(fs.readFileSync(dependency.bufferEntryPath, 'utf8')).toBe(
+      "module.exports = 'changed-buffer-package-bytes';\n"
+    );
+  });
+
+  test('builtin-named package refuses a missing required npm package despite the Node built-in', () => {
+    const fixture = qualificationFixture();
+    const dependency = addBuiltinNamedPackageFixture(fixture, { installed: false });
+    const result = runBuiltinNamedPackageCapture(fixture, dependency);
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'cannot resolve dependency buffer from ' + dependency.blManifestPath
+    );
+    expect(fs.existsSync(dependency.bufferEntryPath)).toBe(false);
+    expect(fs.existsSync(path.join(fixture.repoRoot, 'captured-inputs.json'))).toBe(false);
   });
 });
 
