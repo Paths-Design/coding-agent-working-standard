@@ -99,8 +99,18 @@ function nativeDiscoveryWords(command: string): {
   opaqueRemainder?: string;
 } {
   const words: NativeCommandWord[] = [];
+  const result = (opaqueRemainder?: string) => ({
+    words,
+    ...(opaqueRemainder === undefined ? {} : { opaqueRemainder }),
+  });
   let index = 0;
   while (index < command.length) {
+    // An unquoted continuation at a word boundary creates no word, including
+    // before a comment. Quoted empty words remain material shell words.
+    if (command[index] === '\\' && command[index + 1] === '\n') {
+      index += 2;
+      continue;
+    }
     if (/[ \t\r\n;&|<>()]/.test(command[index] as string)) {
       index++;
       continue;
@@ -120,30 +130,25 @@ function nativeDiscoveryWords(command: string): {
         else value += char;
       } else if (char === '\\') {
         const next = command[++index];
-        if (!next) return { words, opaqueRemainder: command.slice(start) };
+        if (!next) return result(command.slice(start));
         if (next !== '\n') value += quoted && !/["\\$`]/.test(next) ? '\\' + next : next;
       } else if (char === '`' || (char === '$' && command[index + 1] === '(')) {
-        return { words, opaqueRemainder: command.slice(start) };
+        return result(command.slice(start));
       } else if (char === '"' || (!quoted && char === "'")) {
         quoted = quoted ? null : char;
       } else value += char;
       index++;
     }
-    if (quoted) return { words, opaqueRemainder: command.slice(start) };
+    if (quoted) return result(command.slice(start));
     words.push({ raw: command.slice(start, index), value });
   }
-  return { words };
+  return result();
 }
 
 function hasCawsDiscoveryHint(command: string, inspectWrapper = true): boolean {
   const { words, opaqueRemainder } = nativeDiscoveryWords(command);
   for (let index = 0; index < words.length; index++) {
     const word = words[index]!;
-    if (
-      literalShellWord(word) &&
-      ['caws-hook-native', 'caws-hook'].includes(path.posix.basename(word.value))
-    )
-      return true;
     // Inspect one literal payload in the shell form already understood by the
     // ownership classifier. Finding a name here only requests reconciliation.
     const payload = words[index + 2];
@@ -154,8 +159,17 @@ function hasCawsDiscoveryHint(command: string, inspectWrapper = true): boolean {
       payload &&
       literalShellWord(word) &&
       literalShellWord(words[index + 1]!) &&
-      literalShellWord(payload) &&
-      hasCawsDiscoveryHint(payload.value, false)
+      literalShellWord(payload)
+    ) {
+      if (hasCawsDiscoveryHint(payload.value, false)) return true;
+      // The payload has been examined as shell, including its comments. Do
+      // not rescan its original quoted bytes as an ordinary data word.
+      index += 2;
+      continue;
+    }
+    if (
+      possibleCawsProducer(word.raw) ||
+      (literalShellWord(word) && possibleCawsProducer(word.value))
     )
       return true;
   }
@@ -353,18 +367,17 @@ export function isCawsProducerHookCandidate(hook: unknown): hook is NativeHook {
   // Known executable names are possible PATH invocations, not ownership
   // witnesses. Discovery neither resolves PATH nor admits their migration;
   // the existing classifier keeps non-data invocations unresolved.
-  if (
+  // Only shell-form commands have decoded shell words. Literal command
+  // boundaries must not hide a later known basename from reconciliation.
+  // Discovery never establishes ownership, a full parse or PATH resolution.
+  if (!Object.hasOwn(value, 'args'))
+    return typeof value.command === 'string' && hasCawsDiscoveryHint(value.command);
+  return (
     possibleCawsProducer(value.command) ||
     (Array.isArray(value.args)
       ? value.args.some(possibleCawsProducer)
       : possibleCawsProducer(value.args))
-  )
-    return true;
-  // Only shell-form commands have decoded shell words. Literal command
-  // boundaries must not hide a later known basename from reconciliation.
-  // Discovery never establishes ownership, a full parse or PATH resolution.
-  if (Object.hasOwn(value, 'args') || typeof value.command !== 'string') return false;
-  return hasCawsDiscoveryHint(value.command);
+  );
 }
 
 /** Exec-form CAWS registration is not an admitted migration format. Only

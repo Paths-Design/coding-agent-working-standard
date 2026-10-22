@@ -432,6 +432,10 @@ test.each([
     'substitution before encoded executable',
     () => String.raw`echo $(true); caws\-hook-native claude-code pre_tool_use --system`,
   ],
+  [
+    'literal shell payload after continuation-only nonword',
+    () => 'sh ' + '\\' + "\n -c 'true && caws\\-hook-native claude-code pre_tool_use --system'",
+  ],
 ])(
   'A4 preceding syntax %s adoption refuses before state or backup writes',
   (_name, commandForFixture) =>
@@ -472,6 +476,10 @@ test.each([
 test.each([
   String.raw`printf x # caws\-hook-native`,
   String.raw`printf x # $(true); caws\-hook-native`,
+  'printf x # caws-hook-native',
+  'printf x # /private/.caws/hooks/dispatch/pre_tool_use.sh',
+  "sh -c 'printf x # caws-hook-native'",
+  'printf x ' + '\\' + '\n # caws-hook-native',
 ])('A4 preceding syntax examined comment preserves foreign hook during adoption: %s', (command) => {
   const { config, options } = seededClaudePolicy();
   const value = JSON.parse(fs.readFileSync(config));

@@ -397,6 +397,10 @@ test.each([
     'substitution before encoded executable',
     () => String.raw`echo $(true); caws\-hook-native claude-code pre_tool_use --system`,
   ],
+  [
+    'literal shell payload after continuation-only nonword',
+    () => 'sh ' + '\\' + "\n -c 'true && caws\\-hook-native claude-code pre_tool_use --system'",
+  ],
 ])(
   'A4 preceding syntax %s merge refuses with typed reconciliation and unchanged bytes',
   (_name, commandForFixture) =>
@@ -442,6 +446,10 @@ test.each([
 test.each([
   String.raw`printf x # caws\-hook-native`,
   String.raw`printf x # $(true); caws\-hook-native`,
+  'printf x # caws-hook-native',
+  'printf x # /private/.caws/hooks/dispatch/pre_tool_use.sh',
+  "sh -c 'printf x # caws-hook-native'",
+  'printf x ' + '\\' + '\n # caws-hook-native',
 ])('A4 preceding syntax examined comment preserves foreign hook during merge: %s', (command) => {
   const group = { matcher: 'Read', hooks: [{ type: 'command', command, onFailure: 'continue' }] };
   write({ hooks: { PreToolUse: [group] }, permissions: { allow: ['Read'] } });

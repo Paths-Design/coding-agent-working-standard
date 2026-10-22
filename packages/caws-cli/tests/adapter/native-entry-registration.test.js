@@ -194,6 +194,10 @@ const precedingSyntaxCases = [
     'substitution before encoded executable',
     () => String.raw`echo $(true); caws\-hook-native claude-code pre_tool_use --system`,
   ],
+  [
+    'literal shell payload after continuation-only nonword',
+    () => 'sh ' + '\\' + "\n -c 'true && caws\\-hook-native claude-code pre_tool_use --system'",
+  ],
 ];
 function nativeObservationFixture() {
   // Inert assets exercise registration/layout verification only. No fixture
@@ -533,6 +537,10 @@ test('fresh configure remains legacy and installing an image is not implicit nat
 test.each([
   String.raw`printf x # caws\-hook-native`,
   String.raw`printf x # $(true); caws\-hook-native`,
+  'printf x # caws-hook-native',
+  'printf x # /private/.caws/hooks/dispatch/pre_tool_use.sh',
+  "sh -c 'printf x # caws-hook-native'",
+  'printf x ' + '\\' + '\n # caws-hook-native',
 ])(
   'A4 preceding syntax examined comment preserves foreign hook during configuration: %s',
   (command) => {
