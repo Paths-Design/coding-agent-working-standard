@@ -112,3 +112,8 @@ evidence:
     evidence_ref: "t8 ok on ce5ced6c (rm stub refuses only */caws-handler-stdin-*/payload: status 0, bytes exact, payload present during and after, payload named on stderr >= 2 times); prior a5b4baee not ok 8; m7 (presence check removed) not ok 8. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/attempts/*-m7-no-presence-check-ce5ced6c/run.tap"
     recorded_at: "2026-10-22T19:39:43.678Z"
     commit_sha: ce5ced6c
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "parse-input.sh _write_payload_file comment at ce5ced6c (f4168df9) names the EXIT trap, states it runs on TERM/INT/HUP but not KILL, and that no shipped dispatcher consumes CAWS_TEMP_FILES; source review: no CAWS_TEMP_FILES consumer under templates or src at 1169f7df"
+    recorded_at: "2026-10-22T19:40:15.859Z"
+    commit_sha: ce5ced6c
