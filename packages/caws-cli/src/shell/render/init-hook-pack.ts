@@ -467,7 +467,9 @@ export function renderSettingsWiring(
       case 'merged':
         lines.push(`  Merged the CAWS caws_dispatch wiring into your existing`);
         lines.push(`  .claude/settings.json (added: ${mergeResult.added.join(', ')}).`);
-        lines.push('  Your other settings — permissions, env, and any existing hooks —');
+        if (mergeResult.repaired?.length)
+          lines.push(`  Repaired managed failure policy: ${mergeResult.repaired.join(', ')}.`);
+        lines.push('  Your other settings — permissions, env, and user-authored hooks —');
         lines.push('  were preserved unchanged.');
         break;
       case 'unchanged':
@@ -475,6 +477,13 @@ export function renderSettingsWiring(
         lines.push('  entrypoints. No change.');
         break;
       case 'invalid':
+        if (mergeResult.reason === 'policy-invalid') {
+          lines.push(`  ERROR — managed failure policy is invalid: ${mergeResult.error}`);
+          lines.push(
+            '  init did NOT modify the file. Reconcile the supplied policy, then re-run init.'
+          );
+          return lines.join('\n');
+        }
         lines.push(`  ERROR — .claude/settings.json could not be parsed: ${mergeResult.error}`);
         lines.push('  init did NOT modify the file. Repair the JSON, then re-run init or');
         lines.push('  merge the canonical wiring by hand:');

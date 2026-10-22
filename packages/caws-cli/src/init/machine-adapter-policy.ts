@@ -19,6 +19,7 @@ import { isKnownSurface, resolveHookPack } from './hook-packs/register';
 import {
   CANONICAL_HOOK_ENTRIES,
   CANONICAL_QWEN_HOOK_ENTRIES,
+  claudePreToolUsePolicyError,
   readPristineBaseline,
 } from './hook-install';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
@@ -392,6 +393,11 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
         const hooks = group.hooks.map((h) => {
           if (!h || typeof h !== 'object') throw new Error(`Malformed hook: ${native}`);
           if (isCaws(h.command)) {
+            const claudePreToolUse = surface === 'claude-code' && event === 'pre_tool_use';
+            if (claudePreToolUse) {
+              const error = claudePreToolUsePolicyError(h);
+              if (error) throw new Error(error);
+            }
             replaced++;
             if (!selected.events[event as Event])
               throw new Error(
@@ -399,6 +405,7 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
               );
             return {
               ...h,
+              ...(claudePreToolUse ? { onFailure: 'block' } : {}),
               command: migrateNativeCommand(h.command, repo, home, surface, event as Event),
             };
           }

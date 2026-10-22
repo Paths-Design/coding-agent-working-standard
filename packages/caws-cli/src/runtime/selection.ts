@@ -175,7 +175,7 @@ function legacyRegistered(options: SelectionOptions): boolean {
             root !== options.canonical ||
             relative !== primary ||
             !universalEventMatcher(options.surface, options.event, group.matcher) ||
-            !unconditionalCommandHook(group, hook) ||
+            !unconditionalCommandHook(group, hook, options.surface, options.event) ||
             !qualifiedHookTimeout(options.surface, options.event, hook.timeout)
           )
             throw new Error(

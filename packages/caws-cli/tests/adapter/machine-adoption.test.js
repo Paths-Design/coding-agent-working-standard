@@ -9,8 +9,31 @@ const {
 } = require('../../dist/init/machine-adapter-policy');
 const { installMachineRuntime } = require('../../dist/init/machine-adapters');
 let root, repo, home, opts;
+function retainProcess(label, result, userHome) {
+  if (!process.env.CAWS_ADOPTION_ARTIFACT_DIR) return;
+  fs.writeFileSync(
+    path.join(root, `${label}.process.json`),
+    JSON.stringify(
+      {
+        executable: process.execPath,
+        cwd: repo,
+        home: userHome,
+        cawsHome: home,
+        status: result.status,
+        signal: result.signal,
+        error: result.error?.message,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      },
+      null,
+      2
+    )
+  );
+}
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-adoption-'));
+  const artifacts = process.env.CAWS_ADOPTION_ARTIFACT_DIR;
+  if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
+  root = fs.mkdtempSync(path.join(artifacts || os.tmpdir(), 'caws-adoption-'));
   repo = path.join(root, 'repo');
   home = path.join(root, 'machine');
   fs.mkdirSync(repo);
@@ -25,11 +48,19 @@ beforeEach(() => {
       encoding: 'utf8',
     }
   );
+  retainProcess('init-codex', init, path.join(root, 'user'));
   expect(init.status).toBe(0);
   installMachineRuntime({ home });
   opts = { repo, home, surface: 'codex', userHome: path.join(root, 'user') };
 });
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+  if (process.env.CAWS_ADOPTION_ARTIFACT_DIR)
+    fs.writeFileSync(
+      path.join(root, 'test-observation.json'),
+      JSON.stringify({ test: expect.getState().currentTestName, repo, home })
+    );
+  else fs.rmSync(root, { recursive: true, force: true });
+});
 function bytes() {
   const out = {};
   function walk(dir) {
@@ -43,6 +74,91 @@ function bytes() {
   walk(repo);
   return out;
 }
+
+function seededClaudePolicy(onFailure) {
+  const policy = path.join(root, 'reviewed-claude-policy.json');
+  fs.writeFileSync(
+    policy,
+    JSON.stringify({
+      events: { pre_tool_use: { hooks_dir: '.caws/hooks', handlers: ['cwd-guard.sh'] } },
+      libraries: {},
+    })
+  );
+  const config = path.join(repo, '.claude/settings.json');
+  fs.mkdirSync(path.dirname(config), { recursive: true });
+  const hook = {
+    type: 'command',
+    command: `CAWS_HOME='${home}' python3 '${home}/bin/caws-hook' claude-code pre_tool_use`,
+    statusMessage: 'Keep managed status',
+    ...(onFailure === undefined ? {} : { onFailure }),
+  };
+  const foreign = { type: 'command', command: 'echo operator-hook', onFailure: 'continue' };
+  fs.writeFileSync(
+    config,
+    JSON.stringify(
+      {
+        permissions: { allow: ['Read'] },
+        hooks: {
+          PreToolUse: [{ matcher: '.*', hooks: [foreign, hook] }],
+          Stop: [
+            { hooks: [{ type: 'command', command: 'echo operator-stop', onFailure: 'continue' }] },
+          ],
+        },
+      },
+      null,
+      2
+    ) + '\n'
+  );
+  return { config, options: { ...opts, surface: 'claude-code', fromFile: policy } };
+}
+function backupBytes() {
+  const directory = path.join(home, 'state/adoption-backups');
+  return fs.existsSync(directory)
+    ? Object.fromEntries(
+        fs
+          .readdirSync(directory)
+          .sort()
+          .map((name) => [name, fs.readFileSync(path.join(directory, name), 'utf8')])
+      )
+    : {};
+}
+test('seeded Claude adoption retrofits absent managed Pre policy and preserves foreign and other-event fields', () => {
+  const { config, options } = seededClaudePolicy();
+  const original = JSON.parse(fs.readFileSync(config));
+  const before = bytes();
+  const backups = backupBytes();
+  expect(adoptMachineAdapter({ ...options, plan: true }).changed).toBe(true);
+  expect(bytes()).toEqual(before);
+  expect(backupBytes()).toEqual(backups);
+  expect(adoptMachineAdapter(options).changed).toBe(true);
+  const expected = JSON.parse(JSON.stringify(original));
+  expected.hooks.PreToolUse[0].hooks[1].onFailure = 'block';
+  expect(JSON.parse(fs.readFileSync(config))).toEqual(expected);
+  const applied = bytes();
+  const appliedBackups = backupBytes();
+  expect(adoptMachineAdapter(options).changed).toBe(false);
+  expect(bytes()).toEqual(applied);
+  expect(backupBytes()).toEqual(appliedBackups);
+});
+test('seeded Claude adoption keeps explicit block registration bytes unchanged', () => {
+  const { config, options } = seededClaudePolicy('block');
+  const before = fs.readFileSync(config);
+  const plan = adoptMachineAdapter({ ...options, plan: true });
+  expect(plan.changes.map((change) => change.path)).not.toContain(config);
+  expect(fs.readFileSync(config)).toEqual(before);
+});
+test.each(['continue', null, { action: 'block' }])(
+  'seeded Claude adoption refuses supplied policy %j before registration, policy or backup writes',
+  (onFailure) => {
+    const { options } = seededClaudePolicy(onFailure);
+    const before = bytes();
+    const backups = backupBytes();
+    for (const plan of [true, false])
+      expect(() => adoptMachineAdapter({ ...options, plan })).toThrow(/failure policy/);
+    expect(bytes()).toEqual(before);
+    expect(backupBytes()).toEqual(backups);
+  }
+);
 
 test('plan preserves every byte; apply keeps custom handler order and unrelated hooks; repeat is a no-op', () => {
   const dispatcher = path.join(repo, '.caws/hooks/dispatch/pre_tool_use.sh');
@@ -288,6 +404,7 @@ test.each(['claude-code', 'qwen-code'])(
       [path.resolve(__dirname, '../../dist/index.js'), 'init', '--agent-surface', surface],
       { cwd: repo, env: { ...process.env, CI: 'true', CAWS_HOME: home }, encoding: 'utf8' }
     );
+    retainProcess(`init-${surface}`, init, process.env.HOME);
     expect(init.status).toBe(0);
     const vendor = surface === 'claude-code' ? '.claude' : '.qwen';
     const config = path.join(repo, vendor, 'settings.json');

@@ -32,12 +32,19 @@ export function universalEventMatcher(surface: string, event: string, matcher: u
  */
 export function unconditionalCommandHook(
   group: Record<string, unknown>,
-  hook: Record<string, unknown>
+  hook: Record<string, unknown>,
+  surface?: string,
+  event?: string
 ): boolean {
   return (
     Object.keys(group).every((key) => ['hooks', 'matcher', 'enabled'].includes(key)) &&
-    Object.keys(hook).every((key) =>
-      ['type', 'command', 'enabled', 'timeout', 'statusMessage', 'name'].includes(key)
+    Object.keys(hook).every(
+      (key) =>
+        ['type', 'command', 'enabled', 'timeout', 'statusMessage', 'name'].includes(key) ||
+        (key === 'onFailure' &&
+          surface === 'claude-code' &&
+          event === 'pre_tool_use' &&
+          hook.onFailure === 'block')
     ) &&
     hook.type === 'command' &&
     (hook.timeout === undefined ||

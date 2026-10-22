@@ -2,10 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const dist = process.env.CAWS_TEST_DIST || path.join(__dirname, '../../dist');
 
-const { initProject } = require('../../dist/store/init-store');
-const { runInitCommand } = require('../../dist/shell/commands/init');
-const { COMMAND_SURFACE_METADATA } = require('../../dist/shell/command-metadata');
+const { initProject } = require(path.join(dist, 'store/init-store'));
+const { runInitCommand } = require(path.join(dist, 'shell/commands/init'));
+const { COMMAND_SURFACE_METADATA } = require(path.join(dist, 'shell/command-metadata'));
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
 
 afterAll(() => {
@@ -56,6 +57,48 @@ afterEach(() => {
 });
 
 describe('caws init --plan', () => {
+  test.each([true, false])(
+    'Claude project policy invalid preflight refuses plan=%s before every init write',
+    (plan) => {
+      const root = makeTempRepo();
+      const settings = path.join(root, '.claude/settings.json');
+      fs.mkdirSync(path.dirname(settings));
+      fs.writeFileSync(
+        settings,
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                hooks: [
+                  {
+                    type: 'command',
+                    command: '"/p/.caws/hooks/dispatch/pre_tool_use.sh"',
+                    onFailure: 'continue',
+                  },
+                ],
+              },
+            ],
+          },
+        })
+      );
+      const before = snapshotTree(root);
+      const result = runInit(root, { plan, json: plan, agentSurface: 'claude-code' });
+      expect(result.code).toBe(1);
+      if (plan) {
+        const payload = JSON.parse(result.out);
+        expect(payload.ok).toBe(false);
+        expect(payload.claude_settings.settings_json).toMatchObject({
+          kind: 'invalid',
+          reason: 'policy-invalid',
+        });
+      } else expect(result.err).toMatch(/onFailure|failure policy/);
+      expect(fs.existsSync(path.join(root, '.caws'))).toBe(false);
+      expect(fs.existsSync(path.join(root, '.gitignore'))).toBe(false);
+      expect(fs.existsSync(path.join(root, '.claude/hooks'))).toBe(false);
+      expect(fs.existsSync(path.join(root, '.claude/settings.json.example'))).toBe(false);
+      expect(snapshotTree(root)).toEqual(before);
+    }
+  );
   test('help metadata lists read-only plan and JSON options', () => {
     const init = initMeta();
     expect(init.options.find((option) => option.flag === '--plan').description).toContain(

@@ -163,23 +163,43 @@ function requireRuntime(home: string): { files: string[]; defaults: Record<Event
 }
 
 /** Register one stable transport at the harness user layer. No project writes. */
-function requireNativeEntry(home: string): void {
+function requireNativeEntry(home: string, preserveLegacyTransport = false): void {
   const pointer = JSON.parse(before(home, path.join(home, 'state/adapter-runtime.json')) ?? 'null');
   const files = verifyRuntime(home, pointer.digest);
   const stable = path.join(home, 'bin/caws-hook-native');
   assertMachinePath(home, stable);
-  if (
-    !files['native-entry.json'] ||
-    !files['native/caws-hook-native'] ||
-    !fs.existsSync(stable) ||
-    !fs.statSync(stable).isFile() ||
-    (fs.statSync(stable).mode & 0o7777) !== 0o755 ||
-    createHash('sha256').update(fs.readFileSync(stable)).digest('hex') !==
-      files['native/caws-hook-native']
-  )
+  const refuse = (): never => {
     throw new Error(
       'Install and verify an explicit --native-image before configuring the native entry'
     );
+  };
+  if (!fs.existsSync(stable)) return refuse();
+  const stat = fs.lstatSync(stable);
+  if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o7777) !== 0o755) return refuse();
+  const identity = createHash('sha256').update(fs.readFileSync(stable)).digest('hex');
+  if (files['native-entry.json']) {
+    if (files['native/caws-hook-native'] !== identity) return refuse();
+    return;
+  }
+  // A retained transport may follow rollback into a verified legacy generation.
+  // This does not authorize fresh native opt-in or repair any installed bytes.
+  if (!preserveLegacyTransport || !files['bootstrap.py'] || !files['launcher.py']) return refuse();
+  const runtimes = path.join(home, 'lib/runtimes');
+  assertMachinePath(home, runtimes);
+  const candidates = new Set([
+    ...(typeof pointer.previous_digest === 'string' ? [pointer.previous_digest] : []),
+    ...fs.readdirSync(runtimes).sort(),
+  ]);
+  for (const digest of candidates) {
+    if (!/^[a-f0-9]{64}$/.test(digest)) continue;
+    try {
+      const retained = verifyRuntime(home, digest);
+      if (retained['native-entry.json'] && retained['native/caws-hook-native'] === identity) return;
+    } catch {
+      // Corrupt or partial generations vouch for no compatibility identity.
+    }
+  }
+  return refuse();
 }
 
 export function configureSystemRuntime(options: SystemOptions): {
@@ -219,7 +239,7 @@ export function configureSystemRuntime(options: SystemOptions): {
     throw new Error('Mixed CAWS entry registrations require explicit --entry reconciliation');
   const entry = options.entry ?? [...transports][0] ?? 'legacy';
   if (entry !== 'native' && entry !== 'legacy') throw new Error('Entry must be native or legacy');
-  if (entry === 'native') requireNativeEntry(home);
+  if (entry === 'native') requireNativeEntry(home, options.entry === undefined);
   const toml = before(user, path.join(user, vendor, 'config.toml'));
   if (toml && /\[hooks[.\[\]]/.test(toml) && isCawsNativeCommand(toml))
     throw new Error(
@@ -234,6 +254,10 @@ export function configureSystemRuntime(options: SystemOptions): {
       throw new Error(`Unrecognized CAWS lifecycle registration: ${name}`);
   }
   for (const [event, name] of Object.entries(MACHINE_EVENTS)) {
+    const failurePolicy =
+      options.surface === 'claude-code' && event === 'pre_tool_use'
+        ? { onFailure: 'block' as const }
+        : {};
     const groups = native.value.hooks[name] ?? [];
     if (!Array.isArray(groups)) throw new Error(`Malformed native hook groups: ${name}`);
     let replacements = 0;
@@ -246,7 +270,7 @@ export function configureSystemRuntime(options: SystemOptions): {
           if (!isCawsNativeCommand(hook?.command)) return hook;
           if (group.enabled === false || hook.enabled === false)
             throw new Error(`Disabled CAWS registration requires native-harness review: ${name}`);
-          if (!unconditionalCommandHook(group, hook))
+          if (!unconditionalCommandHook(group, hook, options.surface, event))
             throw new Error(
               `Conditional or unsupported CAWS hook requires native-harness reconciliation: ${name}`
             );
@@ -264,6 +288,7 @@ export function configureSystemRuntime(options: SystemOptions): {
           replacements++;
           return {
             ...hook,
+            ...failurePolicy,
             command:
               hook.command === systemCommand(home, options.surface, event, entry)
                 ? hook.command
@@ -310,6 +335,7 @@ export function configureSystemRuntime(options: SystemOptions): {
             type: 'command',
             command: systemCommand(home, options.surface, event, entry),
             timeout,
+            ...failurePolicy,
           },
         ],
       };

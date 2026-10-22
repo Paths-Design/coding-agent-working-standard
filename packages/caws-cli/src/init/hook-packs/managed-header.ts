@@ -11,7 +11,7 @@
 //
 // Contract (managed-header-parser): parseManagedHeader(content) returns the
 // managed header for `CAWS-MANAGED-HOOK` blocks — comment-line form
-// (`# key: value` after an optional shebang or `<!--` wrapper, e.g. installed
+// (`# key: value` or `// key: value` after an optional shebang or `<!--` wrapper, e.g. installed
 // hook scripts and `.dsh/AGENTS.md`-style markers) or JSON form (the
 // description field carrying `key=value` pairs, e.g. settings.json) — or
 // null when the content is not CAWS-managed.
@@ -19,7 +19,7 @@
 import type { ManagedHeader } from './types';
 
 /** Match a managed-header block at the top of a file. The block consists
- *  of consecutive `# CAWS-...` lines after an optional shebang or
+ *  of consecutive `#` or `//` comment lines after an optional shebang or
  *  HTML/JSDoc comment opener. Exported because non-parsing consumers key
  *  on the same marker string (e.g. hook-install's codex equivalence check
  *  strips a managed `description` before comparing) — one constant, one
@@ -80,28 +80,48 @@ export function parseManagedHeader(content: string): ManagedHeader | null {
   let cawsMinMajor = 0;
   let lineageRefs: number[] = [];
   let sawMarker = false;
+  let wrapper: 'html' | 'block' | null = null;
 
   for (const raw of lines) {
-    const line = raw
-      .trim()
-      .replace(/^<!--\s*/, '')
-      .replace(/\s*-->\s*$/, '');
+    let line = raw.trim();
     if (!line) continue;
+    if (!inBlock && line.startsWith('#!')) continue;
+    if (!wrapper && (line.startsWith('<!--') || line.startsWith('/*'))) {
+      wrapper = line.startsWith('<!--') ? 'html' : 'block';
+      line = line.replace(/^(?:<!--|\/\*\*?)\s*/, '');
+      if (!line) continue;
+    }
+    const closesWrapper =
+      wrapper === 'html' ? /-->\s*$/.test(line) : wrapper === 'block' && /\*\/\s*$/.test(line);
+    if (closesWrapper) line = line.replace(/(?:-->|\*\/)\s*$/, '').trim();
+    const comment = /^(?:#|\/\/)/.test(line);
 
-    if (line.includes(HEADER_MARKER)) {
+    if (
+      (comment && line.replace(/^(?:#|\/\/)\s*/, '') === HEADER_MARKER) ||
+      (wrapper !== null && line === HEADER_MARKER)
+    ) {
       sawMarker = true;
       inBlock = true;
+      if (closesWrapper) break;
       continue;
     }
-    if (!inBlock) continue;
+    if (!inBlock) {
+      if (closesWrapper) wrapper = null;
+      if (!comment && !wrapper) break;
+      continue;
+    }
 
-    // The block consists of `# key: value` lines. First non-comment
+    // Authored shell and generated JavaScript assets use the same keys.
+    // The block consists of `# key: value` or `// key: value` lines. First non-comment
     // line ends the block.
-    if (!line.startsWith('#')) break;
+    if (!comment) break;
 
-    const stripped = line.replace(/^#\s*/, '');
+    const stripped = line.replace(/^(?:#|\/\/)\s*/, '');
     const colon = stripped.indexOf(':');
-    if (colon < 0) continue;
+    if (colon < 0) {
+      if (closesWrapper) break;
+      continue;
+    }
     const key = stripped.slice(0, colon).trim();
     const value = stripped.slice(colon + 1).trim();
 
@@ -130,6 +150,7 @@ export function parseManagedHeader(content: string): ManagedHeader | null {
       }
       // 'do_not_edit_directly' is informational; ignored here.
     }
+    if (closesWrapper) break;
   }
 
   if (!sawMarker || !hookPack || hookPackVersion <= 0) return null;

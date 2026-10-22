@@ -12,6 +12,7 @@ const {
   systemCommand,
   isCawsNativeCommand,
   qualifiedHookTimeout,
+  unconditionalCommandHook,
   MACHINE_EVENTS,
 } = require(path.join(dist, 'init/native-hook-identification'));
 const { migrateNativeCommand } = require(path.join(dist, 'init/machine-adapter-policy'));
@@ -358,6 +359,129 @@ test('fresh configure remains legacy and installing an image is not implicit nat
   expect(fs.readFileSync(path.join(user, '.codex/hooks.json'))).toEqual(bytes);
 });
 test.each(['legacy', 'native'])(
+  'Claude failure policy blocks new %s PreToolUse handlers and retains foreign hooks',
+  (entry) => {
+    nativeObservationFixture();
+    const file = path.join(user, '.claude/settings.json');
+    const foreign = { type: 'command', command: '/operator/notify.sh', onFailure: 'continue' };
+    write(file, { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [foreign] }] } });
+    configureSystemRuntime({ home, userHome: user, surface: 'claude-code', entry });
+    const value = JSON.parse(fs.readFileSync(file));
+    expect(value.hooks.PreToolUse[0]).toEqual({ matcher: 'Bash', hooks: [foreign] });
+    expect(value.hooks.PreToolUse[1].hooks[0]).toEqual({
+      type: 'command',
+      command: systemCommand(home, 'claude-code', 'pre_tool_use', entry),
+      timeout: 45,
+      onFailure: 'block',
+    });
+    for (const [event, groups] of Object.entries(value.hooks))
+      if (event !== 'PreToolUse')
+        for (const group of groups)
+          for (const hook of group.hooks) expect(hook).not.toHaveProperty('onFailure');
+  }
+);
+test.each(['legacy', 'native'])(
+  'Claude failure policy retrofits absent %s policy through read-only plan then idempotent apply',
+  (entry) => {
+    nativeObservationFixture();
+    const surface = 'claude-code';
+    const settings = { home, userHome: user, surface, entry };
+    configureSystemRuntime(settings);
+    const file = path.join(user, '.claude/settings.json');
+    const value = JSON.parse(fs.readFileSync(file));
+    delete value.hooks.PreToolUse[0].hooks[0].onFailure;
+    write(file, value);
+    const before = fixtureBytes();
+    expect(configureSystemRuntime({ ...settings, plan: true }).changed).toBe(true);
+    expect(fixtureBytes()).toEqual(before);
+    expect(configureSystemRuntime(settings).changed).toBe(true);
+    value.hooks.PreToolUse[0].hooks[0].onFailure = 'block';
+    expect(JSON.parse(fs.readFileSync(file))).toEqual(value);
+    const applied = fixtureBytes();
+    expect(configureSystemRuntime({ ...settings, plan: true }).changed).toBe(false);
+    expect(systemSurfaceEnabled(surface, home, user)).toBe(true);
+    expect(configureSystemRuntime(settings).changed).toBe(false);
+    expect(fixtureBytes()).toEqual(applied);
+  }
+);
+test.each([
+  ['legacy', 'continue'],
+  ['native', 'continue'],
+  ['legacy', null],
+  ['native', null],
+  ['legacy', { action: 'block' }],
+  ['native', { action: 'block' }],
+])('Claude failure policy refuses explicit %s policy %j before any writes', (entry, onFailure) => {
+  nativeObservationFixture();
+  const surface = 'claude-code';
+  const file = path.join(user, '.claude/settings.json');
+  registration(file, machineCommand(home, surface, 'pre_tool_use', entry), '.*', {}, { onFailure });
+  const before = fixtureBytes();
+  for (const plan of [true, false])
+    expect(() => configureSystemRuntime({ home, userHome: user, surface, entry, plan })).toThrow(
+      /failure policy|reconciliation/i
+    );
+  expect(fixtureBytes()).toEqual(before);
+});
+test.each(['legacy', 'native'])(
+  'Claude failure policy recognizes only unconditional block project %s coverage',
+  (entry) => {
+    nativeObservationFixture();
+    const surface = 'claude-code';
+    const file = path.join(canonical, '.claude/settings.json');
+    const command = machineCommand(home, surface, 'pre_tool_use', entry);
+    registration(file, command, '.*', {}, { onFailure: 'block' });
+    expect(resolveInvocationSelection({ ...options, surface })).toEqual({
+      status: 'inactive',
+      reason: 'legacy native registration remains selected',
+    });
+    registration(file, command, '.*', {}, { onFailure: 'continue' });
+    expect(() => resolveInvocationSelection({ ...options, surface })).toThrow(/reconciliation/);
+    registration(file, command, '.*', {}, { onFailure: 'block', async: true });
+    expect(() => resolveInvocationSelection({ ...options, surface })).toThrow(/reconciliation/);
+  }
+);
+test.each([
+  ['codex', 'pre_tool_use', '.codex/hooks.json'],
+  ['qwen-code', 'pre_tool_use', '.qwen/settings.json'],
+  ['claude-code', 'post_tool_use', '.claude/settings.json'],
+])('failure policy remains unsupported for %s %s', (surface, event, relative) => {
+  configureSystemRuntime({ home, userHome: user, surface });
+  const file = path.join(user, relative);
+  const value = JSON.parse(fs.readFileSync(file));
+  for (const groups of Object.values(value.hooks))
+    for (const group of groups)
+      for (const hook of group.hooks)
+        if (
+          surface !== 'claude-code' ||
+          hook.command !== systemCommand(home, surface, 'pre_tool_use')
+        )
+          expect(hook).not.toHaveProperty('onFailure');
+  value.hooks[MACHINE_EVENTS[event]][0].hooks[0].onFailure = 'block';
+  write(file, value);
+  const before = fixtureBytes();
+  expect(() => configureSystemRuntime({ home, userHome: user, surface })).toThrow(/reconciliation/);
+  expect(fixtureBytes()).toEqual(before);
+});
+test('Claude failure policy recognition stays qualified by surface, event, exact value and execution fields', () => {
+  const group = { matcher: '.*', hooks: [] };
+  const hook = { type: 'command', command: '/operator/hook', onFailure: 'block' };
+  expect(unconditionalCommandHook(group, hook, 'claude-code', 'pre_tool_use')).toBe(true);
+  for (const onFailure of ['continue', 'BLOCK', null, undefined, { action: 'block' }])
+    expect(
+      unconditionalCommandHook(group, { ...hook, onFailure }, 'claude-code', 'pre_tool_use')
+    ).toBe(false);
+  for (const extra of [{ if: 'Bash' }, { async: true }, { args: [] }, { custom: true }])
+    expect(
+      unconditionalCommandHook(group, { ...hook, ...extra }, 'claude-code', 'pre_tool_use')
+    ).toBe(false);
+  expect(unconditionalCommandHook(group, hook)).toBe(false);
+  expect(unconditionalCommandHook(group, hook, 'codex', 'pre_tool_use')).toBe(false);
+  expect(unconditionalCommandHook(group, hook, 'qwen-code', 'pre_tool_use')).toBe(false);
+  for (const event of Object.keys(MACHINE_EVENTS).filter((event) => event !== 'pre_tool_use'))
+    expect(unconditionalCommandHook(group, hook, 'claude-code', event)).toBe(false);
+});
+test.each(['legacy', 'native'])(
   'system observation accepts explicitly configured %s transport without changing fixture bytes',
   (entry) => {
     const digest = nativeObservationFixture();
@@ -381,6 +505,128 @@ test.each(['legacy', 'native'])(
     expect(fixtureBytes()).toEqual(before);
   }
 );
+test('system observation accepts legacy-only selected generation without native metadata or entry', () => {
+  configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'legacy' });
+  expect(fs.existsSync(path.join(home, 'bin/caws-hook-native'))).toBe(false);
+  expect(
+    fs.existsSync(path.join(home, 'lib/runtimes', options.runtimeDigest, 'native-entry.json'))
+  ).toBe(false);
+  const before = fixtureBytes();
+  withObservationHome(() => {
+    expect(configureSystemRuntime({ home, surface: 'codex', plan: true }).changed).toBe(false);
+    expect(systemSurfaceEnabled('codex', home)).toBe(true);
+    expect(observeSystemRuntime(canonical)).toEqual({
+      surfaces: ['codex'],
+      legacySurfaces: [],
+      overrides: [],
+      digest: options.runtimeDigest,
+    });
+  });
+  expect(fixtureBytes()).toEqual(before);
+});
+function rollbackObservationFixture(farther = false) {
+  const nativeDigest = nativeObservationFixture();
+  configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native' });
+  let previousDigest = nativeDigest;
+  if (farther) {
+    const legacyRoot = path.join(home, 'lib/runtimes', options.runtimeDigest);
+    const manifest = JSON.parse(fs.readFileSync(path.join(legacyRoot, 'manifest.json')));
+    const files = Object.fromEntries(
+      Object.keys(manifest).map((relative) => [
+        relative,
+        fs.readFileSync(path.join(legacyRoot, relative)),
+      ])
+    );
+    files['legacy-hop.txt'] = Buffer.from('A later legacy generation\n');
+    const bytes = JSON.stringify(
+      Object.fromEntries(
+        Object.entries(files).map(([relative, content]) => [relative, sha(content)])
+      )
+    );
+    previousDigest = sha(bytes);
+    for (const [relative, content] of Object.entries(files))
+      write(
+        path.join(home, 'lib/runtimes', previousDigest, relative),
+        content.toString('utf8'),
+        relative.endsWith('.sh') ? 0o755 : 0o644
+      );
+    write(path.join(home, 'lib/runtimes', previousDigest, 'manifest.json'), bytes);
+  }
+  // Fixture pointer models ordinary rollback; no fixture executable is run.
+  write(path.join(home, 'state/adapter-runtime.json'), {
+    version: 1,
+    digest: options.runtimeDigest,
+    previous_digest: previousDigest,
+  });
+  return { nativeDigest, previousDigest };
+}
+test.each([false, true])(
+  'rollback observation preserves a verified native transport across legacy selection (farther retained image: %s)',
+  (farther) => {
+    rollbackObservationFixture(farther);
+    const before = fixtureBytes();
+    withObservationHome(() => {
+      expect(configureSystemRuntime({ home, surface: 'codex', plan: true }).changed).toBe(false);
+      expect(systemSurfaceEnabled('codex', home)).toBe(true);
+      expect(observeSystemRuntime(canonical)).toEqual({
+        surfaces: ['codex'],
+        legacySurfaces: [],
+        overrides: [],
+        digest: options.runtimeDigest,
+      });
+      expect(() =>
+        configureSystemRuntime({ home, surface: 'codex', entry: 'native', plan: true })
+      ).toThrow(/native-image/);
+    });
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test.each([
+  'missing retained image',
+  'corrupt retained manifest',
+  'corrupt retained member',
+  'invalid retained mode',
+  'missing retained metadata',
+  'orphan retained metadata',
+  'missing stable entry',
+  'changed stable entry',
+  'invalid stable mode',
+  'hardlinked stable entry',
+  'changed selected legacy',
+])('rollback observation refuses %s without repairing state', (kind) => {
+  const { nativeDigest } = rollbackObservationFixture();
+  const retained = path.join(home, 'lib/runtimes', nativeDigest);
+  const stable = path.join(home, 'bin/caws-hook-native');
+  if (kind === 'missing retained image') fs.rmSync(retained, { recursive: true });
+  if (kind === 'corrupt retained manifest') write(path.join(retained, 'manifest.json'), '{}');
+  if (kind === 'corrupt retained member')
+    write(path.join(retained, 'guard.sh'), '# changed\n', 0o755);
+  if (kind === 'invalid retained mode') fs.chmodSync(path.join(retained, 'native/node'), 0o644);
+  if (kind === 'missing retained metadata') fs.unlinkSync(path.join(retained, 'native-entry.json'));
+  if (kind === 'orphan retained metadata') {
+    fs.rmSync(retained, { recursive: true });
+    write(path.join(home, 'lib/runtimes', 'f'.repeat(64), 'native-entry.json'), {});
+  }
+  if (kind === 'missing stable entry') fs.unlinkSync(stable);
+  if (kind === 'changed stable entry') write(stable, '# changed\n', 0o755);
+  if (kind === 'invalid stable mode') fs.chmodSync(stable, 0o644);
+  if (kind === 'hardlinked stable entry') fs.linkSync(stable, path.join(root, 'stable-hardlink'));
+  if (kind === 'changed selected legacy')
+    write(path.join(home, 'lib/runtimes', options.runtimeDigest, 'guard.sh'), '# changed\n', 0o755);
+  const before = fixtureBytes();
+  const pattern = kind === 'changed selected legacy' ? /modified/ : /native-image/;
+  withObservationHome(() => {
+    expect(() => configureSystemRuntime({ home, surface: 'codex', plan: true })).toThrow(pattern);
+    expect(() => systemSurfaceEnabled('codex', home)).toThrow(pattern);
+    expect(observeSystemRuntime(canonical)).toEqual({
+      surfaces: ['codex'],
+      legacySurfaces: [],
+      overrides: [],
+      error: expect.stringMatching(pattern),
+    });
+  });
+  expect(fixtureBytes()).toEqual(before);
+});
 test.each(['absent', 'disabled'])(
   'system observation leaves %s system surface settings inactive and untouched',
   (state) => {

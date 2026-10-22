@@ -775,6 +775,8 @@ function renderInitPlan(plan: InitPlanDocument): string {
     lines.push(`  settings.json: ${plan.claude_settings.settings_json.kind}`);
     if (plan.claude_settings.settings_json.kind === 'merged') {
       lines.push(`  would add: ${plan.claude_settings.settings_json.added.join(', ')}`);
+      if (plan.claude_settings.settings_json.repaired?.length)
+        lines.push(`  would repair: ${plan.claude_settings.settings_json.repaired.join(', ')}`);
     }
     if (plan.claude_settings.settings_json.kind === 'invalid') {
       lines.push(`  error: ${plan.claude_settings.settings_json.error}`);
@@ -988,6 +990,9 @@ function runInitPlan(
     hookPlan.pack?.id === 'codex'
       ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
       : undefined;
+  const claudePolicyInvalid =
+    claudeSettings?.settings_json.kind === 'invalid' &&
+    claudeSettings.settings_json.reason === 'policy-invalid';
   // CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: mirror the apply-side
   // condition exactly (isAdapterCoveredSurface + planTelemetryRetirement, the
   // classifier retireStaleTelemetryRows is defined in terms of), so the
@@ -998,7 +1003,11 @@ function runInitPlan(
       : undefined;
 
   const plan: InitPlanDocument = {
-    ok: !unimplemented && !anyRefused && codexInstructions?.kind !== 'refused',
+    ok:
+      !unimplemented &&
+      !anyRefused &&
+      !claudePolicyInvalid &&
+      codexInstructions?.kind !== 'refused',
     read_only: true,
     command: 'init',
     repo_root: repoRoot,
@@ -1321,6 +1330,17 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     return 1;
   }
 
+  // Refuse supplied managed policy before canonical state, ignore rules, pack
+  // files or registration can be written. Parse/root-invalid settings retain
+  // their existing advisory behavior; only the typed policy refusal gates init.
+  if (!system && chosen.surface === 'claude-code') {
+    const settingsPlan = planClaudeSettingsMerge(repoRoot);
+    if (settingsPlan.kind === 'invalid' && settingsPlan.reason === 'policy-invalid') {
+      err(`caws init: ${settingsPlan.error}`);
+      return 1;
+    }
+  }
+
   // Step 1: bootstrap canonical .caws/ state.
   const result = initProject(repoRoot);
   if (!result.ok) {
@@ -1421,6 +1441,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   let orphanedDispatchDir: string | null = null;
   if (hookPackResult.pack?.id === 'claude-code') {
     mergeResult = mergeClaudeSettings(repoRoot);
+    if (mergeResult.kind === 'invalid' && mergeResult.reason === 'policy-invalid') {
+      err(`caws init: ${mergeResult.error}`);
+      return 1;
+    }
     writeSettingsExample(repoRoot);
     orphanedDispatchDir = detectOrphanedDispatchDir(repoRoot);
     // Re-inspect AFTER the merge so the activation panel reflects the
