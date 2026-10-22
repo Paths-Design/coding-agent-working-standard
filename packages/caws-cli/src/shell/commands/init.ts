@@ -164,6 +164,8 @@ export interface InitCommandOptions {
   /** Migrate direct canonical projects together; never recurse into worktrees. */
   readonly projectsRoot?: string;
   readonly nativeConfigTarget?: string;
+  readonly nativeImage?: string;
+  readonly entry?: 'native' | 'legacy';
   /** Override for the machine-runtime home consulted by systemSurfaceEnabled
    *  (default: CAWS_HOME env var, else ~/.caws). Callers that invoke
    *  runInitCommand in-process (not via a spawned CLI subprocess, where the
@@ -773,6 +775,8 @@ function renderInitPlan(plan: InitPlanDocument): string {
     lines.push(`  settings.json: ${plan.claude_settings.settings_json.kind}`);
     if (plan.claude_settings.settings_json.kind === 'merged') {
       lines.push(`  would add: ${plan.claude_settings.settings_json.added.join(', ')}`);
+      if (plan.claude_settings.settings_json.repaired?.length)
+        lines.push(`  would repair: ${plan.claude_settings.settings_json.repaired.join(', ')}`);
     }
     if (plan.claude_settings.settings_json.kind === 'invalid') {
       lines.push(`  error: ${plan.claude_settings.settings_json.error}`);
@@ -986,6 +990,9 @@ function runInitPlan(
     hookPlan.pack?.id === 'codex'
       ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
       : undefined;
+  const claudeRegistrationInvalid =
+    claudeSettings?.settings_json.kind === 'invalid' &&
+    claudeSettings.settings_json.reason !== undefined;
   // CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: mirror the apply-side
   // condition exactly (isAdapterCoveredSurface + planTelemetryRetirement, the
   // classifier retireStaleTelemetryRows is defined in terms of), so the
@@ -996,7 +1003,11 @@ function runInitPlan(
       : undefined;
 
   const plan: InitPlanDocument = {
-    ok: !unimplemented && !anyRefused && codexInstructions?.kind !== 'refused',
+    ok:
+      !unimplemented &&
+      !anyRefused &&
+      !claudeRegistrationInvalid &&
+      codexInstructions?.kind !== 'refused',
     read_only: true,
     command: 'init',
     repo_root: repoRoot,
@@ -1046,7 +1057,9 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       opts.wireUserConfig ||
       opts.threeWayPath ||
       opts.projectsRoot ||
-      opts.nativeConfigTarget
+      opts.nativeConfigTarget ||
+      opts.nativeImage ||
+      opts.entry
     ) {
       err(
         'caws init migrate: use --from reviewed-plan.json to preview; add positional apply to execute.'
@@ -1080,7 +1093,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
           (opts.fromFile || opts.agentSurface)) ||
         (opts.projectsRoot && operation !== 'migrate') ||
         (opts.projectsRoot && opts.fromFile) ||
-        (opts.nativeConfigTarget && operation !== 'configure')
+        (opts.nativeConfigTarget && operation !== 'configure') ||
+        (opts.nativeImage && operation !== 'install') ||
+        (opts.entry !== undefined &&
+          (operation !== 'configure' || !['native', 'legacy'].includes(opts.entry)))
       ) {
         err(
           'caws init adapters: incompatible options; use --plan/--json, or --agent-surface/--from with adopt'
@@ -1101,6 +1117,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
           const result = configureSystemRuntime({
             ...options,
             ...(opts.nativeConfigTarget ? { nativeConfigTarget: opts.nativeConfigTarget } : {}),
+            ...(opts.entry ? { entry: opts.entry } : {}),
           });
           out(
             opts.json
@@ -1174,7 +1191,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         );
         return 2;
       }
-      const options = { plan: opts.plan === true };
+      const options = {
+        plan: opts.plan === true,
+        ...(opts.nativeImage ? { nativeImage: opts.nativeImage } : {}),
+      };
       const result =
         operation === 'rollback' ? rollbackMachineRuntime(options) : installMachineRuntime(options);
       out(
@@ -1189,9 +1209,9 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     }
   }
 
-  if (opts.projectsRoot || opts.nativeConfigTarget) {
+  if (opts.projectsRoot || opts.nativeConfigTarget || opts.nativeImage || opts.entry) {
     err(
-      'caws init: --projects-root requires adapters migrate; --native-config-target requires adapters configure.'
+      'caws init: --projects-root requires adapters migrate; --native-config-target/--entry require adapters configure; --native-image requires adapters install.'
     );
     return 2;
   }
@@ -1310,6 +1330,17 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     return 1;
   }
 
+  // Refuse supplied managed policy before canonical state, ignore rules, pack
+  // files or registration can be written. Parse/root-invalid settings retain
+  // their existing advisory behavior; typed policy/registration refusals gate init.
+  if (!system && chosen.surface === 'claude-code') {
+    const settingsPlan = planClaudeSettingsMerge(repoRoot);
+    if (settingsPlan.kind === 'invalid' && settingsPlan.reason !== undefined) {
+      err(`caws init: ${settingsPlan.error}`);
+      return 1;
+    }
+  }
+
   // Step 1: bootstrap canonical .caws/ state.
   const result = initProject(repoRoot);
   if (!result.ok) {
@@ -1410,6 +1441,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   let orphanedDispatchDir: string | null = null;
   if (hookPackResult.pack?.id === 'claude-code') {
     mergeResult = mergeClaudeSettings(repoRoot);
+    if (mergeResult.kind === 'invalid' && mergeResult.reason !== undefined) {
+      err(`caws init: ${mergeResult.error}`);
+      return 1;
+    }
     writeSettingsExample(repoRoot);
     orphanedDispatchDir = detectOrphanedDispatchDir(repoRoot);
     // Re-inspect AFTER the merge so the activation panel reflects the

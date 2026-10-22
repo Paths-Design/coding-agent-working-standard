@@ -1,3 +1,9 @@
+# CAWS-MANAGED-HOOK
+# hook_pack: shared
+# hook_pack_version: 1
+# caws_min_major: 11
+# edit_stance: YOURS TO EDIT. CAWS uses this discovery marker to preserve local
+#   growth and offer reviewed updates; it does not authorize bypassing guards.
 # Cooperative renderer launch boundary. Source adoption must cover every writer,
 # including daemon and one-shot entry points; installing this file alone does
 # not stop an already running or unmodified foreign renderer.
