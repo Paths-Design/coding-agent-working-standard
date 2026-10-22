@@ -1,0 +1,38 @@
+id: CAWS-RESIDENT-STORE-ACQUISITION-001
+title: 'Retain original store acquisition in the resident project actor'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-22T00:37:03.373Z'
+updated_at: '2026-10-22T00:37:03.373Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Resident native actor acquisition, bounded transport relay and original-invocation custody'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/'
+    - 'docs/architecture/caws-native-runtime.md'
+  out: []
+invariants:
+  - 'Only native original invocation evidence binds store acquisition; engine readiness alone grants no authority.'
+  - 'Every acquisition attempt remains owned by the resident actor through frontend loss; no replay, unresolved-handle eviction or publication grant.'
+  - 'Successful engine-write acknowledgement follows the actual frontend write; read controls and credits remain correlated and bounded.'
+acceptance:
+  - id: A1
+    given: 'an active system OpenCode or ZCode Stop invocation with independently bound original project and database'
+    when: 'its actual native store request executes through the existing resident owner'
+    then: 'the project actor owns exactly one acquisition and complete settlement beyond frontend lifetime without changing renderer offer v1 framing or Codex eligibility.'
+  - id: A2
+    given: 'duplicate requests, wrong bindings, bounded capacity, pending renderer work, cancellation or frontend disconnect'
+    when: 'acquisition admission and row exchange execute'
+    then: 'FIFO barriers and request-owned cancellation preserve existing work and return explicit bounded failures without SQL replay, false write delivery or unresolved cleanup eviction.'
+  - id: A3
+    given: 'the committed integrated candidate and isolated native runtime artifacts'
+    when: 'focused actual frontend-to-actor SQL tests and meaningful dropped-retention or premature-acknowledgement controls execute'
+    then: 'source, commands, exits and surviving resident observations establish the owned acquisition contract with independent feedback while publication, ordinary reader consumption and machine adoption remain unqualified.'
+rollback:
+  - 'Revert this isolated source component through normal governed history; do not install a shared runtime.'
+non_functional: {}
+contracts: []
