@@ -233,10 +233,9 @@ evidence:
     commit_sha: "0a4cbe79f38877c08b4cd61b42ae6f177aff3afb"
   - criterion_id: A5
     status: pass
-    evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) test 38 and LF-only sweeps 57-59: lone LF empty-result; two LFs and a relative record non-absolute-result; nothing and an undelimited path no-record-delimiter; each guard refuses at every normalization when only that answer is malformed."
-    recorded_at: "2026-10-22T06:10:42.489Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-41-terminal-0a4cbe79/serial.tap"
-    commit_sha: "0a4cbe79"
+    evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) test 38 and LF-only sweeps 57-59: lone LF empty-result; two LFs and a relative record non-absolute-result; nothing and an undelimited path no-record-delimiter; each guard refuses at every normalization when only that answer is malformed. Raw artifact is outside the repository and not re-derivable by CAWS: ~/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-41-terminal-0a4cbe79/serial.tap (sha256 ae48521d...; its 7 not-ok lines are exactly those baseline reds). Re-derivable citation: commit 0a4cbe79, landed by governed merge b5b9cc69 into caws/shell-analysis."
+    recorded_at: "2026-10-22T16:15:49.983Z"
+    commit_sha: "0a4cbe79f38877c08b4cd61b42ae6f177aff3afb"
   - criterion_id: A6
     status: pass
     evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) tests 1-16: LF root at fixture-built bytes reaches callers with that byte; ordinary-root controls refuse or ask; wwg gives the LF root the control exact refusal; bwg holds LF operating directories for the transport; base-branch enforcement handles apostrophe, bracket and LF roots and an apostrophe branch; -z fallback counts LF roots; without -z an LF root is asked about."
