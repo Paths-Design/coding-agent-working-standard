@@ -1,0 +1,32 @@
+id: CAWS-CUTOVER-PROGRESS-235-001
+title: 'Integrate claim-oracle retirement and synchronize cutover obligations'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-10-22T00:47:49.298Z'
+updated_at: '2026-10-22T00:47:49.298Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Cutover integration evidence and the already qualified claim-oracle regression replacement'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+    - 'packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js'
+    - 'packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py'
+  out: []
+invariants:
+  - 'Main-landed R21 test bytes are imported exactly; no production runtime or parent acceptance is inferred.'
+  - 'Ledger retains partial coverage, complete production retirement, parent acceptance and machine adoption as distinct claims.'
+acceptance:
+  - id: A1
+    given: 'c66730a3 R21 replacement already landed on main and ff3c6180 policy registration on the source branch'
+    when: 'root imports the exact test retirement into the integration branch'
+    then: 'candidate test bytes and deletion match main, the integrated source consumer check passes or its concrete failure remains open, and source provenance is admitted.'
+  - id: A2
+    given: 'actual R21 and mutation-policy source landings and current open dependencies'
+    when: 'the existing ledger is published to main and source'
+    then: 'both ledger byte streams match and record completed bounded units, raw evidence, false-confidence limits, exact remaining owners and documentation obligations without changing unearned coverage or acceptance.'
+non_functional: {}
+contracts: []
