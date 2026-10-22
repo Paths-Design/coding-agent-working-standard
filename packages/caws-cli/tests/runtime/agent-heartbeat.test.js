@@ -479,10 +479,9 @@ test.each([
   ingress({}, inputJson);
   const p = ports();
   const result = await executeAgentHeartbeat(context, p);
-  expect(output(result)).toBe('');
+  expect(result).toEqual({ exitCode: 0, stdout: new Uint8Array(), stderr: new Uint8Array() });
   expect(p.heartbeat).not.toHaveBeenCalled();
   expect(p.poll).not.toHaveBeenCalled();
-  expect(result.offers).toEqual([]);
 });
 // Deliberately inconsistent unit requests the runtime protocol never builds: session
 // context in the payload but an empty, malformed or non-object original text. Custody
