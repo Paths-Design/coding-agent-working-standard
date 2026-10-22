@@ -238,9 +238,12 @@ export function finishStoreTimestamp(
   const hour = integer('tmHour');
   const minute = integer('tmMin');
   const second = Math.min(59, integer('tmSec'));
-  if (tmYear > MAX_I32 - 1900)
-    throw new StoreTimestampContractError('unqualified_profile', 'year_addition_band');
-  const year = tmYear + 1900;
+  // The reviewed ARM64 CPython 3.11.13 _datetime image adds 1900 in a
+  // 32-bit register before year-first validation (SHA-256
+  // d66f70a705a1cc6f170302c360e6085ce3cae42b497c808d59a49eb7022617c0).
+  // Interpret that result only after every supplied field passes C-int
+  // validation. This arithmetic model does not attest a live calendar producer.
+  const year = Number(BigInt.asIntN(32, BigInt(tmYear) + 1900n));
   const invalid = (message: string): never => {
     throw new StoreTimestampReferenceError('ValueError', message);
   };

@@ -5,9 +5,12 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { installMachineRuntime } = require('../../dist/init/machine-adapters');
-let root, home, templates;
+let root, home, templates, invocations;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-system-runtime-'));
+  const parent = process.env.CAWS_SYSTEM_RUNTIME_ARTIFACT_DIR || os.tmpdir();
+  fs.mkdirSync(parent, { recursive: true });
+  root = fs.mkdtempSync(path.join(parent, 'caws-system-runtime-'));
+  invocations = [];
   home = path.join(root, 'machine');
   templates = path.join(root, 'templates');
   fs.cpSync(path.resolve(__dirname, '../../templates/hook-packs'), templates, { recursive: true });
@@ -17,7 +20,26 @@ beforeEach(() => {
     JSON.stringify({ version: 1, enabled: true })
   );
 });
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+  if (process.env.CAWS_SYSTEM_RUNTIME_ARTIFACT_DIR)
+    fs.writeFileSync(
+      path.join(root, 'test-observation.json'),
+      JSON.stringify(
+        {
+          test: expect.getState().currentTestName,
+          root,
+          home,
+          templates,
+          invocations,
+          boundary:
+            'Private legacy subprocess fixture, retained without replacing assertions. No native harness callback is established.',
+        },
+        null,
+        2
+      ) + '\n'
+    );
+  else fs.rmSync(root, { recursive: true, force: true });
+});
 function repo(name) {
   const p = path.join(root, name);
   fs.mkdirSync(path.join(p, '.caws/specs'), { recursive: true });
@@ -32,18 +54,34 @@ function invoke(
   toolInput = { file_path: 'x.ts' },
   payload = {}
 ) {
-  return spawnSync('python3', [path.join(home, 'bin/caws-hook'), 'codex', event, '--system'], {
+  const args = [path.join(home, 'bin/caws-hook'), 'codex', event, '--system'];
+  const input = JSON.stringify({
+    cwd: p,
+    session_id: 'system-test',
+    tool_name: 'Write',
+    tool_input: toolInput,
+    ...payload,
+  });
+  const result = spawnSync('python3', args, {
     cwd: p,
     encoding: 'utf8',
     env: { ...process.env, CAWS_HOME: home, CAWS_PROJECT_DIR: '', ...extra },
-    input: JSON.stringify({
-      cwd: p,
-      session_id: 'system-test',
-      tool_name: 'Write',
-      tool_input: toolInput,
-      ...payload,
-    }),
+    input,
   });
+  invocations.push({
+    command: ['python3', ...args],
+    cwd: p,
+    input,
+    environmentOverrides: { CAWS_HOME: home, CAWS_PROJECT_DIR: '', ...extra },
+    status: result.status,
+    signal: result.signal,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    error: result.error
+      ? { name: result.error.name, message: result.error.message, code: result.error.code }
+      : null,
+  });
+  return result;
 }
 function configure(p, surface) {
   const key = crypto.createHash('sha256').update(fs.realpathSync(p)).digest('hex');

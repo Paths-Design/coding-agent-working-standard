@@ -558,8 +558,12 @@ unset _PAYLOAD_SID
 # is denied, recorded as a strike, and escalated through the SAME
 # identity-verified path as Bash. Untrapped sessions are untouched: the lookup
 # uses --no-create, emits nothing, and exits 0.
+# The Codex parser normalizes apply_patch to Write/Edit for dispatch, while
+# run-handlers forwards the original sanitized payload on stdin. Recognize the
+# raw mutation alias here too: ambient HOOK_TOOL_NAME is not authoritative and
+# must never downgrade a payload mutation to a read.
 case "$TOOL_NAME" in
-  Write|Edit|NotebookEdit|MultiEdit)
+  Write|Edit|NotebookEdit|MultiEdit|apply_patch)
     if [[ -n "${SESSION_ID:-}" && "$SESSION_ID" != "unknown" ]]; then
       WRITE_LATCH_FILE="$(danger_latch_file "$SESSION_ID" --no-create)"
       if [[ -f "$WRITE_LATCH_FILE" ]]; then

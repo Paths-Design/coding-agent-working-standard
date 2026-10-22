@@ -512,8 +512,13 @@ caws_source_lib() {
   # This branch is entered only by the machine launcher; legacy dispatch keeps
   # its existing resolution order below.
   if [[ "${CAWS_MACHINE_RUNTIME:-}" == 1 ]]; then
-    local _machine_local
-    _machine_local="$(python3 -c 'import json,os,sys; p=json.loads(os.environ.get("CAWS_MACHINE_LIBRARIES", "{}")); print(p.get(sys.argv[1], ""))' "$basename")" || return 1
+    local _machine_local=""
+    # The native engine emits this exact empty map when no local libraries
+    # are selected. Every other value retains the existing JSON parser,
+    # including unset, empty, whitespace and malformed values.
+    if [[ "${CAWS_MACHINE_LIBRARIES-}" != '{}' ]]; then
+      _machine_local="$(python3 -c 'import json,os,sys; p=json.loads(os.environ.get("CAWS_MACHINE_LIBRARIES", "{}")); print(p.get(sys.argv[1], ""))' "$basename")" || return 1
+    fi
     if [[ -n "$_machine_local" ]]; then
       source "${CAWS_MACHINE_POLICY_ROOT}/${_machine_local}"
       return $?

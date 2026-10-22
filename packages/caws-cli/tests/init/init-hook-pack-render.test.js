@@ -125,6 +125,119 @@ describe('A1: no managed header carries the contradicting edit-prohibition', () 
 });
 
 describe('A2: parseManagedHeader still recognizes a rewritten header as managed', () => {
+  test('every declared managed shared template has a recognizable discovery header', () => {
+    const missing = SHARED_PACK.installedFiles
+      .filter((file) => file.managed)
+      .filter(
+        (file) =>
+          parseManagedHeader(
+            fs.readFileSync(path.join(PACKS_ROOT, 'shared', file.sourcePath), 'utf8')
+          ) === null
+      )
+      .map((file) => file.sourcePath);
+    expect(missing).toEqual([]);
+  });
+
+  test('generated JavaScript comment headers expose the same managed identity', () => {
+    expect(
+      parseManagedHeader(
+        [
+          '#!/usr/bin/env node',
+          '// CAWS-MANAGED-HOOK',
+          '// hook_pack: shared',
+          '// hook_pack_version: 7',
+          '// caws_min_major: 11',
+          '// lineage_refs: 8,16',
+          'console.log("asset");',
+        ].join('\n')
+      )
+    ).toEqual({
+      hookPack: 'shared',
+      hookPackVersion: 7,
+      cawsMinMajor: 11,
+      lineageRefs: [8, 16],
+    });
+  });
+
+  test('a closed license comment without executable trailing bytes permits the real header', () => {
+    expect(
+      parseManagedHeader(
+        [
+          '/* license */',
+          '// CAWS-MANAGED-HOOK',
+          '// hook_pack: shared',
+          '// hook_pack_version: 7',
+        ].join('\n')
+      )
+    ).toMatchObject({ hookPack: 'shared', hookPackVersion: 7 });
+  });
+
+  test.each([
+    '// hook_pack: shared\n// hook_pack_version: 7\n',
+    '// CAWS-MANAGED-HOOK\nconsole.log("foreign");\n// hook_pack: shared\n// hook_pack_version: 7\n',
+    '// CAWS-MANAGED-HOOK\n// hook_pack_version: 7\n',
+    '// CAWS-MANAGED-HOOK\n// hook_pack: shared\n// hook_pack_version: 0\n',
+    'const marker = "CAWS-MANAGED-HOOK";\n// hook_pack: shared\n// hook_pack_version: 7\n',
+    'echo CAWS-MANAGED-HOOK\n# hook_pack: shared\n# hook_pack_version: 7\n',
+    '/*\nCAWS-MANAGED-HOOK\n*/\n// hook_pack: shared\n// hook_pack_version: 7\n',
+    '/* license */ const operatorCode = true;\n// CAWS-MANAGED-HOOK\n// hook_pack: shared\n// hook_pack_version: 7\n',
+    '/* license\n*/ const operatorCode = true;\n// CAWS-MANAGED-HOOK\n// hook_pack: shared\n// hook_pack_version: 7\n',
+    '<!-- license --> <script>operatorCode()</script>\n# CAWS-MANAGED-HOOK\n# hook_pack: shared\n# hook_pack_version: 7\n',
+  ])(
+    'incomplete or interrupted JavaScript metadata does not authorize management: %s',
+    (content) => {
+      expect(parseManagedHeader(content)).toBeNull();
+    }
+  );
+
+  test.each([
+    ['<!--', '-->'],
+    ['/*', '*/'],
+  ])('wrapped managed metadata remains recognizable with %s', (open, close) => {
+    expect(
+      parseManagedHeader(
+        [open, 'CAWS-MANAGED-HOOK', '# hook_pack: shared', '# hook_pack_version: 7', close].join(
+          '\n'
+        )
+      )
+    ).toMatchObject({ hookPack: 'shared', hookPackVersion: 7 });
+  });
+
+  test('ordinary repeated shared-pack install stamps generated assets and preserves unmanaged collisions', () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-managed-shared-'));
+    try {
+      const first = installHookPack(SHARED_PACK, { repoRoot });
+      expect(first.actions.filter((a) => a.action === 'refused')).toEqual([]);
+      for (const rel of ['lib/session-render-writer.sh', 'advisory_truncate.cjs']) {
+        const header = parseManagedHeader(
+          fs.readFileSync(path.join(repoRoot, '.caws/hooks', rel), 'utf8')
+        );
+        expect(header).toMatchObject({ hookPack: 'shared', hookPackVersion: SHARED_PACK_VERSION });
+      }
+      const repeat = installHookPack(SHARED_PACK, { repoRoot });
+      expect(repeat.actions.every((a) => a.action === 'unchanged')).toBe(true);
+      const unmanaged = path.join(repoRoot, '.caws/hooks/advisory_truncate.cjs');
+      const operatorBytes = [
+        '#!/usr/bin/env node',
+        '/* license */ const operatorCode = true;',
+        '// CAWS-MANAGED-HOOK',
+        '// hook_pack: shared',
+        '// hook_pack_version: 7',
+      ].join('\n');
+      fs.writeFileSync(unmanaged, operatorBytes);
+      const refusal = installHookPack(SHARED_PACK, { repoRoot });
+      expect(
+        refusal.actions.find((a) => a.destPath.endsWith('advisory_truncate.cjs'))
+      ).toMatchObject({
+        action: 'refused',
+        refusalReason: 'unmanaged_collision',
+      });
+      expect(fs.readFileSync(unmanaged, 'utf8')).toBe(operatorBytes);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   test('the live scope-guard.sh header parses to its marker keys', () => {
     const content = fs.readFileSync(path.join(PACKS_ROOT, 'shared', 'scope-guard.sh'), 'utf8');
     const header = parseManagedHeader(content);

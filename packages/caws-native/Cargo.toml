@@ -3,9 +3,33 @@ name = "caws-native"
 version = "0.1.0"
 edition = "2024"
 publish = false
+default-run = "caws-native"
+
+[[bin]]
+name = "caws-hook-native"
+path = "src/installed_entry_main.rs"
+
+[features]
+default = []
+# Qualified SQLite builds require the external fresh-target coordinator.
+sqlite-store = ["dep:rusqlite", "dep:libsqlite3-sys"]
 
 [dependencies]
 base64 = "0.22.1"
+rusqlite = { version = "=0.40.2", default-features = false, features = ["hooks", "limits"], optional = true }
+libsqlite3-sys = { version = "=0.38.2", default-features = false, optional = true }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.10.9"
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+# This release gates its runtime-detected ARM SHA-2 backend behind `asm`.
+# Keep complete byte hashing; CPUs without SHA-2 retain the software fallback.
+sha2 = { version = "0.10.9", features = ["asm"] }
+
+[build-dependencies]
+libc = "0.2"
+cc = "=1.8.0"
+serde_json = "1"
+sha2 = "0.10.9"

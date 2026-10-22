@@ -18,6 +18,7 @@ import {
   pythonStrip,
   type CanonicalEvent,
   type LocatedEvent,
+  type NormalizationContext,
   type TranscriptAdapter,
 } from './harness-common';
 import { PYTHON_WHITESPACE_PATTERN } from './source-occurrence';
@@ -217,7 +218,10 @@ function control(row: JsonObject, ts: string | null): CanonicalEvent | null {
   }
   return null;
 }
-export function normalizeClaude(row: JsonObject): readonly LocatedEvent[] {
+export function normalizeClaude(
+  row: JsonObject,
+  context?: NormalizationContext
+): readonly LocatedEvent[] {
   const events: LocatedEvent[] = [],
     ts = parseTimestamp(getMember(row, 'timestamp')),
     kind = getMember(row, 'type');
@@ -378,7 +382,7 @@ export function normalizeClaude(row: JsonObject): readonly LocatedEvent[] {
           );
       }
     } else if (isJsonObject(attachment) && getMember(attachment, 'type') === 'hook_success') {
-      const hook = parseHookStdout(getMember(attachment, 'stdout'));
+      const hook = parseHookStdout(getMember(attachment, 'stdout'), context?.numericProfile);
       if (hook !== null) {
         const hookEvent = getMember(hook, 'hook_event');
         const fields = Object.fromEntries(hook.entries);
@@ -408,5 +412,8 @@ export const CLAUDE_ADAPTER: TranscriptAdapter<null> = Object.freeze({
   matches: matchesClaude,
   createState: () => null,
   cloneState: () => null,
-  normalize: (row: JsonObject) => ({ state: null, events: normalizeClaude(row) }),
+  normalize: (row: JsonObject, _state: null, context?: NormalizationContext) => ({
+    state: null,
+    events: normalizeClaude(row, context),
+  }),
 });

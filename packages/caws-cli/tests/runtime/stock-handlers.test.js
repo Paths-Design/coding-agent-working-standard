@@ -4,12 +4,81 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
-const { tryExecuteStockHandler } = require('../../dist/runtime/stock-handlers');
+const {
+  tryExecuteStockHandler,
+  qualifiesForNativeContainment,
+} = require('../../dist/runtime/stock-handlers');
 const { createHandlerExecutor } = require('../../dist/runtime/handler-executor');
 const classifier = require('../../dist/runtime/classifier');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const digest = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 let directory, runtime, project, selection, request, environment, controller;
+const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
+if (artifactRoot && !path.isAbsolute(artifactRoot))
+  throw new Error('Artifact root must be absolute');
+const agentSurfaceProfiles = [
+  {
+    name: 'legacy JSON lookup',
+    sha256: 'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
+    revision: 'f7a5af5097f151efa3079935fa2bc235c23ac6ad^',
+  },
+  {
+    name: 'exact-empty JSON lookup',
+    sha256: '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
+    revision: null,
+  },
+];
+function useAgentSurfaceProfile(profile) {
+  const file = selection.libraries['agent-surface.sh'].path;
+  if (profile.revision) {
+    const bytes = execFileSync(
+      '/usr/bin/git',
+      [
+        'show',
+        profile.revision + ':packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh',
+      ],
+      {
+        cwd: path.resolve(__dirname, '../../../..'),
+        env: {
+          HOME: directory,
+          PATH: '/usr/bin:/bin',
+          GIT_CONFIG_NOSYSTEM: '1',
+          GIT_CONFIG_GLOBAL: '/dev/null',
+        },
+        timeout: 5000,
+        maxBuffer: 1024 * 1024,
+      }
+    );
+    fs.writeFileSync(file, bytes);
+  }
+  selection.libraries['agent-surface.sh'].sha256 = digest(file);
+  fs.writeFileSync(
+    path.join(directory, 'reviewed-agent-surface.json'),
+    JSON.stringify({ ...profile, actualSha256: digest(file) }, null, 2)
+  );
+  expect(digest(file)).toBe(profile.sha256);
+}
+function captureResult(label, result) {
+  const base = path.join(directory, label);
+  fs.mkdirSync(base);
+  fs.writeFileSync(path.join(base, 'input.bin'), request.inputJson);
+  fs.writeFileSync(path.join(base, 'stdout.bin'), Buffer.from(result.stdout));
+  fs.writeFileSync(path.join(base, 'stderr.bin'), Buffer.from(result.stderr));
+  fs.writeFileSync(
+    path.join(base, 'result.json'),
+    JSON.stringify({ exitCode: result.exitCode }, null, 2)
+  );
+}
+function retainFixture(source, destination) {
+  const metadata = fs.lstatSync(source);
+  if (metadata.isSymbolicLink()) fs.symlinkSync(fs.readlinkSync(source), destination);
+  else if (metadata.isDirectory()) {
+    fs.mkdirSync(destination, { mode: 0o700 });
+    for (const name of fs.readdirSync(source))
+      retainFixture(path.join(source, name), path.join(destination, name));
+  } else if (metadata.isFile()) fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
+  else throw new Error('Unsupported fixture entry: ' + source);
+}
 function context() {
   return { request, selection, environment, signal: controller.signal };
 }
@@ -109,38 +178,193 @@ beforeEach(() => {
 });
 afterEach(() => {
   jest.restoreAllMocks();
+  if (artifactRoot && directory) {
+    fs.writeFileSync(path.join(directory, 'input.bin'), request.inputJson);
+    // Caller environment is deliberately omitted: the existing fixture inherits
+    // ambient non-CAWS variables, which are not qualification evidence.
+    const { caller, ...requestWithoutEnvironment } = request;
+    const files = ['dist/runtime/stock-handlers.js', 'src/runtime/stock-handlers.ts'];
+    fs.writeFileSync(
+      path.join(directory, 'test-identity.json'),
+      JSON.stringify(
+        {
+          test: expect.getState().currentTestName,
+          node: { path: process.execPath, version: process.version },
+          request: { ...requestWithoutEnvironment, caller: { cwd: caller.cwd } },
+          selection,
+          sourceIdentities: files.map((name) => {
+            const file = path.resolve(__dirname, '../..', name);
+            return { path: file, sha256: digest(file) };
+          }),
+          nonclaims: [
+            'native process execution',
+            'signal execution',
+            'missing-session identity',
+            'exclusive logical-session process ownership',
+          ],
+        },
+        null,
+        2
+      )
+    );
+    fs.mkdirSync(artifactRoot, { recursive: true });
+    const retained = path.join(artifactRoot, path.basename(directory));
+    if (fs.existsSync(retained))
+      throw new Error('Refusing to overwrite retained fixture ' + retained);
+    // Node's native cp weakly_canonical can abort on intentional symlink loops
+    // on macOS even with dereference:false. Retain link bytes without resolving.
+    retainFixture(directory, retained);
+    fs.writeFileSync(
+      path.join(retained, 'retention.json'),
+      JSON.stringify({ executedRoot: directory, retainedRoot: retained }, null, 2)
+    );
+  }
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
-test('actual selected stock guard refuses a bare staged deletion natively without arming a latch', async () => {
-  fs.writeFileSync(path.join(project, 'owned.txt'), 'owned\n');
-  git('add', 'owned.txt');
-  git(
-    '-c',
-    'user.name=Fixture',
-    '-c',
-    'user.email=fixture@example.invalid',
-    'commit',
-    '-qm',
-    'fixture'
-  );
-  fs.unlinkSync(path.join(project, 'owned.txt'));
-  git('add', '-u');
-  const indexBefore = fs.readFileSync(path.join(project, '.git/index'));
-  command('git commit -m unrelated');
+test.each(agentSurfaceProfiles)(
+  'actual selected stock guard refuses a bare staged deletion natively without arming a latch ($name)',
+  async (profile) => {
+    useAgentSurfaceProfile(profile);
+    fs.writeFileSync(path.join(project, 'owned.txt'), 'owned\n');
+    git('add', 'owned.txt');
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '-qm',
+      'fixture'
+    );
+    fs.unlinkSync(path.join(project, 'owned.txt'));
+    git('add', '-u');
+    const indexBefore = fs.readFileSync(path.join(project, '.git/index'));
+    fs.writeFileSync(path.join(directory, 'index-before.bin'), indexBefore);
+    command('git commit -m unrelated');
+    const handler = select();
+    const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+    const result = await createHandlerExecutor(context())(handler, 0);
+    captureResult('staged-deletion', result);
+    expect(result.exitCode).toBe(0);
+    const body = JSON.parse(Buffer.from(result.stdout).toString('utf8'));
+    expect(body.decision).toBe('block');
+    expect(body.reason).toContain('owned.txt');
+    expect(body.reason).toContain('danger latch was NOT armed');
+    expect(body.reason).toContain('git commit -m "<msg>" -- <paths>');
+    expect(spawn.mock.calls.length).toBe(0);
+    expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(indexBefore);
+    expect(fs.existsSync(path.join(project, '.codex/hooks/state'))).toBe(false);
+  }
+);
+
+test('a rehashed unreviewed library keeps the selected shell route instead of inheriting stock trust', async () => {
+  useAgentSurfaceProfile(agentSurfaceProfiles[1]);
+  command('echo safe');
+  environment.CAWS_SESSION_ID = 'fixture';
   const handler = select();
   const spawn = jest.spyOn(require('node:child_process'), 'spawn');
-  const result = await createHandlerExecutor(context())(handler, 0);
-  expect(result.exitCode).toBe(0);
-  const body = JSON.parse(Buffer.from(result.stdout).toString('utf8'));
-  expect(body.decision).toBe('block');
-  expect(body.reason).toContain('owned.txt');
-  expect(body.reason).toContain('danger latch was NOT armed');
-  expect(body.reason).toContain('git commit -m "<msg>" -- <paths>');
-  expect(spawn).not.toHaveBeenCalled();
-  expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(indexBefore);
-  expect(fs.existsSync(path.join(project, '.codex/hooks/state'))).toBe(false);
+  const native = await createHandlerExecutor(context())(handler, 0);
+  const reviewedExecutorChildren = spawn.mock.calls.length;
+  captureResult('reviewed-quiet-allow', native);
+  expect(native.exitCode).toBe(0);
+  expect(Buffer.from(native.stdout).length).toBe(0);
+  expect(Buffer.from(native.stderr).length).toBe(0);
+  expect(spawn.mock.calls.length).toBe(0);
+  expect(qualifiesForNativeContainment(handler, context())).toBe(true);
+
+  const library = selection.libraries['agent-surface.sh'];
+  fs.appendFileSync(library.path, '\n# valid but unreviewed fixture source\n');
+  library.sha256 = digest(library.path); // Fresh metadata must not grant a new reviewed identity.
+  expect(agentSurfaceProfiles.map((profile) => profile.sha256)).not.toContain(library.sha256);
+  expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+  const fallback = await createHandlerExecutor(context())(handler, 0);
+  captureResult('unreviewed-shell-allow', fallback);
+  fs.writeFileSync(
+    path.join(directory, 'route-observation.json'),
+    JSON.stringify(
+      {
+        reviewedExecutorChildren,
+        finalExecutorChildren: spawn.mock.calls.length,
+        rehashedLibrary: library,
+      },
+      null,
+      2
+    )
+  );
+  expect(fallback.exitCode).toBe(0);
+  expect(Buffer.from(fallback.stdout).length).toBe(0);
+  expect(spawn.mock.calls.length).toBe(1);
 });
+
+test.each(agentSurfaceProfiles)(
+  'reviewed source permits only the original containment eligibility contract ($name)',
+  (profile) => {
+    useAgentSurfaceProfile(profile);
+    command('echo safe');
+    environment.CAWS_SESSION_ID = 'fixture';
+    const handler = select();
+    const owner = context();
+    const reviewedEligible = qualifiesForNativeContainment(handler, owner);
+    const candidates = [
+      ['request surface', { ...owner, request: { ...request, surface: 'claude-code' } }],
+      ['request event', { ...owner, request: { ...request, event: 'stop' } }],
+      ['request generation', { ...owner, request: { ...request, runtimeDigest: 'b'.repeat(64) } }],
+      [
+        'file tool',
+        { ...owner, request: { ...request, payload: { ...request.payload, tool_name: 'Write' } } },
+      ],
+      ['disabled effect', { ...owner, environment: { ...environment, CAWS_TRAP_KILL: '0' } }],
+      ['dry-run effect', { ...owner, environment: { ...environment, CAWS_TRAP_KILL: 'dryrun' } }],
+      ['hook dry-run', { ...owner, environment: { ...environment, CAWS_HOOK_DRY_RUN: '1' } }],
+      [
+        'prior startup',
+        {
+          ...owner,
+          environment: { ...environment, CAWS_PRIOR_BASH_ENV: '/unreviewed/startup.sh' },
+        },
+      ],
+      [
+        'custom handler',
+        {
+          ...owner,
+          selection: { ...selection, handlers: [{ ...handler, kind: 'project-override' }] },
+        },
+      ],
+      ['missing selected handler', { ...owner, selection: { ...selection, handlers: [] } }],
+      [
+        'library override',
+        {
+          ...owner,
+          selection: {
+            ...selection,
+            libraryOverrides: { 'emit.sh': selection.libraries['emit.sh'].path },
+          },
+        },
+      ],
+    ];
+    const observations = candidates.map(([name, candidate]) => ({
+      name,
+      eligible: qualifiesForNativeContainment(handler, candidate),
+    }));
+    const startup = path.join(runtime, 'handler-env.sh');
+    fs.appendFileSync(startup, '\n# unreviewed startup bytes\n');
+    const changedStartupEligible = qualifiesForNativeContainment(handler, owner);
+    fs.writeFileSync(
+      path.join(directory, 'containment-eligibility.json'),
+      JSON.stringify(
+        { profile, reviewedEligible, observations, changedStartupEligible, effectAttempted: false },
+        null,
+        2
+      )
+    );
+    expect(reviewedEligible).toBe(true);
+    for (const observation of observations)
+      expect(observation).toEqual({ name: observation.name, eligible: false });
+    expect(changedStartupEligible).toBe(false);
+  }
+);
 
 test('a canonical latch prevents native admission from a different checkout', () => {
   command('echo safe');
@@ -328,7 +552,7 @@ test.each([
     };
   const classify = jest.spyOn(classifier, 'classifyCommand');
   expect(tryExecuteStockHandler(handler, context())).toBeNull();
-  expect(classify).not.toHaveBeenCalled();
+  expect(classify.mock.calls.length).toBe(0);
 });
 
 test('opt-in exact stock utility evaluates document metadata without Python or a shell handler', async () => {
@@ -349,7 +573,7 @@ test('opt-in exact stock utility evaluates document metadata without Python or a
   expect(
     JSON.parse(Buffer.from(result.stdout).toString()).hookSpecificOutput.additionalContext
   ).toBe('Consumer document metadata missing: title.');
-  expect(spawn).not.toHaveBeenCalled();
+  expect(spawn.mock.calls.length).toBe(0);
 });
 
 test.each([
@@ -414,7 +638,7 @@ test.each([
             }) + '\n'
           : '',
     });
-    expect(spawn).not.toHaveBeenCalled();
+    expect(spawn.mock.calls.length).toBe(0);
     expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(indexBefore);
     expect(fs.readFileSync(path.join(subdirectory, 'private.generated'), 'utf8')).toBe(
       'nested sentinel\n'
@@ -458,4 +682,286 @@ test('native entry honors cancellation and an already expired request', () => {
   controller = new AbortController();
   request.deadlineEpochMs = Date.now() - 1;
   expect(() => tryExecuteStockHandler(handler, context())).toThrow('deadline expired');
+});
+
+function useHeartbeatCli() {
+  const bin = path.join(directory, 'heartbeat-bin');
+  fs.mkdirSync(bin);
+  fs.symlinkSync(path.resolve(__dirname, '../../dist/index.js'), path.join(bin, 'caws'));
+  fs.symlinkSync(process.execPath, path.join(bin, 'node'));
+  environment.PATH = bin + path.delimiter + '/usr/bin:/bin';
+  return bin;
+}
+
+test.each([undefined, '', 'caws'])(
+  'exact stock Codex Bash heartbeat selects typed application consumer with CAWS_BIN=%s',
+  async (cli) => {
+    useHeartbeatCli();
+    if (cli !== undefined) environment.CAWS_BIN = cli;
+    const heartbeat = require('../../dist/runtime/agent-heartbeat');
+    const result = { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+    const execute = jest.spyOn(heartbeat, 'executeAgentHeartbeat').mockResolvedValue(result);
+    command('true');
+    const handler = select('agent-heartbeat.sh');
+    expect(await tryExecuteStockHandler(handler, context())).toBe(result);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0][0].request.payload.session_id).toBe('fixture');
+  }
+);
+test.each([
+  [
+    'Node preload',
+    () => {
+      environment.NODE_OPTIONS = '--require /custom/preload.js';
+    },
+  ],
+  [
+    'Node module path',
+    () => {
+      environment.NODE_PATH = '/custom/modules';
+    },
+  ],
+  [
+    'loader preload',
+    () => {
+      environment.LD_PRELOAD = '/custom/preload.so';
+    },
+  ],
+  [
+    'Darwin loader preload',
+    () => {
+      environment.DYLD_INSERT_LIBRARIES = '/custom/preload.dylib';
+    },
+  ],
+  [
+    'imported Bash function',
+    () => {
+      environment['BASH_FUNC_caws%%'] = '() { :; }';
+    },
+  ],
+  [
+    'custom CLI',
+    () => {
+      environment.CAWS_BIN = '/custom/caws';
+    },
+  ],
+  [
+    'PATH-selected custom CLI',
+    () => {
+      const custom = path.join(directory, 'custom-bin');
+      fs.mkdirSync(custom);
+      fs.writeFileSync(path.join(custom, 'caws'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+      environment.PATH = custom + path.delimiter + environment.PATH;
+    },
+  ],
+  [
+    'missing CLI',
+    () => {
+      fs.unlinkSync(path.join(directory, 'heartbeat-bin/caws'));
+    },
+  ],
+  [
+    'nonexecutable CLI',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/caws');
+      fs.unlinkSync(file);
+      fs.writeFileSync(file, '#!/bin/sh\nexit 1\n', { mode: 0o600 });
+    },
+  ],
+  [
+    'CLI directory',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/caws');
+      fs.unlinkSync(file);
+      fs.mkdirSync(file, { mode: 0o700 });
+    },
+  ],
+  [
+    'broken CLI symlink',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/caws');
+      fs.unlinkSync(file);
+      fs.symlinkSync('missing', file);
+    },
+  ],
+  [
+    'foreign CLI with identical entry bytes',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/caws');
+      fs.unlinkSync(file);
+      fs.copyFileSync(path.resolve(__dirname, '../../dist/index.js'), file);
+      fs.chmodSync(file, 0o700);
+    },
+  ],
+  [
+    'missing Node',
+    () => {
+      const bin = path.join(directory, 'heartbeat-bin');
+      fs.unlinkSync(path.join(bin, 'node'));
+      environment.PATH = bin;
+    },
+  ],
+  [
+    'missing PATH',
+    () => {
+      delete environment.PATH;
+    },
+  ],
+  [
+    'PATH-selected custom Node',
+    () => {
+      const file = path.join(directory, 'heartbeat-bin/node');
+      fs.unlinkSync(file);
+      fs.writeFileSync(file, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    },
+  ],
+  [
+    'empty PATH entry',
+    () => {
+      environment.PATH = ':' + environment.PATH;
+    },
+  ],
+  [
+    'relative PATH entry',
+    () => {
+      environment.PATH = '.' + path.delimiter + environment.PATH;
+    },
+  ],
+  [
+    'modified CLI startup bytes',
+    () => {
+      const entry = fs.realpathSync(path.resolve(__dirname, '../../dist/index.js'));
+      const read = fs.readFileSync;
+      jest
+        .spyOn(fs, 'readFileSync')
+        .mockImplementation((file, ...args) =>
+          file === entry
+            ? Buffer.from('#!/usr/bin/env node\n// custom startup\n')
+            : read(file, ...args)
+        );
+    },
+  ],
+  [
+    'startup Bash',
+    () => {
+      environment.BASH_ENV = '/custom/startup';
+    },
+  ],
+  [
+    'prior startup Bash',
+    () => {
+      environment.CAWS_PRIOR_BASH_ENV = '/custom/startup';
+    },
+  ],
+  [
+    'preloaded library',
+    () => {
+      environment._CAWS_EMIT_SH_LOADED = '1';
+    },
+  ],
+  [
+    'project configuration',
+    () => {
+      selection.configuration = 'project-policy';
+    },
+  ],
+  [
+    'other event',
+    () => {
+      selection.event = 'post_tool_use';
+    },
+  ],
+  [
+    'other surface',
+    () => {
+      selection.surface = 'claude-code';
+    },
+  ],
+  [
+    'non-Bash',
+    () => {
+      request.payload.tool_name = 'Write';
+    },
+  ],
+  [
+    'noncanonical Bash',
+    () => {
+      request.payload.tool_input = { command: 27 };
+    },
+  ],
+  [
+    'arguments',
+    (handler) => {
+      handler.args = ['extra'];
+    },
+  ],
+  [
+    'user library',
+    () => {
+      selection.libraries['emit.sh'].kind = 'user';
+    },
+  ],
+  [
+    'project library',
+    () => {
+      selection.libraries['emit.sh'].kind = 'project';
+    },
+  ],
+  [
+    'library override',
+    () => {
+      selection.libraryOverrides['emit.sh'] = '/override';
+    },
+  ],
+  [
+    'handler override',
+    () => {
+      selection.overrides['other.sh'] = '/override';
+    },
+  ],
+  [
+    'project handler',
+    () => {
+      selection.handlers.push({ ...selection.handlers[0], kind: 'project-policy' });
+    },
+  ],
+  [
+    'handler source changed',
+    (handler) => {
+      fs.appendFileSync(handler.path, '\n# changed\n');
+    },
+  ],
+  [
+    'library source changed',
+    () => {
+      fs.appendFileSync(selection.libraries['emit.sh'].path, '\n# changed\n');
+    },
+  ],
+  [
+    'parse dependency changed',
+    () => {
+      fs.appendFileSync(path.join(runtime, 'lib/session-cache.sh'), '\n# changed\n');
+    },
+  ],
+  [
+    'runtime bootstrap changed',
+    () => {
+      fs.appendFileSync(path.join(runtime, 'runtime-paths.sh'), '\n# changed\n');
+    },
+  ],
+  [
+    'handler startup changed',
+    () => {
+      fs.appendFileSync(path.join(runtime, 'handler-env.sh'), '\n# changed\n');
+    },
+  ],
+])('heartbeat %s retains compatibility fallback', (_, mutate) => {
+  useHeartbeatCli();
+  const heartbeat = require('../../dist/runtime/agent-heartbeat');
+  const execute = jest.spyOn(heartbeat, 'executeAgentHeartbeat');
+  command('true');
+  const handler = select('agent-heartbeat.sh');
+  mutate(handler);
+  expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  expect(execute).not.toHaveBeenCalled();
 });

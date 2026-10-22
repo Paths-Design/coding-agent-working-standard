@@ -488,6 +488,8 @@ export function registerShellCommands(
     from?: string;
     projectsRoot?: string;
     nativeConfigTarget?: string;
+    nativeImage?: string;
+    entry?: 'native' | 'legacy';
   };
   const invokeInit = (
     opts: InitOptions,
@@ -543,6 +545,9 @@ export function registerShellCommands(
       (runOpts as { projectsRoot?: string }).projectsRoot = opts.projectsRoot;
     if (opts.nativeConfigTarget !== undefined)
       (runOpts as { nativeConfigTarget?: string }).nativeConfigTarget = opts.nativeConfigTarget;
+    if (opts.nativeImage !== undefined)
+      (runOpts as { nativeImage?: string }).nativeImage = opts.nativeImage;
+    if (opts.entry !== undefined) (runOpts as { entry?: 'native' | 'legacy' }).entry = opts.entry;
     if (opts.from !== undefined) {
       (runOpts as { fromFile?: string }).fromFile = opts.from;
     }

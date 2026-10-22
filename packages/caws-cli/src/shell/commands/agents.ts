@@ -32,10 +32,10 @@
 //   - list / show: read-only via loadLeases + summarizeActiveAgents.
 
 import * as os from 'node:os';
+import { computeActiveSummary, heartbeatAgentActivity } from '../../application/agent-heartbeat';
 import {
   isOk,
   registerAgentSession,
-  heartbeatAgentSession,
   stopAgentSession,
   setAgentLeaseWorkState,
   summarizeActiveAgents,
@@ -215,50 +215,7 @@ function buildLeaseContext(
 
 // ─── active-summary JSON shape (CAWS-native; NEVER hook envelope) ────────
 
-interface ActiveAgentSummaryEntry {
-  readonly session_id: string;
-  readonly bound_worktree: string | null;
-  readonly bound_spec_id: string | null;
-  readonly branch: string | null;
-  readonly git_dir_kind: 'canonical' | 'worktree';
-  readonly last_active_age_ms: number;
-  readonly is_self: boolean;
-}
-
-interface ActiveSummary {
-  readonly active_agent_count: number;
-  readonly active_agents: ReadonlyArray<ActiveAgentSummaryEntry>;
-}
-
 const DEFAULT_STALE_TTL_MS = 30 * 60 * 1000; // 30m
-
-function computeActiveSummary(
-  registry: LeaseRegistry,
-  selfSessionId: string,
-  now: Date,
-  ttlMs: number = DEFAULT_STALE_TTL_MS
-): ActiveSummary {
-  // Defensive: kernel feature-detect. If summarizeActiveAgents is
-  // missing, fall back to an empty summary. Caller (register/heartbeat
-  // --include-active-summary) receives `active_agent_count: 0` and an
-  // empty active_agents array rather than a Node throw.
-  const summary = callSummarizeActiveAgentsSafe(registry, now, ttlMs) ?? EMPTY_ACTIVITY_SUMMARY;
-  const entries: ActiveAgentSummaryEntry[] = summary.active.map((lease) => ({
-    session_id: lease.session_id,
-    bound_worktree: lease.bound_worktree ?? null,
-    bound_spec_id: lease.bound_spec_id ?? null,
-    branch: lease.branch ?? null,
-    git_dir_kind: lease.git_common_dir === lease.git_dir ? 'canonical' : 'worktree',
-    last_active_age_ms: Math.max(0, now.getTime() - Date.parse(lease.last_active)),
-    is_self: lease.session_id === selfSessionId,
-  }));
-  return {
-    active_agent_count: entries.length,
-    active_agents: entries,
-  };
-}
-
-// ─── caws agents register ─────────────────────────────────────────────────
 
 export interface RegisterOpts extends BaseAgentsOpts {
   readonly reason?: LeaseReason;
@@ -392,86 +349,46 @@ export function runAgentsHeartbeatCommand(opts: HeartbeatOpts = {}): number {
       : typeof env['CAWS_FORKED_FROM'] === 'string' && env['CAWS_FORKED_FROM'].length > 0
         ? env['CAWS_FORKED_FROM']
         : undefined;
-  if (kind !== undefined && kind !== 'main' && kind !== 'fork' && kind !== 'subagent') {
-    err("caws agents heartbeat: --session-kind accepts exactly 'main', 'fork', or 'subagent'.");
-    return 1;
-  }
-  if (forkedFrom !== undefined && kind !== 'fork') {
-    err('caws agents heartbeat: --forked-from is only meaningful with --session-kind fork.');
-    return 1;
-  }
-  const forkedContext: LeaseContext = {
-    ...context,
-    ...(kind !== undefined ? { harness_session_kind: kind } : {}),
-    ...(forkedFrom !== undefined ? { forked_from: forkedFrom } : {}),
-  };
-
-  const now = nowFn();
-  const reason: LeaseReason = opts.reason ?? 'pre_tool_use';
-  const throttleMs = opts.throttleMs ?? 0;
-
-  const loadRes = loadLeases(cawsDir);
-  if (!isOk(loadRes)) {
-    err('caws agents heartbeat: lease directory unreadable.');
-    err(renderDiagnostics(loadRes.errors, { showData }));
-    return 2;
-  }
-  let leases = loadRes.value.leases;
-
-  // Throttle check: if existing lease's last_active is within throttleMs,
-  // skip the write. The active-summary is still computed and returned so
-  // the hook caller doesn't lose visibility during throttle windows.
-  const existing = leases[idRes.identity.session_id];
-  let throttled = false;
-  let wrote = false;
-
-  if (existing !== undefined && throttleMs > 0) {
-    const lastActiveMs = Date.parse(existing.last_active);
-    const age = now.getTime() - lastActiveMs;
-    if (Number.isFinite(lastActiveMs) && age < throttleMs) {
-      throttled = true;
-    }
-  }
-
-  if (!throttled) {
-    const patchRes = heartbeatAgentSession(leases, idRes.identity, forkedContext, now, reason);
-    if (!isOk(patchRes)) {
-      err('caws agents heartbeat: kernel refused.');
-      err(renderDiagnostics(patchRes.errors, { showData }));
+  const result = heartbeatAgentActivity({
+    cawsDir,
+    identity: idRes.identity,
+    context,
+    now: nowFn,
+    ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+    ...(opts.throttleMs !== undefined ? { throttleMs: opts.throttleMs } : {}),
+    ...(opts.includeActiveSummary !== undefined
+      ? { includeActiveSummary: opts.includeActiveSummary }
+      : {}),
+    ...(kind !== undefined ? { sessionKind: kind } : {}),
+    ...(forkedFrom !== undefined ? { forkedFrom } : {}),
+  });
+  if (!result.ok) {
+    if (result.stage === 'fork-context') {
+      err(
+        result.reason === 'invalid-session-kind'
+          ? "caws agents heartbeat: --session-kind accepts exactly 'main', 'fork', or 'subagent'."
+          : 'caws agents heartbeat: --forked-from is only meaningful with --session-kind fork.'
+      );
       return 1;
     }
-    const applyRes = applyLeasePatch(cawsDir, patchRes.value);
-    if (!isOk(applyRes)) {
-      err('caws agents heartbeat: store write failed.');
-      err(renderDiagnostics(applyRes.errors, { showData }));
-      return 1;
+    if (result.stage === 'identity') {
+      err(`caws agents: invalid --session-id "${idRes.identity.session_id}".`);
+    } else {
+      const message = {
+        load: 'caws agents heartbeat: lease directory unreadable.',
+        transition: 'caws agents heartbeat: kernel refused.',
+        apply: 'caws agents heartbeat: store write failed.',
+      }[result.stage];
+      err(message);
     }
-    wrote = applyRes.value.wrote;
-    // Re-load for active summary so we include our own fresh write.
-    const reload = loadLeases(cawsDir);
-    if (isOk(reload)) leases = reload.value.leases;
+    err(renderDiagnostics(result.errors, { showData }));
+    return result.stage === 'load' ? 2 : 1;
   }
-
-  const fn = safeLeaseFilename(idRes.identity.session_id);
-  const leasePath = isOk(fn) ? `.caws/leases/${fn.value}` : null;
-
-  if (json) {
-    const payload: Record<string, unknown> = {
-      ok: true,
-      session_id: idRes.identity.session_id,
-      lease_path: leasePath,
-      wrote,
-      throttled,
-    };
-    if (opts.includeActiveSummary === true) {
-      Object.assign(payload, computeActiveSummary(leases, idRes.identity.session_id, now));
-    }
-    emitJson(out, payload);
-  } else {
+  if (json) emitJson(out, result.value);
+  else
     out(
-      `heartbeat ${idRes.identity.session_id} (${throttled ? 'throttled' : 'wrote'}, lease: ${leasePath ?? '?'})`
+      `heartbeat ${result.value.session_id} (${result.value.throttled ? 'throttled' : 'wrote'}, lease: ${result.value.lease_path ?? '?'})`
     );
-  }
   return 0;
 }
 

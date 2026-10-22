@@ -607,7 +607,15 @@ import { isAdapterCoveredSurface } from './types';
 // accepts the native executor's explicit containment descriptor.
 // v100: lib/harness_kimi.py defers annotations so the session renderer imports
 // under the stock macOS python3 (3.9).
-export const SHARED_PACK_VERSION = 100;
+// Cooperative renderer entrypoints include the native writer-custody bridge.
+// v101: agent-stop routes the CLI's operational receipt to diagnostics while
+// preserving its lease mutation. Lifecycle text must not displace advice.
+// v102: raw Codex apply_patch requests enter armed file-tool quarantine checks.
+// v103: contention command failures retain the existing unknown-observation
+// allowlist and approval policy instead of exiting before either policy runs.
+// v104: heartbeat message provenance reads the canonical sender specId field.
+// v105: refresh captured invocation custody and per-handler stdin stage cleanup.
+export const SHARED_PACK_VERSION = 105;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -701,6 +709,8 @@ export const SHARED_PACK: HookPackV1 = {
       '.caws/leases/',
       '.caws/sessions/<session-id>/',
       '.caws/sessions/.caller-session.json',
+      '.caws/.render-writer-custody/',
+      '.caws/.render-writer-provisioned',
     ],
   },
   lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
@@ -843,6 +853,12 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/session-cache.sh',
       sourcePath: 'lib/session-cache.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/session-render-writer.sh',
+      sourcePath: 'lib/session-render-writer.sh',
       executable: false,
       managed: true,
     },
@@ -1045,6 +1061,14 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    {
+      destPath: '.caws/hooks/advisory_truncate.cjs',
+      sourcePath: 'advisory_truncate.cjs',
+      executable: true,
+      managed: true,
+    },
+    // Callable compatibility asset for admitted custom runners. Stock advisory
+    // composition uses the generated CJS and does not fall back to this file.
     {
       destPath: '.caws/hooks/advisory_truncate.py',
       sourcePath: 'advisory_truncate.py',

@@ -1,15 +1,24 @@
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
+const { observeTopology } = require('./engine-topology.cjs');
 const mode = process.env.CAWS_NATIVE_TEST_MODE || 'exact';
 const record = (name, value) => {
   if (process.env[name]) fs.appendFileSync(process.env[name], `${JSON.stringify(value)}\n`);
 };
+// Readers treat the final path as readiness, so publish only complete PID bytes.
+const publishPid = (file, pid) => {
+  const pending = `${file}.${process.pid}.pending`;
+  fs.writeFileSync(pending, String(pid), { flag: 'wx', mode: 0o600 });
+  fs.renameSync(pending, file);
+};
 if (process.env.CAWS_NATIVE_TEST_ENGINE_PID)
-  fs.writeFileSync(process.env.CAWS_NATIVE_TEST_ENGINE_PID, String(process.pid));
+  publishPid(process.env.CAWS_NATIVE_TEST_ENGINE_PID, process.pid);
 let request;
 let ready;
 let text = '';
 const token = 'fixture-proposal';
+const cacheToken = '123e4567-e89b-42d3-a456-426614174000';
 const emit = (value, done) => process.stdout.write(`${JSON.stringify(value)}\n`, done);
 const failure = message =>
   emit({
@@ -28,8 +37,25 @@ const response = () => ({
     stderrBase64: Buffer.from('diagnostic\nexact\n').toString('base64'),
   },
 });
+function cacheRequest() {
+  return {
+    schema: 'caws.runtime.session-cache.request.v1',
+    id: request.id,
+    runtimeDigest: request.runtimeDigest,
+    token: cacheToken,
+    canonicalRoot: mode === 'cache-wrong-root'
+      ? process.env.CAWS_NATIVE_TEST_CACHE_ROOT + '-foreign'
+      : process.env.CAWS_NATIVE_TEST_CACHE_ROOT,
+  };
+}
 function propose() {
   const answer = response();
+  if (['proposal-held-native-self', 'proposal-no-containment-block'].includes(mode))
+    answer.result = {
+      exitCode: 2,
+      stdoutBase64: Buffer.from('{"decision":"block","reason":"retained"}\n').toString('base64'),
+      stderrBase64: '',
+    };
   if (mode === 'large-native-result')
     answer.result.stdoutBase64 = Buffer.alloc(1_000_000, 0x78).toString('base64');
   if (mode === 'guard-block')
@@ -77,7 +103,7 @@ function propose() {
   }
   if (mode === 'pipe-holder' || mode === 'pipe-holder-wait') {
     const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'inherit' });
-    fs.writeFileSync(process.env.CAWS_NATIVE_TEST_CHILD, String(child.pid));
+    publishPid(process.env.CAWS_NATIVE_TEST_CHILD, child.pid);
     if (mode === 'pipe-holder-wait') return setInterval(() => {}, 1000);
   }
   const proposal = {
@@ -93,6 +119,16 @@ function propose() {
   if (mode === 'proposal-token') proposal.token = 'invalid token';
   if (mode === 'proposal-extra') proposal.extra = true;
   if (mode === 'proposal-missing-containment') delete proposal.containment;
+  if (mode === 'proposal-held-native-self')
+    proposal.containment = {
+      schema: 'caws.containment.intent.v1',
+      pid: request.caller.processId,
+      startEpoch: '1',
+      comm: '/fixture/not-a-target',
+      sessionId: ready.sessionId,
+      latchPath: '/fixture/latch.json',
+      latchGeneration: 'a'.repeat(32),
+    };
   if (mode === 'proposal-malformed-containment') { proposal.containment = {pid:1}; answer.result = {exitCode:2,stdoutBase64:Buffer.from('{\"decision\":\"block\",\"reason\":\"retained\"}\n').toString('base64'),stderrBase64:''}; }
   if (mode === 'late-post-proposal-hang')
     return setTimeout(
@@ -104,8 +140,18 @@ function propose() {
 function accept(frame) {
   if (!request) {
     request = frame;
-    if (request.caller.processId !== process.ppid)
-      throw new Error('caller processId is not native parent PID');
+    const topology = observeTopology({
+      platform: process.platform,
+      frontendPid: request.caller.processId,
+      nodePid: process.pid,
+      nodeParentPid: process.ppid,
+      native: process.env.CAWS_NATIVE_TEST_NATIVE,
+      node: process.execPath,
+      engine: __filename,
+    });
+    if (!request.id.startsWith(`${topology.frontend.pid}-`))
+      throw new Error('request identity differs from original frontend');
+    record('CAWS_NATIVE_TEST_TOPOLOGY', topology);
     record('CAWS_NATIVE_TEST_RECEIPT', request);
     if (mode === 'pre-ready-failure') return failure('fixture configuration failure');
     ready = {
@@ -119,6 +165,13 @@ function accept(frame) {
         : process.env.CAWS_NATIVE_TEST_PROJECT_DIGEST || 'c'.repeat(64),
       sessionId: process.env.CAWS_NATIVE_TEST_SESSION_ID || 'session',
     };
+    if (mode.startsWith('cache-')) {
+      if (request.sessionCache !== 'caws.runtime.session-cache.v1')
+        throw new Error('native cache capability absent');
+      ready.projectDigest = crypto.createHash('sha256')
+        .update(process.env.CAWS_NATIVE_TEST_CACHE_ROOT).digest('hex');
+      if (mode === 'cache-before-ready') return emit(cacheRequest());
+    }
     if (mode === 'ready-id') ready.id += '-foreign';
     if (mode === 'ready-digest') ready.runtimeDigest = 'b'.repeat(64);
     if (mode === 'ready-schema') ready.schema = 'caws.runtime.ready.v2';
@@ -145,6 +198,30 @@ function accept(frame) {
     if (Object.keys(frame).sort().join(',') !== 'id,runtimeDigest,schema')
       throw new Error('dispatch keys');
     record('CAWS_NATIVE_TEST_EVENTS', { dispatch: true });
+    if (mode.startsWith('cache-')) return emit(cacheRequest());
+    return propose();
+  }
+  if (frame.schema === 'caws.runtime.session-cache.previous.v1') {
+    if (frame.token !== cacheToken) throw new Error('cache previous token');
+    record('CAWS_NATIVE_TEST_EVENTS', { cachePrevious: frame });
+    let createdUnits = null;
+    if (frame.existingBase64 !== null) {
+      const old = JSON.parse(Buffer.from(frame.existingBase64, 'base64').toString('utf8'));
+      if (old.session_id === request.payload.session_id && typeof old.created_at === 'string' && old.created_at)
+        createdUnits = Array.from({ length: old.created_at.length }, (_, i) => old.created_at.charCodeAt(i));
+    }
+    return emit({
+      schema: 'caws.runtime.session-cache.decision.v1',
+      id: request.id, runtimeDigest: request.runtimeDigest,
+      token: mode === 'cache-wrong-decision' ? 'foreign' : cacheToken,
+      action: mode === 'cache-decline' ? 'decline' : 'capture',
+      createdUnits: mode === 'cache-decline' ? null : createdUnits,
+    });
+  }
+  if (frame.schema === 'caws.runtime.session-cache.result.v1') {
+    if (frame.token !== cacheToken) throw new Error('cache result token');
+    record('CAWS_NATIVE_TEST_EVENTS', { cacheResult: frame });
+    if (mode === 'cache-repeat') return emit(cacheRequest());
     return propose();
   }
   if (

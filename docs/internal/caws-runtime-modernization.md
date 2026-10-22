@@ -6828,6 +6828,192 @@ Additional bounded evidence and unresolved dependencies:
   landing; this ledger publication does not discharge them. No candidate borrows
   earlier package or runtime proof.
 
+- E259: The `handler-stdin-stage` lane (`CAWS-HANDLER-STDIN-STAGE-LIFETIME-001`,
+  owner dd67d988) closes the staging-file lifetime defect in
+  `shared/lib/run-handlers.sh` at candidate `ce5ced6c` over base `1169f7df`.
+  Defect: an inline payload over 32768 characters was staged to one
+  dispatch-scoped `caws-handler-stdin-*` file and appended to `CAWS_TEMP_FILES`,
+  which no shipped dispatcher consumes (`git grep` at `1169f7df` over
+  `templates/` and `src/`), so every large dispatch left a full tool payload in
+  TMPDIR on normal exit, TERM and KILL; the machine held 2,018 such files
+  (109,029,350 bytes, 2026-10-19 to 10-22) under installed runtime `408c06a7`.
+  Repair: each handler's command-substitution subshell creates a private
+  `mktemp -d` directory (mode 0700), writes the payload inside, opens it as
+  stdin, verifies the unlink before clearing its trap, and execs the handler;
+  only its own directory and payload are ever removed. Completion review (Codex,
+  read-only) found that the prior candidate `a5b4baee` left the payload named
+  when the parent TMPDIR stopped accepting removals; the reviewer's falsifier
+  reproduced it (status 0, payload present during and after the handler, no
+  diagnostic), and that FAIL is retained on record. Under `ce5ced6c` the unlink
+  depends only on the private directory, and a directory that cannot be removed
+  is named on stderr. Evidence (all under
+  `~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/`): the
+  self-contained `handler-stdin-stage-lifetime.bats` (8 cases, bats-core 1.13.0,
+  `/bin/bash` 3.2.57, no CLI build or installed pack) run serially against
+  pinned copies from git objects, `f3-runs/series-20261022T193541Z.json`, 11
+  attempts, 55.2 s, zero surviving processes: candidate 8/8; baseline `1169f7df`
+  fails 1,2,3,4,6,7,8; prior `a5b4baee` fails 7,8; mutants dropping the pre-exec
+  unlink (fails 2,3,7,8), appending a newline (1,6,7,8), removing caller
+  `CAWS_TEMP_FILES` entries (4), never staging (1,6,7,8), dropping the pipe
+  fallback (5), staging at `>= 32768` (6), skipping the presence check (8) and
+  silencing the directory report (7) each fail only the named cases. The 17-case
+  real-dispatcher probe (`f3-dispatcher/attempts/20261022T193700Z-ce5ced6c`,
+  `git archive ce5ced6c` of the shared tree, 43.8 s, exit 0) matches the
+  retained `1169f7df` rows except that c11/c12/c13 no longer leave stage
+  residue, with identical handler stdin digests in every case; the raw-byte
+  custody rows (c3/c5 uncertain-to-main, c9 preset `HOOK_INPUT_JSON`) and the
+  c17 spill-file KILL residue are unchanged and remain root-owned. A1–A7 are
+  recorded pass at `ce5ced6c` (events through spec commit `0a6e9704`). Not
+  claimed: a signal while `mktemp -d` runs (one empty directory), a KILL between
+  the payload write and its unlink (the payload file), Linux bash 5, the
+  installed pack copy, and machine adoption. Still owed before this lane is
+  complete on `main`: the single `SHARED_PACK_VERSION` bump with its fingerprint
+  entry (`manifest-shared.ts` and `pack-fingerprints.json` are claimed by the
+  `shell-analysis` lane, owner `01a151c0`, last active 2026-10-21), and root's
+  integration merge.
+
+- E260: F3 successor `c6164df3` is integrated through owner merge `a0ddd5b2`;
+  root verifies its five first-parent paths and exact candidate blobs. Component
+  closure and teardown are recorded in events 11766–11768. E259's `ce5ced6c`
+  evidence is historical: review reproduces deletion of a foreign payload
+  through a replaced stage-directory link, and its old reporting test cannot
+  establish post-handler retry order. Helper `90945b5d` refuses observed
+  replacement links; the revised tests establish transient retry and persistent
+  failure reporting. The 14-attempt nine-case series
+  `f3-runs/series-20261022T201036Z.json` retains expected baseline,
+  prior-candidate and ten mutant failures. The additional persistent-failure
+  control and full ten-case candidate pass; suppressing the post-handler retry
+  fails the after-handler assertion. Raw checks and pins are under Claude's
+  existing `f3-runs/a7-20261022T202124Z` artifact directory. The 17-case
+  dispatcher rerun on the same helper exits 0: c11–c13 lose handler stage
+  residue; the other rows and handler stdin hashes are preserved. Raw NUL,
+  invalid UTF-8, inherited-input spoofing, zero-byte error paths and KILL during
+  parser spill remain open. Signal-during-creation and check/removal races,
+  installed copies and Linux Bash are outside this component proof. Bash 3.2
+  pattern assertions in 19 other Bats files require an applicability audit
+  before their results support broader parity; they receive no blanket pass.
+
+  Receipt-selected image producer source is integrated at `fbb38781`; its
+  80-case component suite uses a mocked loader and does not establish the actual
+  image chain. Fresh debug and release v2 native builds and complete
+  stable-entry reconstruction now execute successfully. Root retains exact
+  requests, the 79-file native inventory, compiler/tool pins, actual process
+  terminals and full loaded receipts under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-stable-entry-v2-preflight/`.
+  Debug build/load PIDs 17230/40589 and release 9687/69334 exit 0.
+  Actual-artifact controls PID 2777 exits 0 with 30 intended
+  schema/Cargo/pin/mode refusals and four positive/restored loads; its group is
+  absent and input/tool pins and restored executable modes match. Parent A7
+  remains unchecked in event 11729: these are builds and point-in-time
+  reconstruction, not image production, native invocation, installation,
+  upgrade, rollback or machine adoption. The CLI refuses the external absolute
+  artifact citation as mechanically re-derivable; root's claim rests on
+  inspected raw artifacts, not that check.
+
+  Observer evidence also advances without qualifying admission. Kernel probe
+  event 11702/result `4b7769d7` observes EADDRINUSE while the listener is held
+  or unreferenced, and a foreign listener after close; it establishes no client
+  or VM authenticity. Retention event 11730/commit `408c0ad6` records five
+  passing filesystem controls, including preserved original bytes after
+  copy/index failure. Parent-witness candidate `ea33c0f6` executes 18 component
+  cases and 22 retained TCP probes, with actual exit 0, stable pins and owned
+  group absent (`parent-witness-controls-01/execution.json`, SHA `ca9926d6`,
+  under the observer's existing `store-baseline-consumption/attempt-01` artifact
+  root). These exercise synthetic producer membership and hostile protocol
+  boundaries, not the genuine six-target/nine-suite outer run. Child A2 remains
+  FAIL in event 11805 until that healthy run and a consequential forged-client
+  refusal traverse both outer branches and publication. Capability deletion does
+  not establish isolation from arbitrary VM host-builtin interception or
+  same-uid processes. The observer owns this bounded implementation; root
+  retains integration and acceptance.
+
+  The existing worktree guide correction `c58d6f8f` is committed and reviewed;
+  source and event 11760 support preview/default-apply/no-close teardown
+  wording. Four-guide coherent guarded-source landing remains open. Help
+  candidate `d80d3996` describes v1 compatibility and receipt-selected v2 input;
+  its focused Node 18/22 help/generator checks do not replace the fresh physical
+  prefix. The prepared shared v105 fingerprint is `b706339e` over 75 files; all
+  seven other pack fingerprints match. The human-authorized two-path claim
+  partition retains those paths as support in archived `shell-analysis`; its
+  head, dirty file list, pack bytes and tracked diff hashes are unchanged.
+  Root's `shared-pack-105` lane holds the exclusive claims and source patch; the
+  parent checkout is clean. The installed guard resolves relative targets
+  against the hook cwd, so normal guarded cleanup uses explicit absolute
+  owned-worktree coordinates. No guard, identity or foreign source changes are
+  made. The earlier full-basis scope failure (event 11772) is retained; 30 exact
+  imported paths are reconciled through the CLI and all five gates pass against
+  the same 288-file input and index. Neither commit-prefix substitution nor a
+  guard bypass is used.
+
+  Execution converges on three owned outcomes: root and the installer peer
+  complete coherent package → actual v2 image → isolated native invocation,
+  refusal and rollback; root completes native acquisition → continuous-custody
+  publication → ordinary reader consumption/release, including both 256-entry
+  capacity limits; root connects resident admission to the actual engine and
+  exercises thirteen sessions across four repositories. The installer retains
+  its clean help candidate for reserved source integration. No machine install
+  or whole-migration acceptance is inferred from these source units.
+
+- E261: Shared pack v105 is integrated at `c5b3b360`, and the installer help
+  merge produces frozen package candidate `7195f14f`. The authorized transfer
+  moves only `manifest-shared.ts` and `tests/init/pack-fingerprints.json` from
+  the archived shell-analysis spec's claims to its supporting scope (event
+  11806); its branch, files and unrelated dirty test remain preserved. The
+  shared-pack child closes with A1/A2 pass in events 11814/11815 and normal
+  merge/teardown in 11816–11818. Fresh normal Node 22 build PID 97390 exits 0;
+  compiled pack-fingerprint PID 11028 exits 0 with all 14 checks, including all
+  eight pack baselines and real-byte, exclusion and coverage controls. These
+  checks qualify the pack metadata against these bytes, not cutover.
+
+  The normal npm tarball is 2,580,764 bytes, SHA256
+  `5c83b318afbcf945e4dee40b546083b714083396bf2e62410939adc31be7667c`. Root
+  independently compares all 1,273 regular tar members and 1,260 captured build
+  members. Actual private installation PID 78216 exits 0; Node 18 and Node 22
+  inspectors exit 0 over the same 5,708-file, 65-package production prefix. The
+  omitted optional `@types/node` peer remains explicit. This is observed
+  package/dependency consistency, not compiler provenance, dependency semantic
+  trust or general Node-version qualification.
+
+  Corrected receipt-selected v2 descriptors retain exactly 71 native notices and
+  one Node notice. The first descriptors duplicated Node's LICENSE; their
+  completed first attempts remain retained and do not qualify the agreed notice
+  layout. Root verifies that the correction removes only that duplicate. Fresh
+  corrected public CLI sequences, negative inputs and tampered recovery complete
+  under both Node versions: 68 actual child commands, including 28 intended
+  exit-1 refusals with empty success output and unchanged target maps. Root
+  reads every terminal/refusal and checks owned-group absence. Both sequences
+  select the same legacy A, release B and debug C digests; B is
+  `fd38244eedb6ef30e782c5be92002dbda2ac5508ab53ce79ce9a2431dc2b4e74`. Retained
+  evidence is under R01's
+  `r01-installed-entry/actual-v2-package/7195f14f736e0784b5f0aca0220a6c76c25d9c9c/`,
+  including `descriptor-attempt-02` and the six `cases-*-attempt02` directories.
+  These are actual installer/state observations; selected stable-entry native
+  dispatch, ordinary guard effects, session rendering and harness adoption
+  remain separate owed checks. The six qualification homes remain unchanged.
+
+  The assertion-only successor `fb1ba781` changes 61 statements in nine Bats
+  suites. Root compares retained source bytes with the commit, reads identical
+  179-test baseline/candidate TAP vectors and all 33 intended predicate-failure
+  controls, and grounds independent review feedback. Child A1–A3 pass records
+  are 11838/11839/11847. The unallocated runs, unpinned live compiled fixture,
+  failed temporary-root attempts and unattributable global process count remain
+  explicit limits; they do not establish exact installed behavior or timing. The
+  separate F1/F2 successor `499ca369` has additional source-review repairs and
+  unexecuted changed tests; the earlier `cb43a2c5` probe does not qualify it.
+
+  Root prepares the matched source landing in its owned `native-source-landing`
+  lane without moving frozen `7195f14f` or taking peer claims. The ten merge
+  conflicts preserve the candidate's coupled native/TS/tooling contracts and
+  main's fixes, including Handlebars 4.7.10 and two existing test repairs.
+  Canonical governance is unchanged by the staged source merge. This merged
+  source needs its own dependency/build/interface checks and committed review;
+  the frozen candidate's package observations cannot qualify different bytes.
+  Root retains both native publication and TS ordinary consumption/release,
+  durable original IDs, both 256-entry capacity traps and actual resident-engine
+  execution through the thirteen-session/four-repository workload. Main landing,
+  the existing guide updates, full observer qualification and machine cutover
+  remain open. Parent evidence 11841 retains the detailed ownership/nonclaims.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7220,7 +7406,7 @@ operational correctness or selected execution.
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend settlement lands in87b70fcc; resident acquisition, cancellation, bounded retention and status contract land with bb3a8b99, E240. | Update publication permit, record release and actual-reader contracts with their implementations and consumer evidence.                                                                                                                            |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.                                           | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
 | `docs/guides/sterling-machine-runtime-migration.md`                             | Qualified main84079dfb and source16981627 match actual SHA1d5041f4, E242.                                                                 | Recheck operations against the eventual combined package and isolated native/harness execution before machine cutover.                                                                                                                             |
-| This tracker and canonical parent acceptance                                    | E231–E257 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
+| This tracker and canonical parent acceptance                                    | E231–E261 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
 
 ## Landing obligations
 

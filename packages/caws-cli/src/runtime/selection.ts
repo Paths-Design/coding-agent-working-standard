@@ -1,8 +1,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
-import { sha, verifyRuntime } from '../init/machine-runtime-state';
-import { isCawsNativeCommand, MACHINE_EVENTS } from '../init/native-hook-identification';
+import { sha, verifyRuntime, readManifest } from '../init/machine-runtime-state';
+import {
+  isCawsNativeCommand,
+  classifyCawsProducerHook,
+  isCawsProducerHookCandidate,
+  machineCommand,
+  universalEventMatcher,
+  unconditionalCommandHook,
+  qualifiedHookTimeout,
+  MACHINE_EVENTS,
+} from '../init/native-hook-identification';
 import {
   effectiveRepoSurfacePolicy,
   parseRepoHookPolicy,
@@ -92,7 +101,44 @@ function emptyMachinePolicy(): SystemSurfacePolicy {
   return { disabled: {}, extensions: {}, handlers: {}, libraries: {} };
 }
 
-/** Event-scoped duplicate avoidance; disabled native registrations do not select a chain. */
+function verifiedProjectMachineEntry(command: string, options: SelectionOptions): void {
+  const legacy = path.join(options.home, 'bin/caws-hook');
+  const native = path.join(options.home, 'bin/caws-hook-native');
+  // Coverage requires the producer's exact command. Decoding shell words loses
+  // assignment syntax: a quoted CAWS_HOME word is a command, not an assignment.
+  // Missing assignments, wrappers, --system and --describe establish no coverage.
+  const interpreter = command === machineCommand(options.home, options.surface, options.event);
+  if (
+    !interpreter &&
+    command !== machineCommand(options.home, options.surface, options.event, 'native')
+  )
+    throw new Error('Project CAWS invocation requires native-harness reconciliation');
+  const entry = interpreter ? legacy : native;
+  assertMachinePath(options.home, entry);
+  if (!isFile(entry) || (!interpreter && (fs.statSync(entry).mode & 0o111) === 0))
+    throw new Error('Project CAWS entry is missing or nonexecutable; requires reconciliation');
+  const identity = sha(fs.readFileSync(entry));
+  const member = entry === native ? 'native/caws-hook-native' : 'bootstrap.py';
+  const runtimes = confined(options.home, 'lib/runtimes');
+  const known = fs.readdirSync(runtimes).some((digest) => {
+    try {
+      const manifest = readManifest(options.home, digest);
+      return (
+        manifest[member] === identity ||
+        (entry === legacy && manifest['launcher.py'] === identity && !manifest['bootstrap.py'])
+      );
+    } catch {
+      return false;
+    }
+  });
+  if (!known)
+    throw new Error('Project CAWS entry identity is not retained; requires reconciliation');
+}
+
+/** Only one understood universal project registration can suppress the system
+ * chain. Restricted matchers and additive local/checkout layers require explicit
+ * harness reconciliation; treating their mere presence as coverage skips guards.
+ */
 function legacyRegistered(options: SelectionOptions): boolean {
   const vendors: Partial<Record<AgentSurface, string>> = {
     codex: '.codex',
@@ -100,31 +146,57 @@ function legacyRegistered(options: SelectionOptions): boolean {
     'qwen-code': '.qwen',
   };
   const vendor = vendors[options.surface];
-  if (!vendor) return false;
-  const file = confined(
-    options.canonical,
-    vendor + (options.surface === 'codex' ? '/hooks.json' : '/settings.json')
-  );
-  if (!isFile(file)) return false;
-  const config = readJson(file);
-  if (!object(config) || (config.hooks !== undefined && !object(config.hooks))) {
-    throw new Error('Malformed legacy native registration');
+  if (!vendor)
+    throw new Error('Native system registration requires a qualified JSON harness adapter');
+  const primary = vendor + (options.surface === 'codex' ? '/hooks.json' : '/settings.json');
+  let selected = 0;
+  for (const root of new Set([options.canonical, options.checkout])) {
+    const toml = confined(root, vendor + '/config.toml');
+    if (isFile(toml) && isCawsNativeCommand(fs.readFileSync(toml, 'utf8')))
+      throw new Error('Inline project CAWS hooks require native-harness reconciliation');
+    for (const relative of [primary, vendor + '/settings.local.json']) {
+      const file = confined(root, relative);
+      if (!isFile(file)) continue;
+      const config = readJson(file);
+      if (!object(config) || (config.hooks !== undefined && !object(config.hooks)))
+        throw new Error('Malformed legacy native registration');
+      if (config.disableAllHooks === true)
+        throw new Error('Disabled project hooks require native-harness reconciliation');
+      const groups = object(config.hooks)
+        ? (config.hooks[MACHINE_EVENTS[options.event]] ?? [])
+        : [];
+      if (!Array.isArray(groups)) throw new Error('Malformed legacy native registration');
+      for (const group of groups) {
+        if (!object(group) || !Array.isArray(group.hooks))
+          throw new Error('Malformed legacy native hook group');
+        if (group.enabled === false) continue;
+        for (const hook of group.hooks) {
+          if (!object(hook) || hook.enabled === false || !isCawsProducerHookCandidate(hook))
+            continue;
+          const ownership = classifyCawsProducerHook(hook, options.surface, options.event);
+          if (ownership.kind === 'foreign') continue;
+          if (ownership.kind === 'unresolved' || typeof hook.command !== 'string')
+            throw new Error('Project CAWS producer registration requires reconciliation');
+          if (
+            root !== options.canonical ||
+            relative !== primary ||
+            !universalEventMatcher(options.surface, options.event, group.matcher) ||
+            !unconditionalCommandHook(group, hook, options.surface, options.event) ||
+            !qualifiedHookTimeout(options.surface, options.event, hook.timeout)
+          )
+            throw new Error(
+              'Restricted or additive project CAWS registration requires native-harness reconciliation'
+            );
+          // Only the exact producer command establishes understood event coverage.
+          verifiedProjectMachineEntry(hook.command, options);
+          selected++;
+        }
+      }
+    }
   }
-  const groups = object(config.hooks) ? (config.hooks[MACHINE_EVENTS[options.event]] ?? []) : [];
-  if (!Array.isArray(groups)) throw new Error('Malformed legacy native registration');
-  for (const group of groups) {
-    if (!object(group) || !Array.isArray(group.hooks))
-      throw new Error('Malformed legacy native hook group');
-    if (group.enabled === false) continue;
-    if (
-      group.hooks.some(
-        (hook: unknown) =>
-          object(hook) && hook.enabled !== false && isCawsNativeCommand(hook.command)
-      )
-    )
-      return true;
-  }
-  return false;
+  if (selected > 1)
+    throw new Error('Duplicate project CAWS registrations require native-harness reconciliation');
+  return selected === 1;
 }
 
 function legacyPolicy(

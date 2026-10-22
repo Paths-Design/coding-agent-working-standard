@@ -35,6 +35,7 @@ import {
   type EventBody,
   err,
   isOk,
+  matchGlob,
   ok,
   parseAndValidateSpec,
   type RegistryPatch,
@@ -2120,33 +2121,22 @@ export function untrackWorktree(
 // the verdict. Governed-state paths (.caws/specs/** etc. — the CLI's own
 // bookkeeping commits ride the lane branch) are always in-lane.
 
-// normalizeRel/scopeEntryMatches are an intentional SECOND copy of the
-// scope.in admission rule (canonical: shell/binding/resolve-binding.ts,
-// module-private). The store layer cannot import from shell, and the
-// codebase precedent is a small local copy over a cross-layer import.
-// INVARIANT: if the canonical matching rule changes, update BOTH copies —
-// exact match, directory-prefix on a path boundary, or anchored `*`/`?`
-// glob.
+// Keep the provenance surface's relative-path normalization, but delegate
+// glob and directory-prefix semantics to the same kernel matcher as scope
+// admission. Review uses that matcher through binding.scopeEntryMatches too.
 function normalizeRel(p: string): string {
   return p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
 }
 
 function scopeEntryMatches(entry: string, target: string): boolean {
-  const e = normalizeRel(entry);
-  const t = normalizeRel(target);
-  if (e === t) return true;
-  if (!/[*?]/.test(e)) {
-    return t.startsWith(e + '/');
+  try {
+    return matchGlob(normalizeRel(target), [normalizeRel(entry)]) !== null;
+  } catch (error) {
+    // A parser-refused pattern cannot admit provenance or suggest an owner.
+    // Other failures remain explicit infrastructure errors.
+    if (error instanceof SyntaxError) return false;
+    throw error;
   }
-  const rx = e
-    .split('')
-    .map((ch) => {
-      if (ch === '*') return '.*';
-      if (ch === '?') return '.';
-      return ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    })
-    .join('');
-  return new RegExp(`^${rx}$`).test(t);
 }
 
 /** One lane commit touching paths outside the lane's scope. */
@@ -2917,6 +2907,7 @@ export function mergeWorktree(
           }),
           data: {
             merge_commit: mergeCommit,
+            merged_cause: mergedTxn.errors,
           },
         }
       )

@@ -85,6 +85,21 @@ assert(path.isAbsolute(rootArgument));
 const root = path.resolve(rootArgument);
 assert(!fs.existsSync(root), 'artifact directory must be new');
 assert(fs.existsSync(path.join(cli, 'src/runtime/engine.ts')));
+const selectedRequest = process.env.CAWS_NATIVE_BUILD_REQUEST;
+assert(
+  selectedRequest && path.isAbsolute(selectedRequest),
+  'CAWS_NATIVE_BUILD_REQUEST must name an explicit absolute request file'
+);
+const nativeBuild = (
+  createRequire(path.join(cli, 'package.json'))(
+    './dist/tooling/native-sqlite-build.js'
+  ) as typeof import('../dist/tooling/native-sqlite-build')
+).loadNativeSqliteBuild(selectedRequest);
+assert.equal(
+  native,
+  nativeBuild.build.artifacts.native.path,
+  'native argument must select the verified request artifact'
+);
 for (const file of [native, node, python, jq]) {
   assert(fs.statSync(file).isFile());
   fs.accessSync(file, fs.constants.X_OK);
@@ -116,6 +131,14 @@ const failures: string[] = [],
   observations: Observation[] = [];
 const manifest: Data = {
   schema: 'caws.native-substitution-qualification.v1',
+  nativeBuild: {
+    requestFile: nativeBuild.requestFile,
+    completionReceipt: nativeBuild.completionReceipt,
+    requestDigest: nativeBuild.build.requestDigest,
+    profile: nativeBuild.build.profile,
+    prefixManifest: nativeBuild.build.prefixManifest,
+    adoption: nativeBuild.build.adoption,
+  },
   root,
   cli,
   runnerPid: process.pid,
