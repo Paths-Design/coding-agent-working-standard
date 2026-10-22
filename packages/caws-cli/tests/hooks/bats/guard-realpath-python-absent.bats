@@ -191,10 +191,15 @@ rp_sweep() {
     cd "$2"
     shift 2
     for p in "$@"; do
-      raw="$(caws_guard_realpath "$p"; printf x)"
-      ref="$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$p"; printf x)"
-      [[ "$raw" == "$ref" ]] || { printf "raw stdout differs for %q\n" "$p"; exit 1; }
-      [[ "$(caws_guard_realpath "$p")" == "$(_realpath "$p")" ]] ||
+      # Bytes and exit status together: a success value with a refusal status
+      # would make every guard refuse a path it could have normalized.
+      raw="$(caws_guard_realpath "$p"; printf "x%s" "$?")"
+      ref="$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$p"; printf "x%s" "$?")"
+      [[ "$raw" == "$ref" ]] || { printf "raw stdout or status differs for %q\n" "$p"; exit 1; }
+      [[ "$raw" == *x0 ]] || { printf "status %s for %q\n" "${raw##*x}" "$p"; exit 1; }
+      observed="$(caws_guard_realpath "$p")" ||
+        { printf "caller-observed status %s for %q\n" "$?" "$p"; exit 1; }
+      [[ "$observed" == "$(_realpath "$p")" ]] ||
         { printf "caller-observed value differs for %q\n" "$p"; exit 1; }
     done
   ' _ "$(guard_dir)" "$RP_SELF" \
@@ -206,7 +211,7 @@ rp_sweep() {
 }
 
 @test "caws_guard_realpath: resolves a dotdot spelling and a symlinked ancestor with a missing leaf" {
-  run bash -c 'source "$1/lib/caws-state.sh"; caws_guard_realpath "$2"; echo; caws_guard_realpath "$3"' \
+  run bash -c 'set -e; source "$1/lib/caws-state.sh"; caws_guard_realpath "$2"; echo; caws_guard_realpath "$3"' \
     _ "$(guard_dir)" "$RP_DOTDOT_TARGET" "$CAWS_TEST_HOME/repo-alias/.caws/worktrees/f-wt/src/new"
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "$RP_TARGET" ]
