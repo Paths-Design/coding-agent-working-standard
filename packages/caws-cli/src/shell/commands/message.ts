@@ -17,13 +17,11 @@
 // send. Success lines stay byte-stable (`sent to <id> (id ..., channel ...)`).
 
 import {
-  pollMessage,
   settleMessageOffer,
   resolveRepoRoot,
   resolveRecipient,
   sendMessage,
   getMessageDeliveryState,
-  inboxCount,
   inboxMessages,
   inboxAllMessages,
   mineQueued,
@@ -37,6 +35,7 @@ import {
   type MessagePruneEntry,
   type MessageRecord,
 } from '../../store';
+import { pollAgentMessages } from '../../application/message-poll';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -548,63 +547,20 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     }
   }
 
-  const pollOpts: {
-    waitMs?: number;
-    peek?: boolean;
-    receipt?: 'auto' | 'poll';
-    drain?: number;
-    offer?: boolean;
-    offerTtlMs?: number;
-  } = {};
-  if (typeof opts.waitMs === 'number' && opts.waitMs > 0) pollOpts.waitMs = opts.waitMs;
-  if (opts.peek === true) pollOpts.peek = true;
-  if (opts.receipt === 'auto') pollOpts.receipt = 'auto';
-  if (typeof opts.drain === 'number' && Number.isFinite(opts.drain) && opts.drain > 0) {
-    pollOpts.drain = Math.floor(opts.drain);
-  }
-  if (opts.offer === true) pollOpts.offer = true;
-  if (typeof opts.offerTtlMs === 'number' && Number.isFinite(opts.offerTtlMs)) {
-    pollOpts.offerTtlMs = opts.offerTtlMs;
-  }
-
-  const pollStartMs = Date.now();
-  const polled = pollMessage(cawsDir, me, pollOpts);
-  const pollMs = Date.now() - pollStartMs;
+  const polled = pollAgentMessages({
+    cawsDir,
+    recipient: me,
+    options: opts,
+    nowMs: Date.now,
+  });
   if (!polled.ok) {
     err('caws message poll: failed to read the message log.');
     err(renderDiagnostics(polled.errors, { showData }));
     return 2;
   }
-  const { message, sender, messages, offer } = polled.value;
-
-  // Mailbox depth for triage. On a peek/empty result this tells the agent how
-  // many more are waiting; best-effort (a count failure does not fail the poll).
-  const countResult = inboxCount(cawsDir, me);
-  const waiting = countResult.ok ? countResult.value : null;
-
-  // Dead-letter signal for the caller (CAWS-MESSAGE-BEHAVIOR-001): my own
-  // sent-but-undelivered messages older than 1h. Best-effort; the hook uses
-  // this to escalate without any extra CLI spawn.
-  const mineRes = mineQueued(cawsDir, me, 3_600_000);
-  const mineQueued1h = mineRes.ok
-    ? { count: mineRes.value.count, oldest_age_ms: mineRes.value.oldestAgeMs }
-    : { count: 0, oldest_age_ms: null };
-
+  const { messages, waiting } = polled.value;
   if (opts.json === true) {
-    out(
-      JSON.stringify({
-        message,
-        ...(sender !== undefined ? { sender } : {}),
-        messages: messages.map((entry) => ({
-          message: entry.message,
-          ...(entry.sender !== undefined ? { sender: entry.sender } : {}),
-        })),
-        ...(offer !== undefined ? { offer } : {}),
-        waiting,
-        poll_ms: pollMs,
-        mine_queued_1h: mineQueued1h,
-      })
-    );
+    out(JSON.stringify(polled.value));
     return 0;
   }
   if (messages.length === 0) {

@@ -91,6 +91,10 @@ function run(cmd, args, cwd) {
   }
 }
 
+// Check the committed projection before destructive build output cleanup.
+// Generation is explicit: a build must not silently repair a stale asset.
+run(process.execPath, ['scripts/generate-runtime-assets.mjs', '--check'], pkgRoot);
+
 // 1. Clean dist
 rmrf(distDir);
 fs.mkdirSync(distDir, { recursive: true });

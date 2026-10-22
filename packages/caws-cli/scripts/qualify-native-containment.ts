@@ -48,6 +48,26 @@ const cli = fs.realpathSync(path.resolve(process.argv[2] ?? '.'));
 assert(fs.existsSync(path.join(cli, 'src/runtime/engine.ts')), 'pass the caws-cli directory');
 const crate = path.resolve(cli, '../caws-native');
 const requireBuilt = createRequire(path.join(cli, 'package.json'));
+const selectedRequest = process.env.CAWS_NATIVE_BUILD_REQUEST;
+assert(
+  selectedRequest && path.isAbsolute(selectedRequest),
+  'CAWS_NATIVE_BUILD_REQUEST must name an explicit absolute request file'
+);
+const nativeBuild = (
+  requireBuilt(
+    './dist/tooling/native-sqlite-build.js'
+  ) as typeof import('../dist/tooling/native-sqlite-build')
+).loadNativeSqliteBuild(selectedRequest);
+assert.equal(nativeBuild.build.profile, 'debug', 'native qualification profile mismatch');
+const native = nativeBuild.build.artifacts.native.path;
+const nativeBuildEvidence = {
+  requestFile: nativeBuild.requestFile,
+  completionReceipt: nativeBuild.completionReceipt,
+  requestDigest: nativeBuild.build.requestDigest,
+  profile: nativeBuild.build.profile,
+  prefixManifest: nativeBuild.build.prefixManifest,
+  adoption: nativeBuild.build.adoption,
+};
 const root = path.join(
   crate,
   'target/qualification/containment-effect-' + new Date().toISOString().replace(/[:.]/g, '-')
@@ -346,6 +366,7 @@ const manifest: {
     encoding: 'utf8',
   }).stdout.trim(),
   root,
+  nativeBuild: nativeBuildEvidence,
   cases: [],
   selectedCase: selectedCase ?? 'all',
   failures: [],
@@ -471,7 +492,6 @@ async function run(): Promise<void> {
   });
   assert.equal(build.status, 0);
   await qualifyWatchdog(binary);
-  const native = path.join(crate, 'target/debug/caws-native');
   const engine = path.join(cli, 'dist/runtime/engine-entry.js');
   const legacy = path.join(cli, 'templates/hook-packs/runtime/caws-hook.py');
   manifest.binaryIdentities = {

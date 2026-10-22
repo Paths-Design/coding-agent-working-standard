@@ -187,6 +187,32 @@ Per-request cancellation prevents request-owned children from mutating state
 after completion. Disconnected or crashed requests have an explicit uncertain
 terminal outcome; reconnection does not manufacture exactly-once execution.
 
+Mandatory safety execution precedes discretionary admission. The current
+one-shot frontend captures ancestry before Node, but latch/strike/escalation and
+required Stop decisions execute after dispatch. A Busy result before that
+dispatch cannot substitute for termination of the verified latched caller or
+evaluation of the goal guard. A general queue before Node requires that complete
+mandatory path to move with its canonical authority implementation; a reserved
+slot alone does not establish the invariant under saturation.
+
+Retained Node modules and invocation-owned descendants have different lifetimes.
+Each invocation has a native custody owner that retains its original executor
+Child and private group from creation. On macOS the frontend retains the
+original custodian Child; the custodian creates and retains Node before Ready.
+Original caller identity, captured ancestry and native effects remain with the
+frontend. Other supported one-shot paths retain the direct owner. A
+daemon-parented compatibility guard cannot recover the caller's ancestry by
+trusting a cached PID. Every subprocess port needs the same request-owned
+execution boundary, including context Git, classifier Git, utilities and process
+lookup. Normal executor cleanup must leave an unrelated module worker alive. An
+opportunistic warm-worker borrow may fall back to the existing one-shot path
+only before any request bytes might have been delivered. This intermediate route
+preserves mandatory execution but does not establish bounded cold fan-out.
+Returning a worker to idle requires handoff settlement and actual resource
+drain; late frames, descriptors and capabilities from one request cannot settle
+another. The existing Stop render descriptors are per invocation and fill once;
+their numbers cannot stand in for a new request's actual descriptor transfer.
+
 The required machine workload includes at least thirteen simultaneous sessions
 across at least four repositories. Bound worker and cache capacity across the
 machine and admit work fairly by canonical project and session. Serialize only
@@ -235,6 +261,45 @@ serialization key, and replacement cannot write before the old writer settles.
 Host-crash child cleanup and recovery of unknown partial writes require their
 own mechanism and evidence; private IPC and normal idle exit do not prove them.
 
+Cooperative renderer writers share the anchored custody directory at the
+canonical project's `.caws/.render-writer-custody`. A private sibling
+`.render-writer-provisioned` registration pins the custody directory's device
+and inode. Exclusive registration precedes exclusive custody initialization;
+partial provisioning, an absent registered directory or a replacement directory
+refuses admission. Session-cache cleanup cannot create a new writer domain. This
+registration records provisioning, not foreign-writer adoption or drain. The
+project-wide key excludes source generation, session and machine home, so a
+replacement generation or another `CAWS_HOME` cannot create a second owner for
+the same output project while the canonical `.caws` root and provisioning
+registration remain intact. Whole-governance-root replacement remains outside
+the cooperative contract; the writer cache is separate from disposable session
+output. The native owner and the cooperative one-shot launcher retain the actual
+lifetime lock through owned child cleanup and both output EOFs; their directly
+created writer inherits the lock descriptor across exec. Each backend lifetime
+or one-shot operation also publishes a dispatch intent in the anchored journal
+before its effect. An abandoned intent recovers as unknown and refuses
+subsequent cooperative writers after the live lock is released. Timeout and
+response loss do not clear that persistent fence. The journal has an internal
+typed `not_started` result for observed preparation or spawn failures that
+create no execution child. Publishing that result releases the reservation
+without fabricating a process exit; failure to publish retains uncertainty.
+Failures after child creation require the existing cleanup and outcome rules.
+The journal has bounded retained history and refuses capacity exhaustion without
+evicting an accepted operation; this implementation supplies no reset procedure.
+
+This protocol covers adopted launch paths. Sterling's reviewed unchanged daemon
+and one-shot renderer do not acquire the fence, and its unchanged client permits
+inline rendering after a lost response. Atomic artifact replacement protects
+individual JSON files from tearing; it does not exclude concurrent writers. The
+CAWS cooperative client successor routes rendering through the native one-shot
+launcher and leaves the selected hook on refusal or uncertainty, without
+invoking the legacy fallback or spawning an unmanaged daemon. Selecting that
+successor for every foreign writer and positively draining the previous writers
+are external migration obligations. A missing lease, answering port, PID record,
+private policy declaration or installed helper does not establish that drain.
+The opt-in native owner and private qualification fixtures do not establish
+shared-output Sterling adoption or eligibility for machine cutover.
+
 | Severity | Trigger and failure                                                                                  | Cost                                                               | Resolve timing                                                                                           |
 | -------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | Critical | Stale cached claim/policy or Rust/TS authority disagreement permits a governed action                | Unauthorized mutation; later logs cannot undo it                   | Before any enforcement cutover; shared authority and freshness tests precede resident mode               |
@@ -254,6 +319,144 @@ The protocol and persistent state format are compounding decisions. Moving
 policy to a second language and cutting over the shared runtime without rollback
 are the expensive-to-reverse choices. A one-shot engine and explicit extension
 boundary keep implementation order reversible.
+
+## Native qualification build contract
+
+The SQLite qualification build uses an explicit reviewed request selected by
+`CAWS_NATIVE_BUILD_REQUEST`. Its value is an absolute JSON-file path matching
+`NativeSqliteBuildRequest` in
+`packages/caws-cli/src/tooling/native-sqlite-build.ts`. The request inventories
+the native crate, its embedded CLI templates, vendored crates, SQLite prefix and
+bindings, resolved tools and selected SDK settings. Caller-supplied pins require
+review; they do not authenticate their own origin or establish full toolchain,
+dynamic-loader or SDK closure.
+
+The build entry requires a previously absent output root and creates its own
+target, Cargo home, source and vendor snapshots. It refuses ambient Cargo
+configuration and publishes completion only after embedded-object, binding,
+runtime-identity and static-linkage checks. Failed roots remain retained with
+explicit uncertain writer state. A completed receipt grants no runtime adoption.
+
+The four direct qualification build commands invoke the coordinator. Ordinary
+qualification consumers load that explicit request's completed receipt and use
+its verified artifact paths. Containment and service probes require debug;
+renderer probes require their selected debug/release profile. Substitution's
+explicit native argument must equal the verified artifact. Missing requests,
+profile mismatch and conventional-target fallback cannot select a candidate.
+Reuse a completed candidate by invoking the emitted qualifier with its request;
+the build entry refuses an existing root. Capture-only heartbeat qualification
+retains its separate explicit native/observer profile and performs no Cargo
+discovery. Default feature-off Cargo builds remain separate from this SQLite
+qualification path.
+
+## Native transcript-store ownership
+
+The default-off SQLite feature exposes a finite development exchange through the
+frontend's existing pre-proposal reader and the private resident project Actor.
+It does not select a stock handler or replace compatibility dispatch. Native
+observations bind one active dispatched system OpenCode/ZCode Stop to its
+original safe session, captured database/cwd, Ready root digest and exchange
+token. A store request additionally observes the project from the original
+caller environment, cwd and raw payload. Payload cwd precedes
+`CAWS_PROJECT_DIR`, then caller cwd; unrelated JSON values remain raw. The
+observer selects Git from that caller's environment, removes inherited
+`GIT_*`/`HOOK_*` routing, queries checkout and absolute common directory, and
+derives the canonical root as the common directory's parent. The finite
+physical-path profile compares that observed root with the engine root before
+database resolution, transport credit or acquisition. Engine root/digest
+agreement alone supplies correlation. Cache and renderer grants confer no store
+authority. Supplied SQL and database overrides are refused.
+
+Each query retains its direct child, private group and pipes independently of
+the engine. Cancellation, combined output limits and each query's five-second
+ceiling remain capped by the original invocation deadline. Cleanup records stop,
+group settlement and reap separately; an accepted signal cannot establish group
+exit. A typed failure carries uncertain query ownership across independent
+engine cleanup and final error delivery, with a bounded retry rather than an
+unbounded destructor. A failed routing observation stays in the surviving
+owner's bounded quarantine; an Actor observation or SQL failure stays in its
+retained record. This supplies process-lifetime custody, not crash recovery or
+durable custody after owner destruction. Executable pathname/metadata/hash
+checks around launch are not atomic execution-image attestation. Physical root
+strings do not anchor directory identity against concurrent replacement, and
+lexical symlink aliases outside this profile remain unqualified. These
+observations confer no publication permit.
+
+Store errors preserve whether original-project agreement was established. The
+original store-eligible invocation starts unbound before frame acquisition;
+recognized byte-bound refusals stay with the store owner, and transport or
+framing failures cannot bypass this state by arriving before that owner runs.
+Fallback charges the Ready project namespace only after that agreement; an
+unbound store refusal uses the existing no-context diagnostic Stop release
+without creating project budget state. A database-path or transport failure
+after agreement retains normal infrastructure budgeting. This distinction binds
+this store error path and does not independently qualify every other Ready
+consumer.
+
+One native connection owns the fixed read transaction and cursor across typed
+row callbacks. Current-row TEXT admission precedes the next VM step and current
+delivery. Native UTC returns actual fields/errno; typed arithmetic and calendar
+interpretation remain explicit. Cancellation covers SQL progress and busy wait
+cooperatively under the original deadline. Row payload bounds do not establish a
+hard OS-I/O deadline or complete SQLite-memory limit.
+
+Reconstruction preserves storage classes, numeric/codepoint profiles and failure
+order. It checks native settlement independently of IteratorClose and retains
+the first operation failure, separate cleanup detail and confirmed-close state.
+Native exchange and CLOSED-delivery errors retain the complete acquisition
+settlement, including any uncertain cleanup owner, in the resident Actor beyond
+frontend termination. Failure to deliver CLOSED does not erase an observed SQL
+close; successful refusal does not establish closure of an uncertain connection.
+Event encoding follows reconstruction and close acknowledgment. Atomic
+projection publication, later receipt serialization and actual renderer
+selection require their own integrated owner and evidence; encoded event bytes
+alone confer no publication, delivery or cutover claim.
+
+The actual native store arm sends a distinct `StoreAcquire` first-message on the
+existing private owner socket. It carries the original raw payload, cwd,
+environment and captured database, native invocation/runtime identity and Ready
+correlation. It does not reuse RenderOffer v1, alter its LF+EOF bridge framing,
+or admit OpenCode/ZCode to the Codex renderer. The owner reserves an unreleased
+record before original-project observation, independently observes the native
+project before creating a project route/journal, and reports a typed
+`ProjectBound` observation. The Actor independently validates original project
+and database binding before its sole SQL acquisition. Frontend EOF sets a
+request-owned cancellation flag; it never consults a global process flag.
+
+Store work is a FIFO barrier behind the pending renderer cohort in the same
+project mailbox. Later renderer work cannot overtake it. Existing connection,
+project, queue and backend accounting retain their bounds. The separate store
+registry admits at most `max_retained_records` invocations across the owner;
+duplicates and saturation fail before SQL. Records have no eviction, release or
+retry surface and pin the resident owner beyond its idle timeout. This stricter
+finite bound qualifies a bounded acquisition slice, not sustained workload
+capacity. Publication, consumption and an explicit record-release lifecycle
+remain integration obligations.
+
+The Actor owns SQL and cleanup; the frontend relays sequenced write, read and
+credit operations over its existing engine transport. A write succeeds only
+after the frontend's actual `Session.send` completes and its matching
+acknowledgement arrives. Controls, acknowledgements and validated credit remain
+correlated and bounded. Confirmed source close and delivered CLOSED can
+accompany an exhausted, stopped or failed acquisition. Full acquisition and
+ServeError values stay in strong Actor records; the frontend receives finite
+metadata and preserves the last independently observed project binding if its
+relay fails. Neither delivery of a row nor CLOSED grants publication. The
+acquisition's `rows_delivered` metric counts rows handed to the native visitor
+before that visitor returns, including transport failures. Successful engine
+delivery requires its separate matching actual-write acknowledgement; the source
+visitor count supplies no such receipt.
+
+A bounded read-only `StoreStatus` first-message requires exact native
+invocation, runtime and registration correlation and uses the existing
+connection admission. It reads the actual retained record through a weak
+registry reference, reporting explicit missing when that owner is absent. It
+exposes phase, binding, end, first-failure category, row metrics and cleanup
+state without raw payloads, database handles, replay, release or authority.
+Status never starts a replacement owner. Process liveness and historical
+diagnostic events cannot substitute for that retained-record observation.
+Ordinary reader consumption, atomic projection publication, permit issuance and
+machine adoption remain unqualified.
 
 ## Functional acceptance and proof
 

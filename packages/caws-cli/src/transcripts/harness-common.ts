@@ -5,12 +5,16 @@ import {
   isJsonNumber,
   isJsonObject,
   jsonObject,
-  parsePythonJson,
   pythonStr,
   pythonTruthy,
   type JsonObject,
   type JsonValue,
 } from './lossless-json';
+import {
+  parseTranscriptJson,
+  snapshotTranscriptJsonProfile,
+  type TranscriptJsonNumericProfile,
+} from './transcript-json-profile';
 import {
   isParsedRow,
   pythonStrip,
@@ -56,15 +60,24 @@ export function parseTimestamp(value: JsonValue | undefined): string | null {
   const part = (n: number): string => String(n).padStart(2, '0');
   return `${String(date.getUTCFullYear()).padStart(4, '0')}-${part(date.getUTCMonth() + 1)}-${part(date.getUTCDate())}T${part(date.getUTCHours())}:${part(date.getUTCMinutes())}:${part(date.getUTCSeconds())}Z`;
 }
-export function decodeStructuredTextPayload(raw: string): string;
-export function decodeStructuredTextPayload(raw: JsonValue | undefined): JsonValue;
-export function decodeStructuredTextPayload(raw: JsonValue | undefined): JsonValue {
+export function decodeStructuredTextPayload(
+  raw: string,
+  profile?: TranscriptJsonNumericProfile
+): string;
+export function decodeStructuredTextPayload(
+  raw: JsonValue | undefined,
+  profile?: TranscriptJsonNumericProfile
+): JsonValue;
+export function decodeStructuredTextPayload(
+  raw: JsonValue | undefined,
+  profile?: TranscriptJsonNumericProfile
+): JsonValue {
   if (typeof raw !== 'string') return raw !== undefined && pythonTruthy(raw) ? raw : '';
   const payload = pythonStrip(raw);
   if (!payload || !['[', '{'].includes(payload[0]!)) return raw;
   let parsed: JsonValue;
   try {
-    parsed = parsePythonJson(payload);
+    parsed = parseTranscriptJson(payload, profile);
   } catch {
     return raw;
   }
@@ -124,12 +137,16 @@ export function parseContextAuthorityBlock(text: string): JsonObject | null {
     ...(values.has('attachment') ? [['attachment', values.get('attachment')!] as const] : []),
   ]);
 }
-export function parseHookStdout(stdout: JsonValue | undefined): JsonObject | null {
+export function parseHookStdout(
+  stdout: JsonValue | undefined,
+  profile?: TranscriptJsonNumericProfile
+): JsonObject | null {
   if (typeof stdout !== 'string' || !pythonStrip(stdout)) return null;
   let payload: JsonValue;
   try {
-    payload = parsePythonJson(stdout);
-  } catch {
+    payload = parseTranscriptJson(stdout, profile);
+  } catch (error) {
+    if (profile !== undefined && !(error instanceof SyntaxError)) throw error;
     return null;
   }
   const hook = isJsonObject(payload) ? getMember(payload, 'hookSpecificOutput') : undefined;
@@ -221,7 +238,8 @@ export interface TranscriptAdapter<S> {
   cloneState(state: S): S;
   normalize(
     row: JsonObject,
-    state: S
+    state: S,
+    context?: NormalizationContext
   ): { readonly state: S; readonly events: readonly LocatedEvent[] };
 }
 export type OptionalContext =
@@ -236,6 +254,7 @@ export interface NormalizationContext {
   readonly surface: OptionalContext;
   readonly cacheGeneration: OptionalContext;
   readonly orderedAdapters: readonly AdapterIdentity[];
+  readonly numericProfile?: TranscriptJsonNumericProfile;
 }
 const contexts = new WeakSet<object>();
 function optional(value: string | undefined): OptionalContext {
@@ -246,7 +265,11 @@ function optional(value: string | undefined): OptionalContext {
   );
 }
 export function makeNormalizationContext(
-  options: { readonly surface?: string; readonly cacheGeneration?: string },
+  options: {
+    readonly surface?: string;
+    readonly cacheGeneration?: string;
+    readonly numericProfile?: TranscriptJsonNumericProfile;
+  },
   orderedAdapters: readonly AdapterIdentity[]
 ): NormalizationContext {
   const ids = new Set<string>();
@@ -261,6 +284,9 @@ export function makeNormalizationContext(
     surface: optional(options.surface),
     cacheGeneration: optional(options.cacheGeneration),
     orderedAdapters: Object.freeze(ordered),
+    ...(options.numericProfile === undefined
+      ? {}
+      : { numericProfile: snapshotTranscriptJsonProfile(options.numericProfile) }),
   });
   contexts.add(context);
   return context;
@@ -383,7 +409,7 @@ export function normalizeOccurrence<S>(
   if (parsed.disposition !== 'parsed') return result(parsed.disposition);
   if (!adapter.matches(parsed.row)) return result('unmatched');
   // Adapter state is intentionally not restricted to JSON: cloneState may preserve Sets and tuple maps.
-  const normalized = adapter.normalize(parsed.row, adapter.cloneState(state.value));
+  const normalized = adapter.normalize(parsed.row, adapter.cloneState(state.value), context);
   const surface = context.surface.presence === 'present' ? context.surface.value : undefined;
   const attribution =
     (surface !== undefined && Object.prototype.hasOwnProperty.call(SURFACES, surface)

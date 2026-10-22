@@ -1,5 +1,12 @@
 import { validateSystemPolicy, type SystemSurfacePolicy } from './system-project-policy';
-import { systemCommand } from './native-hook-identification';
+import {
+  systemCommand,
+  universalEventMatcher,
+  unconditionalCommandHook,
+  qualifiedHookTimeout,
+  configHasCawsProducerHooks,
+  isCawsProducerHookCandidate,
+} from './native-hook-identification';
 import { readSystemSurfaceSettings, nativeConfigPath } from './system-surface-settings';
 export type { SystemSurfacePolicy } from './system-project-policy';
 import type {
@@ -20,11 +27,15 @@ import {
 } from './machine-adapters';
 import {
   MACHINE_EVENTS,
-  configHasCawsHooks,
   isCawsNativeCommand,
   migrateNativeCommand,
+  classifyAdapterProducerHook,
 } from './machine-adapter-policy';
 import { extractMachineHandlers } from './machine-handler-policy';
+import {
+  readNativeEntryFileIdentity,
+  readRetainedNativeEntryIdentity,
+} from './machine-runtime-state';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
 import {
   CANONICAL_HOOK_ENTRIES,
@@ -54,6 +65,7 @@ export interface SystemOptions {
   repo?: string;
   fromFile?: string;
   nativeConfigTarget?: string;
+  entry?: 'native' | 'legacy';
 }
 const encode = (value: unknown): string => JSON.stringify(value, null, 2) + '\n';
 const empty = (): SystemSurfacePolicy => ({
@@ -157,6 +169,52 @@ function requireRuntime(home: string): { files: string[]; defaults: Record<Event
 }
 
 /** Register one stable transport at the harness user layer. No project writes. */
+function requireNativeEntry(home: string, preserveLegacyTransport = false): void {
+  const pointer = JSON.parse(before(home, path.join(home, 'state/adapter-runtime.json')) ?? 'null');
+  const files = verifyRuntime(home, pointer.digest);
+  const stable = path.join(home, 'bin/caws-hook-native');
+  assertMachinePath(home, stable);
+  const refuse = (): never => {
+    throw new Error(
+      'Install and verify an explicit --native-image before configuring the native entry'
+    );
+  };
+  if (!fs.existsSync(stable)) return refuse();
+  let identity: string;
+  try {
+    const captured = readNativeEntryFileIdentity(home, stable);
+    if (captured.mode !== 0o755) return refuse();
+    identity = captured.sha256;
+  } catch {
+    return refuse();
+  }
+  if (files['native-entry.json']) {
+    if (files['native/caws-hook-native'] !== identity) return refuse();
+    return;
+  }
+  // A retained transport may follow rollback into a verified legacy generation.
+  // Only manifest-bound metadata and entry identity are consumed here, under
+  // machine-home custody. Unused native payload health is not legacy readiness;
+  // this neither qualifies that native image nor authenticates publisher history.
+  // Fresh native opt-in still requires a fully verified selected native image.
+  if (!preserveLegacyTransport || !files['bootstrap.py'] || !files['launcher.py']) return refuse();
+  const runtimes = path.join(home, 'lib/runtimes');
+  assertMachinePath(home, runtimes);
+  const candidates = new Set([
+    ...(typeof pointer.previous_digest === 'string' ? [pointer.previous_digest] : []),
+    ...fs.readdirSync(runtimes).sort(),
+  ]);
+  for (const digest of candidates) {
+    if (!/^[a-f0-9]{64}$/.test(digest)) continue;
+    try {
+      if (readRetainedNativeEntryIdentity(home, digest).sha256 === identity) return;
+    } catch {
+      // Invalid manifest-bound entry identity vouches for no compatibility.
+    }
+  }
+  return refuse();
+}
+
 export function configureSystemRuntime(options: SystemOptions): {
   changed: boolean;
   changes: Change[];
@@ -175,6 +233,32 @@ export function configureSystemRuntime(options: SystemOptions): {
     target
   );
   const native = config(user, file);
+  if (native.value.disableAllHooks === true)
+    throw new Error(
+      'Native hooks are disabled; reconcile disableAllHooks before system registration'
+    );
+  const transports = new Set<'native' | 'legacy'>();
+  for (const [name, groups] of Object.entries(native.value.hooks ?? {})) {
+    if (!Array.isArray(groups)) throw new Error('Malformed native hook groups');
+    for (const group of groups)
+      for (const hook of group.hooks ?? []) {
+        if (isCawsProducerHookCandidate(hook)) {
+          const event =
+            Object.entries(MACHINE_EVENTS).find(([, native]) => native === name)?.[0] ?? '';
+          const ownership = classifyAdapterProducerHook(hook, options.surface, event);
+          if (ownership.kind === 'foreign') continue;
+          if (!event) throw new Error(`Unrecognized CAWS lifecycle registration: ${name}`);
+          if (ownership.kind === 'unresolved')
+            throw new Error(`CAWS producer registration requires reconciliation: ${name}`);
+          transports.add(ownership.entry);
+        }
+      }
+  }
+  if (options.entry === undefined && transports.size > 1)
+    throw new Error('Mixed CAWS entry registrations require explicit --entry reconciliation');
+  const entry = options.entry ?? [...transports][0] ?? 'legacy';
+  if (entry !== 'native' && entry !== 'legacy') throw new Error('Entry must be native or legacy');
+  if (entry === 'native') requireNativeEntry(home, options.entry === undefined);
   const toml = before(user, path.join(user, vendor, 'config.toml'));
   if (toml && /\[hooks[.\[\]]/.test(toml) && isCawsNativeCommand(toml))
     throw new Error(
@@ -184,11 +268,15 @@ export function configureSystemRuntime(options: SystemOptions): {
   for (const [name, groups] of Object.entries(native.value.hooks)) {
     if (
       !Object.values(MACHINE_EVENTS).includes(name as (typeof MACHINE_EVENTS)[Event]) &&
-      configHasCawsHooks({ hooks: { [name]: groups } })
+      configHasCawsProducerHooks({ hooks: { [name]: groups } }, options.surface)
     )
       throw new Error(`Unrecognized CAWS lifecycle registration: ${name}`);
   }
   for (const [event, name] of Object.entries(MACHINE_EVENTS)) {
+    const failurePolicy =
+      options.surface === 'claude-code' && event === 'pre_tool_use'
+        ? { onFailure: 'block' as const }
+        : {};
     const groups = native.value.hooks[name] ?? [];
     if (!Array.isArray(groups)) throw new Error(`Malformed native hook groups: ${name}`);
     let replacements = 0;
@@ -198,13 +286,24 @@ export function configureSystemRuntime(options: SystemOptions): {
       return {
         ...group,
         hooks: group.hooks.map((hook: NativeHook) => {
-          if (!isCawsNativeCommand(hook?.command)) return hook;
+          if (!isCawsProducerHookCandidate(hook)) return hook;
+          const ownership = classifyAdapterProducerHook(hook, options.surface, event);
+          if (ownership.kind === 'foreign') return hook;
+          if (ownership.kind === 'unresolved' || typeof hook.command !== 'string')
+            throw new Error(`CAWS producer registration requires reconciliation: ${name}`);
           if (group.enabled === false || hook.enabled === false)
             throw new Error(`Disabled CAWS registration requires native-harness review: ${name}`);
+          if (!unconditionalCommandHook(group, hook, options.surface, event))
+            throw new Error(
+              `Conditional or unsupported CAWS hook requires native-harness reconciliation: ${name}`
+            );
+          if (!qualifiedHookTimeout(options.surface, event, hook.timeout))
+            throw new Error(
+              `Qwen CAWS timeout requires millisecond-budget reconciliation: ${name}`
+            );
           if (
-            options.surface === 'codex' &&
             ['pre_tool_use', 'post_tool_use'].includes(event) &&
-            group.matcher !== '.*'
+            !universalEventMatcher(options.surface, event, group.matcher)
           )
             throw new Error(
               `Restricted CAWS matcher requires native-harness review: ${name}; system hooks must cover all tools`
@@ -212,11 +311,18 @@ export function configureSystemRuntime(options: SystemOptions): {
           replacements++;
           return {
             ...hook,
+            ...failurePolicy,
             command:
-              hook.command === systemCommand(home, options.surface, event)
+              hook.command === systemCommand(home, options.surface, event, entry)
                 ? hook.command
-                : migrateNativeCommand(hook.command, user, home, options.surface, event as Event) +
-                  ' --system',
+                : migrateNativeCommand(
+                    hook.command,
+                    user,
+                    home,
+                    options.surface,
+                    event as Event,
+                    entry
+                  ) + ' --system',
           };
         }),
       };
@@ -230,19 +336,34 @@ export function configureSystemRuntime(options: SystemOptions): {
         options.surface === 'qwen-code'
           ? CANONICAL_QWEN_HOOK_ENTRIES[name]
           : CANONICAL_HOOK_ENTRIES[name];
+      // Qwen consumes milliseconds; Claude and Codex consume seconds. Retain
+      // canonical event budgets, including lifecycle budgets, in their units.
+      // SessionEnd and PreCompact share the corresponding seconds policy when
+      // a surface's legacy pack does not define that event.
+      const seconds =
+        name === 'SessionEnd'
+          ? 10
+          : event === 'post_tool_use'
+            ? 60
+            : event === 'pre_tool_use'
+              ? 45
+              : 30;
+      const defaultHooks = defaults?.hooks as NativeHook[] | undefined;
+      const timeout =
+        defaultHooks?.[0]?.timeout ?? seconds * (options.surface === 'qwen-code' ? 1000 : 1);
       const group = {
         ...defaults,
         hooks: [
           {
             type: 'command',
-            command: systemCommand(home, options.surface, event),
-            timeout: event === 'post_tool_use' ? 60 : 45,
+            command: systemCommand(home, options.surface, event, entry),
+            timeout,
+            ...failurePolicy,
           },
         ],
       };
-      // Native Codex tools include apply_patch and exec_command. The parser and
-      // individual guards decide which inputs they govern.
-      if (options.surface === 'codex' && ['pre_tool_use', 'post_tool_use'].includes(event))
+      // Transport every tool event. Individual guards decide which inputs they govern.
+      if (['pre_tool_use', 'post_tool_use'].includes(event))
         (group as NativeHookGroup).matcher = '.*';
       retained.push(group);
     }
@@ -300,8 +421,15 @@ function inferPolicy(
     let dispatchPath: string | undefined;
     const commands = (native.hooks?.[nativeName] ?? [])
       .flatMap((g: NativeHookGroup) => g.hooks ?? [])
-      .map((h: NativeHook) => h.command)
-      .filter(isCawsNativeCommand);
+      .filter((hook: NativeHook) => {
+        if (!isCawsProducerHookCandidate(hook)) return false;
+        const ownership = classifyAdapterProducerHook(hook, surface, event);
+        if (ownership.kind === 'unresolved')
+          throw new Error(`CAWS producer registration requires reconciliation: ${nativeName}`);
+        return ownership.kind === 'owned';
+      })
+      .map((hook: NativeHook) => hook.command)
+      .filter((command): command is string => typeof command === 'string');
     if (!handlers && commands.length === 0) continue;
     hadTransport = true;
     if (!handlers) {
@@ -503,7 +631,11 @@ export function migrateSystemProject(options: SystemOptions): {
         return {
           ...group,
           hooks: group.hooks.filter((hook: NativeHook) => {
-            if (!isCawsNativeCommand(hook?.command)) return true;
+            if (!isCawsProducerHookCandidate(hook)) return true;
+            const ownership = classifyAdapterProducerHook(hook, options.surface, event);
+            if (ownership.kind === 'foreign') return true;
+            if (ownership.kind === 'unresolved' || typeof hook.command !== 'string')
+              throw new Error(`CAWS producer registration requires reconciliation: ${name}`);
             if (!options.fromFile)
               migrateNativeCommand(hook.command, repo, home, options.surface, event as Event);
             return false;
@@ -514,7 +646,7 @@ export function migrateSystemProject(options: SystemOptions): {
     if (retained.length === 0) delete nativeHooks[name];
     else nativeHooks[name] = retained;
   }
-  if (configHasCawsHooks(native.value))
+  if (configHasCawsProducerHooks(native.value, options.surface))
     throw new Error('Unrecognized lifecycle CAWS wiring remains; review native adapter');
   const changes: Change[] = [
     { root: home, path: projectPath, before: prior, after: encode(project) },

@@ -18,12 +18,17 @@ import {
 } from './handler-executor';
 import { handlerEligibility } from './eligibility';
 import { resolveInvocationIdentity } from './identity';
+import { clearGuardConfigurationTransport, invocationGuardConfiguration } from './guard-config';
 import { InvocationJournal } from './journal';
 import { AdvisoryDedup } from './advisory-dedup';
 import { normalizeNativeResult } from './native-response';
 import { resolveInvocationSelection, type ActiveInvocationSelection } from './selection';
-import { encodeRuntimeResponse, type RuntimeRequest } from './protocol';
+import { encodeRuntimeResponse, SESSION_CACHE_CAPABILITY, type RuntimeRequest } from './protocol';
+import { qualifiesForNativeSessionCache } from './session-cache-admission';
+import { sessionCacheInputSupported, type NativeSessionCachePort } from './session-cache-client';
 import type { NativeResult } from './types';
+import { prepareNativeRenderOffer, type NativeRenderOffer } from './service-offer';
+import { type NativeRenderAdmission, disposeNativeRenderAdmission } from './service-image';
 import {
   CONTAINMENT_ENV,
   containmentWire,
@@ -183,15 +188,18 @@ export interface PreparedRuntimeInvocation {
   readonly budgetHome: string;
   readonly projectDigest: string | null;
   readonly sessionId: string | null;
-  dispatch(): Promise<PreparedDispatchResult>;
+  readonly serviceOffer?: NativeRenderOffer;
+  dispatch(admission?: NativeRenderAdmission): Promise<PreparedDispatchResult>;
   acknowledgeHandoff(success: boolean, containment?: ContainmentReceipt | null): Promise<string>;
 }
 
 export async function prepareRuntimeInvocation(
   request: RuntimeRequest,
-  signal: AbortSignal
+  signal: AbortSignal,
+  nativeSessionCache?: NativeSessionCachePort
 ): Promise<PreparedRuntimeInvocation> {
   const environment = invocationEnvironment(request.caller);
+  clearGuardConfigurationTransport(environment);
   for (const name of [
     'CAWS_HOOK_INVOCATION_FILE',
     'CAWS_HOOK_INVOCATION_METADATA',
@@ -231,7 +239,11 @@ export async function prepareRuntimeInvocation(
       budgetHome: home,
       projectDigest: null,
       sessionId: null,
-      async dispatch() {
+      async dispatch(admission) {
+        if (admission) {
+          disposeNativeRenderAdmission(admission);
+          throw new Error('Inactive invocation cannot accept service admission');
+        }
         if (used) throw new Error('Invocation dispatch is single-use');
         used = true;
         return {
@@ -264,7 +276,13 @@ export async function prepareRuntimeInvocation(
     );
   const journal = new InvocationJournal(request, selection, identity.sessionId);
   const dedup = new AdvisoryDedup(home, selection.canonical, identity.sessionId, environment);
-  const options = { request, selection, environment: Object.freeze(environment), signal };
+  const serviceOffer = prepareNativeRenderOffer(
+    request,
+    selection,
+    environment,
+    identity.sessionId,
+    home
+  );
   let dispatched = false,
     acknowledged = false,
     result: NativeResult | null = null;
@@ -275,6 +293,7 @@ export async function prepareRuntimeInvocation(
     active: true,
     budgetHome: home,
     projectDigest: digest(selection.canonical),
+    ...(serviceOffer ? { serviceOffer } : {}),
     sessionId:
       identity.sessionId &&
       identity.sessionId !== 'unknown' &&
@@ -282,15 +301,62 @@ export async function prepareRuntimeInvocation(
       !identity.sessionId.includes('\0')
         ? identity.sessionId
         : null,
-    async dispatch() {
+    async dispatch(admission) {
+      if (Boolean(serviceOffer) !== Boolean(admission)) {
+        if (admission) disposeNativeRenderAdmission(admission);
+        throw new Error('Native render admission must match the prepared service offer');
+      }
       if (dispatched || acknowledged)
         throw new Error('Invocation dispatch is single-use and cannot resume after settlement');
       if (signal.aborted) throw signal.reason;
       dispatched = true;
       journal.append('dispatch_started');
+      let cacheDiagnostic = '';
       try {
-        if (compatibilityRequired(request, selection, environment)) {
-          const completed = await executeCompatibilityDispatch(options);
+        const options = {
+          request,
+          selection,
+          environment: invocationGuardConfiguration(selection, environment),
+          signal,
+        };
+        let compatibility = compatibilityRequired(request, selection, environment);
+        if (!compatibility) {
+          const sid = request.payload.session_id;
+          // Unsafe/non-string identity retains the complete parser's diagnostic
+          // behavior. Resolved fallback identity must never select cache writes.
+          const supportedSid =
+            sid === undefined ||
+            (typeof sid === 'string' &&
+              (sid === '' ||
+                sid === 'unknown' ||
+                (sid !== '.' && sid !== '..' && /^[A-Za-z0-9_.@:-]+$/.test(sid))));
+          if (
+            !nativeSessionCache ||
+            request.sessionCache !== SESSION_CACHE_CAPABILITY ||
+            !supportedSid ||
+            !sessionCacheInputSupported(request.inputJson) ||
+            !qualifiesForNativeSessionCache({ request, selection, environment })
+          ) {
+            compatibility = true;
+          } else {
+            // Ready and the native dispatch grant precede this awaited prefix.
+            // It also runs for empty or entirely reprieved handler selections.
+            const cache = await nativeSessionCache.capture(selection.canonical);
+            if (signal.aborted) throw signal.reason;
+            journal.append('session_cache_completed', {
+              status: cache.status,
+              envelope_published: cache.envelopePublished,
+            });
+            if (cache.status === 'declined') compatibility = true;
+            else if (cache.status === 'unavailable')
+              cacheDiagnostic = '[caws runtime] ' + cache.diagnostic + '\n';
+          }
+        }
+        if (compatibility) {
+          const completed = await executeCompatibilityDispatch({
+            ...options,
+            ...(admission ? { nativeRenderAdmission: admission } : {}),
+          });
           result = completed;
           try {
             offers = compatibilityOffers(completed.offerReceipts);
@@ -365,7 +431,7 @@ export async function prepareRuntimeInvocation(
           ...result,
           stderr: Buffer.concat([
             result.stderr,
-            Buffer.from(identity.diagnostic + journal.takeDiagnostics()),
+            Buffer.from(cacheDiagnostic + identity.diagnostic + journal.takeDiagnostics()),
           ]),
         })
       );

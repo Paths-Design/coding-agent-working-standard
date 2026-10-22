@@ -19,13 +19,36 @@
 load helpers
 
 setup_file() {
+  if [[ "${CAWS_AGENT_SURFACE_SOURCE_TESTS:-}" == 1 ]]; then
+    # Source-unit fixtures deliberately provision no installed hook pack.
+    export CAWS_TEST_REPO="$BATS_FILE_TMPDIR/source-unit-repo"
+    export CAWS_TEST_HOME="$BATS_FILE_TMPDIR/source-unit-home"
+    export CAWS_TEST_HOOKS_DIR="$CAWS_TEST_REPO/installed-pack-not-provisioned"
+    mkdir -p "$CAWS_TEST_REPO" "$CAWS_TEST_HOME" "$BATS_FILE_TMPDIR/empty-template"
+    env -i PATH="$PATH" HOME="$CAWS_TEST_HOME" \
+      GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+      GIT_TEMPLATE_DIR="$BATS_FILE_TMPDIR/empty-template" \
+      git -C "$CAWS_TEST_REPO" init -q -b source-unit
+    return
+  fi
   caws_install_pack_once
 }
 teardown_file() {
+  # --no-tempdir-cleanup retains source-unit evidence in Bats' run directory;
+  # ordinary installed-pack teardown stays unchanged.
+  [[ "${CAWS_AGENT_SURFACE_SOURCE_TESTS:-}" == 1 ]] && return 0
   caws_teardown_pack
 }
 
 setup() {
+  if [[ "${CAWS_AGENT_SURFACE_SOURCE_TESTS:-}" == 1 ]]; then
+    AS_LIB="$CAWS_TEST_HOOKS_DIR/lib/agent-surface.sh"
+    [[ "$BATS_TEST_DESCRIPTION" == 'source caws_source_lib:'* ]] || {
+      printf '%s\n' 'SOURCE-UNIT mode cannot run installed-pack tests' >&2
+      return 1
+    }
+    return 0
+  fi
 AS_LIB="$CAWS_TEST_HOOKS_DIR/lib/agent-surface.sh"
 
 # git rev-parse --show-toplevel returns the realpath-resolved root (on macOS
@@ -38,6 +61,142 @@ CAWS_TEST_REPO_REAL="$(cd "$CAWS_TEST_REPO" && git rev-parse --show-toplevel)"
 # env/bash word-splitting boundary intact (the run_guard pattern).
 RESOLVE_CMD="source '$AS_LIB' >/dev/null 2>&1; printf '%s\n' \"\${CAWS_PROJECT_DIR:-}\""
 
+}
+
+# These controls source the authoritative template directly. They make no
+# installed-pack claim and run independently of the legacy init bootstrap.
+_source_lookup_fixture() {
+  LOOKUP_TEMPLATE="$CLI_PKG_ROOT/templates/hook-packs/shared/lib/agent-surface.sh"
+  LOOKUP_ROOT="$BATS_TEST_TMPDIR/source-lookup"
+  LOOKUP_REAL_PYTHON="$(command -v python3)"
+  LOOKUP_CALL=0
+  mkdir -p "$LOOKUP_ROOT"/{bin,no-python,policy,adapter,shared,home,machine/surfaces/codex/lib}
+  printf 'LOOKUP_RESULT=user\n' > "$LOOKUP_ROOT/machine/surfaces/codex/lib/probe.sh"
+  printf 'LOOKUP_RESULT=adapter\n' > "$LOOKUP_ROOT/adapter/probe.sh"
+  printf 'LOOKUP_RESULT=shared\n' > "$LOOKUP_ROOT/shared/probe.sh"
+  cat > "$LOOKUP_ROOT/bin/python3" <<'PYTHON_BOUNDARY'
+#!/bin/bash
+printf '%s\n' "${!#}" >> "$LOOKUP_ROOT/python-calls"
+exec "$LOOKUP_REAL_PYTHON" "$@"
+PYTHON_BOUNDARY
+  chmod +x "$LOOKUP_ROOT/bin/python3"
+}
+
+_source_lookup_run() {
+  local map="$1" program="$2"
+  shift 2
+  local -a mapping=()
+  [[ "$map" == __UNSET__ ]] || mapping=("CAWS_MACHINE_LIBRARIES=$map")
+  LOOKUP_CALL=$((LOOKUP_CALL + 1))
+  printf '%s\n' "$map" > "$LOOKUP_ROOT/case-$LOOKUP_CALL.map"
+  run env -i PATH="$LOOKUP_ROOT/bin:/usr/bin:/bin" \
+    HOME="$LOOKUP_ROOT/home" CAWS_HOME="$LOOKUP_ROOT/machine" \
+    CAWS_AGENT_SURFACE=codex CAWS_TRAP_KILL=0 CAWS_MACHINE_RUNTIME=1 \
+    CAWS_PROJECT_DIR="$LOOKUP_ROOT/policy" CAWS_MACHINE_POLICY_ROOT="$LOOKUP_ROOT/policy" \
+    CAWS_MACHINE_ADAPTER_LIB_DIR="$LOOKUP_ROOT/adapter" CAWS_SHARED_LIB_DIR="$LOOKUP_ROOT/shared" \
+    LOOKUP_TEMPLATE="$LOOKUP_TEMPLATE" LOOKUP_ROOT="$LOOKUP_ROOT" \
+    LOOKUP_REAL_PYTHON="$LOOKUP_REAL_PYTHON" LOOKUP_NAME=probe.sh \
+    "${mapping[@]}" "$@" /bin/bash -c 'source "$LOOKUP_TEMPLATE" || exit 98
+'"$program"
+  printf '%s\n' "$status" > "$LOOKUP_ROOT/case-$LOOKUP_CALL.status"
+  printf '%s\n' "$output" > "$LOOKUP_ROOT/case-$LOOKUP_CALL.output"
+  if [[ -f "$LOOKUP_ROOT/parser.stderr" ]]; then
+    cp "$LOOKUP_ROOT/parser.stderr" "$LOOKUP_ROOT/case-$LOOKUP_CALL.stderr"
+  fi
+}
+
+@test "source caws_source_lib: exact empty map works without Python and preserves fresh user adapter shared tiers" {
+  _source_lookup_fixture
+  _source_lookup_run '{}' '
+    PATH="$LOOKUP_ROOT/no-python"
+    if command -v python3 >/dev/null 2>&1; then exit 97; fi
+    caws_source_lib "$LOOKUP_NAME" || exit 96
+    printf "%s\n" "$LOOKUP_RESULT"
+    /bin/rm "$CAWS_HOME/surfaces/codex/lib/probe.sh"
+    caws_source_lib "$LOOKUP_NAME" || exit 95
+    printf "%s\n" "$LOOKUP_RESULT"
+    /bin/rm "$CAWS_MACHINE_ADAPTER_LIB_DIR/probe.sh"
+    caws_source_lib "$LOOKUP_NAME" || exit 94
+    printf "%s\n" "$LOOKUP_RESULT"
+    printf "LOOKUP_RESULT=fresh\n" > "$CAWS_SHARED_LIB_DIR/probe.sh"
+    caws_source_lib "$LOOKUP_NAME" || exit 93
+    printf "%s\n" "$LOOKUP_RESULT"'
+  assert_success
+  assert_output $'user\nadapter\nshared\nfresh'
+  [ ! -e "$LOOKUP_ROOT/python-calls" ]
+}
+
+@test "source caws_source_lib: nonempty maps preserve quoted keys paths and per-call override selection" {
+  _source_lookup_fixture
+  local name="probe ' quoted.sh" first="local overrides/one's file.sh" second="local overrides/two's file.sh"
+  mkdir -p "$LOOKUP_ROOT/policy/local overrides"
+  printf 'LOOKUP_RESULT=override-one\n' > "$LOOKUP_ROOT/policy/$first"
+  printf 'LOOKUP_RESULT=override-two\n' > "$LOOKUP_ROOT/policy/$second"
+  local first_map second_map
+  first_map="$("$LOOKUP_REAL_PYTHON" -c 'import json,sys; print(json.dumps({sys.argv[1]:sys.argv[2]}))' "$name" "$first")"
+  second_map="$("$LOOKUP_REAL_PYTHON" -c 'import json,sys; print(json.dumps({sys.argv[1]:sys.argv[2]}))' "$name" "$second")"
+  _source_lookup_run "$first_map" '
+    caws_source_lib "$LOOKUP_NAME" || exit 96
+    printf "%s\n" "$LOOKUP_RESULT"
+    export CAWS_MACHINE_LIBRARIES="$LOOKUP_SECOND_MAP"
+    caws_source_lib "$LOOKUP_NAME" || exit 95
+    printf "%s\n" "$LOOKUP_RESULT"' LOOKUP_NAME="$name" LOOKUP_SECOND_MAP="$second_map"
+  assert_success
+  assert_output $'override-one\noverride-two'
+  [ "$(cat "$LOOKUP_ROOT/python-calls")" = "$name"$'\n'"$name" ]
+}
+
+@test "source caws_source_lib: whitespace and unset maps retain the Python parser and fallback" {
+  _source_lookup_fixture
+  local map
+  for map in ' {} ' __UNSET__; do
+    _source_lookup_run "$map" 'caws_source_lib "$LOOKUP_NAME" || exit 96; printf "%s\n" "$LOOKUP_RESULT"'
+    assert_success
+    assert_output user
+  done
+  [ "$(cat "$LOOKUP_ROOT/python-calls")" = $'probe.sh\nprobe.sh' ]
+}
+
+@test "source caws_source_lib: empty malformed and nonobject maps cannot fall through to an existing library" {
+  _source_lookup_fixture
+  local map
+  for map in '' '{' '[]' 'null' '"{}"' '1'; do
+    _source_lookup_run "$map" '
+      caws_source_lib "$LOOKUP_NAME" 2>"$LOOKUP_ROOT/parser.stderr"
+      code=$?
+      printf "%s|%s\n" "$code" "${LOOKUP_RESULT-unset}"
+      exit "$code"'
+    assert_failure 1
+    assert_output '1|unset'
+    [ -s "$LOOKUP_ROOT/parser.stderr" ]
+  done
+  [ "$(wc -l < "$LOOKUP_ROOT/python-calls" | tr -d ' ')" -eq 6 ]
+}
+
+@test "source caws_source_lib: nonempty map without Python refuses rather than selecting a fallback" {
+  _source_lookup_fixture
+  _source_lookup_run '{"probe.sh":"explicit.sh"}' '
+    PATH="$LOOKUP_ROOT/no-python"
+    caws_source_lib "$LOOKUP_NAME" 2>"$LOOKUP_ROOT/parser.stderr"
+    code=$?
+    printf "%s|%s\n" "$code" "${LOOKUP_RESULT-unset}"
+    exit "$code"'
+  assert_failure 1
+  assert_output '1|unset'
+  [ -s "$LOOKUP_ROOT/parser.stderr" ]
+  [ ! -e "$LOOKUP_ROOT/python-calls" ]
+}
+
+@test "source caws_source_lib: legacy runtime does not acquire machine map requirements" {
+  _source_lookup_fixture
+  _source_lookup_run '{' '
+    CAWS_MACHINE_RUNTIME=0
+    PATH="$LOOKUP_ROOT/no-python"
+    caws_source_lib "$LOOKUP_NAME" || exit 96
+    printf "%s\n" "$LOOKUP_RESULT"'
+  assert_success
+  assert_output shared
+  [ ! -e "$LOOKUP_ROOT/python-calls" ]
 }
 
 @test "agent-surface: CLAUDE_PROJECT_DIR at a subdir resolves to the repo root (A1, zcode scenario)" {
