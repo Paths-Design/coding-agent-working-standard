@@ -1,9 +1,11 @@
 id: CAWS-CUTOVER-PROGRESS-250-001
 title: 'Retain private installation, actual timeout refusal and qualification obligations'
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Reviewed evidence ledger landed in source and local main with equal SHA f57e8c8d, two component PASS records; full migration parent remains active and unqualified.'
 created_at: '2026-10-22T07:04:50.800Z'
-updated_at: '2026-10-22T07:05:09.635Z'
+updated_at: '2026-10-22T07:20:20.348Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
