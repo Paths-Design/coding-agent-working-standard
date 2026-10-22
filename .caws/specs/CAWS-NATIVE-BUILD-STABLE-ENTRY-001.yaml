@@ -40,3 +40,10 @@ non_functional: {}
 contracts:
   - name: 'native-build-receipt'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Committed two-path source candidate3e4fb235 is clean; exact source923590f2/testa2e9f776 pinned after formatting and preserved by commit. Independent read-only committed review found no actionable defect, not acceptance. Actual attempt01 compiler0 lacks pre-run source identity; Jest1 stopped at package-root setup resolution before cases. Mixed identity recorder was refused before execution; normally admitted literal terminal artifact retains exact argv/status and null original pins. No behavioral suite has passed. Corrected package cwd plus explicit rootDir and literal source/tool pre/post observations await lead01a15a2a light-slot allocation after R01 confirms terminal checks. This session01a1620e retains component test/evidence ownership; lead retains actual fresh debug/release Cargo, complete v2 publication/load, native-image pin derivation, integrated consumers and all parent acceptance. No source/runtime adoption or feature-count advancement follows."
+    recorded_at: "2026-10-22T16:36:48.804Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a1620e-59d6-7373-b74b-25d9f5f7b1e9/native-build-stable-entry/attempt-01/terminal.json"
+    commit_sha: "3e4fb235589e592ae3325bddc6d686aac6d43fe8"
