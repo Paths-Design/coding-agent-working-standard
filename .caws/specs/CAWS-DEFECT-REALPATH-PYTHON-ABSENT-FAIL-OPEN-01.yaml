@@ -156,5 +156,7 @@ evidence:
     recorded_at: "2026-10-22T03:17:48.700Z"
     commit_sha: "4ac64fbf"
   - criterion_id: A5
-    status: unchecked
-    recorded_at: "2026-10-22T03:16:27.207Z"
+    status: pass
+    evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) test 25: lone LF empty-result, two LFs and relative non-absolute-result, nothing and undelimited path no-record-delimiter, each status 2 with caller variable unchanged; tests 44-46 (lf, lflf, empty modes) and 33-35, 41-43 (exit1): every reachable normalization answered alone refuses exit 2 naming its input (wwg git common dir, git dir, canonical root, spec-materialization, allowlist, operating directory, canonical-claim; bwg project root, mutation target, Git metadata), target absent. Mutants M17/M18 (delimiter/absolute checks removed) killed. Bound: bwg dynamic-prefix normalization unreachable (pinned ask)."
+    recorded_at: "2026-10-22T03:18:15.679Z"
+    commit_sha: "4ac64fbf"
