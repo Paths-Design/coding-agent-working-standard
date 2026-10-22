@@ -311,9 +311,9 @@ evidence:
     commit_sha: "5dd7f8deadcc1229ec45196eab74fc9a3a661bb8"
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "E239-E241 published source560f29/mainb64c0c09 ledger bytes e7fd8c90 match; progress239 unit closed2PASS/events10864,10890,10891. Coverage33/37partial, zero full production rows retired; full first-party/developer inventory/destinations/consumer qualification remains parent-owned. Root carries full endpoint/Move guards and trusted execution-directory context gap, mail original-byte carrier, publication/ordinary reader and finite documentation tax. No parent completion inferred."
-    recorded_at: "2026-10-22T04:37:24.860Z"
-    commit_sha: "5dd7f8deadcc1229ec45196eab74fc9a3a661bb8"
+    evidence_ref: "E242-E249 tracker main64d3/source52d7164a actualcmp0 SHA f0951bfb, progress242 closed2PASS dual events11040/11041. Guide source169/main2d1a match1d504; mail component sourcef419 tenblobs equal57056 closed7PASS.33/37partial,zero completePythonretirements,parent0/8. Full inventory/destinations and actual ordinary consumers remain open. Root retains completepatch endpoints, trustedworkdir/rawcarrier, continuous publication/recordrelease/reader, SessionEndusage defect, bound mutationqualification and finite existing docs tax. New private installation/configuration data proceeds under R01 owner, not machine cutover."
+    recorded_at: "2026-10-22T06:34:29.244Z"
+    commit_sha: "52d7164ada7af68b3d4bab7e88e98d082d08cfe4"
   - criterion_id: A4
     status: unchecked
     evidence_ref: "License transport292/source1d004 is a packaging prerequisite: actual ordinary tar/private full snapshot carries three exact notices with finite cleanup ownership; strict dependency audit1 retained for two empty cache directories. Native entry candidate293 CLI172/0 and Rust10/0 are bounded checks with sentinel programs. No complete production Python row retired; guards still use Python normalization/parser, actual no-first-party-Python package and normal consumers remain owed."
