@@ -171,7 +171,7 @@ test('Qwen seconds-era timeout cannot survive entry migration or suppress the sy
     /reconciliation/
   );
 });
-test.each([undefined, NaN, Infinity, -Infinity, 45, 44999])(
+test.each([undefined, NaN, Infinity, -Infinity, 45, 44999, 45000.5, 2147483648, Number.MAX_VALUE])(
   'Qwen unsupported budget %s refuses without changing operator bytes',
   (timeout) => {
     const file = path.join(user, '.qwen/settings.json');
@@ -195,6 +195,11 @@ test.each([undefined, NaN, Infinity, -Infinity, 45, 44999])(
     );
     expect(fs.readFileSync(file)).toEqual(bytes);
     expect(fs.existsSync(path.join(home, 'surfaces/qwen-code/settings.json'))).toBe(false);
+    write(path.join(home, 'surfaces/qwen-code/settings.json'), { version: 1, enabled: true });
+    write(path.join(canonical, '.qwen/settings.json'), JSON.parse(bytes));
+    expect(() => resolveInvocationSelection({ ...options, surface: 'qwen-code' })).toThrow(
+      /reconciliation/
+    );
   }
 );
 test.each([

@@ -58,7 +58,14 @@ export function qualifiedHookTimeout(surface: string, event: string, timeout: un
         : event === 'session_end'
           ? 10000
           : 30000;
-  return typeof timeout === 'number' && Number.isFinite(timeout) && timeout >= floor;
+  // Qwen passes this directly to Node setTimeout; an overflowing delay becomes
+  // 1ms rather than a long timeout. Admit only exact supported integer budgets.
+  return (
+    typeof timeout === 'number' &&
+    Number.isInteger(timeout) &&
+    timeout >= floor &&
+    timeout <= 2147483647
+  );
 }
 
 export function machineCommand(
