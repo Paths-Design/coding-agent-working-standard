@@ -1,9 +1,11 @@
 id: CAWS-CUTOVER-RECOVERY-CHECKPOINT-001
 title: 'Retain recovery repair and observer failed-check checkpoints'
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Reviewed bounded tracker checkpoint published through normal source/main lanes with exactblob and actualworkingbyte equality; failed and corrected checks, R14port, guidehold and ordinary/native obligations retained. Full parent acceptance unchanged.'
 created_at: '2026-10-22T11:23:39.459Z'
-updated_at: '2026-10-22T11:25:23.748Z'
+updated_at: '2026-10-22T11:44:10.938Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
