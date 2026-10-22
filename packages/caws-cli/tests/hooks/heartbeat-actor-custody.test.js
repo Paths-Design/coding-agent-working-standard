@@ -225,6 +225,27 @@ async function typedExecutor(value, extra = {}) {
   return { status: result.exitCode, stdout: Buffer.from(result.stdout).toString() };
 }
 
+// Custody is binary, so the end-to-end cases cannot tell subagent from uncertain. The
+// shipped classifier program, run on the same rows, must name the exact class.
+function shellClassifier() {
+  const source = fs.readFileSync(path.join(SHARED, 'agent-heartbeat.sh'), 'utf8');
+  const match = source.match(/_hb_classify_actor\(\) \{\n {2}node -e '([^']*)' 2>\/dev\/null\n\}/);
+  if (!match)
+    throw new Error('agent-heartbeat.sh must define _hb_classify_actor as one node -e program');
+  return match[1];
+}
+test.each(ROWS)(
+  'the shipped shell classifier names the exact class: $label',
+  ({ json, expected }) => {
+    const result = spawnSync(process.execPath, ['-e', shellClassifier()], {
+      input: json,
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(expected);
+  }
+);
+
 describe('shell heartbeat decides mail custody from its own ingress, matching actorContext', () => {
   test.each(ROWS.filter((row) => row.object))(
     'parsed by the handler: $label',
@@ -319,10 +340,12 @@ describe('inherited environment never vouches for main-thread ingress', () => {
     expect(custody(mail, result.stdout)).toEqual(WITHHELD);
   });
 
+  // Without a parse marker the parser would take its identity from the preset bytes, not
+  // from what this handler received, so even main-thread stdin cannot vouch for custody.
   test('a preset HOOK_INPUT_JSON without a parse marker is inherited, not witnessed', () => {
     const sid = session();
     const mail = seed(sid);
-    const result = heartbeat(JSON.stringify(payload(sid, SUBAGENT)), {
+    const result = heartbeat(JSON.stringify(payload(sid)), {
       HOOK_INPUT_JSON: JSON.stringify(payload(sid)),
     });
     expect(result.status).toBe(0);
