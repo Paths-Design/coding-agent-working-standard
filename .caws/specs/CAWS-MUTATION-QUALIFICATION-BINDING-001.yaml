@@ -1,10 +1,11 @@
 id: CAWS-MUTATION-QUALIFICATION-BINDING-001
 title: 'Bind ordinary mutation qualification to observed source and build inputs'
 mode: fix
-lifecycle_state: active
-worktree: mutation-qualification-binding
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded A1-A4 verified at d5fe5c85: observed source/build/report mechanics, real ordinary store dryrun0 with385baseline tests and6sources/2678discoverablemutants. Full mutationfloor80, actual Jest loadedbytes/distinguishing perturbation, later integrated-parent/Windows/native/release/race qualification remain accepted parent obligations. Successful sandbox streams not retained separately; outcomes and emitted identities retained.'
 created_at: '2026-10-22T05:50:50.804Z'
-updated_at: '2026-10-22T05:51:09.375Z'
+updated_at: '2026-10-22T07:39:03.268Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
