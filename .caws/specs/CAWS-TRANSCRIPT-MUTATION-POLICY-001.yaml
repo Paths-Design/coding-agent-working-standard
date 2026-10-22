@@ -45,11 +45,11 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "49329541 private commands.json validator exit0 gives192/21/3; jest-report.json CI hostile topology checks pass;15source images and1135+53emitted files independently checked. Artifact root /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/4932954144212ea4739de31c164568e732b2a6b9. Commit verification is reachability, not test execution."
-    recorded_at: "2026-10-22T00:14:17.871Z"
-    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/run-private.cjs
+    evidence_ref: "90553b82 exact-count follow-up: revised normal CI25 checks exit0; valid wrong192/121/3 policy validator exits0 but actual live topology CI now exits1 at expected21 assertion. Same policy incorrectly passes old493 live CI. Raw before/after commands, wrong policies, streams and reports: /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/count-pin-regression/. Original493 validator192/21/3 and hostile CI results retained. Git delta only two count assertion lines. Commit verification establishes reachability, not test execution."
+    recorded_at: "2026-10-22T00:39:16.757Z"
+    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/count-pin-regression.cjs after
     exit_code: 0
-    commit_sha: "4932954144212ea4739de31c164568e732b2a6b9"
+    commit_sha: "90553b82b0e0d18303e6811ec15b90c8be6d9603"
   - criterion_id: A2
     status: pass
     evidence_ref: "49329541 store-selection.json records exact6sources/9tests, timestamp source/test,80floor,perTest,noincremental,normalbuildCommand; missing-timestamp-test and unrelated-transcript-test controls exit1 at intended selection assertions. Raw commands.json and controlreports retained at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/4932954144212ea4739de31c164568e732b2a6b9. Canonical mutation execution/floor achievement excluded; root owns qualification."
