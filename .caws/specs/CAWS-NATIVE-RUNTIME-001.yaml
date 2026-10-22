@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-22T01:55:02.247Z'
+updated_at: '2026-10-22T02:30:22.366Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -13,7 +13,6 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'packages/caws-cli/scripts/'
     - 'packages/caws-cli/src/store/'
     - 'packages/caws-cli/package.json'
     - packages/caws-cli/tests/init/repo-hook-policy.test.js
@@ -24,8 +23,6 @@ scope:
     - packages/caws-cli/tests/hooks/bats/agent-surface.bats
     - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-budget.bats
     - packages/caws-cli/tests/init/pack-fingerprints.json
-    - scripts/install-cli-snapshot.mjs
-    - scripts/install-cli-snapshot.test.mjs
     - packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js
     - packages/caws-cli/src/shell/binding/resolve-binding.ts
     - packages/caws-cli/src/runtime/advisory-dedup.ts
@@ -241,6 +238,11 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
     - packages/caws-cli/tests/runtime/handler-executor.test.js
     - packages/caws-cli/tests/adapter/machine-runtime.test.js
+    - packages/caws-cli/scripts/
+    - scripts/install-cli-snapshot.mjs
+    - scripts/install-cli-snapshot.test.mjs
+    - packages/caws-cli/.gitignore
+    - packages/caws-cli/tests/docs/package-license-transport.test.js
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
