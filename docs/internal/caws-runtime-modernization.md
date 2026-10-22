@@ -6414,24 +6414,40 @@ Additional bounded evidence and unresolved dependencies:
   with actual baseline-phase provenance, per-suite/context observations,
   six-target union, fresh lifetimes and finite retention; source reachability
   alone cannot establish runtime consumption. The full mutation campaign remains
-  unexecuted.
+  unexecuted. The actual concurrency tests in
+  `tests/store/messages-store.test.js:729–780` spawn Node children requiring
+  sandbox `dist/store/messages-store.js`; an in-process Jest VM observer cannot
+  attest those child loads. Root explicitly accepts this remaining consumption
+  obligation under parent A3/A4. The observer component does not qualify every
+  candidate consumer or process.
 
-- E256: R01 candidate `f9a90160` remains held. Independent review reaches
-  executable-position ownership and managed-header boundaries that its237
-  passing checks miss. The owner retains failing canonical and producer controls
-  and repairs classification across merge, adoption, system configuration,
-  selection and health observation. Root directs active Claude peer c4 through
-  CAWS AIM for read-only inspection. Its source-derived `command: python3` plus
-  `args` containing the CAWS entry counterexample reaches discovery gates that
-  inspect only `hook.command`; the documented Claude exec form passes this
-  argument vector without a shell. Root grounds the source coordinates and
-  official contract, and the owning R01 peer accepts whole-hook discovery and
-  no-write reconciliation controls. Actual repaired candidate checks, committed
-  review, fresh package images, native callbacks and rollback remain owed. No
-  new R01 landing or actual-machine registration/selection change is inferred.
-  AIM delivery to c4 is confirmed; current sends to dd67 and c843 are refused
-  for stale leases, and dd67's earlier raw-carrier follow-up remains queued.
-  Those peers have not accepted these new handoffs.
+- E256: Review of R01 candidate `f9a90160` reaches executable-position ownership
+  and managed-header boundaries that its237 passing checks miss. The owner
+  retains failing canonical and producer controls and repairs classification
+  across merge, adoption, system configuration, selection and health
+  observation. Root directs active Claude peer c4 through CAWS AIM for read-only
+  inspection. Its source-derived `command: python3` plus `args` containing the
+  CAWS entry counterexample reaches discovery gates that inspect only
+  `hook.command`; the documented Claude exec form passes this argument vector
+  without a shell. Root grounds the source coordinates and official contract,
+  and the owning R01 peer accepts whole-hook discovery and no-write
+  reconciliation controls. Repaired candidate `43f560a7` commits the bounded
+  producer, observer, failure-policy and rollback-selection repairs. Root reads
+  `claude-failure-policy/exec-qualified-execution.json` and the raw seven-suite
+  result:307 checks pass, exit0; its JSON hashes to
+  `35a484638d6e4ddcf86096fa7fd6dcc1274410e500dab6ce4d5899bab84e5dd3`. Normal
+  build and scoped lint exit0. These configuration/selection API checks use
+  inert images and do not execute native hooks or harness callbacks. Exec-form
+  CAWS requires reconciliation; supported exec-form migration or Codex argument
+  semantics are not inferred. The first invalid-Git run retains complete JSON
+  failure diagnostics, but its separate stdout/stderr were overwritten by the
+  corrected run; `exec-red-log-custody.json` identifies the preserved and
+  replaced streams. Independent committed review, fresh package images, native
+  callbacks and rollback qualification remain owed. No new R01 landing or
+  actual-machine registration/selection change is inferred. AIM delivery to c4
+  is confirmed; current sends to dd67 and c843 are refused for stale leases, and
+  dd67's earlier raw-carrier follow-up remains queued. Those peers have not
+  accepted these new handoffs.
 
 - E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
   `native-session-publication`, based on `03d663b6`, for the continuous original
