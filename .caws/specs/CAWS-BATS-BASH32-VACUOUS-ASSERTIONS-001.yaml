@@ -46,3 +46,10 @@ rollback:
   - 'revert the lane merge commit; no runtime or pack bytes are affected'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "33 of 33 non-last rows negated in a mirrored copy of fb1ba781 each report not ok at the declared predicate or helper call (mutants/<file>-L<line>-mutant.tap); identical-copy control kimi-surface-control.tap stays ok. Run 22:02:14 to 22:03:24Z under /bin/bash 3.2.57, bats-core 1.13.0, foreground, unallocated by root; dist was the native-runtime-modernization worktree build (unverified against 7195f14f source); TMPDIR was the system tmp; no PID or PGID receipts; Linux not run."
+    recorded_at: "2026-10-22T22:16:56.738Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/repair/mutants.tsv"
+    commit_sha: fb1ba781ff093cad38a8823a416ff6cccf3521f4
