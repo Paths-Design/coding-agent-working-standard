@@ -6624,10 +6624,9 @@ Additional bounded evidence and unresolved dependencies:
   consumers. Retained child diagnostics trace Python3.9's Kimi annotation import
   failure. R01 ports the existing `main` `8a758936` fix and portable AST test;
   both blobs match that source. The AST control changes from one failure to four
-  passes, and both corrected private legacy consumers exit0. Source integration
-  remains owed. The complete ten-suite rerun on committed `bfb548e6` then exits0
-  with563 passing checks, zero failures and no pending tests.
-  `final-qualified-jest.json` hashes to
+  passes, and both corrected private legacy consumers exit0. The complete
+  ten-suite rerun on committed `bfb548e6` then exits0 with563 passing checks,
+  zero failures and no pending tests. `final-qualified-jest.json` hashes to
   `4dd6bb32a5e81fa518afbbb05b886620b7760d855ba610cf13b1dca859bf8f85`; root
   checks the actual exit0 terminal as well as that retained JSON. Read-only
   built-API observations under Node18/22 retain identical343-entry before/after
@@ -6685,18 +6684,23 @@ Additional bounded evidence and unresolved dependencies:
   establish consistency, not independent policy correctness. Artifacts remain
   under `package-bfb548e6/`; retained native inputs are feature-off binaries.
 
-  Normal source integration through `--no-close` and a recreated owned
-  verification lane precedes coherent guide/handler/fingerprint packaging. The
-  SQLite build receipt's exact v1 artifact inventory omits the stable
-  `caws-hook-native` entry. A fresh build must bind that target and its bytes in
-  an explicit version/capability contract while preserving bounded v1 consumers
-  and both build profiles. The separate native-image input accepts a
-  stable-entry pin without reading this receipt; its producer must derive that
-  pin from the verified build. Extending the receipt alone cannot qualify the
-  installed image. Borrowing retained feature-off entry bytes cannot establish
-  this source chain. A source-confirmed discovery gap also remains: an earlier
-  shell operator stops tokenization before an escaped or concatenated CAWS
-  basename, allowing the candidate gate to miss a possible producer. Strict
+  Normal `--no-close` merge `aea8dcda` integrates the14 R01 commits at
+  `bfb548e6` into parent `18b9d699`. Events11450/11451 retain the merge and
+  physical lane teardown while the R01 spec stays active. Root verifies the
+  parent index and files unchanged at the old base, refreshes them through the
+  guarded two-tree transition, and verifies a clean parent with `bfb548e6`
+  ancestry. Recreating the owned verification lane and fresh combined checks
+  precede coherent guide/handler/fingerprint packaging. This is source landing,
+  not runtime acceptance. The SQLite build receipt's exact v1 artifact inventory
+  omits the stable `caws-hook-native` entry. A fresh build must bind that target
+  and its bytes in an explicit version/capability contract while preserving
+  bounded v1 consumers and both build profiles. The separate native-image input
+  accepts a stable-entry pin without reading this receipt; its producer must
+  derive that pin from the verified build. Extending the receipt alone cannot
+  qualify the installed image. Borrowing retained feature-off entry bytes cannot
+  establish this source chain. A source-confirmed discovery gap also remains: an
+  earlier shell operator stops tokenization before an escaped or concatenated
+  CAWS basename, allowing the candidate gate to miss a possible producer. Strict
   ownership parsing remains separate; a read-only finding does not prove actual
   duplicate callbacks. Actual native callbacks, upgrade/rollback,
   effective-event precedence, combined-source packaging and machine adoption
