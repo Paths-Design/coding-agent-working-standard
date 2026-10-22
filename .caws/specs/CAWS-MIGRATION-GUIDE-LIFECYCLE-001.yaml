@@ -1,0 +1,29 @@
+id: CAWS-MIGRATION-GUIDE-LIFECYCLE-001
+title: 'Align migration guide with lifecycle policy and configuration prerequisites'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-22T04:37:42.242Z'
+updated_at: '2026-10-22T04:37:42.242Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'machine adapter migration operating guide'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/guides/sterling-machine-runtime-migration.md'
+  out: []
+invariants:
+  - 'Operating instructions follow CLI package then shared runtime then native registration before project migration, and never infer native execution from installation.'
+acceptance:
+  - id: A1
+    given: 'the supported machine lifecycle event mapping'
+    when: 'the guide describes surface-policy keys'
+    then: 'its event list includes session_end without claiming execution or sealing qualification.'
+  - id: A2
+    given: 'configuration changes are required before project migration'
+    when: 'the guide directs migration application'
+    then: 'it requires reviewed configuration application and an unchanged preview first, preserving separate CLI and runtime installation responsibilities.'
+non_functional: {}
+contracts: []
