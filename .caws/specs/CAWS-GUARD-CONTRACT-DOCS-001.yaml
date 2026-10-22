@@ -50,9 +50,9 @@ evidence:
     commit_sha: "3f6f234c"
   - criterion_id: A2
     status: pass
-    evidence_ref: "At 063991aa, README, shared-core architecture, hook-packs and command-analysis guidance explicitly separate implemented bounded analysis from proposed final-launch custody, reduced Codex producer qualification and required native canary/rollback. Root grounded against actual source and source-owner feedback; deployed runtime remains unchanged. Reachability verification is not native adoption evidence."
-    recorded_at: "2026-10-21T21:55:27.073Z"
-    commit_sha: "063991aa2da021bd6eca9aff3714f8105041fcfb"
+    evidence_ref: "Existing fourguidecandidate preserves implementedboundedanalysis/proposedexecutor and unqualifiednativeadoption. New guide3f6 explicitly machinehomecustody manifest-boundentryidentity vs fullnativeimageverification; observationstrict0755/no repair vs explicitknownbyte/missingentry repair; unknown/symlink/multilink refusalbeforepointer and no nativefailure fallback sourcegrounded bfb. Independent committedreview/rootdischarge support only authoredsourcecontract. No deployed/global change."
+    recorded_at: "2026-10-22T11:25:02.188Z"
+    commit_sha: "3f6f234c"
   - criterion_id: A3
     status: unchecked
     evidence_ref: "All four existing documents are committed and clean at 063991aa; independent review and source-owner feedback are grounded, formatter and scoped gates pass. Coherent landing remains open: main lacks the corresponding analysis source and guide lineage, so these documents must land with source after the held source-quality obligation resolves. Root retains integration, documentation tax and acceptance; no standalone documentation merge or source availability claim."
