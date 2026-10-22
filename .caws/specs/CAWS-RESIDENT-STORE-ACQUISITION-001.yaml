@@ -1,10 +1,11 @@
 id: CAWS-RESIDENT-STORE-ACQUISITION-001
 title: 'Retain original store acquisition in the resident project actor'
 mode: feature
-lifecycle_state: active
-worktree: resident-store-acquisition
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge resident-store-acquisition at bb3a8b99c978fbde8023b83e366030fc25cbb286'
 created_at: '2026-10-22T00:37:03.373Z'
-updated_at: '2026-10-22T02:40:05.271Z'
+updated_at: '2026-10-22T03:46:55.461Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
