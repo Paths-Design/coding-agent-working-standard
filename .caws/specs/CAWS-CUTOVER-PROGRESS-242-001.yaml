@@ -27,3 +27,9 @@ acceptance:
     then: 'actual main/source byte equality is verified while the parent remains active and selected runtime408 unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "E242-E249 tracker reconciled on committed c85c6a87 and normally source-merged2245d59d. Actual refreshed source checkout clean, one-file diff151add/2del, tracker SHA256d1057f420e8372617bbd52a94c2a4bdb6cc276cd7be0f33b5e6d436bcf88f6d7. Root inspected guide equality, descriptor hashes/actual public Node18+22 plan receipts, SessionEnd usage loss, actual patch/extractor mismatch, mail tests/records and conditional unintegrated guard count. Independent committed documentation review found candidate-vs-installed helper scope; root verified source and actual selected/project callers and corrected it. Final formatting/diff0 and5scoped gatesPASS onefile; doctor0E3W4I.33/37partial,parent0/8,zero completePythonretirements remain; pending integration/ordinaryconsumer/native/harness/rollback obligations retain owners. Commit verification is reachability only; raw behavioral results are individually inspected, not inferred from this citation."
+    recorded_at: "2026-10-22T06:04:21.060Z"
+    commit_sha: "2245d59db1cc2960c9238b0c32babb983214c15f"
