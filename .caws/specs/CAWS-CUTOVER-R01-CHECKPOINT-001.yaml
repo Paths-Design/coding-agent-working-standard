@@ -35,3 +35,9 @@ non_functional: {}
 contracts:
   - name: 'cutover-checkpoint'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Reviewed committed ledger8e72bd64 against dd27eca0 source, compound-prefix-red.stderr12, compound-qualified-jest427 SHA f3be7432daad9a8c8bba639890afc13f2d34fc67678817ed2b9e4cb6edc7da55, exact tested/committed patch d38d6ff599746009a0ad2b39e7779d64c1f0847fa533a34b669d84ff1e721a22; actual CLI plan/apply exit1 reconciliation and16before-after files identical;22helper decisions each Node18/22; earlier-syntax preview and observer awaited completion/ordinary sequence remain open. Independent read-only committed peer feedback grounded at E255/E256; gates5PASS, doctor0E3W4I; no native/cutover claim."
+    recorded_at: "2026-10-22T10:30:04.418Z"
+    commit_sha: "8e72bd64a895d1dd38837e82a34b07617a48a22c"
