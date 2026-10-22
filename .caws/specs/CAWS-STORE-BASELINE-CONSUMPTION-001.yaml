@@ -99,3 +99,9 @@ evidence:
     recorded_at: "2026-10-22T10:32:16.084Z"
     artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-02/inspected-artifacts.json"
     commit_sha: "6703e691fe5d7c8d10bba40b0777e4b7eba4f196"
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "PARTIAL awaited API mechanics: resolving, rejection, cleanup, warn-only, nonzero and publication-after-complete-bytes controls pass; actual child1 refuses despite resolved0 JSON. Public pinned API Promise source inspected; actual production Stryker API execution remains unverified."
+    recorded_at: "2026-10-22T10:32:17.508Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-02/inspected-artifacts.json"
+    commit_sha: "6703e691fe5d7c8d10bba40b0777e4b7eba4f196"
