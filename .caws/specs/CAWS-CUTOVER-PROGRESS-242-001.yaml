@@ -1,9 +1,10 @@
 id: CAWS-CUTOVER-PROGRESS-242-001
 title: 'Retain guide, package, consumer and custody cutover evidence'
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: cutover-progress-242
 created_at: '2026-10-22T05:42:51.118Z'
-updated_at: '2026-10-22T05:42:51.118Z'
+updated_at: '2026-10-22T05:43:30.112Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
