@@ -134,6 +134,21 @@ acceptance:
       record line feed; caws_resolve_canonical_dir_into yields the line-feed
       canonical root from its linked worktree; a helper with no answer assigns
       nothing and returns 1.
+  - id: A8
+    given: >-
+      a governed repository with real linked worktrees s-wt and f-wt owned by
+      different sessions, and a tool farm carrying python3 and the core tools but no
+      git
+    when: >-
+      worktree-write-guard adjudicates a Write and bash-write-guard a Bash mutation
+      into f-wt from the canonical root and from s-wt with git absent, and the same
+      writes with git present plus the owner writing its own worktree
+    then: >-
+      with git present the foreign write and mutation are refused with exit 2 by
+      ownership and the owner write passes with exit 0; with git absent every run,
+      including the owner write, exits 2 with a guard-attributed git-unavailable
+      diagnosis naming git, and the target stays absent, where the pre-repair guards
+      (39d06b1a, 4ac64fbf) exited 0 with empty output.
 non_functional: {}
 contracts: []
 evidence:
