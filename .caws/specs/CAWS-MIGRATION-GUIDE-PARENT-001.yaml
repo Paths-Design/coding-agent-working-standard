@@ -1,9 +1,11 @@
 id: CAWS-MIGRATION-GUIDE-PARENT-001
 title: 'Integrate qualified migration guide into runtime source'
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Qualified guide landed normally in runtime source; source/main bytes match actual SHA1d5041f4, parent active and selected408 unchanged. Documentation integration only; runtime adoption and full cutover remain parent obligations.'
 created_at: '2026-10-22T05:22:12.354Z'
-updated_at: '2026-10-22T05:22:26.268Z'
+updated_at: '2026-10-22T05:40:59.565Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
