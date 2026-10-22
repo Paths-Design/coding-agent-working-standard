@@ -1,11 +1,14 @@
 use super::*;
 use caws_native::render_owner::{self, OwnerConfig, OwnerLimits, StoreStatusQuery};
+use std::os::unix::net::UnixStream;
 use std::process::Child;
 
 struct ResidentOwner {
     config: OwnerConfig,
     engine: PathBuf,
     child: Child,
+    startup_guard: Option<UnixStream>,
+    connection_observations: PathBuf,
 }
 impl ResidentOwner {
     fn start(fixture: &Fixture) -> Self {
@@ -45,7 +48,9 @@ impl ResidentOwner {
                 max_queue_per_project: 2,
                 max_frame_bytes: 2_097_152,
                 max_retained_records: 2,
-                first_frame_ms: 1000,
+                // One ordinary first-message connection pins startup only. Its
+                // bound covers frontend negotiation; it is closed at registration.
+                first_frame_ms: 5000,
                 request_ms: 5000,
                 startup_ms: 1000,
                 idle_ms: 100,
@@ -79,15 +84,38 @@ impl ResidentOwner {
             config,
             engine,
             child,
+            startup_guard: None,
+            connection_observations: fixture.dir.join("resident-owner-connection.jsonl"),
         };
+        assert!(owner.config.limits.first_frame_ms <= owner.config.limits.request_ms);
+        use sha2::{Digest, Sha256};
+        let home_digest = format!(
+            "{:x}",
+            Sha256::digest(owner.config.home.as_os_str().as_encoded_bytes())
+        );
+        let socket = PathBuf::from("/private/tmp")
+            .join(format!(
+                "caws-render-{}-{}",
+                unsafe { libc::geteuid() },
+                &home_digest[..24]
+            ))
+            .join("owner.sock");
         let deadline = Instant::now() + Duration::from_secs(3);
         loop {
+            if owner.startup_guard.is_none() {
+                if let Ok(stream) = UnixStream::connect(&socket) {
+                    owner.startup_guard = Some(stream);
+                    owner.connection_observation("startup_guard_connected");
+                }
+            }
             let query = StoreStatusQuery::new("absent".into(), "a".repeat(64), "0".repeat(64));
-            if let Ok(status) = render_owner::store_status(
-                &owner.config,
-                &query,
-                Instant::now() + Duration::from_millis(100),
-            ) {
+            if owner.startup_guard.is_some()
+                && let Ok(status) = render_owner::store_status(
+                    &owner.config,
+                    &query,
+                    Instant::now() + Duration::from_millis(100),
+                )
+            {
                 assert!(!status.present);
                 break;
             }
@@ -97,7 +125,24 @@ impl ResidentOwner {
         }
         owner
     }
-    fn registrations(&self) -> Vec<serde_json::Value> {
+    fn connection_observation(&self, event: &str) {
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.connection_observations)
+            .unwrap();
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({"event":event,"ownedHostPid":self.child.id(),
+            "atUnixMs":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(),
+            "guardPeer":self.startup_guard.as_ref().map(|stream| format!("{:?}", stream.peer_addr().unwrap())),
+            "firstFrameMs":self.config.limits.first_frame_ms,"idleMs":self.config.limits.idle_ms,
+            "guardPresent":self.startup_guard.is_some()})
+        )
+        .unwrap();
+    }
+    fn observations(&self) -> Vec<serde_json::Value> {
         fs::read_to_string(
             self.config
                 .home
@@ -105,9 +150,43 @@ impl ResidentOwner {
         )
         .unwrap()
         .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|value| value["event"] == "store_registered")
+        .map(|line| {
+            let mut value: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert_eq!(value["schema"], "caws.render.owner.observation.v1");
+            assert!(value["observation"].is_object());
+            value["observation"].take()
+        })
         .collect()
+    }
+    fn registrations(&self) -> Vec<serde_json::Value> {
+        self.observations()
+            .into_iter()
+            .filter(|value| value["event"] == "store_registered")
+            .collect()
+    }
+    fn release_startup_guard(&mut self) {
+        let hosts: Vec<_> = self
+            .observations()
+            .into_iter()
+            .filter(|value| value["event"] == "host_started")
+            .collect();
+        assert_eq!(
+            hosts.len(),
+            1,
+            "replacement owner must not masquerade as retained owner"
+        );
+        assert_eq!(hosts[0]["hostPid"], self.child.id());
+        assert!(
+            self.child.try_wait().unwrap().is_none(),
+            "owned host exited before registration"
+        );
+        assert_eq!(self.registrations().len(), 1);
+        self.startup_guard
+            .take()
+            .unwrap()
+            .shutdown(std::net::Shutdown::Both)
+            .unwrap();
+        self.connection_observation("startup_guard_shutdown_and_dropped");
     }
 }
 impl Drop for ResidentOwner {
@@ -217,6 +296,7 @@ fn store_actor_survives_frontend_death_and_reports_actual_retained_sql_settlemen
     let registrations = owner.registrations();
     assert_eq!(registrations.len(), 1);
     let registration = &registrations[0];
+    owner.release_startup_guard();
     let query = StoreStatusQuery::new(
         registration["invocationId"].as_str().unwrap().into(),
         "a".repeat(64),
@@ -269,16 +349,9 @@ fn store_actor_survives_frontend_death_and_reports_actual_retained_sql_settlemen
         .unwrap()
         .present
     );
-    let records: Vec<serde_json::Value> = fs::read_to_string(
-        owner
-            .config
-            .home
-            .join("state/render-service/observations.jsonl"),
-    )
-    .unwrap()
-    .lines()
-    .map(|line| serde_json::from_str(line).unwrap())
-    .collect();
+    assert!(owner.startup_guard.is_none());
+    owner.connection_observation("retained_after_idle_without_startup_guard");
+    let records = owner.observations();
     assert_eq!(
         records
             .iter()
@@ -351,7 +424,7 @@ fn store_settlement_survives_late_engine_failure_on_both_store_profiles() {
             }
             connection.close().unwrap();
             let before = fs::read(&database).unwrap();
-            let owner = ResidentOwner::start(&fixture);
+            let mut owner = ResidentOwner::start(&fixture);
             let observation = root.join("store-observation.json");
             let trace = root.join("store-trace.jsonl");
             let mut command = Command::new(env!("CARGO_BIN_EXE_caws-native"));
@@ -452,6 +525,7 @@ fn store_settlement_survives_late_engine_failure_on_both_store_profiles() {
             let registrations = owner.registrations();
             assert_eq!(registrations.len(), 1);
             let registration = &registrations[0];
+            owner.release_startup_guard();
             let status = render_owner::store_status(
                 &owner.config,
                 &StoreStatusQuery::new(
