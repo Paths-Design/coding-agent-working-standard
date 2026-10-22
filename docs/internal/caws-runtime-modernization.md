@@ -6447,14 +6447,16 @@ Additional bounded evidence and unresolved dependencies:
   checks in four suites, stable11 source hashes and execution receipt SHA256
   `62222353a12cc6dcdac1b379203155c522da6910d029ad8f3ee5d8d88593a84b`. These
   receipts live under `store-baseline-consumption/attempt-01/` and retain the
-  failed attempt. A further conditional-export ordering concern remains under
-  repair; passing mechanics at `97f7dca9` do not qualify a later candidate.
-  Actual ordinary Stryker consumption, the semantic negative/restored sequence
-  and full mutation quality remain open. CI retention is also owed:
-  `.github/workflows/mutation.yml` uploads report/index files but omits run
-  receipts and `runs/**`. The foreign shell lane owns that path; coordination
-  refuses its stale lease, so root retains the repair and no handoff is
-  accepted.
+  failed attempt. Candidate `547d4f96` tightens the audited two-key conditional
+  export shape after review finds that an earlier Node/default branch can
+  precede the expected import branch. Its two actual private-import controls
+  await the allocated159-case VM run; passing mechanics at `97f7dca9` do not
+  qualify this later candidate. Actual ordinary Stryker consumption, the
+  semantic negative/restored sequence and full mutation quality remain open. CI
+  retention is also owed: `.github/workflows/mutation.yml` uploads report/index
+  files but omits run receipts and `runs/**`. The foreign shell lane owns that
+  path; coordination refuses its stale lease, so root retains the repair and no
+  handoff is accepted.
 
 - E256: Review of R01 candidate `f9a90160` reaches executable-position ownership
   and managed-header boundaries that its237 passing checks miss. The owner
@@ -6541,9 +6543,12 @@ Additional bounded evidence and unresolved dependencies:
   failure. R01 ports the existing `main` `8a758936` fix and portable AST test;
   both blobs match that source. The AST control changes from one failure to four
   passes, and both corrected private legacy consumers exit0. Source integration
-  remains owed. The complete ten-suite rerun on committed `bfb548e6` is a
-  separate outstanding checkpoint; these two focused consumers do not replace
-  it. Raw attempts and source/build identities live under
+  remains owed. The complete ten-suite rerun on committed `bfb548e6` then exits0
+  with563 passing checks, zero failures and no pending tests.
+  `final-qualified-jest.json` hashes to
+  `4dd6bb32a5e81fa518afbbb05b886620b7760d855ba610cf13b1dca859bf8f85`; root
+  checks the actual exit0 terminal as well as that retained JSON. Raw attempts
+  and source/build identities live under
   `r01-installed-entry/rollback-identity/`. The existing four-guide unit commits
   the bounded recovery wording at `3f6f234c`, with independent source review;
   coherent source/guide landing remains held. Fresh repaired packages, actual
