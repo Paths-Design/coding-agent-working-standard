@@ -33,3 +33,9 @@ rollback:
   - 'Revert only this three-path logical source and ledger unit through normal governed history if its declared inventory or evidence is refuted.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Root prepared exact sharedversion105/live75fileFPb706339e; sevenotherpacks match. Parent a0ddd retains ONLY root-owned staged manifest-shared.ts/fingerprints patch; directcommit rejected integrationbasewithopenchildren. New owned shared-pack-105 lane created normally, but installedBashguard refused even unstaging ownparentpatch because shell-analysis and thislane both scope.in claim the two paths. No followingpatch/retry/bypass/foreignwrite executed. Root asks explicit human ONLYtwo-file claimpartition: foreignfiles/branch/otherownershippreserved, retainforeignpathsupport. Await directanswer; elapsedtime is not consent. Existing ledger candidate90992ed4 is committedclean in thislane; source pack remainsunlanded and freshcompiledJest/package/image/nativechainowed. Resumeonlyafterauthorizedclaimdecision, normal CLI scopepartition and guardedpatchmove, then normalcommit/review/merge. Root retains owner and acceptance; no waiver/reprieve/identitychange."
+    recorded_at: "2026-10-22T20:49:25.375Z"
+    commit_sha: "90992ed4"
