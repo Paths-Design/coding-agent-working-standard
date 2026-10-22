@@ -6138,6 +6138,159 @@ Additional bounded evidence and unresolved dependencies:
   not an observed live misdelivery. Refused artifact export remains a retained
   guard prerequisite, without installed guard changes or a bypass claim.
 
+- E242: The existing machine migration guide is qualified on main at `84079dfb`,
+  merged there at `2d1a69c8`, and imported through an owned source lane at
+  `dbd8891d` with normal source merge `16981627`. Actual source/main comparison
+  exits0; both guide copies have SHA256
+  `1d5041f4b228d40e26fb0961d1a03aa809d51b09a4b4eaddae03cf3e577cc74e`. The guide
+  includes `session_end` and the ordered CLI snapshot, runtime install and
+  native configuration preview/apply sequence. Independent source review,
+  formatting and five scoped gates support the documentation change. Component
+  A1 is recorded in event10947 and read back; its spec closes completed. Parent
+  remains active and the selected machine digest stays408c06a7. A direct
+  integration-base commit and a later restore attempt are refused; neither
+  executes. The normal owned-lane merge retains the wanted guide bytes and
+  leaves the source checkout clean. Safe branch deletion is refused because main
+  does not contain this source-lane history; no forced deletion follows.
+
+- E243: R01 candidate `b71dd82f` retains a locked/offline native entry run: ten
+  tests,21 observations, exit0, including unknown-event usage exit2 with empty
+  stdout. Ordinary pack and production-prefix install exit0. Tar SHA256
+  `b7de5a052127d66443ada73c040743dada914fce371b292eff6e21418f394c01`
+  identifies1,269 regular files. One shared installed prefix contains5,704 files
+  and65 packages; inspection under Node18.0.0 and22.19.0 checks80 dependency
+  edges and36 declared engine ranges each. This is one installation inspected
+  twice, with the npm10/Node18 tooling warning retained. Six separately
+  adjudicated ordinary hash/stat/jq commands exit0 and produce descriptors
+  SHA256 `4580cf4295fa00bc3980887aa93cc7c0bfac5af4578ef654abaedbf933ef53fc` and
+  `b70c1eeb9006b4d0e82f7c0bc5af8ea9f7516dea50d16ac24a234cbc98c6c4a2`. Root
+  inspects the scalar comparison and hashes both files:11 checks are true, 55
+  native notice carriers are pinned, and both JSON files end with LF. Raw
+  commands/results remain under peer15984's
+  `r01-installed-entry/package-b71dd82f/`, including
+  `data-stage-execution.json`, `data-stage-verification.json` and
+  `descriptor-comparison.json`. Refused Python and process-substitution programs
+  remain unexecuted; mistaken self-matching and cross-run cell captures are
+  corrected with failed captures preserved. Package/data consistency does not
+  establish production-reader acceptance, actual native dispatch, notice
+  completeness, launch custody, trust or rollback consumption. Peer15984 retains
+  the entry spec; root retains combined-source package, supported harness,
+  no-Python execution and machine cutover qualification.
+
+- E244: The actual SessionEnd consumer contradicts the usage-preservation
+  requirement. PeerA's `session-end-consumer-contract/whole-hook/attempt-02/`
+  retains the75-file source image, invocation, stdout/stderr and before/after
+  metadata. The real handler exits0 with empty output in0.436s. Its actual
+  prepared turn carries a4,300-digit `input_tokens` value; the resulting
+  metadata gains `ended` but has no `usage`. Root reads the invocation and
+  resulting metadata. Schema `turn-log.v2` carries seven independent provider
+  counts and top-level models; `session-log.sh` instead aggregates legacy
+  aliases and `usage.models`. Exit0 therefore does not prove preserved usage.
+  The missing-dependency first attempt and filter failure are retained. Root
+  owns repair through the typed ordinary metadata consumer, exact integer
+  preservation and separately exercised model ordering; installed/native
+  consumer integration remains open.
+
+- E245: An actual patch-tool counterexample grounds the endpoint obligation in
+  E241. Root's `patch-endpoint-contract/actual-tool-01/` retains the real
+  Update/Move/Delete effect, reconstructed patch, expected roles and execution
+  record. The moved file preserves a context line literally containing
+  `*** Add File: fake-path`; source and deleted files disappear. The shipped
+  scalar extractor exits0 but reports the update source, literal `fake-path` and
+  deletion path, omitting the move destination and inventing a context endpoint.
+  Parser SHA256 is
+  `04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61`. The
+  reconstructed fixture adds a final LF relative to the original tool argument;
+  exact input-byte equivalence is not claimed. A tab-bearing header becomes an
+  actual filename without a tab, so arbitrary control-character transport
+  fidelity remains unproven. This exercises the real tool and extractor, not a
+  complete guarded harness write. Root owns grammar-aware ordered role/path
+  extraction, complete structured carriage and every-endpoint
+  scope/protected/worktree consumption, including worst-verdict ordering and
+  once-per-invocation side effects. No isolated first-path loop closes it.
+
+- E246: Mail-custody candidate `9aabcae9` repairs raw-capture interruption
+  cleanup and bounds the test's first TERM wait. The prior real red and
+  held-link mutant retain a capture after SIGTERM; the repaired full93-case
+  custody run at `20eaa26d` and targeted9aab run observe cleanup. Production
+  bytes are unchanged across those candidates. A TERM-resistant test copy hits
+  the explicit10s failure and bounded KILL cleanup; the earlier wrong143 oracle
+  remains retained. Final9aab typed checks execute60 cases and pass; four
+  hostile copies fail with52/93,37/93,8/31 and27/60 failures. Raw evidence
+  remains under dd67's `subagent-mail-custody/`. Five gates pass over eight
+  owned files; doctor reports0E/3W/4I. Root reads corrected A5 original-input
+  authority and A1–A7 spec/event records10936–10945, then authorizes the normal
+  source merge. Final candidate `57056cb5` includes the qualified operating
+  guidance and failure-lineage entry; all five gates pass over its ten files.
+  Normal source merge `f419e392` has parents `2245d59d` and `57056cb5`. Root
+  verifies all ten integrated files equal the candidate; the component closes
+  with A1–A7 retained and its lane removed. The source checkout is refreshed
+  without discarding changes. Project dispatcher inherited-marker
+  scrubbing/original-byte carriage, installed runtime/native harness and actual
+  Codex subagent shape remain parent A5 obligations. A3 withholds uncertain
+  empty handler ingress; it does not establish that the dispatcher preserved
+  original bytes.
+
+- E247: Ordinary store qualification requires a stronger provenance contract.
+  Root inspects peerA's
+  `store-qualification/contract-counterexamples/attempt-01/` execution record:
+  the actual report assertion accepts four synthetic reports with a false
+  supplied SHA, mismatched source, mismatched test source or empty test
+  discovery, each printing six100% rows and exiting0. These are assertion
+  counterexamples, not Stryker output or an executed mutation score. The copied
+  license-marker primitive in `sandbox-marker/attempt-02/` executes actual
+  staging: original fixture0, copied package1 with an ownership-identity error;
+  marker bytes match but inodes differ. This models inspected sandbox layout,
+  not an observed whole Stryker failure. Root retains current-source build,
+  actual sandbox/output/test-consumption binding and full six-source/nine-test
+  floor80 execution. PeerA owns a bounded runner/report/config repair. It
+  preserves explicitly offline scoring while requiring bound input/build/report
+  checks in the ordinary runner; the SHA is a supplied label. Actual loaded
+  module/content identity and a distinguishing perturbation remain stronger
+  qualification obligations. Ownership validation and declared floors remain
+  intact. Neither frozen source freshness nor a supplied SHA qualifies a later
+  build.
+
+- E248: Checked-normalization owner c4 retains candidate `7d49da1d`, its54-case
+  focused run and four ancestry/refusal mutants. Git failure with surviving
+  physical `.git` evidence refuses instead of treating the path as ungoverned;
+  missing-Git, relative foreign paths and missing cwd have separate controls.
+  Root identifies a reached worktree guard early exit when Node is absent; c4
+  owns its red/repair/hostile controls before merge. Git hangs and
+  safe-directory failures are not qualified. The legacy normalization helper
+  remains: candidate `7d49da1d` shared templates have no stock authority calls
+  to it, while selected and project-installed guards retain callers. External
+  custom consumers are not fully inventoried. Once integrated, this helper plus
+  the checked implementation increase the embedded count from19 to20 bodies;
+  that is not Python retirement. The shell owner retains its lane and reached LF
+  identity callers; coherent source/four-document landing and final six-file
+  quality remain owed. Root also retains the execution-directory producer
+  defect: the inspected Codex Bash payload carries session cwd but omits
+  exec_command's per-call workdir. A real relative-output command is refused at
+  the wrong coordinate; the same explicit absolute output is admitted. This does
+  not establish an unauthorized write. The ambiguity is scoped to
+  Bash/exec_command; apply_patch has no per-call workdir argument and its
+  resolution base needs separate qualification. Claude peers receive bounded
+  directions through caws-aim; replies do not establish acceptance.
+
+- E249: The actual packaged public production-reader plans execute under both
+  Node18.0.0 and22.19.0 with
+  `init adapters install --plan --json --native-image`. Both exit0 with empty
+  stderr and5,880 planned members. Planned digests are
+  `7fccdee87a4a24328e8c608cd11fdea470263d9fe6cadafafcd58aacfbdb4d26` and
+  `cab8f519073d97b62a0652dd7b400146bb40e0ead304af09584a53e2ffa4f18a`. Root
+  inspects `production-reader-execution.json` and semantic member assertions
+  under E243's artifact root. The private CAWS_HOME stays absent before, between
+  and after; real pointer comparison exits0 with408c06a7 unchanged. These actual
+  readers accept the precise descriptors; they do not publish a runtime,
+  configure a harness or execute a native callback. Peer15984 receives the next
+  bounded private legacy/native installation allocation; callback,
+  upgrade/rollback, trust and machine adoption remain unverified.
+
+These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
+zero complete production Python retirements. Root owns ledger publication to
+main, parent evidence updates and integration of each remaining consumer.
+
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
 exit 0. Raw logs and retained native fixtures live under
@@ -6180,7 +6333,7 @@ Line anchors below refer to the integration source tree `10690d4b`.
 | Group / source sites                                                                                                                                           | Destination and decisive proof                                                                                                                                                                                  |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared/runtime-paths.sh:58`; shared/Codex/Kimi `lib/parse-input.sh`                                                                                           | Typed input normalization: raw controls/NUL/surrogate handling, shell-safe assignments, Codex multi-file patch first-action mode, Kimi fallback precedence and large-input transport                            |
-| `shared/lib/caws-state.sh:211`                                                                                                                                 | Shared path/native FS port: existing symlink ancestor with missing leaf, `/tmp` alias and unresolved path fallback                                                                                              |
+| `shared/lib/caws-state.sh:211`                                                                                                                                 | Checked path normalization/refusal contract: existing symlink ancestor with missing leaf and `/tmp` alias; retained legacy helper removal and final native port require consumer qualification                  |
 | `shared/lib/agent-surface.sh:520`, `shared/lib/run-handlers.sh:598`                                                                                            | Typed selection: malformed/absent override maps, custom paths and concurrent request environment isolation                                                                                                      |
 | `shared/lib/parse-input.sh:355,372,449`, `shared/lib/agent-pid.sh:162`, `shared/lib/session-cache.sh:29`                                                       | Native anchored filesystem + typed identity/cache: dir-relative no-follow writes, exclusive temp0600/rename, symlink races, unsafe IDs, original created_at, partial writes, PID reuse and retention boundaries |
 | `shared/lib/reprieve.sh:194`                                                                                                                                   | Owning reprieve reader: handler/session/repo scope, legacy null repo reach, revoke-key presence, naive-UTC/offset/equal-expiry and symlink ancestry                                                             |
@@ -6525,7 +6678,8 @@ operational correctness or selected execution.
 | `README.md`, `hook-pack-shared-core.md`, `hook-packs.md`, `command-analysis.md` | Four-file candidate `063991aa` is committed and reviewed, E230.                                                                           | Land coherently with qualified guard source; reconcile the checked-normalization interface and command-specific failure exits before final checks.                                                                                                 |
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend settlement lands in87b70fcc; resident acquisition, cancellation, bounded retention and status contract land with bb3a8b99, E240. | Update publication permit, record release and actual-reader contracts with their implementations and consumer evidence.                                                                                                                            |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.                                           | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
-| This tracker and canonical parent acceptance                                    | E231–E241 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
+| `docs/guides/sterling-machine-runtime-migration.md`                             | Qualified main84079dfb and source16981627 match actual SHA1d5041f4, E242.                                                                 | Recheck operations against the eventual combined package and isolated native/harness execution before machine cutover.                                                                                                                             |
+| This tracker and canonical parent acceptance                                    | E231–E249 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
 
 ## Landing obligations
 
