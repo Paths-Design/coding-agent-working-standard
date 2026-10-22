@@ -6801,9 +6801,32 @@ Additional bounded evidence and unresolved dependencies:
   introduces explicit opt-in request/receipt v2 and retains strict legacy v1
   shapes. Its selector and filesystem checks are synthetic component controls;
   actual fresh debug/release builds, complete v2 loading and image production
-  remain owed. Both owners retain bounded repairs and fresh checks; R01 retains
-  the heavy runtime interval. No candidate borrows earlier package or runtime
-  proof.
+  remain owed. Subsequent source checkpoint `431d1549` incorporates the R01
+  four-path repair `255b4b39` through normal merge `2b1325b4` and the receipt
+  two-path candidate `3a2422fc` through normal merge `431d1549`. Exact candidate
+  blobs match the integrated files. R01's actual ten-suite run passes 681 checks
+  with no failures or pending cases; 62 Node 18/22 helper cases and 40 private
+  public-CLI cases exercise preservation and reconciliation. The receipt suite
+  passes 79 executed cases with no failures or pending cases. These are bounded
+  source and private-fixture results, not native dispatch or machine adoption.
+  Both owners retain active, owned lanes for remaining qualification. The
+  observer's allocated two-case probe at `b77e032d` exits 1: the healthy two-VM
+  control passes, while coordinated generation/marker deletion fails the exact
+  two-generation inventory assertion. Retained worker completion and raw UTF-16
+  code establish both closed lifetimes returning 41 and 42 for mutant 0; the
+  resolved fixture API and terminal inventory silently retain only the survivor.
+  Child A2 is recorded FAIL in event 11661. This demonstrates bounded retention
+  incompleteness; ordinary Stryker and full outer validation were not executed.
+  Original-parent membership and independent failure state must survive through
+  outer qualification before a replacement collector can qualify. Claude's owned
+  `handler-stdin-stage` lane carries the staging-file lifetime repair. Its first
+  six-case interval is allocated and acknowledged by the main session; results
+  and integrated dispatcher behavior remain open. Root retains raw ingress
+  classification, inherited-environment custody, native publication, fresh v2
+  build/load/image production and all cutover acceptance. Four existing guard
+  guides remain committed in `guard-contract-docs` pending coherent source
+  landing; this ledger publication does not discharge them. No candidate borrows
+  earlier package or runtime proof.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
