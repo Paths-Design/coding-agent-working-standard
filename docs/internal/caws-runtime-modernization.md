@@ -6196,8 +6196,9 @@ Additional bounded evidence and unresolved dependencies:
   Update/Move/Delete effect, reconstructed patch, expected roles and execution
   record. The moved file preserves a context line literally containing
   `*** Add File: fake-path`; source and deleted files disappear. The shipped
-  scalar extractor exits0 but reports `source`, `fake-path`, `delete`, omitting
-  the move destination and inventing a context endpoint. Parser SHA256 is
+  scalar extractor exits0 but reports the update source, literal `fake-path` and
+  deletion path, omitting the move destination and inventing a context endpoint.
+  Parser SHA256 is
   `04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61`. The
   reconstructed fixture adds a final LF relative to the original tool argument;
   exact input-byte equivalence is not claimed. A tab-bearing header becomes an
@@ -6252,10 +6253,11 @@ Additional bounded evidence and unresolved dependencies:
   Root identifies a reached worktree guard early exit when Node is absent; c4
   owns its red/repair/hostile controls before merge. Git hangs and
   safe-directory failures are not qualified. The legacy normalization helper
-  remains: current stock authority callers are absent, but external custom
-  consumers are not fully inventoried. Once integrated, this helper plus the
-  checked implementation increase the embedded count from19 to20 bodies; that is
-  not Python retirement. The shell owner retains its lane and reached LF
+  remains: candidate `7d49da1d` shared templates have no stock authority calls
+  to it, while selected and project-installed guards retain callers. External
+  custom consumers are not fully inventoried. Once integrated, this helper plus
+  the checked implementation increase the embedded count from19 to20 bodies;
+  that is not Python retirement. The shell owner retains its lane and reached LF
   identity callers; coherent source/four-document landing and final six-file
   quality remain owed. Root also retains the execution-directory producer
   defect: the inspected Codex Bash payload carries session cwd but omits
@@ -6265,6 +6267,20 @@ Additional bounded evidence and unresolved dependencies:
   Bash/exec_command; apply_patch has no per-call workdir argument and its
   resolution base needs separate qualification. Claude peers receive bounded
   directions through caws-aim; replies do not establish acceptance.
+
+- E249: The actual packaged public production-reader plans execute under both
+  Node18.0.0 and22.19.0 with
+  `init adapters install --plan --json --native-image`. Both exit0 with empty
+  stderr and5,880 planned members. Planned digests are
+  `7fccdee87a4a24328e8c608cd11fdea470263d9fe6cadafafcd58aacfbdb4d26` and
+  `cab8f519073d97b62a0652dd7b400146bb40e0ead304af09584a53e2ffa4f18a`. Root
+  inspects `production-reader-execution.json` and semantic member assertions
+  under E243's artifact root. The private CAWS_HOME stays absent before, between
+  and after; real pointer comparison exits0 with408c06a7 unchanged. These actual
+  readers accept the precise descriptors; they do not publish a runtime,
+  configure a harness or execute a native callback. Peer15984 receives the next
+  bounded private legacy/native installation allocation; callback,
+  upgrade/rollback, trust and machine adoption remain unverified.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -6658,7 +6674,7 @@ operational correctness or selected execution.
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend settlement lands in87b70fcc; resident acquisition, cancellation, bounded retention and status contract land with bb3a8b99, E240. | Update publication permit, record release and actual-reader contracts with their implementations and consumer evidence.                                                                                                                            |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.                                           | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
 | `docs/guides/sterling-machine-runtime-migration.md`                             | Qualified main84079dfb and source16981627 match actual SHA1d5041f4, E242.                                                                 | Recheck operations against the eventual combined package and isolated native/harness execution before machine cutover.                                                                                                                             |
-| This tracker and canonical parent acceptance                                    | E231–E247 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
+| This tracker and canonical parent acceptance                                    | E231–E249 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
 
 ## Landing obligations
 
