@@ -203,6 +203,20 @@ test('preserved historical models remain exact even when repeated', () => {
   const result = ready(request([], '{"models": ["m", "m"]}'));
   assert.equal(valueToken(result.metadataJson, 'models'), '["m", "m"]');
 });
+test('preserved historical fractions remain exact while new fractional counts refuse', () => {
+  const result = ready(request([], '{"usage": {"input_tokens":0.5}}'));
+  assert.equal(valueToken(result.metadataJson, 'usage'), '{"input_tokens":0.5}');
+  assert.equal(result.summaryMode, 'preserved');
+  unavailable(request([turn('"usage":{"input_tokens":0.5}')]), 'invalid_count');
+});
+test('accepts mathematical version-two spellings admitted by the governing schema', () => {
+  for (const version of ['2', '2.0', '2e0', '20e-1']) {
+    const result = ready(
+      request(['{"schema_version":' + version + ',"usage":{"input_tokens":1}}'])
+    );
+    assert.equal(valueToken(result.metadataJson, 'usage'), '{"input_tokens":1}');
+  }
+});
 test('retained real turn-v2 4300-digit regression', { skip: !retainedTurn }, () => {
   assert.equal(typeof retainedTurn, 'string');
   const fixture = retainedTurn!;

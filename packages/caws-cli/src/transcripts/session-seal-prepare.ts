@@ -188,7 +188,11 @@ export function prepareSessionSeal(request: SessionSealRequest): SessionSealPrep
       const source = read(turn.json, limits.maxTurnCodeUnits);
       const value = object(source.root, 'turn must be an object');
       const version = value.entries.get('schema_version');
-      if (version?.kind !== 'number' || source.text.slice(version.start, version.end) !== '2')
+      if (
+        version?.kind !== 'number' ||
+        (source.text.slice(version.start, version.end) !== '2' &&
+          count(source.text.slice(version.start, version.end)) !== '2')
+      )
         refuse('invalid_json', 'expected turn schema version 2');
       const usage = value.entries.get('usage');
       if (usage !== undefined) {
