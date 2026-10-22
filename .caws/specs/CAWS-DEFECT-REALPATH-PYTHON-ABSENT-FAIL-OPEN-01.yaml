@@ -146,8 +146,10 @@ evidence:
     recorded_at: "2026-10-22T03:18:12.912Z"
     commit_sha: "4ac64fbf"
   - criterion_id: A3
-    status: unchecked
-    recorded_at: "2026-10-22T03:16:25.704Z"
+    status: pass
+    evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) test 47: neither guard command-substitutes _realpath, caws_guard_realpath, abspath or resolve_canonical_dir, and every caws_guard_realpath_into/abspath_into/caws_resolve_canonical_dir_into line carries a _wwg/_bwg refusal; tests 32 and 40: the identity-drop tree (caws_guard_realpath_into assigning _realpath output) admits the foreign write and mutation with exit 0 under failing and absent python3. Bound: text scan of these two guards only."
+    recorded_at: "2026-10-22T03:18:14.307Z"
+    commit_sha: "4ac64fbf"
   - criterion_id: A4
     status: pass
     evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) tests 36-39: bash-write-guard foreign mutation through dotdot python3 present exit 2 foreign-worktree refusal; owner exit 0; failing exit 2 python3-exit-1; absent exit 2 python3-unavailable; target absent. Analysis CLI pinned to the shell owner dist built at 5ace5a52. Bounds: as A1."
