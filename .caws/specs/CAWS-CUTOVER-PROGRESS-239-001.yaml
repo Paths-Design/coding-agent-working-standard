@@ -1,0 +1,32 @@
+id: CAWS-CUTOVER-PROGRESS-239-001
+title: 'Synchronize license and resident acquisition cutover evidence'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-22T03:50:09.705Z'
+updated_at: '2026-10-22T03:50:09.705Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Cutover source/main ledger and retained acceptance boundaries'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Partial feature coverage, component acceptance, source landing, main publication and selected machine adoption remain distinct.'
+  - 'Retain failed qualification attempts, concrete evidence, accepted owners and remaining effects without advancing unearned parent acceptance.'
+acceptance:
+  - id: A1
+    given: 'closed license transport and resident acquisition components plus current qualification gaps'
+    when: 'the source tracker is reconciled against actual source, runtime artifacts and lifecycle events'
+    then: 'the ledger records exact landings, commands/exits, artifact identities, review discharge and owed work with unchanged 33/37 partial coverage and 0/8 parent acceptance.'
+  - id: A2
+    given: 'the reconciled source tracker'
+    when: 'the ledger is published through a main-based owned lane'
+    then: 'source and main ledger bytes match while candidate implementation remains on the source branch, the parent remains active and the selected machine runtime is unchanged.'
+rollback:
+  - 'Revert only the bounded ledger publication through normal governed Git history; preserve retained runtime artifacts and active parent work.'
+non_functional: {}
+contracts: []
