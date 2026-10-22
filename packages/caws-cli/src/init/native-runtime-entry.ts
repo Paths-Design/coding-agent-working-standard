@@ -5,6 +5,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { sha } from './machine-runtime-state';
+import { loadNativeSqliteBuildWithStableEntry } from '../tooling/native-sqlite-build';
+import type { ReviewedFile } from '../tooling/sqlite-static-build';
 
 export const NATIVE_ENTRY_SCHEMA = 'caws.runtime.native-entry.v1' as const;
 export interface NativeEntryMetadata {
@@ -42,6 +44,14 @@ export interface NativeImageInput {
   readonly node: BinaryPin;
   readonly stableEntry: Pin;
   readonly timeoutMs: number;
+}
+/** Select a reviewed build, never independent native/stable executable pins. */
+export interface NativeBuildImageInput
+  extends Omit<NativeImageInput, 'schema' | 'native' | 'stableEntry'> {
+  readonly schema: 'caws.runtime.native-image-input.v2';
+  readonly requestFile: ReviewedFile;
+  readonly completionReceipt: ReviewedFile;
+  readonly nativeNotices: Readonly<Record<string, Pin>>;
 }
 export interface PreparedNativeEntry {
   readonly files: ReadonlyMap<string, Buffer>;
@@ -84,13 +94,15 @@ function same(a: fs.Stats, b: fs.Stats): boolean {
     a.ctimeMs === b.ctimeMs
   );
 }
-/** Ancestors, descriptor identity, and the final path must name the same regular input. */
-function capture(file: string): { bytes: Buffer; stat: fs.Stats } {
+/** Capture regular bytes; receipt-bound artifacts repeat canonical-path observation. */
+function capture(file: string, expected?: ReviewedFile): { bytes: Buffer; stat: fs.Stats } {
   if (!path.isAbsolute(file) || path.resolve(file) !== file || fs.realpathSync(file) !== file)
     throw new Error(`Native image input must be canonical and contain no symlink: ${file}`);
   const before = fs.lstatSync(file);
   if (!before.isFile() || before.nlink !== 1 || (before.mode & 0o7022) !== 0)
     throw new Error(`Unsafe native image file or permissions: ${file}`);
+  if (expected && before.size !== expected.sizeBytes)
+    throw new Error(`Native build artifact size mismatch: ${file}`);
   const fd = fs.openSync(
     file,
     fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
@@ -98,11 +110,28 @@ function capture(file: string): { bytes: Buffer; stat: fs.Stats } {
   try {
     const opened = fs.fstatSync(fd);
     if (!same(before, opened)) throw new Error(`Replaced native image input: ${file}`);
-    const bytes = fs.readFileSync(fd);
+    // A receipt-bound artifact is read only up to its reviewed size. A growing
+    // file must not turn a later hash refusal into an unbounded allocation.
+    const bytes = expected ? Buffer.alloc(expected.sizeBytes) : fs.readFileSync(fd);
+    if (expected) {
+      let offset = 0;
+      while (offset < bytes.length) {
+        const count = fs.readSync(fd, bytes, offset, bytes.length - offset, null);
+        if (count === 0) throw new Error(`Truncated native build artifact: ${file}`);
+        offset += count;
+      }
+    }
+    const afterDescriptor = fs.fstatSync(fd);
+    const afterPath = fs.lstatSync(file);
     if (
-      !same(opened, fs.fstatSync(fd)) ||
-      !same(opened, fs.lstatSync(file)) ||
-      bytes.length !== opened.size
+      !same(opened, afterDescriptor) ||
+      !same(opened, afterPath) ||
+      bytes.length !== opened.size ||
+      (expected &&
+        (opened.nlink !== 1 ||
+          afterDescriptor.nlink !== 1 ||
+          afterPath.nlink !== 1 ||
+          fs.realpathSync(file) !== file))
     )
       throw new Error(`Changed native image input: ${file}`);
     return { bytes, stat: opened };
@@ -110,11 +139,13 @@ function capture(file: string): { bytes: Buffer; stat: fs.Stats } {
     fs.closeSync(fd);
   }
 }
-function executable(value: Pin): Buffer {
+function executable(value: Pin, expected?: ReviewedFile): Buffer {
   keys(value, ['source', 'sha256'], 'executable pin');
   if (typeof value.source !== 'string' || !digest(value.sha256))
     throw new Error('Invalid executable pin');
-  const captured = capture(value.source);
+  if (expected && (value.source !== expected.path || value.sha256 !== expected.sha256))
+    throw new Error('Native build artifact pin mismatch');
+  const captured = capture(value.source, expected);
   if (!(captured.stat.mode & 0o111) || sha(captured.bytes) !== value.sha256)
     throw new Error(`Native executable identity mismatch: ${value.source}`);
   return captured.bytes;
@@ -143,6 +174,13 @@ function dependencyTarget(
   }
 }
 export function prepareNativeRuntimeEntry(input: NativeImageInput): PreparedNativeEntry {
+  return prepareNativeImage(input);
+}
+
+function prepareNativeImage(
+  input: NativeImageInput,
+  build?: { native: ReviewedFile; stableEntry: ReviewedFile; provenance: Buffer }
+): PreparedNativeEntry {
   keys(
     input,
     [
@@ -362,16 +400,20 @@ export function prepareNativeRuntimeEntry(input: NativeImageInput): PreparedNati
     }
     // Notice preservation is mechanical; provenance and coverage are reviewed
     // with the build input. A nonempty notice set is not a legal conclusion.
-    return executable({ source: pin.source, sha256: pin.sha256 });
+    return executable(
+      { source: pin.source, sha256: pin.sha256 },
+      kind === 'native' ? build?.native : undefined
+    );
   };
   files.set(metadata.nativeExecutable, binary(input.native, 'native'));
   files.set(metadata.nodeExecutable, binary(input.node, 'node'));
   executablePaths.add(metadata.nativeExecutable);
   executablePaths.add(metadata.nodeExecutable);
-  const stableEntry = executable(input.stableEntry);
+  const stableEntry = executable(input.stableEntry, build?.stableEntry);
   files.set('native/caws-hook-native', Buffer.from(stableEntry));
   executablePaths.add('native/caws-hook-native');
   files.set('native-entry.json', Buffer.from(JSON.stringify(metadata)));
+  if (build) files.set('native-build-provenance.json', Buffer.from(build.provenance));
   // Mode closure is ordinary hashed metadata; the writer checks actual published modes.
   files.set('native-modes.json', Buffer.alloc(0));
   files.set(
@@ -387,8 +429,89 @@ export function prepareNativeRuntimeEntry(input: NativeImageInput): PreparedNati
   return { files, executablePaths, stableEntry, metadata };
 }
 
-export function readNativeImage(file: string): PreparedNativeEntry {
-  return prepareNativeRuntimeEntry(
-    JSON.parse(capture(path.resolve(file)).bytes.toString('utf8')) as NativeImageInput
+function reviewedFile(value: unknown, label: string): asserts value is ReviewedFile {
+  keys(value, ['path', 'sizeBytes', 'sha256'], label);
+  if (
+    typeof value.path !== 'string' ||
+    !path.isAbsolute(value.path) ||
+    path.resolve(value.path) !== value.path ||
+    typeof value.sizeBytes !== 'number' ||
+    !Number.isSafeInteger(value.sizeBytes) ||
+    value.sizeBytes < 1 ||
+    value.sizeBytes > 256 * 1024 * 1024 ||
+    !digest(value.sha256)
+  )
+    throw new Error(`Invalid ${label}`);
+}
+
+function sameReviewedFile(a: ReviewedFile, b: ReviewedFile): boolean {
+  return a.path === b.path && a.sizeBytes === b.sizeBytes && a.sha256 === b.sha256;
+}
+
+/** Capture the selected receipt's artifacts. The installer owns publication. */
+export function prepareNativeRuntimeEntryFromBuild(
+  input: NativeBuildImageInput
+): PreparedNativeEntry {
+  keys(
+    input,
+    [
+      'schema',
+      'prefixRoot',
+      'files',
+      'packages',
+      'omissions',
+      'node',
+      'timeoutMs',
+      'requestFile',
+      'completionReceipt',
+      'nativeNotices',
+    ],
+    'native build image'
   );
+  if (input.schema !== 'caws.runtime.native-image-input.v2')
+    throw new Error('Invalid native build image schema');
+  reviewedFile(input.requestFile, 'selected build request');
+  reviewedFile(input.completionReceipt, 'selected completion receipt');
+  const loaded = loadNativeSqliteBuildWithStableEntry(input.requestFile.path);
+  if (
+    !sameReviewedFile(input.requestFile, loaded.requestFile) ||
+    !sameReviewedFile(input.completionReceipt, loaded.completionReceipt)
+  )
+    throw new Error('Native build selection identity mismatch');
+  const { native, stableEntry } = loaded.build.artifacts;
+  reviewedFile(native, 'native build artifact');
+  reviewedFile(stableEntry, 'stable entry build artifact');
+  const identity = (pin: ReviewedFile) => ({ sizeBytes: pin.sizeBytes, sha256: pin.sha256 });
+  const provenance = Buffer.from(
+    JSON.stringify({
+      schema: 'caws.runtime.native-build-provenance.v1',
+      requestFile: identity(loaded.requestFile),
+      completionReceipt: identity(loaded.completionReceipt),
+      requestDigest: loaded.build.requestDigest,
+      sourceTreeDigest: loaded.build.sourceTreeDigest,
+      profile: loaded.build.profile,
+      artifacts: { native: identity(native), stableEntry: identity(stableEntry) },
+    })
+  );
+  return prepareNativeImage(
+    {
+      schema: 'caws.runtime.native-image-input.v1',
+      prefixRoot: input.prefixRoot,
+      files: input.files,
+      packages: input.packages,
+      omissions: input.omissions,
+      native: { source: native.path, sha256: native.sha256, notices: input.nativeNotices },
+      node: input.node,
+      stableEntry: { source: stableEntry.path, sha256: stableEntry.sha256 },
+      timeoutMs: input.timeoutMs,
+    },
+    { native, stableEntry, provenance }
+  );
+}
+
+export function readNativeImage(file: string): PreparedNativeEntry {
+  const input: unknown = JSON.parse(capture(path.resolve(file)).bytes.toString('utf8'));
+  return object(input) && input.schema === 'caws.runtime.native-image-input.v2'
+    ? prepareNativeRuntimeEntryFromBuild(input as unknown as NativeBuildImageInput)
+    : prepareNativeRuntimeEntry(input as NativeImageInput);
 }

@@ -7,6 +7,10 @@ const staticTooling = require('../../dist/tooling/sqlite-static-build');
 const {
   buildNativeSqliteCandidate,
   loadNativeSqliteBuild,
+  loadNativeSqliteBuildWithStableEntry,
+  nativeSqliteCargoArguments,
+  selectNativeSqliteCargoArtifacts,
+  verifyNativeSqliteBuildArtifacts,
 } = require('../../dist/tooling/native-sqlite-build');
 
 const HEADER_SHA = '919e7f2e8ed1d8f56ac17b412b8971c76aa5d1a879752cc6058f75e7d5910e1d';
@@ -200,6 +204,283 @@ describe('native SQLite coordinator pre-Cargo refusals and explicit loader bindi
     Object.defineProperty(process, 'platform', platformDescriptor);
     Object.defineProperty(process, 'arch', archDescriptor);
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  describe('versioned stable-entry Cargo and filesystem boundaries (no Rust build)', () => {
+    function version(v2, profile = 'debug') {
+      request.profile = profile;
+      request.schema = `caws.native_sqlite_build_request.v${v2 ? 2 : 1}`;
+      if (v2)
+        request.source.files.push(
+          treeFile(request.source.root, 'src/installed_entry_main.rs', 'boundary source only\n')
+        );
+    }
+    function records() {
+      const target = path.join(
+        request.outputRoot,
+        'target',
+        'aarch64-apple-darwin',
+        request.profile
+      );
+      const manifest = path.join(request.outputRoot, 'source', 'Cargo.toml');
+      const binary = (name, kind) => ({
+        reason: 'compiler-artifact',
+        manifest_path: manifest,
+        fresh: false,
+        target: {
+          name,
+          kind: [kind],
+          src_path: path.join(request.outputRoot, 'source', 'src', 'installed_entry_main.rs'),
+        },
+        executable: path.join(target, ...(kind === 'example' ? ['examples'] : []), name),
+      });
+      return [
+        binary('caws-native', 'bin'),
+        binary('service-observer', 'example'),
+        binary('service-custody-observer', 'example'),
+        binary('caws-hook-native', 'bin'),
+        {
+          reason: 'compiler-artifact',
+          manifest_path: path.join(
+            request.outputRoot,
+            'vendor',
+            request.binding.directory,
+            'Cargo.toml'
+          ),
+          fresh: false,
+          package_id: 'sqlite-fixture',
+          target: { name: 'libsqlite3_sys', kind: ['lib'] },
+          filenames: [path.join(target, 'deps', 'libsqlite3_sys-fixture.rlib')],
+        },
+        {
+          reason: 'build-script-executed',
+          package_id: 'sqlite-fixture',
+          out_dir: path.join(target, 'build', 'sqlite-fixture', 'out'),
+        },
+      ];
+    }
+    const encoded = (rows) => Buffer.from(rows.map((row) => JSON.stringify(row)).join('\n') + '\n');
+    function artifacts() {
+      const rows = records();
+      const selected = selectNativeSqliteCargoArtifacts(request, encoded(rows));
+      const files = {
+        ...selected,
+        runtimeIdentity: path.join(request.outputRoot, 'observed-sqlite-identity.json'),
+        cargoMessages: path.join(request.outputRoot, 'cargo-build.stdout'),
+      };
+      const pins = {};
+      for (const [name, file] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(
+          file,
+          name === 'cargoMessages' ? encoded(rows) : Buffer.from(`boundary ${name}\n`),
+          {
+            mode: ['native', 'observer', 'custodyObserver', 'stableEntry'].includes(name)
+              ? 0o700
+              : 0o600,
+          }
+        );
+        pins[name] = identity(file);
+      }
+      return pins;
+    }
+
+    test.each([
+      ['debug', false],
+      ['release', false],
+      ['debug', true],
+      ['release', true],
+    ])('selects exact %s targets for v2=%s', (profile, v2) => {
+      version(v2, profile);
+      const args = nativeSqliteCargoArguments(request);
+      const bins = args.flatMap((arg, i) => (arg === '--bin' ? [args[i + 1]] : []));
+      expect(bins).toEqual(v2 ? ['caws-native', 'caws-hook-native'] : ['caws-native']);
+      expect(args.includes('--release')).toBe(profile === 'release');
+      const selected = selectNativeSqliteCargoArtifacts(request, encoded(records()));
+      expect(Object.keys(selected).sort()).toEqual(
+        [
+          'native',
+          'observer',
+          'custodyObserver',
+          'sysRlib',
+          'generatedBinding',
+          ...(v2 ? ['stableEntry'] : []),
+        ].sort()
+      );
+      expect(selected.native).toBe(
+        path.join(request.outputRoot, 'target', 'aarch64-apple-darwin', profile, 'caws-native')
+      );
+      if (v2)
+        expect(selected.stableEntry).toBe(
+          path.join(
+            request.outputRoot,
+            'target',
+            'aarch64-apple-darwin',
+            profile,
+            'caws-hook-native'
+          )
+        );
+      const pins = artifacts();
+      const schema = `caws.native_sqlite_build_receipt.v${v2 ? 2 : 1}`;
+      expect(() => verifyNativeSqliteBuildArtifacts(request, schema, pins)).not.toThrow();
+      expect(step).not.toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['missing', (rows) => rows.splice(3, 1), /unique Cargo record: caws-hook-native/],
+      ['duplicate', (rows) => rows.push({ ...rows[3] }), /unique Cargo record: caws-hook-native/],
+      [
+        'cached',
+        (rows) => {
+          rows[3].fresh = true;
+        },
+        /cached Cargo artifact/,
+      ],
+      [
+        'wrong manifest',
+        (rows) => {
+          rows[3].manifest_path = path.join(root, 'foreign', 'Cargo.toml');
+        },
+        /source\/target mismatch/,
+      ],
+      [
+        'wrong source',
+        (rows) => {
+          rows[3].target.src_path = path.join(request.outputRoot, 'source', 'src', 'main.rs');
+        },
+        /source\/target mismatch/,
+      ],
+      [
+        'wrong kind',
+        (rows) => {
+          rows[3].target.kind = ['example'];
+        },
+        /source\/target mismatch/,
+      ],
+      [
+        'mixed kind',
+        (rows) => {
+          rows[3].target.kind = ['bin', 'example'];
+        },
+        /source\/target mismatch/,
+      ],
+      [
+        'wrong name',
+        (rows) => {
+          rows[3].target.name = 'unreviewed-entry';
+        },
+        /unique Cargo record/,
+      ],
+      [
+        'wrong profile',
+        (rows) => {
+          rows[3].executable = rows[3].executable.replace('/debug/', '/release/');
+        },
+        /Unexpected executable location/,
+      ],
+      [
+        'escaped target',
+        (rows) => {
+          rows[3].executable = path.join(root, 'foreign-entry');
+        },
+        /escaped fresh target/,
+      ],
+      [
+        'missing executable',
+        (rows) => {
+          rows[3].executable = null;
+        },
+        /artifact path missing/,
+      ],
+      [
+        'unbound extra record',
+        (rows) =>
+          rows.push({ ...rows[3], manifest_path: path.join(root, 'foreign', 'Cargo.toml') }),
+        /unique Cargo record/,
+      ],
+    ])('refuses %s stable Cargo identity', (_name, change, expected) => {
+      version(true);
+      const rows = records();
+      change(rows);
+      expect(() => selectNativeSqliteCargoArtifacts(request, encoded(rows))).toThrow(expected);
+      expect(fs.existsSync(request.outputRoot)).toBe(false);
+    });
+
+    test.each([
+      ['changed bytes', /Pin mismatch:.*caws-hook-native$/],
+      ['nonexecutable', /^Executable artifact mode changed$/],
+      ['symlink', /ELOOP|EMLINK/],
+      ['wrong pin path', /^Artifact path mismatch: stableEntry$/],
+      ['missing pin', /^Unexpected object shape/],
+      ['extra pin', /^Unexpected object shape/],
+      ['modified Cargo records', /Pin mismatch:.*cargo-build\.stdout$/],
+      ['oversized executable', /Not a bounded regular file:.*caws-hook-native$/],
+      ['oversized Cargo records', /Not a bounded regular file:.*cargo-build\.stdout$/],
+    ])('refuses %s at the real filesystem boundary', (change, expected) => {
+      version(true);
+      const pins = artifacts();
+      const corruptSameSize = (file) => {
+        const before = fs.readFileSync(file);
+        const changed = Buffer.from(before);
+        changed[0] ^= 1;
+        fs.writeFileSync(file, changed);
+        expect(fs.statSync(file).size).toBe(before.length);
+        expect(fs.readFileSync(file)).not.toEqual(before);
+      };
+      if (change === 'changed bytes') corruptSameSize(pins.stableEntry.path);
+      if (change === 'nonexecutable') fs.chmodSync(pins.stableEntry.path, 0o600);
+      if (change === 'symlink') {
+        const file = pins.stableEntry.path;
+        fs.renameSync(file, `${file}-held`);
+        fs.symlinkSync(`${file}-held`, file);
+      }
+      if (change === 'wrong pin path') pins.stableEntry = pins.native;
+      if (change === 'missing pin') delete pins.stableEntry;
+      if (change === 'extra pin') pins.unreviewed = pins.native;
+      if (change === 'modified Cargo records') corruptSameSize(pins.cargoMessages.path);
+      if (change === 'oversized executable') fs.appendFileSync(pins.stableEntry.path, 'tampered');
+      if (change === 'oversized Cargo records') fs.appendFileSync(pins.cargoMessages.path, '{}\n');
+      expect(() =>
+        verifyNativeSqliteBuildArtifacts(request, 'caws.native_sqlite_build_receipt.v2', pins)
+      ).toThrow(expected);
+    });
+
+    test('v1 neither receives nor grants a stable-entry pin', () => {
+      version(false);
+      const pins = artifacts();
+      pins.stableEntry = pins.native;
+      expect(() =>
+        verifyNativeSqliteBuildArtifacts(request, 'caws.native_sqlite_build_receipt.v1', pins)
+      ).toThrow('Unexpected object shape');
+      expect(() => loadNativeSqliteBuildWithStableEntry(requestPath())).toThrow(
+        'requires native build request v2'
+      );
+    });
+
+    test.each([
+      [false, 2],
+      [true, 1],
+    ])('refuses request/receipt downgrade v2=%s receipt=%s', (v2, receiptVersion) => {
+      version(v2);
+      negativeMarker({ schema: `caws.native_sqlite_build_receipt.v${receiptVersion}` });
+      expect(() => loadNativeSqliteBuild(requestPath())).toThrow(
+        'Completion receipt/request mismatch'
+      );
+    });
+
+    test('v2 requires reviewed stable-entry source before mutation', async () => {
+      request.schema = 'caws.native_sqlite_build_request.v2';
+      const result = await buildNativeSqliteCandidate(request);
+      expect(result).toMatchObject({
+        status: 'failed',
+        phase: 'request',
+        writerState: 'NOT_STARTED',
+        reason: 'Stable hook entry source missing from reviewed tree',
+      });
+      expect(fs.existsSync(request.outputRoot)).toBe(false);
+      expect(step).not.toHaveBeenCalled();
+    });
   });
 
   test('copies empty files but refuses unauthenticated header before Cargo', async () => {

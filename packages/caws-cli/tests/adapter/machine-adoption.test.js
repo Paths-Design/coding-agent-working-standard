@@ -129,7 +129,7 @@ function withPrivatePathWitness(run) {
     const file = path.join(directory, name);
     fs.writeFileSync(
       file,
-      '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nexit 97\n',
+      '#!/bin/sh\n# PATH resolution witness only; never executed by these tests.\nprintf executed > "$(dirname "$0")/executed"\nexit 97\n',
       { mode: 0o755 }
     );
     fs.copyFileSync(file, path.join(repo, name));
@@ -375,6 +375,133 @@ test.each(['printf', 'echo'])(
     });
   }
 );
+test.each([
+  [
+    'and escaped native',
+    () => String.raw`true && caws\-hook-native claude-code pre_tool_use --system`,
+  ],
+  ['and split quote native', () => "true && 'caws'-hook-native claude-code pre_tool_use --system"],
+  [
+    'semicolon absolute concatenation',
+    () =>
+      `true; '${path.join(root, 'path-bin')}/'caws\\-hook-native claude-code pre_tool_use --system`,
+  ],
+  [
+    'pipeline escaped legacy',
+    () => String.raw`true | caws\-hook claude-code pre_tool_use --system`,
+  ],
+  [
+    'comment and newline escaped legacy',
+    () => 'true # operator comment\n' + String.raw`caws\-hook claude-code pre_tool_use --system`,
+  ],
+  [
+    'literal shell payload',
+    () => String.raw`bash -c 'true && caws\-hook-native claude-code pre_tool_use --system'`,
+  ],
+  [
+    'printf followed by executable newline',
+    () => 'printf first\n' + String.raw`caws\-hook-native claude-code pre_tool_use --system`,
+  ],
+  [
+    'empty quoted program before continuation',
+    () => "'' " + '\\' + '\n printf first ' + String.raw`caws\-hook-native`,
+  ],
+  [
+    'quoted multiline native pathname',
+    () =>
+      "'/private/line\nbreak/bin/'" +
+      String.raw`caws\-hook-native claude-code pre_tool_use --system`,
+  ],
+  [
+    'literal shell escaped backtick substitution after quoted newline',
+    () => 'sh -c "printf \'first\nsecond\' \\`caws\\-hook-native\\` caws-hook"',
+  ],
+  [
+    'literal shell escaped backtick substitution',
+    () => 'sh -c "printf first \\`caws\\-hook-native\\` caws-hook"',
+  ],
+  [
+    'literal shell escaped backtick substitution after quoted newline without plain tail',
+    () => 'sh -c "printf \'first\nsecond\' \\`caws\\-hook-native\\`"',
+  ],
+  [
+    'literal shell escaped backtick substitution without plain tail',
+    () => 'sh -c "printf first \\`caws\\-hook-native\\`"',
+  ],
+  [
+    'substitution before encoded executable',
+    () => String.raw`echo $(true); caws\-hook-native claude-code pre_tool_use --system`,
+  ],
+  [
+    'literal shell payload after continuation-only nonword',
+    () => 'sh ' + '\\' + "\n -c 'true && caws\\-hook-native claude-code pre_tool_use --system'",
+  ],
+])(
+  'A4 preceding syntax %s adoption refuses before state or backup writes',
+  (_name, commandForFixture) =>
+    withPrivatePathWitness(() => {
+      const { config, options } = seededClaudePolicy();
+      const value = JSON.parse(fs.readFileSync(config));
+      value.hooks.PreToolUse[0].hooks[1].command = commandForFixture();
+      fs.writeFileSync(config, JSON.stringify(value));
+      const before = bytes();
+      const backups = backupBytes();
+      for (const plan of [true, false]) {
+        expect(() => adoptMachineAdapter({ ...options, plan })).toThrow(/reconcil/i);
+        expect(bytes()).toEqual(before);
+        expect(backupBytes()).toEqual(backups);
+        expect(fs.existsSync(path.join(root, 'path-bin/executed'))).toBe(false);
+      }
+    })
+);
+test.each([
+  String.raw`printf '%s\n' 'true && caws\-hook-native' 'caws-hook'`,
+  String.raw`echo '# caws-hook-native' 'true | caws\-hook'`,
+  "printf 'first\nsecond' " + String.raw`caws\-hook-native`,
+  "echo 'first\nsecond' " + String.raw`caws\-hook-native`,
+  'printf first ' + '\\' + '\n' + String.raw`caws\-hook-native`,
+  'sh -c \'printf "first\nsecond" caws\\-hook-native\'',
+  '\\' + '\n printf first ' + String.raw`caws\-hook-native`,
+  'env ' + '\\' + '\n printf first ' + String.raw`caws\-hook-native`,
+])('A4 preceding syntax quoted operator and comment data survives adoption: %s', (command) => {
+  const { config, options } = seededClaudePolicy();
+  const value = JSON.parse(fs.readFileSync(config));
+  const foreign = { type: 'command', command, onFailure: 'continue' };
+  value.hooks.PreToolUse[0].hooks.unshift(foreign);
+  fs.writeFileSync(config, JSON.stringify(value));
+  expect(adoptMachineAdapter(options).changed).toBe(true);
+  value.hooks.PreToolUse[0].hooks[2].onFailure = 'block';
+  expect(JSON.parse(fs.readFileSync(config))).toEqual(value);
+});
+test.each([
+  String.raw`printf x # caws\-hook-native`,
+  String.raw`printf x # $(true); caws\-hook-native`,
+  'printf x # caws-hook-native',
+  'printf x # /private/.caws/hooks/dispatch/pre_tool_use.sh',
+  "sh -c 'printf x # caws-hook-native'",
+  'printf x ' + '\\' + '\n # caws-hook-native',
+])('A4 preceding syntax examined comment preserves foreign hook during adoption: %s', (command) => {
+  const { config, options } = seededClaudePolicy();
+  const value = JSON.parse(fs.readFileSync(config));
+  const group = { matcher: 'Read', hooks: [{ type: 'command', command, onFailure: 'continue' }] };
+  value.hooks.PreToolUse = [group];
+  fs.writeFileSync(config, JSON.stringify(value));
+  const before = bytes();
+  const backups = backupBytes();
+  expect(adoptMachineAdapter({ ...options, plan: true }).changed).toBe(true);
+  expect(bytes()).toEqual(before);
+  expect(backupBytes()).toEqual(backups);
+  expect(adoptMachineAdapter(options).changed).toBe(true);
+  const applied = JSON.parse(fs.readFileSync(config));
+  expect(applied.hooks.PreToolUse).toHaveLength(2);
+  expect(applied.hooks.PreToolUse[0]).toEqual(group);
+  expect(applied.hooks.PreToolUse[1].hooks[0]).toMatchObject({
+    command: `CAWS_HOME='${home}' python3 '${home}/bin/caws-hook' claude-code pre_tool_use`,
+    onFailure: 'block',
+  });
+  expect(applied.hooks.Stop).toEqual(value.hooks.Stop);
+  expect(applied.permissions).toEqual(value.permissions);
+});
 test.each(['continue', null, { action: 'block' }])(
   'seeded Claude adoption refuses supplied policy %j before registration, policy or backup writes',
   (onFailure) => {
