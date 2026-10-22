@@ -1,0 +1,25 @@
+id: CAWS-CUTOVER-RECOVERY-CHECKPOINT-001
+title: 'Retain recovery repair and observer failed-check checkpoints'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-22T11:23:39.459Z'
+updated_at: '2026-10-22T11:23:39.459Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
