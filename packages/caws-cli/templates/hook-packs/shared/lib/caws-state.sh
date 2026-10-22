@@ -241,6 +241,19 @@ _caws_outparam_ok() {
   [[ "${1:-}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${2:-}" && "$1" != "$2"* ]]
 }
 
+# caws_payload_carries_cwd [surface]
+#   Succeeds when the hook payload contract of [surface] (default
+#   CAWS_AGENT_SURFACE) carries `cwd` (decision recorded in
+#   CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01). There a missing cwd is a
+#   degraded payload, so a relative write target is asked about instead of
+#   resolved against a guessed root. On a surface whose contract is unverified
+#   an absent cwd is the normal case. Adding a surface whose payload is verified
+#   to carry cwd (zcode, dsh) is a one-word change to this list.
+caws_payload_carries_cwd() {
+  local surface="${1-${CAWS_AGENT_SURFACE:-}}"
+  [[ -n "$surface" && " claude-code codex opencode qwen-code kimi-code " == *" $surface "* ]]
+}
+
 # caws_guard_realpath_into <var> <path>
 #   Checked normalization for ownership and containment decisions
 #   (CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01). Paths are compared as

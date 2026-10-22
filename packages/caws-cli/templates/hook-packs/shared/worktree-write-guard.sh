@@ -152,15 +152,40 @@ if [[ -n "$GIT_COMMON_DIR_RAW" ]] && [[ -n "$GIT_DIR_RAW" ]]; then
   fi
 fi
 
+# The write target, normalized once; every arm below adjudicates this path. A
+# relative target names a file only relative to the payload's cwd, so it is
+# resolved against that cwd when the payload names an existing directory.
+# Without one, a surface whose payload contract carries cwd asks, because the
+# target may be another worktree's payload; a surface whose contract is
+# unverified resolves against the session's project directory as before
+# (CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01).
+WRITE_TARGET=""
+if [[ -n "$FILE_PATH" ]]; then
+  case "$FILE_PATH" in
+    /*) _WWG_TARGET_RAW="$FILE_PATH" ;;
+    *)
+      if [[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]]; then
+        _WWG_TARGET_RAW="$HOOK_CWD/$FILE_PATH"
+      elif caws_payload_carries_cwd; then
+        _WHY="[worktree-write-guard] ask_uncertain: the operating cwd could not be resolved for the relative path '$FILE_PATH', so which file it names (this checkout or another worktree's payload) cannot be decided. Approve only if you know the target is yours to write."
+        if caws_guard_cannot_ask; then
+          echo "$_WHY" >&2
+          echo "  (approval unavailable or automatically satisfied (mode=${HOOK_PERMISSION_MODE:-default}); blocked)" >&2
+          exit 2
+        fi
+        emit_ask "$_WHY"
+        exit 0
+      else
+        _WWG_TARGET_RAW="$WORKTREE_ROOT/$FILE_PATH"
+      fi ;;
+  esac
+  caws_guard_realpath_into WRITE_TARGET "$_WWG_TARGET_RAW" || _wwg_normalize_refuse "write target" "$_WWG_TARGET_RAW"
+fi
+
 # Canonical-spec-materialization refusal (I1: BEFORE the allowlist).
 if [[ "$IS_LINKED_WORKTREE" == "1" ]] && [[ -n "$FILE_PATH" ]]; then
   SPEC_ROOT="$WORKTREE_ROOT/.caws/specs"
-  case "$FILE_PATH" in
-    /*) FILE_PATH_ABS="$FILE_PATH" ;;
-    *)  FILE_PATH_ABS="$WORKTREE_ROOT/$FILE_PATH" ;;
-  esac
-  caws_guard_realpath_into FILE_PATH_ABS "$FILE_PATH_ABS" || _wwg_normalize_refuse "spec-materialization target" "$FILE_PATH_ABS"
-  case "$FILE_PATH_ABS" in
+  case "$WRITE_TARGET" in
     "$SPEC_ROOT"/*|"$SPEC_ROOT")
       echo "[worktree-write-guard.sh] BLOCKED: $FILE_PATH" >&2
       echo "[worktree-write-guard.sh] Refusing $TOOL_NAME against a linked-worktree .caws/specs/ path." >&2
@@ -197,10 +222,7 @@ fi
 # through the oracle), not unconditionally allowed, and it must run BEFORE the
 # allowlist so a payload path is not swept up by the .caws/* allow arm.
 if [[ -n "$FILE_PATH" ]]; then
-  case "$FILE_PATH" in
-    /*) caws_guard_realpath_into FILE_PATH_FOR_ALLOWLIST "$FILE_PATH" || _wwg_normalize_refuse "allowlist target" "$FILE_PATH" ;;
-    *)  FILE_PATH_FOR_ALLOWLIST="$FILE_PATH" ;;
-  esac
+  FILE_PATH_FOR_ALLOWLIST="$WRITE_TARGET"
 
   # WORKTREE-ISOLATION-HARDENING-001 (Fix 1+2): .caws/worktrees/<name>/<rest>
   # is worktree PAYLOAD — route through ownership oracle FIRST. This arm is
@@ -208,7 +230,7 @@ if [[ -n "$FILE_PATH" ]]; then
   # never unconditionally allowed) and must precede the allowlist delegation
   # so it wins over the .caws/* allow arm.
   case "$FILE_PATH_FOR_ALLOWLIST" in
-    "$PROJECT_DIR"/.caws/worktrees/*|.caws/worktrees/*)
+    "$PROJECT_DIR"/.caws/worktrees/*)
       if [[ -f "$CAWS_CLAIM_ORACLE" ]] && command -v node >/dev/null 2>&1; then
         _ORACLE_OUT="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
           CAWS_ORACLE_CURRENT_BRANCH="" \
@@ -320,11 +342,8 @@ WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
 
 if [[ -n "$AGENT_DIR" ]] && [[ "$AGENT_DIR" == "$WORKTREE_BASE"/* ]]; then
   # Being in a worktree does not authorize edits to a different canonical claim.
-  case "$FILE_PATH" in
-    /*) caws_guard_realpath_into _CANON_TARGET "$FILE_PATH" || _wwg_normalize_refuse "canonical-claim target" "$FILE_PATH" ;;
-    *) caws_guard_realpath_into _CANON_TARGET "$AGENT_DIR/$FILE_PATH" || _wwg_normalize_refuse "canonical-claim target" "$AGENT_DIR/$FILE_PATH" ;;
-  esac
-  case "$_CANON_TARGET" in "$WORKTREE_BASE"/*) exit 0 ;; esac
+  # Worktree payload never reaches this point: the payload arm above decided it.
+  _CANON_TARGET="$WRITE_TARGET"
   case "$_CANON_TARGET" in
     "$PROJECT_DIR"/*)
       _OWN_WT="${AGENT_DIR#"$WORKTREE_BASE"/}"; _OWN_WT="${_OWN_WT%%/*}"

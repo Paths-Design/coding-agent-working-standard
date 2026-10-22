@@ -205,13 +205,13 @@ AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 # surface whose contract is unverified, an absent cwd is the normal case, and
 # asking would refuse every relative write (a false refusal, ranked worse than
 # the narrow fail-open), so those keep the prior behavior of resolving against
-# the guess. Adding a surface whose payload is verified to carry `cwd` (zcode,
-# dsh) is a one-word change to this list.
-_CWD_CONTRACT_SURFACES=" claude-code codex opencode qwen-code kimi-code "
+# the guess. The surface list lives in caws_payload_carries_cwd
+# (lib/caws-state.sh), shared with worktree-write-guard so a relative Write and
+# a relative Bash mutation get the same answer.
 # CAWS_AGENT_SURFACE is set by lib/agent-surface.sh (sourced above), which
 # defaults an unset value to claude-code.
 _CWD_CONTRACT=0
-[[ -n "${CAWS_AGENT_SURFACE:-}" && "$_CWD_CONTRACT_SURFACES" == *" $CAWS_AGENT_SURFACE "* ]] && _CWD_CONTRACT=1
+caws_payload_carries_cwd && _CWD_CONTRACT=1
 _CWD_RESOLVED=0
 [[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]] && _CWD_RESOLVED=1
 

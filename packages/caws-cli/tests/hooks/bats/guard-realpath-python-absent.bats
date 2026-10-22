@@ -303,17 +303,20 @@ rp_sweep() {
 # rp-session-f owns. The payload carries every path byte-faithfully.
 id_guard() {
   local guard="$1" repo="$2" op="$3" tool="$4" arg="$5" payload file="" cmd=""
-  # RP_ID_CWD moves the session's working directory away from its project.
-  local cwd="${RP_ID_CWD:-$op}"
+  # RP_ID_CWD moves the session's working directory away from its project;
+  # RP_ID_NO_CWD=1 sends a payload without cwd (the process still runs there).
+  local cwd="${RP_ID_CWD:-$op}" hook_cwd
+  hook_cwd="$cwd"
+  [[ "${RP_ID_NO_CWD:-0}" == 1 ]] && hook_cwd=""
   case "$tool" in
     Write)
       file="$arg"
-      payload="$(jq -nc --arg f "$arg" --arg c "$cwd" \
-        '{tool_name: "Write", tool_input: {file_path: $f, content: "x"}, cwd: $c}')" ;;
+      payload="$(jq -nc --arg f "$arg" --arg c "$hook_cwd" \
+        '{tool_name: "Write", tool_input: {file_path: $f, content: "x"}} + (if $c == "" then {} else {cwd: $c} end)')" ;;
     Bash)
       cmd="$arg"
-      payload="$(jq -nc --arg k "$arg" --arg c "$cwd" \
-        '{tool_name: "Bash", tool_input: {command: $k}, cwd: $c}')" ;;
+      payload="$(jq -nc --arg k "$arg" --arg c "$hook_cwd" \
+        '{tool_name: "Bash", tool_input: {command: $k}} + (if $c == "" then {} else {cwd: $c} end)')" ;;
   esac
   run env -i \
     HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws" PATH="${RP_ID_PATH:-$PATH}" \
@@ -321,12 +324,13 @@ id_guard() {
     RP_REAL_GIT="$RP_REAL_GIT" \
     CLAUDE_CODE_SESSION_ID=rp-session-s HOOK_SESSION_ID=rp-session-s \
     CLAUDE_PROJECT_DIR="$op" CAWS_PROJECT_DIR="$op" \
-    CAWS_AGENT_SURFACE=claude-code HOOK_EVENT_NAME=PreToolUse \
+    CAWS_AGENT_SURFACE="${RP_ID_SURFACE:-claude-code}" HOOK_EVENT_NAME=PreToolUse \
     HOOK_PERMISSION_MODE="${RP_ID_MODE:-default}" HOOK_INPUT_JSON="$payload" \
     HOOK_TOOL_NAME="$tool" HOOK_FILE_PATH="$file" HOOK_COMMAND="$cmd" \
-    HOOK_CWD="$cwd" \
+    HOOK_CWD="$hook_cwd" \
     bash -c 'cd "$1" && bash "$2" </dev/null' _ "$cwd" "$(guard_dir)/$guard"
-  printf '# %s op=%q cwd=%q status=%s\n# output=%s\n' "$guard" "$op" "$cwd" "$status" "$output" >&3
+  printf '# %s surface=%s op=%q cwd=%q hook_cwd=%q status=%s\n# output=%s\n' "$guard" \
+    "${RP_ID_SURFACE:-claude-code}" "$op" "$cwd" "$hook_cwd" "$status" "$output" >&3
   [[ ! -e "$repo/.caws/worktrees/f-wt/src" ]]
 }
 
@@ -630,6 +634,39 @@ rp_git_case() {
   rp_git_case bash-write-guard.sh Bash
 }
 
+@test "relative target: worktree-write-guard resolves a relative Write against the payload cwd before adjudicating ownership" {
+  local repo="$RP_PLAIN_REPO" self="$RP_PLAIN_REPO/.caws/worktrees/s-wt"
+  # Control: the absolute spelling of the foreign target is refused.
+  id_guard worktree-write-guard.sh "$repo" "$self" Write "$repo/.caws/worktrees/f-wt/src/payload.ts"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
+  # From s-wt the relative spelling names the same foreign file.
+  id_guard worktree-write-guard.sh "$repo" "$self" Write "../f-wt/src/payload.ts"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
+  # The owner's own relative write is admitted.
+  id_guard worktree-write-guard.sh "$repo" "$self" Write "src/own.ts"
+  [ "$status" -eq 0 ]
+  refute_output --partial "BLOCKED"
+}
+
+@test "relative target: with no payload cwd a relative Write is asked about where the payload contract carries cwd" {
+  local repo="$RP_PLAIN_REPO" self="$RP_PLAIN_REPO/.caws/worktrees/s-wt"
+  RP_ID_NO_CWD=1 id_guard worktree-write-guard.sh "$repo" "$self" Write "../f-wt/src/payload.ts"
+  [ "$status" -eq 0 ]
+  assert_output --partial '"permissionDecision": "ask"'
+  assert_output --partial "operating cwd could not be resolved for the relative path '../f-wt/src/payload.ts'"
+  RP_ID_NO_CWD=1 RP_ID_MODE=bypassPermissions \
+    id_guard worktree-write-guard.sh "$repo" "$self" Write "../f-wt/src/payload.ts"
+  [ "$status" -eq 2 ]
+  assert_output --partial "operating cwd could not be resolved"
+  # A surface whose payload contract is unverified keeps resolving against the
+  # session's project directory, which here names the same foreign file.
+  RP_ID_NO_CWD=1 RP_ID_SURFACE=zcode id_guard worktree-write-guard.sh "$repo" "$self" Write "../f-wt/src/payload.ts"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
+}
+
 @test "precondition: the linked worktree has an absolute common dir distinct from its git dir" {
   [ "$(git -C "$RP_SELF" rev-parse --git-common-dir)" = "$RP_REPO/.git" ]
   [ "$(git -C "$RP_SELF" rev-parse --git-dir)" = "$RP_REPO/.git/worktrees/s-wt" ]
@@ -781,6 +818,8 @@ rp_git_case() {
   refute_output --partial "command not found"
   [ "$status" -eq 2 ]
   assert_output --partial "[caws-guard-realpath] cannot normalize: python3-unavailable"
+  assert_output --partial "[worktree-write-guard] cannot normalize the git common dir path"
+  assert_output --partial '{"decision":"block"'
 }
 
 @test "worktree-write-guard identity-drop control: unchecked normalization admits the foreign write" {
@@ -796,17 +835,17 @@ rp_git_case() {
 
 @test "worktree-write-guard sweep: each normalization on the foreign-payload path refuses when it alone fails" {
   rp_sweep exit1 worktree-write-guard.sh rp-session-s "$(write_payload "$RP_TARGET")" 2 \
-    "git common dir" "git dir" "canonical root" "spec-materialization target" "allowlist target"
+    "git common dir" "git dir" "canonical root" "write target"
 }
 
 @test "worktree-write-guard sweep: each normalization on the canonical-claim path refuses when it alone fails" {
   rp_sweep exit1 worktree-write-guard.sh rp-session-s "$(write_payload "$RP_REPO/src/claimed.ts")" 0 \
-    "operating directory" "canonical-claim target"
+    "write target" "operating directory"
 }
 
-@test "worktree-write-guard sweep: a relative target reaches the relative canonical-claim normalization" {
+@test "worktree-write-guard sweep: a relative target is normalized once against the payload cwd" {
   rp_sweep exit1 worktree-write-guard.sh rp-session-s "$(write_payload "src/claimed.ts")" 0 \
-    "spec-materialization target" "operating directory" "canonical-claim target"
+    "write target"
 }
 
 @test "bash-write-guard: python3 present blocks a foreign-owned payload mutation spelled through dotdot" {
@@ -835,6 +874,8 @@ rp_git_case() {
   refute_output --partial "command not found"
   [ "$status" -eq 2 ]
   assert_output --partial "[caws-guard-realpath] cannot normalize: python3-unavailable"
+  assert_output --partial "[bash-write-guard] cannot normalize the project root path"
+  assert_output --partial '{"decision":"block"'
 }
 
 @test "bash-write-guard identity-drop control: unchecked normalization admits the foreign mutation" {
@@ -879,14 +920,14 @@ rp_git_case() {
 # metadata coordinate must refuse like a failed one, never reach a prefix arm.
 @test "worktree-write-guard LF-only success sweep: foreign-payload path refuses at each normalization" {
   rp_sweep lf worktree-write-guard.sh rp-session-s "$(write_payload "$RP_TARGET")" 2 \
-    "git common dir" "git dir" "canonical root" "spec-materialization target" "allowlist target"
+    "git common dir" "git dir" "canonical root" "write target"
 }
 
 @test "worktree-write-guard LF-only success sweep: canonical-claim paths refuse at each normalization" {
   rp_sweep lflf worktree-write-guard.sh rp-session-s "$(write_payload "$RP_REPO/src/claimed.ts")" 0 \
-    "operating directory" "canonical-claim target"
+    "write target" "operating directory"
   rp_sweep lf worktree-write-guard.sh rp-session-s "$(write_payload "src/claimed.ts")" 0 \
-    "spec-materialization target" "operating directory" "canonical-claim target"
+    "write target"
 }
 
 @test "bash-write-guard LF-only success sweep: root, target and Git metadata refuse at each normalization" {
