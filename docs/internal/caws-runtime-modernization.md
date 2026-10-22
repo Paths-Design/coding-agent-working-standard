@@ -6463,6 +6463,30 @@ Additional bounded evidence and unresolved dependencies:
   refuses its stale lease, so root retains the repair and no handoff is
   accepted.
 
+  The first ordinary positive attempt at `547d4f96` fails with outer exit1. Run
+  `89dd3c16-c3f4-4a80-b024-d6095590c6ad` discovers2678 mutants across the six
+  sources and nine suites, and its385 initial tests succeed. The supported
+  Stryker API and child completion each return0, but the outer validator refuses
+  differing generation tool identities. Its failed execution receipt remains
+  `d81cb0db6533497ad377859e9a249fafaef7b70bf1509e6a7a6015070108c412`. Root
+  inspects capture and observer source: all nine generation identity maps agree
+  by role, while their `node` and `jest-runtime` array positions differ.
+  Candidate `f07d6b1d` compares the closed inventory by unique role while
+  retaining exact fields, count, path, hash and size checks. The one-suite
+  `focused-07` run exits0 with113 passing checks and stable11 source hashes; its
+  execution receipt hashes to
+  `92d40dc14577810e3ca24f5799926c76b29b34b37bfeb954aad7b82e1abaa232`. Raw
+  controls exercise the actual capture/verification helpers with differing role
+  orders and independently permuted inventories. Eight malformed inventories
+  refuse for the intended role, field or identity mismatch. The post-run
+  frozen-prefix/Node custody audit retains empty failure lists and the two
+  explicitly admitted cache directories; it does not attest lane build output or
+  continuous custody. These artifacts remain under the same `attempt-01/` root.
+  They do not rescue the failed ordinary receipt. Root allocates one fresh
+  ordinary positive attempt at `f07d6b1d` after the R01 package interval
+  releases. Its new run context, semantic source negative, restored run, child
+  consumers and full mutation quality remain owed.
+
 - E256: Review of R01 candidate `f9a90160` reaches executable-position ownership
   and managed-header boundaries that its237 passing checks miss. The owner
   retains failing canonical and producer controls and repairs classification
@@ -6562,8 +6586,31 @@ Additional bounded evidence and unresolved dependencies:
   source/build identities live under `r01-installed-entry/rollback-identity/`.
   The existing four-guide unit commits the bounded recovery wording at
   `3f6f234c`, with independent source review; coherent source/guide landing
-  remains held. Fresh repaired packages, actual native callbacks,
-  upgrade/rollback, effective-event precedence and machine adoption remain open.
+  remains held.
+
+  The repaired candidate has a separate fresh package checkpoint under
+  `r01-installed-entry/package-bfb548e6/`. Root reviews corrected plan
+  `e7910121`, including explicit physical npm installation and private log
+  paths. Normal prepack/postpack, fresh private installation, the supported
+  Node22 physical npm graph and Node18/22 prefix inspectors each exit0. Tarball
+  SHA256 `1c11e27ea6d8e57bfb5b0f035a5073a3ebb452c5eeebe18115957f5a1b16c82e`
+  retains1269 CLI files with matching installed bytes and modes. Both prefix
+  maps agree on5704 files and65 packages, with36 engine and80 dependency checks
+  each. All eight declared CLI dependencies resolve, including `inquirer`8.2.7;
+  the source workspace's missing `inquirer` remains explicit. The only reported
+  omission is the declared optional `@types/node` peer of
+  `@inquirer/external-editor`. Final source/tool/binary verification records1577
+  captures and1254 remaining build files, with only the two expected
+  marker-owned license removals after lifecycle cleanup; tracked `bfb548e6`
+  remains clean. `qualification-checkpoint.json` retains raw artifact hashes,
+  exact commands and terminal statuses. These are payload, physical dependency
+  and declared-range/engine checks, not dynamic-import or native behavior
+  qualification. Fresh descriptor commands receive separate review; descriptor
+  construction and public packaged readers have not executed for this candidate.
+  Actual native callbacks, upgrade/rollback, effective-event precedence,
+  combined-source packaging and machine adoption remain open. New AIM sends to
+  c4, dd67 and c843 refuse stale heartbeats; earlier queued assignments remain
+  unfinished under root ownership.
 
 - E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
   `native-session-publication`, based on `03d663b6`, for the continuous original
