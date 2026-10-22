@@ -32,3 +32,9 @@ rollback:
   - 'Revert the publication through a governed docs unit; retain raw artifacts and original events.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Normal main merge d57fe2694982cac63ff9840bc529ed5c34f7d3f2 publishes E231-E234, exact source checkpoint87b70fcc and existing four-row documentation obligations. Root actual raw source/control/lifecycle evidence and independent committed review agree; final formatter/content check37rows33partial0parent, five scoped gates0 and doctor0/0E3W4I. Final ledger SHA3b499900a13df137e89a9bb45a2f95c31079ff5215835c120c54fd540a9348ab. Three-path timestamp registration is authorized/pending, not executed qualification. No full6file guard quality, resident publication, complete Python retirement, installation or cutover claim. Raw publication checks: /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/cutover-progress-231/. Source synchronization remains A2."
+    recorded_at: "2026-10-22T00:06:10.947Z"
+    commit_sha: "7dfc2e6fe1cfecc0233cc50665577d906ba84c8f"
