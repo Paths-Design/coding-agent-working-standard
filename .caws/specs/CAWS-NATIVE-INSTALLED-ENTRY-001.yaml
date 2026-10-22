@@ -96,9 +96,8 @@ contracts:
 evidence:
   - criterion_id: A4
     status: unchecked
-    evidence_ref: "Candidate1f literal matrix repaired;72 red failures,415 focused checks exit0 and Node18/22 pure-helper20 decisions each exit0. Ordinary CLI plan/apply relative known-name refusal exit1 with16 file hashes/modes unchanged. Unsupported escaped-name compound discovery still returns false; broader registration precedence and native callbacks remain unqualified. No AC PASS or cutover claim."
-    recorded_at: "2026-10-22T09:33:05.570Z"
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/claude-failure-policy/literal-compound-gap.stdout.json"
+    evidence_ref: "Candidate1f literal matrix repaired; 72 red failures and415 API checks exit0. Retained external observation /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/claude-failure-policy/literal-compound-gap.stdout.json shows unsupported escaped-name compound candidate=false. CLI plan/apply refusal exit1 and16 file hashes/modes equal in literal-cli-before/after.json. Broader precedence, native callbacks and compound discovery remain owed. Only commit existence checked mechanically; external raw artifacts inspected directly, no test execution by this command."
+    recorded_at: "2026-10-22T09:33:36.517Z"
     commit_sha: "1f3a3a138fe80a70cb591b8e8abb2a2f95a19628"
   - criterion_id: A5
     status: unchecked
