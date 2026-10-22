@@ -230,6 +230,46 @@ pub struct Preparation {
     offer: Offer,
     context: service_image::AdmissionContext,
 }
+/// Bind a distinct owner operation to native code roots and captured home.
+/// This check grants no renderer eligibility or publication authority.
+#[cfg(feature = "sqlite-store")]
+pub fn captured_store_owner_config(
+    config: &Config,
+    request: &Request,
+    ready: &Ready,
+) -> Result<OwnerConfig, String> {
+    let environment = request.caller_environment();
+    let home = match environment.get("CAWS_HOME").filter(|s| !s.is_empty()) {
+        Some(home) => PathBuf::from(home),
+        None => {
+            PathBuf::from(environment.get("HOME").ok_or("store home unavailable")?).join(".caws")
+        }
+    };
+    if !absolute(&home) || ready.budget_home != home {
+        return Err("store home differs from captured caller home".into());
+    }
+    let client_root = config
+        .engine
+        .parent()
+        .ok_or("trusted engine has no client root")?;
+    let package_root = client_root
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("trusted engine has no package root")?;
+    let config_path = home.join("state/render-service/config.json");
+    no_symlinks(&config_path)?;
+    let owner = render_owner::read_config(&config_path)?;
+    if owner.home != home
+        || owner.client_root != client_root
+        || owner.template_root != package_root.join("templates/hook-packs/runtime/service-image")
+        || owner.client_shell_source
+            != package_root.join("templates/hook-packs/shared/lib/session-render-service-client.sh")
+        || owner.native_executable != std::env::current_exe().map_err(|e| e.to_string())?
+    {
+        return Err("store owner code roots differ from trusted native configuration".into());
+    }
+    Ok(owner)
+}
 pub fn prepare_offer(
     config: &Config,
     request: &Request,

@@ -1,7 +1,8 @@
 /** Actual native owner + reviewed copied Sterling profile. Root runs after build.
- * Usage: qualify-render-owner.js <caws-cli-root> <sterling-root>
- * This retains private artifacts and never installs machine adapters, modifies
- * foreign sources, adopts a PID, signals a service PID, or deletes a sandbox.
+ * Usage: qualify-render-owner.js <caws-cli-root> <sterling-root> [debug|release] [--prepare-only]
+ * This installs a runtime only into its retained private sandbox. It never
+ * changes selected machine adapters, modifies foreign sources, adopts a PID,
+ * signals a service PID, or deletes a sandbox. Preparation alone is not qualification.
  */
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -40,8 +41,17 @@ assert(process.argv[2] && process.argv[3], 'CLI root and Sterling root are requi
 const cli = fs.realpathSync(path.resolve(process.argv[2]));
 const sterling = fs.realpathSync(path.resolve(process.argv[3]));
 const crate = path.resolve(cli, '../caws-native');
-const nativeProfile = process.argv[4] ?? 'release';
-assert(['debug', 'release'].includes(nativeProfile), 'native profile must be debug or release');
+const optionalArguments = process.argv.slice(4);
+const nativeProfile = ['debug', 'release'].includes(optionalArguments[0] ?? '')
+  ? optionalArguments.shift()!
+  : 'release';
+const prepareOnly = optionalArguments[0] === '--prepare-only';
+if (prepareOnly) optionalArguments.shift();
+assert.equal(
+  optionalArguments.length,
+  0,
+  'expected only optional debug|release followed by optional --prepare-only'
+);
 const selectedRequest = process.env.CAWS_NATIVE_BUILD_REQUEST;
 assert(
   selectedRequest && path.isAbsolute(selectedRequest),
@@ -103,6 +113,7 @@ const manifest: Data = {
     adoption: nativeBuild.build.adoption,
   },
   state: 'running',
+  mode: prepareOnly ? 'prepare_only' : 'full_qualification',
   artifactRoot: root,
   sandbox,
   nativeProfile,
@@ -128,6 +139,7 @@ const manifest: Data = {
 };
 let commandNumber = 0,
   monitor: ReturnType<typeof setInterval> | undefined;
+let fixturePrepared = false;
 let lastDaemon: Instance | null = null;
 let cleanup: Data = { state: 'not_observed' };
 const pause = (ms: number): Promise<void> => new Promise((accept) => setTimeout(accept, ms));
@@ -955,6 +967,13 @@ async function main(): Promise<void> {
   manifest.qualifierSha256 = digest(
     fs.readFileSync(path.join(cli, 'scripts/qualify-render-owner.ts'))
   );
+  const qualifierExecutable = fs.realpathSync(path.resolve(process.argv[1]!));
+  manifest.qualifierExecution = {
+    path: qualifierExecutable,
+    sha256: digest(fs.readFileSync(qualifierExecutable)),
+    cliRootSource: path.join(cli, 'scripts/qualify-render-owner.ts'),
+    cliRootSourceSha256: manifest.qualifierSha256,
+  };
   persist();
   for (const directory of [home, project, path.join(root, 'tmp')])
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -1093,19 +1112,21 @@ async function main(): Promise<void> {
   const projectState = path.join(home, 'state/projects', digest(project)),
     imageParent = path.join(projectState, 'service-images');
   fs.mkdirSync(imageParent, { recursive: true, mode: 0o700 });
-  const prepared = prepareSessionRenderImage({
-    selection: selected,
-    selectedIndex,
-    imageParent,
-    environment: env as Record<string, string>,
-    toolchain: tools,
-    clientDirectory: path.join(cli, 'dist/runtime'),
-    templateDirectory: path.join(cli, 'templates/hook-packs/runtime/service-image'),
-    clientShellPath: path.join(
-      cli,
-      'templates/hook-packs/shared/lib/session-render-service-client.sh'
-    ),
-  });
+  const prepareImage = (): ReturnType<typeof prepareSessionRenderImage> =>
+    prepareSessionRenderImage({
+      selection: selected,
+      selectedIndex,
+      imageParent,
+      environment: env as Record<string, string>,
+      toolchain: tools,
+      clientDirectory: path.join(cli, 'dist/runtime'),
+      templateDirectory: path.join(cli, 'templates/hook-packs/runtime/service-image'),
+      clientShellPath: path.join(
+        cli,
+        'templates/hook-packs/shared/lib/session-render-service-client.sh'
+      ),
+    });
+  const prepared = prepareImage();
   json(path.join(root, 'initial-prepared-image.json'), prepared);
   manifest.initialUnsubmittedStage = prepared.stagingRoot;
   json(path.join(projectState, 'render-service.json'), {
@@ -1154,6 +1175,121 @@ async function main(): Promise<void> {
     },
   };
   json(path.join(root, 'owner-config-input.json'), ownerConfig);
+  if (prepareOnly) {
+    // Both offers carry independently prepared stages. The actor must perform
+    // native admission/publication and issue its own grants before any bridge.
+    const preparedB = prepareImage();
+    assert(prepared.stagingRoot && preparedB.stagingRoot, 'fresh fixture requires two stages');
+    assert.notEqual(
+      prepared.stagingRoot,
+      preparedB.stagingRoot,
+      'fixture stages must be independent'
+    );
+    json(path.join(root, 'fifo-B-prepared-image.json'), preparedB);
+    put(transcriptFile, transcript(1));
+    json(path.join(session, '.meta.json'), {
+      local_time: '2026-10-01T12:00:00Z',
+      model: 'owner-fixture-model',
+      head_sha: 'fixture',
+    });
+    const policyFile = path.join(projectState, 'render-service.json');
+    const policySha256 = digest(fs.readFileSync(policyFile));
+    // Derive this from the selected inputs, independently of either image's
+    // manifest, as the ordinary prepareNativeRenderOffer consumer does.
+    const expectedSelection: typeof prepared.manifest.selection = {
+      canonicalProject: selected.canonical,
+      surface: 'codex',
+      event: 'stop',
+      configuration: 'system',
+      runtimeDigest: selected.runtimeDigest,
+      selectedIndex,
+      handlers: selected.handlers.map((handler) => ({ ...handler, args: [...handler.args] })),
+      libraries: Object.entries(selected.libraries)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([name, library]) => {
+          assert(library.kind === 'shared' || library.kind === 'surface');
+          return { name, path: library.path, sha256: library.sha256, kind: library.kind };
+        }),
+    };
+    const renderArguments = [
+      session,
+      project,
+      sessionId,
+      '2026-10-01T12:00:00Z',
+      'owner-fixture-model',
+      'main',
+      'fixture',
+      '0',
+      'fixture',
+      transcriptFile,
+      '',
+      '',
+    ];
+    const offers = [
+      { label: 'A', prepared },
+      { label: 'B', prepared: preparedB },
+    ].map(({ label, prepared: image }) => ({
+      label,
+      offer: {
+        schema: 'caws.render.owner.offer.v1',
+        prepared: image,
+        expectedSelection,
+        policySha256,
+        checkout: selected.checkout,
+        sessionId,
+        invocationId: 'render-owner-fifo:' + label,
+        callerEnvironment: env as Record<string, string>,
+        remainingBudgetMs: 120000,
+      } satisfies import('../dist/runtime/service-offer').NativeRenderOffer,
+      renderArguments,
+    }));
+    const pin = (file: string): Data => {
+      const bytes = fs.readFileSync(file);
+      return { path: file, sha256: digest(bytes), bytes: bytes.length };
+    };
+    json(
+      path.join(root, 'source-custody-prepared.json'),
+      sourceCustody(STERLING_SESSION_SOURCE_PROFILE)
+    );
+    const fixtureFile = path.join(root, 'prepared-fixture.json');
+    json(fixtureFile, {
+      schema: 'caws.qualification.render-owner.prepared-fixture.v1',
+      state: 'fixture_prepared',
+      adoption: 'NOT_ADOPTED',
+      artifactRoot: root,
+      ownerConfig,
+      project,
+      home,
+      sessionId,
+      transcriptFile,
+      offers,
+      inputs: {
+        nativeBuild: manifest.nativeBuild,
+        qualifier: manifest.qualifierExecution,
+        ownerConfig: pin(path.join(root, 'owner-config-input.json')),
+        selection: pin(path.join(root, 'selection.json')),
+        policy: pin(policyFile),
+        tools: pin(path.join(root, 'tools.json')),
+        sourceCustody: pin(path.join(root, 'source-custody-prepared.json')),
+        preparedImages: [
+          pin(path.join(root, 'initial-prepared-image.json')),
+          pin(path.join(root, 'fifo-B-prepared-image.json')),
+        ],
+        transcript: pin(transcriptFile),
+        meta: pin(path.join(session, '.meta.json')),
+      },
+      nonclaims: [
+        'native image admission/publication or actor execution',
+        'renderer ordering, store settlement, or ordinary renderer output',
+        'full qualification, cross-session fairness, or Python retirement',
+        'machine installation/adoption',
+      ],
+    });
+    manifest.preparedFixture = pin(fixtureFile);
+    manifest.adoption = 'NOT_ADOPTED';
+    fixturePrepared = true;
+    return;
+  }
   success(
     run(
       'owner-pristine-init',
@@ -1456,6 +1592,36 @@ void main()
     manifest.failureStack = error instanceof Error ? error.stack : String(error);
   })
   .finally(async () => {
+    if (prepareOnly) {
+      manifest.state =
+        fixturePrepared && failures.length === 0 && gaps.length === 0
+          ? 'fixture_prepared'
+          : 'failed';
+      manifest.cleanup = {
+        state: 'not_started',
+        reason: 'prepare-only does not launch native owner',
+      };
+      manifest.completedAt = new Date().toISOString();
+      persist();
+      process.stdout.write(
+        JSON.stringify(
+          {
+            artifactRoot: root,
+            manifest: path.join(root, 'manifest.json'),
+            state: manifest.state,
+            adoption: 'NOT_ADOPTED',
+            preparedFixture: manifest.preparedFixture ?? null,
+            failures,
+            evidenceGaps: gaps,
+            cleanup: manifest.cleanup,
+          },
+          null,
+          2
+        ) + '\n'
+      );
+      if (!fixturePrepared || failures.length || gaps.length) process.exitCode = 1;
+      return;
+    }
     if (monitor) clearInterval(monitor);
     try {
       cleanup = await awaitCleanup();
