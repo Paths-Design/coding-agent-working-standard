@@ -81,3 +81,9 @@ acceptance:
       0, and stderr names the payload stage both before and after the handler runs
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "handler-stdin-stage-lifetime.bats t1 ok on ce5ced6c; baseline 1169f7df not ok 1 at _no_stage_in; mutants m2 (appended newline, cmp) and m4 (never stage, kind!=file) red at t1. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/series-20261022T193531Z.json; attempts/*-candidate-ce5ced6c, *-baseline-1169f7df, *-m2-*, *-m4-*; pinned run-handlers blob 381f72f6, bash 3.2.57, bats 1.13.0"
+    recorded_at: "2026-10-22T19:39:33.296Z"
+    commit_sha: ce5ced6c
