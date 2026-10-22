@@ -186,6 +186,23 @@ acceptance:
       the non-repository directory stays ungoverned with exit 0 and no git-failure
       diagnosis; at 8dbe29c1 the failing-git and admin-loss foreign writes exited 0
       with empty output.
+  - id: A11
+    given: >-
+      a governed repository with real linked worktrees s-wt and f-wt owned by
+      different sessions, the canonical path src/claimed.ts claimed by the active
+      spec of f-wt, a tool farm carrying git, python3 and the core tools but no
+      node, and the guard tree under test copied with only the hook runtime node
+      discovery returning early (otherwise an installed node is found again)
+    when: >-
+      worktree-write-guard adjudicates a Write to src/claimed.ts from s-wt and from
+      the claimant f-wt, and a base-branch Write to src/new.ts from the canonical
+      root, with node and without it
+    then: >-
+      with node the s-wt write is refused 2 naming claimed:f-wt:src/claimed.ts, the
+      claimant write exits 0 and the base-branch write is asked about; without node
+      each of those writes, the claimant write included, is refused 2 with the node
+      diagnosis and block JSON; a directory without a worktree registry still exits
+      0 without node
 non_functional: {}
 contracts: []
 evidence:
