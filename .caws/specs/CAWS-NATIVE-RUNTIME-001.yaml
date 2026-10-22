@@ -311,9 +311,9 @@ evidence:
     commit_sha: b9ac7043
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "E254-257 sourceb9ac7043 and localmain49da7f50 equal741ef004 blob/SHA25604c7314201defa95cf9fa8a8e606bd0289838bf042ea8e2ca1638f75c3552e04, actualcmp0; progress254 closes2PASS. Mutationbindingd5/03d closed4PASS with realbuild/Stryker/sandbox385 baseline/2678discovered0executed. Unused publicationclient2a9/09a closed3PASS with four discriminator red cases then177 controlledchecks0; no actual native publication, ordinary dispatch/sealer/current reader or retired whole Python row. Original parent33/37partial0/8 remains; all destinations/architecture/actualconsumers and fullcutover still owed. Foreign native/preparer source clean and held for explicit human ownership answer; root integration lane remainsowned andclean. No retry of refused childwrites or root restore, no takeover/bypass. Existing guide docs063 hold and finalpack104 reconciliation remain root-owned."
-    recorded_at: "2026-10-22T09:43:20.021Z"
-    commit_sha: b9ac7043
+    evidence_ref: "Reviewed checkpoint8e72 source3800f59b/main d5030fa3 equal9b601e466edb81d760d6c131a6e73fb75d4d9212; actual workingcmp0 SHA256bec6e12f1a88f1620bb0d7cfa70e90764a7b30ad659272a2593ef8ff425f56da; finite docunit closed2PASS. E255 awaits actual observer/API ordinary qualification; E256 dd27 prefix discovery427/actualCLIrefusal/16unchanged/helper22 each is bounded with earlier-syntax actualevent proof open. Unused client2a9/source09a closed3PASS/177 controlledchecks only. Wholeparent0/8,33/37partial; no wholePython retirement/native publication/consumer/cutover acceptance. Foreign native/preparer cleanownership hold persists; guide063/finalpack104 and coherent architecture remain rootowed."
+    recorded_at: "2026-10-22T10:36:44.769Z"
+    commit_sha: "3800f59bcdd9b9a260c6cd9eea2f3f99d2290c87"
   - criterion_id: A4
     status: unchecked
     evidence_ref: "License transport292/source1d004 is a packaging prerequisite: actual ordinary tar/private full snapshot carries three exact notices with finite cleanup ownership; strict dependency audit1 retained for two empty cache directories. Native entry candidate293 CLI172/0 and Rust10/0 are bounded checks with sentinel programs. No complete production Python row retired; guards still use Python normalization/parser, actual no-first-party-Python package and normal consumers remain owed."
