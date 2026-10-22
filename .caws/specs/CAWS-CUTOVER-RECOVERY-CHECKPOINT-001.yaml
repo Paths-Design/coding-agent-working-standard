@@ -18,8 +18,10 @@ invariants:
   - 'Keep33of37 partial coverage and parent0of8 acceptance; historical packages do not qualify repaired source or native adoption'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'committed recovery and observer candidates with retained failed and corrected checks'
+    when: 'the existing tracker is reconciled'
+    then: >-
+      source mechanisms tested boundaries R14 status owners and exact outstanding
+      combined or ordinary validation match primary evidence
 non_functional: {}
 contracts: []
