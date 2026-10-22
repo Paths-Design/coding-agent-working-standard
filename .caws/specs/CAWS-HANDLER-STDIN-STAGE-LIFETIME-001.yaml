@@ -107,3 +107,8 @@ evidence:
     evidence_ref: "t6 ok on ce5ced6c (32768 chars -> pipe, 32769 -> regular file, wc exact); m6 (>= 32768) not ok 6 at kind=file for 32768; m2 not ok 6 at wc 32769. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/attempts/*-m6-bound-ge-ce5ced6c/run.tap"
     recorded_at: "2026-10-22T19:39:40.525Z"
     commit_sha: ce5ced6c
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "t8 ok on ce5ced6c (rm stub refuses only */caws-handler-stdin-*/payload: status 0, bytes exact, payload present during and after, payload named on stderr >= 2 times); prior a5b4baee not ok 8; m7 (presence check removed) not ok 8. ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/attempts/*-m7-no-presence-check-ce5ced6c/run.tap"
+    recorded_at: "2026-10-22T19:39:43.678Z"
+    commit_sha: ce5ced6c
