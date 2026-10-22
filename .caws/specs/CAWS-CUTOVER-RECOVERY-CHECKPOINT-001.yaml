@@ -23,5 +23,9 @@ acceptance:
     then: >-
       source mechanisms tested boundaries R14 status owners and exact outstanding
       combined or ordinary validation match primary evidence
+  - id: A2
+    given: 'the reviewed tracker checkpoint'
+    when: 'normal source and local main publication complete'
+    then: 'both tracker blobs and working files match without advancing parent acceptance'
 non_functional: {}
 contracts: []
