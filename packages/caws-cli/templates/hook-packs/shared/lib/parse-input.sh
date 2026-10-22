@@ -71,8 +71,9 @@ _hook_payload_transport() {
 # for this dispatch (a bounded overshoot) rather than dropping the bytes or
 # blocking the tool call. Only whole payloads are ever written; no handler can
 # observe a truncated file presented as complete.
-# Registered in CAWS_TEMP_FILES so a dispatcher that sources
-# runtime-paths.sh removes it on exit.
+# The EXIT trap below removes the file; bash also runs that trap on TERM, INT and
+# HUP, but nothing runs on KILL. The path is appended to CAWS_TEMP_FILES too, and
+# no shipped dispatcher consumes that list.
 _write_payload_file() {
   local payload="${1:-}"
   local dir="${TMPDIR:-/tmp}"

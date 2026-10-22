@@ -609,7 +609,8 @@ import { isAdapterCoveredSurface } from './types';
 // v103: contention command failures retain the existing unknown-observation
 // allowlist and approval policy instead of exiting before either policy runs.
 // v104: heartbeat message provenance reads the canonical sender specId field.
-export const SHARED_PACK_VERSION = 104;
+// v105: refresh captured invocation custody and per-handler stdin stage cleanup.
+export const SHARED_PACK_VERSION = 105;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

@@ -3,6 +3,11 @@ name = "caws-native"
 version = "0.1.0"
 edition = "2024"
 publish = false
+default-run = "caws-native"
+
+[[bin]]
+name = "caws-hook-native"
+path = "src/installed_entry_main.rs"
 
 [features]
 default = []

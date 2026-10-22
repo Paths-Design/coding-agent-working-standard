@@ -36,7 +36,11 @@ _run_chain_with_payload() { # $1 = payload string, $2 = count file
   printf '#!/bin/bash\nwc -c < /dev/stdin > "$COUNT_FILE" 2>/dev/null\nexit 0\n' \
     > "$fake_dir/echo-size.sh"
   chmod +x "$fake_dir/echo-size.sh"
+  # A TMPDIR inside the test directory keeps any stage this chain writes out of
+  # the machine's real TMPDIR.
+  mkdir -p "$BATS_TEST_TMPDIR/chain-tmp"
   run env COUNT_FILE="$2" HOOKS_DIR="$fake_dir" HOOK_INPUT_JSON="$1" \
+    TMPDIR="$BATS_TEST_TMPDIR/chain-tmp" \
     bash -c 'source "'"$CAWS_TEST_HOOKS_DIR"'/lib/run-handlers.sh"; run_handlers echo-size.sh'
 }
 
