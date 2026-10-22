@@ -274,7 +274,7 @@ evidence:
     commit_sha: "0a4cbe79"
   - criterion_id: A11
     status: pass
-    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 from the template dir and 58/58 against the installed pack) tests 22-25: in the simulated tree the guard runtime discovery finds no node (the shipped discovery finds /usr/local/bin/node with the same PATH; only runtime-paths.sh differs, checked by diff -r); with node the s-wt Write to claimed src/claimed.ts exits 2 naming claimed:f-wt:src/claimed.ts, the claimant f-wt write exits 0 and the base-branch src/new.ts write is asked about; without node the s-wt, claimant and base-branch writes exit 2 with the node diagnosis and block JSON; a directory without a registry exits 0. Red at 7d49da1d: run-34-node-red/bats.tap (sha b6f1e14f) no-node claimed and base-branch writes exit 0 empty. Mutants run-36-node-mutants/mutants.tap (sha 4f23775a): revert to exit 0 killed by 23-24; refusal before the registry check killed by 25; ask instead of refusal killed by 23-24. Not covered: a real machine without node; a node that is present but failing."
-    recorded_at: "2026-10-22T05:41:02.764Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
-    commit_sha: "821bdeef"
+    evidence_ref: "run-41-terminal-0a4cbe79/serial.tap (sha ae48521d; candidate 0a4cbe79 clean; 60/60 template dir and 60/60 installed pack; 9 regression suites equal to baseline, base reds claim-oracle-cwd-relative 8-12 and parse-input 1,3 unchanged) tests 24-27: simulated tree has no node (only runtime-paths.sh differs); with node claimed s-wt write 2 claimed:f-wt:src/claimed.ts, claimant 0, base-branch ask; without node all three refused 2 with the node diagnosis and block JSON; registry-less directory 0. Red run-34-node-red (sha b6f1e14f); mutants run-36-node-mutants (sha 4f23775a) all killed. Not covered: a real node-free machine; a failing node."
+    recorded_at: "2026-10-22T06:10:28.116Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-41-terminal-0a4cbe79/serial.tap"
+    commit_sha: "0a4cbe79"
