@@ -2,7 +2,6 @@ id: CAWS-CUTOVER-RECOVERY-CHECKPOINT-001
 title: 'Retain recovery repair and observer failed-check checkpoints'
 mode: doc
 lifecycle_state: active
-worktree: cutover-recovery-main
 created_at: '2026-10-22T11:23:39.459Z'
 updated_at: '2026-10-22T11:25:23.748Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
