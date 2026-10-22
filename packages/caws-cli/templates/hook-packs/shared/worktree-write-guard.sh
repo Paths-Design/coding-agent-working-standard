@@ -69,6 +69,11 @@ _wwg_git_refuse() {
   printf '{"decision":"block","reason":"CAWS worktree-write-guard: git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing closed. Restore git on PATH."}\n'
   exit 2
 }
+_wwg_node_refuse() {
+  echo "[worktree-write-guard] node is not available on PATH, so the worktree registry and canonical scope claims cannot be read. Failing CLOSED (refusing the write). Restore node on PATH." >&2
+  printf '{"decision":"block","reason":"CAWS worktree-write-guard: node is not available on PATH, so the worktree registry and canonical scope claims cannot be read. Failing closed. Restore node on PATH."}\n'
+  exit 2
+}
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR, CAWS_VENDOR_DIR, and caws_source_lib — load-bearing.
 # Must come before caws_source_lib calls. Guard the source (a fatal `source
@@ -326,7 +331,7 @@ if [[ -n "$FILE_PATH" ]]; then
   # check in the base-branch section. There, a CLAIMED allowlisted path blocks
   # (scope.in wins); a CLEAR or UNDETERMINED allowlisted path exits 0 (the
   # allowlist permits when unclaimed, and a toolchain fault must not block).
-  # The early exits below (no worktrees.json, no node, inside worktree,
+  # The early exits below (no worktrees.json, inside worktree,
   # registered worktree, WT_COUNT 0) all exit 0, so an allowlisted path is
   # still allowed in those contexts — scope.in only overrides on the base
   # branch where cross-worktree contention is the concern.
@@ -343,9 +348,9 @@ fi
 if [[ ! -f "$PROJECT_DIR/.caws/worktrees.json" ]]; then
   exit 0
 fi
-if ! command -v node >/dev/null 2>&1; then
-  exit 0
-fi
+# Node reads the registry and the canonical scope claims below. Without it
+# neither can be read, which is not the same as no claim and no worktree.
+command -v node >/dev/null 2>&1 || _wwg_node_refuse
 
 _WWG_AGENT_RAW="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 caws_guard_realpath_into AGENT_DIR "$_WWG_AGENT_RAW" || _wwg_normalize_refuse "operating directory" "$_WWG_AGENT_RAW"
