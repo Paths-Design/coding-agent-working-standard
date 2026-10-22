@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-22T01:48:39.622Z'
+updated_at: '2026-10-22T01:55:02.247Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -131,8 +131,6 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
     - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
-    - packages/caws-cli/src/init/machine-adapters.ts
-    - packages/caws-cli/tests/adapter/machine-runtime.test.js
   support:
     - packages/caws-cli/reports/
     - package.json
@@ -242,6 +240,7 @@ scope:
     - packages/caws-cli/src/runtime/session-cache-admission.ts
     - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
     - packages/caws-cli/tests/runtime/handler-executor.test.js
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
