@@ -46,10 +46,12 @@ function readJson(file, label) {
   }
 }
 
-function normalizeReportPath(file, report) {
+function normalizeReportPath(file, report, inputIdentity) {
   const normalized = file.split(path.sep).join('/');
   if (!path.isAbsolute(normalized)) return normalized.replace(/^\.\//, '');
-  const root = report.projectRoot ? path.resolve(report.projectRoot) : packageRoot;
+  const root =
+    inputIdentity?.packageRoot ||
+    (report.projectRoot ? path.resolve(report.projectRoot) : packageRoot);
   return path.relative(root, normalized).split(path.sep).join('/');
 }
 
@@ -62,11 +64,15 @@ function countStatuses(mutants) {
   return counts;
 }
 
-function appendSummary(file, surfaceId, sha, verdicts, passed) {
+export function appendSummary(file, surfaceId, sha, verdicts, passed, inputIdentity = null) {
   const rows = [
-    `## Mutation proof: ${surfaceId}`,
+    `## Mutation score: ${surfaceId}`,
     '',
-    `Tested SHA: \`${sha}\``,
+    `Descriptive SHA (not verified): \`${sha}\``,
+    '',
+    inputIdentity
+      ? `Captured input digest: \`${inputIdentity.digest}\``
+      : 'Offline score calculation; no build or execution binding.',
     '',
     '| Target | Score | Detected / valid | Verdict |',
     '| --- | ---: | ---: | --- |',
@@ -80,7 +86,7 @@ function appendSummary(file, surfaceId, sha, verdicts, passed) {
   fs.appendFileSync(file, `${rows.join('\n')}\n`, 'utf8');
 }
 
-export function assertMutationReport({ policy, surfaceId, report }) {
+export function assertMutationReport({ policy, surfaceId, report, inputIdentity = null }) {
   const errors = [];
   const verdicts = [];
   const surface = policy.surfaces && policy.surfaces[surfaceId];
@@ -102,6 +108,8 @@ export function assertMutationReport({ policy, surfaceId, report }) {
       verdicts,
     };
   }
+  if (inputIdentity && (!Array.isArray(surface.tests) || surface.tests.length === 0))
+    errors.push('bound mutation surface declares no tests');
 
   if (Array.isArray(surface.tests)) {
     if (!report.testFiles || typeof report.testFiles !== 'object') {
@@ -109,8 +117,36 @@ export function assertMutationReport({ policy, surfaceId, report }) {
     } else {
       const expectedTests = new Set(surface.tests.map((file) => file.replace(/^\.\//, '')));
       const reportTests = new Set(
-        Object.keys(report.testFiles).map((file) => normalizeReportPath(file, report))
+        Object.keys(report.testFiles).map((file) =>
+          normalizeReportPath(file, report, inputIdentity)
+        )
       );
+      if (inputIdentity) {
+        if (reportTests.size !== Object.keys(report.testFiles).length)
+          errors.push('duplicate normalized report test paths');
+        for (const [reportedPath, result] of Object.entries(report.testFiles)) {
+          const file = normalizeReportPath(reportedPath, report, inputIdentity);
+          if (typeof result?.source !== 'string' || result.source !== inputIdentity.tests?.[file]) {
+            errors.push(`${file} test source does not match captured input`);
+          }
+          if (!Array.isArray(result?.tests) || result.tests.length === 0)
+            errors.push(`${file} has empty discovered tests`);
+          else if (
+            result.tests.some(
+              (test) =>
+                !test ||
+                typeof test !== 'object' ||
+                Array.isArray(test) ||
+                !Object.hasOwn(test, 'id') ||
+                typeof test.id !== 'string' ||
+                !Object.hasOwn(test, 'name') ||
+                typeof test.name !== 'string'
+            )
+          ) {
+            errors.push(`${file} has malformed discovered test definition`);
+          }
+        }
+      }
       for (const file of expectedTests) {
         if (!reportTests.has(file)) errors.push(`missing report test file ${file}`);
       }
@@ -123,10 +159,12 @@ export function assertMutationReport({ policy, surfaceId, report }) {
 
   const reportFiles = new Map(
     Object.entries(report.files).map(([file, result]) => [
-      normalizeReportPath(file, report),
+      normalizeReportPath(file, report, inputIdentity),
       result,
     ])
   );
+  if (inputIdentity && reportFiles.size !== Object.keys(report.files).length)
+    errors.push('duplicate normalized report source paths');
   const expected = new Set();
 
   for (const target of surface.targets) {
@@ -137,6 +175,13 @@ export function assertMutationReport({ policy, surfaceId, report }) {
       errors.push(`missing report entry for ${file}`);
       verdicts.push({ file, detected: 0, valid: 0, score: null, passed: false });
       continue;
+    }
+    if (
+      inputIdentity &&
+      (typeof result.source !== 'string' ||
+        result.source !== inputIdentity.targets?.[target.source])
+    ) {
+      errors.push(`${file} source does not match captured input`);
     }
     if (!Array.isArray(result.mutants)) {
       errors.push(`${file} report entry has no mutants array`);
@@ -207,6 +252,9 @@ function main(argv) {
     const policy = readJson(options.policy, 'mutation policy');
     const report = readJson(options.report, 'mutation report');
     const result = assertMutationReport({ policy, surfaceId: options.surface, report });
+
+    console.log('Offline mutation score calculation; no build or execution binding.');
+    console.log(`Descriptive SHA (not verified): ${options.sha}`);
 
     for (const verdict of result.verdicts) {
       if (verdict.score !== null && verdict.passed) {
