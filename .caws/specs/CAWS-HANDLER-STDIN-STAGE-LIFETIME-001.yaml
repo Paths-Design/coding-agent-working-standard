@@ -54,9 +54,11 @@ acceptance:
     when: 'run_handlers runs a reading handler'
     then: 'The handler receives the payload byte for byte through the pipe fallback and no stage file remains'
   - id: A5
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given a payload of at most 32768 characters, when run_handlers runs, then the historical pipe path delivers it and no stage file is created'
+    given: 'Inline payloads of exactly 32768 and 32769 characters'
+    when: 'run_handlers runs a reading handler on each'
+    then: >-
+      The 32768-character payload arrives through a pipe and the 32769-character
+      payload through a regular file, each byte for byte, and no stage file remains
   - id: A6
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
