@@ -93,3 +93,9 @@ evidence:
     recorded_at: "2026-10-22T10:32:14.674Z"
     artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-03/execution.json"
     commit_sha: "6703e691fe5d7c8d10bba40b0777e4b7eba4f196"
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "OPEN coordinated ordinary positive, distinguishing pre-capture atomic-write semantic negative and restored sequence. 199 inspected mechanics fixture directories are retained, but no actual ordinary Stryker run for this source unit, no child-process or full-campaign qualification."
+    recorded_at: "2026-10-22T10:32:16.084Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-02/inspected-artifacts.json"
+    commit_sha: "6703e691fe5d7c8d10bba40b0777e4b7eba4f196"
