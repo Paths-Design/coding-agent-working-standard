@@ -45,9 +45,9 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Committed four-document candidate 063991aa. Root source-grounded decoder/exits, dispatcher mandatory write versus optional pin, startup-binding policy and three-suite/six-target per-file 80 mutation recipe. Independent read-only review of 5a504111 found no material mismatch; source owner reviewed both commits and the precise startup-binding correction at 063991aa. Formatter, diff checks and scoped gates passed; doctor exit 0 with 0 errors, 3 warnings, 4 informational findings. Commit verification checks reachability, not semantic correctness. No native execution or source availability on main is inferred."
-    recorded_at: "2026-10-21T21:55:20.289Z"
-    commit_sha: "063991aa2da021bd6eca9aff3714f8105041fcfb"
+    evidence_ref: "Four-document candidate063 plus guide3f6f234c retainedentry append. Root source-grounded bfb548e6 sharedcapture/metadata/installer/observer/selectedtarget verification plus raw34old controls15semanticfail, dangling2red, TEN561pass2legacyfail, Pythonannotation1fail→4pass and correctedSessionStart2pass. Independent committedguide review foundno conflictingclaim at385-399 and exactR01sourcecoordinates. ScopedfivegatesPASS4paths, prettier/diff0. FinalTENbfb rerun/combinedsource/nativeexecution remainopen; guide neitherclaims those nor publisherauth."
+    recorded_at: "2026-10-22T11:25:00.706Z"
+    commit_sha: "3f6f234c"
   - criterion_id: A2
     status: pass
     evidence_ref: "At 063991aa, README, shared-core architecture, hook-packs and command-analysis guidance explicitly separate implemented bounded analysis from proposed final-launch custody, reduced Codex producer qualification and required native canary/rollback. Root grounded against actual source and source-owner feedback; deployed runtime remains unchanged. Reachability verification is not native adoption evidence."
