@@ -1,0 +1,67 @@
+id: CAWS-HOOK-INGRESS-CUSTODY-F1F2-001
+title: 'Decide mail custody from the original hook bytes; inherited HOOK_* env never vouches'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-22T21:51:53.116Z'
+updated_at: '2026-10-22T21:51:53.116Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/templates/hook-packs/shared'
+    - 'packages/caws-cli/templates/hook-packs/codex/hooks/lib'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh'
+    - 'packages/caws-cli/templates/hook-packs/codex/hooks/lib/parse-input.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/pre_tool_use.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/post_tool_use.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/pre_compact.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/session_start.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/session_end.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/stop.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/runtime-paths.sh'
+    - 'packages/caws-cli/tests/hooks/heartbeat-actor-custody.test.js'
+    - 'packages/caws-cli/tests/hooks/bats/dispatch-ingress.bats'
+  out: []
+invariants:
+  - 'No environment value inherited by a dispatcher or handler is ever trusted toward a main or subagent custody verdict; an inherited value can only make custody uncertain'
+  - 'The bytes handed to the nine guard handlers stay identical across slots and equal to the current re-serialized payload; guard execution and their refusal semantics are unchanged'
+  - 'SHARED_PACK_VERSION, pack-fingerprints.json, run-handlers.sh, runtime/caws-hook.py, runtime/dispatch.sh and src/runtime are not edited by this spec'
+acceptance:
+  - id: A1
+    given: 'the real dispatch/pre_tool_use.sh under env -i with recorder slots'
+    when: 'stdin carries a raw NUL inside the agent_id key (c3) or a 0xFF byte inside a string (c5)'
+    then: 'the heartbeat classifies uncertain and no mail offer is made, where at 7195f14f both read main'
+  - id: A2
+    given: 'subagent bytes on stdin and a preset HOOK_INPUT_JSON naming session spoof-s (c9)'
+    when: 'the dispatcher runs'
+    then: 'the heartbeat classifies subagent, HOOK_SESSION_ID is the stdin session, and every handler receives the stdin payload, not the preset'
+  - id: A3
+    given: 'an inherited HOOK_TOOL_NAME, set or empty, with HOOK_SESSION_ID parent-s (c8, c14, c15)'
+    when: 'the dispatcher runs'
+    then: 'it exits 0, every handler receives the real payload bytes, and custody is subagent for subagent bytes and main for a main object'
+  - id: A4
+    given: 'main, subagent, spilled and 40 KiB inline payloads (c1, c2, c10, c11)'
+    when: 'the dispatcher runs'
+    then: 'custody, HOOK_COMMAND, handler stdin sha per slot and zero TMPDIR residue are unchanged from 7195f14f'
+  - id: A5
+    given: 'a TMPDIR where the raw capture cannot be created or unlinked'
+    when: 'the dispatcher runs'
+    then: 'parsing proceeds, the dispatcher exits 0, the heartbeat classifies uncertain and the failure is named on stderr'
+  - id: A6
+    given: 'agent-heartbeat.sh invoked directly with HOOK_TOOL_NAME preset and subagent bytes on stdin'
+    when: 'it runs'
+    then: 'it classifies subagent exactly as at 7195f14f'
+  - id: A7
+    given: 'the rewritten heartbeat-actor-custody.test.js and the new dispatch-ingress.bats'
+    when: 'each control row is negated in turn'
+    then: 'the corresponding test fails, with TAP or jest output retained'
+observability:
+  - 'Per-case recorder output under ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/<stamp>-<sha>/ with heartbeat.actor, handler stdin sha per slot, exit status and TMPDIR listing'
+rollback:
+  - 'revert the lane merge commit; the pack bump that carries it is recorded separately by root'
+non_functional: {}
+contracts: []
