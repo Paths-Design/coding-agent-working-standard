@@ -182,9 +182,9 @@ evidence:
     commit_sha: "8dbe29c1"
   - criterion_id: A3
     status: pass
-    evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) test 47: neither guard command-substitutes _realpath, caws_guard_realpath, abspath or resolve_canonical_dir, and every caws_guard_realpath_into/abspath_into/caws_resolve_canonical_dir_into line carries a _wwg/_bwg refusal; tests 32 and 40: the identity-drop tree (caws_guard_realpath_into assigning _realpath output) admits the foreign write and mutation with exit 0 under failing and absent python3. Bound: text scan of these two guards only."
-    recorded_at: "2026-10-22T03:18:14.307Z"
-    commit_sha: "4ac64fbf"
+    evidence_ref: "At 8dbe29c1, /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-26-8dbe29c1/serial.tap (sha 65d5c249; TERMINAL 51/51 template dir, guard-realpath 51/51 installed pack) test 51: no command substitution of _realpath, caws_guard_realpath, abspath or resolve_canonical_dir; every caws_guard_realpath_into/abspath_into/caws_resolve_canonical_dir_into line carries a _wwg/_bwg refusal; tests 36 and 44: the identity-drop tree admits with exit 0 under failing and absent python3. Bound: text scan of the two guards; helper fallbacks (physical dir to raw spelling, git path to empty) are exempt by design."
+    recorded_at: "2026-10-22T04:08:18.351Z"
+    commit_sha: "8dbe29c1"
   - criterion_id: A4
     status: pass
     evidence_ref: "At 8dbe29c1, /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-26-8dbe29c1/serial.tap (sha 65d5c249; TERMINAL 51/51 template dir, guard-realpath 51/51 installed pack) tests 40-43: bwg foreign mutation through dotdot python3 present exit 2 ownership refusal; owner exit 0; failing exit 2 python3-exit-1 with project root refusal line; absent exit 2 python3-unavailable with project root refusal line and block JSON. Analysis CLI = shell-owner dist at 5ace5a52. Bounds as A1."
