@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-21T23:56:02.650Z'
+updated_at: '2026-10-22T00:28:44.123Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -140,6 +140,8 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
     - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
+    - packages/caws-cli/src/init/machine-adapters.ts
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
   support:
     - packages/caws-cli/reports/
     - package.json
