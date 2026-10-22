@@ -31,11 +31,11 @@ passing unit tests, or the existence of this document.
 
 This working ledger is published on `main` independently of candidate source.
 The integration branch is `native-runtime-modernization`; its source-tree
-checkpoint is `87b70fccb620eab679cac357a27cd0fcdba3f357`. Later branch commits
+checkpoint is `cc95efeb415e56989635e6fe5cc2bbb84ff29a3b`. Later branch commits
 that change only this ledger leave that checkpoint unchanged. Evidence entries
 identify their actual component branch or historical revision. Publishing this
 document does not land those implementations on `main`. Inspect the candidate
-architecture with `git show 87b70fcc:docs/architecture/caws-native-runtime.md`;
+architecture with `git show cc95efeb:docs/architecture/caws-native-runtime.md`;
 the relative architecture link follows the branch containing this document.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
@@ -259,7 +259,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | bounded preparation accepted and landed, E225; frontend settlement retained, E231; production renderer unreplaced                                 | Selected numeric/catch/spill and output boundaries exercised at199fa5e. Native publication/current-attempt admission, real SessionEnd consumption, production calendar, context-bound freshness, packaging and installed rendering remain open; E147/E165 partial-publication counterexamples are not closed by preparation.                                                                                                  |
 | R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                           | 15 executable shell consumers, 19 inline bodies and seven external callsites; the [embedded inventory](#embedded-and-developer-implementation-coverage) groups them and excludes textual interpreter mentions                                                                                                                                                                                                                 |
 | R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity, hook-harvest and replay leaves accepted, landed and integrated; three original paths unreplaced                          | E134/E144/E148/E163 retain bounded reference profiles, deliberate repairs and raw failed/successful artifacts. E151/E163 integrate the exact source and Python deletions; qualify-render-daemon.py, qualify-transcript-cache.py and source_freshness.py remain; component progress is not parent acceptance                                                                                                                   |
-| R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | one test-module retirement integrated, E170; remaining corpus unreplaced                                                                          | Integration source `10690d4b`: twelve test modules plus conftest (13 tracked pytest files). `main` adds `test_template_annotation_compat.py` at `8a758936` (thirteen modules plus conftest), which the integration branch lacks. Preserve independent hostile oracles and checked failure causes                                                                                                                              |
+| R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | two test-module retirements integrated, E170/E236; remaining corpus unreplaced                                                                    | Integration source `cc95efeb`: eleven test modules plus conftest (12 tracked pytest files). Main has twelve modules plus conftest because `test_template_annotation_compat.py` remains main-only. Preserve independent hostile oracles and checked failure causes; production guard dependencies remain Python.                                                                                                               |
 | R22 | Tracked installed `.caws/hooks` Python copies                                                                       | Governed self-host/runtime adoption                                        | unreplaced                                                                                                                                        | Fourteen copies identified; do not edit generated/governed installation by hand                                                                                                                                                                                                                                                                                                                                               |
 | R23 | Rust client / versioned local protocol                                                                              | `packages/caws-native` + TS protocol                                       | POSIX one-shot transport/cancellation and bounded actual-engine replay tested; macOS pre-Ready frontend-death custody observed, E145              | E156 observes ordinary typed-engine/renderer replay and E162 one after-Ready/dispatch frontend loss; closed-pipe nonleader settlement, other loss phases/surfaces, descriptor leakage, resident IPC, bounded Stop recovery and installed parity remain open                                                                                                                                                                   |
 | R24 | One-shot typed engine                                                                                               | `packages/caws-cli/src/runtime`                                            | opt-in prototype; isolated nonlatching Codex branch exercised                                                                                     | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified                                                                                                                                                                                                                                                |
@@ -5853,10 +5853,60 @@ Additional bounded evidence and unresolved dependencies:
   not installed-dispatcher, native-harness or Bash-consumer proof. Root owns
   A4/A5/A7 consequences and a checked-normalization repair preserving
   Python-success behavior, with explicit caller refusal2 on unavailable or
-  failed normalization. Implementation awaits the source owner's exact file
-  handoff and a normal bound child; the draft defect grants no write authority.
-  The Python-dependent payload-parser sibling remains unexecuted, and complete
-  no-Python refusal parity is open. The selected408 runtime is unchanged.
+  failed normalization. The normally bound child
+  `CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01` carries committed candidate
+  `73166c16`; source-owner integration, late-path evidence inspection, pack
+  fingerprints, native library pins and the combined guard/docs qualification
+  remain open. A child's recorded acceptance does not establish that
+  integration. The Python-dependent payload-parser sibling remains unexecuted,
+  and complete no-Python refusal parity is open. The selected408 runtime is
+  unchanged.
+
+- E235: Canonical transcript mutation registration and finite public export
+  consumers integrate at `ff3c6180` from `90553b82`, with child acceptance A1–A3
+  and close/merge/destroy events10666–10671 read back. Root verifies the clean
+  linked parent index/worktree against its old `5990334c` preimage, then safely
+  synchronizes both to the new ref; all three candidate blobs match. Source
+  count192, targets21 and surfaces3 include the timestamp in the ordinary store
+  profile: six sources, nine selected tests, unchanged80 per-file floor, no
+  incremental evidence. The original private `49329541` commands record build0,
+  validator0,93 focused CI/timestamp checks0 and286 strict transcript checks0.
+  Four isolated omission/export controls fail at their intended assertions;
+  actual public consumers retain the9007199254740993 lexeme, raw bytes,
+  caller-asserted coordinates, forged-row refusal,4300/4301 digit boundary and
+  Unicode near misses. A later two-line count-oracle repair has fresh25 CI
+  checks0: a valid192/121/3 policy passes the validator and falsely passes the
+  old topology assertion, but fails the repaired exact21 assertion. Root reads
+  both raw phases and the committed delta; unchanged runtime/export evidence
+  remains explicitly attributed to493, not fresh905 execution. Artifacts:
+  `/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/`.
+  The registration is complete; full canonical six-source mutation execution,
+  per-file quality, CI, complete generator correctness and installed/native
+  qualification remain parent obligations. This unit changes neither33/37
+  partial coverage nor0/8 parent acceptance.
+
+- E236: The R21 claim-oracle regression replacement `c66730a3` lands on main at
+  `5af9757e`; close/merge/destroy events10663–10665 and exact test blob
+  `795947e87b48ad595321aeaa24a200af48731f19` are independently read back.
+  Integration commit `cc95efeb` imports exactly that Jest file and deletes its
+  pytest predecessor. The integrated-source Jest command exits0 with15 checks,
+  including actual shipped Bash-guard refusal2 naming the foreign claimant and
+  sibling admission0 with empty stdout, excluding an approval request. Raw
+  output and JSON are retained under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/cutover-progress-235/`.
+  Independent source/raw inspection preserves all ten original cases and the
+  exact444→434 collection delta. Earlier Git fixture escape and false admission
+  oracles are reproduced before their repairs; committed fixtures strip
+  inherited Git overrides and isolate Git configuration. Four controls
+  respectively break containment/consumer refusal, degradation, segment matching
+  and ask-versus-pass admission. Original artifacts and transcript-derived
+  command/exit receipts:
+  `/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/r21-claim-oracle/`.
+  Those receipts are not complete process-environment capture or npx dependency
+  identity. Matching finite pattern samples do not prove all-string equivalence;
+  a guarded command is adjudicated without executing its mutation. Remaining
+  pytest modules and the tested guard's Python dependencies remain obligations.
+  No production Python row, installed/native result or parent criterion closes.
 
 The terminal bridge's CLI build, six focused suites (118 checks), Rust library,
 binary and executable suites (29/13/23 checks), strict Clippy and scoped lint
@@ -6001,54 +6051,57 @@ progress and does not replace that transaction or its event readback.
    context qualification. E218 carries recognized oversize and early transport
    refusals without a budget namespace bypass. E226 lands the pinned-profile
    year-addition extension and compares all25 former exclusions without
-   rewriting historical observations. Its timestamp mutation target remains
-   unregistered. Chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` owns the authorized
-   three-path policy/CI/export-consumer component
-   `CAWS-TRANSCRIPT-MUTATION-POLICY-001`: `mutation-policy.json`,
-   `tests/ci/mutation-contract.test.js` and `tests/transcripts/exports.test.ts`
-   under `packages/caws-cli`. Root retains integration and canonical mutation
-   qualification. Complete classification of the 31 additional sources must
-   retain meaningful consumer evidence; validator success, dry-run selection and
-   generated-table consumer checks do not prove executed mutation quality or
-   full regeneration integrity. E227 retains the build refusal before execution;
-   resolve final-launch custody through a supported contract before root
-   executes the stable native REAL boundary. Preserve the prepared fixture and
-   exact expected error rather than infer live parity from pure arithmetic. E231
-   preserves the complete acquisition through later frontend failure and
-   documents that bounded lifetime; its component is accepted and integrated.
-   Implement a surviving owner for acquisition settlement and single-use
-   exhausted-and-settled publication. The store call in `main.rs` owns
-   acquisition in the transient frontend, while `render_owner.rs`'s resident
-   actor separately owns writer custody; the engine custodian proxies bytes
-   without original store context. A local return object cannot transfer
-   authority across those processes. Establish native-original registration and
-   a bounded row/control/publication exchange in the surviving owner; generic
-   confirmed close does not grant a permit. Integrate atomic projection
-   publication under compatible continuous writer custody before the actual
-   renderer opens its source, followed by receipt serialization/delivery as
-   distinct outcomes. E213 records why a separate recursively acquired publisher
-   lock or an early unlock is insufficient. E210 requires retaining publication
-   truth even when later receipt encoding fails; no failed invocation may select
-   an old projection. Connect this owner to the actual session-log renderer
-   consumer while preserving normalization, selected overrides and E165/E166
-   source/profile controls. E202/E206 component imports and E208–E215 finite
-   observations do not close complete native calendar/error/path/profile
-   behavior, WAL, asynchronous cleanup, release packaging or ordinary consumer
-   parity. R09's production consumer and R18 remain unreplaced. E214 retains the
-   incomplete-profile publication reference. E215 assigns coherent typed
-   preparation and preserves the actual-reader generation/closure obligation; a
-   prepared result cannot stand in for that integration. E219 grounds the exact
-   missing entry/selection/actor/reader connections. E225 lands the bounded
-   embedded-profile, owned-spill and output-conversion repairs; connect that
-   prepared API to native publication and the actual reader. Repair the
-   source-grounded SessionEnd usage-schema mismatch through its real metadata
-   consumer, preserving provider counts and top-level model ordering.
+   rewriting historical observations. E235 integrates the canonical timestamp
+   mutation registration and finite public export consumers at `ff3c6180`; full
+   six-source/nine-test store mutation execution and per-file quality remain
+   open. Chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` prepares that private
+   qualification from the ordinary package runner; root allocates two stable
+   workers under the shared ceiling and retains acceptance. Classification of
+   the 31 additional sources retains finite consumer evidence; validator
+   success, dry-run selection and generated-table consumer checks do not prove
+   executed mutation quality or full regeneration integrity. E227 retains the
+   build refusal before execution; resolve final-launch custody through a
+   supported contract before root executes the stable native REAL boundary.
+   Preserve the prepared fixture and exact expected error rather than infer live
+   parity from pure arithmetic. E231 preserves the complete acquisition through
+   later frontend failure and documents that bounded lifetime; its component is
+   accepted and integrated. Root's active `CAWS-RESIDENT-STORE-ACQUISITION-001`
+   component owns the next surviving-actor acquisition slice; its scoped edits
+   await the human response to the unsupported bulk-wrapper refusal, and no
+   resident acquisition is qualified. The refused wrapper remains unexecuted.
+   Follow that slice with single-use exhausted-and-settled publication. The
+   accepted store call in `main.rs` owns acquisition in the transient frontend,
+   while `render_owner.rs`'s resident actor separately owns writer custody; the
+   engine custodian proxies bytes without original store context. A local return
+   object cannot transfer authority across those processes. Establish
+   native-original registration and a bounded row/control/publication exchange
+   in the surviving owner; generic confirmed close does not grant a permit.
+   Integrate atomic projection publication under compatible continuous writer
+   custody before the actual renderer opens its source, followed by receipt
+   serialization/delivery as distinct outcomes. E213 records why a separate
+   recursively acquired publisher lock or an early unlock is insufficient. E210
+   requires retaining publication truth even when later receipt encoding fails;
+   no failed invocation may select an old projection. Connect this owner to the
+   actual session-log renderer consumer while preserving normalization, selected
+   overrides and E165/E166 source/profile controls. E202/E206 component imports
+   and E208–E215 finite observations do not close complete native
+   calendar/error/path/profile behavior, WAL, asynchronous cleanup, release
+   packaging or ordinary consumer parity. R09's production consumer and R18
+   remain unreplaced. E214 retains the incomplete-profile publication reference.
+   E215 assigns coherent typed preparation and preserves the actual-reader
+   generation/closure obligation; a prepared result cannot stand in for that
+   integration. E219 grounds the exact missing entry/selection/actor/reader
+   connections. E225 lands the bounded embedded-profile, owned-spill and
+   output-conversion repairs; connect that prepared API to native publication
+   and the actual reader. Repair the source-grounded SessionEnd usage-schema
+   mismatch through its real metadata consumer, preserving provider counts and
+   top-level model ordering.
 5. Resume the unchanged13-session/four-repository/1000-hot-turn fairness
    workload only after the owning consumer change and cleanup evidence justify
    it. Complete lifecycle, legacy-writer drain, packaging, upgrade/rollback and
    machine adoption remain required before parent acceptance and retirement.
 
-E167–E234 retain the historical candidates, failures and bounded observations;
+E167–E236 retain the historical candidates, failures and bounded observations;
 the ordered work above governs the next execution. Coverage is33/37 and parent
 acceptance0/8. Root updates row state and this order with each durable change;
 component closure alone does not establish integration or installation.
@@ -6246,7 +6299,7 @@ operational correctness or selected execution.
 | `README.md`, `hook-pack-shared-core.md`, `hook-packs.md`, `command-analysis.md` | Four-file candidate `063991aa` is committed and reviewed, E230.                                          | Land coherently with qualified guard source; reconcile the checked-normalization interface and command-specific failure exits before final checks.                                                                                                 |
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend-local settlement and precise diagnostic metadata contract land with source in `87b70fcc`, E231. | Update actor acquisition, cancellation/retention, publication permit and actual-reader contracts as their implementations land; present-tense claims require corresponding consumer evidence.                                                      |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.          | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
-| This tracker and canonical parent acceptance                                    | E231–E234 retain bounded progress, failed attempts, owners and open consequences.                        | Synchronize main/source bytes after durable changes; keep 33/37 partial coverage separate from 0/8 parent acceptance, complete Python retirement and installed adoption.                                                                           |
+| This tracker and canonical parent acceptance                                    | E231–E236 retain bounded progress, failed attempts, owners and open consequences.                        | Synchronize main/source bytes after durable changes; keep 33/37 partial coverage separate from 0/8 parent acceptance, complete Python retirement and installed adoption.                                                                           |
 
 ## Landing obligations
 
