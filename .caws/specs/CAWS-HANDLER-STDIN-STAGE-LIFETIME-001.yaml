@@ -1,10 +1,11 @@
 id: CAWS-HANDLER-STDIN-STAGE-LIFETIME-001
 title: 'Handler stdin stage leaves no file behind'
 mode: fix
-lifecycle_state: active
-worktree: handler-stdin-stage
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Per-handler private stage directory (mktemp -d 0700), payload unlinked and verified before the handler runs; replaced-link paths left in place and named; 10-case self-contained bats suite with 10 pinned mutants, 14-attempt series and 17-case real-dispatcher probe retained under ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/ (f3-runs, f3-dispatcher, f3-review, f3-merge). Not claimed: signal during mktemp -d, KILL between payload write and unlink, link replacement between check and removal, Linux bash 5, installed pack copy. Pack bump and integration to main are root-owned.'
 created_at: '2026-10-22T16:48:10.968Z'
-updated_at: '2026-10-22T19:38:52.963Z'
+updated_at: '2026-10-22T20:27:44.624Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
