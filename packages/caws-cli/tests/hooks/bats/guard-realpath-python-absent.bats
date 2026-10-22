@@ -33,6 +33,32 @@ guard_dir() {
   printf '%s\n' "${CAWS_GUARD_REALPATH_DIR:-$CAWS_TEST_HOOKS_DIR}"
 }
 
+# Usage: rp_make_layout <physical-root>
+# A governed repository at exactly <physical-root>: tracked .caws content (so
+# linked worktrees carry a .caws directory, as real ones do), an untracked
+# registry, and linked worktrees s-wt and f-wt owned by different sessions.
+rp_make_layout() {
+  local root="$1"
+  mkdir "$root"
+  git -C "$root" init -q -b main
+  mkdir -p "$root/.caws/worktrees"
+  printf 'version: 1\n' > "$root/.caws/policy.yaml"
+  printf '.caws/worktrees/\n.caws/worktrees.json\n' > "$root/.gitignore"
+  git -C "$root" add .gitignore .caws/policy.yaml
+  git -C "$root" -c user.name='CAWS Test' -c user.email=test@caws.invalid \
+    -c commit.gpgsign=false commit -q -m 'root commit'
+  git -C "$root" worktree add -q -b caws/s-wt "$root/.caws/worktrees/s-wt"
+  git -C "$root" worktree add -q -b caws/f-wt "$root/.caws/worktrees/f-wt"
+  jq -n --arg r "$root" '{
+      "s-wt": {name: "s-wt", branch: "caws/s-wt", baseBranch: "main",
+               path: ($r + "/.caws/worktrees/s-wt"), spec_id: "FIX-S-1",
+               owner: {session_id: "rp-session-s"}},
+      "f-wt": {name: "f-wt", branch: "caws/f-wt", baseBranch: "main",
+               path: ($r + "/.caws/worktrees/f-wt"), spec_id: "FIX-F-1",
+               owner: {session_id: "rp-session-f"}}
+    }' > "$root/.caws/worktrees.json"
+}
+
 setup_file() {
   caws_install_pack_once claude-code
   local repo
@@ -99,6 +125,25 @@ SHIM
   cp -R "$(guard_dir)" "$CAWS_TEST_HOME/identity-drop"
   printf '\ncaws_guard_realpath() { _realpath "$@"; }\n' \
     >> "$CAWS_TEST_HOME/identity-drop/lib/caws-state.sh"
+
+  # Path identity: two repositories with the same layout, one at an ordinary
+  # physical path and one whose physical path ends in a line feed, each with an
+  # ordinary alias. The expected root bytes are built here, never derived from
+  # a normalizer under test. Command substitution strips trailing line feeds,
+  # so a root capture that is not byte-faithful names a different directory.
+  local id_base
+  id_base="$(cd "$CAWS_TEST_HOME" && pwd -P)/identity"
+  mkdir "$id_base"
+  export RP_PLAIN_REPO="$id_base/plain"
+  export RP_LF_REPO="$id_base/repo"$'\n'
+  export RP_QUOTE_REPO="$id_base/o'brien"
+  rp_make_layout "$RP_PLAIN_REPO"
+  rp_make_layout "$RP_LF_REPO"
+  rp_make_layout "$RP_QUOTE_REPO"
+  ln -s "$RP_PLAIN_REPO" "$id_base/plain-alias"
+  ln -s "$RP_LF_REPO" "$id_base/lf-alias"
+  export RP_PLAIN_ALIAS="$id_base/plain-alias"
+  export RP_LF_ALIAS="$id_base/lf-alias"
 
   export RP_CLI="${CAWS_GUARD_REALPATH_CLI:-$CLI_DIST_ENTRY}"
   export RP_REPO="$repo"
@@ -181,6 +226,127 @@ rp_sweep() {
   for label in "$@"; do
     [[ "$labels" == *"cannot normalize the $label path"* ]] ||
       { printf 'no refusal from the %s normalization\n' "$label"; false; }
+  done
+}
+
+# Usage: id_guard <guard.sh> <repo> <operating-dir> <tool> <file-path-or-command>
+# Session rp-session-s operates at <operating-dir> and targets f-wt, which
+# rp-session-f owns. The payload carries every path byte-faithfully.
+id_guard() {
+  local guard="$1" repo="$2" op="$3" tool="$4" arg="$5" payload file="" cmd=""
+  case "$tool" in
+    Write)
+      file="$arg"
+      payload="$(jq -nc --arg f "$arg" --arg c "$op" \
+        '{tool_name: "Write", tool_input: {file_path: $f, content: "x"}, cwd: $c}')" ;;
+    Bash)
+      cmd="$arg"
+      payload="$(jq -nc --arg k "$arg" --arg c "$op" \
+        '{tool_name: "Bash", tool_input: {command: $k}, cwd: $c}')" ;;
+  esac
+  run env -i \
+    HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws" PATH="$PATH" \
+    CAWS_BIN="$RP_CLI" \
+    CLAUDE_CODE_SESSION_ID=rp-session-s HOOK_SESSION_ID=rp-session-s \
+    CLAUDE_PROJECT_DIR="$op" CAWS_PROJECT_DIR="$op" \
+    CAWS_AGENT_SURFACE=claude-code HOOK_EVENT_NAME=PreToolUse \
+    HOOK_PERMISSION_MODE=default HOOK_INPUT_JSON="$payload" \
+    HOOK_TOOL_NAME="$tool" HOOK_FILE_PATH="$file" HOOK_COMMAND="$cmd" \
+    HOOK_CWD="$op" \
+    bash -c 'cd "$1" && bash "$2" </dev/null' _ "$op" "$(guard_dir)/$guard"
+  printf '# %s op=%q status=%s\n# output=%s\n' "$guard" "$op" "$status" "$output" >&3
+  [[ ! -e "$repo/.caws/worktrees/f-wt/src" ]]
+}
+
+# Usage: id_case <guard.sh> <canonical|alias|linked> <Write|Bash>
+# Runs one scenario against the ordinary-path repository, then the identical
+# scenario against the repository whose root ends in a line feed. The ordinary
+# run is the control: it must refuse, or the fixture proves nothing. The line
+# feed run must reach the same refusal.
+id_case() {
+  local guard="$1" kind="$2" tool="$3" variant repo alias op target cmd
+  for variant in plain lf; do
+    if [[ "$variant" == plain ]]; then repo="$RP_PLAIN_REPO"; alias="$RP_PLAIN_ALIAS"
+    else repo="$RP_LF_REPO"; alias="$RP_LF_ALIAS"; fi
+    case "$kind" in
+      canonical) op="$repo"; target="$op/.caws/worktrees/f-wt/src/payload.ts"
+        cmd='touch .caws/worktrees/f-wt/src/payload.ts' ;;
+      alias) op="$alias"; target="$op/.caws/worktrees/f-wt/src/payload.ts"
+        cmd='touch .caws/worktrees/f-wt/src/payload.ts' ;;
+      linked) op="$repo/.caws/worktrees/s-wt"; target="$repo/.caws/worktrees/f-wt/src/payload.ts"
+        cmd='touch ../f-wt/src/payload.ts' ;;
+    esac
+    if [[ "$tool" == Write ]]; then
+      id_guard "$guard" "$repo" "$op" Write "$target"
+    else
+      id_guard "$guard" "$repo" "$op" Bash "$cmd"
+    fi
+    [ "$status" -eq 2 ] || { printf '%s %s %s: %s run exited %s\n' "$guard" "$kind" "$tool" "$variant" "$status"; false; }
+  done
+}
+
+@test "precondition: the identity roots exist at exactly their constructed bytes" {
+  [[ -d "$RP_PLAIN_REPO/.git" && -d "$RP_LF_REPO/.git" ]]
+  [[ "$RP_LF_REPO" == *$'\n' ]]
+  # The root without its final byte names nothing: a capture that strips it
+  # cannot be mistaken for the repository.
+  [[ ! -e "${RP_LF_REPO%$'\n'}" ]]
+  local resolved
+  resolved="$(cd -P "$RP_LF_ALIAS" && printf '%sx' "$PWD")"
+  [[ "${resolved%x}" == "$RP_LF_REPO" ]]
+  resolved="$(git -C "$RP_LF_REPO/.caws/worktrees/s-wt" rev-parse --git-common-dir && printf x)"
+  printf '# lf root=%q\n# lf linked common dir=%q\n' "$RP_LF_REPO" "${resolved%x}" >&3
+  [[ "${resolved%x}" == "$RP_LF_REPO/.git"$'\n' ]]
+}
+
+@test "path identity: a root ending in a line feed reaches the caller with that byte" {
+  local input
+  for input in "$RP_LF_REPO" "$RP_LF_ALIAS" "$RP_LF_REPO/.git/.."; do
+    run bash -c 'source "$1/lib/caws-state.sh"
+      v="$(caws_guard_realpath "$2")" || exit 9
+      printf "%q" "$v"' _ "$(guard_dir)" "$input"
+    printf '# input=%q status=%s observed=%s expected=%q\n' "$input" "$status" "$output" "$RP_LF_REPO" >&3
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(printf '%q' "$RP_LF_REPO")" ]
+  done
+}
+
+@test "path identity: worktree-write-guard refuses a foreign payload write from a line-feed canonical root" {
+  id_case worktree-write-guard.sh canonical Write
+}
+
+@test "path identity: worktree-write-guard refuses a foreign payload write through an alias of a line-feed root" {
+  id_case worktree-write-guard.sh alias Write
+}
+
+@test "path identity: worktree-write-guard refuses a foreign payload write from a worktree of a line-feed root" {
+  id_case worktree-write-guard.sh linked Write
+}
+
+@test "path identity: bash-write-guard refuses a foreign mutation from a line-feed canonical root" {
+  id_case bash-write-guard.sh canonical Bash
+}
+
+@test "path identity: bash-write-guard refuses a foreign mutation through an alias of a line-feed root" {
+  id_case bash-write-guard.sh alias Bash
+}
+
+@test "path identity: bash-write-guard refuses a foreign mutation from a worktree of a line-feed root" {
+  id_case bash-write-guard.sh linked Bash
+}
+
+@test "path identity: base-branch enforcement gives a line-feed or apostrophe root the ordinary root's verdict" {
+  local repo expected="" observed
+  for repo in "$RP_PLAIN_REPO" "$RP_QUOTE_REPO" "$RP_LF_REPO"; do
+    id_guard worktree-write-guard.sh "$repo" "$repo" Write "$repo/src/new.ts"
+    # The verdict, with the root's own bytes abstracted so the three compare.
+    observed="$status:${output//"$repo"/<ROOT>}"
+    if [[ -z "$expected" ]]; then
+      expected="$observed"
+      # The control must reach the enforcement this case is about.
+      [[ "$output" == *'"decision"'* || "$status" -eq 2 ]]
+    fi
+    [ "$observed" = "$expected" ] || { printf 'root %q: %s\nexpected: %s\n' "$repo" "$observed" "$expected"; false; }
   done
 }
 
