@@ -53,3 +53,9 @@ evidence:
     recorded_at: "2026-10-22T17:16:33.556Z"
     artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a1620e-59d6-7373-b74b-25d9f5f7b1e9/native-build-stable-entry/attempt-03/terminal.json"
     commit_sha: "3a2422fcb5f9bcae0b392c7193b4760cb94ecbab"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Provenance/handoff criterion only. Inspected actual attempt03 terminalc86699f4 and raw JestJSON/stderr/exit:79selected79pass0fail0pending, exit0,2.505s; exact argv/packagecwd and candidate3a2422fc retained. Literal before/after Node/compiler/Jest/source/test pins agree; actual three compiled-module hashes match both attempt02 compiler output and posttest state, with their bytes retained outside lane. Attempt01 setup refusal and missing original pins remain explicit; attempt02 actual75pass2oraclefail output and size-before-hash correction retained; no failed output overwritten. Source3e and test-only3a received independent committed read-only inspection, not acceptance authority. Lead received actual start/terminal/pins and independently inspected79test JSON and source/test delta, explicitly accepting remaining actual debug/release v2 build/load, producer-derived image and parent integration. A1/A2 remain unchecked; no fullpackage/native/harness/adoption/parity claim. Final source gates on3a/f5ad pass5; doctor0E3W4I. Readback of this spec record and matching event is required and performed separately."
+    recorded_at: "2026-10-22T17:16:35.411Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a1620e-59d6-7373-b74b-25d9f5f7b1e9/native-build-stable-entry/attempt-03/terminal.json"
+    commit_sha: "3a2422fcb5f9bcae0b392c7193b4760cb94ecbab"
