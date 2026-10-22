@@ -60,8 +60,10 @@ acceptance:
       The 32768-character payload arrives through a pipe and the 32769-character
       payload through a regular file, each byte for byte, and no stage file remains
   - id: A6
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given the cleanup contract comment in parse-input.sh, when it describes temp-file removal, then it names the single payload-file EXIT trap and states that nothing consumes CAWS_TEMP_FILES'
+    given: 'The cleanup comment above _write_payload_file in parse-input.sh'
+    when: 'It describes how the payload file is removed'
+    then: >-
+      It names the EXIT trap, states that the trap runs on TERM, INT and HUP but not
+      on KILL, and states that no shipped dispatcher consumes CAWS_TEMP_FILES
 non_functional: {}
 contracts: []
