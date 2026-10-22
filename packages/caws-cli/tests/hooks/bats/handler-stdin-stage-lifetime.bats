@@ -246,5 +246,6 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   # ran, is still present, and was named on stderr before and after the handler.
   [ -s "$(ls "$OUT_DIR"/reader-*.files)" ]
   [ -n "$(find "$STAGE_TMP" -type f -name payload)" ]
-  [ "$(printf '%s\n' "$output" | grep -c '\[caws run-handlers\] could not remove handler stdin stage ')" -ge 2 ]
+  # Count payload reports only; the directory report names "stage directory".
+  [ "$(printf '%s\n' "$output" | grep -cF "[caws run-handlers] could not remove handler stdin stage $STAGE_TMP/")" -ge 2 ]
 }
