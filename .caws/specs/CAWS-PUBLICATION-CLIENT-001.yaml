@@ -51,3 +51,9 @@ evidence:
     command: node canonical/node_modules/jest/bin/jest.js --config jest.config.js --selectProjects caws-cli --runInBand --runTestsByPath tests/runtime/session-publication-client.test.js tests/runtime/transcript-store-client.test.js tests/runtime/protocol.test.js
     exit_code: 0
     commit_sha: "2a9f2093"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Source-grounded committed peer6649 finding reproduced with four unknown discriminator controls: jest-disposition-red.json exit1 fourfail/50skipped, each reached forbidden output copy; exact ready-or-aborted guard repairs before copy/write. Full3suite177pass0 in jest-disposition-green.json. Earlier jest-expanded.json9fail35pass reproduces abort advance, inventory and allocation defects; original client typecheck missingwire and commit/restore refusals retained in transcript. Current controls exercise changed correlation/attempt/hash/phase, contradictory abort, complete inventory, resource limits before copying, cancellation, lost CONSUMED; they do not prove native effects or general mutation score. Root artifact base /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-session-publication/client-red/."
+    recorded_at: "2026-10-22T09:14:02.952Z"
+    exit_code: 0
+    commit_sha: "2a9f2093"
