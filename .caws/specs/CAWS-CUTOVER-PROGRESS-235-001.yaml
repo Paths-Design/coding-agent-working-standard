@@ -1,9 +1,11 @@
 id: CAWS-CUTOVER-PROGRESS-235-001
 title: 'Integrate claim-oracle retirement and synchronize cutover obligations'
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Reviewed R21 retirement exact import and integrated guard consumer15checks0 land on source174672d9; reviewed E235/E236 ledger lands on mainffa4df68 with exact shared SHAe088ad75 and cmp0. Source/main gates0, doctor0E3W4I, raw controls and stated limits retained. A1/A2 component evidence recorded separately; no parent acceptance, production Python retirement, resident acquisition, fullmutation, release or machine adoption inferred.'
 created_at: '2026-10-22T00:47:49.298Z'
-updated_at: '2026-10-22T00:48:12.254Z'
+updated_at: '2026-10-22T01:28:35.243Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
