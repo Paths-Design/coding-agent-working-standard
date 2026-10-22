@@ -6102,8 +6102,17 @@ Additional bounded evidence and unresolved dependencies:
   Git-path controls explicitly distinguished. Missing-Git canonical discovery
   and relative foreign-worktree paths remain consequential source/probe findings
   under owner c4; repair and fresh evidence precede merge. Missing-Python parser
-  ingress and the LF sibling walker remain parent/source-owner obligations. The
-  shell lane's account/system error grants no takeover; coherent
+  ingress and the LF sibling walker remain parent/source-owner obligations.
+  Candidate `8dbe29c1` remains held: a retained actual guard probe observes both
+  guards refuse a foreign write with healthy Git, but allow with empty output
+  when Git is present and fails or linked-worktree administration is missing.
+  Root inspects the probe and discovery fallback; c4 owns the bounded repair.
+  Source inspection also establishes incomplete multi-target and Move endpoint
+  propagation: the Codex parser extracts only Add/Update/Delete headers, and
+  scope, protected-paths and worktree guards consume its first path. Root owns
+  the complete endpoint carrier, consumer integration and actual patch/guard
+  falsifiers. This source finding does not establish an executed harness write.
+  The shell lane's account/system error grants no takeover; coherent
   source/four-document landing and final six-file quality remain held.
   Mail-custody owner dd67's `83b6cdba` adds strict original-text and fatal UTF8
   classification plus cleanup controls. Its six-suite251-case run exits0 and
