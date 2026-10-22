@@ -1,0 +1,43 @@
+id: CAWS-TRANSCRIPT-MUTATION-POLICY-001
+title: 'Register transcript timestamp in canonical mutation policy'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-22T00:02:22.356Z'
+updated_at: '2026-10-22T00:02:22.356Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'CLI transcript mutation inventory and proof consumers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/mutation-policy.json'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+    - 'packages/caws-cli/tests/transcripts/exports.test.ts'
+  out: []
+invariants:
+  - 'Every admitted transcript source has exactly one existing proof strategy and timestamp retains the store per-file 80 percent mutation floor.'
+  - 'Generated consumer checks do not establish full regeneration integrity, and registration does not establish mutation execution or runtime cutover.'
+acceptance:
+  - id: A1
+    given: 'the canonical CLI policy omits the 31 transcript sources'
+    when: 'the expanded policy and hostile topology controls are evaluated'
+    then: 'all 192 sources are classified exactly once and 21 targets remain on three surfaces without weakening existing rejection controls.'
+  - id: A2
+    given: 'the compiled in-process timestamp consumer and existing store mutation configuration'
+    when: 'policy-derived selection is inspected and contract checks execute'
+    then: 'the authored timestamp source and exact transcript test are selected on store with its unchanged 80 percent floor and arbitrary non-store tests remain excluded.'
+  - id: A3
+    given: 'the public transcript barrel and Unicode shim'
+    when: 'typed and runtime consumers execute and representative missing-export controls are evaluated'
+    then: 'origin bindings, exact occurrence lexeme and custody, forged-row refusal, numeric-profile boundaries and pinned Unicode digit semantics are exercised through those exports.'
+observability:
+  - 'Retain private build/test commands, exits, selected source and emitted image hashes, output streams and failing controls outside the source tree.'
+rollback:
+  - 'Revert only the owned three-file registration commit through normal Git history if its canonical qualification fails.'
+non_functional: {}
+contracts:
+  - name: 'transcript-mutation-registration'
+    type: contract-test
+    path: 'packages/caws-cli/tests/ci/mutation-contract.test.js'
