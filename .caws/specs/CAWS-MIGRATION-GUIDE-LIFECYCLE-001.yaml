@@ -1,10 +1,11 @@
 id: CAWS-MIGRATION-GUIDE-LIFECYCLE-001
 title: 'Align migration guide with lifecycle policy and configuration prerequisites'
 mode: doc
-lifecycle_state: active
-worktree: migration-guide-lifecycle
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'A1/A2 source/documentation contracts verified at 84079dfb and recorded/read back with ac_recorded10912/10913. Formatting and one-file policy gates pass; doctor retains existing warnings. No machine operation, native execution or cutover qualification.'
 created_at: '2026-10-22T04:37:42.242Z'
-updated_at: '2026-10-22T04:37:57.116Z'
+updated_at: '2026-10-22T04:57:27.001Z'
 created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
 blast_radius:
   modules:
