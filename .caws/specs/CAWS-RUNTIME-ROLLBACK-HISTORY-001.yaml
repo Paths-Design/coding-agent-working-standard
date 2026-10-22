@@ -46,3 +46,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::repairing the stable entry of the selected runtime keeps its rollback target"
     commit_sha: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
     test_verified_at: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Test runs D1/B1 install, older-package D0/B0 install, older-package rollback (pointer D1, entry B0), newer repair; asserts pointer exactly {D1, previous D0}, then rollback selects D0 and the project guard reports '<D0 digest> older' (marker exported by a library only D0 ships), exit 0. The jest scenario simulates the older package with template copies through candidate code; the real retained older CLI 160015a1 is exercised in ~/.claude/artifacts/c843b9aa-c831-40ce-ac99-cae38f061436/rollback-probe/after.log AFTER S2 (step 5 rollback selects 5ec11024) and fails before the fix in s0-s2.log S2 step 5. Counterexample killed: mutant-a.log, received previous_digest == D1 at :724."
+    recorded_at: "2026-10-22T00:50:22.665Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/machine-runtime.test.js::a newer package repairing an older package rollback keeps the older runtime reachable"
+    commit_sha: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
+    test_verified_at: "1bb584a8da064d7f9c6978ffcc30c8a7787a574a"
