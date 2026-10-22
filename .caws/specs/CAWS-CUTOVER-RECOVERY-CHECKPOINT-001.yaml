@@ -7,7 +7,7 @@ updated_at: '2026-10-22T11:23:39.459Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'Existing cutover tracker evidence and owned recovery dependencies'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
