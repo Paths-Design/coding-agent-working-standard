@@ -148,9 +148,9 @@ evidence:
     recorded_at: "2026-10-22T03:16:25.704Z"
   - criterion_id: A4
     status: pass
-    evidence_ref: "run-08 at 39d06b1a tests 18-21, 23-25 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-08/bats.tap): bash-write-guard touch of the f-wt payload spelled via s-wt/.. python3 present exit 2 BLOCKED f-wt; owner exit 0; failing exit 2 python3-exit-1; absent exit 2 python3-unavailable; target absent. Per-normalization sweeps refuse at project root, static mutation target and both Git metadata coordinates; dynamic-prefix normalization unreachable at 5ace5a52 (analysis tokens carry basis none), test 24 pins ask_dynamic_unconfined. Bounds: template guards run directly with precomputed HOOK_* and canonical helpers.bash, analysis CLI pinned to the shell owner built dist; not dispatcher, installed pack or native harness."
-    recorded_at: "2026-10-22T01:13:10.661Z"
-    commit_sha: "39d06b1a"
+    evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) tests 36-39: bash-write-guard foreign mutation through dotdot python3 present exit 2 foreign-worktree refusal; owner exit 0; failing exit 2 python3-exit-1; absent exit 2 python3-unavailable; target absent. Analysis CLI pinned to the shell owner dist built at 5ace5a52. Bounds: as A1."
+    recorded_at: "2026-10-22T03:17:48.700Z"
+    commit_sha: "4ac64fbf"
   - criterion_id: A5
     status: unchecked
     recorded_at: "2026-10-22T03:16:27.207Z"
