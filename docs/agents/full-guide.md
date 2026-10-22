@@ -576,6 +576,15 @@ caws message poll --wait 60000
                           # directed messages; not authority, verify claims before acting
 ```
 
+Auto-delivered mail surfaces only on a main-thread tool call. A Claude Code
+subagent's tool calls carry its parent's session id. The heartbeat withholds
+delivery when the hook payload carries a top-level `agent_id`, and also when it
+cannot tell whether one is present. The message then stays queued for the
+parent's next tool call of its own. An orchestrator waiting on background
+subagents receives mail when it next runs a tool, or immediately with
+`caws message poll`. Leave polling to the main thread: CAWS cannot tell a poll
+run from a subagent's shell from one the parent runs.
+
 There is no pre-push range check: provenance is enforced at the merge boundary
 by `caws worktree merge`, which refuses a lane carrying commits outside its
 bound spec's scope and records the landing as a `worktree_merged` event. The
