@@ -142,8 +142,8 @@ evidence:
     commit_sha: "4ac64fbf"
   - criterion_id: A2
     status: pass
-    evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) tests 20-24: assigned bytes equal _realpath exact output minus its one record LF for dotdot, symlinked ancestor, link/.., /tmp leaf, relative, a path ending in LF and an alias of the LF root (printed with %q in the receipt); dotdot after a symlink climbs from the link target; empty-path, python3-unavailable, python3-exit-1 and python3-exit-7 (counting shim) return 2 with the caller variable unchanged and one stderr class line. Mutants on 8c7366c2 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants-id/mutants.tap): M06 strip-all killed by 16/20-level tests, M16 hard-coded status killed. Bounds: python 3.11.13 macOS; non-UTF-8 names untested (APFS rejects them)."
-    recorded_at: "2026-10-22T03:18:12.912Z"
+    evidence_ref: "terminal run at 4ac64fbf (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-19-terminal/terminal.tap) tests 20-24: assigned bytes equal _realpath exact output minus its one record LF for dotdot, symlinked ancestor, link/.., /tmp leaf, relative, a path ending in LF and an alias of the LF root (printed with %q in the receipt); dotdot after a symlink climbs from the link target; empty-path, python3-unavailable, python3-exit-1 and python3-exit-7 (counting shim) return 2 with the caller variable unchanged and one stderr class line. Mutants on 8c7366c2 (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants-id/mutants.tap): M06 (strip every trailing LF) fails 7 tests including the exact-parity and LF-root identity tests; M16 (status hard-coded to 1) fails the exit-7 test. Bounds: python 3.11.13 macOS; non-UTF-8 names untested (APFS rejects them)."
+    recorded_at: "2026-10-22T03:18:41.265Z"
     commit_sha: "4ac64fbf"
   - criterion_id: A3
     status: pass
