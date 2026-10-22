@@ -130,6 +130,11 @@ SHIM
     case "$source" in /*) ln -s "$source" "$CAWS_TEST_HOME/no-python/$tool" ;; esac
   done
 
+  # A git that is on PATH but exits 1 for every call.
+  mkdir -p "$CAWS_TEST_HOME/failing-git"
+  printf '#!/bin/sh\nexit 1\n' > "$CAWS_TEST_HOME/failing-git/git"
+  chmod +x "$CAWS_TEST_HOME/failing-git/git"
+
   # A tool farm with python3 and the core tools but without git.
   mkdir -p "$CAWS_TEST_HOME/no-git"
   for tool in bash sh env node jq python3 cat sed awk grep cut tr head tail \
@@ -170,6 +175,16 @@ SHIM
   rp_make_layout "$RP_QUOTE_BRANCH_REPO" "it's"
   rp_make_layout "$RP_FALLBACK_PLAIN_REPO" main elsewhere
   rp_make_layout "$RP_FALLBACK_LF_REPO" main elsewhere
+  # Git discovery that fails although a .git entry exists: a nested project
+  # directory inside s-wt, and a layout whose s-wt admin directory is gone
+  # (as after a prune) while the checkout remains. A directory outside every
+  # repository is the ungoverned control.
+  mkdir -p "$RP_PLAIN_REPO/.caws/worktrees/s-wt/src/nested"
+  export RP_ADMIN_REPO="$id_base/admin-loss"
+  rp_make_layout "$RP_ADMIN_REPO"
+  rm -rf "$RP_ADMIN_REPO/.git/worktrees/s-wt"
+  export RP_NONREPO="$id_base/nonrepo"
+  mkdir "$RP_NONREPO"
 
   # A git without `worktree list -z` (before 2.36): that one form fails as
   # git does for an unknown option; every other call goes to the real git.
@@ -632,6 +647,66 @@ rp_git_case() {
 
 @test "git unavailable: bash-write-guard refuses naming git instead of reading an ungoverned directory" {
   rp_git_case bash-write-guard.sh Bash
+}
+
+# Usage: rp_git_failed_case <guard.sh> <Write|Bash> <repo> <operating-dir> <PATH> <target>
+# The run must be refused naming the failed git discovery.
+rp_git_failed_case() {
+  local guard="$1" tool="$2" repo="$3" op="$4" path_value="$5" target="$6" arg="$6"
+  [[ "$tool" == Bash ]] && arg="touch \"$target\""
+  RP_ID_PATH="$path_value" id_guard "$guard" "$repo" "$op" "$tool" "$arg"
+  [ "$status" -eq 2 ] || { printf '%s from %q exited %s\n' "$guard" "$op" "$status"; false; }
+  assert_output --partial "[${guard%.sh}] git could not determine the repository for"
+  assert_output --partial "although a .git entry exists at"
+  assert_output --partial '{"decision":"block"'
+}
+
+@test "git failing: both guards refuse when git cannot answer for a directory that holds a .git entry" {
+  local repo="$RP_PLAIN_REPO" self="$RP_PLAIN_REPO/.caws/worktrees/s-wt"
+  local failing="$CAWS_TEST_HOME/failing-git:$PATH"
+  local foreign="$repo/.caws/worktrees/f-wt/src/payload.ts" own="$self/src/own.ts"
+  # With working git, ownership decides (controls).
+  id_guard worktree-write-guard.sh "$repo" "$self" Write "$foreign"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
+  # A git that fails: the foreign write and, as the price of failing closed,
+  # the owner's own write are refused.
+  rp_git_failed_case worktree-write-guard.sh Write "$repo" "$self" "$failing" "$foreign"
+  rp_git_failed_case worktree-write-guard.sh Write "$repo" "$self" "$failing" "$own"
+  rp_git_failed_case bash-write-guard.sh Bash "$repo" "$self" "$failing" "$foreign"
+  rp_git_failed_case bash-write-guard.sh Bash "$repo" "$self" "$failing" "$own"
+  # A project directory nested below the worktree root: the .git entry is an
+  # ancestor's, and it must still be found.
+  rp_git_failed_case worktree-write-guard.sh Write "$repo" "$self/src/nested" "$failing" "$foreign"
+  rp_git_failed_case bash-write-guard.sh Bash "$repo" "$self/src/nested" "$failing" "$foreign"
+}
+
+@test "git failing: a worktree whose admin directory is gone is refused with working git" {
+  local repo="$RP_ADMIN_REPO" self="$RP_ADMIN_REPO/.caws/worktrees/s-wt"
+  run git -C "$self" rev-parse --git-dir
+  [ "$status" -ne 0 ]
+  rp_git_failed_case worktree-write-guard.sh Write "$repo" "$self" "$PATH" "$repo/.caws/worktrees/f-wt/src/payload.ts"
+  rp_git_failed_case worktree-write-guard.sh Write "$repo" "$self" "$PATH" "$self/src/own.ts"
+  rp_git_failed_case bash-write-guard.sh Bash "$repo" "$self" "$PATH" "$repo/.caws/worktrees/f-wt/src/payload.ts"
+}
+
+@test "git failing: a directory outside every repository stays ungoverned" {
+  local d
+  # Precondition: no .git entry on the directory or any ancestor.
+  d="$RP_NONREPO"
+  while :; do
+    [[ ! -e "$d/.git" ]] || { printf 'unexpected .git at %q\n' "$d"; false; }
+    [[ "$d" == / ]] && break
+    d="${d%/*}"; [[ -n "$d" ]] || d=/
+  done
+  RP_ID_PATH="$CAWS_TEST_HOME/failing-git:$PATH" \
+    id_guard worktree-write-guard.sh "$RP_NONREPO" "$RP_NONREPO" Write "$RP_NONREPO/notes.txt"
+  [ "$status" -eq 0 ]
+  refute_output --partial "git could not determine"
+  RP_ID_PATH="$CAWS_TEST_HOME/failing-git:$PATH" \
+    id_guard bash-write-guard.sh "$RP_NONREPO" "$RP_NONREPO" Bash "touch notes.txt"
+  [ "$status" -eq 0 ]
+  refute_output --partial "git could not determine"
 }
 
 @test "relative target: worktree-write-guard resolves a relative Write against the payload cwd before adjudicating ownership" {

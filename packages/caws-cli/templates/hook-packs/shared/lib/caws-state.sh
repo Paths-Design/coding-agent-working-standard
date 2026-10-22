@@ -65,9 +65,13 @@
 #       resolve_canonical_dir for guards that compare path identity. Each
 #       assigns <var> and returns 0, or assigns nothing and returns non-zero.
 #
+#   caws_git_evidence_dir_into <var> <dir>
+#       Assigns the nearest of <dir> and its ancestors holding a .git entry;
+#       returns 1 when none does.
+#
 #   Out-parameters (<var>) must be shell identifiers. Each helper refuses a
 #   name under its own local prefix (_caws_rp_, _caws_pd_, _caws_gp_,
-#   _caws_cd_); callers should keep their names outside _caws_.
+#   _caws_cd_, _caws_ge_); callers should keep their names outside _caws_.
 #
 #   caws_current_branch [dir]
 #       Prints the current branch of the checkout at [dir] (default cwd),
@@ -339,6 +343,29 @@ caws_git_path_into() {
   _caws_gp_out="${_caws_gp_out%$'\n'}"
   [[ -n "$_caws_gp_out" ]] || return 1
   printf -v "$_caws_gp_var" '%s' "$_caws_gp_out"
+}
+
+# caws_git_evidence_dir_into <var> <dir>
+#   Assign the nearest of <dir> and its ancestors that holds a .git entry
+#   (a repository directory or a linked worktree's gitfile). Returns 1 when
+#   none does or <dir> is not absolute, 2 for an invalid out-parameter; <var>
+#   is assigned only on success. Parents are taken by string operations, never
+#   through a capture, so every component keeps its bytes. A guard uses this to
+#   tell a directory outside every repository (ungoverned) from one where git
+#   failed to answer (a project that cannot be adjudicated).
+caws_git_evidence_dir_into() {
+  local _caws_ge_var="${1:-}" _caws_ge_dir="${2:-}"
+  _caws_outparam_ok "$_caws_ge_var" _caws_ge_ || return 2
+  [[ "$_caws_ge_dir" == /* ]] || return 1
+  while :; do
+    if [[ -e "$_caws_ge_dir/.git" || -L "$_caws_ge_dir/.git" ]]; then
+      printf -v "$_caws_ge_var" '%s' "$_caws_ge_dir"
+      return 0
+    fi
+    [[ "$_caws_ge_dir" == / ]] && return 1
+    _caws_ge_dir="${_caws_ge_dir%/*}"
+    [[ -n "$_caws_ge_dir" ]] || _caws_ge_dir=/
+  done
 }
 
 # caws_resolve_canonical_dir_into <var> <start-dir>

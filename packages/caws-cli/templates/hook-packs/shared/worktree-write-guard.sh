@@ -59,6 +59,11 @@ _wwg_normalize_refuse() {
   printf '{"decision":"block","reason":"CAWS worktree-write-guard: a path could not be normalized, so worktree ownership cannot be evaluated. Failing closed. Restore a working python3 on PATH."}\n'
   exit 2
 }
+_wwg_git_failed_refuse() {
+  echo "[worktree-write-guard] git could not determine the repository for $(printf '%q' "$1") although a .git entry exists at $(printf '%q' "$2"), so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED (refusing the write). Repair the repository or worktree (git worktree repair, or prune and recreate it)." >&2
+  printf '{"decision":"block","reason":"CAWS worktree-write-guard: git could not determine the repository although a .git entry exists, so the canonical checkout and worktree ownership cannot be determined. Failing closed."}\n'
+  exit 2
+}
 _wwg_git_refuse() {
   echo "[worktree-write-guard] git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED (refusing the write). Restore git on PATH." >&2
   printf '{"decision":"block","reason":"CAWS worktree-write-guard: git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing closed. Restore git on PATH."}\n'
@@ -132,6 +137,13 @@ IS_LINKED_WORKTREE=0
 CANONICAL_ROOT=""
 caws_git_path_into GIT_COMMON_DIR_RAW "$WORKTREE_ROOT" --git-common-dir || GIT_COMMON_DIR_RAW=""
 caws_git_path_into GIT_DIR_RAW "$WORKTREE_ROOT" --git-dir || GIT_DIR_RAW=""
+# No answer from git means "not a repository" only where no .git entry exists
+# on the directory or any ancestor. Otherwise git failed (a broken worktree, a
+# failing binary) and the directory must not be read as ungoverned.
+if [[ -z "$GIT_COMMON_DIR_RAW" || -z "$GIT_DIR_RAW" ]] &&
+    caws_git_evidence_dir_into _WWG_GIT_EVIDENCE "$WORKTREE_ROOT"; then
+  _wwg_git_failed_refuse "$WORKTREE_ROOT" "$_WWG_GIT_EVIDENCE/.git"
+fi
 if [[ -n "$GIT_COMMON_DIR_RAW" ]] && [[ -n "$GIT_DIR_RAW" ]]; then
   case "$GIT_COMMON_DIR_RAW" in
     /*) GIT_COMMON_DIR_ABS="$GIT_COMMON_DIR_RAW" ;;

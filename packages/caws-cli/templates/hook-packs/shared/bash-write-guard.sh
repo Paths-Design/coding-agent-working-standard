@@ -57,6 +57,11 @@ _bwg_normalize_refuse() {
   printf '{"decision":"block","reason":"CAWS bash-write-guard: a path could not be normalized, so Bash-mutation ownership cannot be evaluated. Failing closed. Restore a working python3 on PATH."}\n'
   exit 2
 }
+_bwg_git_failed_refuse() {
+  echo "[bash-write-guard] git could not determine the repository for $(printf '%q' "$1") although a .git entry exists at $(printf '%q' "$2"), so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED. Repair the repository or worktree (git worktree repair, or prune and recreate it)." >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: git could not determine the repository although a .git entry exists, so the canonical checkout and worktree ownership cannot be determined. Failing closed."}\n'
+  exit 2
+}
 _bwg_git_refuse() {
   echo "[bash-write-guard] git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED. Restore git on PATH." >&2
   printf '{"decision":"block","reason":"CAWS bash-write-guard: git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing closed. Restore git on PATH."}\n'
@@ -162,6 +167,14 @@ command -v git >/dev/null 2>&1 || _bwg_git_refuse
 # would find no .caws and admit. Every path is therefore assigned through the
 # out-parameter helpers in lib/caws-state.sh.
 _BWG_START="${CAWS_PROJECT_DIR:-.}"
+# No answer from git means "not a repository" only where no .git entry exists
+# on the directory or any ancestor. Otherwise git failed (a broken worktree, a
+# failing binary) and the directory must not be read as ungoverned.
+caws_physical_dir_into _BWG_START_PHYSICAL "$_BWG_START" || _BWG_START_PHYSICAL=""
+if ! caws_git_path_into _BWG_GIT_DIR "$_BWG_START" --git-dir &&
+    caws_git_evidence_dir_into _BWG_GIT_EVIDENCE "$_BWG_START_PHYSICAL"; then
+  _bwg_git_failed_refuse "$_BWG_START" "$_BWG_GIT_EVIDENCE/.git"
+fi
 caws_resolve_canonical_dir_into _BWG_PROJECT_RAW "$_BWG_START" || _bwg_normalize_refuse "project root" "$_BWG_START"
 # Compare the same physical identity used by abspath for mutation targets.
 # A logical alias such as /tmp or a symlinked project root is still this repo.
