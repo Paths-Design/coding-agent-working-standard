@@ -6850,7 +6850,7 @@ Additional bounded evidence and unresolved dependencies:
   `~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/`): the
   self-contained `handler-stdin-stage-lifetime.bats` (8 cases, bats-core 1.13.0,
   `/bin/bash` 3.2.57, no CLI build or installed pack) run serially against
-  pinned copies from git objects, `f3-runs/series-20261022T193531Z.json`, 11
+  pinned copies from git objects, `f3-runs/series-20261022T193541Z.json`, 11
   attempts, 55.2 s, zero surviving processes: candidate 8/8; baseline `1169f7df`
   fails 1,2,3,4,6,7,8; prior `a5b4baee` fails 7,8; mutants dropping the pre-exec
   unlink (fails 2,3,7,8), appending a newline (1,6,7,8), removing caller
@@ -6871,6 +6871,85 @@ Additional bounded evidence and unresolved dependencies:
   entry (`manifest-shared.ts` and `pack-fingerprints.json` are claimed by the
   `shell-analysis` lane, owner `01a151c0`, last active 2026-10-21), and root's
   integration merge.
+
+- E260: F3 successor `c6164df3` is integrated through owner merge `a0ddd5b2`;
+  root verifies its five first-parent paths and exact candidate blobs. Component
+  closure and teardown are recorded in events 11766–11768. E259's `ce5ced6c`
+  evidence is historical: review reproduces deletion of a foreign payload
+  through a replaced stage-directory link, and its old reporting test cannot
+  establish post-handler retry order. Helper `90945b5d` refuses observed
+  replacement links; the revised tests establish transient retry and persistent
+  failure reporting. The 14-attempt nine-case series
+  `f3-runs/series-20261022T201036Z.json` retains expected baseline,
+  prior-candidate and ten mutant failures. The additional persistent-failure
+  control and full ten-case candidate pass; suppressing the post-handler retry
+  fails the after-handler assertion. Raw checks and pins are under Claude's
+  existing `f3-runs/a7-20261022T202124Z` artifact directory. The 17-case
+  dispatcher rerun on the same helper exits 0: c11–c13 lose handler stage
+  residue; the other rows and handler stdin hashes are preserved. Raw NUL,
+  invalid UTF-8, inherited-input spoofing, zero-byte error paths and KILL during
+  parser spill remain open. Signal-during-creation and check/removal races,
+  installed copies and Linux Bash are outside this component proof. Bash 3.2
+  pattern assertions in 19 other Bats files require an applicability audit
+  before their results support broader parity; they receive no blanket pass.
+
+  Receipt-selected image producer source is integrated at `fbb38781`; its
+  80-case component suite uses a mocked loader and does not establish the actual
+  image chain. Fresh debug and release v2 native builds and complete
+  stable-entry reconstruction now execute successfully. Root retains exact
+  requests, the 79-file native inventory, compiler/tool pins, actual process
+  terminals and full loaded receipts under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-stable-entry-v2-preflight/`.
+  Debug build/load PIDs 17230/40589 and release 9687/69334 exit 0.
+  Actual-artifact controls PID 2777 exits 0 with 30 intended
+  schema/Cargo/pin/mode refusals and four positive/restored loads; its group is
+  absent and input/tool pins and restored executable modes match. Parent A7
+  remains unchecked in event 11729: these are builds and point-in-time
+  reconstruction, not image production, native invocation, installation,
+  upgrade, rollback or machine adoption. The CLI refuses the external absolute
+  artifact citation as mechanically re-derivable; root's claim rests on
+  inspected raw artifacts, not that check.
+
+  Observer evidence also advances without qualifying admission. Kernel probe
+  event 11702/result `4b7769d7` observes EADDRINUSE while the listener is held
+  or unreferenced, and a foreign listener after close; it establishes no client
+  or VM authenticity. Retention event 11730/commit `408c0ad6` records five
+  passing filesystem controls, including preserved original bytes after
+  copy/index failure. Parent-witness candidate `ea33c0f6` executes 18 component
+  cases and 22 retained TCP probes, with actual exit 0, stable pins and owned
+  group absent (`parent-witness-controls-01/execution.json`, SHA `ca9926d6`,
+  under the observer's existing `store-baseline-consumption/attempt-01` artifact
+  root). These exercise synthetic producer membership and hostile protocol
+  boundaries, not the genuine six-target/nine-suite outer run. Child A2 remains
+  FAIL in event 11754 until that healthy run and a consequential forged-client
+  refusal traverse both outer branches and publication. Capability deletion does
+  not establish isolation from arbitrary VM host-builtin interception or
+  same-uid processes. The observer owns this bounded implementation; root
+  retains integration and acceptance.
+
+  The existing worktree guide correction `c58d6f8f` is committed and reviewed;
+  source and event 11760 support preview/default-apply/no-close teardown
+  wording. Four-guide coherent guarded-source landing remains open. Help
+  candidate `d80d3996` describes v1 compatibility and receipt-selected v2 input;
+  its focused Node 18/22 help/generator checks do not replace the fresh physical
+  prefix. The prepared shared v105 fingerprint is `b706339e` over 75 files; all
+  seven other pack fingerprints match. Packaging waits on the explicit two-path
+  claim partition with archived `shell-analysis`: the installed guard refuses
+  the overlapping claims despite parent CLI admission. Root preserves the staged
+  two-file patch and all foreign work, and owns `shared-pack-105` for normal
+  landing. The earlier full-basis scope failure (event 11772) is retained; 30
+  exact imported paths are reconciled through the CLI and all five gates pass
+  against the same 288-file input and index. Neither commit-prefix substitution
+  nor a guard bypass is used.
+
+  Execution converges on three owned outcomes: root and the installer peer
+  complete coherent package → actual v2 image → isolated native invocation,
+  refusal and rollback; root completes native acquisition → continuous-custody
+  publication → ordinary reader consumption/release, including both 256-entry
+  capacity limits; root connects resident admission to the actual engine and
+  exercises thirteen sessions across four repositories. The installer retains
+  its clean help candidate while the claim decision is pending. No machine
+  install or whole-migration acceptance is inferred from these source units.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
