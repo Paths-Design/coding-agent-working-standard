@@ -33,3 +33,9 @@ rollback:
   - 'Revert only the owned ledger change through an ordinary governed commit.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed doc-only E255/E256 checkpoint grounded by root in failedordinary89dd executiond81cb0db and role-order source; f07 focused07 actual113/rawhelpercomposition/eight malformed refusals plus scoped custodya42a0. Fresh bfb package plan e791 and all five terminal0 raw receipts; 13 aggregate hashes rechecked, maps5704files65packages/36engine80rangechecks each, required8deps/inquirer8.2.7, optional1peer omission,1577 finalcaptures/1254build/only2ownedlicense removals. Prettier baseline/check/write and diffcheck0; five one-doc gatesPASS; doctor0E3W4I. Independent committed read-only review found no coordinate mismatch; root primary artifact inspection supports claimed boundedresults. Originalfailedordinary preserved, fresh ordinary02 allocated independently; descriptors/readers/native/CI/semanticnegative/restored/fullmutation/cutover remainopen,33of37partial0of8accepted."
+    recorded_at: "2026-10-22T12:21:22.683Z"
+    commit_sha: "36329d7fb7efabb380579c234c380ec2c9b9f045"
