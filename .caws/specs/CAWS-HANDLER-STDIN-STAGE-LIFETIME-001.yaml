@@ -72,5 +72,11 @@ acceptance:
     then: >-
       It names the EXIT trap, states that the trap runs on TERM, INT and HUP but not
       on KILL, and states that no shipped dispatcher consumes CAWS_TEMP_FILES
+  - id: A7
+    given: 'A staged inline payload whose unlink inside its private stage directory fails'
+    when: 'run_handlers runs a reading handler'
+    then: >-
+      The handler still runs and receives the payload byte for byte, the chain exits
+      0, and stderr names the payload stage both before and after the handler runs
 non_functional: {}
 contracts: []
