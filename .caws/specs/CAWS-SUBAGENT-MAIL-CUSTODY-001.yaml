@@ -90,3 +90,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/runtime/agent-heartbeat.test.js::real stores keep subagent-observed mail pending until the parent context offers it once"
     commit_sha: "9aabcae99fd91c274fde35dbdb24a8d6a9ea892b"
     test_verified_at: "9aabcae99fd91c274fde35dbdb24a8d6a9ea892b"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "The shell classifier is extracted verbatim from agent-heartbeat.sh at 9aabcae9. It names the exact class on all 26 rows of tests/hooks/actor-context-rows.json: absent key; valid id with and without agent_type; unicode-escaped key; empty, non-string, null, over-limit and bad-charset ids; non-object, truncated, empty and BOM-prefixed input. It also rejects 3 undecodable byte rows. actorContext and ingressActorContext give the same class on every row (actor-context.test.js 29/29 in /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/subagent-mail-custody/9aabcae9-typed.json). The rows tests assert that shell custody matches actorContext on both the parsed and fast paths. Under the typed uncertain-to-main mutant, 21 actor-context tests fail (/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/subagent-mail-custody/9aabcae9-a7-typed-uncertain.json)."
+    recorded_at: "2026-10-22T05:32:03.569Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/heartbeat-actor-custody.test.js::the shipped shell classifier names the exact class"
+    commit_sha: "9aabcae99fd91c274fde35dbdb24a8d6a9ea892b"
+    test_verified_at: "9aabcae99fd91c274fde35dbdb24a8d6a9ea892b"
