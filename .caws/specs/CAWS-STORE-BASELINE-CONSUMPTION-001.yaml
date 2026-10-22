@@ -95,11 +95,10 @@ contracts:
 evidence:
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "Committed491bea focused-04 four-suite command exited1:247pass28fail0pending. Bootstrap ESM export registry and duplicate-role fixture defect found; observer lifecycle not qualified. Raw execution.json SHA25685fa5f17ebd3d535912e16234e23201636bf5cc7e0fc22a97b0825569a68d6a6 and inspected-artifacts.json at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-04. Ordinary sequence remains owed."
-    recorded_at: "2026-10-22T11:15:28.061Z"
-    command: "pinned Node22 Jest --selectProjects caws-cli --runTestsByPath four mutation CI suites --runInBand --no-cache (full argv in focused-04/execution.json)"
-    exit_code: 1
-    commit_sha: "491bea053534e13b172436c4ae3ac9e889475e34"
+    evidence_ref: "Current547d focused06 two-VM suites exited0/159 with source hashes stable. Actual private Node22 imports selected earlier node/default branches and wrote exact markers; separate validator results ok:false with unsupported Stryker Jest public import export and faultCount0. Full argv, stdout, stderr, markers and rebound metadata in /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-06/inspected-artifacts.json SHA25669c9bd6e283ed42c6c6ec27db2d6a079475d3c0d6c421459c9c35446d160b0bc. Prior focused04 failed247/28 remains retained. Synthetic conditional-consumer and installed-environment checks are not ordinary Stryker consumption; A3/A4/A5 ordinary obligations remain open. Commit verification establishes existence only."
+    recorded_at: "2026-10-22T11:37:35.641Z"
+    exit_code: 0
+    commit_sha: "547d4f96b00bbaac7919a24a22476ac36b7c8a3a"
   - criterion_id: A2
     status: unchecked
     evidence_ref: "Bounded installed-environment component checks at97f7 focused05 exit0/277 with source hashes stable. Four retained producer-closure controls: actualSnapshot.status refused, hook.restoration restored, actual host record-sink error despite retained disk closed; each raw disk SHA rederived. Manifest /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/focused-05/inspected-artifacts.json SHA256d983d4b7a1f49c89352f0798cdd7480ed4f6ccfa4e2ba29360553d6e3c151edb. Subsequent547d conditional-shape controls not executed; ordinary lifecycle remains unverified. Commit existence verification is not test execution or external artifact verification."
