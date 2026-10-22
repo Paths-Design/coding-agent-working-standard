@@ -214,9 +214,10 @@ evidence:
     commit_sha: "821bdeef"
   - criterion_id: A2
     status: pass
-    evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) tests 27-31: assigned bytes equal _realpath exact output minus its one record LF (dotdot, symlinked ancestor, link/.., /tmp leaf, relative, LF-ending path, alias of the LF root); empty-path, python3-unavailable, python3-exit-1, python3-exit-7 return 2, caller variable unchanged, one stderr class line. Mutants M06/M16 killed (/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/mutants-id/mutants.tap). Bounds: python 3.11.13 macOS; non-UTF-8 names untested."
-    recorded_at: "2026-10-22T04:28:02.998Z"
-    commit_sha: "7d49da1d"
+    evidence_ref: "run-37-terminal-821bdeef/serial.tap (sha bf419ce5; candidate 821bdeef clean; 58/58 template dir and installed pack; numbering shifted by 4 after test 21 from run-31) tests 31-35: assigned bytes equal the exact _realpath output minus its one record LF for dotdot, a symlinked ancestor and dotdot after a symlink; empty path, python3 absent and failing python3 (own exit status) are refused by class with the caller variable unchanged."
+    recorded_at: "2026-10-22T05:41:45.503Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-37-terminal-821bdeef/serial.tap"
+    commit_sha: "821bdeef"
   - criterion_id: A3
     status: pass
     evidence_ref: "/Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-31-terminal-7d49da1d/bats.tap (sha f83a9522; candidate 7d49da1d clean, 54/54, guard shas in header) test 54: no command substitution of _realpath, caws_guard_realpath, abspath or resolve_canonical_dir; every caws_guard_realpath_into/abspath_into/caws_resolve_canonical_dir_into line carries a _wwg/_bwg refusal; tests 39 and 47: identity-drop tree admits with exit 0 under failing and absent python3. Bound: text scan; helper fallbacks exempt by design."
