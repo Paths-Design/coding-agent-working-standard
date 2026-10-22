@@ -43,3 +43,11 @@ non_functional: {}
 contracts:
   - name: 'publication-preparation-client'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Actual controlled-transport Jest177/0 in root native-session-publication/client-red/jest-disposition-green.json, cwd publication-client/packages/caws-cli; exact byte copies/chunk offsets/digests, projection-render ordering, prior inventory/removals, terminal consumption and single-attempt seal. Source2a9f2093 strict full TS compilation0 and package five-file ESLint0. These prove client mechanics only: actual exhausted CLOSED/native capture/publication/current reader/ordinary dispatch remain CAWS-NATIVE-SESSION-PUBLICATION-001 obligations. Commit verification is reachability, not test rerun."
+    recorded_at: "2026-10-22T09:13:57.412Z"
+    command: node canonical/node_modules/jest/bin/jest.js --config jest.config.js --selectProjects caws-cli --runInBand --runTestsByPath tests/runtime/session-publication-client.test.js tests/runtime/transcript-store-client.test.js tests/runtime/protocol.test.js
+    exit_code: 0
+    commit_sha: "2a9f2093"
