@@ -50,9 +50,9 @@ acceptance:
       Handlers read the inherited payload file, and neither that file nor the
       CAWS_TEMP_FILES entry is deleted
   - id: A4
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given TMPDIR where no stage can be created, when run_handlers runs a reading handler over a staged-size payload, then the handler still receives the payload byte for byte through the pipe fallback'
+    given: 'A staged-size inline payload and a stage mktemp that fails'
+    when: 'run_handlers runs a reading handler'
+    then: 'The handler receives the payload byte for byte through the pipe fallback and no stage file remains'
   - id: A5
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
