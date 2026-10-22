@@ -52,10 +52,22 @@
 #       Best-effort realpath (python3-backed, falls back to the input).
 #       Resolves the existing prefix even when the leaf does not exist.
 #
-#   caws_guard_realpath <path>
-#       Checked realpath for authority decisions: the same result as
-#       _realpath when python3 succeeds, otherwise empty stdout, a cause on
-#       stderr and exit 2. Never falls back to the unresolved input.
+#   caws_guard_realpath_into <var> <path>
+#       Checked realpath for authority decisions. Assigns the resolved path,
+#       byte for byte, to the caller's variable <var>; on any failure assigns
+#       nothing, names the cause on stderr and returns 2. Never falls back to
+#       the unresolved input.
+#
+#   caws_physical_dir_into <var> <dir>
+#   caws_git_path_into <var> <dir> <rev-parse-option>
+#   caws_resolve_canonical_dir_into <var> <start-dir>
+#       Byte-faithful forms of `cd -P && pwd -P`, `git rev-parse <option>` and
+#       resolve_canonical_dir for guards that compare path identity. Each
+#       assigns <var> and returns 0, or assigns nothing and returns non-zero.
+#
+#   Out-parameters (<var>) must be shell identifiers. Each helper refuses a
+#   name under its own local prefix (_caws_rp_, _caws_pd_, _caws_gp_,
+#   _caws_cd_); callers should keep their names outside _caws_.
 #
 #   caws_current_branch [dir]
 #       Prints the current branch of the checkout at [dir] (default cwd),
@@ -219,18 +231,37 @@ _realpath() {
   fi
 }
 
-# caws_guard_realpath <path>
+# _caws_outparam_ok <name> <helper-local-prefix>
+#   An out-parameter is assigned with printf -v, which writes the nearest
+#   variable of that name in scope. A name shared with one of the helper's own
+#   locals would assign the local and leave the caller's variable untouched.
+#   Each helper keeps its locals under its own prefix and refuses
+#   out-parameters that use it.
+_caws_outparam_ok() {
+  [[ "${1:-}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${2:-}" && "$1" != "$2"* ]]
+}
+
+# caws_guard_realpath_into <var> <path>
 #   Checked normalization for ownership and containment decisions
-#   (CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01). It runs the same python3
-#   program as _realpath, so a successful result reaches the caller unchanged.
-#   When the path cannot be normalized it prints nothing on stdout, names the
-#   cause on stderr and returns 2: a write guard that compared the unresolved
-#   input instead would miss every prefix arm and admit the write. Causes:
-#   empty-path, python3-unavailable, python3-exit-<status>, and empty-result
-#   for output with no byte other than a line feed.
-caws_guard_realpath() {
-  local p="${1:-}" out status
-  if [[ -z "$p" ]]; then
+#   (CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01). Paths are compared as
+#   exact bytes, and a legitimate path may end in a line feed, which a caller's
+#   command substitution would strip. So the result is assigned to <var>
+#   rather than printed: python3 writes the path's filesystem bytes followed
+#   by one line feed record delimiter, the status sentinel keeps every byte
+#   and the producer's exit status, and exactly that one delimiter is removed.
+#   When the path cannot be normalized, <var> is not assigned, the cause is
+#   named on stderr and the status is 2: a write guard that compared the
+#   unresolved input instead would miss every prefix arm and admit the write.
+#   Causes: invalid-out-parameter, empty-path, python3-unavailable,
+#   python3-exit-<status>, no-record-delimiter, empty-result and
+#   non-absolute-result.
+caws_guard_realpath_into() {
+  local _caws_rp_var="${1:-}" _caws_rp_path="${2:-}" _caws_rp_out _caws_rp_status
+  if ! _caws_outparam_ok "$_caws_rp_var" _caws_rp_; then
+    printf '[caws-guard-realpath] cannot normalize: invalid-out-parameter\n' >&2
+    return 2
+  fi
+  if [[ -z "$_caws_rp_path" ]]; then
     printf '[caws-guard-realpath] cannot normalize: empty-path\n' >&2
     return 2
   fi
@@ -238,24 +269,86 @@ caws_guard_realpath() {
     printf '[caws-guard-realpath] cannot normalize: python3-unavailable\n' >&2
     return 2
   fi
-  # The status sentinel keeps trailing newlines, so the bytes printed below are
-  # exactly the interpreter's. The && / || list keeps a failing interpreter from
-  # tripping an inherited errexit before its status is recorded.
-  out="$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$p" 2>/dev/null &&
+  # The && / || list keeps a failing interpreter from tripping an inherited
+  # errexit before its status is recorded; in it $? is the interpreter's own.
+  _caws_rp_out="$(python3 -c 'import os, sys; sys.stdout.buffer.write(os.fsencode(os.path.realpath(sys.argv[1])) + b"\n")' "$_caws_rp_path" 2>/dev/null &&
     printf 'x0' || printf 'x%s' "$?")"
-  status="${out##*x}"
-  out="${out%x*}"
-  if [[ "$status" != 0 ]]; then
-    printf '[caws-guard-realpath] cannot normalize: python3-exit-%s\n' "$status" >&2
+  _caws_rp_status="${_caws_rp_out##*x}"
+  _caws_rp_out="${_caws_rp_out%x*}"
+  if [[ "$_caws_rp_status" != 0 ]]; then
+    printf '[caws-guard-realpath] cannot normalize: python3-exit-%s\n' "$_caws_rp_status" >&2
     return 2
   fi
-  # Callers strip trailing line feeds, so output holding no other byte reaches
-  # them as an empty path even though the interpreter exited 0.
-  if [[ -z "${out//$'\n'/}" ]]; then
+  if [[ "$_caws_rp_out" != *$'\n' ]]; then
+    printf '[caws-guard-realpath] cannot normalize: no-record-delimiter\n' >&2
+    return 2
+  fi
+  _caws_rp_out="${_caws_rp_out%$'\n'}"
+  if [[ -z "$_caws_rp_out" ]]; then
     printf '[caws-guard-realpath] cannot normalize: empty-result\n' >&2
     return 2
   fi
-  printf '%s' "$out"
+  if [[ "$_caws_rp_out" != /* ]]; then
+    printf '[caws-guard-realpath] cannot normalize: non-absolute-result\n' >&2
+    return 2
+  fi
+  printf -v "$_caws_rp_var" '%s' "$_caws_rp_out"
+}
+
+# caws_physical_dir_into <var> <dir>
+#   Assign the physical (symlink-free) path of directory <dir>. `cd -P` sets
+#   PWD to that path, which is printed with a sentinel and no delimiter, so no
+#   byte is stripped. Returns 1 when <dir> cannot be entered, 2 for an invalid
+#   out-parameter; <var> is assigned only on success.
+caws_physical_dir_into() {
+  local _caws_pd_var="${1:-}" _caws_pd_dir="${2:-}" _caws_pd_out
+  _caws_outparam_ok "$_caws_pd_var" _caws_pd_ || return 2
+  [[ -n "$_caws_pd_dir" ]] || return 1
+  _caws_pd_out="$(CDPATH='' cd -P -- "$_caws_pd_dir" 2>/dev/null && printf '%sx' "$PWD")" || return 1
+  [[ "$_caws_pd_out" == /*x ]] || return 1
+  printf -v "$_caws_pd_var" '%s' "${_caws_pd_out%x}"
+}
+
+# caws_git_path_into <var> <dir> <rev-parse-option>
+#   Assign the path `git rev-parse <option>` prints from <dir>, removing
+#   exactly the one line feed that ends git's record. Returns 1 when git
+#   fails or its output is not one non-empty record, 2 for an invalid
+#   out-parameter; <var> is assigned only on success.
+caws_git_path_into() {
+  local _caws_gp_var="${1:-}" _caws_gp_dir="${2:-}" _caws_gp_option="${3:-}" _caws_gp_out
+  _caws_outparam_ok "$_caws_gp_var" _caws_gp_ || return 2
+  [[ -n "$_caws_gp_dir" ]] || return 1
+  _caws_gp_out="$(CDPATH='' cd -- "$_caws_gp_dir" 2>/dev/null &&
+    git rev-parse "$_caws_gp_option" 2>/dev/null && printf 'x0' || printf 'x%s' "$?")"
+  [[ "${_caws_gp_out##*x}" == 0 ]] || return 1
+  _caws_gp_out="${_caws_gp_out%x*}"
+  [[ "$_caws_gp_out" == *$'\n' ]] || return 1
+  _caws_gp_out="${_caws_gp_out%$'\n'}"
+  [[ -n "$_caws_gp_out" ]] || return 1
+  printf -v "$_caws_gp_var" '%s' "$_caws_gp_out"
+}
+
+# caws_resolve_canonical_dir_into <var> <start-dir>
+#   resolve_canonical_dir's decision, assigned byte for byte: the canonical
+#   checkout containing .caws/ when <start-dir> is inside a linked worktree of
+#   one, otherwise <start-dir> itself. Returns 2 for an invalid out-parameter
+#   and 0 otherwise.
+caws_resolve_canonical_dir_into() {
+  local _caws_cd_var="${1:-}" _caws_cd_start="${2:-}" _caws_cd_common="" _caws_cd_candidate=""
+  _caws_outparam_ok "$_caws_cd_var" _caws_cd_ || return 2
+  if [[ -n "$_caws_cd_start" ]] && command -v git >/dev/null 2>&1; then
+    caws_git_path_into _caws_cd_common "$_caws_cd_start" --git-common-dir || _caws_cd_common=""
+    if [[ -n "$_caws_cd_common" && "$_caws_cd_common" != .git ]]; then
+      _caws_cd_candidate="$(CDPATH='' cd -- "$_caws_cd_start" 2>/dev/null &&
+        CDPATH='' cd -- "$_caws_cd_common/.." 2>/dev/null && printf '%sx' "$PWD")" || _caws_cd_candidate=""
+      _caws_cd_candidate="${_caws_cd_candidate%x}"
+      if [[ -n "$_caws_cd_candidate" && -d "$_caws_cd_candidate/.caws" ]]; then
+        printf -v "$_caws_cd_var" '%s' "$_caws_cd_candidate"
+        return 0
+      fi
+    fi
+  fi
+  printf -v "$_caws_cd_var" '%s' "$_caws_cd_start"
 }
 
 # caws_current_branch [dir]

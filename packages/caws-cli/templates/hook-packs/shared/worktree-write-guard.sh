@@ -111,15 +111,18 @@ case "$TOOL_NAME" in
   *) exit 0 ;;
 esac
 
-WORKTREE_ROOT="${CAWS_PROJECT_DIR:-.}"
-WORKTREE_ROOT="$(cd "$WORKTREE_ROOT" 2>/dev/null && pwd -P || printf '%s\n' "$WORKTREE_ROOT")"
+# Path identity is compared byte for byte, and a legitimate path may end in a
+# line feed that command substitution would strip, so every path below is
+# assigned through the out-parameter helpers in lib/caws-state.sh.
+_WWG_ROOT_RAW="${CAWS_PROJECT_DIR:-.}"
+caws_physical_dir_into WORKTREE_ROOT "$_WWG_ROOT_RAW" || WORKTREE_ROOT="$_WWG_ROOT_RAW"
 
 # Linked-worktree detection via git as primary signal.
 IS_LINKED_WORKTREE=0
 CANONICAL_ROOT=""
 if command -v git >/dev/null 2>&1; then
-  GIT_COMMON_DIR_RAW="$(cd "$WORKTREE_ROOT" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null || printf '')"
-  GIT_DIR_RAW="$(cd "$WORKTREE_ROOT" 2>/dev/null && git rev-parse --git-dir 2>/dev/null || printf '')"
+  caws_git_path_into GIT_COMMON_DIR_RAW "$WORKTREE_ROOT" --git-common-dir || GIT_COMMON_DIR_RAW=""
+  caws_git_path_into GIT_DIR_RAW "$WORKTREE_ROOT" --git-dir || GIT_DIR_RAW=""
   if [[ -n "$GIT_COMMON_DIR_RAW" ]] && [[ -n "$GIT_DIR_RAW" ]]; then
     case "$GIT_COMMON_DIR_RAW" in
       /*) GIT_COMMON_DIR_ABS="$GIT_COMMON_DIR_RAW" ;;
@@ -129,11 +132,11 @@ if command -v git >/dev/null 2>&1; then
       /*) GIT_DIR_ABS="$GIT_DIR_RAW" ;;
       *)  GIT_DIR_ABS="$WORKTREE_ROOT/$GIT_DIR_RAW" ;;
     esac
-    GIT_COMMON_DIR="$(caws_guard_realpath "$GIT_COMMON_DIR_ABS")" || _wwg_normalize_refuse "git common dir" "$GIT_COMMON_DIR_ABS"
-    GIT_DIR="$(caws_guard_realpath "$GIT_DIR_ABS")" || _wwg_normalize_refuse "git dir" "$GIT_DIR_ABS"
+    caws_guard_realpath_into GIT_COMMON_DIR "$GIT_COMMON_DIR_ABS" || _wwg_normalize_refuse "git common dir" "$GIT_COMMON_DIR_ABS"
+    caws_guard_realpath_into GIT_DIR "$GIT_DIR_ABS" || _wwg_normalize_refuse "git dir" "$GIT_DIR_ABS"
     if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != "$GIT_DIR" ]]; then
       IS_LINKED_WORKTREE=1
-      CANONICAL_CANDIDATE="$(caws_guard_realpath "$GIT_COMMON_DIR/..")" || _wwg_normalize_refuse "canonical root" "$GIT_COMMON_DIR/.."
+      caws_guard_realpath_into CANONICAL_CANDIDATE "$GIT_COMMON_DIR/.." || _wwg_normalize_refuse "canonical root" "$GIT_COMMON_DIR/.."
       if [[ -n "$CANONICAL_CANDIDATE" ]] && [[ -d "$CANONICAL_CANDIDATE/.caws" ]]; then
         CANONICAL_ROOT="$CANONICAL_CANDIDATE"
       fi
@@ -148,8 +151,7 @@ if [[ "$IS_LINKED_WORKTREE" == "1" ]] && [[ -n "$FILE_PATH" ]]; then
     /*) FILE_PATH_ABS="$FILE_PATH" ;;
     *)  FILE_PATH_ABS="$WORKTREE_ROOT/$FILE_PATH" ;;
   esac
-  _WWG_SPEC_RAW="$FILE_PATH_ABS"
-  FILE_PATH_ABS="$(caws_guard_realpath "$_WWG_SPEC_RAW")" || _wwg_normalize_refuse "spec-materialization target" "$_WWG_SPEC_RAW"
+  caws_guard_realpath_into FILE_PATH_ABS "$FILE_PATH_ABS" || _wwg_normalize_refuse "spec-materialization target" "$FILE_PATH_ABS"
   case "$FILE_PATH_ABS" in
     "$SPEC_ROOT"/*|"$SPEC_ROOT")
       echo "[worktree-write-guard.sh] BLOCKED: $FILE_PATH" >&2
@@ -188,7 +190,7 @@ fi
 # allowlist so a payload path is not swept up by the .caws/* allow arm.
 if [[ -n "$FILE_PATH" ]]; then
   case "$FILE_PATH" in
-    /*) FILE_PATH_FOR_ALLOWLIST="$(caws_guard_realpath "$FILE_PATH")" || _wwg_normalize_refuse "allowlist target" "$FILE_PATH" ;;
+    /*) caws_guard_realpath_into FILE_PATH_FOR_ALLOWLIST "$FILE_PATH" || _wwg_normalize_refuse "allowlist target" "$FILE_PATH" ;;
     *)  FILE_PATH_FOR_ALLOWLIST="$FILE_PATH" ;;
   esac
 
@@ -304,15 +306,15 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 _WWG_AGENT_RAW="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
-AGENT_DIR="$(caws_guard_realpath "$_WWG_AGENT_RAW")" || _wwg_normalize_refuse "operating directory" "$_WWG_AGENT_RAW"
+caws_guard_realpath_into AGENT_DIR "$_WWG_AGENT_RAW" || _wwg_normalize_refuse "operating directory" "$_WWG_AGENT_RAW"
 CURRENT_BRANCH=$(caws_current_branch "$AGENT_DIR")  # HOOK-LIB-CONSOLIDATION-001 T2b
 WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
 
 if [[ -n "$AGENT_DIR" ]] && [[ "$AGENT_DIR" == "$WORKTREE_BASE"/* ]]; then
   # Being in a worktree does not authorize edits to a different canonical claim.
   case "$FILE_PATH" in
-    /*) _CANON_TARGET="$(caws_guard_realpath "$FILE_PATH")" || _wwg_normalize_refuse "canonical-claim target" "$FILE_PATH" ;;
-    *) _CANON_TARGET="$(caws_guard_realpath "$AGENT_DIR/$FILE_PATH")" || _wwg_normalize_refuse "canonical-claim target" "$AGENT_DIR/$FILE_PATH" ;;
+    /*) caws_guard_realpath_into _CANON_TARGET "$FILE_PATH" || _wwg_normalize_refuse "canonical-claim target" "$FILE_PATH" ;;
+    *) caws_guard_realpath_into _CANON_TARGET "$AGENT_DIR/$FILE_PATH" || _wwg_normalize_refuse "canonical-claim target" "$AGENT_DIR/$FILE_PATH" ;;
   esac
   case "$_CANON_TARGET" in "$WORKTREE_BASE"/*) exit 0 ;; esac
   case "$_CANON_TARGET" in
@@ -346,11 +348,15 @@ if [[ -n "$AGENT_DIR" ]] && [[ "$AGENT_DIR" == "$WORKTREE_BASE"/* ]]; then
   exit 0
 fi
 
-IS_REGISTERED_WORKTREE=$(node -e "
+# The root and branch reach node through the environment, never spliced into
+# the program text: an apostrophe or line feed in either would break the parse
+# (and the catch default would answer for the registry), and a spliced value
+# is code.
+IS_REGISTERED_WORKTREE=$(CAWS_WWG_PROJECT_DIR="$PROJECT_DIR" CAWS_WWG_CURRENT_BRANCH="$CURRENT_BRANCH" node -e "
   $CAWS_NODE_ENTRIES_OF
   try {
-    var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-    var current = '$CURRENT_BRANCH';
+    var reg = JSON.parse(require('fs').readFileSync(process.env.CAWS_WWG_PROJECT_DIR + '/.caws/worktrees.json', 'utf8'));
+    var current = process.env.CAWS_WWG_CURRENT_BRANCH;
     var found = entriesOf(reg).some(function(w) {
       return w.branch === current && w.status !== 'destroyed' && w.status !== 'missing';
     });
@@ -362,16 +368,16 @@ if [[ "$IS_REGISTERED_WORKTREE" == "1" ]]; then
   exit 0
 fi
 
-WT_INFO=$(node -e "
+WT_INFO=$(CAWS_WWG_PROJECT_DIR="$PROJECT_DIR" CAWS_WWG_CURRENT_BRANCH="$CURRENT_BRANCH" node -e "
   $CAWS_NODE_ENTRIES_OF
   var fs = require('fs');
   var path = require('path');
   try {
-    var projectDir = '$PROJECT_DIR';
+    var projectDir = process.env.CAWS_WWG_PROJECT_DIR;
     var reg = JSON.parse(fs.readFileSync(projectDir + '/.caws/worktrees.json', 'utf8'));
     var active = entriesOf(reg).filter(function(w) {
       if (w.status === 'destroyed' || w.status === 'missing') return false;
-      if (w.baseBranch !== '$CURRENT_BRANCH') return false;
+      if (w.baseBranch !== process.env.CAWS_WWG_CURRENT_BRANCH) return false;
       var wtPath = (typeof w.path === 'string' && w.path)
         ? w.path
         : path.join(projectDir, '.caws', 'worktrees', String(w.name || ''));
@@ -384,40 +390,72 @@ WT_INFO=$(node -e "
 WT_COUNT=$(echo "$WT_INFO" | cut -d: -f1)
 WT_NAMES=$(echo "$WT_INFO" | cut -d: -f2)
 
-if [[ "$WT_COUNT" -lt 1 ]] 2>/dev/null && command -v git >/dev/null 2>&1; then
-  GIT_WT_INFO=$(git -C "$PROJECT_DIR" worktree list --porcelain 2>/dev/null | awk -v current="$PROJECT_DIR" '
-    BEGIN {
-      count = 0;
-      names = "";
-      path = "";
-    }
-    /^worktree / {
-      path = substr($0, 10);
-      next;
-    }
-    /^branch / {
-      if (path != "" && path != current) {
-        count++;
-        name = path;
-        sub(/^.*\//, "", name);
-        names = names (names ? ", " : "") name;
-      }
-      path = "";
-      next;
-    }
-    END {
-      if (path != "" && path != current) {
-        count++;
-        name = path;
-        sub(/^.*\//, "", name);
-        names = names (names ? ", " : "") name;
-      }
-      printf "%d:%s\n", count, names;
-    }
-  ')
+# Reads `git worktree list --porcelain -z` on stdin and prints
+# <count>:<names> for the worktrees other than $PROJECT_DIR, counting as the
+# line-form parser below does: each record with a branch, and a final record
+# without one. NUL-terminated fields carry any path byte.
+_wwg_count_worktrees_z() {
+  local field path="" count=0 names=""
+  while IFS= read -r -d '' field; do
+    case "$field" in
+      "worktree "*) path="${field#worktree }" ;;
+      "branch "*)
+        if [[ -n "$path" && "$path" != "$PROJECT_DIR" ]]; then
+          count=$((count + 1)); names="${names:+$names, }${path##*/}"
+        fi
+        path="" ;;
+    esac
+  done
+  if [[ -n "$path" && "$path" != "$PROJECT_DIR" ]]; then
+    count=$((count + 1)); names="${names:+$names, }${path##*/}"
+  fi
+  printf '%d:%s' "$count" "$names"
+}
 
-  WT_COUNT=$(echo "$GIT_WT_INFO" | cut -d: -f1)
-  WT_NAMES=$(echo "$GIT_WT_INFO" | cut -d: -f2-)
+if [[ "$WT_COUNT" -lt 1 ]] 2>/dev/null && command -v git >/dev/null 2>&1; then
+  if GIT_WT_INFO="$(git -C "$PROJECT_DIR" worktree list --porcelain -z 2>/dev/null | _wwg_count_worktrees_z)"; then
+    :
+  elif [[ "$PROJECT_DIR" == *$'\n'* ]]; then
+    # git before 2.36 has no -z, and its line form cannot carry the root's
+    # line feed: the worktree count is unknown, which is not zero.
+    _WHY="[worktree-write-guard] the project root $(printf '%q' "$PROJECT_DIR") contains a line feed and this git cannot list worktrees NUL-terminated (git worktree list --porcelain -z needs git 2.36 or later), so active worktrees cannot be counted."
+    if caws_guard_cannot_ask; then echo "$_WHY" >&2; exit 2; fi
+    emit_ask "$_WHY"; exit 0
+  else
+    GIT_WT_INFO=$(git -C "$PROJECT_DIR" worktree list --porcelain 2>/dev/null | awk -v current="$PROJECT_DIR" '
+      BEGIN {
+        count = 0;
+        names = "";
+        path = "";
+      }
+      /^worktree / {
+        path = substr($0, 10);
+        next;
+      }
+      /^branch / {
+        if (path != "" && path != current) {
+          count++;
+          name = path;
+          sub(/^.*\//, "", name);
+          names = names (names ? ", " : "") name;
+        }
+        path = "";
+        next;
+      }
+      END {
+        if (path != "" && path != current) {
+          count++;
+          name = path;
+          sub(/^.*\//, "", name);
+          names = names (names ? ", " : "") name;
+        }
+        printf "%d:%s\n", count, names;
+      }
+    ')
+  fi
+
+  WT_COUNT="${GIT_WT_INFO%%:*}"
+  WT_NAMES="${GIT_WT_INFO#*:}"
 fi
 
 # Zero worktrees → nothing to isolate → allow.
@@ -428,7 +466,7 @@ fi
 if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
   REL_PATH="${FILE_PATH_FOR_ALLOWLIST:-$FILE_PATH}"
   if [[ "$REL_PATH" == "$PROJECT_DIR"/* ]]; then
-    REL_PATH="${REL_PATH#$PROJECT_DIR/}"
+    REL_PATH="${REL_PATH#"$PROJECT_DIR"/}"
   fi
 
   # CAWS-SCOPE-CONTENTION-CMD-001: the cross-worktree scope-claim check is the
@@ -488,11 +526,11 @@ fi
 if [[ -z "${REL_PATH:-}" ]]; then
   REL_PATH="${FILE_PATH_FOR_ALLOWLIST:-$FILE_PATH}"
   if [[ -n "$REL_PATH" ]] && [[ "$REL_PATH" == "$PROJECT_DIR"/* ]]; then
-    REL_PATH="${REL_PATH#$PROJECT_DIR/}"
+    REL_PATH="${REL_PATH#"$PROJECT_DIR"/}"
   fi
 fi
 
-MERGE_HEAD_PATH=$(cd "$AGENT_DIR" && git rev-parse --git-dir 2>/dev/null || echo ".git")
+caws_git_path_into MERGE_HEAD_PATH "$AGENT_DIR" --git-dir || MERGE_HEAD_PATH=".git"
 if [[ -f "$MERGE_HEAD_PATH/MERGE_HEAD" ]]; then
   exit 0
 fi

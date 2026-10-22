@@ -20,6 +20,12 @@
 # operand is held for approval first. A separate test pins that conservative
 # ask and fails if prefixes are ever projected.
 #
+# Path identity: guards compare paths as exact bytes, and a legitimate root may
+# end in a line feed, which command substitution strips. The identity cases
+# build each root's expected bytes in the fixture and run every scenario at an
+# ordinary root first as the control. A root the Bash analysis transport
+# cannot carry must be refused naming that, never admitted or misattributed.
+#
 # CAWS_GUARD_REALPATH_DIR selects the guard tree under test (default: the pack
 # installed by helpers.bash); CAWS_GUARD_REALPATH_CLI the CLI providing
 # `hooks mutation-view` (default: helpers.bash's built entry);
@@ -33,14 +39,17 @@ guard_dir() {
   printf '%s\n' "${CAWS_GUARD_REALPATH_DIR:-$CAWS_TEST_HOOKS_DIR}"
 }
 
-# Usage: rp_make_layout <physical-root>
-# A governed repository at exactly <physical-root>: tracked .caws content (so
-# linked worktrees carry a .caws directory, as real ones do), an untracked
-# registry, and linked worktrees s-wt and f-wt owned by different sessions.
+# Usage: rp_make_layout <physical-root> [<branch>] [<registry-base-branch>]
+# A governed repository at exactly <physical-root> on <branch> (default main):
+# tracked .caws content (so linked worktrees carry a .caws directory, as real
+# ones do), an untracked registry, and linked worktrees s-wt and f-wt owned by
+# different sessions, registered against <registry-base-branch> (default
+# <branch>).
 rp_make_layout() {
-  local root="$1"
+  local root="$1" branch="${2:-main}"
+  local base="${3:-$branch}"
   mkdir "$root"
-  git -C "$root" init -q -b main
+  git -C "$root" init -q -b "$branch"
   mkdir -p "$root/.caws/worktrees"
   printf 'version: 1\n' > "$root/.caws/policy.yaml"
   printf '.caws/worktrees/\n.caws/worktrees.json\n' > "$root/.gitignore"
@@ -49,11 +58,11 @@ rp_make_layout() {
     -c commit.gpgsign=false commit -q -m 'root commit'
   git -C "$root" worktree add -q -b caws/s-wt "$root/.caws/worktrees/s-wt"
   git -C "$root" worktree add -q -b caws/f-wt "$root/.caws/worktrees/f-wt"
-  jq -n --arg r "$root" '{
-      "s-wt": {name: "s-wt", branch: "caws/s-wt", baseBranch: "main",
+  jq -n --arg r "$root" --arg b "$base" '{
+      "s-wt": {name: "s-wt", branch: "caws/s-wt", baseBranch: $b,
                path: ($r + "/.caws/worktrees/s-wt"), spec_id: "FIX-S-1",
                owner: {session_id: "rp-session-s"}},
-      "f-wt": {name: "f-wt", branch: "caws/f-wt", baseBranch: "main",
+      "f-wt": {name: "f-wt", branch: "caws/f-wt", baseBranch: $b,
                path: ($r + "/.caws/worktrees/f-wt"), spec_id: "FIX-F-1",
                owner: {session_id: "rp-session-f"}}
     }' > "$root/.caws/worktrees.json"
@@ -85,13 +94,13 @@ setup_file() {
 
   # python3 that forwards to the real interpreter, counts each call of the
   # exact realpath program, and answers only the RP_FAIL_NTH-th such call per
-  # RP_FAIL_MODE: exit1 fails; lf, lflf and empty exit 0 having printed only
-  # line feeds or nothing -- a "success" whose value a caller's command
-  # substitution reduces to the empty string.
+  # RP_FAIL_MODE: exit<N> fails with status N; lf, lflf, empty, relative and
+  # nodelim exit 0 having written something other than one absolute path and
+  # its single record delimiter.
   mkdir -p "$CAWS_TEST_HOME/counting-python"
   cat > "$CAWS_TEST_HOME/counting-python/python3" <<'SHIM'
 #!/bin/bash
-program='import os, sys; print(os.path.realpath(sys.argv[1]))'
+program='import os, sys; sys.stdout.buffer.write(os.fsencode(os.path.realpath(sys.argv[1])) + b"\n")'
 if [[ "$1" == -c && "$2" == "$program" && -n "${RP_COUNT_FILE:-}" ]]; then
   n=$(( $(cat "$RP_COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
   printf '%s\n' "$n" > "$RP_COUNT_FILE"
@@ -101,7 +110,9 @@ if [[ "$1" == -c && "$2" == "$program" && -n "${RP_COUNT_FILE:-}" ]]; then
       lf) printf '\n'; exit 0 ;;
       lflf) printf '\n\n'; exit 0 ;;
       empty) exit 0 ;;
-      *) exit 1 ;;
+      relative) printf 'relative/leaf\n'; exit 0 ;;
+      nodelim) printf '%s' "$3"; exit 0 ;;
+      exit*) exit "${RP_FAIL_MODE#exit}" ;;
     esac
   fi
 fi
@@ -123,7 +134,7 @@ SHIM
   # normalizer replaced by the best-effort one. It must reproduce the
   # unrepaired admission, or the refusal assertions below prove nothing.
   cp -R "$(guard_dir)" "$CAWS_TEST_HOME/identity-drop"
-  printf '\ncaws_guard_realpath() { _realpath "$@"; }\n' \
+  printf '\ncaws_guard_realpath_into() { printf -v "$1" "%%s" "$(_realpath "$2")"; }\n' \
     >> "$CAWS_TEST_HOME/identity-drop/lib/caws-state.sh"
 
   # Path identity: two repositories with the same layout, one at an ordinary
@@ -137,9 +148,53 @@ SHIM
   export RP_PLAIN_REPO="$id_base/plain"
   export RP_LF_REPO="$id_base/repo"$'\n'
   export RP_QUOTE_REPO="$id_base/o'brien"
+  export RP_GLOB_REPO="$id_base/glob[1]"
   rp_make_layout "$RP_PLAIN_REPO"
   rp_make_layout "$RP_LF_REPO"
   rp_make_layout "$RP_QUOTE_REPO"
+  rp_make_layout "$RP_GLOB_REPO"
+  # A branch name containing an apostrophe, and registries naming another base
+  # branch, so base-branch enforcement must count worktrees from git.
+  export RP_QUOTE_BRANCH_REPO="$id_base/branch-quote"
+  export RP_FALLBACK_PLAIN_REPO="$id_base/fallback-plain"
+  export RP_FALLBACK_LF_REPO="$id_base/fallback"$'\n'
+  rp_make_layout "$RP_QUOTE_BRANCH_REPO" "it's"
+  rp_make_layout "$RP_FALLBACK_PLAIN_REPO" main elsewhere
+  rp_make_layout "$RP_FALLBACK_LF_REPO" main elsewhere
+
+  # A git without `worktree list -z` (before 2.36): that one form fails as
+  # git does for an unknown option; every other call goes to the real git.
+  export RP_REAL_GIT
+  RP_REAL_GIT="$(command -v git)"
+  mkdir -p "$CAWS_TEST_HOME/git-without-z"
+  cat > "$CAWS_TEST_HOME/git-without-z/git" <<'SHIM'
+#!/bin/bash
+args=" $* "
+if [[ "$args" == *" worktree list "* && "$args" == *" -z "* ]]; then
+  echo "error: unknown switch \`z'" >&2
+  exit 129
+fi
+exec "$RP_REAL_GIT" "$@"
+SHIM
+  chmod +x "$CAWS_TEST_HOME/git-without-z/git"
+
+  # Instrumentation for base-branch enforcement: a caws that records, NUL
+  # terminated, the path worktree-write-guard hands to `scope contention` and
+  # answers clear; every other subcommand goes to the real CLI.
+  export RP_REAL_CAWS
+  RP_REAL_CAWS="$(command -v caws || true)"
+  mkdir -p "$CAWS_TEST_HOME/contention-caws"
+  cat > "$CAWS_TEST_HOME/contention-caws/caws" <<'SHIM'
+#!/bin/bash
+if [[ "${1:-}" == scope && "${2:-}" == contention ]]; then
+  printf '%s\0' "${3-}" >> "$RP_CONTENTION_LOG"
+  printf '{"status":"clear"}\n'
+  exit 0
+fi
+[[ -n "${RP_REAL_CAWS:-}" ]] || exit 127
+exec "$RP_REAL_CAWS" "$@"
+SHIM
+  chmod +x "$CAWS_TEST_HOME/contention-caws/caws"
   ln -s "$RP_PLAIN_REPO" "$id_base/plain-alias"
   ln -s "$RP_LF_REPO" "$id_base/lf-alias"
   export RP_PLAIN_ALIAS="$id_base/plain-alias"
@@ -202,8 +257,13 @@ rp_guard() {
 rp_sweep() {
   local mode="$1" guard="$2" session="$3" payload="$4" expected="$5"
   shift 5
-  local count n labels="" label cause=empty-result
-  [[ "$mode" == exit1 ]] && cause=python3-exit-1
+  local count n labels="" label cause
+  case "$mode" in
+    exit*) cause="python3-exit-${mode#exit}" ;;
+    lf) cause=empty-result ;;
+    lflf|relative) cause=non-absolute-result ;;
+    empty|nodelim) cause=no-record-delimiter ;;
+  esac
   export RP_FAIL_MODE="$mode"
   export RP_COUNT_FILE="$BATS_TEST_TMPDIR/count.$guard"
   rm -f "$RP_COUNT_FILE" "$RP_COUNT_FILE.paths"
@@ -234,46 +294,53 @@ rp_sweep() {
 # rp-session-f owns. The payload carries every path byte-faithfully.
 id_guard() {
   local guard="$1" repo="$2" op="$3" tool="$4" arg="$5" payload file="" cmd=""
+  # RP_ID_CWD moves the session's working directory away from its project.
+  local cwd="${RP_ID_CWD:-$op}"
   case "$tool" in
     Write)
       file="$arg"
-      payload="$(jq -nc --arg f "$arg" --arg c "$op" \
+      payload="$(jq -nc --arg f "$arg" --arg c "$cwd" \
         '{tool_name: "Write", tool_input: {file_path: $f, content: "x"}, cwd: $c}')" ;;
     Bash)
       cmd="$arg"
-      payload="$(jq -nc --arg k "$arg" --arg c "$op" \
+      payload="$(jq -nc --arg k "$arg" --arg c "$cwd" \
         '{tool_name: "Bash", tool_input: {command: $k}, cwd: $c}')" ;;
   esac
   run env -i \
-    HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws" PATH="$PATH" \
-    CAWS_BIN="$RP_CLI" \
+    HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws" PATH="${RP_ID_PATH:-$PATH}" \
+    CAWS_BIN="$RP_CLI" RP_CONTENTION_LOG="${RP_CONTENTION_LOG:-}" RP_REAL_CAWS="$RP_REAL_CAWS" \
+    RP_REAL_GIT="$RP_REAL_GIT" \
     CLAUDE_CODE_SESSION_ID=rp-session-s HOOK_SESSION_ID=rp-session-s \
     CLAUDE_PROJECT_DIR="$op" CAWS_PROJECT_DIR="$op" \
     CAWS_AGENT_SURFACE=claude-code HOOK_EVENT_NAME=PreToolUse \
-    HOOK_PERMISSION_MODE=default HOOK_INPUT_JSON="$payload" \
+    HOOK_PERMISSION_MODE="${RP_ID_MODE:-default}" HOOK_INPUT_JSON="$payload" \
     HOOK_TOOL_NAME="$tool" HOOK_FILE_PATH="$file" HOOK_COMMAND="$cmd" \
-    HOOK_CWD="$op" \
-    bash -c 'cd "$1" && bash "$2" </dev/null' _ "$op" "$(guard_dir)/$guard"
-  printf '# %s op=%q status=%s\n# output=%s\n' "$guard" "$op" "$status" "$output" >&3
+    HOOK_CWD="$cwd" \
+    bash -c 'cd "$1" && bash "$2" </dev/null' _ "$cwd" "$(guard_dir)/$guard"
+  printf '# %s op=%q cwd=%q status=%s\n# output=%s\n' "$guard" "$op" "$cwd" "$status" "$output" >&3
   [[ ! -e "$repo/.caws/worktrees/f-wt/src" ]]
 }
 
-# Usage: id_case <guard.sh> <canonical|alias|linked> <Write|Bash>
+# Usage: id_case <guard.sh> <canonical|alias|linked> <Write|Bash> <same|transport-hold>
 # Runs one scenario against the ordinary-path repository, then the identical
 # scenario against the repository whose root ends in a line feed. The ordinary
-# run is the control: it must refuse, or the fixture proves nothing. The line
-# feed run must reach the same refusal.
+# run is the control: it must refuse, or the fixture proves nothing. With
+# `same` the line-feed run must produce the control's exact refusal, which
+# names no root. With `transport-hold` the operating directory's physical path
+# holds the line feed, which the Bash analysis transport cannot carry (the
+# analyzer resolves an alias to that path), and the run must be refused naming
+# exactly that physical path.
 id_case() {
-  local guard="$1" kind="$2" tool="$3" variant repo alias op target cmd
+  local guard="$1" kind="$2" tool="$3" expect="$4" variant repo alias op physical target cmd control="" hold
   for variant in plain lf; do
     if [[ "$variant" == plain ]]; then repo="$RP_PLAIN_REPO"; alias="$RP_PLAIN_ALIAS"
     else repo="$RP_LF_REPO"; alias="$RP_LF_ALIAS"; fi
     case "$kind" in
-      canonical) op="$repo"; target="$op/.caws/worktrees/f-wt/src/payload.ts"
+      canonical) op="$repo"; physical="$repo"; target="$op/.caws/worktrees/f-wt/src/payload.ts"
         cmd='touch .caws/worktrees/f-wt/src/payload.ts' ;;
-      alias) op="$alias"; target="$op/.caws/worktrees/f-wt/src/payload.ts"
+      alias) op="$alias"; physical="$repo"; target="$op/.caws/worktrees/f-wt/src/payload.ts"
         cmd='touch .caws/worktrees/f-wt/src/payload.ts' ;;
-      linked) op="$repo/.caws/worktrees/s-wt"; target="$repo/.caws/worktrees/f-wt/src/payload.ts"
+      linked) op="$repo/.caws/worktrees/s-wt"; physical="$op"; target="$repo/.caws/worktrees/f-wt/src/payload.ts"
         cmd='touch ../f-wt/src/payload.ts' ;;
     esac
     if [[ "$tool" == Write ]]; then
@@ -282,7 +349,59 @@ id_case() {
       id_guard "$guard" "$repo" "$op" Bash "$cmd"
     fi
     [ "$status" -eq 2 ] || { printf '%s %s %s: %s run exited %s\n' "$guard" "$kind" "$tool" "$variant" "$status"; false; }
+    if [[ "$variant" == plain ]]; then
+      [[ "$output" == *"BLOCKED"*"owned by a DIFFERENT session"* ]] ||
+        { printf 'control did not reach the ownership refusal\n'; false; }
+      control="$output"
+    elif [[ "$expect" == same ]]; then
+      [ "$output" = "$control" ] || { printf 'line-feed run differs from the control\n'; false; }
+    else
+      hold="[bash-write-guard] the operating directory's physical path $(printf '%q' "$physical") contains a carriage return, line feed or tab, which the command mutation analysis transport cannot carry as a coordinate, so this command's write targets cannot be established. Failing CLOSED."
+      [ "${lines[0]}" = "$hold" ] || { printf 'line-feed run was not held for the transport\n'; false; }
+      [ "${#lines[@]}" -eq 2 ]
+      [[ "${lines[1]}" == '{"decision":"block","reason":"CAWS bash-write-guard: the operating directory contains a carriage return, line feed or tab'* ]]
+    fi
   done
+}
+
+# Usage: rp_expect_into <helper> <option-or-empty> <input> <expected> [<input> <expected>]...
+# Calls <helper> <var> <input> [<option>] for each pair and requires the
+# assigned bytes to equal <expected>, which the fixture constructed.
+rp_expect_into() {
+  local helper="$1" option="$2"
+  shift 2
+  run bash -c '
+    source "$1/lib/caws-state.sh"; helper="$2"; option="$3"; shift 3
+    while (($#)); do
+      v=unassigned
+      if [[ -n "$option" ]]; then "$helper" v "$1" "$option"; else "$helper" v "$1"; fi ||
+        { printf "status %s for %q\n" "$?" "$1"; exit 1; }
+      printf "%q -> %q\n" "$1" "$v"
+      [[ "$v" == "$2" ]] || { printf "expected %q\n" "$2"; exit 1; }
+      shift 2
+    done' _ "$(guard_dir)" "$helper" "$option" "$@"
+  printf '# %s\n' "${lines[@]}" >&3
+  [ "$status" -eq 0 ]
+}
+
+# Usage: rp_refusal <PATH> <helper> <var-name> <input> <expected-status> <expected-stderr>
+# A refused call must leave the caller's variable exactly as it was.
+rp_refusal() {
+  local path_value="$1" helper="$2" name="$3" input="$4" want_status="$5" want_stderr="$6"
+  run --separate-stderr env PATH="$path_value" RP_REAL_PYTHON="$RP_REAL_PYTHON" \
+    RP_COUNT_FILE="${RP_COUNT_FILE:-}" RP_FAIL_NTH="${RP_FAIL_NTH:-0}" RP_FAIL_MODE="${RP_FAIL_MODE:-exit1}" \
+    bash -c 'source "$1/lib/caws-state.sh"
+      if [[ "$3" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then printf -v "$3" %s untouched; fi
+      "$2" "$3" "$4"; s=$?
+      if [[ "$3" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then printf "status=%s value=%s" "$s" "${!3}"
+      else printf "status=%s" "$s"; fi' _ "$(guard_dir)" "$helper" "$name" "$input"
+  printf '# %s %q %q: %s stderr=%q\n' "$helper" "$name" "$input" "$output" "$stderr" >&3
+  if [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    [ "$output" = "status=$want_status value=untouched" ]
+  else
+    [ "$output" = "status=$want_status" ]
+  fi
+  [ "$stderr" = "$want_stderr" ]
 }
 
 @test "precondition: the identity roots exist at exactly their constructed bytes" {
@@ -300,54 +419,160 @@ id_case() {
 }
 
 @test "path identity: a root ending in a line feed reaches the caller with that byte" {
-  local input
-  for input in "$RP_LF_REPO" "$RP_LF_ALIAS" "$RP_LF_REPO/.git/.."; do
-    run bash -c 'source "$1/lib/caws-state.sh"
-      v="$(caws_guard_realpath "$2")" || exit 9
-      printf "%q" "$v"' _ "$(guard_dir)" "$input"
-    printf '# input=%q status=%s observed=%s expected=%q\n' "$input" "$status" "$output" "$RP_LF_REPO" >&3
-    [ "$status" -eq 0 ]
-    [ "$output" = "$(printf '%q' "$RP_LF_REPO")" ]
-  done
+  rp_expect_into caws_guard_realpath_into "" \
+    "$RP_LF_REPO" "$RP_LF_REPO" \
+    "$RP_LF_ALIAS" "$RP_LF_REPO" \
+    "$RP_LF_REPO/.git/.." "$RP_LF_REPO" \
+    "$RP_LF_ALIAS/.caws/worktrees/f-wt/src/payload.ts" "$RP_LF_REPO/.caws/worktrees/f-wt/src/payload.ts" \
+    "$RP_LF_REPO/.caws/missing-leaf"$'\n' "$RP_LF_REPO/.caws/missing-leaf"$'\n'
+  rp_expect_into caws_physical_dir_into "" \
+    "$RP_LF_ALIAS" "$RP_LF_REPO" \
+    "$RP_PLAIN_ALIAS" "$RP_PLAIN_REPO"
+  rp_expect_into caws_git_path_into --git-common-dir \
+    "$RP_LF_REPO/.caws/worktrees/s-wt" "$RP_LF_REPO/.git"
+  rp_expect_into caws_git_path_into --git-dir \
+    "$RP_LF_REPO/.caws/worktrees/s-wt" "$RP_LF_REPO/.git/worktrees/s-wt"
+  # git's record ends in a line feed after the root's own: only one is removed.
+  rp_expect_into caws_git_path_into --show-toplevel \
+    "$RP_LF_REPO" "$RP_LF_REPO"
+  rp_expect_into caws_resolve_canonical_dir_into "" \
+    "$RP_LF_REPO/.caws/worktrees/s-wt" "$RP_LF_REPO" \
+    "$RP_PLAIN_REPO/.caws/worktrees/s-wt" "$RP_PLAIN_REPO" \
+    "$RP_LF_REPO" "$RP_LF_REPO" \
+    "$CAWS_TEST_HOME/no-python" "$CAWS_TEST_HOME/no-python"
+}
+
+@test "path identity: the capture helpers assign nothing when they have no answer" {
+  rp_refusal "$PATH" caws_physical_dir_into result "$CAWS_TEST_HOME/missing-dir" 1 ""
+  rp_refusal "$PATH" caws_git_path_into result "$CAWS_TEST_HOME/no-python" 1 ""
+  rp_refusal "$PATH" caws_git_path_into result "" 1 ""
 }
 
 @test "path identity: worktree-write-guard refuses a foreign payload write from a line-feed canonical root" {
-  id_case worktree-write-guard.sh canonical Write
+  id_case worktree-write-guard.sh canonical Write same
 }
 
 @test "path identity: worktree-write-guard refuses a foreign payload write through an alias of a line-feed root" {
-  id_case worktree-write-guard.sh alias Write
+  id_case worktree-write-guard.sh alias Write same
 }
 
 @test "path identity: worktree-write-guard refuses a foreign payload write from a worktree of a line-feed root" {
-  id_case worktree-write-guard.sh linked Write
+  id_case worktree-write-guard.sh linked Write same
 }
 
-@test "path identity: bash-write-guard refuses a foreign mutation from a line-feed canonical root" {
-  id_case bash-write-guard.sh canonical Bash
+@test "path identity: bash-write-guard holds a line-feed canonical operating directory for the analysis transport" {
+  id_case bash-write-guard.sh canonical Bash transport-hold
 }
 
-@test "path identity: bash-write-guard refuses a foreign mutation through an alias of a line-feed root" {
-  id_case bash-write-guard.sh alias Bash
+@test "path identity: bash-write-guard holds an alias of a line-feed root, which the analyzer resolves to that root" {
+  id_case bash-write-guard.sh alias Bash transport-hold
 }
 
-@test "path identity: bash-write-guard refuses a foreign mutation from a worktree of a line-feed root" {
-  id_case bash-write-guard.sh linked Bash
+@test "path identity: bash-write-guard holds a line-feed worktree operating directory for the analysis transport" {
+  id_case bash-write-guard.sh linked Bash transport-hold
 }
 
-@test "path identity: base-branch enforcement gives a line-feed or apostrophe root the ordinary root's verdict" {
-  local repo expected="" observed
-  for repo in "$RP_PLAIN_REPO" "$RP_QUOTE_REPO" "$RP_LF_REPO"; do
+# Usage: id_base_branch <repo>
+# A canonical-root Write of src/new.ts under base-branch enforcement, first at
+# the ordinary root (the control) and then at <repo>. Each run must hand
+# exactly src/new.ts to scope contention and reach the control's verdict, the
+# root's own bytes abstracted. The control's verdict names the registry's
+# worktrees in registry order (s-wt, f-wt); the git worktree list fallback,
+# which answers only when the registry read fails, names them f-wt, s-wt.
+id_base_branch() {
+  local variant="$1" repo observed expected="" log="$BATS_TEST_TMPDIR/contention.log"
+  printf 'src/new.ts\0' > "$BATS_TEST_TMPDIR/contention.expected"
+  for repo in "$RP_PLAIN_REPO" "$variant"; do
+    rm -f "$log"
+    RP_ID_PATH="$CAWS_TEST_HOME/contention-caws:$PATH" RP_CONTENTION_LOG="$log" \
+      id_guard worktree-write-guard.sh "$repo" "$repo" Write "$repo/src/new.ts"
+    observed="$status:${output//"$repo"/<ROOT>}"
+    printf '# contention argument: %s\n' "$(od -c "$log" 2>/dev/null | head -2 | tr '\n' ' ')" >&3
+    if [[ -z "$expected" ]]; then
+      expected="$observed"
+      [[ "$output" == *'"permissionDecision": "ask"'* && "$output" == *"s-wt, f-wt"* ]] ||
+        { printf 'control did not reach base-branch enforcement\n'; false; }
+    fi
+    cmp -s "$BATS_TEST_TMPDIR/contention.expected" "$log" ||
+      { printf 'root %q handed scope contention a different path\n' "$repo"; false; }
+    [ "$observed" = "$expected" ] || { printf 'root %q: %s\nexpected: %s\n' "$repo" "$observed" "$expected"; false; }
+  done
+}
+
+@test "path identity: base-branch enforcement reads the registry for a root containing an apostrophe" {
+  id_base_branch "$RP_QUOTE_REPO"
+}
+
+@test "path identity: bash-write-guard governs a line-feed project root from an ordinary working directory outside it" {
+  # The working directory is an ordinary path, so nothing is held for the
+  # transport and the project root alone decides whether the guard governs.
+  # The control's target is refused by ownership. The line-feed root's target
+  # holds that line feed, which the operand carrier cannot transport, so it is
+  # escalated as unrepresentable: asked when asking is possible, refused when
+  # it is not, never admitted.
+  local target
+  mkdir -p "$CAWS_TEST_HOME/outside"
+  target="$RP_PLAIN_REPO/.caws/worktrees/f-wt/src/payload.ts"
+  RP_ID_CWD="$CAWS_TEST_HOME/outside" \
+    id_guard bash-write-guard.sh "$RP_PLAIN_REPO" "$RP_PLAIN_REPO" Bash "touch \"$target\""
+  [ "$status" -eq 2 ]
+  assert_output --partial "BLOCKED: this Bash command mutates worktree 'f-wt''s payload"
+  target="$RP_LF_REPO/.caws/worktrees/f-wt/src/payload.ts"
+  RP_ID_CWD="$CAWS_TEST_HOME/outside" \
+    id_guard bash-write-guard.sh "$RP_LF_REPO" "$RP_LF_REPO" Bash "touch \"$target\""
+  [ "$status" -eq 0 ]
+  assert_output --partial '"permissionDecision": "ask"'
+  assert_output --partial "ask_unrepresentable_target: 1 operand(s) contain a newline or tab"
+  RP_ID_CWD="$CAWS_TEST_HOME/outside" RP_ID_MODE=bypassPermissions \
+    id_guard bash-write-guard.sh "$RP_LF_REPO" "$RP_LF_REPO" Bash "touch \"$target\""
+  [ "$status" -eq 2 ]
+  assert_output --partial "ask_unrepresentable_target"
+}
+
+@test "path identity: base-branch enforcement strips a root containing a bracket expression literally" {
+  id_base_branch "$RP_GLOB_REPO"
+}
+
+@test "path identity: base-branch enforcement keeps a root ending in a line feed" {
+  id_base_branch "$RP_LF_REPO"
+}
+
+@test "path identity: base-branch enforcement reads the registry for a branch containing an apostrophe" {
+  local repo="$RP_QUOTE_BRANCH_REPO"
+  RP_ID_PATH="$CAWS_TEST_HOME/contention-caws:$PATH" RP_CONTENTION_LOG="$BATS_TEST_TMPDIR/contention.log" \
     id_guard worktree-write-guard.sh "$repo" "$repo" Write "$repo/src/new.ts"
-    # The verdict, with the root's own bytes abstracted so the three compare.
+  [ "$status" -eq 0 ]
+  # Registry order; the git worktree list fallback would name f-wt first.
+  assert_output --partial "2 active worktree(s) on 'it's': s-wt, f-wt."
+}
+
+@test "path identity: the git worktree fallback counts a line-feed root's worktrees as it counts an ordinary root's" {
+  # Both registries name another base branch, so both runs count from git.
+  local repo observed expected=""
+  for repo in "$RP_FALLBACK_PLAIN_REPO" "$RP_FALLBACK_LF_REPO"; do
+    RP_ID_PATH="$CAWS_TEST_HOME/contention-caws:$PATH" RP_CONTENTION_LOG="$BATS_TEST_TMPDIR/contention.log" \
+      id_guard worktree-write-guard.sh "$repo" "$repo" Write "$repo/src/new.ts"
     observed="$status:${output//"$repo"/<ROOT>}"
     if [[ -z "$expected" ]]; then
       expected="$observed"
-      # The control must reach the enforcement this case is about.
-      [[ "$output" == *'"decision"'* || "$status" -eq 2 ]]
+      assert_output --partial "2 active worktree(s) on 'main': f-wt, s-wt."
     fi
     [ "$observed" = "$expected" ] || { printf 'root %q: %s\nexpected: %s\n' "$repo" "$observed" "$expected"; false; }
   done
+}
+
+@test "path identity: without worktree list -z an ordinary root is counted from the line form and a line-feed root is asked about" {
+  local no_z="$CAWS_TEST_HOME/git-without-z:$CAWS_TEST_HOME/contention-caws:$PATH"
+  RP_ID_PATH="$no_z" RP_CONTENTION_LOG="$BATS_TEST_TMPDIR/contention.log" \
+    id_guard worktree-write-guard.sh "$RP_FALLBACK_PLAIN_REPO" "$RP_FALLBACK_PLAIN_REPO" Write "$RP_FALLBACK_PLAIN_REPO/src/new.ts"
+  [ "$status" -eq 0 ]
+  assert_output --partial "2 active worktree(s) on 'main': f-wt, s-wt."
+  RP_ID_PATH="$no_z" RP_CONTENTION_LOG="$BATS_TEST_TMPDIR/contention.log" \
+    id_guard worktree-write-guard.sh "$RP_FALLBACK_LF_REPO" "$RP_FALLBACK_LF_REPO" Write "$RP_FALLBACK_LF_REPO/src/new.ts"
+  [ "$status" -eq 0 ]
+  assert_output --partial '"permissionDecision": "ask"'
+  assert_output --partial "contains a line feed and this git cannot list worktrees NUL-terminated"
+  refute_output --partial "active worktree(s)"
 }
 
 @test "precondition: the linked worktree has an absolute common dir distinct from its git dir" {
@@ -369,22 +594,21 @@ id_case() {
   [ "$status" -eq 0 ]
 }
 
-@test "caws_guard_realpath: python success is byte-identical to the existing normalizer" {
+@test "caws_guard_realpath_into: python success assigns exactly the path the existing normalizer resolves" {
   run bash -c '
     source "$1/lib/caws-state.sh"
     cd "$2"
     shift 2
     for p in "$@"; do
-      # Bytes and exit status together: a success value with a refusal status
-      # would make every guard refuse a path it could have normalized.
-      raw="$(caws_guard_realpath "$p"; printf "x%s" "$?")"
-      ref="$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$p"; printf "x%s" "$?")"
-      [[ "$raw" == "$ref" ]] || { printf "raw stdout or status differs for %q\n" "$p"; exit 1; }
-      [[ "$raw" == *x0 ]] || { printf "status %s for %q\n" "${raw##*x}" "$p"; exit 1; }
-      observed="$(caws_guard_realpath "$p")" ||
-        { printf "caller-observed status %s for %q\n" "$?" "$p"; exit 1; }
-      [[ "$observed" == "$(_realpath "$p")" ]] ||
-        { printf "caller-observed value differs for %q\n" "$p"; exit 1; }
+      v=unassigned
+      # Status and value together: a success value with a refusal status would
+      # make every guard refuse a path it could have normalized.
+      caws_guard_realpath_into v "$p" || { printf "status %s for %q\n" "$?" "$p"; exit 1; }
+      # _realpath prints the path and one line feed. The sentinel keeps every
+      # byte, so ref is its exact path, not a copy a capture stripped.
+      ref="$(_realpath "$p"; printf x)"; ref="${ref%x}"; ref="${ref%?}"
+      printf "%q -> %q\n" "$p" "$v"
+      [[ "$v" == "$ref" ]] || { printf "differs from %q\n" "$ref"; exit 1; }
     done
   ' _ "$(guard_dir)" "$RP_SELF" \
     "$RP_DOTDOT_TARGET" \
@@ -392,60 +616,88 @@ id_case() {
     "$CAWS_TEST_HOME/repo-alias/../link-dotdot-leaf" \
     "/tmp/caws-guard-realpath-missing-leaf" \
     "relative/leaf" \
-    "$RP_REPO/ends-with-newline"$'\n'
+    "$RP_REPO/ends-with-newline"$'\n' \
+    "$RP_LF_ALIAS"
+  printf '# %s\n' "${lines[@]}" >&3
   [ "$status" -eq 0 ]
 }
 
-@test "caws_guard_realpath: resolves dotdot, a symlinked ancestor and dotdot after a symlink by the filesystem" {
-  run bash -c 'set -e; source "$1/lib/caws-state.sh"
-    caws_guard_realpath "$2"; echo; caws_guard_realpath "$3"; echo; caws_guard_realpath "$4"' \
-    _ "$(guard_dir)" "$RP_DOTDOT_TARGET" "$CAWS_TEST_HOME/repo-alias/.caws/worktrees/f-wt/src/new" \
-    "$CAWS_TEST_HOME/repo-alias/../link-dotdot-leaf"
-  [ "$status" -eq 0 ]
-  [ "${lines[0]}" = "$RP_TARGET" ]
-  [ "${lines[1]}" = "$RP_REPO/.caws/worktrees/f-wt/src/new" ]
+@test "caws_guard_realpath_into: resolves dotdot, a symlinked ancestor and dotdot after a symlink by the filesystem" {
   # dotdot after a symlink climbs from the link's target, not lexically.
-  [ "${lines[2]}" = "$(dirname "$RP_REPO")/link-dotdot-leaf" ]
-  [ "${lines[2]}" != "$CAWS_TEST_HOME/link-dotdot-leaf" ]
+  [ "$(dirname "$RP_REPO")/link-dotdot-leaf" != "$CAWS_TEST_HOME/link-dotdot-leaf" ]
+  rp_expect_into caws_guard_realpath_into "" \
+    "$RP_DOTDOT_TARGET" "$RP_TARGET" \
+    "$CAWS_TEST_HOME/repo-alias/.caws/worktrees/f-wt/src/new" "$RP_REPO/.caws/worktrees/f-wt/src/new" \
+    "$CAWS_TEST_HOME/repo-alias/../link-dotdot-leaf" "$(dirname "$RP_REPO")/link-dotdot-leaf"
 }
 
-@test "caws_guard_realpath: an empty path is refused with its class" {
-  run --separate-stderr bash -c 'source "$1/lib/caws-state.sh"; caws_guard_realpath ""' _ "$(guard_dir)"
-  [ "$status" -eq 2 ]
-  [ -z "$output" ]
-  [ "$stderr" = "[caws-guard-realpath] cannot normalize: empty-path" ]
+@test "caws_guard_realpath_into: an empty path is refused with its class" {
+  rp_refusal "$PATH" caws_guard_realpath_into result "" 2 \
+    "[caws-guard-realpath] cannot normalize: empty-path"
 }
 
-@test "caws_guard_realpath: python3 absent is refused with its class" {
-  run --separate-stderr env -i PATH="$CAWS_TEST_HOME/no-python" \
-    bash -c 'source "$1/lib/caws-state.sh"; caws_guard_realpath "$2"' _ "$(guard_dir)" "$RP_TARGET"
-  [ "$status" -eq 2 ]
-  [ -z "$output" ]
-  [ "$stderr" = "[caws-guard-realpath] cannot normalize: python3-unavailable" ]
+@test "caws_guard_realpath_into: python3 absent is refused with its class" {
+  rp_refusal "$CAWS_TEST_HOME/no-python" caws_guard_realpath_into result "$RP_TARGET" 2 \
+    "[caws-guard-realpath] cannot normalize: python3-unavailable"
 }
 
-@test "caws_guard_realpath: a python3 success with no non-LF output byte is refused as empty-result" {
-  local mode
-  for mode in lf lflf empty; do
+@test "caws_guard_realpath_into: a failing python3 is refused with the interpreter's own exit status" {
+  rp_refusal "$CAWS_TEST_HOME/failing-python:$PATH" caws_guard_realpath_into result "$RP_TARGET" 2 \
+    "[caws-guard-realpath] cannot normalize: python3-exit-1"
+  RP_COUNT_FILE="$BATS_TEST_TMPDIR/helper-count" RP_FAIL_NTH=1 RP_FAIL_MODE=exit7 \
+    rp_refusal "$CAWS_TEST_HOME/counting-python:$PATH" caws_guard_realpath_into result "$RP_TARGET" 2 \
+    "[caws-guard-realpath] cannot normalize: python3-exit-7"
+}
+
+@test "caws_guard_realpath_into: a python3 success that is not one absolute path record is refused by class" {
+  local mode cause
+  for mode in lf lflf relative empty nodelim; do
+    case "$mode" in
+      lf) cause=empty-result ;;
+      lflf|relative) cause=non-absolute-result ;;
+      empty|nodelim) cause=no-record-delimiter ;;
+    esac
     rm -f "$BATS_TEST_TMPDIR/helper-count" "$BATS_TEST_TMPDIR/helper-count.paths"
-    run --separate-stderr env PATH="$CAWS_TEST_HOME/counting-python:$PATH" \
-      RP_REAL_PYTHON="$RP_REAL_PYTHON" RP_COUNT_FILE="$BATS_TEST_TMPDIR/helper-count" \
-      RP_FAIL_NTH=1 RP_FAIL_MODE="$mode" \
-      bash -c 'source "$1/lib/caws-state.sh"; caws_guard_realpath "$2"; printf "x%s" "$?"' \
-      _ "$(guard_dir)" "$RP_TARGET"
-    printf '# mode=%s stdout=%q stderr=%q\n' "$mode" "$output" "$stderr" >&3
-    # No stdout byte at all (not even a line feed), then status 2.
-    [ "$output" = "x2" ] || { printf '%s: stdout %q\n' "$mode" "$output"; false; }
-    [ "$stderr" = "[caws-guard-realpath] cannot normalize: empty-result" ]
+    RP_COUNT_FILE="$BATS_TEST_TMPDIR/helper-count" RP_FAIL_NTH=1 RP_FAIL_MODE="$mode" \
+      rp_refusal "$CAWS_TEST_HOME/counting-python:$PATH" caws_guard_realpath_into result "$RP_TARGET" 2 \
+      "[caws-guard-realpath] cannot normalize: $cause"
   done
 }
 
-@test "caws_guard_realpath: a failing python3 is refused with its exit status" {
-  run --separate-stderr env PATH="$CAWS_TEST_HOME/failing-python:$PATH" \
-    bash -c 'set -e; source "$1/lib/caws-state.sh"; caws_guard_realpath "$2"' _ "$(guard_dir)" "$RP_TARGET"
-  [ "$status" -eq 2 ]
-  [ -z "$output" ]
-  [ "$stderr" = "[caws-guard-realpath] cannot normalize: python3-exit-1" ]
+@test "out-parameters: invalid names and each helper's own local prefix are refused" {
+  local name
+  for name in "" 1x a-b "x y" 'a$b'; do
+    rp_refusal "$PATH" caws_guard_realpath_into "$name" "$RP_TARGET" 2 \
+      "[caws-guard-realpath] cannot normalize: invalid-out-parameter"
+  done
+  # printf -v into a name the helper also declares local would assign the
+  # local and leave the caller's variable unchanged; the caller's value
+  # surviving is asserted alongside the refusal.
+  rp_refusal "$PATH" caws_guard_realpath_into _caws_rp_out "$RP_TARGET" 2 \
+    "[caws-guard-realpath] cannot normalize: invalid-out-parameter"
+  rp_refusal "$PATH" caws_physical_dir_into _caws_pd_out "$RP_REPO" 2 ""
+  rp_refusal "$PATH" caws_git_path_into _caws_gp_out "$RP_SELF" 2 ""
+  rp_refusal "$PATH" caws_resolve_canonical_dir_into _caws_cd_common "$RP_SELF" 2 ""
+}
+
+@test "out-parameters: a caller's variable sharing a common or another helper's name is assigned" {
+  run bash -c '
+    source "$1/lib/caws-state.sh"
+    for name in out status p path var v field count _caws_gp_out _caws_cd_common; do
+      unset -v "$name"
+      caws_guard_realpath_into "$name" "$2" || { printf "realpath %s: status %s\n" "$name" "$?"; exit 1; }
+      [[ "${!name}" == "$3" ]] || { printf "realpath %s: %q\n" "$name" "${!name}"; exit 1; }
+    done
+    # The canonical resolver calls caws_git_path_into with its own local as
+    # the out-parameter; names of the other helpers pass through it.
+    for name in out common candidate start _caws_gp_out _caws_rp_out; do
+      unset -v "$name"
+      caws_resolve_canonical_dir_into "$name" "$4" || { printf "resolve %s: status %s\n" "$name" "$?"; exit 1; }
+      [[ "${!name}" == "$5" ]] || { printf "resolve %s: %q\n" "$name" "${!name}"; exit 1; }
+    done
+    printf "assigned\n"' _ "$(guard_dir)" "$RP_DOTDOT_TARGET" "$RP_TARGET" "$RP_SELF" "$RP_REPO"
+  printf '# %s\n' "${lines[@]}" >&3
+  [ "$status" -eq 0 ]
 }
 
 @test "worktree-write-guard: python3 present blocks a foreign-owned payload write" {
@@ -592,13 +844,14 @@ id_case() {
     "project root" "mutation target"
 }
 
-@test "contract: every normalization in both write guards is checked" {
+@test "contract: every normalization in both write guards is checked and assigned without a capture" {
   local guard file lines unchecked
   for guard in worktree-write-guard.sh bash-write-guard.sh; do
     file="$(guard_dir)/$guard"
-    run grep -n -F '$(_realpath ' "$file"
-    [ "$status" -eq 1 ]
-    lines="$(grep -E '\$\((caws_guard_realpath|abspath) ' "$file")"
+    # Command substitution would strip a trailing line feed from the path.
+    run grep -n -E '\$\((_realpath|caws_guard_realpath|abspath|resolve_canonical_dir|caws_resolve_canonical_dir)' "$file"
+    [ "$status" -eq 1 ] || { printf '%s captures a path:\n%s\n' "$guard" "$output"; false; }
+    lines="$(grep -E '(^|[^_[:alnum:]])(caws_guard_realpath_into|abspath_into|caws_resolve_canonical_dir_into) [A-Za-z_]' "$file")"
     [[ -n "$lines" ]]
     unchecked="$(printf '%s\n' "$lines" | grep -v -E '\|\| _(wwg|bwg)_normalize_refuse ' || true)"
     [[ -z "$unchecked" ]] || { printf '%s unchecked:\n%s\n' "$guard" "$unchecked"; false; }

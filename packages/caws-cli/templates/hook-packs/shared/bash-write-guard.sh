@@ -146,16 +146,33 @@ esac
 
 CAWS_CLAIM_ORACLE="$SCRIPT_DIR/lib/worktree-claim-oracle.cjs"
 
-# Resolve canonical root.
-if command -v resolve_canonical_dir >/dev/null 2>&1; then
-  PROJECT_DIR="$(resolve_canonical_dir "${CAWS_PROJECT_DIR:-.}")"
-else
-  PROJECT_DIR="${CAWS_PROJECT_DIR:-.}"
-fi
+# Resolve canonical root. Path identity is compared byte for byte, and a
+# legitimate root may end in a line feed that command substitution would
+# strip; the stripped root names no directory, so the governance check below
+# would find no .caws and admit. Every path is therefore assigned through the
+# out-parameter helpers in lib/caws-state.sh.
+_BWG_START="${CAWS_PROJECT_DIR:-.}"
+caws_resolve_canonical_dir_into _BWG_PROJECT_RAW "$_BWG_START" || _bwg_normalize_refuse "project root" "$_BWG_START"
 # Compare the same physical identity used by abspath for mutation targets.
 # A logical alias such as /tmp or a symlinked project root is still this repo.
-_BWG_PROJECT_RAW="$PROJECT_DIR"
-PROJECT_DIR="$(caws_guard_realpath "$_BWG_PROJECT_RAW")" || _bwg_normalize_refuse "project root" "$_BWG_PROJECT_RAW"
+caws_guard_realpath_into PROJECT_DIR "$_BWG_PROJECT_RAW" || _bwg_normalize_refuse "project root" "$_BWG_PROJECT_RAW"
+
+# The command analysis transport (caws.shell_mutation_view.v2) carries the
+# operating directory as a coordinate that cannot hold a carriage return, line
+# feed or tab. The operating directory is the payload's cwd when it names a
+# directory, otherwise the project root (see _CWD_RESOLVED below), and the
+# analyzer resolves it to its physical path, so an ordinary alias of such a
+# directory reaches the same limit. It is refused here, before the governance
+# check, rather than reaching the analyzer as an invalid contract.
+_BWG_TRANSPORT_CWD="$PROJECT_DIR"
+if [[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]]; then
+  caws_physical_dir_into _BWG_TRANSPORT_CWD "$HOOK_CWD" || _BWG_TRANSPORT_CWD="$HOOK_CWD"
+fi
+if [[ "$_BWG_TRANSPORT_CWD" == *[$'\r\n\t']* ]]; then
+  echo "[bash-write-guard] the operating directory's physical path $(printf '%q' "$_BWG_TRANSPORT_CWD") contains a carriage return, line feed or tab, which the command mutation analysis transport cannot carry as a coordinate, so this command's write targets cannot be established. Failing CLOSED." >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: the operating directory contains a carriage return, line feed or tab, which the command mutation analysis transport cannot carry, so write targets cannot be established. Failing closed."}\n'
+  exit 2
+fi
 
 [[ -d "$PROJECT_DIR/.caws" ]] || exit 0
 if [[ ! -f "$CAWS_CLAIM_ORACLE" ]] || ! command -v node >/dev/null 2>&1; then
@@ -271,12 +288,12 @@ extract_targets() {
   fi
 }
 
-# Returns caws_guard_realpath's status; every caller refuses on failure.
-abspath() {
-  local p="$1"
-  case "$p" in
-    /*) caws_guard_realpath "$p" ;;
-    *)  caws_guard_realpath "$AGENT_CWD/$p" ;;
+# abspath_into <var> <path>: caws_guard_realpath_into's status; every caller
+# refuses on failure.
+abspath_into() {
+  case "$2" in
+    /*) caws_guard_realpath_into "$1" "$2" ;;
+    *)  caws_guard_realpath_into "$1" "$AGENT_CWD/$2" ;;
   esac
 }
 
@@ -308,7 +325,7 @@ while IFS= read -r cand; do
     escalate ask "cwd-unresolved:$cand" "ask_uncertain"
     continue
   fi
-  abs="$(abspath "$cand")" || _bwg_normalize_refuse "mutation target" "$cand"
+  abspath_into abs "$cand" || _bwg_normalize_refuse "mutation target" "$cand"
   # CAWS-GUARD-ALLOWLIST-SYNC-001 + CAWS-GUARD-SCOPE-PRIORITY-001: record
   # whether this target is on the unconditional allowlist (docs/*, .caws/*
   # minus payload, .tmp/*, .github/*, vendor dir, instruction files,
@@ -398,7 +415,7 @@ while [[ $_GM_INDEX -lt ${#CAWS_AST_GIT_WORKTREE[@]} ]]; do
       escalate ask metadata-path-unresolved ask_git_metadata
       continue
     fi
-    _GM_PHYSICAL="$(caws_guard_realpath "$_GM_PATH")" || _bwg_normalize_refuse "git metadata" "$_GM_PATH"
+    caws_guard_realpath_into _GM_PHYSICAL "$_GM_PATH" || _bwg_normalize_refuse "git metadata" "$_GM_PATH"
     if [[ "$_GM_PHYSICAL" != /* ]]; then
       escalate ask metadata-path-unresolved ask_git_metadata
       continue
@@ -513,7 +530,7 @@ if declare -F caws_bash_dynamic_mutations >/dev/null 2>&1; then
       escalate ask "$_pat (${_reskind:-runtime}-resolved; no lexically proven prefix, so no region is proven admissible)" "ask_dynamic_unconfined"
       continue
     fi
-    _pabs="$(abspath "$_prefix")" || _bwg_normalize_refuse "dynamic mutation prefix" "$_prefix"
+    abspath_into _pabs "$_prefix" || _bwg_normalize_refuse "dynamic mutation prefix" "$_prefix"
     _dout="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
       CAWS_ORACLE_CURRENT_BRANCH="" \
       CAWS_ORACLE_REL_PATH="$_pabs" \
