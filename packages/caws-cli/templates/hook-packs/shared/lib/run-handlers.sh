@@ -420,32 +420,62 @@ _rh_record_execution() {
 
 # _rh_exec_staged <handler_path> <stderr_file> [args...]
 # Runs ONLY as the whole body of a handler's command substitution, whose subshell
-# it replaces with the handler. The inline payload is written to a stage this
-# subshell creates, opened as the subshell's stdin, and unlinked before the
-# handler starts. So no stage file exists while any handler runs, and killing
-# the dispatcher at any point a handler is running leaves none behind. Each
-# handler opens its own stage, so every reader starts at offset zero and a
-# handler that never reads cannot block a writer. The only path it removes is
-# the one its own mktemp returned. TERM, INT or HUP to this subshell before the
-# unlink still removes the stage through its EXIT trap; a KILL delivered in that
-# short window (mktemp, write, open) can leave one stage. If the stage cannot
-# be created or opened, the payload goes through the historical pipe instead.
+# it replaces with the handler. The inline payload is written into a private stage
+# directory this subshell creates (mktemp -d, mode 0700), opened as the subshell's
+# stdin, and unlinked before the handler starts. Unlinking the payload needs write
+# permission only on that private directory, so it still succeeds when TMPDIR
+# itself has stopped accepting removals; only removing the then-empty directory
+# depends on TMPDIR, and a directory that cannot be removed is named on stderr.
+# Each handler opens its own stage, so every reader starts at offset zero and a
+# handler that never reads cannot block a writer. The only paths it removes are the
+# directory its own mktemp -d returned and the payload it wrote inside it; a handler
+# is never skipped to avoid a leftover.
+# The payload unlink is verified before the trap is cleared. If the payload is
+# still present (its directory was altered after creation), it is named on stderr
+# and the handler runs as a child instead of replacing the subshell, so the EXIT
+# trap retries the removal afterwards and reports again if it still fails.
+# Limits, from the order of operations below: a signal delivered while mktemp -d
+# runs, before its name is known, can leave one empty directory. Once the name is
+# known, TERM, INT or HUP before the unlink remove the stage through the EXIT trap.
+# A KILL between the payload write and its unlink can leave the payload file; a
+# KILL after the unlink can leave only the empty directory.
+# If the directory cannot be created, or the payload cannot be written or opened,
+# the payload goes through the historical pipe instead.
 _rh_exec_staged() {
   local handler_path="$1" stderr_file="$2"
   shift 2
-  _rh_stage=$(mktemp "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || _rh_stage=""
-  if [[ -n "$_rh_stage" ]]; then
-    trap 'rm -f -- "$_rh_stage" 2>/dev/null' EXIT
+  _rh_stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || _rh_stage_dir=""
+  if [[ -n "$_rh_stage_dir" ]]; then
+    _rh_stage="$_rh_stage_dir/payload"
+    trap '_rh_remove_stage' EXIT
     if printf '%s' "${HOOK_INPUT_JSON-}" > "$_rh_stage" 2>/dev/null \
       && exec 0<"$_rh_stage"; then
-      rm -f -- "$_rh_stage" 2>/dev/null
+      _rh_remove_stage
+      if [[ -e "$_rh_stage" ]]; then
+        "$handler_path" "$@" 2>"$stderr_file"
+        exit $?
+      fi
       trap - EXIT
       exec "$handler_path" "$@" 2>"$stderr_file"
     fi
-    rm -f -- "$_rh_stage" 2>/dev/null
+    _rh_remove_stage
     trap - EXIT
   fi
   printf '%s' "${HOOK_INPUT_JSON-}" | "$handler_path" "$@" 2>"$stderr_file"
+}
+
+# _rh_remove_stage: removes the current subshell's payload and its private
+# directory, and names on stderr whichever of the two is still present afterwards.
+_rh_remove_stage() {
+  rm -f -- "$_rh_stage" 2>/dev/null
+  if [[ -e "$_rh_stage" ]]; then
+    printf '[caws run-handlers] could not remove handler stdin stage %s\n' "$_rh_stage" >&2
+  fi
+  rmdir -- "$_rh_stage_dir" 2>/dev/null
+  if [[ -e "$_rh_stage_dir" ]]; then
+    printf '[caws run-handlers] could not remove handler stdin stage directory %s\n' "$_rh_stage_dir" >&2
+  fi
+  return 0
 }
 
 run_handlers() {

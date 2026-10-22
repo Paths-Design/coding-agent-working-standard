@@ -12,9 +12,12 @@
 # run-handlers.sh under test and defaults to the shipped template, so a pinned
 # copy of any revision can be checked without touching the source tree.
 #
-# Not covered: a KILL delivered inside a handler's own stage creation window
-# (mktemp, write, open, unlink). No trap can intercept it, and it can leave one
-# stage; nothing here claims otherwise.
+# Not covered, and not claimed: a signal delivered while mktemp -d runs, before the
+# stage name is known, can leave one empty directory; a KILL between the payload
+# write and its unlink can leave the payload file; a KILL after the unlink can leave
+# only the empty directory. A payload that cannot be unlinked (its private
+# directory altered after creation) stays on disk while its handler runs and is
+# named on stderr; that case is pinned below as a reported failure, not a pass.
 
 setup() {
   RUN_HANDLERS="${CAWS_STAGE_RUN_HANDLERS:-$BATS_TEST_DIRNAME/../../../templates/hook-packs/shared/lib/run-handlers.sh}"
@@ -29,6 +32,7 @@ if [ -p /dev/stdin ]; then kind=pipe; else kind=file; fi
 cat > "$OUT_DIR/reader-$$.bytes"
 printf '%s\n' "$kind" > "$OUT_DIR/reader-$$.kind"
 ls -A "$TMPDIR" > "$OUT_DIR/reader-$$.tmp"
+find "$TMPDIR" -type f > "$OUT_DIR/reader-$$.files"
 exit 0
 EOF
   printf '#!/bin/bash\nexit 0\n' > "$STAGE_PACK/early-exit.sh"
@@ -47,6 +51,9 @@ EOF
 teardown() {
   _end_owned "$OUT_DIR/dispatcher.pid" 'run_handlers sleeper.sh'
   _end_owned "$OUT_DIR/sleeper.pid" 'sleep 30'
+  # The non-writable-TMPDIR case removes write permission from STAGE_TMP, which
+  # this test created; restore it so bats can remove the test directory.
+  [ ! -d "$STAGE_TMP" ] || chmod u+w "$STAGE_TMP"
 }
 
 _end_owned() { # $1 = pid file, $2 = substring the process command line must contain
@@ -187,4 +194,57 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   [ "$(cat "$OUT_DIR"/reader-*.kind)" = file ]
   [ "$(wc -c < "$OUT_DIR"/reader-*.bytes | tr -d ' ')" = 32769 ]
   _no_stage_in "$STAGE_TMP"
+}
+
+@test "TMPDIR that stops accepting removals leaves no payload file and names the empty stage directory" {
+  # Root removes entries from a non-writable directory, so the case cannot be
+  # produced for uid 0.
+  [ "$(id -u)" != 0 ] || skip "needs a non-root user"
+  local big expected real_mktemp stub left
+  big=$(_payload)
+  expected="$BATS_TEST_TMPDIR/expected.bytes"
+  printf '%s' "$big" > "$expected"
+  real_mktemp=$(command -v mktemp)
+  stub="$BATS_TEST_TMPDIR/mktemp-stub"
+  mkdir -p "$stub"
+  # The stage is created normally; then TMPDIR (which this test owns) stops
+  # accepting removals, as a hostile or misconfigured parent directory would.
+  printf '#!/bin/bash\ncase "$*" in *caws-handler-stdin-*) f=$(%q "$@") || exit 1; chmod a-w "$(dirname "$f")"; echo "$f"; exit 0 ;; esac\nexec %q "$@"\n' \
+    "$real_mktemp" "$real_mktemp" > "$stub/mktemp"
+  chmod +x "$stub/mktemp"
+  STAGE_PATH="$stub:$PATH" _chain "$big" reader.sh
+  [ "$status" -eq 0 ]
+  cmp "$expected" "$OUT_DIR"/reader-*.bytes
+  # No payload pathname while the handler ran, and none afterwards.
+  [ ! -s "$(ls "$OUT_DIR"/reader-*.files)" ]
+  [ -z "$(find "$STAGE_TMP" -type f)" ]
+  # What remains is one empty stage directory, named on stderr.
+  left=$(ls -A "$STAGE_TMP")
+  [[ "$left" == caws-handler-stdin-* ]]
+  [ -d "$STAGE_TMP/$left" ]
+  [ -z "$(ls -A "$STAGE_TMP/$left")" ]
+  [[ "$output" == *"[caws run-handlers] could not remove handler stdin stage directory $STAGE_TMP/$left"* ]]
+}
+
+@test "a payload that cannot be unlinked is named on stderr and its handler still runs" {
+  local big expected real_rm stub
+  big=$(_payload)
+  expected="$BATS_TEST_TMPDIR/expected.bytes"
+  printf '%s' "$big" > "$expected"
+  real_rm=$(command -v rm)
+  stub="$BATS_TEST_TMPDIR/rm-stub"
+  mkdir -p "$stub"
+  # Stands in for a private directory altered after creation: only the payload
+  # inside a stage directory refuses removal; every other rm works.
+  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */caws-handler-stdin-*/payload) exit 1 ;; esac; done\nexec %q "$@"\n' \
+    "$real_rm" > "$stub/rm"
+  chmod +x "$stub/rm"
+  STAGE_PATH="$stub:$PATH" _chain "$big" reader.sh
+  [ "$status" -eq 0 ]
+  cmp "$expected" "$OUT_DIR"/reader-*.bytes
+  # The failure is explicit, not hidden: the payload was present while the handler
+  # ran, is still present, and was named on stderr before and after the handler.
+  [ -s "$(ls "$OUT_DIR"/reader-*.files)" ]
+  [ -n "$(find "$STAGE_TMP" -type f -name payload)" ]
+  [ "$(printf '%s\n' "$output" | grep -c '\[caws run-handlers\] could not remove handler stdin stage ')" -ge 2 ]
 }
