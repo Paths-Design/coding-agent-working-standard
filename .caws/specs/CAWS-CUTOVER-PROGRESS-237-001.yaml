@@ -33,3 +33,9 @@ rollback:
   - 'Revert only this isolated source/ledger unit through normal governed history; no installed runtime changes.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exact source integration1a023e33 imports only reviewed rollback1bb584a8 blobs e7cf08e265a4d0e6ca20f53fafbf73748caadc62 and74df1748a3ea7c97596a84f0547e67696e3cce83. Maina451 ancestry and close10724/merge10725 verified. Raw c843 rollback-probe full-file55/55 terminal0, assignmentmutant two intended pointer failures, actual retained older-entry witness selected5ec/lib9d7c allow0/attributedguard2 inspected; witnessSHA03dada81a27a9c07daed15283796190113379e1d6a462c1724e6e7844ff997a4 includes temporarytestdelta. Finalad7 gates0 all5 exact3paths/base174, doctor0E3W4I. Independent committed source/raw review grounded, no actionablefinding; not semantic acceptance by peer agreement. LedgerE237/E238 preserves guard5admissions, mailcustody, resident snapshotcompile101/zero+owned34with2oraclefailures, correctione468 separate, privateNode startup/native readiness0 and fullmutationunqualified. No fresh integrated TS runtime/package/native adoption proof; verify confirms commit reachability only. Root retains parent0/8/fullgoal and forthcoming ledger synchronizationA2."
+    recorded_at: "2026-10-22T02:18:02.594Z"
+    commit_sha: ad7b1c66d672fec7ab1576aa55932a7eaeeb296b
