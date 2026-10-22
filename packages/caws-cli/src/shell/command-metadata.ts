@@ -1148,7 +1148,14 @@ const INIT_INSTALL: LeafCommandMeta = {
   name: 'install',
   description:
     'Install or update the shared runtime under CAWS_HOME (default ~/.caws). Applies by default; --plan previews. Does not upgrade the CLI package or register a native harness. Example: caws init adapters install --plan --json',
-  options: INIT_PREVIEW,
+  options: [
+    ...INIT_PREVIEW,
+    {
+      flag: '--native-image <file>',
+      description:
+        'Install an explicit local pinned native image and complete production prefix. Accepts reviewed native-image-input.v1 descriptors or receipt-selected native-image-input.v2 descriptors. Keeps existing harness registration; configure --entry native opts in separately.',
+    },
+  ],
 };
 const INIT_MIGRATE_PREVIEW: LeafCommandMeta = {
   kind: 'leaf',
@@ -1222,6 +1229,11 @@ export const INIT_COMMAND_META: GroupCommandMeta = {
           options: [
             INIT_SURFACE,
             ...INIT_PREVIEW,
+            {
+              flag: '--entry <native|legacy>',
+              description:
+                'Explicitly select the installed entry. Native requires a verified native image. Omission preserves an existing explicit selection and defaults to legacy for a fresh registration.',
+            },
             {
               flag: '--native-config-target <path>',
               description:
