@@ -399,3 +399,58 @@ test('redirected checkout sidecars cannot write outside the checkout and never s
   expect(result.offers).toEqual([{ offerId: 'exact-offer', recipient: 'same-session' }]);
   expect(fs.readdirSync(outside)).toEqual([]);
 });
+
+// A subagent's hooks carry the parent's session id; offering the parent's mail there
+// would settle it into a context the parent never reads.
+test.each([['sub-1'], [''], [7], [null]])(
+  'agent_id %p keeps the lease write and peer notice but never polls the parent mailbox',
+  async (agentId) => {
+    context.request.payload.agent_id = agentId;
+    const p = ports({ heartbeat: jest.fn(() => summary([peer()])) });
+    const result = await executeAgentHeartbeat(context, p);
+    expect(p.heartbeat).toHaveBeenCalledTimes(1);
+    expect(p.poll).not.toHaveBeenCalled();
+    expect(output(result)).toContain('MULTI-AGENT NOTICE');
+    expect(output(result)).not.toContain('MESSAGE from');
+    expect(result.offers).toEqual([]);
+  }
+);
+test('real stores keep subagent-observed mail pending until the parent context offers it once', async () => {
+  const p = ports({ heartbeat: heartbeatAgentActivity, poll: pollAgentMessages });
+  const cawsDir = path.join(canonical, '.caws');
+  const sent = sendMessage(cawsDir, {
+    actor: { kind: 'agent', id: 'sender', session_id: 'sender' },
+    to: 'same-session',
+    text: 'for the parent only',
+    requireLive: false,
+  });
+  expect(sent.ok).toBe(true);
+  const id = sent.value.message.id;
+  const offerRecords = () =>
+    fs
+      .readFileSync(path.join(cawsDir, 'messages.jsonl'), 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((record) => record.record === 'offer' && record.deliver_ids.includes(id));
+
+  context.request.payload.agent_id = 'a13a6319c8155f001';
+  context.request.payload.agent_type = 'general-purpose';
+  const fromSubagent = await executeAgentHeartbeat(context, p);
+  expect(output(fromSubagent)).not.toContain('for the parent only');
+  expect(fromSubagent.offers).toEqual([]);
+  expect(offerRecords()).toEqual([]);
+  expect(getMessageDeliveryState(cawsDir, id).value.delivered).toBe(false);
+
+  delete context.request.payload.agent_id;
+  delete context.request.payload.agent_type;
+  const fromParent = await executeAgentHeartbeat(context, p);
+  expect(output(fromParent)).toContain('for the parent only');
+  expect(fromParent.offers).toHaveLength(1);
+  expect(offerRecords()).toHaveLength(1);
+  const [offer] = fromParent.offers;
+  expect(offer.recipient).toBe('same-session');
+  expect(settleMessageOffer(cawsDir, offer.offerId, offer.recipient, 'delivered').ok).toBe(true);
+  expect(getMessageDeliveryState(cawsDir, id).value.delivered).toBe(true);
+  expect(output(await executeAgentHeartbeat(context, p))).not.toContain('for the parent only');
+});

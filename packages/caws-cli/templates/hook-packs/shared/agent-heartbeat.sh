@@ -56,11 +56,57 @@ source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # Use caws_source_lib so a vendor override (e.g. codex ask->deny) is
 # preferred over the shared default when present.
 caws_source_lib emit.sh 2>/dev/null || true
+# Ingress witness for mail custody, recorded before parsing can replace it. A
+# preset HOOK_TOOL_NAME means a dispatcher parsed the payload and piped it to
+# this handler's stdin; a preset HOOK_INPUT_JSON without it was inherited.
+_HB_FAST_PATH=0
+[[ -n "${HOOK_TOOL_NAME+set}" ]] && _HB_FAST_PATH=1
+_HB_STAGED_INPUT=0
+[[ -n "${HOOK_INPUT_JSON:-}" ]] && _HB_STAGED_INPUT=1
 parse_hook_input || exit 0
 
 if [[ -z "${HOOK_SESSION_ID:-}" || "$HOOK_SESSION_ID" == "unknown" ]]; then
   exit 0
 fi
+
+# Mirrors src/runtime/actor-context.ts; the custody tests compare them row by row.
+_hb_classify_actor() {
+  node -e '
+    let raw = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => { raw += c; });
+    process.stdin.on("end", () => {
+      let payload;
+      try { payload = JSON.parse(raw); } catch { payload = undefined; }
+      let actor = "uncertain";
+      if (typeof payload === "object" && payload !== null && !Array.isArray(payload)) {
+        const id = payload.agent_id;
+        if (!Object.prototype.hasOwnProperty.call(payload, "agent_id")) actor = "main";
+        else if (typeof id === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(id)) actor = "subagent";
+      }
+      process.stdout.write(actor);
+    });
+  ' 2>/dev/null
+}
+
+# Classified now, before any child process can inherit and drain stdin. Only the
+# bytes this handler received count: its own stdin on the fast path, else what
+# this process's parse read. Empty, TTY, unparseable or inherited input stays
+# uncertain.
+_HB_ACTOR=uncertain
+if [[ "$_HB_FAST_PATH" == 1 ]]; then
+  [[ -t 0 ]] || _HB_ACTOR="$(_hb_classify_actor)"
+elif [[ "$_HB_STAGED_INPUT" == 0 ]]; then
+  if [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == 1 && -n "${HOOK_PAYLOAD_FILE:-}" && -f "$HOOK_PAYLOAD_FILE" ]]; then
+    _HB_ACTOR="$(_hb_classify_actor < "$HOOK_PAYLOAD_FILE")"
+  else
+    _HB_ACTOR="$(printf '%s' "${HOOK_INPUT_JSON:-}" | _hb_classify_actor)"
+  fi
+fi
+case "$_HB_ACTOR" in
+  main | subagent) ;;
+  *) _HB_ACTOR=uncertain ;;
+esac
 
 CAWS_BIN="${CAWS_BIN:-caws}"
 if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
@@ -252,7 +298,13 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
 # FAIL-CLOSED-NON-BLOCKING: any error (CLI absent/erroring, malformed JSON, no
 # message) emits nothing and never blocks the tool call. Independent of the peer
 # notice above — both can fire on the same call.
-if [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
+#
+# Custody: a subagent's hooks carry the parent's session id, so polling there
+# would reserve and settle the parent's mail into a context the parent never
+# reads. Mail stays queued unless the ingress is main-thread (_HB_ACTOR above).
+if [[ "$_HB_ACTOR" != "main" ]]; then
+  _MSG_OUT=""
+elif [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
   _MSG_OUT="$(
     caws_run_cli message poll \
       --me "$HOOK_SESSION_ID" \

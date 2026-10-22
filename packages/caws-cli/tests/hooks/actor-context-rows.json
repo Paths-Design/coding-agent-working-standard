@@ -1,0 +1,130 @@
+[
+  {
+    "label": "main: no agent_id key",
+    "object": true,
+    "expected": "main",
+    "json": "{\"session_id\":\"custody-session\",\"tool_name\":\"Read\"}"
+  },
+  {
+    "label": "main: agent_id only nested in tool_input",
+    "object": true,
+    "expected": "main",
+    "json": "{\"session_id\":\"custody-session\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo agent_id\",\"agent_id\":\"sub-1\"}}"
+  },
+  {
+    "label": "main: agent_id only under a __proto__ key",
+    "object": true,
+    "expected": "main",
+    "json": "{\"session_id\":\"custody-session\",\"__proto__\":{\"agent_id\":\"sub-1\"}}"
+  },
+  {
+    "label": "subagent: agent_id with agent_type",
+    "object": true,
+    "expected": "subagent",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"a13a6319c8155f001\",\"agent_type\":\"general-purpose\"}"
+  },
+  {
+    "label": "subagent: agent_id without agent_type",
+    "object": true,
+    "expected": "subagent",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"a13a6319c8155f001\"}"
+  },
+  {
+    "label": "subagent: unicode-escaped key spelling",
+    "object": true,
+    "expected": "subagent",
+    "json": "{\"session_id\":\"custody-session\",\"agent\\u005fid\":\"sub-1\"}"
+  },
+  {
+    "label": "subagent: 128-character id",
+    "object": true,
+    "expected": "subagent",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}"
+  },
+  {
+    "label": "uncertain: empty id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"\"}"
+  },
+  {
+    "label": "uncertain: numeric id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":7}"
+  },
+  {
+    "label": "uncertain: boolean id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":true}"
+  },
+  {
+    "label": "uncertain: null id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":null}"
+  },
+  {
+    "label": "uncertain: object id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":{}}"
+  },
+  {
+    "label": "uncertain: array id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":[\"sub-1\"]}"
+  },
+  {
+    "label": "uncertain: 129-character id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}"
+  },
+  {
+    "label": "uncertain: space in id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"has space\"}"
+  },
+  {
+    "label": "uncertain: slash in id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"sub/1\"}"
+  },
+  {
+    "label": "uncertain: newline in id",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"sub\\n1\"}"
+  },
+  {
+    "label": "uncertain: duplicate key, last value empty",
+    "object": true,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\",\"agent_id\":\"sub-1\",\"agent_id\":\"\"}"
+  },
+  { "label": "uncertain: null payload", "object": false, "expected": "uncertain", "json": "null" },
+  {
+    "label": "uncertain: array payload",
+    "object": false,
+    "expected": "uncertain",
+    "json": "[{\"session_id\":\"custody-session\"}]"
+  },
+  {
+    "label": "uncertain: string payload",
+    "object": false,
+    "expected": "uncertain",
+    "json": "\"main\""
+  },
+  {
+    "label": "uncertain: truncated object",
+    "object": false,
+    "expected": "uncertain",
+    "json": "{\"session_id\":\"custody-session\""
+  },
+  { "label": "uncertain: empty input", "object": false, "expected": "uncertain", "json": "" }
+]

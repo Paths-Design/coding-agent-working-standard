@@ -20,7 +20,7 @@ import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
-  'agent-heartbeat.sh': '05d61d1c55a3be8802250083d10899d44e2bbb33a689f0e806f65afb46df8abc',
+  'agent-heartbeat.sh': '283421d390c1f7416a64de0233f811940dfa5bd087b1ad053f6964c002b1d58d',
   'block-dangerous.sh': '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5',
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
 };
