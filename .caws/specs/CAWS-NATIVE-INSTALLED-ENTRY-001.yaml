@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-22T07:00:07.142Z'
+updated_at: '2026-10-22T07:34:46.086Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -32,6 +32,10 @@ scope:
     - packages/caws-cli/src/init/machine-adapters.ts
     - packages/caws-cli/tests/runtime/selection.test.js
     - packages/caws-cli/src/store/system-runtime-observation.ts
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/tests/init/claude-settings-merge.test.js
+    - packages/caws-cli/tests/shell/init-plan.test.js
+    - packages/caws-cli/tests/adapter/machine-adoption.test.js
   out: []
   support: []
 invariants:
