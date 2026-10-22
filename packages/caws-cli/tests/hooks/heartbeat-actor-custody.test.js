@@ -446,9 +446,10 @@ test('a standalone spill run terminated during scalar extraction leaves no captu
     process.kill(-child.pid, 'SIGTERM');
     const termination = await exited;
     reaped = true;
-    expect(reachedPause).toBe(true);
-    expect(termination).toEqual({ code: 143, signal: null });
-    expect({ whilePaused, afterTermination: captures() }).toEqual({
+    // bash runs its EXIT trap on SIGTERM and then re-raises it, so the child dies by signal.
+    expect({ reachedPause, termination, whilePaused, afterTermination: captures() }).toEqual({
+      reachedPause: true,
+      termination: { code: null, signal: 'SIGTERM' },
       whilePaused: 0,
       afterTermination: 0,
     });
