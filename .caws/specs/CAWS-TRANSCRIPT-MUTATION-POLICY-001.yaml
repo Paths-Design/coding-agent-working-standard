@@ -52,11 +52,11 @@ evidence:
     commit_sha: "90553b82b0e0d18303e6811ec15b90c8be6d9603"
   - criterion_id: A2
     status: pass
-    evidence_ref: "49329541 store-selection.json records exact6sources/9tests, timestamp source/test,80floor,perTest,noincremental,normalbuildCommand; missing-timestamp-test and unrelated-transcript-test controls exit1 at intended selection assertions. Raw commands.json and controlreports retained at /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/4932954144212ea4739de31c164568e732b2a6b9. Canonical mutation execution/floor achievement excluded; root owns qualification."
-    recorded_at: "2026-10-22T00:14:27.910Z"
-    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/run-private.cjs
+    evidence_ref: "905 revised CI25 checks exit0 includes exact timestamp store target/test/build selection and unchanged80. Prior493 store-selection.json and omission/unrelated-test controls remain evidence for identical policy/config/test-selection bytes; exact Git delta493..905 contains only two inventory regex lines. Raw current CI report and snapshot input identities: transcript-mutation-policy/count-pin-regression/after; original runtime artifact root transcript-mutation-policy/4932954144212ea4739de31c164568e732b2a6b9 under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/. No canonical mutation execution or floor achievement claimed."
+    recorded_at: "2026-10-22T00:39:41.128Z"
+    command: node /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/count-pin-regression.cjs after
     exit_code: 0
-    commit_sha: "4932954144212ea4739de31c164568e732b2a6b9"
+    commit_sha: "90553b82b0e0d18303e6811ec15b90c8be6d9603"
   - criterion_id: A3
     status: pass
     evidence_ref: "49329541 strict transcriptcompile0/current runner286pass includes4newpublicexportconsumers; runtime-observations.json preserves exact9007199254740993/rawsource/caller_asserted/forgedrowfalse/4300vs4301/Unicode near-misses; missing-occurrence-export and missing-unicode-export controls exit1 at intended assertions. Rawstreams/controlimages under /Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/transcript-mutation-policy/4932954144212ea4739de31c164568e732b2a6b9. No fullgenerator/native/installedparity claim."
