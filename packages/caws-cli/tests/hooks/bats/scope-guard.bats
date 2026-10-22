@@ -110,7 +110,7 @@ STUB
 @test "scope-guard: an out-of-scope reject is surfaced from the JSON contract (authoritative)" {
   local json='{"decision":"reject","rule":"scope.reject.scope_out","path":"packages/out/x.ts","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1","matchedPattern":"packages/out"}'
   _run_scope_guard_with_stub "packages/out/x.ts" 1 "$json"
-  [[ -n "$output" ]]
+  assert [ -n "$output" ]
   assert_output --partial 'out-of-scope'
   assert_output --partial 'packages/out'
 }
