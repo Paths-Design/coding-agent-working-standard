@@ -51,3 +51,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js::worktree-claim-oracle verdicts"
     commit_sha: c66730a3
     test_verified_at: c66730a37f1c737a180eef774519ee6f6866b8d1
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Both matcher sources are extracted and compiled with asserted shape (caws-state.sh CAWS_NODE_GLOB_TO_SCOPE_REGEXP via bash source; oracle globToRegExp by declaration match); per-copy anchors pin subtree, boundary and single-segment * semantics; a 23 x 30 hostile matrix has zero disagreements with both answers exercised. Control C, which changes only the shell copy's * mapping, fails the shell anchor and the differential with 3 pairs while oracle tests stay green (~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/r21-claim-oracle/c66730a3-control-c.txt). Equality holds over the matrix, not all strings."
+    recorded_at: "2026-10-22T00:12:21.875Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js::scope matcher parity between caws-state.sh and the oracle"
+    commit_sha: c66730a3
+    test_verified_at: c66730a37f1c737a180eef774519ee6f6866b8d1
