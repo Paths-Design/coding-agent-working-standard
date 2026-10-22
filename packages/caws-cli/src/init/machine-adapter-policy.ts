@@ -53,7 +53,7 @@ const noVersion = (text: string): string =>
 /** Tokenize the supported simple-command subset without expanding or executing
  * project shell. Preserve raw assignment bytes; reject compound commands and
  * substitutions instead of discarding custom execution semantics. */
-function nativeCommandWords(command: string): { raw: string; value: string }[] {
+export function nativeCommandWords(command: string): { raw: string; value: string }[] {
   const words: { raw: string; value: string }[] = [];
   let index = 0;
   while (index < command.length) {
@@ -97,9 +97,10 @@ export function migrateNativeCommand(
   repo: string,
   home: string,
   surface: string,
-  event: Event
+  event: Event,
+  entry: 'native' | 'legacy' = 'legacy'
 ): string {
-  const next = machineCommand(home, surface, event);
+  const next = machineCommand(home, surface, event, entry);
   // These are the shipped root-resolving transports, not arbitrary shell to
   // evaluate. The Qwen shim's conditional bootstrap is replaced by the runtime's
   // own outside-project handling. Unknown wrappers require reconciliation.
@@ -120,8 +121,11 @@ export function migrateNativeCommand(
       if (!assignment.raw.startsWith('CAWS_HOME=')) assignments.push(assignment.raw);
     }
     const args = words.map((word) => word.value);
+    if (args.at(-1) === '--system') args.pop();
     let recognized = false;
-    if (['python3', '/usr/bin/python3'].includes(args[0] ?? '')) {
+    if (path.isAbsolute(args[0] ?? '') && args[0]?.endsWith('/bin/caws-hook-native')) {
+      recognized = args.length === 3 && args[1] === surface && args[2] === event;
+    } else if (['python3', '/usr/bin/python3'].includes(args[0] ?? '')) {
       recognized =
         args.length === 4 &&
         path.isAbsolute(args[1] ?? '') &&

@@ -17,12 +17,26 @@ export interface NativeConfiguration {
 }
 const quote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
 
-export function machineCommand(home: string, surface: string, event: string): string {
-  return `CAWS_HOME=${quote(home)} python3 ${quote(path.join(home, 'bin/caws-hook'))} ${surface} ${event}`;
+export function machineCommand(
+  home: string,
+  surface: string,
+  event: string,
+  entry: 'native' | 'legacy' = 'legacy'
+): string {
+  const launcher =
+    entry === 'native'
+      ? quote(path.join(home, 'bin/caws-hook-native'))
+      : `python3 ${quote(path.join(home, 'bin/caws-hook'))}`;
+  return `CAWS_HOME=${quote(home)} ${launcher} ${surface} ${event}`;
 }
 
-export function systemCommand(home: string, surface: string, event: string): string {
-  return machineCommand(home, surface, event) + ' --system';
+export function systemCommand(
+  home: string,
+  surface: string,
+  event: string,
+  entry: 'native' | 'legacy' = 'legacy'
+): string {
+  return machineCommand(home, surface, event, entry) + ' --system';
 }
 
 export function configHasCawsHooks(config: unknown): boolean {
@@ -44,7 +58,7 @@ export function configHasCawsHooks(config: unknown): boolean {
 export function isCawsNativeCommand(command: unknown): command is string {
   return (
     typeof command === 'string' &&
-    /(?:\/(?:bin\/caws-hook)(?:['"\s;|&<>]|$)|\.caws\/hooks\/[^'"\s;|&<>]+\.sh(?:['"\s;|&<>]|$)|\.(?:codex|claude|qwen)\/hooks\/(?:(?:dispatch|caws_dispatch)\/(?:pre_tool_use|post_tool_use|session_start|stop|pre_compact|session_end)\.sh|(?:caws-qwen-hook|session-log)\.sh)(?:['"\s;|&<>]|$))/.test(
+    /(?:\/(?:bin\/caws-hook(?:-native)?)(?:['"\s;|&<>]|$)|\.caws\/hooks\/[^'"\s;|&<>]+\.sh(?:['"\s;|&<>]|$)|\.(?:codex|claude|qwen)\/hooks\/(?:(?:dispatch|caws_dispatch)\/(?:pre_tool_use|post_tool_use|session_start|stop|pre_compact|session_end)\.sh|(?:caws-qwen-hook|session-log)\.sh)(?:['"\s;|&<>]|$))/.test(
       command
     )
   );

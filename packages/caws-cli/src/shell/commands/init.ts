@@ -164,6 +164,8 @@ export interface InitCommandOptions {
   /** Migrate direct canonical projects together; never recurse into worktrees. */
   readonly projectsRoot?: string;
   readonly nativeConfigTarget?: string;
+  readonly nativeImage?: string;
+  readonly entry?: 'native' | 'legacy';
   /** Override for the machine-runtime home consulted by systemSurfaceEnabled
    *  (default: CAWS_HOME env var, else ~/.caws). Callers that invoke
    *  runInitCommand in-process (not via a spawned CLI subprocess, where the
@@ -1046,7 +1048,9 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       opts.wireUserConfig ||
       opts.threeWayPath ||
       opts.projectsRoot ||
-      opts.nativeConfigTarget
+      opts.nativeConfigTarget ||
+      opts.nativeImage ||
+      opts.entry
     ) {
       err(
         'caws init migrate: use --from reviewed-plan.json to preview; add positional apply to execute.'
@@ -1080,7 +1084,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
           (opts.fromFile || opts.agentSurface)) ||
         (opts.projectsRoot && operation !== 'migrate') ||
         (opts.projectsRoot && opts.fromFile) ||
-        (opts.nativeConfigTarget && operation !== 'configure')
+        (opts.nativeConfigTarget && operation !== 'configure') ||
+        (opts.nativeImage && operation !== 'install') ||
+        (opts.entry !== undefined &&
+          (operation !== 'configure' || !['native', 'legacy'].includes(opts.entry)))
       ) {
         err(
           'caws init adapters: incompatible options; use --plan/--json, or --agent-surface/--from with adopt'
@@ -1101,6 +1108,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
           const result = configureSystemRuntime({
             ...options,
             ...(opts.nativeConfigTarget ? { nativeConfigTarget: opts.nativeConfigTarget } : {}),
+            ...(opts.entry ? { entry: opts.entry } : {}),
           });
           out(
             opts.json
@@ -1174,7 +1182,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         );
         return 2;
       }
-      const options = { plan: opts.plan === true };
+      const options = {
+        plan: opts.plan === true,
+        ...(opts.nativeImage ? { nativeImage: opts.nativeImage } : {}),
+      };
       const result =
         operation === 'rollback' ? rollbackMachineRuntime(options) : installMachineRuntime(options);
       out(
@@ -1189,9 +1200,9 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     }
   }
 
-  if (opts.projectsRoot || opts.nativeConfigTarget) {
+  if (opts.projectsRoot || opts.nativeConfigTarget || opts.nativeImage || opts.entry) {
     err(
-      'caws init: --projects-root requires adapters migrate; --native-config-target requires adapters configure.'
+      'caws init: --projects-root requires adapters migrate; --native-config-target/--entry require adapters configure; --native-image requires adapters install.'
     );
     return 2;
   }

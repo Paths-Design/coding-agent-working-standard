@@ -54,6 +54,7 @@ export interface SystemOptions {
   repo?: string;
   fromFile?: string;
   nativeConfigTarget?: string;
+  entry?: 'native' | 'legacy';
 }
 const encode = (value: unknown): string => JSON.stringify(value, null, 2) + '\n';
 const empty = (): SystemSurfacePolicy => ({
@@ -157,6 +158,25 @@ function requireRuntime(home: string): { files: string[]; defaults: Record<Event
 }
 
 /** Register one stable transport at the harness user layer. No project writes. */
+function requireNativeEntry(home: string): void {
+  const pointer = JSON.parse(before(home, path.join(home, 'state/adapter-runtime.json')) ?? 'null');
+  const files = verifyRuntime(home, pointer.digest);
+  const stable = path.join(home, 'bin/caws-hook-native');
+  assertMachinePath(home, stable);
+  if (
+    !files['native-entry.json'] ||
+    !files['native/caws-hook-native'] ||
+    !fs.existsSync(stable) ||
+    !fs.statSync(stable).isFile() ||
+    (fs.statSync(stable).mode & 0o7777) !== 0o755 ||
+    createHash('sha256').update(fs.readFileSync(stable)).digest('hex') !==
+      files['native/caws-hook-native']
+  )
+    throw new Error(
+      'Install and verify an explicit --native-image before configuring the native entry'
+    );
+}
+
 export function configureSystemRuntime(options: SystemOptions): {
   changed: boolean;
   changes: Change[];
@@ -175,6 +195,22 @@ export function configureSystemRuntime(options: SystemOptions): {
     target
   );
   const native = config(user, file);
+  const transports = new Set<'native' | 'legacy'>();
+  for (const groups of Object.values(native.value.hooks ?? {})) {
+    if (!Array.isArray(groups)) throw new Error('Malformed native hook groups');
+    for (const group of groups)
+      for (const hook of group.hooks ?? []) {
+        if (isCawsNativeCommand(hook.command))
+          transports.add(
+            /\/bin\/caws-hook-native(?:['"\s]|$)/.test(hook.command) ? 'native' : 'legacy'
+          );
+      }
+  }
+  if (options.entry === undefined && transports.size > 1)
+    throw new Error('Mixed CAWS entry registrations require explicit --entry reconciliation');
+  const entry = options.entry ?? [...transports][0] ?? 'legacy';
+  if (entry !== 'native' && entry !== 'legacy') throw new Error('Entry must be native or legacy');
+  if (entry === 'native') requireNativeEntry(home);
   const toml = before(user, path.join(user, vendor, 'config.toml'));
   if (toml && /\[hooks[.\[\]]/.test(toml) && isCawsNativeCommand(toml))
     throw new Error(
@@ -213,10 +249,16 @@ export function configureSystemRuntime(options: SystemOptions): {
           return {
             ...hook,
             command:
-              hook.command === systemCommand(home, options.surface, event)
+              hook.command === systemCommand(home, options.surface, event, entry)
                 ? hook.command
-                : migrateNativeCommand(hook.command, user, home, options.surface, event as Event) +
-                  ' --system',
+                : migrateNativeCommand(
+                    hook.command,
+                    user,
+                    home,
+                    options.surface,
+                    event as Event,
+                    entry
+                  ) + ' --system',
           };
         }),
       };
@@ -235,7 +277,7 @@ export function configureSystemRuntime(options: SystemOptions): {
         hooks: [
           {
             type: 'command',
-            command: systemCommand(home, options.surface, event),
+            command: systemCommand(home, options.surface, event, entry),
             timeout: event === 'post_tool_use' ? 60 : 45,
           },
         ],

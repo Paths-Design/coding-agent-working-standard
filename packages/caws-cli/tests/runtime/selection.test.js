@@ -3,7 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { resolveInvocationSelection } = require('../../dist/runtime/selection');
 const { sha } = require('../../dist/init/machine-runtime-state');
-const { MACHINE_EVENTS } = require('../../dist/init/native-hook-identification');
+const { MACHINE_EVENTS, machineCommand } = require('../../dist/init/native-hook-identification');
 
 let root;
 beforeEach(() => {
@@ -26,6 +26,7 @@ function fixture() {
   fs.mkdirSync(checkout);
   const files = {
     'launcher.py': '# fixture source-generation launcher\n',
+    'bootstrap.py': '# fixture retained bootstrap\n',
     'first.sh': '#!/bin/sh\nexit 0\n',
     'last.sh': '#!/bin/sh\nexit 0\n',
     'lib/helper.sh': 'shared helper\n',
@@ -47,6 +48,7 @@ function fixture() {
   for (const [name, bytes] of Object.entries(files))
     write(path.join(runtime, name), bytes, name.endsWith('.sh'));
   write(path.join(runtime, 'manifest.json'), manifest);
+  write(path.join(home, 'bin/caws-hook'), files['bootstrap.py'], true);
   write(path.join(canonical, '.caws/policy.yaml'), 'version: 1\n');
   fs.mkdirSync(path.join(canonical, '.caws/specs'));
   write(path.join(home, 'surfaces/codex/settings.json'), { version: 1, enabled: true });
@@ -282,7 +284,7 @@ test('legacy governance and disabled system surfaces do not silently adopt proje
 test('legacy native duplicate avoidance is event-specific and respects disabled registrations', () => {
   const f = fixture();
   const native = path.join(f.options.canonical, '.codex/hooks.json');
-  const hook = { command: '/home/user/.caws/bin/caws-hook codex pre_tool_use' };
+  const hook = { command: machineCommand(f.options.home, 'codex', 'pre_tool_use') };
   write(native, { hooks: { PreToolUse: [{ hooks: [hook] }] } });
   expect(resolveInvocationSelection(f.options)).toEqual({
     status: 'inactive',
