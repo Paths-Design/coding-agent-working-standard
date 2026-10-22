@@ -1,9 +1,10 @@
 id: CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01
 title: 'Write guards compare unresolved paths when python3 is absent or fails: _realpath falls back to identity and worktree-write-guard admits foreign-worktree writes'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: realpath-checked
 created_at: '2026-10-21T23:16:20.828Z'
-updated_at: '2026-10-22T00:00:13.341Z'
+updated_at: '2026-10-22T00:04:59.295Z'
 created_by_session: 'c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885'
 blast_radius:
   modules:
