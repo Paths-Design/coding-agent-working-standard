@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-publication-boundary
 created_at: '2026-10-22T07:54:35.268Z'
-updated_at: '2026-10-22T07:54:46.167Z'
+updated_at: '2026-10-22T08:52:45.335Z'
 created_by_session: '01a16072-908c-7033-9fd2-fb054ac7024b'
 blast_radius:
   modules:
@@ -25,7 +25,6 @@ scope:
     - 'packages/caws-native/src/service_journal/custody.rs'
     - 'packages/caws-native/src/service_journal/'
     - 'packages/caws-native/tests/'
-    - 'packages/caws-cli/src/runtime/session-publication-wire.ts'
   out: []
 invariants:
   - 'Native original identity and continuous writer custody govern effects; prepared bytes confer no authority'
