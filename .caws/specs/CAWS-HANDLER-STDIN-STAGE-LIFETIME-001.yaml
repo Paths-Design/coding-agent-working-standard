@@ -74,11 +74,18 @@ acceptance:
       It names the EXIT trap, states that the trap runs on TERM, INT and HUP but not
       on KILL, and states that no shipped dispatcher consumes CAWS_TEMP_FILES
   - id: A7
-    given: 'A staged inline payload whose unlink inside its private stage directory fails'
+    given: >-
+      A staged inline payload whose unlink inside its private stage directory fails:
+      either persistently (every attempt refused) or transiently (only the first
+      attempt refused)
     when: 'run_handlers runs a reading handler'
     then: >-
-      The handler still runs and receives the payload byte for byte, the chain exits
-      0, and stderr names the payload stage both before and after the handler runs
+      In both cases the handler still runs and receives the payload byte for byte
+      and the chain exits 0. Under a persistent failure the payload remains and
+      stderr names it before and after the handler, with one refused attempt before
+      the handler and at least one after. Under a transient failure the retry after
+      the handler removes the payload and stderr names it exactly once. Nothing
+      run_handlers did not create is removed
 non_functional: {}
 contracts: []
 evidence:
@@ -108,10 +115,8 @@ evidence:
     recorded_at: "2026-10-22T20:13:18.454Z"
     commit_sha: "50ba057b"
   - criterion_id: A7
-    status: pass
-    evidence_ref: "t8 ok at 50ba057b: rm stub refuses only the FIRST payload unlink, handler ran and saw the payload (recursive find), payload absent after the chain, exactly one payload report; m7 (presence check removed) and m10 (two reports before the handler, no EXIT retry) fail t8; prior a5b4baee fails t8. Assertions use _has/_lacks because a false [[ ]] above the last line does not fail a bats test under bash 3.2 (probe ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/bats-assert-probe). ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-runs/series-20261022T201036Z.json"
-    recorded_at: "2026-10-22T20:13:22.379Z"
-    commit_sha: "50ba057b"
+    status: unchecked
+    recorded_at: "2026-10-22T20:22:10.911Z"
   - criterion_id: A6
     status: pass
     evidence_ref: "parse-input.sh _write_payload_file comment (f4168df9, unchanged through 50ba057b) names the EXIT trap, its TERM/INT/HUP vs KILL limit, and that no shipped dispatcher consumes CAWS_TEMP_FILES; source review at 1169f7df found no consumer under templates or src"
