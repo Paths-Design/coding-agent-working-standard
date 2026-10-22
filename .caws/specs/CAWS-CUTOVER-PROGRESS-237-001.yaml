@@ -1,9 +1,11 @@
 id: CAWS-CUTOVER-PROGRESS-237-001
 title: 'Integrate bounded rollback repair and synchronize cutover obligations'
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Exact accepted rollback component integratedsource and bounded E237/E238 ledger synchronized on main;2criteria recorded with inspected source/raw artifacts and normalgates. Parent goal0/8 remains active; no machine adoption.'
 created_at: '2026-10-22T01:56:52.197Z'
-updated_at: '2026-10-22T02:23:22.825Z'
+updated_at: '2026-10-22T02:28:43.195Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
