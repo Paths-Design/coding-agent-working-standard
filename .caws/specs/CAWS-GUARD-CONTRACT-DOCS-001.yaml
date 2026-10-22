@@ -55,6 +55,6 @@ evidence:
     commit_sha: "3f6f234c"
   - criterion_id: A3
     status: unchecked
-    evidence_ref: "All four existing documents are committed and clean at 063991aa; independent review and source-owner feedback are grounded, formatter and scoped gates pass. Coherent landing remains open: main lacks the corresponding analysis source and guide lineage, so these documents must land with source after the held source-quality obligation resolves. Root retains integration, documentation tax and acceptance; no standalone documentation merge or source availability claim."
-    recorded_at: "2026-10-21T21:55:32.218Z"
-    commit_sha: "063991aa2da021bd6eca9aff3714f8105041fcfb"
+    evidence_ref: "All four existingdocs plus finitelegacyrecoveryappend committedclean. Review/source/rawchecksgrounded; coherentlanding remainsowed with corresponding heldshellanalysis and R01nativeentrysource. No standaloneguide merge, nativeadoption or sourceavailabilityonmainclaim. Rootretain integration/documentationtax; pending finalTENbfb notrescuedbytwofocusedlegacychecks."
+    recorded_at: "2026-10-22T11:25:03.495Z"
+    commit_sha: "3f6f234c"
