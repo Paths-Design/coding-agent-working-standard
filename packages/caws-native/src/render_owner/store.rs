@@ -656,6 +656,18 @@ pub(super) fn take_after_cohort(
     if pending == 0 { waiting.take() } else { None }
 }
 impl StoreJob {
+    pub(super) fn invocation_id(&self) -> String {
+        // Release the record lock before the caller emits an observation.
+        let invocation = {
+            self.record
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .original
+                .id
+                .clone()
+        };
+        invocation
+    }
     pub(super) fn refuse(self, reason: &str) {
         settle_quarantine(
             &self.registry,

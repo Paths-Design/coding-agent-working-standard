@@ -7,6 +7,8 @@ impl Actor {
         let mut waiting: Option<Job> = None;
         #[cfg(feature = "sqlite-store")]
         let mut store_waiting: Option<store::StoreJob> = None;
+        #[cfg(feature = "sqlite-store")]
+        let mut store_waiting_observed = false;
         let mut barrier = false;
         loop {
             if let Some(arrival) = bridge_head(pending.iter().map(|entry| &entry.job)) {
@@ -47,8 +49,17 @@ impl Actor {
             if store_waiting.is_some() {
                 if let Some(job) = store::take_after_cohort(&mut store_waiting, pending.len()) {
                     self.acquire_store_job(job);
+                    store_waiting_observed = false;
                     barrier = false;
                 } else {
+                    if !store_waiting_observed {
+                        let invocation = store_waiting
+                            .as_ref()
+                            .expect("waiting store job")
+                            .invocation_id();
+                        self.stage("store_cohort_waiting", &invocation);
+                        store_waiting_observed = true;
+                    }
                     thread::sleep(TICK);
                 }
                 continue;
@@ -64,6 +75,7 @@ impl Actor {
                     #[cfg(feature = "sqlite-store")]
                     Ok(Mailbox::Store(job)) => {
                         store_waiting = Some(job);
+                        store_waiting_observed = false;
                         barrier = true;
                         continue;
                     }

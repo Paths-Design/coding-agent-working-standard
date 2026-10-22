@@ -986,24 +986,43 @@ fn resident_actor_run_orders_prepared_renderer_store_and_later_renderer() {
         &observations,
         deadline,
     );
-    let quiet_until = Instant::now() + Duration::from_millis(250);
-    while Instant::now() < quiet_until {
+    let mut barrier_seen = None;
+    loop {
         for caller in [&mut store_caller, &mut b] {
             assert!(
                 matches!(caller.read(&mut [0u8; 1]), Err(error) if error.kind() == io::ErrorKind::WouldBlock),
                 "SQL relay or later renderer grant overtook prepared A"
             );
         }
+        let held = fifo_observations(&config);
+        assert!(
+            !held
+                .iter()
+                .any(|event| event["stage"] == "store_acquisition_start"
+                    || (event["invocationId"] == "render-owner-fifo:B"
+                        && event["stage"] == "image_admission"))
+        );
+        let barriers = held
+            .iter()
+            .filter(|event| {
+                event["event"] == "actor_stage"
+                    && event["stage"] == "store_cohort_waiting"
+                    && event["invocationId"] == id
+            })
+            .count();
+        assert!(barriers <= 1, "one waiting observation per StoreJob");
+        if barriers == 1 {
+            let seen = barrier_seen.get_or_insert_with(Instant::now);
+            if seen.elapsed() >= Duration::from_millis(250) {
+                break;
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "actual Actor never encountered S behind the prepared A cohort"
+        );
         thread::sleep(TICK);
     }
-    let held = fifo_observations(&config);
-    assert!(
-        !held
-            .iter()
-            .any(|event| event["stage"] == "store_acquisition_start"
-                || (event["invocationId"] == "render-owner-fifo:B"
-                    && event["stage"] == "image_admission"))
-    );
     assert_eq!(registry.lock().unwrap().status(&query).phase, "registered");
     a.shutdown(std::net::Shutdown::Both).unwrap(); // Actual reader EOF revokes A.
 
@@ -1122,6 +1141,7 @@ fn resident_actor_run_orders_prepared_renderer_store_and_later_renderer() {
     };
     let order = [
         position("prepared", "render-owner-fifo:A", None),
+        position("actor_stage", id, Some("store_cohort_waiting")),
         position("prepared_withdrawn", "render-owner-fifo:A", None),
         position("actor_stage", "render-owner-fifo:A", Some("finish")),
         position("actor_stage", id, Some("store_acquisition_start")),
