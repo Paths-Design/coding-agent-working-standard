@@ -41,6 +41,23 @@ EOF
   chmod +x "$STAGE_PACK"/*.sh
 }
 
+# Ends only processes this test started and recorded, and only while each pid still
+# runs the command it was recorded for, so a failed assertion cannot strand them and
+# a reused pid is never signalled.
+teardown() {
+  _end_owned "$OUT_DIR/dispatcher.pid" 'run_handlers sleeper.sh'
+  _end_owned "$OUT_DIR/sleeper.pid" 'sleep 30'
+}
+
+_end_owned() { # $1 = pid file, $2 = substring the process command line must contain
+  [ -s "$1" ] || return 0
+  local pid cmd
+  pid=$(cat "$1")
+  cmd=$(ps -o command= -p "$pid" 2>/dev/null) || return 0
+  [[ "$cmd" == *"$2"* ]] || return 0
+  kill -KILL "$pid" 2>/dev/null || true
+}
+
 # Runs run_handlers over the given handlers under the dispatcher's shell options,
 # with HOOK_INPUT_JSON preset so only the stdin decision is observed.
 _chain() { # $1 = payload, rest = handlers
@@ -101,6 +118,7 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
       /bin/bash -c 'set -uo pipefail; source "$RUN_HANDLERS"; run_handlers sleeper.sh' \
       > "$OUT_DIR/dispatch-$sig.out" 2>&1 3>&- &
     dpid=$!
+    echo "$dpid" > "$OUT_DIR/dispatcher.pid"
     for _ in $(seq 1 100); do [ -s "$OUT_DIR/sleeper.pid" ] && break; sleep 0.1; done
     [ -s "$OUT_DIR/sleeper.pid" ]
     kill -"$sig" "$dpid"
