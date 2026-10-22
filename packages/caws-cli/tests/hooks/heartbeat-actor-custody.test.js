@@ -2,7 +2,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
+const { setTimeout: delay } = require('node:timers/promises');
 const { AbortController } = globalThis;
 const { sendMessage, getMessageDeliveryState } = require('../../dist/store/messages-store');
 const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
@@ -406,6 +407,65 @@ test('a subagent call keeps the lease write and peer notice while the mail waits
   expect(result.stdout).toContain('custody-peer');
   expect(custody(mail, result.stdout)).toEqual(WITHHELD);
   expect(fs.existsSync(path.join(cawsDir, 'leases', `${sid}.json`))).toBe(true);
+});
+
+// The parser replaces the heartbeat's EXIT trap with its own before scalar extraction,
+// so a standalone run terminated there must already have removed its capture.
+test('a standalone spill run terminated during scalar extraction leaves no capture file', async () => {
+  const sid = session();
+  const mail = seed(sid);
+  const bin = path.join(root, `pause-${sid}`);
+  const paused = path.join(bin, 'paused');
+  fs.mkdirSync(bin);
+  const python = spawnSync('/bin/sh', ['-c', 'command -v python3'], {
+    env,
+    encoding: 'utf8',
+  }).stdout.trim();
+  expect(python).not.toBe('');
+  fs.writeFileSync(
+    path.join(bin, 'python3'),
+    `#!/bin/sh\ncase "$*" in *HOOK_TOOL_NAME*) : > '${paused}'; sleep 30 ;; esac\nexec '${python}' "$@"\n`,
+    { mode: 0o755 }
+  );
+  const child = spawn('/bin/bash', [path.join(hooks, 'agent-heartbeat.sh')], {
+    cwd: repo,
+    env: { ...env, PATH: `${bin}:${env.PATH}`, CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES: '0' },
+    detached: true,
+    stdio: ['pipe', 'ignore', 'ignore'],
+  });
+  const exited = new Promise((resolve) =>
+    child.on('exit', (code, signal) => resolve({ code, signal }))
+  );
+  child.stdin.end(JSON.stringify(payload(sid)));
+  let reaped = false;
+  try {
+    const deadline = Date.now() + 30_000;
+    while (!fs.existsSync(paused) && Date.now() < deadline) await delay(50);
+    const reachedPause = fs.existsSync(paused);
+    const whilePaused = captures();
+    process.kill(-child.pid, 'SIGTERM');
+    const termination = await exited;
+    reaped = true;
+    expect(reachedPause).toBe(true);
+    expect(termination).toEqual({ code: 143, signal: null });
+    expect({ whilePaused, afterTermination: captures() }).toEqual({
+      whilePaused: 0,
+      afterTermination: 0,
+    });
+    expect(custody(mail, '')).toMatchObject({ shown: false, delivered: false, offers: 0 });
+  } finally {
+    // A failed assertion must not strand the paused group or leak its capture into later cases.
+    if (!reaped) {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        /* the group already exited */
+      }
+      await Promise.race([exited, delay(5_000)]);
+    }
+    for (const name of fs.readdirSync(env.TMPDIR))
+      if (name.startsWith('caws-heartbeat-ingress-')) fs.rmSync(path.join(env.TMPDIR, name));
+  }
 });
 
 // The typed executor kills a handler at its deadline, so nothing the heartbeat wrote may

@@ -105,13 +105,26 @@ case "$_HB_ACTOR" in
   main | subagent) ;;
   *) _HB_ACTOR=uncertain ;;
 esac
+# The parser installs its own EXIT trap, replacing the capture's, so the capture is
+# opened on a descriptor and unlinked before parsing; once unlinked, no interruption can
+# leave it on disk. If it cannot be opened or unlinked, exit while the capture's own
+# trap is still installed rather than parse with the payload still named on disk.
 if [[ -n "$_HB_INGRESS" ]]; then
-  parse_hook_input < "$_HB_INGRESS"
+  if ! { exec 9<"$_HB_INGRESS"; } 2>/dev/null; then
+    exit 0
+  fi
+  rm -f "$_HB_INGRESS" 2>/dev/null
+  if [[ -e "$_HB_INGRESS" ]]; then
+    exec 9<&-
+    exit 0
+  fi
+  parse_hook_input <&9
+  _HB_PARSED=$?
+  exec 9<&-
 else
   parse_hook_input
+  _HB_PARSED=$?
 fi
-_HB_PARSED=$?
-[[ -n "$_HB_INGRESS" ]] && rm -f "$_HB_INGRESS"
 [[ "$_HB_PARSED" == 0 ]] || exit 0
 
 if [[ -z "${HOOK_SESSION_ID:-}" || "$HOOK_SESSION_ID" == "unknown" ]]; then
