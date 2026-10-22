@@ -1,0 +1,32 @@
+id: CAWS-SHARED-PACK-105-001
+title: 'Refresh the shared pack after custody and stdin lifetime integration'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-22T20:37:12.261Z'
+updated_at: '2026-10-22T20:37:12.261Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Shared hook pack version and exact sorted template inventory; existing cutover progress ledger'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'Refresh only the shared pack after reviewed source integration; all seven other pack baselines remain unchanged; no installed runtime or foreign worktree mutation.'
+acceptance:
+  - id: A1
+    given: 'the integrated custody and stdin templates'
+    when: 'the shipping shared manifest and live template fingerprint are inspected'
+    then: 'shared version105 and the exact75-file source fingerprint agree and the seven other pack inventories match their preserved baselines'
+  - id: A2
+    given: 'retained actual cutover checks and component landing'
+    when: 'the existing migration ledger is updated'
+    then: 'source integration, actual native builds and bounded refusals, kernel and retention checks remain distinct from open image, native consumption, resident workload and machine adoption obligations'
+rollback:
+  - 'Revert only this three-path logical source and ledger unit through normal governed history if its declared inventory or evidence is refuted.'
+non_functional: {}
+contracts: []
