@@ -408,17 +408,27 @@ describe('native SQLite coordinator pre-Cargo refusals and explicit loader bindi
     });
 
     test.each([
-      'changed bytes',
-      'nonexecutable',
-      'symlink',
-      'wrong pin path',
-      'missing pin',
-      'extra pin',
-      'modified Cargo records',
-    ])('refuses %s at the real filesystem boundary', (change) => {
+      ['changed bytes', /Pin mismatch:.*caws-hook-native$/],
+      ['nonexecutable', /^Executable artifact mode changed$/],
+      ['symlink', /ELOOP|EMLINK/],
+      ['wrong pin path', /^Artifact path mismatch: stableEntry$/],
+      ['missing pin', /^Unexpected object shape/],
+      ['extra pin', /^Unexpected object shape/],
+      ['modified Cargo records', /Pin mismatch:.*cargo-build\.stdout$/],
+      ['oversized executable', /Not a bounded regular file:.*caws-hook-native$/],
+      ['oversized Cargo records', /Not a bounded regular file:.*cargo-build\.stdout$/],
+    ])('refuses %s at the real filesystem boundary', (change, expected) => {
       version(true);
       const pins = artifacts();
-      if (change === 'changed bytes') fs.appendFileSync(pins.stableEntry.path, 'tampered');
+      const corruptSameSize = (file) => {
+        const before = fs.readFileSync(file);
+        const changed = Buffer.from(before);
+        changed[0] ^= 1;
+        fs.writeFileSync(file, changed);
+        expect(fs.statSync(file).size).toBe(before.length);
+        expect(fs.readFileSync(file)).not.toEqual(before);
+      };
+      if (change === 'changed bytes') corruptSameSize(pins.stableEntry.path);
       if (change === 'nonexecutable') fs.chmodSync(pins.stableEntry.path, 0o600);
       if (change === 'symlink') {
         const file = pins.stableEntry.path;
@@ -428,12 +438,12 @@ describe('native SQLite coordinator pre-Cargo refusals and explicit loader bindi
       if (change === 'wrong pin path') pins.stableEntry = pins.native;
       if (change === 'missing pin') delete pins.stableEntry;
       if (change === 'extra pin') pins.unreviewed = pins.native;
-      if (change === 'modified Cargo records') fs.appendFileSync(pins.cargoMessages.path, '{}\n');
+      if (change === 'modified Cargo records') corruptSameSize(pins.cargoMessages.path);
+      if (change === 'oversized executable') fs.appendFileSync(pins.stableEntry.path, 'tampered');
+      if (change === 'oversized Cargo records') fs.appendFileSync(pins.cargoMessages.path, '{}\n');
       expect(() =>
         verifyNativeSqliteBuildArtifacts(request, 'caws.native_sqlite_build_receipt.v2', pins)
-      ).toThrow(
-        /Pin mismatch|mode changed|ELOOP|EMLINK|Artifact path mismatch|Unexpected object shape/
-      );
+      ).toThrow(expected);
     });
 
     test('v1 neither receives nor grants a stable-entry pin', () => {
