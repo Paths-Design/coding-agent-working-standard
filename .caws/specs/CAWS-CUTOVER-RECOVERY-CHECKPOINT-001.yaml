@@ -15,7 +15,7 @@ scope:
     - 'docs/internal/caws-runtime-modernization.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Keep33of37 partial coverage and parent0of8 acceptance; historical packages do not qualify repaired source or native adoption'
 acceptance:
   - id: A1
     given: 'TODO'
