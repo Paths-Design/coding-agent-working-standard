@@ -4,9 +4,13 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const dist = process.env.CAWS_TEST_DIST || path.join(__dirname, '../../dist');
 const { configureSystemRuntime } = require(path.join(dist, 'init/system-runtime'));
-const { machineCommand, systemCommand, isCawsNativeCommand, MACHINE_EVENTS } = require(
-  path.join(dist, 'init/native-hook-identification')
-);
+const {
+  machineCommand,
+  systemCommand,
+  isCawsNativeCommand,
+  qualifiedHookTimeout,
+  MACHINE_EVENTS,
+} = require(path.join(dist, 'init/native-hook-identification'));
 const { migrateNativeCommand } = require(path.join(dist, 'init/machine-adapter-policy'));
 const { resolveInvocationSelection } = require(path.join(dist, 'runtime/selection'));
 const sha = (s) => createHash('sha256').update(s).digest('hex');
@@ -158,6 +162,59 @@ test('Qwen seconds-era timeout cannot survive entry migration or suppress the sy
   expect(() => resolveInvocationSelection({ ...options, surface: 'qwen-code' })).toThrow(
     /reconciliation/
   );
+});
+test.each([undefined, NaN, Infinity, -Infinity, 45, 44999])(
+  'Qwen unsupported budget %s refuses without changing operator bytes',
+  (timeout) => {
+    const file = path.join(user, '.qwen/settings.json');
+    const command = machineCommand(home, 'qwen-code', 'pre_tool_use');
+    write(file, {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: '.*',
+            hooks: [{ type: 'command', command, ...(timeout === undefined ? {} : { timeout }) }],
+          },
+        ],
+      },
+    });
+    const bytes = fs.readFileSync(file);
+    // JSON encodes nonfinite numbers as null; check both the in-memory boundary
+    // and the actual serialized configuration instead of claiming NaN JSON.
+    expect(qualifiedHookTimeout('qwen-code', 'pre_tool_use', timeout)).toBe(false);
+    expect(() => configureSystemRuntime({ home, userHome: user, surface: 'qwen-code' })).toThrow(
+      /reconciliation/
+    );
+    expect(fs.readFileSync(file)).toEqual(bytes);
+    expect(fs.existsSync(path.join(home, 'surfaces/qwen-code/settings.json'))).toBe(false);
+  }
+);
+test.each([
+  ['pre_tool_use', 45000],
+  ['post_tool_use', 60000],
+  ['session_start', 30000],
+  ['stop', 30000],
+  ['pre_compact', 30000],
+  ['session_end', 10000],
+])('Qwen %s explicit floor %s preserves operator bytes on repeated configure', (event, timeout) => {
+  const file = path.join(user, '.qwen/settings.json');
+  write(file, {
+    hooks: {
+      [MACHINE_EVENTS[event]]: [
+        {
+          matcher: '.*',
+          hooks: [{ type: 'command', command: machineCommand(home, 'qwen-code', event), timeout }],
+        },
+      ],
+    },
+  });
+  configureSystemRuntime({ home, userHome: user, surface: 'qwen-code' });
+  const bytes = fs.readFileSync(file);
+  expect(JSON.parse(bytes).hooks[MACHINE_EVENTS[event]][0].hooks[0].timeout).toBe(timeout);
+  expect(configureSystemRuntime({ home, userHome: user, surface: 'qwen-code' }).changed).toBe(
+    false
+  );
+  expect(fs.readFileSync(file)).toEqual(bytes);
 });
 test.each([
   { if: 'Bash(rm *)' },

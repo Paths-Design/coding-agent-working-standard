@@ -49,7 +49,7 @@ export function unconditionalCommandHook(
  * reconciliation; these floors do not attest that a callback finishes in time.
  */
 export function qualifiedHookTimeout(surface: string, event: string, timeout: unknown): boolean {
-  if (surface !== 'qwen-code' || timeout === undefined) return true;
+  if (surface !== 'qwen-code') return true;
   const floor =
     event === 'pre_tool_use'
       ? 45000
@@ -58,7 +58,7 @@ export function qualifiedHookTimeout(surface: string, event: string, timeout: un
         : event === 'session_end'
           ? 10000
           : 30000;
-  return typeof timeout === 'number' && timeout >= floor;
+  return typeof timeout === 'number' && Number.isFinite(timeout) && timeout >= floor;
 }
 
 export function machineCommand(
