@@ -32,3 +32,9 @@ rollback:
   - 'Correct the existing ledger through normal governed history'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Ledger candidate cb99e6b8 and exact publisher86d6dda3 retain audited human transfers11486/87, pure helper42e2 source landingabdb/three equal blobs, child3PASS plus native A4 unchecked, and current979 observer all5unchecked/historicalf07. Root inspected raw check03 TAP42/0/0skip, six schema expectations and prepared historical validity, isolated Numberfault41/1, exact events/specs and source inventory gaps. Read-only C4 committed review a2f39ac7 confirms coordinates; root grounds its provenance questions with fresh clean abdb compile and all3 emitted JS byte-equal original test outputs, explicit pinned Nodev22.22.2/SHA5c899, and actual validJSON precision contrast9007199254740994 vs Numberfault9007199254740992 exact assertion failure under check04-integrated/precision-02. Earlier bad fault path remains a failed probe, excluded. Final docdiffcheck0, commitprettier0 and five1path gates PASS; doctor0E/3W/4I. Parent0of8,33of37 partial rows, zero complete production Python retirements unchanged. Root retains ordinary native consumer, full mutation, package and machine adoption gaps. A1 accepts truthful documentation only, A2 two-target publication pending; commit verify establishes reachability only."
+    recorded_at: "2026-10-22T15:40:42.027Z"
+    commit_sha: "86d6dda34ecacab2d027e97e77cb9873c807ded4"
