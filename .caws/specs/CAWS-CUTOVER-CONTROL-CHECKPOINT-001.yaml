@@ -1,0 +1,37 @@
+id: CAWS-CUTOVER-CONTROL-CHECKPOINT-001
+title: 'Reconcile native cutover control and packaged reader evidence'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-22T13:29:00.075Z'
+updated_at: '2026-10-22T13:29:00.075Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Native cutover owed-work ledger'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Partial component evidence does not establish native cutover, acceptance or Python retirement.'
+  - 'Failed attempts, exact source restoration and remaining consumer obligations remain explicit.'
+acceptance:
+  - id: A1
+    given: 'retained positive and negative controls plus current packaged-reader artifacts'
+    when: 'the existing ledger is reconciled'
+    then: 'it cites inspected outcomes, restoration state, source integration and receipt-proof gaps without promoting partial evidence to completion.'
+  - id: A2
+    given: 'a reviewed and checked ledger candidate'
+    when: 'it lands through governed lanes'
+    then: 'the parent and canonical source ledger have identical bytes and both acceptance records have matching ac_recorded events.'
+observability:
+  - 'Retained artifact paths and command exit states remain in the existing ledger.'
+rollback:
+  - 'Revert only the owned documentation commit through the normal governed workflow if evidence is refuted.'
+non_functional: {}
+contracts:
+  - name: 'native-cutover-ledger'
+    type: behavior
+    path: 'docs/internal/caws-runtime-modernization.md'
