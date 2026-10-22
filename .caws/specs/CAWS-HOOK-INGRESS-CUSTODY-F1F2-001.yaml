@@ -1,9 +1,10 @@
 id: CAWS-HOOK-INGRESS-CUSTODY-F1F2-001
 title: 'Decide mail custody from the original hook bytes; inherited HOOK_* env never vouches'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: f1f2-ingress-custody
 created_at: '2026-10-22T21:51:53.116Z'
-updated_at: '2026-10-22T21:51:53.116Z'
+updated_at: '2026-10-22T21:52:22.595Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
