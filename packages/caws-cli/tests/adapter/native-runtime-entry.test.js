@@ -3,7 +3,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const dist = process.env.CAWS_TEST_DIST || path.join(__dirname, '../../dist');
-const { prepareNativeRuntimeEntry } = require(path.join(dist, 'init/native-runtime-entry'));
+const { prepareNativeRuntimeEntry, prepareNativeRuntimeEntryFromBuild, readNativeImage } = require(
+  path.join(dist, 'init/native-runtime-entry')
+);
+const nativeBuildTooling = require(path.join(dist, 'tooling/native-sqlite-build'));
 const { installMachineRuntime, rollbackMachineRuntime } = require(
   path.join(dist, 'init/machine-adapters')
 );
@@ -545,4 +548,449 @@ test('legacy rollback cannot treat a corrupt native catalogue as evidence of a l
     })
   ).toThrow(/identity cannot be verified/);
   expect(fs.readFileSync(pointer)).toEqual(before);
+});
+
+describe('v2 receipt-derived image component boundaries (mocked receipt loader, no native execution)', () => {
+  let descriptor, loaded, loader, nativeBytes, stableBytes, observation;
+  const errorIdentity = (error) => ({
+    name: error?.name,
+    message: error?.message ?? String(error),
+  });
+  function installedState(home) {
+    try {
+      return Object.fromEntries(
+        Object.entries(fixtureState(home)).map(([relative, entry]) => [
+          relative,
+          {
+            mode: entry.mode,
+            nlink: entry.nlink,
+            ...(entry.bytes === undefined
+              ? { type: 'directory' }
+              : { type: 'file', sizeBytes: entry.bytes.length, sha256: sha(entry.bytes) }),
+          },
+        ])
+      );
+    } catch (error) {
+      return { observationError: errorIdentity(error) };
+    }
+  }
+  function observeOperation(label, run, home) {
+    if (!process.env.CAWS_NATIVE_IMAGE_ARTIFACT_DIR) return run();
+    const callStart = loader.mock.results.length;
+    const operation = { label, ...(home ? { home, before: installedState(home) } : {}) };
+    try {
+      const result = run();
+      if (typeof result?.digest === 'string') operation.returned = result;
+      return result;
+    } catch (error) {
+      operation.error = errorIdentity(error);
+      throw error;
+    } finally {
+      operation.loaderResults = loader.mock.results
+        .slice(callStart)
+        .map((result) =>
+          result.type === 'throw'
+            ? { type: 'throw', error: errorIdentity(result.value) }
+            : { type: result.type, returnedLoaded: result.value }
+        );
+      if (home) operation.after = installedState(home);
+      observation.operations.push(operation);
+    }
+  }
+  function retainPrepared(label, prepared) {
+    if (!process.env.CAWS_NATIVE_IMAGE_ARTIFACT_DIR) return;
+    const identity = (bytes) =>
+      Buffer.isBuffer(bytes) ? { sizeBytes: bytes.length, sha256: sha(bytes) } : null;
+    const provenance = prepared.files.get('native-build-provenance.json');
+    let parsedProvenance;
+    try {
+      parsedProvenance = JSON.parse(provenance);
+    } catch (error) {
+      parsedProvenance = { observationError: errorIdentity(error) };
+    }
+    observation.prepared.push({
+      label,
+      metadata: prepared.metadata,
+      native: identity(prepared.files.get('native/caws-native')),
+      stableEntryMember: identity(prepared.files.get('native/caws-hook-native')),
+      stableEntry: identity(prepared.stableEntry),
+      provenance: { ...identity(provenance), value: parsedProvenance },
+    });
+  }
+  function prepareDescriptor() {
+    const prepared = observeOperation('prepare receipt descriptor', () =>
+      prepareNativeRuntimeEntryFromBuild(descriptor)
+    );
+    retainPrepared('returned image', prepared);
+    return prepared;
+  }
+  function reviewedFile(name, bytes, mode = 0o644) {
+    const file = path.join(root, name);
+    fs.writeFileSync(file, bytes, { mode });
+    fs.chmodSync(file, mode);
+    return { path: file, sizeBytes: Buffer.byteLength(bytes), sha256: sha(Buffer.from(bytes)) };
+  }
+  function pinIdentity(pin) {
+    return { sizeBytes: pin.sizeBytes, sha256: pin.sha256 };
+  }
+  function expectedProvenance() {
+    return {
+      schema: 'caws.runtime.native-build-provenance.v1',
+      requestFile: pinIdentity(loaded.requestFile),
+      completionReceipt: pinIdentity(loaded.completionReceipt),
+      requestDigest: loaded.build.requestDigest,
+      sourceTreeDigest: loaded.build.sourceTreeDigest,
+      profile: loaded.build.profile,
+      artifacts: {
+        native: pinIdentity(loaded.build.artifacts.native),
+        stableEntry: pinIdentity(loaded.build.artifacts.stableEntry),
+      },
+    };
+  }
+  function imageFile() {
+    const file = path.join(root, 'receipt-image.json');
+    fs.writeFileSync(file, JSON.stringify(descriptor), { mode: 0o600 });
+    return file;
+  }
+  function existingHome() {
+    const home = path.join(root, 'machine');
+    install(home);
+    return home;
+  }
+  function installDescriptor(home, nativeImage, plan = false) {
+    return observeOperation(
+      plan ? 'install plan' : 'install apply',
+      () =>
+        installMachineRuntime({
+          home,
+          nativeImage,
+          plan,
+          templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+        }),
+      home
+    );
+  }
+  beforeEach(() => {
+    observation = {
+      test: expect.getState().currentTestName,
+      boundary:
+        'Mocked receipt-loader component observation; not a real build or assertion verdict',
+      operations: [],
+      prepared: [],
+    };
+    nativeBytes = Buffer.from('# inert receipt-selected native artifact\n');
+    stableBytes = Buffer.from('# inert receipt-selected stable entry artifact\n');
+    const requestFile = reviewedFile('native-build-request.json', '{"fixture":"request v2"}\n');
+    const completionReceipt = reviewedFile('native-completed.json', '{"fixture":"receipt v2"}\n');
+    loaded = {
+      requestFile: { ...requestFile },
+      completionReceipt: { ...completionReceipt },
+      build: {
+        schema: 'caws.native_sqlite_build_receipt.v2',
+        status: 'completed',
+        adoption: 'NOT_ADOPTED',
+        requestDigest: 'a'.repeat(64),
+        sourceTreeDigest: 'b'.repeat(64),
+        profile: 'debug',
+        artifacts: {
+          native: reviewedFile('receipt-native', nativeBytes, 0o755),
+          stableEntry: reviewedFile('receipt-stable-entry', stableBytes, 0o755),
+        },
+      },
+    };
+    const { native, ...shared } = input;
+    delete shared.stableEntry;
+    descriptor = {
+      ...shared,
+      schema: 'caws.runtime.native-image-input.v2',
+      nativeNotices: native.notices,
+      requestFile,
+      completionReceipt,
+    };
+    loader = jest
+      .spyOn(nativeBuildTooling, 'loadNativeSqliteBuildWithStableEntry')
+      .mockReturnValue(loaded);
+  });
+  afterEach(() => {
+    try {
+      if (process.env.CAWS_NATIVE_IMAGE_ARTIFACT_DIR)
+        fs.writeFileSync(
+          path.join(root, 'v2-observation.json'),
+          JSON.stringify(
+            {
+              ...observation,
+              descriptor,
+              mockedLoadedCandidate: loaded,
+            },
+            null,
+            2
+          )
+        );
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
+  test('maps one selected artifact pair into retained buffers and ordinary provenance', () => {
+    const prepared = prepareDescriptor();
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledWith(descriptor.requestFile.path);
+    expect(prepared.files.get('native/caws-native')).toEqual(nativeBytes);
+    expect(prepared.files.get('native/caws-hook-native')).toEqual(stableBytes);
+    expect(prepared.stableEntry).toEqual(stableBytes);
+    for (const [member, pin] of [
+      ['native/caws-native', loaded.build.artifacts.native],
+      ['native/caws-hook-native', loaded.build.artifacts.stableEntry],
+    ]) {
+      expect(prepared.files.get(member).length).toBe(pin.sizeBytes);
+      expect(sha(prepared.files.get(member))).toBe(pin.sha256);
+      expect(prepared.executablePaths.has(member)).toBe(true);
+    }
+    expect(JSON.parse(prepared.files.get('native-build-provenance.json'))).toEqual(
+      expectedProvenance()
+    );
+    expect(prepared.executablePaths.has('native-build-provenance.json')).toBe(false);
+    expect(prepared.files.get('native/licenses/native/LICENSE').toString()).toBe(
+      'Reviewed fixture notice\n'
+    );
+    expect(prepared.metadata).toEqual({
+      schema: 'caws.runtime.native-entry.v1',
+      nativeExecutable: 'native/caws-native',
+      nodeExecutable: 'native/node',
+      engineEntry: `native-prefix/${cli}/dist/runtime/engine-entry.js`,
+      describeEntry: `native-prefix/${cli}/dist/runtime/describe-entry.js`,
+      timeoutMs: 1000,
+    });
+  });
+
+  test('returned image buffers retain the selected pair after source paths change', () => {
+    const prepared = prepareDescriptor();
+    fs.writeFileSync(loaded.build.artifacts.native.path, 'later native path bytes');
+    fs.writeFileSync(loaded.build.artifacts.stableEntry.path, 'later stable path bytes');
+    retainPrepared('after source-path mutation', prepared);
+    expect(prepared.files.get('native/caws-native')).toEqual(nativeBytes);
+    expect(prepared.files.get('native/caws-hook-native')).toEqual(stableBytes);
+    expect(prepared.stableEntry).toEqual(stableBytes);
+    expect(sha(prepared.files.get('native/caws-native'))).toBe(
+      loaded.build.artifacts.native.sha256
+    );
+    expect(sha(prepared.stableEntry)).toBe(loaded.build.artifacts.stableEntry.sha256);
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  test('real image reader and installer publish exact receipt buffers without adopting the harness', () => {
+    const home = existingHome();
+    const legacyLauncher = fs.readFileSync(path.join(home, 'bin/caws-hook'));
+    const user = path.join(root, 'user');
+    fs.mkdirSync(user);
+    configureSystemRuntime({ home, userHome: user, surface: 'claude-code', entry: 'legacy' });
+    const registration = path.join(user, '.claude/settings.json');
+    const registrationBytes = fs.readFileSync(registration);
+    const nativeImage = imageFile();
+    const before = fixtureState();
+    const planned = installDescriptor(home, nativeImage, true);
+    expect(planned.changed).toBe(true);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(fixtureState()).toEqual(before);
+    loader.mockClear();
+    const applied = installDescriptor(home, nativeImage);
+    expect(applied.digest).toBe(planned.digest);
+    expect(loader).toHaveBeenCalledTimes(1);
+    const generation = path.join(home, 'lib/runtimes', applied.digest);
+    expect(fs.readFileSync(path.join(generation, 'native/caws-native'))).toEqual(nativeBytes);
+    expect(fs.readFileSync(path.join(generation, 'native/caws-hook-native'))).toEqual(stableBytes);
+    expect(fs.readFileSync(path.join(home, 'bin/caws-hook-native'))).toEqual(stableBytes);
+    const provenance = fs.readFileSync(path.join(generation, 'native-build-provenance.json'));
+    expect(JSON.parse(provenance)).toEqual(expectedProvenance());
+    expect(verifyRuntime(home, applied.digest)['native-build-provenance.json']).toBe(
+      sha(provenance)
+    );
+    for (const member of ['native/caws-native', 'native/caws-hook-native'])
+      expect(fs.statSync(path.join(generation, member)).mode & 0o7777).toBe(0o755);
+    expect(fs.statSync(path.join(generation, 'native-build-provenance.json')).mode & 0o7777).toBe(
+      0o644
+    );
+    expect(fs.readFileSync(path.join(home, 'bin/caws-hook'))).toEqual(legacyLauncher);
+    expect(fs.readFileSync(registration)).toEqual(registrationBytes);
+  });
+
+  test.each(['native', 'stableEntry'])(
+    'rejects raw v2 executable override %s before loading',
+    (field) => {
+      const home = existingHome();
+      descriptor[field] = input[field];
+      const before = fixtureState(home);
+      expect(() =>
+        observeOperation('read executable override', () => readNativeImage(imageFile()), home)
+      ).toThrow(/fields|native image/i);
+      expect(loader).not.toHaveBeenCalled();
+      expect(fixtureState(home)).toEqual(before);
+    }
+  );
+
+  test.each(
+    ['requestFile', 'completionReceipt'].flatMap((field) =>
+      ['path', 'sizeBytes', 'sha256'].map((member) => [field, member])
+    )
+  )('refuses selected %s %s disagreement before publication', (field, member) => {
+    const home = existingHome();
+    if (member === 'path') {
+      const alias = path.join(root, 'different-' + field + '.json');
+      fs.copyFileSync(descriptor[field].path, alias);
+      descriptor[field].path = alias;
+    } else if (member === 'sizeBytes') descriptor[field].sizeBytes++;
+    else descriptor[field].sha256 = 'f'.repeat(64);
+    const nativeImage = imageFile();
+    const before = fixtureState(home);
+    expect(() => installDescriptor(home, nativeImage)).toThrow(
+      /identity|mismatch|request|receipt/i
+    );
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledWith(descriptor.requestFile.path);
+    expect(fixtureState(home)).toEqual(before);
+  });
+
+  test.each([
+    'request v1',
+    'receipt v1 downgrade',
+    'source identity mismatch',
+    'profile mismatch',
+    'completion receipt/request mismatch',
+  ])('propagates loader refusal for %s without a conventional-target fallback', (reason) => {
+    const home = existingHome();
+    const conventional = path.join(root, 'target/aarch64-apple-darwin/debug');
+    fs.mkdirSync(conventional, { recursive: true });
+    fs.writeFileSync(path.join(conventional, 'caws-native'), nativeBytes, { mode: 0o755 });
+    fs.writeFileSync(path.join(conventional, 'caws-hook-native'), stableBytes, { mode: 0o755 });
+    const refusal = new Error('receipt loader refused: ' + reason);
+    loader.mockImplementation(() => {
+      throw refusal;
+    });
+    const nativeImage = imageFile();
+    const before = fixtureState(home);
+    expect(() => installDescriptor(home, nativeImage)).toThrow(refusal);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(fixtureState(home)).toEqual(before);
+  });
+
+  test.each(
+    ['native', 'stableEntry'].flatMap((artifact) =>
+      [
+        'same-size bytes',
+        'size growth',
+        'symlink',
+        'hardlink',
+        'nonexecutable',
+        'writable mode',
+      ].map((change) => [artifact, change])
+    )
+  )('refuses %s %s changed after loading and preserves installed state', (artifact, change) => {
+    const home = existingHome();
+    loader.mockImplementation(() => {
+      const pin = loaded.build.artifacts[artifact];
+      if (change === 'same-size bytes') {
+        const changed = fs.readFileSync(pin.path);
+        changed[0] ^= 0xff;
+        fs.writeFileSync(pin.path, changed);
+      }
+      if (change === 'size growth') fs.appendFileSync(pin.path, 'x');
+      if (change === 'symlink') {
+        fs.renameSync(pin.path, pin.path + '-retained');
+        fs.symlinkSync(pin.path + '-retained', pin.path);
+      }
+      if (change === 'hardlink') fs.linkSync(pin.path, pin.path + '-alias');
+      if (change === 'nonexecutable') fs.chmodSync(pin.path, 0o644);
+      if (change === 'writable mode') fs.chmodSync(pin.path, 0o777);
+      return loaded;
+    });
+    const nativeImage = imageFile();
+    const before = fixtureState(home);
+    expect(() => installDescriptor(home, nativeImage)).toThrow(
+      /changed|mismatch|unsafe|canonical|symlink|link|executable|permissions|size/i
+    );
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(fixtureState(home)).toEqual(before);
+  });
+
+  test.each(['native', 'stableEntry'])(
+    'refuses %s ancestor redirection during bounded capture despite unchanged leaf identity',
+    (artifact) => {
+      const home = existingHome();
+      const pin = loaded.build.artifacts[artifact];
+      const parent = path.join(root, 'artifact-input');
+      const retainedParent = parent + '-retained';
+      fs.mkdirSync(parent, { mode: 0o700 });
+      const artifactPath = path.join(parent, path.basename(pin.path));
+      fs.renameSync(pin.path, artifactPath);
+      pin.path = artifactPath;
+      const leafIdentity = () => {
+        const stat = fs.statSync(artifactPath);
+        const bytes = fs.readFileSync(artifactPath);
+        return {
+          dev: stat.dev,
+          ino: stat.ino,
+          mode: stat.mode,
+          nlink: stat.nlink,
+          sizeBytes: stat.size,
+          mtimeMs: stat.mtimeMs,
+          ctimeMs: stat.ctimeMs,
+          sha256: sha(bytes),
+        };
+      };
+      const selectedLeaf = leafIdentity();
+      const selectedRealpath = fs.realpathSync(artifactPath);
+      expect(selectedRealpath).toBe(artifactPath);
+      expect(selectedLeaf.sha256).toBe(pin.sha256);
+      expect(selectedLeaf.sizeBytes).toBe(pin.sizeBytes);
+      const nativeImage = imageFile();
+      const before = fixtureState(home);
+      const originalRead = fs.readSync;
+      const originalFstat = fs.fstatSync;
+      let swapped = false;
+      const read = jest.spyOn(fs, 'readSync').mockImplementation((fd, ...args) => {
+        const stat = originalFstat(fd);
+        const count = originalRead(fd, ...args);
+        if (
+          !swapped &&
+          count > 0 &&
+          stat.dev === selectedLeaf.dev &&
+          stat.ino === selectedLeaf.ino
+        ) {
+          fs.renameSync(parent, retainedParent);
+          fs.symlinkSync(retainedParent, parent, 'dir');
+          swapped = true;
+        }
+        return count;
+      });
+      let failure, witness;
+      try {
+        installDescriptor(home, nativeImage);
+      } catch (error) {
+        failure = error;
+      } finally {
+        read.mockRestore();
+        witness = {
+          artifact,
+          artifactPath,
+          parent,
+          retainedParent,
+          swapped,
+          beforeRealpath: selectedRealpath,
+          afterRealpath: fs.realpathSync(artifactPath),
+          beforeLeaf: selectedLeaf,
+          afterLeaf: leafIdentity(),
+          ...(failure ? { error: errorIdentity(failure) } : {}),
+        };
+        if (process.env.CAWS_NATIVE_IMAGE_ARTIFACT_DIR) observation.ancestorSwap = witness;
+      }
+      expect(witness.swapped).toBe(true);
+      expect(witness.afterLeaf).toEqual(witness.beforeLeaf);
+      expect(witness.afterRealpath).toBe(path.join(retainedParent, path.basename(artifactPath)));
+      expect(witness.afterRealpath).not.toBe(witness.beforeRealpath);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toMatch(/canonical|changed/i);
+      expect(loader).toHaveBeenCalledTimes(1);
+      expect(fixtureState(home)).toEqual(before);
+    }
+  );
 });
