@@ -10,6 +10,7 @@ blast_radius:
   modules:
     - 'Ordinary store mutation runner and pinned Jest environment observer'
     - 'Run-bound baseline evidence validation and hostile-path contract tests'
+    - 'Awaited public Stryker API launcher and explicit terminal outcome custody'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -32,6 +33,7 @@ invariants:
   - 'Only actual context-matched baseline compilation and invocation can satisfy per-suite positives and the six-target union; missing or stale evidence fails closed.'
   - 'Observer qualification never confers child-process, full-campaign, exported-function semantic, native-adoption or cutover authority.'
   - 'No child test edits, candidate direct imports, preloads, dependency changes, foreign hooks or shared runtime configuration changes.'
+  - 'The launcher uses the pinned public Stryker API with the same configFile and logLevel; dryRunOnly is omitted when the CLI flag is absent, and successful Promise resolution never resets an existing nonzero process exit code.'
 acceptance:
   - id: A1
     given: 'the pinned Node and Jest/Stryker boundary'
@@ -49,6 +51,18 @@ acceptance:
     given: 'a fresh ordinary pinned store baseline and a separately prepared distinguishing atomic-write source control'
     when: 'normal build and baseline execute'
     then: 'retained actual code and named test outcomes distinguish positive consumption from semantic failure without weakening production policy; child-process consumption and full mutation quality remain parent obligations.'
+  - id: A5
+    given: >-
+      captured public Stryker API, original launcher, production configuration and
+      startup influence policy
+    when: >-
+      the ordinary runner invokes resolving, rejecting, cleanup-failing and
+      resolved-nonzero API outcomes including warning-only unhandled rejection mode
+    then: >-
+      the launcher awaits the actual API lifecycle, preserves option omission and
+      nonzero exit semantics, retains current-attempt terminal artifacts and refuses
+      positive qualification without resolved API completion plus actual child exit
+      zero
 observability:
   - 'Retained current-attempt source/output identities, exact compiled code units, finite environment/test lifecycle records, semantic test event and refusals outside source ledger.'
 rollback:
