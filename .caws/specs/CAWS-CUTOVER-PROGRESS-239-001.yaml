@@ -31,3 +31,9 @@ rollback:
   - 'Revert only the bounded ledger publication through normal governed Git history; preserve retained runtime artifacts and active parent work.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Ledger E239-E241 at5dd7f8de reconciles license292/source1d004, residentaa53/sourcebb3 acceptance+events and actual package/FIFO/build/raw artifacts; failed attempts, cache mutation1, R01combined293 normal build/Jest172/0, mailcleanup and multi-endpoint/Git-failure obligations retained. Independent read-only committed-candidate feedback grounded at parser/guard coordinates and discharged by5dd. Five gates pass over one path; format/diff0; 33/37partial and0/8parent unchanged. Commit verification establishes reachability only."
+    recorded_at: "2026-10-22T04:21:46.248Z"
+    commit_sha: "5dd7f8deadcc1229ec45196eab74fc9a3a661bb8"
