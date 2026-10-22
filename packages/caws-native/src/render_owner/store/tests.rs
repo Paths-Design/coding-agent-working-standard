@@ -620,8 +620,10 @@ fn fifo_pin(value: &serde_json::Value) -> Vec<u8> {
     assert!(metadata.is_file() && metadata.len() <= 32 * 1024 * 1024);
     let bytes = fs::read(path).unwrap();
     assert_eq!(sha(&bytes), value["sha256"].as_str().unwrap());
-    if !value["bytes"].is_null() {
-        assert_eq!(bytes.len() as u64, value["bytes"].as_u64().unwrap());
+    for size_field in ["bytes", "sizeBytes"] {
+        if !value[size_field].is_null() {
+            assert_eq!(bytes.len() as u64, value[size_field].as_u64().unwrap());
+        }
     }
     bytes
 }
@@ -753,9 +755,27 @@ fn resident_actor_run_orders_prepared_renderer_store_and_later_renderer() {
     assert!(
         request_digest.len() == 64 && request_digest.bytes().all(|byte| byte.is_ascii_hexdigit())
     );
-    let request_file = Path::new(inputs["nativeBuild"]["requestFile"].as_str().unwrap());
-    canonical(request_file).unwrap();
-    assert!(fs::symlink_metadata(request_file).unwrap().is_file());
+    assert_eq!(inputs["nativeBuild"]["adoption"], "NOT_ADOPTED");
+    assert_eq!(inputs["nativeBuild"]["profile"], "debug");
+    fifo_pin(&inputs["nativeBuild"]["requestFile"]);
+    fifo_pin(&inputs["nativeBuild"]["prefixManifest"]);
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&fifo_pin(&inputs["nativeBuild"]["completionReceipt"])).unwrap();
+    assert_eq!(receipt["schema"], "caws.native_sqlite_build_receipt.v1");
+    assert_eq!(receipt["status"], "completed");
+    assert_eq!(receipt["requestDigest"], request_digest);
+    assert_eq!(receipt["adoption"], "NOT_ADOPTED");
+    assert_eq!(receipt["profile"], "debug");
+    assert_eq!(
+        receipt["prefixManifest"],
+        inputs["nativeBuild"]["prefixManifest"]
+    );
+    let native_pin = &receipt["artifacts"]["native"];
+    assert_eq!(
+        native_pin["path"].as_str(),
+        config.native_executable.to_str()
+    );
+    fifo_pin(native_pin);
     fifo_pin(
         &serde_json::json!({"path":inputs["qualifier"]["cliRootSource"],
         "sha256":inputs["qualifier"]["cliRootSourceSha256"]}),
