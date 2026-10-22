@@ -50,6 +50,7 @@ invariants:
   - 'No publication after stopped or unsettled acquisition; preserve truthful post-rename uncertainty and no unsafe replay'
   - 'Release heavy records after definitive terminal consumption while retaining durable original-ID rejection across same-home restart and generation'
   - 'Preserve exact provider counts, top-level model order, unrelated metadata and explicit historical-summary preservation; never fallback after a native attempt'
+  - 'Continuous same-Arc writer custody spans actual warm-backend retirement, acquisition, anchored publication and exact ordinary-reader CONSUMED; keep at most 256 live heavy operations separately from durable terminal original-ID history, reject replays across restart/generation, and refuse explicit history exhaustion without eviction.'
 acceptance:
   - id: A1
     given: 'fresh original store and SessionEnd invocations'
