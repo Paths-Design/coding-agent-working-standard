@@ -49,9 +49,25 @@ acceptance:
     when: 'the dispatcher runs'
     then: 'custody, HOOK_COMMAND, handler stdin sha per slot and zero TMPDIR residue are unchanged from 7195f14f'
   - id: A5
-    given: 'a TMPDIR where the raw capture cannot be created or unlinked'
+    given: >-
+      the dispatcher ingress runs with a stdin payload and one of its capture phases
+      fails: the private directory cannot be created before any byte is read
+      (setup), the capture write or the parser descriptor fails after bytes were
+      consumed (payload lost), only the custody descriptor fails to open (custody),
+      or the stage cannot be removed after both descriptors are open (unlink)
     when: 'the dispatcher runs'
-    then: 'parsing proceeds, the dispatcher exits 0, the heartbeat classifies uncertain and the failure is named on stderr'
+    then: >-
+      setup: parsing proceeds on the untouched stdin,
+      HOOK_INGRESS_CAPTURE=setup_failed is exported, the heartbeat classifies
+      uncertain and the absence is named on stderr; payload lost: no handler runs,
+      pre_tool_use emits a block decision naming the phase and exits 2, every other
+      event writes the diagnostic and exits 1, and no stage remains; custody: every
+      guard parses the complete captured payload from the parser descriptor,
+      HOOK_INGRESS_CAPTURE=custody_failed is exported and the heartbeat classifies
+      uncertain; unlink: the failure is named on stderr, the EXIT cleanup retries
+      it, and parsing and custody proceed on the open descriptors; in no phase does
+      an inherited environment value or descriptor produce a main or subagent
+      verdict
   - id: A6
     given: 'agent-heartbeat.sh invoked directly with HOOK_TOOL_NAME preset and subagent bytes on stdin'
     when: 'it runs'
