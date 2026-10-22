@@ -6220,11 +6220,16 @@ Additional bounded evidence and unresolved dependencies:
   remains under dd67's `subagent-mail-custody/`. Five gates pass over eight
   owned files; doctor reports0E/3W/4I. Root reads corrected A5 original-input
   authority and A1–A7 spec/event records10936–10945, then authorizes the normal
-  source merge. Integration is pending the terminal merge receipt and actual
-  source comparison. Project dispatcher inherited-marker scrubbing/original-byte
-  carriage, installed runtime/native harness and actual Codex subagent shape
-  remain parent A5 obligations. A3 withholds uncertain empty handler ingress; it
-  does not establish that the dispatcher preserved original bytes.
+  source merge. Final candidate `57056cb5` includes the qualified operating
+  guidance and failure-lineage entry; all five gates pass over its ten files.
+  Normal source merge `f419e392` has parents `2245d59d` and `57056cb5`. Root
+  verifies all ten integrated files equal the candidate; the component closes
+  with A1–A7 retained and its lane removed. The source checkout is refreshed
+  without discarding changes. Project dispatcher inherited-marker
+  scrubbing/original-byte carriage, installed runtime/native harness and actual
+  Codex subagent shape remain parent A5 obligations. A3 withholds uncertain
+  empty handler ingress; it does not establish that the dispatcher preserved
+  original bytes.
 
 - E247: Ordinary store qualification requires a stronger provenance contract.
   Root inspects peerA's
