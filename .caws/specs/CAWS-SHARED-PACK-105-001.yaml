@@ -1,10 +1,11 @@
 id: CAWS-SHARED-PACK-105-001
 title: 'Refresh the shared pack after custody and stdin lifetime integration'
 mode: fix
-lifecycle_state: active
-worktree: shared-pack-105
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Reviewed source inventory and existing owed-work ledger only: shared105/75fileb706339e with sevenotherbaselines preserved, F3source+actualnativebuild/load/refusal and boundedobserverfacts retained; normal5gates/doctor/lint/formatter and independentcommittedreview grounded. Human-authorized exacttwo-pathclaimpartition preservesforeignfiles/head/dirt andotherownership. No compiledpackJest/freshpackage/image/nativeconsumer/adoption or parentacceptance inferred. Installerpeer owns next actualpackage/v2publicCLI/rollback; root retains fullmigration, sourcepublishing, consumer and13session4repo obligations.'
 created_at: '2026-10-22T20:37:12.261Z'
-updated_at: '2026-10-22T21:25:14.134Z'
+updated_at: '2026-10-22T21:34:34.123Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
