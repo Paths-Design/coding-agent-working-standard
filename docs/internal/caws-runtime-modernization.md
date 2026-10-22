@@ -5826,9 +5826,9 @@ Additional bounded evidence and unresolved dependencies:
   terminal receipts and absent PID; the source owner verifies all seven
   before/after pin groups equal at complete digest `40fab4fe…`. Report SHA is
   `41de02e2c92ca4a6e8bd9fc4842b7c953590e8256f7b2c4f134a651e3070b5da`. Artifacts
-  remain under the source owner's
-  `guard-coordination-20261021/policies-declared-topology-attempt-2/`. This
-  result uses the retained three-file test configuration. Its name filter
+  remain under
+  `/Users/darianrosebrook/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-coordination-20261021/policies-declared-topology-attempt-2/`.
+  This result uses the retained three-file test configuration. Its name filter
   unintentionally excludes a multiline interpreter-effects case; the owner
   retains the filter correction and a missing metadata-coordinate consumer
   oracle. Five other analysis files lack current declared-topology results;
@@ -6001,11 +6001,20 @@ progress and does not replace that transaction or its event readback.
    context qualification. E218 carries recognized oversize and early transport
    refusals without a budget namespace bypass. E226 lands the pinned-profile
    year-addition extension and compares all25 former exclusions without
-   rewriting historical observations. E227 retains the build refusal before
-   execution; resolve final-launch custody through a supported contract before
-   root executes the stable native REAL boundary. Preserve the prepared fixture
-   and exact expected error rather than infer live parity from pure arithmetic.
-   E231 preserves the complete acquisition through later frontend failure and
+   rewriting historical observations. Its timestamp mutation target remains
+   unregistered. Chat `01a157bd-8bb6-7fc1-9322-6120a73b5a72` owns the authorized
+   three-path policy/CI/export-consumer component
+   `CAWS-TRANSCRIPT-MUTATION-POLICY-001`: `mutation-policy.json`,
+   `tests/ci/mutation-contract.test.js` and `tests/transcripts/exports.test.ts`
+   under `packages/caws-cli`. Root retains integration and canonical mutation
+   qualification. Complete classification of the 31 additional sources must
+   retain meaningful consumer evidence; validator success, dry-run selection and
+   generated-table consumer checks do not prove executed mutation quality or
+   full regeneration integrity. E227 retains the build refusal before execution;
+   resolve final-launch custody through a supported contract before root
+   executes the stable native REAL boundary. Preserve the prepared fixture and
+   exact expected error rather than infer live parity from pure arithmetic. E231
+   preserves the complete acquisition through later frontend failure and
    documents that bounded lifetime; its component is accepted and integrated.
    Implement a surviving owner for acquisition settlement and single-use
    exhausted-and-settled publication. The store call in `main.rs` owns
