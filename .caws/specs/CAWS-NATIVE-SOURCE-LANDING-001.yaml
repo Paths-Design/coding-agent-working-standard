@@ -1,0 +1,40 @@
+id: CAWS-NATIVE-SOURCE-LANDING-001
+title: 'Reconcile matched native runtime source and package contracts onto main'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-22T22:51:57.793Z'
+updated_at: '2026-10-22T22:51:57.793Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Matched opt-in native frontend, typed runtime, image tooling and shared ordinary consumers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve main fixes and matched producer/consumer/build contracts; preserve foreign worktrees and all parent publication, residency and machine-cutover obligations'
+  - 'A coherent source landing does not accept full runtime cutover, first-party Python retirement, ordinary publication or thirteen-session four-repository qualification'
+acceptance:
+  - id: A1
+    given: 'frozen integration 7195f14f and current main source'
+    when: 'the owned lane reconciles the actual ten conflict paths'
+    then: 'main fixes and the matched native/TS/package dependency closure remain with no unresolved conflict or unrelated authored changes'
+  - id: A2
+    given: 'the committed resolved source candidate'
+    when: 'fresh matched build, focused changed-interface checks and actual isolated native image consumer controls run'
+    then: 'bounded source behavior is supported and failed attempts plus unverified production scope remain explicit'
+  - id: A3
+    given: 'the exact committed source and raw checks'
+    when: 'doctor, full-basis gates and independent completion review run'
+    then: 'existing documentation and owed-work tracking match the bounded landing and every consequential finding has a source-grounded disposition'
+observability:
+  - 'Commit parents and exact conflict resolutions, original inputs, raw exits, immutable artifact identities and owner-specific remaining work'
+rollback:
+  - 'Use a normal corrective or revert commit while preserving existing selected machine runtime and all retained failed/successful evidence'
+non_functional: {}
+contracts:
+  - name: 'matched-native-source-landing'
+    type: behavior
