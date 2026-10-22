@@ -3,7 +3,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const dist = process.env.CAWS_TEST_DIST || path.join(__dirname, '../../dist');
-const { configureSystemRuntime } = require(path.join(dist, 'init/system-runtime'));
+const { configureSystemRuntime, systemSurfaceEnabled } = require(
+  path.join(dist, 'init/system-runtime')
+);
+const { observeSystemRuntime } = require(path.join(dist, 'store/system-runtime-observation'));
 const {
   machineCommand,
   systemCommand,
@@ -26,6 +29,86 @@ function registration(file, command, matcher = '.*', extra = {}, hookExtra = {})
       PreToolUse: [{ matcher, hooks: [{ type: 'command', command, ...hookExtra }], ...extra }],
     },
   });
+}
+function nativeObservationFixture() {
+  // Inert assets exercise registration/layout verification only. No fixture
+  // executable is invoked and this is not a native-image execution witness.
+  const previous = path.join(home, 'lib/runtimes', options.runtimeDigest);
+  const members = JSON.parse(fs.readFileSync(path.join(previous, 'manifest.json')));
+  const files = Object.fromEntries(
+    Object.keys(members).map((relative) => [
+      relative,
+      fs.readFileSync(path.join(previous, relative), 'utf8'),
+    ])
+  );
+  const executable = '# Native observation fixture; never executed\n';
+  Object.assign(files, {
+    'native/caws-hook-native': executable,
+    'native/caws-native': executable,
+    'native/node': executable,
+    'native-prefix/engine-entry.js': '// observation fixture\n',
+    'native-prefix/describe-entry.js': '// observation fixture\n',
+    'native-entry.json': JSON.stringify({
+      schema: 'caws.runtime.native-entry.v1',
+      nativeExecutable: 'native/caws-native',
+      nodeExecutable: 'native/node',
+      engineEntry: 'native-prefix/engine-entry.js',
+      describeEntry: 'native-prefix/describe-entry.js',
+      timeoutMs: 1000,
+    }),
+    'native-modes.json': '',
+  });
+  const modes = Object.fromEntries(
+    Object.keys(files)
+      .sort()
+      .map((relative) => [
+        relative,
+        relative.startsWith('native/') || relative.endsWith('.sh') ? 0o755 : 0o644,
+      ])
+  );
+  files['native-modes.json'] = JSON.stringify(modes);
+  const manifest = JSON.stringify(
+    Object.fromEntries(Object.entries(files).map(([relative, bytes]) => [relative, sha(bytes)]))
+  );
+  const digest = sha(manifest);
+  for (const [relative, bytes] of Object.entries(files))
+    write(path.join(home, 'lib/runtimes', digest, relative), bytes, modes[relative]);
+  write(path.join(home, 'lib/runtimes', digest, 'manifest.json'), manifest);
+  write(path.join(home, 'bin/caws-hook-native'), executable, 0o755);
+  write(path.join(home, 'state/adapter-runtime.json'), {
+    version: 1,
+    digest,
+    previous_digest: options.runtimeDigest,
+  });
+  return digest;
+}
+function fixtureBytes() {
+  const result = {};
+  const visit = (directory) => {
+    for (const name of fs.readdirSync(directory).sort()) {
+      const file = path.join(directory, name);
+      const stat = fs.lstatSync(file);
+      if (stat.isDirectory()) {
+        result[path.relative(root, file)] = { type: 'directory', mode: stat.mode };
+        visit(file);
+      } else
+        result[path.relative(root, file)] = { sha256: sha(fs.readFileSync(file)), mode: stat.mode };
+    }
+  };
+  visit(root);
+  return result;
+}
+function withObservationHome(run) {
+  const previous = process.env.CAWS_HOME;
+  process.env.CAWS_HOME = home;
+  const homedir = jest.spyOn(os, 'homedir').mockReturnValue(user);
+  try {
+    return run();
+  } finally {
+    homedir.mockRestore();
+    if (previous === undefined) delete process.env.CAWS_HOME;
+    else process.env.CAWS_HOME = previous;
+  }
 }
 beforeEach(() => {
   const artifacts = process.env.CAWS_NATIVE_REGISTRATION_ARTIFACT_DIR;
@@ -274,6 +357,105 @@ test('fresh configure remains legacy and installing an image is not implicit nat
   ).toThrow(/native-image/);
   expect(fs.readFileSync(path.join(user, '.codex/hooks.json'))).toEqual(bytes);
 });
+test.each(['legacy', 'native'])(
+  'system observation accepts explicitly configured %s transport without changing fixture bytes',
+  (entry) => {
+    const digest = nativeObservationFixture();
+    configureSystemRuntime({ home, userHome: user, surface: 'codex', entry });
+    const native = JSON.parse(fs.readFileSync(path.join(user, '.codex/hooks.json')));
+    for (const [event, name] of Object.entries(MACHINE_EVENTS))
+      expect(native.hooks[name][0].hooks[0].command).toBe(
+        systemCommand(home, 'codex', event, entry)
+      );
+    const before = fixtureBytes();
+    withObservationHome(() => {
+      expect(configureSystemRuntime({ home, surface: 'codex', plan: true }).changed).toBe(false);
+      expect(systemSurfaceEnabled('codex', home)).toBe(true);
+      expect(observeSystemRuntime(canonical)).toEqual({
+        surfaces: ['codex'],
+        legacySurfaces: [],
+        overrides: [],
+        digest,
+      });
+    });
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test.each(['absent', 'disabled'])(
+  'system observation leaves %s system surface settings inactive and untouched',
+  (state) => {
+    nativeObservationFixture();
+    configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native' });
+    const settings = path.join(home, 'surfaces/codex/settings.json');
+    if (state === 'absent') fs.unlinkSync(settings);
+    else write(settings, { version: 1, enabled: false });
+    const before = fixtureBytes();
+    withObservationHome(() => {
+      expect(systemSurfaceEnabled('codex', home)).toBe(false);
+      expect(observeSystemRuntime(canonical)).toBeUndefined();
+    });
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test.each([
+  ['legacy', 'restricted matcher', /Restricted CAWS matcher/],
+  ['legacy', 'disabled hooks', /disableAllHooks/],
+  ['native', 'disabled group', /Disabled CAWS registration/],
+  ['native', 'conditional hook', /Conditional or unsupported CAWS hook/],
+  ['native', 'mixed entry', /Mixed CAWS entry registrations/],
+  ['legacy', 'duplicate hook', /Duplicate native CAWS registrations/],
+  ['legacy', 'missing lifecycle event', /System surface settings and native registration disagree/],
+  ['native', 'custom command', /reconciliation/i],
+  ['native', 'tampered stable entry', /native-image/],
+  ['native', 'tampered generation mode', /Native runtime member mode mismatch/],
+])(
+  'system observation rejects %s %s under the read-only registration contract',
+  (entry, kind, pattern) => {
+    const digest = nativeObservationFixture();
+    configureSystemRuntime({ home, userHome: user, surface: 'codex', entry });
+    const file = path.join(user, '.codex/hooks.json');
+    const native = JSON.parse(fs.readFileSync(file));
+    const group = native.hooks.PreToolUse[0];
+    if (kind === 'restricted matcher') group.matcher = 'exec_command';
+    if (kind === 'disabled hooks') native.disableAllHooks = true;
+    if (kind === 'disabled group') group.enabled = false;
+    if (kind === 'conditional hook') group.hooks[0].if = 'Bash(rm *)';
+    if (kind === 'mixed entry')
+      native.hooks.Stop[0].hooks[0].command = systemCommand(home, 'codex', 'stop', 'legacy');
+    if (kind === 'duplicate hook') group.hooks.push({ ...group.hooks[0] });
+    if (kind === 'missing lifecycle event') delete native.hooks.SessionEnd;
+    if (kind === 'custom command') group.hooks[0].command += ' --unreviewed';
+    if (kind === 'tampered stable entry')
+      write(path.join(home, 'bin/caws-hook-native'), 'Changed observation fixture\n', 0o755);
+    if (kind === 'tampered generation mode')
+      fs.chmodSync(path.join(home, 'lib/runtimes', digest, 'native/node'), 0o644);
+    write(file, native);
+    const before = fixtureBytes();
+    withObservationHome(() => {
+      if (kind === 'missing lifecycle event')
+        expect(configureSystemRuntime({ home, surface: 'codex', plan: true }).changed).toBe(true);
+      else
+        expect(() => configureSystemRuntime({ home, surface: 'codex', plan: true })).toThrow(
+          pattern
+        );
+      let rejected;
+      try {
+        systemSurfaceEnabled('codex', home);
+      } catch (error) {
+        rejected = error;
+      }
+      expect(rejected).toBeInstanceOf(Error);
+      expect(rejected.message).toMatch(pattern);
+      expect(observeSystemRuntime(canonical)).toEqual({
+        surfaces: ['codex'],
+        legacySurfaces: [],
+        overrides: [],
+        error: rejected.message,
+      });
+    });
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
 test('recognizes only exact native entry filename and migrates understood transport without evaluating shell', () => {
   const native = machineCommand(home, 'codex', 'pre_tool_use', 'native');
   expect(native).not.toContain('python3');
