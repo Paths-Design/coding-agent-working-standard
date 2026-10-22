@@ -85,3 +85,9 @@ contracts:
     type: behavior
   - name: 'session-seal-metadata'
     type: contract-test
+evidence:
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "Human explicitly authorized both clean component-lane ownership transfers in current session. Before writes root verified both03d663b6 clean/no lane commits; normal caws claim --takeover succeeded, audit events11486 native-publication-boundary and11487 session-seal-preparation preserve prior owners and root01a15a2a. Current registry confirms root ownership. No guard/identity variable changed. Prior worker notices could not be delivered: direct app server disallows multi-agent v2 subagent input, CAWS reports no leases; no workers started and previous refusals preserved. Root applied normally guarded TS preparation/schema/tests only in admitted preparation lane, commitc1eb17a1 clean. Strict focused compilation0, Node22.22.2 actual40tests/40pass/0skip includes retained real4300-digit turn and exact sums/omissions/models/raw-value forwarding/historical provenance/resource hostile paths; check-02 raw artifacts outside source at root artifacts/session-seal-preparation. ESLint0, five three-path gates PASS, doctor0E/3W/4I. New lexical preflight bounds temporary JSON tree before grammar parse. Independent committed review requested; fresh Sol spawn unavailable thread limit, existing read-only review worker requested. No ordinary/native caller, original SessionEnd capture, anchored metadata publish, seal consumption or runtime acceptance yet; native Rust lane remains03dclean. This records progress, not component or parent completion."
+    recorded_at: "2026-10-22T14:37:05.069Z"
+    commit_sha: c1eb17a110d9bf79f61af5bfd38e5f2399f82ffa
