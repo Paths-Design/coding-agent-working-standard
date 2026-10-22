@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { readPointer, verifyRuntime } from '../init/machine-runtime-state';
 import { assertMachinePath } from '../init/machine-paths';
-import { configHasCawsHooks } from '../init/native-hook-identification';
+import { configHasCawsProducerHooks } from '../init/native-hook-identification';
 import type { SystemRuntimeObservation } from '../kernel/doctor/types';
 
 /** Observe disk configuration and verified runtime bytes without loading hooks,
@@ -37,7 +37,7 @@ export function observeSystemRuntime(repo: string): SystemRuntimeObservation | u
     ]) {
       const settings = readSystemSurfaceSettings(home, surface as string);
       const nativeName = surface === 'codex' ? 'hooks.json' : 'settings.json';
-      if (configHasCawsHooks(read(repo, `${vendor}/${nativeName}`)))
+      if (configHasCawsProducerHooks(read(repo, `${vendor}/${nativeName}`), surface as string))
         legacySurfaces.push(surface as string);
       if (settings === undefined) continue;
       if (settings?.version !== 1 || typeof settings.enabled !== 'boolean')

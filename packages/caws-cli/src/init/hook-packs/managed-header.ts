@@ -91,9 +91,15 @@ export function parseManagedHeader(content: string): ManagedHeader | null {
       line = line.replace(/^(?:<!--|\/\*\*?)\s*/, '');
       if (!line) continue;
     }
-    const closesWrapper =
-      wrapper === 'html' ? /-->\s*$/.test(line) : wrapper === 'block' && /\*\/\s*$/.test(line);
-    if (closesWrapper) line = line.replace(/(?:-->|\*\/)\s*$/, '').trim();
+    const close = wrapper === 'html' ? '-->' : wrapper === 'block' ? '*/' : null;
+    const closeIndex = close === null ? -1 : line.indexOf(close);
+    const closesWrapper = closeIndex !== -1;
+    if (closesWrapper && close !== null) {
+      // Code after a comment ends the header search. A later marker cannot
+      // confer management on executable bytes preceding it.
+      if (!inBlock && line.slice(closeIndex + close.length).trim()) break;
+      line = line.slice(0, closeIndex).trim();
+    }
     const comment = /^(?:#|\/\/)/.test(line);
 
     if (
@@ -106,7 +112,10 @@ export function parseManagedHeader(content: string): ManagedHeader | null {
       continue;
     }
     if (!inBlock) {
-      if (closesWrapper) wrapper = null;
+      if (closesWrapper) {
+        wrapper = null;
+        continue;
+      }
       if (!comment && !wrapper) break;
       continue;
     }

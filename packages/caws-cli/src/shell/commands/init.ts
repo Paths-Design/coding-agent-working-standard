@@ -990,9 +990,9 @@ function runInitPlan(
     hookPlan.pack?.id === 'codex'
       ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
       : undefined;
-  const claudePolicyInvalid =
+  const claudeRegistrationInvalid =
     claudeSettings?.settings_json.kind === 'invalid' &&
-    claudeSettings.settings_json.reason === 'policy-invalid';
+    claudeSettings.settings_json.reason !== undefined;
   // CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: mirror the apply-side
   // condition exactly (isAdapterCoveredSurface + planTelemetryRetirement, the
   // classifier retireStaleTelemetryRows is defined in terms of), so the
@@ -1006,7 +1006,7 @@ function runInitPlan(
     ok:
       !unimplemented &&
       !anyRefused &&
-      !claudePolicyInvalid &&
+      !claudeRegistrationInvalid &&
       codexInstructions?.kind !== 'refused',
     read_only: true,
     command: 'init',
@@ -1332,10 +1332,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
 
   // Refuse supplied managed policy before canonical state, ignore rules, pack
   // files or registration can be written. Parse/root-invalid settings retain
-  // their existing advisory behavior; only the typed policy refusal gates init.
+  // their existing advisory behavior; typed policy/registration refusals gate init.
   if (!system && chosen.surface === 'claude-code') {
     const settingsPlan = planClaudeSettingsMerge(repoRoot);
-    if (settingsPlan.kind === 'invalid' && settingsPlan.reason === 'policy-invalid') {
+    if (settingsPlan.kind === 'invalid' && settingsPlan.reason !== undefined) {
       err(`caws init: ${settingsPlan.error}`);
       return 1;
     }
@@ -1441,7 +1441,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   let orphanedDispatchDir: string | null = null;
   if (hookPackResult.pack?.id === 'claude-code') {
     mergeResult = mergeClaudeSettings(repoRoot);
-    if (mergeResult.kind === 'invalid' && mergeResult.reason === 'policy-invalid') {
+    if (mergeResult.kind === 'invalid' && mergeResult.reason !== undefined) {
       err(`caws init: ${mergeResult.error}`);
       return 1;
     }

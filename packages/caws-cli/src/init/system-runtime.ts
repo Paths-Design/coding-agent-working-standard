@@ -4,6 +4,8 @@ import {
   universalEventMatcher,
   unconditionalCommandHook,
   qualifiedHookTimeout,
+  configHasCawsProducerHooks,
+  isCawsProducerHookCandidate,
 } from './native-hook-identification';
 import { readSystemSurfaceSettings, nativeConfigPath } from './system-surface-settings';
 export type { SystemSurfacePolicy } from './system-project-policy';
@@ -25,9 +27,9 @@ import {
 } from './machine-adapters';
 import {
   MACHINE_EVENTS,
-  configHasCawsHooks,
   isCawsNativeCommand,
   migrateNativeCommand,
+  classifyAdapterProducerHook,
 } from './machine-adapter-policy';
 import { extractMachineHandlers } from './machine-handler-policy';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
@@ -225,14 +227,20 @@ export function configureSystemRuntime(options: SystemOptions): {
       'Native hooks are disabled; reconcile disableAllHooks before system registration'
     );
   const transports = new Set<'native' | 'legacy'>();
-  for (const groups of Object.values(native.value.hooks ?? {})) {
+  for (const [name, groups] of Object.entries(native.value.hooks ?? {})) {
     if (!Array.isArray(groups)) throw new Error('Malformed native hook groups');
     for (const group of groups)
       for (const hook of group.hooks ?? []) {
-        if (isCawsNativeCommand(hook.command))
-          transports.add(
-            /\/bin\/caws-hook-native(?:['"\s]|$)/.test(hook.command) ? 'native' : 'legacy'
-          );
+        if (isCawsProducerHookCandidate(hook)) {
+          const event =
+            Object.entries(MACHINE_EVENTS).find(([, native]) => native === name)?.[0] ?? '';
+          const ownership = classifyAdapterProducerHook(hook, options.surface, event);
+          if (ownership.kind === 'foreign') continue;
+          if (!event) throw new Error(`Unrecognized CAWS lifecycle registration: ${name}`);
+          if (ownership.kind === 'unresolved')
+            throw new Error(`CAWS producer registration requires reconciliation: ${name}`);
+          transports.add(ownership.entry);
+        }
       }
   }
   if (options.entry === undefined && transports.size > 1)
@@ -249,7 +257,7 @@ export function configureSystemRuntime(options: SystemOptions): {
   for (const [name, groups] of Object.entries(native.value.hooks)) {
     if (
       !Object.values(MACHINE_EVENTS).includes(name as (typeof MACHINE_EVENTS)[Event]) &&
-      configHasCawsHooks({ hooks: { [name]: groups } })
+      configHasCawsProducerHooks({ hooks: { [name]: groups } }, options.surface)
     )
       throw new Error(`Unrecognized CAWS lifecycle registration: ${name}`);
   }
@@ -267,7 +275,11 @@ export function configureSystemRuntime(options: SystemOptions): {
       return {
         ...group,
         hooks: group.hooks.map((hook: NativeHook) => {
-          if (!isCawsNativeCommand(hook?.command)) return hook;
+          if (!isCawsProducerHookCandidate(hook)) return hook;
+          const ownership = classifyAdapterProducerHook(hook, options.surface, event);
+          if (ownership.kind === 'foreign') return hook;
+          if (ownership.kind === 'unresolved' || typeof hook.command !== 'string')
+            throw new Error(`CAWS producer registration requires reconciliation: ${name}`);
           if (group.enabled === false || hook.enabled === false)
             throw new Error(`Disabled CAWS registration requires native-harness review: ${name}`);
           if (!unconditionalCommandHook(group, hook, options.surface, event))
@@ -398,8 +410,15 @@ function inferPolicy(
     let dispatchPath: string | undefined;
     const commands = (native.hooks?.[nativeName] ?? [])
       .flatMap((g: NativeHookGroup) => g.hooks ?? [])
-      .map((h: NativeHook) => h.command)
-      .filter(isCawsNativeCommand);
+      .filter((hook: NativeHook) => {
+        if (!isCawsProducerHookCandidate(hook)) return false;
+        const ownership = classifyAdapterProducerHook(hook, surface, event);
+        if (ownership.kind === 'unresolved')
+          throw new Error(`CAWS producer registration requires reconciliation: ${nativeName}`);
+        return ownership.kind === 'owned';
+      })
+      .map((hook: NativeHook) => hook.command)
+      .filter((command): command is string => typeof command === 'string');
     if (!handlers && commands.length === 0) continue;
     hadTransport = true;
     if (!handlers) {
@@ -601,7 +620,11 @@ export function migrateSystemProject(options: SystemOptions): {
         return {
           ...group,
           hooks: group.hooks.filter((hook: NativeHook) => {
-            if (!isCawsNativeCommand(hook?.command)) return true;
+            if (!isCawsProducerHookCandidate(hook)) return true;
+            const ownership = classifyAdapterProducerHook(hook, options.surface, event);
+            if (ownership.kind === 'foreign') return true;
+            if (ownership.kind === 'unresolved' || typeof hook.command !== 'string')
+              throw new Error(`CAWS producer registration requires reconciliation: ${name}`);
             if (!options.fromFile)
               migrateNativeCommand(hook.command, repo, home, options.surface, event as Event);
             return false;
@@ -612,7 +635,7 @@ export function migrateSystemProject(options: SystemOptions): {
     if (retained.length === 0) delete nativeHooks[name];
     else nativeHooks[name] = retained;
   }
-  if (configHasCawsHooks(native.value))
+  if (configHasCawsProducerHooks(native.value, options.surface))
     throw new Error('Unrecognized lifecycle CAWS wiring remains; review native adapter');
   const changes: Change[] = [
     { root: home, path: projectPath, before: prior, after: encode(project) },

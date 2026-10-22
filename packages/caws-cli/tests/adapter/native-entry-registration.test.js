@@ -2,8 +2,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const dist = process.env.CAWS_TEST_DIST || path.join(__dirname, '../../dist');
-const { configureSystemRuntime, systemSurfaceEnabled } = require(
+const { configureSystemRuntime, systemSurfaceEnabled, migrateSystemProject } = require(
   path.join(dist, 'init/system-runtime')
 );
 const { observeSystemRuntime } = require(path.join(dist, 'store/system-runtime-observation'));
@@ -30,6 +31,37 @@ function registration(file, command, matcher = '.*', extra = {}, hookExtra = {})
       PreToolUse: [{ matcher, hooks: [{ type: 'command', command, ...hookExtra }], ...extra }],
     },
   });
+}
+function execFormCawsHook(kind, surface = 'claude-code') {
+  if (kind === 'interpreter')
+    return {
+      type: 'command',
+      command: 'python3',
+      args: [path.join(home, 'bin/caws-hook'), surface, 'pre_tool_use', '--system'],
+    };
+  return {
+    type: 'command',
+    command: kind === 'native' ? path.join(home, 'bin/caws-hook-native') : 'operator-wrapper',
+    args: [
+      ...(kind === 'wrapper' ? [path.join(home, 'bin/caws-hook-native')] : []),
+      surface,
+      'pre_tool_use',
+      '--system',
+    ],
+  };
+}
+function initializeCanonicalGitFixture() {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))
+  );
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: canonical, env });
+  expect(
+    execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: canonical,
+      env,
+      encoding: 'utf8',
+    }).trim()
+  ).toBe(canonical);
 }
 function nativeObservationFixture() {
   // Inert assets exercise registration/layout verification only. No fixture
@@ -380,6 +412,224 @@ test.each(['legacy', 'native'])(
           for (const hook of group.hooks) expect(hook).not.toHaveProperty('onFailure');
   }
 );
+test.each([
+  ['/p/.caws/hooks/dispatch/pre_tool_use.sh', undefined],
+  ['/p/.caws/hooks/dispatch/pre_tool_use.sh', 'continue'],
+  ['/p/bin/caws-hook-native', undefined],
+  ['/p/bin/caws-hook-native', 'continue'],
+])('producer configuration preserves quoted pathname data %s policy=%s', (operand, onFailure) => {
+  const surface = 'claude-code';
+  const file = path.join(user, '.claude/settings.json');
+  const foreign = {
+    type: 'command',
+    command: `printf '%s\\n' '${operand}'`,
+    ...(onFailure === undefined ? {} : { onFailure }),
+  };
+  write(file, {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: '.*',
+          hooks: [
+            foreign,
+            {
+              type: 'command',
+              command: machineCommand(home, surface, 'pre_tool_use'),
+            },
+          ],
+        },
+      ],
+    },
+  });
+  expect(configureSystemRuntime({ home, userHome: user, surface }).changed).toBe(true);
+  const value = JSON.parse(fs.readFileSync(file));
+  expect(value.hooks.PreToolUse[0].hooks[0]).toEqual(foreign);
+  expect(value.hooks.PreToolUse[0].hooks[1]).toEqual({
+    type: 'command',
+    command: systemCommand(home, surface, 'pre_tool_use'),
+    onFailure: 'block',
+  });
+  const before = fixtureBytes();
+  expect(configureSystemRuntime({ home, userHome: user, surface, plan: true }).changed).toBe(false);
+  expect(systemSurfaceEnabled(surface, home, user)).toBe(true);
+  expect(fixtureBytes()).toEqual(before);
+});
+test.each([
+  ['/p/.caws/hooks/dispatch/pre_tool_use.sh', undefined],
+  ['/p/.caws/hooks/dispatch/pre_tool_use.sh', 'continue'],
+  ['/p/bin/caws-hook-native', undefined],
+  ['/p/bin/caws-hook-native', 'continue'],
+])(
+  'producer selection gives literal pathname data zero project coverage %s policy=%s',
+  (operand, onFailure) => {
+    const surface = 'claude-code';
+    fs.unlinkSync(path.join(home, 'surfaces/codex/settings.json'));
+    configureSystemRuntime({ home, userHome: user, surface, entry: 'legacy' });
+    registration(
+      path.join(canonical, '.claude/settings.json'),
+      `printf '%s\\n' '${operand}'`,
+      '.*',
+      {},
+      onFailure === undefined ? {} : { onFailure }
+    );
+    const before = fixtureBytes();
+    expect(resolveInvocationSelection({ ...options, surface }).status).toBe('active');
+    withObservationHome(() => {
+      expect(observeSystemRuntime(canonical)).toEqual({
+        surfaces: ['claude-code'],
+        legacySurfaces: [],
+        overrides: [],
+        digest: options.runtimeDigest,
+      });
+    });
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test.each(['--custom', '&& echo operator', 'dynamic-wrapper'])(
+  'producer configuration keeps actual or unresolved CAWS %s fail-closed before writes',
+  (kind) => {
+    const surface = 'claude-code';
+    const command =
+      kind === 'dynamic-wrapper'
+        ? 'operator-wrapper "$UNKNOWN/bin/caws-hook-native" claude-code pre_tool_use'
+        : machineCommand(home, surface, 'pre_tool_use') + ' ' + kind;
+    registration(path.join(user, '.claude/settings.json'), command);
+    registration(path.join(canonical, '.claude/settings.json'), command);
+    write(path.join(home, 'surfaces/claude-code/settings.json'), { version: 1, enabled: true });
+    const before = fixtureBytes();
+    for (const plan of [true, false])
+      expect(() =>
+        configureSystemRuntime({ home, userHome: user, surface, entry: 'legacy', plan })
+      ).toThrow(/reconcil/i);
+    expect(() => resolveInvocationSelection({ ...options, surface })).toThrow(/reconcil/i);
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test('producer selection treats local and checkout literal path data as zero CAWS coverage', () => {
+  const surface = 'claude-code';
+  configureSystemRuntime({ home, userHome: user, surface, entry: 'legacy' });
+  for (const file of [
+    path.join(canonical, '.claude/settings.local.json'),
+    path.join(checkout, '.claude/settings.json'),
+  ])
+    registration(file, "echo '/p/bin/caws-hook-native'", '.*', {}, { onFailure: 'continue' });
+  const before = fixtureBytes();
+  expect(resolveInvocationSelection({ ...options, surface }).status).toBe('active');
+  expect(fixtureBytes()).toEqual(before);
+});
+test('producer entry inference follows the actual legacy dispatcher rather than assignment pathname data', () => {
+  const surface = 'claude-code';
+  const file = path.join(user, '.claude/settings.json');
+  const assignment = "NOTE='/p/bin/caws-hook-native'";
+  const dispatcher = path.join(user, '.caws/hooks/dispatch/pre_tool_use.sh');
+  registration(file, `${assignment} "${dispatcher}"`);
+  expect(fs.existsSync(path.join(home, 'bin/caws-hook-native'))).toBe(false);
+  expect(configureSystemRuntime({ home, userHome: user, surface }).changed).toBe(true);
+  const hook = JSON.parse(fs.readFileSync(file)).hooks.PreToolUse[0].hooks[0];
+  expect(hook.command).toBe(
+    assignment + ' ' + systemCommand(home, surface, 'pre_tool_use', 'legacy')
+  );
+  expect(hook.onFailure).toBe('block');
+  expect(fs.existsSync(path.join(home, 'bin/caws-hook-native'))).toBe(false);
+  expect(configureSystemRuntime({ home, userHome: user, surface, plan: true }).changed).toBe(false);
+});
+test.each(['interpreter', 'native', 'wrapper'])(
+  'exec-form CAWS %s configuration refuses before fixture writes',
+  (kind) => {
+    const surface = 'claude-code';
+    write(path.join(user, '.claude/settings.json'), {
+      hooks: { PreToolUse: [{ hooks: [execFormCawsHook(kind)] }] },
+    });
+    const before = fixtureBytes();
+    for (const plan of [true, false])
+      expect(() =>
+        configureSystemRuntime({ home, userHome: user, surface, entry: 'legacy', plan })
+      ).toThrow(/reconcil/i);
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test.each(['interpreter', 'native', 'wrapper'])(
+  'exec-form CAWS %s selection refuses before fixture writes',
+  (kind) => {
+    const surface = 'claude-code';
+    configureSystemRuntime({ home, userHome: user, surface, entry: 'legacy' });
+    write(path.join(canonical, '.claude/settings.json'), {
+      hooks: { PreToolUse: [{ matcher: '.*', hooks: [execFormCawsHook(kind)] }] },
+    });
+    const before = fixtureBytes();
+    expect(() => resolveInvocationSelection({ ...options, surface })).toThrow(/reconcil/i);
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test.each(['interpreter', 'native', 'wrapper'])(
+  'exec-form CAWS %s project migration refuses before fixture writes',
+  (kind) => {
+    const surface = 'claude-code';
+    initializeCanonicalGitFixture();
+    configureSystemRuntime({ home, userHome: user, surface, entry: 'legacy' });
+    write(path.join(canonical, '.claude/settings.json'), {
+      hooks: { PreToolUse: [{ matcher: '.*', hooks: [execFormCawsHook(kind)] }] },
+    });
+    const before = fixtureBytes();
+    for (const plan of [true, false])
+      expect(() =>
+        migrateSystemProject({ home, userHome: user, repo: canonical, surface, plan })
+      ).toThrow(/reconcil/i);
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test.each(['printf', 'echo'])(
+  'exec-form literal %s path data preserves argv and supplies zero coverage',
+  (command) => {
+    const surface = 'claude-code';
+    initializeCanonicalGitFixture();
+    const foreign = {
+      type: 'command',
+      command,
+      args: [
+        '%s\\n',
+        '/p/bin/caws-hook-native',
+        '/p/.caws/hooks/dispatch/pre_tool_use.sh',
+        "$LITERAL 'quoted' `literal`",
+      ],
+      onFailure: 'continue',
+    };
+    const file = path.join(user, '.claude/settings.json');
+    write(file, { hooks: { PreToolUse: [{ matcher: '.*', hooks: [foreign] }] } });
+    configureSystemRuntime({ home, userHome: user, surface, entry: 'legacy' });
+    expect(JSON.parse(fs.readFileSync(file)).hooks.PreToolUse[0].hooks[0]).toEqual(foreign);
+    expect(JSON.parse(fs.readFileSync(file)).hooks.PreToolUse[1].hooks[0].onFailure).toBe('block');
+    write(path.join(canonical, '.claude/settings.json'), {
+      hooks: { PreToolUse: [{ hooks: [foreign] }] },
+    });
+    const before = fixtureBytes();
+    expect(resolveInvocationSelection({ ...options, surface }).status).toBe('active');
+    expect(configureSystemRuntime({ home, userHome: user, surface, plan: true }).changed).toBe(
+      false
+    );
+    expect(fixtureBytes()).toEqual(before);
+    migrateSystemProject({ home, userHome: user, repo: canonical, surface });
+    expect(
+      JSON.parse(fs.readFileSync(path.join(canonical, '.claude/settings.json'))).hooks.PreToolUse[0]
+        .hooks[0]
+    ).toEqual(foreign);
+    expect(resolveInvocationSelection({ ...options, surface }).status).toBe('active');
+  }
+);
+test('Codex args on a recognized CAWS command remains unsupported and refuses before writes', () => {
+  registration(
+    path.join(user, '.codex/hooks.json'),
+    machineCommand(home, 'codex', 'pre_tool_use'),
+    '.*',
+    {},
+    { args: [] }
+  );
+  const before = fixtureBytes();
+  expect(() => configureSystemRuntime({ home, userHome: user, surface: 'codex' })).toThrow(
+    /reconcil/i
+  );
+  expect(fixtureBytes()).toEqual(before);
+});
 test.each(['legacy', 'native'])(
   'Claude failure policy retrofits absent %s policy through read-only plan then idempotent apply',
   (entry) => {

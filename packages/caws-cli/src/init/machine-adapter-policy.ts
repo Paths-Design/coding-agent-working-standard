@@ -1,7 +1,10 @@
 import {
-  configHasCawsHooks,
   isCawsNativeCommand,
   machineCommand,
+  nativeCommandWords,
+  classifyCawsProducerHook,
+  isCawsProducerHookCandidate,
+  configHasCawsProducerHooks,
 } from './native-hook-identification';
 export {
   configHasCawsHooks,
@@ -51,46 +54,23 @@ interface NativeHookGroup {
 const noVersion = (text: string): string =>
   text.replace(/hook_pack_version:\s*\d+/g, 'hook_pack_version: N');
 
-/** Tokenize the supported simple-command subset without expanding or executing
- * project shell. Preserve raw assignment bytes; reject compound commands and
- * substitutions instead of discarding custom execution semantics. */
-function nativeCommandWords(command: string): { raw: string; value: string }[] {
-  const words: { raw: string; value: string }[] = [];
-  let index = 0;
-  while (index < command.length) {
-    if (/[ \t]/.test(command[index] as string)) {
-      index++;
-      continue;
-    }
-    const start = index;
-    let value = '';
-    let quoted: string | null = null;
-    while (index < command.length) {
-      const char = command[index] as string;
-      if (!quoted && /[ \t]/.test(char)) break;
-      if (/[\r\n]/.test(char)) throw new Error('multiline command');
-      if (quoted === "'") {
-        if (char === "'") quoted = null;
-        else value += char;
-      } else if (char === '\\') {
-        const next = command[++index];
-        if (!next || /[\r\n]/.test(next) || (quoted && !/["\\$]/.test(next)))
-          throw new Error('unsupported shell escape');
-        value += next;
-      } else if (char === '`' || (char === '$' && command[index + 1] === '(')) {
-        throw new Error('command substitution');
-      } else if (char === '"' || (!quoted && char === "'")) {
-        quoted = quoted ? null : char;
-      } else {
-        if (!quoted && /[;&|<>()#]/.test(char)) throw new Error('compound command');
-        value += char;
-      }
-      index++;
-    }
-    if (quoted) throw new Error('unclosed shell quote');
-    words.push({ raw: command.slice(start, index), value });
-  }
-  return words;
+/** Preserve the shipped Qwen shim's existing exact migration witness without
+ * interpreting its conditional shell or admitting arbitrary wrappers. */
+export function classifyAdapterProducerHook(
+  hook: NativeHook,
+  surface: string,
+  event: string
+): ReturnType<typeof classifyCawsProducerHook> {
+  const qwen = CANONICAL_QWEN_HOOK_ENTRIES[MACHINE_EVENTS[event as Event]];
+  const canonical = (qwen?.hooks as NativeHook[] | undefined)?.[0]?.command;
+  if (
+    surface === 'qwen-code' &&
+    !Object.hasOwn(hook, 'args') &&
+    typeof canonical === 'string' &&
+    hook.command === canonical
+  )
+    return { kind: 'owned', entry: 'legacy' };
+  return classifyCawsProducerHook(hook, surface, event);
 }
 
 export function migrateNativeCommand(
@@ -284,7 +264,7 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
     if (
       fs.existsSync(file) &&
       (file.endsWith('.json')
-        ? configHasCawsHooks(JSON.parse(fs.readFileSync(file, 'utf8')))
+        ? configHasCawsProducerHooks(JSON.parse(fs.readFileSync(file, 'utf8')), surface)
         : /\[hooks[.\[\]]/.test(fs.readFileSync(file, 'utf8')) &&
           isCaws(fs.readFileSync(file, 'utf8')))
     ) {
@@ -392,7 +372,11 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
           throw new Error(`Malformed hook group: ${native}`);
         const hooks = group.hooks.map((h) => {
           if (!h || typeof h !== 'object') throw new Error(`Malformed hook: ${native}`);
-          if (isCaws(h.command)) {
+          if (isCawsProducerHookCandidate(h)) {
+            const ownership = classifyAdapterProducerHook(h, surface, event);
+            if (ownership.kind === 'foreign') return h;
+            if (ownership.kind === 'unresolved' || typeof h.command !== 'string')
+              throw new Error(`CAWS producer registration requires reconciliation: ${native}`);
             const claudePreToolUse = surface === 'claude-code' && event === 'pre_tool_use';
             if (claudePreToolUse) {
               const error = claudePreToolUsePolicyError(h);

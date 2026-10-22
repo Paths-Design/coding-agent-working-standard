@@ -477,6 +477,13 @@ export function renderSettingsWiring(
         lines.push('  entrypoints. No change.');
         break;
       case 'invalid':
+        if (mergeResult.reason === 'registration-reconciliation') {
+          lines.push(`  ERROR — CAWS registration requires reconciliation: ${mergeResult.error}`);
+          lines.push(
+            '  init did NOT modify the file. Review the dispatcher invocation, then re-run init.'
+          );
+          return lines.join('\n');
+        }
         if (mergeResult.reason === 'policy-invalid') {
           lines.push(`  ERROR — managed failure policy is invalid: ${mergeResult.error}`);
           lines.push(

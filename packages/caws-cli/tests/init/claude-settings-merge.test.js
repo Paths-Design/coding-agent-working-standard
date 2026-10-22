@@ -73,6 +73,106 @@ test.each(['.caws/hooks/dispatch', '.claude/hooks/caws_dispatch', '.claude/hooks
     expect(fs.readFileSync(settings)).toEqual(applied);
   }
 );
+test.each([
+  [
+    'printf policy',
+    { command: 'printf "%s\\n" "/p/.caws/hooks/dispatch/pre_tool_use.sh"', onFailure: 'continue' },
+  ],
+  ['printf absent policy', { command: 'printf "%s\\n" "/p/.caws/hooks/dispatch/pre_tool_use.sh"' }],
+  [
+    'misleading executable suffix',
+    { command: '"/p/.caws/hooks/dispatch/pre_tool_use.sh-foreign"', onFailure: 'continue' },
+  ],
+  [
+    'bash string containing path data',
+    {
+      command: 'bash -c \'printf "%s\\n" "/p/.caws/hooks/dispatch/pre_tool_use.sh"\'',
+      onFailure: 'continue',
+    },
+  ],
+  [
+    'unqualified dynamic wrapper',
+    { command: 'bash -c "$OPERATOR_COMMAND"', onFailure: 'continue' },
+  ],
+])(
+  'foreign dispatcher-path data stays untouched beside actual managed policy: %s',
+  (_name, foreign) => {
+    const value = wired();
+    const managed = value.hooks.PreToolUse[0].hooks[0];
+    delete managed.onFailure;
+    value.hooks.PreToolUse[0].hooks.unshift({ type: 'command', ...foreign });
+    write(value);
+    const before = fs.readFileSync(settings);
+    const expected = { kind: 'merged', path: settings, added: [], repaired: ['PreToolUse'] };
+    expect(planClaudeSettingsMerge(root)).toEqual({ ...expected, readOnly: true });
+    expect(fs.readFileSync(settings)).toEqual(before);
+    expect(mergeClaudeSettings(root)).toEqual(expected);
+    managed.onFailure = 'block';
+    expect(JSON.parse(fs.readFileSync(settings))).toEqual(value);
+  }
+);
+test.each([
+  '"/p/.caws/hooks/dispatch/pre_tool_use.sh" --custom',
+  '"/p/.caws/hooks/dispatch/pre_tool_use.sh" && echo operator',
+  '\'MODE=demo\' "/p/.caws/hooks/dispatch/pre_tool_use.sh"',
+  "'$CLAUDE_PROJECT_DIR/.caws/hooks/dispatch/pre_tool_use.sh'",
+  '\\$CLAUDE_PROJECT_DIR/.caws/hooks/dispatch/pre_tool_use.sh',
+  '"$CLAUDE_PROJECT_DIR/$UNKNOWN/.caws/hooks/dispatch/pre_tool_use.sh"',
+  'bash -c "$UNKNOWN/bin/caws-hook-native"',
+  'bash -c \'"/p/.claude/hooks/caws_dispatch/pre_tool_use.sh"\'',
+  '/bin/sh -c \'"/p/.claude/hooks/dispatch/pre_tool_use.sh"\'',
+])(
+  'known dispatcher requiring registration reconciliation refuses every merge write: %s',
+  (command) => {
+    const value = wired();
+    delete value.hooks.PreToolUse[0].hooks[0].onFailure;
+    value.hooks.PreToolUse.push({ hooks: [{ type: 'command', command }] });
+    write(value);
+    const before = fs.readFileSync(settings);
+    for (const operation of [planClaudeSettingsMerge, mergeClaudeSettings]) {
+      expect(operation(root)).toMatchObject({
+        kind: 'invalid',
+        reason: 'registration-reconciliation',
+      });
+      expect(fs.readFileSync(settings)).toEqual(before);
+    }
+    const rendered = renderSettingsWiring(
+      { kind: 'wired' },
+      {
+        kind: 'invalid',
+        path: settings,
+        reason: 'registration-reconciliation',
+        error: 'Unsupported dispatcher invocation',
+      }
+    );
+    expect(rendered).toContain('registration requires reconciliation');
+    expect(rendered).not.toContain('could not be parsed');
+    expect(rendered).not.toContain('settings.json.example');
+  }
+);
+test.each([
+  '"/p/.caws/hooks/dispatch/pre_tool_use.sh"',
+  'bash "/p/.claude/hooks/caws_dispatch/pre_tool_use.sh"',
+  'MODE=demo /bin/bash "/p/.claude/hooks/dispatch/pre_tool_use.sh"',
+  'env MODE=demo bash "/p/.caws/hooks/dispatch/pre_tool_use.sh"',
+  'MODE=demo env bash "/p/.caws/hooks/dispatch/pre_tool_use.sh"',
+  'CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR="$CLAUDE_PROJECT_DIR" "$CLAUDE_PROJECT_DIR"/.caws/hooks/dispatch/pre_tool_use.sh',
+  '"${CLAUDE_PROJECT_DIR}/.claude/hooks/dispatch/pre_tool_use.sh"',
+])('managed executable-position dispatcher remains eligible for policy repair: %s', (command) => {
+  const value = wired();
+  const managed = value.hooks.PreToolUse[0].hooks[0];
+  managed.command = command;
+  delete managed.onFailure;
+  write(value);
+  expect(mergeClaudeSettings(root)).toEqual({
+    kind: 'merged',
+    path: settings,
+    added: [],
+    repaired: ['PreToolUse'],
+  });
+  managed.onFailure = 'block';
+  expect(JSON.parse(fs.readFileSync(settings))).toEqual(value);
+});
 test('an explicit block project policy keeps existing settings byte-identical', () => {
   const value = wired();
   value.hooks.PreToolUse[0].hooks[0].onFailure = 'block';
@@ -82,6 +182,51 @@ test('an explicit block project policy keeps existing settings byte-identical', 
   expect(mergeClaudeSettings(root)).toEqual({ kind: 'unchanged', path: settings });
   expect(fs.readFileSync(settings)).toEqual(before);
 });
+test.each([
+  { command: 'python3', args: ['/p/bin/caws-hook', 'claude-code', 'pre_tool_use', '--system'] },
+  { command: '/p/bin/caws-hook-native', args: ['claude-code', 'pre_tool_use', '--system'] },
+  { command: 'operator-wrapper', args: ['/p/bin/caws-hook-native', 'claude-code', 'pre_tool_use'] },
+])('exec-form CAWS merge requires registration reconciliation without writes: %j', (fields) => {
+  const value = wired();
+  delete value.hooks.PreToolUse[0].hooks[0].onFailure;
+  value.hooks.PreToolUse.push({ hooks: [{ type: 'command', ...fields }] });
+  write(value);
+  const before = fs.readFileSync(settings);
+  for (const operation of [planClaudeSettingsMerge, mergeClaudeSettings]) {
+    expect(operation(root)).toMatchObject({
+      kind: 'invalid',
+      reason: 'registration-reconciliation',
+    });
+    expect(fs.readFileSync(settings)).toEqual(before);
+  }
+});
+test.each(['printf', 'echo'])(
+  'exec-form literal %s merge preserves argv path data as foreign',
+  (command) => {
+    const value = wired();
+    const managed = value.hooks.PreToolUse[0].hooks[0];
+    delete managed.onFailure;
+    const foreign = {
+      type: 'command',
+      command,
+      args: [
+        '/p/bin/caws-hook-native',
+        '/p/.caws/hooks/dispatch/pre_tool_use.sh',
+        "$LITERAL 'quoted' `literal`",
+      ],
+      onFailure: 'continue',
+    };
+    value.hooks.PreToolUse[0].hooks.unshift(foreign);
+    write(value);
+    expect(mergeClaudeSettings(root)).toMatchObject({
+      kind: 'merged',
+      added: [],
+      repaired: ['PreToolUse'],
+    });
+    managed.onFailure = 'block';
+    expect(JSON.parse(fs.readFileSync(settings))).toEqual(value);
+  }
+);
 test('Claude project policy rendering names repairs and separates policy refusal from JSON parse errors', () => {
   const repaired = renderSettingsWiring(
     { kind: 'wired' },

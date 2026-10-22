@@ -4,6 +4,8 @@ import { assertMachinePath } from '../init/machine-paths';
 import { sha, verifyRuntime, readManifest } from '../init/machine-runtime-state';
 import {
   isCawsNativeCommand,
+  classifyCawsProducerHook,
+  isCawsProducerHookCandidate,
   machineCommand,
   universalEventMatcher,
   unconditionalCommandHook,
@@ -169,8 +171,12 @@ function legacyRegistered(options: SelectionOptions): boolean {
           throw new Error('Malformed legacy native hook group');
         if (group.enabled === false) continue;
         for (const hook of group.hooks) {
-          if (!object(hook) || hook.enabled === false || !isCawsNativeCommand(hook.command))
+          if (!object(hook) || hook.enabled === false || !isCawsProducerHookCandidate(hook))
             continue;
+          const ownership = classifyCawsProducerHook(hook, options.surface, options.event);
+          if (ownership.kind === 'foreign') continue;
+          if (ownership.kind === 'unresolved' || typeof hook.command !== 'string')
+            throw new Error('Project CAWS producer registration requires reconciliation');
           if (
             root !== options.canonical ||
             relative !== primary ||

@@ -159,6 +159,19 @@ describe('A2: parseManagedHeader still recognizes a rewritten header as managed'
     });
   });
 
+  test('a closed license comment without executable trailing bytes permits the real header', () => {
+    expect(
+      parseManagedHeader(
+        [
+          '/* license */',
+          '// CAWS-MANAGED-HOOK',
+          '// hook_pack: shared',
+          '// hook_pack_version: 7',
+        ].join('\n')
+      )
+    ).toMatchObject({ hookPack: 'shared', hookPackVersion: 7 });
+  });
+
   test.each([
     '// hook_pack: shared\n// hook_pack_version: 7\n',
     '// CAWS-MANAGED-HOOK\nconsole.log("foreign");\n// hook_pack: shared\n// hook_pack_version: 7\n',
@@ -167,6 +180,9 @@ describe('A2: parseManagedHeader still recognizes a rewritten header as managed'
     'const marker = "CAWS-MANAGED-HOOK";\n// hook_pack: shared\n// hook_pack_version: 7\n',
     'echo CAWS-MANAGED-HOOK\n# hook_pack: shared\n# hook_pack_version: 7\n',
     '/*\nCAWS-MANAGED-HOOK\n*/\n// hook_pack: shared\n// hook_pack_version: 7\n',
+    '/* license */ const operatorCode = true;\n// CAWS-MANAGED-HOOK\n// hook_pack: shared\n// hook_pack_version: 7\n',
+    '/* license\n*/ const operatorCode = true;\n// CAWS-MANAGED-HOOK\n// hook_pack: shared\n// hook_pack_version: 7\n',
+    '<!-- license --> <script>operatorCode()</script>\n# CAWS-MANAGED-HOOK\n# hook_pack: shared\n# hook_pack_version: 7\n',
   ])(
     'incomplete or interrupted JavaScript metadata does not authorize management: %s',
     (content) => {
@@ -201,7 +217,13 @@ describe('A2: parseManagedHeader still recognizes a rewritten header as managed'
       const repeat = installHookPack(SHARED_PACK, { repoRoot });
       expect(repeat.actions.every((a) => a.action === 'unchanged')).toBe(true);
       const unmanaged = path.join(repoRoot, '.caws/hooks/advisory_truncate.cjs');
-      const operatorBytes = '#!/usr/bin/env node\nconsole.log("operator-owned");\n';
+      const operatorBytes = [
+        '#!/usr/bin/env node',
+        '/* license */ const operatorCode = true;',
+        '// CAWS-MANAGED-HOOK',
+        '// hook_pack: shared',
+        '// hook_pack_version: 7',
+      ].join('\n');
       fs.writeFileSync(unmanaged, operatorBytes);
       const refusal = installHookPack(SHARED_PACK, { repoRoot });
       expect(

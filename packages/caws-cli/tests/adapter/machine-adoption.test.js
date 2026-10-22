@@ -147,6 +147,126 @@ test('seeded Claude adoption keeps explicit block registration bytes unchanged',
   expect(plan.changes.map((change) => change.path)).not.toContain(config);
   expect(fs.readFileSync(config)).toEqual(before);
 });
+test.each([
+  ['/p/.caws/hooks/dispatch/pre_tool_use.sh', undefined],
+  ['/p/.caws/hooks/dispatch/pre_tool_use.sh', 'continue'],
+  ['/p/bin/caws-hook-native', undefined],
+  ['/p/bin/caws-hook-native', 'continue'],
+])('producer adoption preserves quoted pathname data %s policy=%s', (operand, onFailure) => {
+  const { config, options } = seededClaudePolicy();
+  const value = JSON.parse(fs.readFileSync(config));
+  const foreign = {
+    type: 'command',
+    command: `printf '%s\\n' '${operand}'`,
+    ...(onFailure === undefined ? {} : { onFailure }),
+  };
+  value.hooks.PreToolUse[0].hooks.unshift(foreign);
+  fs.writeFileSync(config, JSON.stringify(value));
+  const before = bytes();
+  const backups = backupBytes();
+  expect(adoptMachineAdapter({ ...options, plan: true }).changed).toBe(true);
+  expect(bytes()).toEqual(before);
+  expect(backupBytes()).toEqual(backups);
+  expect(adoptMachineAdapter(options).changed).toBe(true);
+  value.hooks.PreToolUse[0].hooks[2].onFailure = 'block';
+  expect(JSON.parse(fs.readFileSync(config))).toEqual(value);
+});
+test.each(['--custom', '&& echo operator', 'dynamic-wrapper'])(
+  'producer adoption keeps actual or unresolved CAWS %s fail-closed before writes',
+  (kind) => {
+    const { config, options } = seededClaudePolicy();
+    const value = JSON.parse(fs.readFileSync(config));
+    const managed = value.hooks.PreToolUse[0].hooks[1];
+    managed.command =
+      kind === 'dynamic-wrapper'
+        ? 'operator-wrapper "$UNKNOWN/bin/caws-hook-native" claude-code pre_tool_use'
+        : managed.command + ' ' + kind;
+    fs.writeFileSync(config, JSON.stringify(value));
+    const before = bytes();
+    const backups = backupBytes();
+    for (const plan of [true, false])
+      expect(() => adoptMachineAdapter({ ...options, plan })).toThrow(/reconcil/i);
+    expect(bytes()).toEqual(before);
+    expect(backupBytes()).toEqual(backups);
+  }
+);
+test('producer adoption user JSON discovery exempts only definite literal pathname data', () => {
+  const { config, options } = seededClaudePolicy();
+  const userConfig = path.join(opts.userHome, '.claude/settings.json');
+  fs.mkdirSync(path.dirname(userConfig), { recursive: true });
+  const foreign = JSON.stringify({
+    hooks: {
+      PreToolUse: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: "printf '%s\\n' '/p/bin/caws-hook-native'",
+              onFailure: 'continue',
+            },
+          ],
+        },
+      ],
+    },
+  });
+  fs.writeFileSync(userConfig, foreign);
+  expect(adoptMachineAdapter({ ...options, plan: true }).changed).toBe(true);
+  expect(fs.readFileSync(userConfig, 'utf8')).toBe(foreign);
+  expect(adoptMachineAdapter(options).changed).toBe(true);
+  expect(JSON.parse(fs.readFileSync(config)).hooks.PreToolUse[0].hooks[1].onFailure).toBe('block');
+  expect(fs.readFileSync(userConfig, 'utf8')).toBe(foreign);
+});
+test.each(['interpreter', 'native', 'wrapper'])(
+  'exec-form CAWS %s adoption refuses before state or backup writes',
+  (kind) => {
+    const { config, options } = seededClaudePolicy();
+    const value = JSON.parse(fs.readFileSync(config));
+    value.hooks.PreToolUse[0].hooks[1] = {
+      type: 'command',
+      command:
+        kind === 'interpreter'
+          ? 'python3'
+          : kind === 'native'
+            ? path.join(home, 'bin/caws-hook-native')
+            : 'operator-wrapper',
+      args: [
+        ...(kind === 'interpreter'
+          ? [path.join(home, 'bin/caws-hook')]
+          : kind === 'wrapper'
+            ? [path.join(home, 'bin/caws-hook-native')]
+            : []),
+        'claude-code',
+        'pre_tool_use',
+        '--system',
+      ],
+    };
+    fs.writeFileSync(config, JSON.stringify(value));
+    const before = bytes();
+    const backups = backupBytes();
+    for (const plan of [true, false])
+      expect(() => adoptMachineAdapter({ ...options, plan })).toThrow(/reconcil/i);
+    expect(bytes()).toEqual(before);
+    expect(backupBytes()).toEqual(backups);
+  }
+);
+test.each(['printf', 'echo'])(
+  'exec-form literal %s adoption retains argv while repairing actual managed policy',
+  (command) => {
+    const { config, options } = seededClaudePolicy();
+    const value = JSON.parse(fs.readFileSync(config));
+    const foreign = {
+      type: 'command',
+      command,
+      args: ['/p/bin/caws-hook-native', "$LITERAL 'quoted' `literal`"],
+      onFailure: 'continue',
+    };
+    value.hooks.PreToolUse[0].hooks.unshift(foreign);
+    fs.writeFileSync(config, JSON.stringify(value));
+    expect(adoptMachineAdapter(options).changed).toBe(true);
+    value.hooks.PreToolUse[0].hooks[2].onFailure = 'block';
+    expect(JSON.parse(fs.readFileSync(config))).toEqual(value);
+  }
+);
 test.each(['continue', null, { action: 'block' }])(
   'seeded Claude adoption refuses supplied policy %j before registration, policy or backup writes',
   (onFailure) => {
@@ -477,7 +597,9 @@ test.each([
     wiring.hooks.PreToolUse[0].hooks[0].command = command;
     fs.writeFileSync(config, JSON.stringify(wiring));
     const before = bytes();
-    expect(() => adoptMachineAdapter(opts)).toThrow(/native command.*reconcil/i);
+    expect(() => adoptMachineAdapter(opts)).toThrow(
+      /CAWS producer registration requires reconciliation: PreToolUse/
+    );
     expect(bytes()).toEqual(before);
   }
 );

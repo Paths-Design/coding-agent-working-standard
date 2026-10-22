@@ -58,6 +58,45 @@ afterEach(() => {
 
 describe('caws init --plan', () => {
   test.each([true, false])(
+    'known dispatcher reconciliation refuses plan=%s before every init write',
+    (plan) => {
+      const root = makeTempRepo();
+      const settings = path.join(root, '.claude/settings.json');
+      fs.mkdirSync(path.dirname(settings));
+      fs.writeFileSync(
+        settings,
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                hooks: [
+                  {
+                    type: 'command',
+                    command: '"/p/.caws/hooks/dispatch/pre_tool_use.sh" --custom',
+                  },
+                ],
+              },
+            ],
+          },
+        })
+      );
+      const before = snapshotTree(root);
+      const result = runInit(root, { plan, json: plan, agentSurface: 'claude-code' });
+      expect(result.code).toBe(1);
+      if (plan) {
+        const payload = JSON.parse(result.out);
+        expect(payload.ok).toBe(false);
+        expect(payload.claude_settings.settings_json).toMatchObject({
+          kind: 'invalid',
+          reason: 'registration-reconciliation',
+        });
+      } else expect(result.err).toMatch(/registration.*reconciliation/);
+      expect(snapshotTree(root)).toEqual(before);
+      expect(fs.existsSync(path.join(root, '.caws'))).toBe(false);
+      expect(fs.existsSync(path.join(root, '.gitignore'))).toBe(false);
+    }
+  );
+  test.each([true, false])(
     'Claude project policy invalid preflight refuses plan=%s before every init write',
     (plan) => {
       const root = makeTempRepo();

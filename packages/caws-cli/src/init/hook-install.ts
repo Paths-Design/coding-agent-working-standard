@@ -67,6 +67,7 @@ import {
   sharedPackForSurface,
 } from './hook-packs/manifest-shared';
 import { KNOWN_SURFACES, resolveHookPack } from './hook-packs/register';
+import { classifyClaudeDispatcherHook } from './native-hook-identification';
 
 /** Location of the pack templates relative to the caws-cli package root.
  *  Resolved at runtime from __dirname so it works both in dev (running
@@ -1645,12 +1646,12 @@ export type SettingsMergeResult =
   /** settings.json already wired all four entries; nothing written. */
   | { readonly kind: 'unchanged'; readonly path: string }
   /** settings.json could not be parsed or supplied a conflicting managed
-   * failure policy; left untouched. Only policy refusal carries a reason. */
+   * policy/invocation; left untouched. Typed refusals carry a reason. */
   | {
       readonly kind: 'invalid';
       readonly path: string;
       readonly error: string;
-      readonly reason?: 'policy-invalid';
+      readonly reason?: 'policy-invalid' | 'registration-reconciliation';
     }
   /** CAWS-GATED-SURFACE-SCOPE-GUARD-001: user-scope CAWS wiring for this
    *  trust-gated surface exists on this machine, so the project-scope hook
@@ -1669,33 +1670,27 @@ export interface SettingsExamplePlanResult {
   readonly readOnly: true;
 }
 
-/** Does this hook-event's entry array already contain a CAWS-owned entry for
- *  `key`? Matches an entry whose command references any of the three known
- *  CAWS dispatch tails so that re-running init on a consumer using an older
- *  wiring does not append a duplicate entry.
+/** Classify the executable operand of supported Claude dispatcher invocations.
+ *  Pathname data passed to foreign executables does not establish ownership.
  *
  *  Recognised tails (all anchored with a leading slash):
  *   1. `/.caws/hooks/dispatch/<snake>.sh`      — current (shared-core) path
  *   2. `/.claude/hooks/caws_dispatch/<snake>.sh` — legacy pre-shared-core path
  *   3. `/.claude/hooks/dispatch/<snake>.sh`     — pre-rename legacy path
  *
- *  Decision (CAWS-HOOK-PACK-SHARED-CORE-001): for this slice recognizing all
- *  three tails to avoid duplicates is sufficient. A fresh install writes the
- *  new shared-core path; consumers on the old path are detected as wired and
- *  no duplicate is appended. Whether to rewrite an old-path entry to the new
- *  path on merge is deferred — idempotent detection is the required invariant. */
-function isClaudeCawsHook(hook: unknown, key: string): hook is Record<string, unknown> {
-  if (!hook || typeof hook !== 'object') return false;
+ *  Supported old paths are retained without duplicate entries or command
+ *  rewrites. Known dispatchers with unsupported argv or compound syntax
+ *  require reconciliation before the merge can add or repair wiring. */
+function claudeCawsHookKind(
+  hook: unknown,
+  key: string
+): ReturnType<typeof classifyClaudeDispatcherHook> {
+  if (!hook || typeof hook !== 'object') return 'foreign';
   const snake = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
-  const command = (hook as Record<string, unknown>).command;
-  return (
-    typeof command === 'string' &&
-    [
-      `/.caws/hooks/dispatch/${snake}.sh`,
-      `/.claude/hooks/caws_dispatch/${snake}.sh`,
-      `/.claude/hooks/dispatch/${snake}.sh`,
-    ].some((tail) => command.includes(tail))
-  );
+  return classifyClaudeDispatcherHook(hook, snake);
+}
+function isClaudeCawsHook(hook: unknown, key: string): hook is Record<string, unknown> {
+  return claudeCawsHookKind(hook, key) === 'managed';
 }
 function arrayHasCawsEntry(entryArray: unknown, key: string): boolean {
   if (!Array.isArray(entryArray)) return false;
@@ -1749,11 +1744,23 @@ function computeClaudeSettingsMerge(
       : {};
 
   const managed: Record<string, unknown>[] = [];
-  if (Array.isArray(hooks.PreToolUse))
-    for (const group of hooks.PreToolUse) {
+  for (const key of Object.keys(CANONICAL_HOOK_ENTRIES)) {
+    const groups = hooks[key];
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
       if (!group || !Array.isArray(group.hooks)) continue;
       for (const hook of group.hooks) {
-        if (!isClaudeCawsHook(hook, 'PreToolUse')) continue;
+        const kind = claudeCawsHookKind(hook, key);
+        if (kind === 'reconciliation')
+          return {
+            result: {
+              kind: 'invalid',
+              path: settingsPath,
+              reason: 'registration-reconciliation',
+              error: `Claude ${key} CAWS registration requires reconciliation before settings changes`,
+            },
+          };
+        if (key !== 'PreToolUse' || kind !== 'managed') continue;
         const error = claudePreToolUsePolicyError(hook);
         if (error)
           return {
@@ -1762,6 +1769,7 @@ function computeClaudeSettingsMerge(
         managed.push(hook);
       }
     }
+  }
   const repaired: string[] = [];
   for (const hook of managed)
     if (!Object.hasOwn(hook, 'onFailure')) {
