@@ -205,17 +205,24 @@ rp_sweep() {
   ' _ "$(guard_dir)" "$RP_SELF" \
     "$RP_DOTDOT_TARGET" \
     "$CAWS_TEST_HOME/repo-alias/.caws/worktrees/f-wt/src/new" \
+    "$CAWS_TEST_HOME/repo-alias/../link-dotdot-leaf" \
+    "/tmp/caws-guard-realpath-missing-leaf" \
     "relative/leaf" \
     "$RP_REPO/ends-with-newline"$'\n'
   [ "$status" -eq 0 ]
 }
 
-@test "caws_guard_realpath: resolves a dotdot spelling and a symlinked ancestor with a missing leaf" {
-  run bash -c 'set -e; source "$1/lib/caws-state.sh"; caws_guard_realpath "$2"; echo; caws_guard_realpath "$3"' \
-    _ "$(guard_dir)" "$RP_DOTDOT_TARGET" "$CAWS_TEST_HOME/repo-alias/.caws/worktrees/f-wt/src/new"
+@test "caws_guard_realpath: resolves dotdot, a symlinked ancestor and dotdot after a symlink by the filesystem" {
+  run bash -c 'set -e; source "$1/lib/caws-state.sh"
+    caws_guard_realpath "$2"; echo; caws_guard_realpath "$3"; echo; caws_guard_realpath "$4"' \
+    _ "$(guard_dir)" "$RP_DOTDOT_TARGET" "$CAWS_TEST_HOME/repo-alias/.caws/worktrees/f-wt/src/new" \
+    "$CAWS_TEST_HOME/repo-alias/../link-dotdot-leaf"
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "$RP_TARGET" ]
   [ "${lines[1]}" = "$RP_REPO/.caws/worktrees/f-wt/src/new" ]
+  # dotdot after a symlink climbs from the link's target, not lexically.
+  [ "${lines[2]}" = "$(dirname "$RP_REPO")/link-dotdot-leaf" ]
+  [ "${lines[2]}" != "$CAWS_TEST_HOME/link-dotdot-leaf" ]
 }
 
 @test "caws_guard_realpath: an empty path is refused with its class" {
