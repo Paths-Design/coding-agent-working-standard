@@ -93,6 +93,30 @@ acceptance:
       path stays absent; the helper returns 2 with class empty-result for a lone
       line feed, non-absolute-result for two line feeds or a relative path, and
       no-record-delimiter for nothing or a path without its delimiter.
+  - id: A6
+    given: >-
+      governed repositories with identical layouts (registry, real linked worktrees
+      s-wt owned by one session and f-wt by another) at an ordinary physical root,
+      at a root whose physical path ends in a line feed, at roots containing an
+      apostrophe or a bracket expression, on a branch containing an apostrophe, and
+      with registries naming another base branch, each root expected byte string
+      built by the fixture
+    when: >-
+      both write guards adjudicate a foreign write into f-wt from the canonical
+      root, through an ordinary alias and from s-wt, a Bash mutation of the
+      line-feed root target from an ordinary directory outside it, and a
+      canonical-root base-branch Write, with git worktree list -z available and with
+      a git that lacks it
+    then: >-
+      every ordinary-root control refuses or asks as before; worktree-write-guard
+      gives each other root the control exact refusal or verdict (root bytes
+      abstracted), hands scope contention exactly src/new.ts, reads the registry
+      (s-wt, f-wt order) and counts git worktrees through NUL records, and asks
+      naming the unrepresentable root when -z is unavailable; bash-write-guard
+      refuses an operating directory whose physical path holds the line feed naming
+      the analysis transport limit, and from outside the root escalates
+      ask_unrepresentable_target (blocked when asking is impossible), never exit 0
+      with empty output as at 39d06b1a.
 non_functional: {}
 contracts: []
 evidence:
