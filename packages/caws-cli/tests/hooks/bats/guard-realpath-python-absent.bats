@@ -26,6 +26,11 @@
 # ordinary root first as the control. A root the Bash analysis transport
 # cannot carry must be refused naming that, never admitted or misattributed.
 #
+# The same holds for the other tools the guards decide with: without git the
+# canonical root and ownership are unknown, and without node
+# worktree-write-guard cannot read the registry or the canonical scope claims.
+# Either is refused naming the tool, never read as nothing to govern.
+#
 # CAWS_GUARD_REALPATH_DIR selects the guard tree under test (default: the pack
 # installed by helpers.bash); CAWS_GUARD_REALPATH_CLI the CLI providing
 # `hooks mutation-view` (default: helpers.bash's built entry);
@@ -144,6 +149,23 @@ SHIM
     case "$source" in /*) ln -s "$source" "$CAWS_TEST_HOME/no-git/$tool" ;; esac
   done
 
+  # A tool farm with git, python3 and the core tools but without node.
+  mkdir -p "$CAWS_TEST_HOME/no-node"
+  for tool in bash sh env git jq python3 cat sed awk grep cut tr head tail \
+    dirname basename mktemp date readlink rm mkdir mv cp printf wc sort uniq \
+    uname id ps stat touch ls find xargs tee sleep; do
+    source="$(command -v "$tool" 2>/dev/null || true)"
+    case "$source" in /*) ln -s "$source" "$CAWS_TEST_HOME/no-node/$tool" ;; esac
+  done
+  # The farm alone does not hide an installed node: runtime-paths.sh looks
+  # again in $HOME/.nvm and the standard bin directories. Node absence as the
+  # guards see it is a machine where that discovery finds nothing too, so the
+  # guard tree under test is copied with only the discovery replaced (it runs
+  # when the file is sourced, so it returns at its own definition).
+  cp -R "$(guard_dir)" "$CAWS_TEST_HOME/node-hidden"
+  sed 's/^ensure_hook_runtime_path() {$/ensure_hook_runtime_path() { return 0/' \
+    "$(guard_dir)/runtime-paths.sh" > "$CAWS_TEST_HOME/node-hidden/runtime-paths.sh"
+
   # Identity-drop control: the guard tree under test with the checked
   # normalizer replaced by the best-effort one. It must reproduce the
   # unrepaired admission, or the refusal assertions below prove nothing.
@@ -185,6 +207,13 @@ SHIM
   rm -rf "$RP_ADMIN_REPO/.git/worktrees/s-wt"
   export RP_NONREPO="$id_base/nonrepo"
   mkdir "$RP_NONREPO"
+  # A canonical path claimed by f-wt's active spec, which only the claim
+  # oracle (node) can read.
+  export RP_CLAIM_REPO="$id_base/claim"
+  rp_make_layout "$RP_CLAIM_REPO"
+  mkdir -p "$RP_CLAIM_REPO/.caws/specs"
+  printf 'id: FIX-F-1\nlifecycle_state: active\nworktree: f-wt\nscope:\n  in:\n    - src/claimed.ts\n' \
+    > "$RP_CLAIM_REPO/.caws/specs/FIX-F-1.yaml"
 
   # A git without `worktree list -z` (before 2.36): that one form fails as
   # git does for an unknown option; every other call goes to the real git.
@@ -314,8 +343,9 @@ rp_sweep() {
 }
 
 # Usage: id_guard <guard.sh> <repo> <operating-dir> <tool> <file-path-or-command>
-# Session rp-session-s operates at <operating-dir> and targets f-wt, which
-# rp-session-f owns. The payload carries every path byte-faithfully.
+# Session rp-session-s (RP_ID_SESSION overrides) operates at <operating-dir>
+# and targets f-wt, which rp-session-f owns. The payload carries every path
+# byte-faithfully. RP_ID_NODE_PATH lets the claim oracle resolve js-yaml.
 id_guard() {
   local guard="$1" repo="$2" op="$3" tool="$4" arg="$5" payload file="" cmd=""
   # RP_ID_CWD moves the session's working directory away from its project;
@@ -336,8 +366,8 @@ id_guard() {
   run env -i \
     HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws" PATH="${RP_ID_PATH:-$PATH}" \
     CAWS_BIN="$RP_CLI" RP_CONTENTION_LOG="${RP_CONTENTION_LOG:-}" RP_REAL_CAWS="$RP_REAL_CAWS" \
-    RP_REAL_GIT="$RP_REAL_GIT" \
-    CLAUDE_CODE_SESSION_ID=rp-session-s HOOK_SESSION_ID=rp-session-s \
+    RP_REAL_GIT="$RP_REAL_GIT" ${RP_ID_NODE_PATH:+"NODE_PATH=$RP_ID_NODE_PATH"} \
+    CLAUDE_CODE_SESSION_ID="${RP_ID_SESSION:-rp-session-s}" HOOK_SESSION_ID="${RP_ID_SESSION:-rp-session-s}" \
     CLAUDE_PROJECT_DIR="$op" CAWS_PROJECT_DIR="$op" \
     CAWS_AGENT_SURFACE="${RP_ID_SURFACE:-claude-code}" HOOK_EVENT_NAME=PreToolUse \
     HOOK_PERMISSION_MODE="${RP_ID_MODE:-default}" HOOK_INPUT_JSON="$payload" \
@@ -707,6 +737,76 @@ rp_git_failed_case() {
     id_guard bash-write-guard.sh "$RP_NONREPO" "$RP_NONREPO" Bash "touch notes.txt"
   [ "$status" -eq 0 ]
   refute_output --partial "git could not determine"
+}
+
+RP_NODE_REFUSAL="[worktree-write-guard] node is not available on PATH, so the worktree registry and canonical scope claims cannot be read. Failing CLOSED (refusing the write). Restore node on PATH."
+
+# Usage: rp_no_node <id_guard arguments>
+# id_guard where node is absent as the guard sees it (see setup_file).
+rp_no_node() {
+  CAWS_GUARD_REALPATH_DIR="$CAWS_TEST_HOME/node-hidden" RP_ID_PATH="$CAWS_TEST_HOME/no-node" id_guard "$@"
+}
+
+@test "node unavailable: precondition: the guard's own runtime discovery finds no node and the core tools remain" {
+  local discover='source "$1/runtime-paths.sh"; ensure_hook_runtime_path; command -v node'
+  run env -i HOME="$CAWS_TEST_HOME" PATH="$CAWS_TEST_HOME/no-node" bash -c "$discover" _ "$CAWS_TEST_HOME/node-hidden"
+  [ "$status" -ne 0 ]
+  [ -z "$output" ]
+  # Diagnostic only (machine dependent): what the shipped discovery finds.
+  run env -i HOME="$CAWS_TEST_HOME" PATH="$CAWS_TEST_HOME/no-node" bash -c "$discover" _ "$(guard_dir)"
+  printf '# shipped discovery with the farm PATH: status=%s node=%s\n' "$status" "${output:-none}" >&3
+  # Only the discovery differs from the tree under test.
+  run diff -r "$(guard_dir)" "$CAWS_TEST_HOME/node-hidden"
+  [ "$(grep -c -E '^(diff -r |Only in )' <<<"$output")" -eq 1 ]
+  [ "${lines[0]}" = "diff -r $(guard_dir)/runtime-paths.sh $CAWS_TEST_HOME/node-hidden/runtime-paths.sh" ]
+  local tool
+  for tool in bash git python3 jq cat sed grep cut tr head dirname; do
+    [[ -x "$CAWS_TEST_HOME/no-node/$tool" ]]
+  done
+}
+
+@test "node unavailable: worktree-write-guard refuses a canonical write another worktree claims instead of skipping the claim check" {
+  local repo="$RP_CLAIM_REPO" target="$RP_CLAIM_REPO/src/claimed.ts"
+  local self="$repo/.caws/worktrees/s-wt" owner="$repo/.caws/worktrees/f-wt" op
+  # With node the claim decides: f-wt's scope.in claims src/claimed.ts, so
+  # the write from s-wt is refused and the claimant's own write passes.
+  RP_ID_NODE_PATH="$_REPO_NM" id_guard worktree-write-guard.sh "$repo" "$self" Write "$target"
+  [ "$status" -eq 2 ]
+  assert_output --partial "BLOCKED canonical path '$target': claimed:f-wt:src/claimed.ts"
+  RP_ID_NODE_PATH="$_REPO_NM" RP_ID_SESSION=rp-session-f \
+    id_guard worktree-write-guard.sh "$repo" "$owner" Write "$target"
+  [ "$status" -eq 0 ]
+  refute_output --partial "BLOCKED"
+  # Without node neither the claim nor the claimant can be read: both writes
+  # are refused naming node, the claimant's included.
+  rp_no_node worktree-write-guard.sh "$repo" "$self" Write "$target"
+  [ "$status" -eq 2 ]
+  assert_output --partial "$RP_NODE_REFUSAL"
+  assert_output --partial '{"decision":"block"'
+  RP_ID_SESSION=rp-session-f rp_no_node worktree-write-guard.sh "$repo" "$owner" Write "$target"
+  [ "$status" -eq 2 ]
+  assert_output --partial "$RP_NODE_REFUSAL"
+}
+
+@test "node unavailable: base-branch enforcement refuses instead of admitting silently" {
+  local repo="$RP_CLAIM_REPO"
+  # With node, a base-branch write while worktrees are active is asked about.
+  RP_ID_PATH="$CAWS_TEST_HOME/contention-caws:$PATH" RP_CONTENTION_LOG="$BATS_TEST_TMPDIR/contention.log" \
+    id_guard worktree-write-guard.sh "$repo" "$repo" Write "$repo/src/new.ts"
+  [ "$status" -eq 0 ]
+  assert_output --partial '"permissionDecision": "ask"'
+  assert_output --partial "2 active worktree(s) on 'main': s-wt, f-wt."
+  rp_no_node worktree-write-guard.sh "$repo" "$repo" Write "$repo/src/new.ts"
+  [ "$status" -eq 2 ]
+  assert_output --partial "$RP_NODE_REFUSAL"
+  assert_output --partial '{"decision":"block"'
+}
+
+@test "node unavailable: a directory without a worktree registry stays ungoverned" {
+  [[ ! -e "$RP_NONREPO/.caws/worktrees.json" ]]
+  rp_no_node worktree-write-guard.sh "$RP_NONREPO" "$RP_NONREPO" Write "$RP_NONREPO/notes.txt"
+  [ "$status" -eq 0 ]
+  refute_output --partial "node is not available"
 }
 
 @test "relative target: worktree-write-guard resolves a relative Write against the payload cwd before adjudicating ownership" {
