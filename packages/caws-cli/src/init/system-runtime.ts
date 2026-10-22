@@ -1,5 +1,10 @@
 import { validateSystemPolicy, type SystemSurfacePolicy } from './system-project-policy';
-import { systemCommand } from './native-hook-identification';
+import {
+  systemCommand,
+  universalEventMatcher,
+  unconditionalCommandHook,
+  qualifiedHookTimeout,
+} from './native-hook-identification';
 import { readSystemSurfaceSettings, nativeConfigPath } from './system-surface-settings';
 export type { SystemSurfacePolicy } from './system-project-policy';
 import type {
@@ -195,6 +200,10 @@ export function configureSystemRuntime(options: SystemOptions): {
     target
   );
   const native = config(user, file);
+  if (native.value.disableAllHooks === true)
+    throw new Error(
+      'Native hooks are disabled; reconcile disableAllHooks before system registration'
+    );
   const transports = new Set<'native' | 'legacy'>();
   for (const groups of Object.values(native.value.hooks ?? {})) {
     if (!Array.isArray(groups)) throw new Error('Malformed native hook groups');
@@ -237,10 +246,17 @@ export function configureSystemRuntime(options: SystemOptions): {
           if (!isCawsNativeCommand(hook?.command)) return hook;
           if (group.enabled === false || hook.enabled === false)
             throw new Error(`Disabled CAWS registration requires native-harness review: ${name}`);
+          if (!unconditionalCommandHook(group, hook))
+            throw new Error(
+              `Conditional or unsupported CAWS hook requires native-harness reconciliation: ${name}`
+            );
+          if (!qualifiedHookTimeout(options.surface, event, hook.timeout))
+            throw new Error(
+              `Qwen CAWS timeout requires millisecond-budget reconciliation: ${name}`
+            );
           if (
-            options.surface === 'codex' &&
             ['pre_tool_use', 'post_tool_use'].includes(event) &&
-            group.matcher !== '.*'
+            !universalEventMatcher(options.surface, event, group.matcher)
           )
             throw new Error(
               `Restricted CAWS matcher requires native-harness review: ${name}; system hooks must cover all tools`
@@ -272,19 +288,33 @@ export function configureSystemRuntime(options: SystemOptions): {
         options.surface === 'qwen-code'
           ? CANONICAL_QWEN_HOOK_ENTRIES[name]
           : CANONICAL_HOOK_ENTRIES[name];
+      // Qwen consumes milliseconds; Claude and Codex consume seconds. Retain
+      // canonical event budgets, including lifecycle budgets, in their units.
+      // SessionEnd and PreCompact share the corresponding seconds policy when
+      // a surface's legacy pack does not define that event.
+      const seconds =
+        name === 'SessionEnd'
+          ? 10
+          : event === 'post_tool_use'
+            ? 60
+            : event === 'pre_tool_use'
+              ? 45
+              : 30;
+      const defaultHooks = defaults?.hooks as NativeHook[] | undefined;
+      const timeout =
+        defaultHooks?.[0]?.timeout ?? seconds * (options.surface === 'qwen-code' ? 1000 : 1);
       const group = {
         ...defaults,
         hooks: [
           {
             type: 'command',
             command: systemCommand(home, options.surface, event, entry),
-            timeout: event === 'post_tool_use' ? 60 : 45,
+            timeout,
           },
         ],
       };
-      // Native Codex tools include apply_patch and exec_command. The parser and
-      // individual guards decide which inputs they govern.
-      if (options.surface === 'codex' && ['pre_tool_use', 'post_tool_use'].includes(event))
+      // Transport every tool event. Individual guards decide which inputs they govern.
+      if (['pre_tool_use', 'post_tool_use'].includes(event))
         (group as NativeHookGroup).matcher = '.*';
       retained.push(group);
     }

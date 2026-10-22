@@ -53,7 +53,7 @@ const noVersion = (text: string): string =>
 /** Tokenize the supported simple-command subset without expanding or executing
  * project shell. Preserve raw assignment bytes; reject compound commands and
  * substitutions instead of discarding custom execution semantics. */
-export function nativeCommandWords(command: string): { raw: string; value: string }[] {
+function nativeCommandWords(command: string): { raw: string; value: string }[] {
   const words: { raw: string; value: string }[] = [];
   let index = 0;
   while (index < command.length) {

@@ -17,6 +17,50 @@ export interface NativeConfiguration {
 }
 const quote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
 
+/** Qualified universal matchers for the supported JSON harness adapters. */
+export function universalEventMatcher(surface: string, event: string, matcher: unknown): boolean {
+  if (matcher === '.*') return true;
+  if (!['pre_tool_use', 'post_tool_use'].includes(event) && matcher === undefined) return true;
+  return (
+    (surface === 'claude-code' || surface === 'qwen-code') &&
+    (matcher === undefined || matcher === '' || matcher === '*')
+  );
+}
+
+/** A command's presence cannot establish coverage when a harness can skip or
+ * detach it. Unknown execution fields require explicit harness reconciliation.
+ */
+export function unconditionalCommandHook(
+  group: Record<string, unknown>,
+  hook: Record<string, unknown>
+): boolean {
+  return (
+    Object.keys(group).every((key) => ['hooks', 'matcher', 'enabled'].includes(key)) &&
+    Object.keys(hook).every((key) =>
+      ['type', 'command', 'enabled', 'timeout', 'statusMessage', 'name'].includes(key)
+    ) &&
+    hook.type === 'command' &&
+    (hook.timeout === undefined ||
+      (typeof hook.timeout === 'number' && Number.isFinite(hook.timeout) && hook.timeout > 0))
+  );
+}
+
+/** Qwen's supported budgets are milliseconds. Smaller custom budgets require
+ * reconciliation; these floors do not attest that a callback finishes in time.
+ */
+export function qualifiedHookTimeout(surface: string, event: string, timeout: unknown): boolean {
+  if (surface !== 'qwen-code' || timeout === undefined) return true;
+  const floor =
+    event === 'pre_tool_use'
+      ? 45000
+      : event === 'post_tool_use'
+        ? 60000
+        : event === 'session_end'
+          ? 10000
+          : 30000;
+  return typeof timeout === 'number' && timeout >= floor;
+}
+
 export function machineCommand(
   home: string,
   surface: string,

@@ -2,8 +2,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
 import { sha, verifyRuntime, readManifest } from '../init/machine-runtime-state';
-import { isCawsNativeCommand, MACHINE_EVENTS } from '../init/native-hook-identification';
-import { nativeCommandWords } from '../init/machine-adapter-policy';
+import {
+  isCawsNativeCommand,
+  machineCommand,
+  universalEventMatcher,
+  unconditionalCommandHook,
+  qualifiedHookTimeout,
+  MACHINE_EVENTS,
+} from '../init/native-hook-identification';
 import {
   effectiveRepoSurfacePolicy,
   parseRepoHookPolicy,
@@ -94,29 +100,18 @@ function emptyMachinePolicy(): SystemSurfacePolicy {
 }
 
 function verifiedProjectMachineEntry(command: string, options: SelectionOptions): void {
-  const words = nativeCommandWords(command).map((word) => word.value);
-  if (words[0] === 'env') words.shift();
-  while (words[0] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) {
-    if (words.shift() !== `CAWS_HOME=${options.home}`)
-      throw new Error('Project CAWS environment requires native-harness reconciliation');
-  }
-  let interpreter = false;
-  if (words[0] === 'python3' || words[0] === '/usr/bin/python3') {
-    words.shift();
-    interpreter = true;
-  }
-  const [entry, surface, event] = words;
   const legacy = path.join(options.home, 'bin/caws-hook');
   const native = path.join(options.home, 'bin/caws-hook-native');
-  // --system would recursively suppress both transports; --describe observes
-  // selection but never executes guards. Neither establishes event coverage.
+  // Coverage requires the producer's exact command. Decoding shell words loses
+  // assignment syntax: a quoted CAWS_HOME word is a command, not an assignment.
+  // Missing assignments, wrappers, --system and --describe establish no coverage.
+  const interpreter = command === machineCommand(options.home, options.surface, options.event);
   if (
-    words.length !== 3 ||
-    surface !== options.surface ||
-    event !== options.event ||
-    (entry !== legacy && (entry !== native || interpreter))
+    !interpreter &&
+    command !== machineCommand(options.home, options.surface, options.event, 'native')
   )
     throw new Error('Project CAWS invocation requires native-harness reconciliation');
+  const entry = interpreter ? legacy : native;
   assertMachinePath(options.home, entry);
   if (!isFile(entry) || (!interpreter && (fs.statSync(entry).mode & 0o111) === 0))
     throw new Error('Project CAWS entry is missing or nonexecutable; requires reconciliation');
@@ -163,6 +158,8 @@ function legacyRegistered(options: SelectionOptions): boolean {
       const config = readJson(file);
       if (!object(config) || (config.hooks !== undefined && !object(config.hooks)))
         throw new Error('Malformed legacy native registration');
+      if (config.disableAllHooks === true)
+        throw new Error('Disabled project hooks require native-harness reconciliation');
       const groups = object(config.hooks)
         ? (config.hooks[MACHINE_EVENTS[options.event]] ?? [])
         : [];
@@ -177,13 +174,14 @@ function legacyRegistered(options: SelectionOptions): boolean {
           if (
             root !== options.canonical ||
             relative !== primary ||
-            (group.matcher !== undefined && group.matcher !== '' && group.matcher !== '.*')
+            !universalEventMatcher(options.surface, options.event, group.matcher) ||
+            !unconditionalCommandHook(group, hook) ||
+            !qualifiedHookTimeout(options.surface, options.event, hook.timeout)
           )
             throw new Error(
               'Restricted or additive project CAWS registration requires native-harness reconciliation'
             );
-          // Parse the actual command without shell expansion; event/surface and
-          // supported wrappers must agree before claiming this event is covered.
+          // Only the exact producer command establishes understood event coverage.
           verifiedProjectMachineEntry(hook.command, options);
           selected++;
         }

@@ -22,7 +22,11 @@ function registration(file, command, matcher = '.*', extra = {}) {
   });
 }
 beforeEach(() => {
-  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-native-registration-')));
+  const artifacts = process.env.CAWS_NATIVE_REGISTRATION_ARTIFACT_DIR;
+  if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
+  root = fs.realpathSync(
+    fs.mkdtempSync(path.join(artifacts || os.tmpdir(), 'caws-native-registration-'))
+  );
   home = path.join(root, 'machine');
   user = path.join(root, 'user');
   canonical = path.join(root, 'repo');
@@ -66,7 +70,127 @@ beforeEach(() => {
     system: true,
   };
 });
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+  if (process.env.CAWS_NATIVE_REGISTRATION_ARTIFACT_DIR)
+    write(path.join(root, 'test-observation.json'), {
+      test: expect.getState().currentTestName,
+      home,
+      user,
+      canonical,
+      checkout,
+      boundary: 'Configuration and selection fixtures; no native harness callback executed',
+    });
+  else fs.rmSync(root, { recursive: true, force: true });
+});
+test.each(['codex', 'claude-code', 'qwen-code'])(
+  'fresh %s transport covers all tools with event budgets in harness units',
+  (surface) => {
+    configureSystemRuntime({ home, userHome: user, surface });
+    const vendor =
+      surface === 'codex'
+        ? '.codex/hooks.json'
+        : surface === 'claude-code'
+          ? '.claude/settings.json'
+          : '.qwen/settings.json';
+    const value = JSON.parse(fs.readFileSync(path.join(user, vendor)));
+    const scale = surface === 'qwen-code' ? 1000 : 1;
+    const seconds = {
+      PreToolUse: 45,
+      PostToolUse: 60,
+      SessionStart: 30,
+      Stop: 30,
+      PreCompact: 30,
+      SessionEnd: 10,
+    };
+    for (const [name, budget] of Object.entries(seconds)) {
+      expect(value.hooks[name][0].hooks[0].timeout).toBe(budget * scale);
+    }
+    for (const name of ['PreToolUse', 'PostToolUse'])
+      expect(value.hooks[name][0].matcher).toBe('.*');
+  }
+);
+test.each([
+  ['codex', '.codex/hooks.json', 'exec_command'],
+  ['claude-code', '.claude/settings.json', 'Bash'],
+  ['qwen-code', '.qwen/settings.json', 'run_shell_command'],
+])(
+  'restricted %s registration refuses before enabling system state',
+  (surface, relative, matcher) => {
+    const file = path.join(user, relative);
+    registration(file, machineCommand(home, surface, 'pre_tool_use'), matcher);
+    const bytes = fs.readFileSync(file);
+    const settings = path.join(home, 'surfaces', surface, 'settings.json');
+    const previous = fs.existsSync(settings) ? fs.readFileSync(settings) : null;
+    expect(() => configureSystemRuntime({ home, userHome: user, surface })).toThrow(
+      /Restricted CAWS matcher/
+    );
+    expect(fs.readFileSync(file)).toEqual(bytes);
+    expect(fs.existsSync(settings) ? fs.readFileSync(settings) : null).toEqual(previous);
+  }
+);
+test.each(['claude-code', 'qwen-code'])('%s refuses disabled settings before writes', (surface) => {
+  const file = path.join(
+    user,
+    surface === 'claude-code' ? '.claude/settings.json' : '.qwen/settings.json'
+  );
+  write(file, { disableAllHooks: true });
+  const bytes = fs.readFileSync(file);
+  expect(() => configureSystemRuntime({ home, userHome: user, surface })).toThrow(
+    /disableAllHooks/
+  );
+  expect(fs.readFileSync(file)).toEqual(bytes);
+  expect(fs.existsSync(path.join(home, 'surfaces', surface, 'settings.json'))).toBe(false);
+});
+test('Qwen seconds-era timeout cannot survive entry migration or suppress the system chain', () => {
+  const command = machineCommand(home, 'qwen-code', 'pre_tool_use');
+  const value = {
+    hooks: { PreToolUse: [{ matcher: '.*', hooks: [{ type: 'command', command, timeout: 45 }] }] },
+  };
+  const file = path.join(user, '.qwen/settings.json');
+  write(file, value);
+  const bytes = fs.readFileSync(file);
+  expect(() => configureSystemRuntime({ home, userHome: user, surface: 'qwen-code' })).toThrow(
+    /millisecond-budget/
+  );
+  expect(fs.readFileSync(file)).toEqual(bytes);
+  write(path.join(canonical, '.qwen/settings.json'), value);
+  write(path.join(home, 'surfaces/qwen-code/settings.json'), { version: 1, enabled: true });
+  expect(() => resolveInvocationSelection({ ...options, surface: 'qwen-code' })).toThrow(
+    /reconciliation/
+  );
+});
+test.each([
+  { if: 'Bash(rm *)' },
+  { args: [] },
+  { async: true },
+  { type: 'http' },
+  { unknownExecutionMode: true },
+])(
+  'execution-affecting hook fields %j require reconciliation before configuration or suppression',
+  (fields) => {
+    const command = machineCommand(home, 'codex', 'pre_tool_use');
+    const value = {
+      hooks: { PreToolUse: [{ matcher: '.*', hooks: [{ type: 'command', command, ...fields }] }] },
+    };
+    const file = path.join(user, '.codex/hooks.json');
+    write(file, value);
+    const bytes = fs.readFileSync(file);
+    expect(() => configureSystemRuntime({ home, userHome: user, surface: 'codex' })).toThrow(
+      /reconciliation/
+    );
+    expect(fs.readFileSync(file)).toEqual(bytes);
+    write(path.join(canonical, '.codex/hooks.json'), value);
+    expect(() => resolveInvocationSelection(options)).toThrow(/reconciliation/);
+  }
+);
+test('omitted Codex lifecycle matcher retains canonical event coverage', () => {
+  write(path.join(canonical, '.codex/hooks.json'), {
+    hooks: {
+      Stop: [{ hooks: [{ type: 'command', command: machineCommand(home, 'codex', 'stop') }] }],
+    },
+  });
+  expect(resolveInvocationSelection({ ...options, event: 'stop' }).status).toBe('inactive');
+});
 test('fresh configure remains legacy and installing an image is not implicit native registration', () => {
   configureSystemRuntime({ home, userHome: user, surface: 'codex' });
   const value = JSON.parse(fs.readFileSync(path.join(user, '.codex/hooks.json')));
@@ -144,6 +268,10 @@ test.each([
   'foreign-home',
   'modified-entry',
   'missing-entry',
+  'quoted-assignment',
+  'escaped-assignment',
+  'missing-assignment',
+  'duplicate-assignment',
 ])('does not silently suppress guards for %s registration', (kind) => {
   const command = machineCommand(home, 'codex', 'pre_tool_use');
   const primary = path.join(canonical, '.codex/hooks.json');
@@ -159,6 +287,14 @@ test.each([
     write(path.join(canonical, '.codex/config.toml'), '[hooks]\ncommand="' + command + '"');
   if (kind === 'system') registration(primary, command + ' --system');
   if (kind === 'describe') registration(primary, command + ' --describe');
+  const assignmentEnd = command.indexOf(' python3');
+  if (kind === 'quoted-assignment')
+    registration(primary, `'CAWS_HOME=${home}'` + command.slice(assignmentEnd));
+  if (kind === 'escaped-assignment')
+    registration(primary, 'CAWS_HOME\\=' + command.slice('CAWS_HOME='.length));
+  if (kind === 'missing-assignment') registration(primary, command.slice(assignmentEnd + 1));
+  if (kind === 'duplicate-assignment')
+    registration(primary, command.slice(0, assignmentEnd) + ' ' + command);
   if (kind === 'foreign-home')
     registration(
       primary,
