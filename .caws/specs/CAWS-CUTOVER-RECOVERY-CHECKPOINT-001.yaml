@@ -30,3 +30,9 @@ acceptance:
     then: 'both tracker blobs and working files match without advancing parent acceptance'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root inspected R01bfb sharedentrysource/red15of34+dangling2, TEN561/2, retainedPythonTypeErrorchildren, exact8a758936portblobs, AST1fail→4pass, correctedlegacy2pass, finalTEN563/0 SHA4dd6bb32+rawterminald30d20 transcript26134. Rootread Node18/22 currentsourceAPI343entrymaps identical and outcomes; independentreview grounded05/06raw159source11/SHAe300 and actualprivateimportmarkers/refusals. Historicalddpackage bounded, ordinaryStryker/CI/native/sourceintegration/guidecoherentlanding remainopen. Independent committedtracker review e20 foundno conflictingclaim; tableformatter changesonlyR14semantics. Prettier/diff0, fivegates1docPASS, doctor0E3W4I. Commitverification isreachability, not testexecution."
+    recorded_at: "2026-10-22T11:40:54.658Z"
+    commit_sha: e20f411a3eb496fbd1b3656092187bf230c404b0
