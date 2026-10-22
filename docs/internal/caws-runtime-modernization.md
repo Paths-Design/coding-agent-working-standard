@@ -6828,6 +6828,50 @@ Additional bounded evidence and unresolved dependencies:
   landing; this ledger publication does not discharge them. No candidate borrows
   earlier package or runtime proof.
 
+- E259: The `handler-stdin-stage` lane (`CAWS-HANDLER-STDIN-STAGE-LIFETIME-001`,
+  owner dd67d988) closes the staging-file lifetime defect in
+  `shared/lib/run-handlers.sh` at candidate `ce5ced6c` over base `1169f7df`.
+  Defect: an inline payload over 32768 characters was staged to one
+  dispatch-scoped `caws-handler-stdin-*` file and appended to `CAWS_TEMP_FILES`,
+  which no shipped dispatcher consumes (`git grep` at `1169f7df` over
+  `templates/` and `src/`), so every large dispatch left a full tool payload in
+  TMPDIR on normal exit, TERM and KILL; the machine held 2,018 such files
+  (109,029,350 bytes, 2026-10-19 to 10-22) under installed runtime `408c06a7`.
+  Repair: each handler's command-substitution subshell creates a private
+  `mktemp -d` directory (mode 0700), writes the payload inside, opens it as
+  stdin, verifies the unlink before clearing its trap, and execs the handler;
+  only its own directory and payload are ever removed. Completion review (Codex,
+  read-only) found that the prior candidate `a5b4baee` left the payload named
+  when the parent TMPDIR stopped accepting removals; the reviewer's falsifier
+  reproduced it (status 0, payload present during and after the handler, no
+  diagnostic), and that FAIL is retained on record. Under `ce5ced6c` the unlink
+  depends only on the private directory, and a directory that cannot be removed
+  is named on stderr. Evidence (all under
+  `~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/`): the
+  self-contained `handler-stdin-stage-lifetime.bats` (8 cases, bats-core 1.13.0,
+  `/bin/bash` 3.2.57, no CLI build or installed pack) run serially against
+  pinned copies from git objects, `f3-runs/series-20261022T193531Z.json`, 11
+  attempts, 55.2 s, zero surviving processes: candidate 8/8; baseline `1169f7df`
+  fails 1,2,3,4,6,7,8; prior `a5b4baee` fails 7,8; mutants dropping the pre-exec
+  unlink (fails 2,3,7,8), appending a newline (1,6,7,8), removing caller
+  `CAWS_TEMP_FILES` entries (4), never staging (1,6,7,8), dropping the pipe
+  fallback (5), staging at `>= 32768` (6), skipping the presence check (8) and
+  silencing the directory report (7) each fail only the named cases. The 17-case
+  real-dispatcher probe (`f3-dispatcher/attempts/20261022T193700Z-ce5ced6c`,
+  `git archive ce5ced6c` of the shared tree, 43.8 s, exit 0) matches the
+  retained `1169f7df` rows except that c11/c12/c13 no longer leave stage
+  residue, with identical handler stdin digests in every case; the raw-byte
+  custody rows (c3/c5 uncertain-to-main, c9 preset `HOOK_INPUT_JSON`) and the
+  c17 spill-file KILL residue are unchanged and remain root-owned. A1–A7 are
+  recorded pass at `ce5ced6c` (events through spec commit `0a6e9704`). Not
+  claimed: a signal while `mktemp -d` runs (one empty directory), a KILL between
+  the payload write and its unlink (the payload file), Linux bash 5, the
+  installed pack copy, and machine adoption. Still owed before this lane is
+  complete on `main`: the single `SHARED_PACK_VERSION` bump with its fingerprint
+  entry (`manifest-shared.ts` and `pack-fingerprints.json` are claimed by the
+  `shell-analysis` lane, owner `01a151c0`, last active 2026-10-21), and root's
+  integration merge.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
