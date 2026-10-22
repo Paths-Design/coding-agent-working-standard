@@ -305,3 +305,9 @@ non_functional: {}
 contracts:
   - name: 'matched-native-source-landing'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Direct parent/diff/conflict inspection at c9b919e6 preserves main7d4 Handlebar4.7.10 lock, rollback pointer semantics, both unrelated test repairs and matched C7195 native/typed contracts; no .caws delta and clean source. Independent read-only completion review inspected exact source coordinates and raw new-candidate checks, finding no consequential merge-loss counterexample. Native source diff C..c9 empty; all1260 fresh builtmembers inspected,1257 exact and3 manifest history-comment/maps differences. This verifies source reconciliation, not native execution or cutover."
+    recorded_at: "2026-10-22T23:33:52.190Z"
+    commit_sha: c9b919e64f9149a09e2e9fff62f40cfdf141d1a8
