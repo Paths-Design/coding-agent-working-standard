@@ -130,6 +130,15 @@ SHIM
     case "$source" in /*) ln -s "$source" "$CAWS_TEST_HOME/no-python/$tool" ;; esac
   done
 
+  # A tool farm with python3 and the core tools but without git.
+  mkdir -p "$CAWS_TEST_HOME/no-git"
+  for tool in bash sh env node jq python3 cat sed awk grep cut tr head tail \
+    dirname basename mktemp date readlink rm mkdir mv cp printf wc sort uniq \
+    uname id ps stat touch ls find xargs tee sleep; do
+    source="$(command -v "$tool" 2>/dev/null || true)"
+    case "$source" in /*) ln -s "$source" "$CAWS_TEST_HOME/no-git/$tool" ;; esac
+  done
+
   # Identity-drop control: the guard tree under test with the checked
   # normalizer replaced by the best-effort one. It must reproduce the
   # unrepaired admission, or the refusal assertions below prove nothing.
@@ -573,6 +582,52 @@ id_base_branch() {
   assert_output --partial '"permissionDecision": "ask"'
   assert_output --partial "contains a line feed and this git cannot list worktrees NUL-terminated"
   refute_output --partial "active worktree(s)"
+}
+
+# Usage: rp_git_case <guard.sh> <Write|Bash>
+# Git is how the guards find the canonical root and worktree ownership. With
+# git, ownership decides: the foreign write is refused from the canonical root
+# and from s-wt, and the owner's own write passes. Without git that discovery
+# is impossible, so every run, the owner's included, must be refused naming
+# git rather than read as an ungoverned directory.
+rp_git_case() {
+  local guard="$1" tool="$2" repo="$RP_PLAIN_REPO" op target path_value expected label
+  local self="$RP_PLAIN_REPO/.caws/worktrees/s-wt"
+  local foreign="$repo/.caws/worktrees/f-wt/src/payload.ts" own="$self/src/own.ts"
+  label="${guard%.sh}"
+  for path_value in "$PATH" "$CAWS_TEST_HOME/no-git"; do
+    for op in "$repo" "$self"; do
+      for target in "$foreign" "$own"; do
+        [[ "$op" == "$repo" && "$target" == "$own" ]] && continue
+        if [[ "$tool" == Write ]]; then
+          RP_ID_PATH="$path_value" id_guard "$guard" "$repo" "$op" Write "$target"
+        else
+          RP_ID_PATH="$path_value" id_guard "$guard" "$repo" "$op" Bash "touch \"$target\""
+        fi
+        if [[ "$path_value" != "$PATH" ]]; then
+          [ "$status" -eq 2 ] || { printf 'no git, %s -> %s exited %s\n' "$op" "$target" "$status"; false; }
+          assert_output --partial "[$label] git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED"
+          assert_output --partial '{"decision":"block"'
+        elif [[ "$target" == "$foreign" ]]; then
+          [ "$status" -eq 2 ] || { printf 'with git, %s -> foreign exited %s\n' "$op" "$status"; false; }
+          assert_output --partial "owned by a DIFFERENT session"
+        else
+          [ "$status" -eq 0 ] || { printf 'with git, the owner write exited %s\n' "$status"; false; }
+          refute_output --partial "BLOCKED"
+        fi
+      done
+    done
+  done
+}
+
+@test "git unavailable: worktree-write-guard refuses naming git instead of reading an ungoverned directory" {
+  run env -i PATH="$CAWS_TEST_HOME/no-git" bash -c 'command -v git'
+  [ "$status" -ne 0 ]
+  rp_git_case worktree-write-guard.sh Write
+}
+
+@test "git unavailable: bash-write-guard refuses naming git instead of reading an ungoverned directory" {
+  rp_git_case bash-write-guard.sh Bash
 }
 
 @test "precondition: the linked worktree has an absolute common dir distinct from its git dir" {

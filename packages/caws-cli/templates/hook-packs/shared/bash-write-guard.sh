@@ -57,6 +57,11 @@ _bwg_normalize_refuse() {
   printf '{"decision":"block","reason":"CAWS bash-write-guard: a path could not be normalized, so Bash-mutation ownership cannot be evaluated. Failing closed. Restore a working python3 on PATH."}\n'
   exit 2
 }
+_bwg_git_refuse() {
+  echo "[bash-write-guard] git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED. Restore git on PATH." >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing closed. Restore git on PATH."}\n'
+  exit 2
+}
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR and caws_source_lib — load-bearing. Guard the source
 # (a fatal `source <missing>` is not caught by `|| true` under set -e) and fail
@@ -145,6 +150,11 @@ case "$ORIGINAL_TOOL" in
 esac
 
 CAWS_CLAIM_ORACLE="$SCRIPT_DIR/lib/worktree-claim-oracle.cjs"
+
+# Git is how this guard finds the canonical checkout and which session owns a
+# linked worktree. Without it a worktree reads as an ungoverned directory, and
+# a foreign mutation would be admitted at the governance check below.
+command -v git >/dev/null 2>&1 || _bwg_git_refuse
 
 # Resolve canonical root. Path identity is compared byte for byte, and a
 # legitimate root may end in a line feed that command substitution would

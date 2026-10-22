@@ -59,6 +59,11 @@ _wwg_normalize_refuse() {
   printf '{"decision":"block","reason":"CAWS worktree-write-guard: a path could not be normalized, so worktree ownership cannot be evaluated. Failing closed. Restore a working python3 on PATH."}\n'
   exit 2
 }
+_wwg_git_refuse() {
+  echo "[worktree-write-guard] git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED (refusing the write). Restore git on PATH." >&2
+  printf '{"decision":"block","reason":"CAWS worktree-write-guard: git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing closed. Restore git on PATH."}\n'
+  exit 2
+}
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR, CAWS_VENDOR_DIR, and caws_source_lib — load-bearing.
 # Must come before caws_source_lib calls. Guard the source (a fatal `source
@@ -111,6 +116,11 @@ case "$TOOL_NAME" in
   *) exit 0 ;;
 esac
 
+# Git is how this guard finds the canonical checkout and which session owns a
+# linked worktree. Without it a worktree reads as an ungoverned directory with
+# no registry, and a foreign write would be admitted.
+command -v git >/dev/null 2>&1 || _wwg_git_refuse
+
 # Path identity is compared byte for byte, and a legitimate path may end in a
 # line feed that command substitution would strip, so every path below is
 # assigned through the out-parameter helpers in lib/caws-state.sh.
@@ -120,26 +130,24 @@ caws_physical_dir_into WORKTREE_ROOT "$_WWG_ROOT_RAW" || WORKTREE_ROOT="$_WWG_RO
 # Linked-worktree detection via git as primary signal.
 IS_LINKED_WORKTREE=0
 CANONICAL_ROOT=""
-if command -v git >/dev/null 2>&1; then
-  caws_git_path_into GIT_COMMON_DIR_RAW "$WORKTREE_ROOT" --git-common-dir || GIT_COMMON_DIR_RAW=""
-  caws_git_path_into GIT_DIR_RAW "$WORKTREE_ROOT" --git-dir || GIT_DIR_RAW=""
-  if [[ -n "$GIT_COMMON_DIR_RAW" ]] && [[ -n "$GIT_DIR_RAW" ]]; then
-    case "$GIT_COMMON_DIR_RAW" in
-      /*) GIT_COMMON_DIR_ABS="$GIT_COMMON_DIR_RAW" ;;
-      *)  GIT_COMMON_DIR_ABS="$WORKTREE_ROOT/$GIT_COMMON_DIR_RAW" ;;
-    esac
-    case "$GIT_DIR_RAW" in
-      /*) GIT_DIR_ABS="$GIT_DIR_RAW" ;;
-      *)  GIT_DIR_ABS="$WORKTREE_ROOT/$GIT_DIR_RAW" ;;
-    esac
-    caws_guard_realpath_into GIT_COMMON_DIR "$GIT_COMMON_DIR_ABS" || _wwg_normalize_refuse "git common dir" "$GIT_COMMON_DIR_ABS"
-    caws_guard_realpath_into GIT_DIR "$GIT_DIR_ABS" || _wwg_normalize_refuse "git dir" "$GIT_DIR_ABS"
-    if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != "$GIT_DIR" ]]; then
-      IS_LINKED_WORKTREE=1
-      caws_guard_realpath_into CANONICAL_CANDIDATE "$GIT_COMMON_DIR/.." || _wwg_normalize_refuse "canonical root" "$GIT_COMMON_DIR/.."
-      if [[ -n "$CANONICAL_CANDIDATE" ]] && [[ -d "$CANONICAL_CANDIDATE/.caws" ]]; then
-        CANONICAL_ROOT="$CANONICAL_CANDIDATE"
-      fi
+caws_git_path_into GIT_COMMON_DIR_RAW "$WORKTREE_ROOT" --git-common-dir || GIT_COMMON_DIR_RAW=""
+caws_git_path_into GIT_DIR_RAW "$WORKTREE_ROOT" --git-dir || GIT_DIR_RAW=""
+if [[ -n "$GIT_COMMON_DIR_RAW" ]] && [[ -n "$GIT_DIR_RAW" ]]; then
+  case "$GIT_COMMON_DIR_RAW" in
+    /*) GIT_COMMON_DIR_ABS="$GIT_COMMON_DIR_RAW" ;;
+    *)  GIT_COMMON_DIR_ABS="$WORKTREE_ROOT/$GIT_COMMON_DIR_RAW" ;;
+  esac
+  case "$GIT_DIR_RAW" in
+    /*) GIT_DIR_ABS="$GIT_DIR_RAW" ;;
+    *)  GIT_DIR_ABS="$WORKTREE_ROOT/$GIT_DIR_RAW" ;;
+  esac
+  caws_guard_realpath_into GIT_COMMON_DIR "$GIT_COMMON_DIR_ABS" || _wwg_normalize_refuse "git common dir" "$GIT_COMMON_DIR_ABS"
+  caws_guard_realpath_into GIT_DIR "$GIT_DIR_ABS" || _wwg_normalize_refuse "git dir" "$GIT_DIR_ABS"
+  if [[ -n "$GIT_COMMON_DIR" ]] && [[ "$GIT_COMMON_DIR" != "$GIT_DIR" ]]; then
+    IS_LINKED_WORKTREE=1
+    caws_guard_realpath_into CANONICAL_CANDIDATE "$GIT_COMMON_DIR/.." || _wwg_normalize_refuse "canonical root" "$GIT_COMMON_DIR/.."
+    if [[ -n "$CANONICAL_CANDIDATE" ]] && [[ -d "$CANONICAL_CANDIDATE/.caws" ]]; then
+      CANONICAL_ROOT="$CANONICAL_CANDIDATE"
     fi
   fi
 fi
@@ -413,7 +421,7 @@ _wwg_count_worktrees_z() {
   printf '%d:%s' "$count" "$names"
 }
 
-if [[ "$WT_COUNT" -lt 1 ]] 2>/dev/null && command -v git >/dev/null 2>&1; then
+if [[ "$WT_COUNT" -lt 1 ]] 2>/dev/null; then
   if GIT_WT_INFO="$(git -C "$PROJECT_DIR" worktree list --porcelain -z 2>/dev/null | _wwg_count_worktrees_z)"; then
     :
   elif [[ "$PROJECT_DIR" == *$'\n'* ]]; then
