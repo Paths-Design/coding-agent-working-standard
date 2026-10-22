@@ -42,9 +42,13 @@ acceptance:
       creation window (mktemp, write, open, unlink) cannot be trapped and can leave
       one stage
   - id: A3
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given an inherited HOOK_PAYLOAD_FILE and a caller CAWS_TEMP_FILES naming files run_handlers did not create, when run_handlers runs, then handlers read the payload file and neither that file nor any CAWS_TEMP_FILES entry is deleted'
+    given: >-
+      An inherited HOOK_PAYLOAD_FILE, and a caller CAWS_TEMP_FILES naming a file
+      run_handlers did not create
+    when: 'run_handlers runs on the spill path and on the staged inline path'
+    then: >-
+      Handlers read the inherited payload file, and neither that file nor the
+      CAWS_TEMP_FILES entry is deleted
   - id: A4
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
