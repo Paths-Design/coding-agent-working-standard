@@ -73,3 +73,9 @@ acceptance:
       path stays absent.
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "guard-realpath-python-absent.bats tests 9-12 at 73166c16, run-06 bats exit 0 25/25 (receipt outside repo: /Users/darianrosebrook/.claude/artifacts/c4c0f2e0-cb0c-4380-a9c4-7daeb8f35885/realpath-v2/run-06/bats.tap): worktree-write-guard foreign payload write python3 present exit 2 BLOCKED f-wt; owner exit 0 empty; failing python3 exit 2 class python3-exit-1; absent exit 2 class python3-unavailable; target absent asserted every run. Pre-repair run-01 (selected 408) and red baseline run-02 exited 0. Bounds: template guard run directly with precomputed HOOK_* and canonical helpers.bash; not dispatcher, installed pack or native harness."
+    recorded_at: "2026-10-22T00:50:11.359Z"
+    commit_sha: "73166c16"
