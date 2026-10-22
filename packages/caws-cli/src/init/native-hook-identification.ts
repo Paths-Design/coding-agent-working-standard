@@ -22,9 +22,13 @@ interface NativeCommandWord {
   readonly value: string;
 }
 
-/** Tokenize without expanding or executing shell. Lazy consumption lets an
- * ownership probe stop at a foreign executable rather than inspect its data. */
-function* nativeCommandTokens(command: string, literalData = false): Generator<NativeCommandWord> {
+/** Tokenize without expanding or executing shell. The default grammar governs
+ * migration; optional data decoding does not establish producer ownership. */
+function* nativeCommandTokens(
+  command: string,
+  literalData = false,
+  literalDataLines = false
+): Generator<NativeCommandWord> {
   let index = 0;
   while (index < command.length) {
     if (/[ \t]/.test(command[index] as string)) {
@@ -34,10 +38,11 @@ function* nativeCommandTokens(command: string, literalData = false): Generator<N
     const start = index;
     let value = '';
     let quoted: string | null = null;
+    let hasWord = false;
     while (index < command.length) {
       const char = command[index] as string;
       if (!quoted && /[ \t]/.test(char)) break;
-      if (/[\r\n]/.test(char)) {
+      if (/[\r\n]/.test(char) && !(literalDataLines && quoted)) {
         if (!quoted && index > start) yield { raw: command.slice(start, index), value };
         throw new Error('multiline command');
       }
@@ -46,8 +51,16 @@ function* nativeCommandTokens(command: string, literalData = false): Generator<N
         else value += char;
       } else if (char === '\\') {
         const next = command[++index];
+        if (literalDataLines && next === '\n') {
+          index++;
+          continue;
+        }
         if (!next || /[\r\n]/.test(next)) throw new Error('unsupported shell escape');
-        if (quoted && !/["\\$]/.test(next)) {
+        // A literal shell payload must receive the value its outer double
+        // quotes produce. Retaining this backslash would hide an inner
+        // substitution; the strict migration grammar keeps rejecting it.
+        const quotedEscape = /["\\$]/.test(next) || (literalData && next === '`');
+        if (quoted && !quotedEscape) {
           if (!literalData) throw new Error('unsupported shell escape');
           value += '\\' + next;
         } else value += next;
@@ -62,10 +75,12 @@ function* nativeCommandTokens(command: string, literalData = false): Generator<N
         }
         value += char;
       }
+      hasWord = true;
       index++;
     }
     if (quoted) throw new Error('unclosed shell quote');
-    yield { raw: command.slice(start, index), value };
+    // A continuation alone creates no word; even empty quotes create one.
+    if (hasWord) yield { raw: command.slice(start, index), value };
   }
 }
 
@@ -73,6 +88,106 @@ function* nativeCommandTokens(command: string, literalData = false): Generator<N
  * substitutions and unsupported quoting; no token is executed. */
 export function nativeCommandWords(command: string): NativeCommandWord[] {
   return [...nativeCommandTokens(command)];
+}
+
+/** Discovery can cross literal command boundaries without admitting their
+ * execution or migration. Quotes and escapes belong to words; operators and
+ * comments do not. Opaque substitutions and incomplete words stop this bounded
+ * inspection rather than supplying an executable identity. */
+function nativeDiscoveryWords(command: string): {
+  words: NativeCommandWord[];
+  opaqueRemainder?: string;
+} {
+  const words: NativeCommandWord[] = [];
+  const result = (opaqueRemainder?: string) => ({
+    words,
+    ...(opaqueRemainder === undefined ? {} : { opaqueRemainder }),
+  });
+  let index = 0;
+  while (index < command.length) {
+    // An unquoted continuation at a word boundary creates no word, including
+    // before a comment. Quoted empty words remain material shell words.
+    if (command[index] === '\\' && command[index + 1] === '\n') {
+      index += 2;
+      continue;
+    }
+    if (/[ \t\r\n;&|<>()]/.test(command[index] as string)) {
+      index++;
+      continue;
+    }
+    if (command[index] === '#') {
+      while (index < command.length && !/[\r\n]/.test(command[index] as string)) index++;
+      continue;
+    }
+    const start = index;
+    let value = '';
+    let quoted: string | null = null;
+    while (index < command.length) {
+      const char = command[index] as string;
+      if (!quoted && /[ \t\r\n;&|<>()]/.test(char)) break;
+      if (quoted === "'") {
+        if (char === "'") quoted = null;
+        else value += char;
+      } else if (char === '\\') {
+        const next = command[++index];
+        if (!next) return result(command.slice(start));
+        if (next !== '\n') value += quoted && !/["\\$`]/.test(next) ? '\\' + next : next;
+      } else if (char === '`' || (char === '$' && command[index + 1] === '(')) {
+        return result(command.slice(start));
+      } else if (char === '"' || (!quoted && char === "'")) {
+        quoted = quoted ? null : char;
+      } else value += char;
+      index++;
+    }
+    if (quoted) return result(command.slice(start));
+    words.push({ raw: command.slice(start, index), value });
+  }
+  return result();
+}
+
+function hasCawsDiscoveryHint(command: string, inspectWrapper = true): boolean {
+  const { words, opaqueRemainder } = nativeDiscoveryWords(command);
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index]!;
+    // Inspect one literal payload in the shell form already understood by the
+    // ownership classifier. Finding a name here only requests reconciliation.
+    const payload = words[index + 2];
+    if (
+      inspectWrapper &&
+      ['bash', '/bin/bash', 'sh', '/bin/sh'].includes(word.value) &&
+      words[index + 1]?.value === '-c' &&
+      payload &&
+      literalShellWord(word) &&
+      literalShellWord(words[index + 1]!) &&
+      literalShellWord(payload)
+    ) {
+      if (hasCawsDiscoveryHint(payload.value, false)) return true;
+      // The payload has been examined as shell, including its comments. Do
+      // not rescan its original quoted bytes as an ordinary data word.
+      index += 2;
+      continue;
+    }
+    if (
+      possibleCawsProducer(word.raw) ||
+      (literalShellWord(word) && possibleCawsProducer(word.value))
+    )
+      return true;
+  }
+  // Only unexamined text gets a conservative spelling check. Examined comments
+  // must not become producer hints when their quote/escape markers are removed.
+  // Opaque data can request reconciliation; it grants no migration ownership.
+  return (
+    opaqueRemainder !== undefined &&
+    possibleCawsProducer(opaqueRemainder.replace(/\\\n/g, '').replace(/[\\'"]/g, ''))
+  );
+}
+
+function possibleCawsProducer(text: unknown): boolean {
+  return (
+    isCawsNativeCommand(text) ||
+    (typeof text === 'string' &&
+      /(?:^|[\s/"'`;&|<>()])caws-hook(?:-native)?(?=$|[\s"'`;&|<>()])/.test(text))
+  );
 }
 
 export type CawsProducerOwnership =
@@ -124,6 +239,37 @@ function literalShellWord(word: NativeCommandWord): boolean {
     else if (char === '"' || (!quoted && char === "'")) quoted = quoted ? null : char;
   }
   return quoted === null;
+}
+
+/** Multiline literal data can be foreign without becoming an admitted producer.
+ * This complete parse alone permits quoted newlines and line continuations;
+ * operators and substitutions stay unsupported. A shell wrapper accepts
+ * exactly one literal payload. */
+function isLiteralForeignDataCommand(command: string, inspectWrapper: boolean): boolean {
+  try {
+    const words = [...nativeCommandTokens(command, true, true)];
+    let index = 0;
+    while (words[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]!.raw)) index++;
+    if (words[index]?.value === 'env') {
+      index++;
+      while (words[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]!.raw)) index++;
+    }
+    const program = words[index++];
+    if (!program || !words.every(literalShellWord)) return false;
+    if (['printf', '/usr/bin/printf', 'echo', '/bin/echo', '/usr/bin/echo'].includes(program.value))
+      return true;
+    const payload = words[index + 1];
+    return (
+      inspectWrapper &&
+      ['bash', '/bin/bash', 'sh', '/bin/sh'].includes(program.value) &&
+      words[index]?.value === '-c' &&
+      words.length === index + 2 &&
+      payload !== undefined &&
+      isLiteralForeignDataCommand(payload.value, false)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Shared producer ownership, not shell execution admission. Only a complete
@@ -204,7 +350,12 @@ export function classifyCawsProducerCommand(
       ? { kind: 'owned', entry: 'legacy' }
       : { kind: 'unresolved' };
   } catch {
-    return { kind: 'unresolved' };
+    return {
+      kind:
+        !hasPrelude && isLiteralForeignDataCommand(command, inspectWrapper)
+          ? 'foreign'
+          : 'unresolved',
+    };
   }
 }
 
@@ -216,27 +367,17 @@ export function isCawsProducerHookCandidate(hook: unknown): hook is NativeHook {
   // Known executable names are possible PATH invocations, not ownership
   // witnesses. Discovery neither resolves PATH nor admits their migration;
   // the existing classifier keeps non-data invocations unresolved.
-  const possibleProducer = (text: unknown): boolean =>
-    isCawsNativeCommand(text) ||
-    (typeof text === 'string' &&
-      /(?:^|[\s/"'`;&|<>()])caws-hook(?:-native)?(?=$|[\s"'`;&|<>()])/.test(text));
-  if (
-    possibleProducer(value.command) ||
-    (Array.isArray(value.args) ? value.args.some(possibleProducer) : possibleProducer(value.args))
-  )
-    return true;
-  // Only shell-form commands have decoded shell words. A known basename emitted
-  // before unsupported syntax remains a suspicion hint, never executable
-  // ownership, a successful full parse or PATH lookup.
-  if (Object.hasOwn(value, 'args') || typeof value.command !== 'string') return false;
-  try {
-    for (const word of nativeCommandTokens(value.command))
-      if (['caws-hook-native', 'caws-hook'].includes(path.posix.basename(word.value))) return true;
-    return false;
-  } catch {
-    // No known basename was emitted before the tokenizer stopped.
-    return false;
-  }
+  // Only shell-form commands have decoded shell words. Literal command
+  // boundaries must not hide a later known basename from reconciliation.
+  // Discovery never establishes ownership, a full parse or PATH resolution.
+  if (!Object.hasOwn(value, 'args'))
+    return typeof value.command === 'string' && hasCawsDiscoveryHint(value.command);
+  return (
+    possibleCawsProducer(value.command) ||
+    (Array.isArray(value.args)
+      ? value.args.some(possibleCawsProducer)
+      : possibleCawsProducer(value.args))
+  );
 }
 
 /** Exec-form CAWS registration is not an admitted migration format. Only
