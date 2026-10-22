@@ -6374,6 +6374,85 @@ Additional bounded evidence and unresolved dependencies:
   inspected. No full mutation campaign or score is inferred from66 fixture
   checks; floors and license ownership validation remain unchanged.
 
+- E254: Mutation-binding repair `d5fe5c85` resolves declared physical npm
+  packages named like Node builtins without weakening missing-dependency
+  refusal. The ordinary store
+  `mutation:dry-run -- --surface store --sha d5fe5c8579562f5d2fcfaf96e94b361396e66440`
+  exits0: outer build, real Stryker and relocated sandbox build succeed. Run
+  `40da60d3` selects9 test files, passes385 initial tests and discovers2,678
+  mutants across6 sources. It executes zero mutants and produces no mutation
+  score. Root reads actual execution, stdout, run receipt and artifact
+  inspection under peerA's `mutation-qualification-binding/real-dryrun-02/`; the
+  receipt hashes to
+  `6d513f68aca13c2d96e850b8f2e5a231599f34d34f24079bc696916cd6d37b64`. Retained
+  receipts associate23,153 inputs with1,149 outer and1,149 sandbox outputs;
+  instrumented output samples and distinct license-marker identities remain
+  available. Successful sandbox stdout/stderr are not retained separately. The
+  original `real-dryrun-01` dependency-resolution failure remains preserved.
+  Component A1–A4 are recorded pass and
+  `CAWS-MUTATION-QUALIFICATION-BINDING-001` closes completed; normal merge
+  `03d663b6` lands the six candidate paths with identical integrated blobs. This
+  earns the bounded binding component, not parent acceptance. Actual Jest-loaded
+  candidate bodies, a distinguishing perturbation, the full campaign and
+  unchanged per-file floors remain owed, together with later integrated-parent
+  qualification. Root retains these obligations.
+
+- E255: The allocated Node22 VM primitive probe exits0 with42 retained events
+  and exact submitted UTF16 code files under peerA's
+  `mutation-qualification-binding/vm-primitive-01/`. Root reads the actual
+  execution and result: compilation alone refuses qualification; actual body
+  invocation records entry/return; foreign context/filename controls produce no
+  eligible observations; receiver, arguments, returned Promise and three thrown
+  values retain their identities. Sink failure refuses qualification while
+  preserving the subject outcome, and foreign hook replacement is not
+  overwritten. Distinct lone-surrogate source strings collide under UTF8 hashing
+  but remain distinct under exact UTF16 hashing. The prototype's post-detach
+  proxies and retained history do not establish fresh observer lifetime or
+  generation custody. No actual Jest environment, six-target candidate
+  consumption, exported-function behavior, semantic perturbation or mutation
+  score is demonstrated. Root allocates a separate bounded observer component
+  with actual baseline-phase provenance, per-suite/context observations,
+  six-target union, fresh lifetimes and finite retention; source reachability
+  alone cannot establish runtime consumption. The full mutation campaign remains
+  unexecuted.
+
+- E256: R01 candidate `f9a90160` remains held. Independent review reaches
+  executable-position ownership and managed-header boundaries that its237
+  passing checks miss. The owner retains failing canonical and producer controls
+  and repairs classification across merge, adoption, system configuration,
+  selection and health observation. Root directs active Claude peer c4 through
+  CAWS AIM for read-only inspection. Its source-derived `command: python3` plus
+  `args` containing the CAWS entry counterexample reaches discovery gates that
+  inspect only `hook.command`; the documented Claude exec form passes this
+  argument vector without a shell. Root grounds the source coordinates and
+  official contract, and the owning R01 peer accepts whole-hook discovery and
+  no-write reconciliation controls. Actual repaired candidate checks, committed
+  review, fresh package images, native callbacks and rollback remain owed. No
+  new R01 landing or actual-machine registration/selection change is inferred.
+  AIM delivery to c4 is confirmed; current sends to dd67 and c843 are refused
+  for stale leases, and dd67's earlier raw-carrier follow-up remains queued.
+  Those peers have not accepted these new handoffs.
+
+- E257: Root owns `CAWS-NATIVE-SESSION-PUBLICATION-001` in
+  `native-session-publication`, based on `03d663b6`, for the continuous original
+  store acquisition through native publication and independent SessionEnd
+  sealing. Its typed wire/client is staged ahead of production dispatch.
+  Controlled transport checks reproduce aborted-preparation acceptance and
+  related terminal-inventory and resource-bound defects; repairs require a
+  definite refusal after abort, exact status types, complete retained/output
+  inventory and bounds before output copies. Existing protocol/store and new
+  client checks exercise framed bytes and consumption; they do not execute
+  native publication or the ordinary renderer/sealer. The separate native
+  boundary lane passes37 feature-off custody tests, not SQLite/publication
+  qualification. Its write is refused by hook identity despite its CLI claim;
+  the preparation lane has the same identity disagreement and a separately
+  refused baseline recorder. Both child lanes remain untouched. Root requests
+  explicit human authorization for ownership transfer, retains the independent
+  integration lane and all original consumer obligations, and does not retry
+  refused child writes through another carrier. Native implementation, exact
+  sealer, ordinary dispatch, current-reader artifacts and actual terminal
+  consumption remain open.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -6766,7 +6845,7 @@ operational correctness or selected execution.
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend settlement lands in87b70fcc; resident acquisition, cancellation, bounded retention and status contract land with bb3a8b99, E240. | Update publication permit, record release and actual-reader contracts with their implementations and consumer evidence.                                                                                                                            |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.                                           | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
 | `docs/guides/sterling-machine-runtime-migration.md`                             | Qualified main84079dfb and source16981627 match actual SHA1d5041f4, E242.                                                                 | Recheck operations against the eventual combined package and isolated native/harness execution before machine cutover.                                                                                                                             |
-| This tracker and canonical parent acceptance                                    | E231–E253 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
+| This tracker and canonical parent acceptance                                    | E231–E257 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
 
 ## Landing obligations
 
