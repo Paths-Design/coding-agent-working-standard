@@ -13,8 +13,12 @@
 # A global python3 failure stops at each guard's FIRST normalization, so the
 # sweeps below fail one normalization at a time (the Nth call of the exact
 # realpath program, all other python3 use passes through) across scenarios that
-# reach every caller, including late Bash target, dynamic-prefix and Git
-# metadata normalization.
+# reach every reachable caller: all worktree-write-guard normalizations, and the
+# bash-write-guard project root, static mutation target and Git metadata
+# normalizations. The bash-write-guard dynamic-prefix normalization is not
+# reachable: analysis tokens carry no lexically proven prefix, so a dynamic
+# operand is held for approval first. A separate test pins that conservative
+# ask and fails if prefixes are ever projected.
 #
 # CAWS_GUARD_REALPATH_DIR selects the guard tree under test (default: the pack
 # installed by helpers.bash); CAWS_GUARD_REALPATH_CLI the CLI providing
