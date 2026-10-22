@@ -4,7 +4,7 @@ mode: doc
 lifecycle_state: active
 worktree: guard-contract-docs
 created_at: '2026-10-21T21:21:46.923Z'
-updated_at: '2026-10-21T21:23:44.924Z'
+updated_at: '2026-10-22T20:13:05.239Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -17,6 +17,7 @@ scope:
     - 'docs/architecture/hook-pack-shared-core.md'
     - docs/guides/hook-packs.md
     - docs/guides/command-analysis.md
+    - docs/guides/worktree-isolation.md
   out: []
   support: []
 invariants:
