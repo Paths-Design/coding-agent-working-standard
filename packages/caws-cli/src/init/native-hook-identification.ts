@@ -24,7 +24,11 @@ interface NativeCommandWord {
 
 /** Tokenize without expanding or executing shell. Lazy consumption lets an
  * ownership probe stop at a foreign executable rather than inspect its data. */
-function* nativeCommandTokens(command: string, literalData = false): Generator<NativeCommandWord> {
+function* nativeCommandTokens(
+  command: string,
+  literalData = false,
+  literalDataLines = false
+): Generator<NativeCommandWord> {
   let index = 0;
   while (index < command.length) {
     if (/[ \t]/.test(command[index] as string)) {
@@ -37,7 +41,7 @@ function* nativeCommandTokens(command: string, literalData = false): Generator<N
     while (index < command.length) {
       const char = command[index] as string;
       if (!quoted && /[ \t]/.test(char)) break;
-      if (/[\r\n]/.test(char)) {
+      if (/[\r\n]/.test(char) && !(literalDataLines && quoted)) {
         if (!quoted && index > start) yield { raw: command.slice(start, index), value };
         throw new Error('multiline command');
       }
@@ -46,6 +50,10 @@ function* nativeCommandTokens(command: string, literalData = false): Generator<N
         else value += char;
       } else if (char === '\\') {
         const next = command[++index];
+        if (literalDataLines && next === '\n') {
+          index++;
+          continue;
+        }
         if (!next || /[\r\n]/.test(next)) throw new Error('unsupported shell escape');
         if (quoted && !/["\\$]/.test(next)) {
           if (!literalData) throw new Error('unsupported shell escape');
@@ -193,6 +201,36 @@ function literalShellWord(word: NativeCommandWord): boolean {
   return quoted === null;
 }
 
+/** Multiline literal data can be foreign without becoming an admitted producer.
+ * This complete parse alone permits quoted newlines and line continuations;
+ * operators, substitutions and extra shell operands remain unresolved. */
+function isLiteralForeignDataCommand(command: string, inspectWrapper: boolean): boolean {
+  try {
+    const words = [...nativeCommandTokens(command, true, true)];
+    let index = 0;
+    while (words[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]!.raw)) index++;
+    if (words[index]?.value === 'env') {
+      index++;
+      while (words[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]!.raw)) index++;
+    }
+    const program = words[index++];
+    if (!program || !words.every(literalShellWord)) return false;
+    if (['printf', '/usr/bin/printf', 'echo', '/bin/echo', '/usr/bin/echo'].includes(program.value))
+      return true;
+    const payload = words[index + 1];
+    return (
+      inspectWrapper &&
+      ['bash', '/bin/bash', 'sh', '/bin/sh'].includes(program.value) &&
+      words[index]?.value === '-c' &&
+      words.length === index + 2 &&
+      payload !== undefined &&
+      isLiteralForeignDataCommand(payload.value, false)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Shared producer ownership, not shell execution admission. Only a complete
  * literal printf/echo command is definitely foreign pathname data. Arbitrary
  * wrappers, dynamic shell and unknown executables remain unresolved; broad
@@ -271,7 +309,12 @@ export function classifyCawsProducerCommand(
       ? { kind: 'owned', entry: 'legacy' }
       : { kind: 'unresolved' };
   } catch {
-    return { kind: 'unresolved' };
+    return {
+      kind:
+        !hasPrelude && isLiteralForeignDataCommand(command, inspectWrapper)
+          ? 'foreign'
+          : 'unresolved',
+    };
   }
 }
 

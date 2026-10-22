@@ -159,6 +159,16 @@ const precedingSyntaxCases = [
     'literal shell payload',
     () => String.raw`bash -c 'true && caws\-hook-native claude-code pre_tool_use --system'`,
   ],
+  [
+    'printf followed by executable newline',
+    () => 'printf first\n' + String.raw`caws\-hook-native claude-code pre_tool_use --system`,
+  ],
+  [
+    'quoted multiline native pathname',
+    () =>
+      "'/private/line\nbreak/bin/'" +
+      String.raw`caws\-hook-native claude-code pre_tool_use --system`,
+  ],
 ];
 function nativeObservationFixture() {
   // Inert assets exercise registration/layout verification only. No fixture
@@ -929,8 +939,14 @@ test.each([
   String.raw`printf '%s\n' 'true && caws\-hook-native' 'caws-hook'`,
   String.raw`echo '# caws-hook-native' 'true | caws\-hook'`,
   String.raw`sh -c 'printf "%s\n" "# caws-hook-native" "true && caws\-hook"'`,
+  "printf 'first\nsecond' " + String.raw`caws\-hook-native`,
+  "echo 'first\nsecond' " + String.raw`caws\-hook-native`,
+  'printf first ' + '\\' + '\n' + String.raw`caws\-hook-native`,
+  'sh -c \'printf "first\nsecond" caws\\-hook-native\'',
 ])('A4 preceding syntax quoted operator and comment data stays foreign: %s', (command) => {
   const hook = { type: 'command', command };
+  if (command.includes('\n'))
+    expect(() => nativeCommandWords(command)).toThrow(/multiline command|unsupported shell escape/);
   expect(isCawsProducerHookCandidate(hook)).toBe(true);
   expect(classifyCawsProducerHook(hook, 'claude-code', 'pre_tool_use')).toEqual({
     kind: 'foreign',
