@@ -1,0 +1,39 @@
+id: CAWS-NATIVE-REQUEST-FRAMING-001
+title: 'Frame multiline native hook JSON without losing source custody'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-23T03:46:03.360Z'
+updated_at: '2026-10-23T03:46:03.360Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Native request serialization and actual typed engine transport'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/protocol.rs'
+    - 'packages/caws-native/src/main.rs'
+  out: []
+invariants:
+  - 'Preserve original inputJson bytes, payload numeric token spelling, duplicate member behavior and quoted string bytes; never round-trip raw payload through numeric values'
+  - 'One newline terminates each request frame; valid formatting cannot split transport; preserve strict UTF8 rejection and invocation-owned cleanup'
+acceptance:
+  - id: A1
+    given: 'valid compact LF CRLF nested and escaped-string hook JSON including large exponent and negative-zero numerals'
+    when: 'native request serialization frames the payload'
+    then: 'exactly one terminating LF is emitted, original inputJson is unchanged and payload tokens survive independent typed decoding'
+  - id: A2
+    given: 'a newly built matched native candidate and real private installed entry'
+    when: 'multiline benign input and foreign-write controls execute through the actual typed engine'
+    then: 'benign input reaches selected checks and actual foreign refusal has guard evidence, while malformed input fails closed and failed attempts remain retained'
+  - id: A3
+    given: 'committed framing repair and raw native checks'
+    when: 'current gates doctor independent review and normal source landing execute'
+    then: 'main retains the bounded repair and existing owed-work record preserves all unverified publication residency and machine-adoption outcomes'
+observability:
+  - 'Raw native command/status, frame counts and token/input equality, real guard journal and process cleanup; no caller environment values in diagnostic summaries'
+rollback:
+  - 'Normal corrective or revert commit while preserving prior immutable image generations and raw failed attempts'
+non_functional: {}
+contracts: []
