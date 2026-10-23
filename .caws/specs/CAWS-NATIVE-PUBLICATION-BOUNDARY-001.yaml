@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-publication-boundary
 created_at: '2026-10-22T07:54:35.268Z'
-updated_at: '2026-10-23T06:59:15.871Z'
+updated_at: '2026-10-23T07:14:30.944Z'
 created_by_session: '01a16072-908c-7033-9fd2-fb054ac7024b'
 blast_radius:
   modules:
@@ -51,6 +51,8 @@ scope:
     - packages/caws-cli/src/runtime/session-cache-admission.ts
     - packages/caws-cli/tests/runtime/session-cache-client.test.js
     - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/tests/runtime/protocol.test.js
   out: []
 invariants:
   - 'Native original identity and continuous writer custody govern effects; prepared bytes confer no authority'
