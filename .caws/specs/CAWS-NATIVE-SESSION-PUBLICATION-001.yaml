@@ -120,6 +120,7 @@ evidence:
     commit_sha: abdb033854c79ba506445e9abee7d84dacadd4b9
   - criterion_id: A5
     status: unchecked
-    evidence_ref: "Root accepts remaining superseded publication-boundary A1-A3 after source integration1e88c3c9: SQL CLOSED-to-publication/current-reader; warm Render A-to-SessionEnd-to-B with continuous same-Arc writer and exact worker correlation; beyond256 actual operations and replay restart/generation; full hostile composition. Actual-session-publication-04 proves bounded real SessionEnd consumption and unknown-fenced hostile retries only. Child records12189-12191 retained. First record attempt refused because the object-database merge left the checked-out base index at ad59b24f; exact old-tree/index equality and clean worktree verified before two-tree reconciliation. No cutover acceptance claimed."
-    recorded_at: "2026-10-23T09:33:05.490Z"
-    commit_sha: "1e88c3c9f3432540e33bd072bd3ea656b656ea30"
+    evidence_ref: "Candidate0699c408 repaired strict staged-image transformation and typed known-not-executed replay refund; focused actual controls preserve consumed tombstone and restore fresh capacity. warm-render-execution-02 exits1 after actual RenderA succeeds: SessionEnd compatibility path exits0 but native prefix absent because fixture project bootstrap makes native prefix ineligible. No RenderB; original manifest retains cleanupunknown caused by late identity capture and expected2worker accounting despite1created. Root retains same-profile warm repair and >256realoriginal qualification. No sustained residency, SQL publication, installed adoption or cutover acceptance."
+    recorded_at: "2026-10-23T11:02:25.683Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/warm-render-actual-02/manifest.json"
+    commit_sha: "0699c40877ec89ddddb60f169374f9fc5de1a030"
