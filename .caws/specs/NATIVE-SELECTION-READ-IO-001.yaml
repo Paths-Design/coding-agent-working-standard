@@ -1,10 +1,11 @@
 id: NATIVE-SELECTION-READ-IO-001
 title: 'Run invocation selection through bounded immutable read observations'
 mode: refactor
-lifecycle_state: active
-worktree: native-selection-observations
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded selection read abstraction accepted from committed a0d30c27 and retained source/emitted-pinned checks. All eight component criteria recorded and read back. Default live semantics preserved; captured observations grant no native admission, freshness, publication or cutover authority. Parent modernization continues in native-session-publication.'
 created_at: '2026-10-23T20:11:12.480Z'
-updated_at: '2026-10-23T20:11:13.735Z'
+updated_at: '2026-10-23T21:24:47.474Z'
 created_by_session: '01a16a40-3acd-7cd0-a124-4dfaf35c69f8'
 blast_radius:
   modules:
