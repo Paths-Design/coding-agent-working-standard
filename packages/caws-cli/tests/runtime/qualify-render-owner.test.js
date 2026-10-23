@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
 const ts = require('typescript');
 const source = fs.readFileSync(
   path.resolve(__dirname, '../../scripts/qualify-render-owner.ts'),
@@ -14,7 +15,16 @@ const source = fs.readFileSync(
 function loadAccounting(text = source, warmSessionEnd = true) {
   const tree = ts.createSourceFile('qualify-render-owner.ts', text, ts.ScriptTarget.ES2022, true);
   assert.equal(tree.parseDiagnostics.length, 0, 'qualifier source must parse');
-  const names = ['object', 'row', 'workerCleanupAccounting', 'warmFixtureUsage', 'transcript'];
+  const names = [
+    'object',
+    'row',
+    'workerCleanupAccounting',
+    'warmFixtureUsage',
+    'transcript',
+    'digest',
+    'publicationArtifactRole',
+    'verifySealInventory',
+  ];
   const declarations = tree.statements.filter(
     (node) => ts.isFunctionDeclaration(node) && names.includes(node.name?.text)
   );
@@ -35,18 +45,35 @@ function loadAccounting(text = source, warmSessionEnd = true) {
   assert.deepEqual(compiled.diagnostics, [], 'accounting declarations must transpile');
   const context = {
     assert,
+    Buffer,
+    createHash,
     module: { exports: {} },
     warmSessionEnd,
     project: '/private/qualifier-fixture/project',
   };
+  // Only convert fixture containers into the function's realm. Production uses
+  // one realm; strict identity checks must reach byte/membership assertions,
+  // rather than fail early on the VM boundary's array prototypes.
   vm.runInNewContext(
-    compiled.outputText + '\nmodule.exports = { account: workerCleanupAccounting, transcript };',
+    compiled.outputText +
+      `\nmodule.exports = {
+        account: workerCleanupAccounting,
+        transcript,
+        verifySealInventory(before, current, descriptors) {
+          const files = (values) => Array.from(values, ({ name, bytes }) => ({ name, bytes }));
+          return verifySealInventory(
+            files(before),
+            files(current),
+            Array.from(descriptors, (value) => ({ ...value }))
+          );
+        }
+      };`,
     context,
     { timeout: 1000 }
   );
   return context.module.exports;
 }
-const { account, transcript } = loadAccounting();
+const { account, transcript, verifySealInventory } = loadAccounting();
 function worker(nativeWorkerPid, backendPid) {
   const identity = { nativeWorkerPid, backendPid };
   return [
@@ -67,6 +94,133 @@ function worker(nativeWorkerPid, backendPid) {
     { event: 'worker_exit', ...identity, code: 0, signal: null },
   ];
 }
+
+function sealFixture() {
+  const names = [
+    ['.meta.json', 'metadata'],
+    ['session-index.json', 'index'],
+    ['store-projection.jsonl', 'projection'],
+    ['turn-001.json', 'turn'],
+    ['turn-001.payloads.json', 'spill'],
+  ];
+  const before = names.map(([name]) => ({ name, bytes: Buffer.from('retained ' + name) }));
+  const current = before.map(({ name, bytes }) => ({
+    name,
+    bytes: name === '.meta.json' ? Buffer.from('sealed metadata') : Buffer.from(bytes),
+  }));
+  const descriptors = names.map(([name, role], index) => ({
+    name,
+    role,
+    byteLength: current[index].bytes.length,
+    sha256: createHash('sha256').update(current[index].bytes).digest('hex'),
+  }));
+  return { names: names.map(([name]) => name), before, current, descriptors };
+}
+
+test('seal marker binds the full captured index, projection, turn and spill inventory', () => {
+  const f = sealFixture();
+  const before = [
+    ...f.before,
+    { name: '.session-envelope.json', bytes: Buffer.from('old prefix') },
+  ];
+  const after = [
+    ...f.current,
+    { name: '.session-envelope.json', bytes: Buffer.from('new prefix') },
+    { name: 'hook-invocations/original.jsonl', bytes: Buffer.from('operational journal') },
+  ];
+  expect(verifySealInventory(before, after, f.descriptors)).toEqual(f.names);
+  expect(f.current[0].bytes).not.toEqual(f.before[0].bytes);
+});
+
+test('marker cannot omit the index while retaining metadata and turns', () => {
+  const f = sealFixture();
+  expect(() =>
+    verifySealInventory(
+      f.before,
+      f.current,
+      f.descriptors.filter((descriptor) => descriptor.name !== 'session-index.json')
+    )
+  ).toThrow('complete captured publication inventory');
+});
+
+test('the A renderer must actually produce an index rather than omitting it on both sides', () => {
+  const f = sealFixture();
+  const withoutIndex = (values) => values.filter((value) => value.name !== 'session-index.json');
+  expect(() =>
+    verifySealInventory(
+      withoutIndex(f.before),
+      withoutIndex(f.current),
+      withoutIndex(f.descriptors)
+    )
+  ).toThrow('actual A session index missing before seal');
+});
+
+test.each([
+  'session-index.json',
+  'store-projection.jsonl',
+  'turn-001.json',
+  'turn-001.payloads.json',
+])('seal cannot remove retained %s even when the marker also omits it', (name) => {
+  const f = sealFixture();
+  expect(() =>
+    verifySealInventory(
+      f.before,
+      f.current.filter((file) => file.name !== name),
+      f.descriptors.filter((descriptor) => descriptor.name !== name)
+    )
+  ).toThrow('seal current publication inventory differs');
+});
+
+test('seal cannot change index bytes and issue a matching new descriptor', () => {
+  const f = sealFixture();
+  const file = f.current.find((item) => item.name === 'session-index.json');
+  file.bytes = Buffer.from('changed index');
+  const descriptor = f.descriptors.find((item) => item.name === file.name);
+  descriptor.byteLength = file.bytes.length;
+  descriptor.sha256 = createHash('sha256').update(file.bytes).digest('hex');
+  expect(() => verifySealInventory(f.before, f.current, f.descriptors)).toThrow(
+    'seal changed retained publication artifact: session-index.json'
+  );
+});
+
+test('seal cannot add a new publication artifact even if marker membership matches it', () => {
+  const f = sealFixture();
+  const added = { name: 'turn-002.json', bytes: Buffer.from('unexpected turn') };
+  const descriptor = {
+    name: added.name,
+    role: 'turn',
+    byteLength: added.bytes.length,
+    sha256: createHash('sha256').update(added.bytes).digest('hex'),
+  };
+  expect(() =>
+    verifySealInventory(f.before, [...f.current, added], [...f.descriptors, descriptor])
+  ).toThrow('seal current publication inventory differs');
+});
+
+test.each([
+  ['role', 'turn'],
+  ['byteLength', 0],
+  ['sha256', '0'.repeat(64)],
+])('marker index %s must match its captured role and exact current bytes', (field, value) => {
+  const f = sealFixture();
+  f.descriptors.find((item) => item.name === 'session-index.json')[field] = value;
+  expect(() => verifySealInventory(f.before, f.current, f.descriptors)).toThrow('marker artifact');
+});
+
+test('duplicate or unordered descriptors cannot stand in for a complete canonical inventory', () => {
+  const f = sealFixture();
+  const duplicate = [...f.descriptors];
+  duplicate[1] = duplicate[0];
+  expect(() => verifySealInventory(f.before, f.current, duplicate)).toThrow(
+    'complete captured publication inventory'
+  );
+  expect(() => verifySealInventory(f.before, f.current, [...f.descriptors].reverse())).toThrow(
+    'complete captured publication inventory'
+  );
+  expect(() => verifySealInventory([...f.before, f.before[1]], f.current, f.descriptors)).toThrow(
+    'duplicate observed publication artifact'
+  );
+});
 
 test('warm input supplies recognized per-turn Codex usage before the next turn boundary', () => {
   const rows = transcript(2).trimEnd().split('\n').map(JSON.parse);

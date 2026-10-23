@@ -284,6 +284,61 @@ function sessionEndInput(): string {
 function digest(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
 }
+/** Independent qualifier oracle for the finite published artifact namespace. */
+function publicationArtifactRole(name: string): string | undefined {
+  if (name === '.meta.json') return 'metadata';
+  if (name === 'session-index.json') return 'index';
+  if (name === 'store-projection.jsonl') return 'projection';
+  if (/^turn-[0-9]+\.payloads\.json$/.test(name)) return 'spill';
+  if (/^turn-[0-9]+\.json$/.test(name)) return 'turn';
+  return undefined;
+}
+/** Seal replaces metadata while retaining every other captured published leaf.
+ * Operational journals/envelopes are outside this artifact namespace.
+ */
+function verifySealInventory(
+  before: readonly { name: string; bytes: Uint8Array }[],
+  current: readonly { name: string; bytes: Uint8Array }[],
+  descriptors: readonly Data[]
+): readonly string[] {
+  const selected = (files: readonly { name: string; bytes: Uint8Array }[]) => {
+    const artifacts = files.filter((file) => publicationArtifactRole(file.name) !== undefined);
+    assert.equal(
+      new Set(artifacts.map((file) => file.name)).size,
+      artifacts.length,
+      'duplicate observed publication artifact'
+    );
+    return new Map(artifacts.map((file) => [file.name, file.bytes]));
+  };
+  const prior = selected(before),
+    after = selected(current);
+  assert(prior.has('.meta.json'), 'actual A metadata missing before seal');
+  assert(prior.has('session-index.json'), 'actual A session index missing before seal');
+  assert(
+    [...prior.keys()].some((name) => publicationArtifactRole(name) === 'turn'),
+    'actual A rendered turn missing before seal'
+  );
+  const names = [...prior.keys()].sort();
+  assert.deepEqual([...after.keys()].sort(), names, 'seal current publication inventory differs');
+  assert.deepEqual(
+    descriptors.map((item) => item.name),
+    names,
+    'marker must bind the complete captured publication inventory'
+  );
+  for (const [index, name] of names.entries()) {
+    const descriptor = descriptors[index]!;
+    const bytes = after.get(name)!;
+    assert.equal(descriptor.role, publicationArtifactRole(name), 'marker artifact role differs');
+    assert.equal(descriptor.byteLength, bytes.length, 'marker artifact byte length differs');
+    assert.equal(descriptor.sha256, digest(bytes), 'marker artifact digest differs');
+    if (name !== '.meta.json')
+      assert(
+        Buffer.from(prior.get(name)!).equals(Buffer.from(bytes)),
+        'seal changed retained publication artifact: ' + name
+      );
+  }
+  return names;
+}
 function put(file: string, bytes: string | Uint8Array): void {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   fs.writeFileSync(file, bytes, { mode: 0o600 });
@@ -1153,9 +1208,10 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   );
   assert.equal(beforeMetadataSource.root.kind, 'object');
   const beforeMetadata = read(path.join(session, '.meta.json'));
-  const turnBytes = list(session)
-    .filter((name) => /^turn-\d+\.json$/.test(name))
+  const priorArtifacts = list(session)
+    .filter((name) => publicationArtifactRole(name) !== undefined)
     .map((name) => ({ name, bytes: fs.readFileSync(path.join(session, name)) }));
+  const turnBytes = priorArtifacts.filter((item) => publicationArtifactRole(item.name) === 'turn');
   assert.equal(turnBytes.length, 1, 'seal must consume the actual A output');
   snapshot(session, path.join(directory, 'before'));
   const before = new Set(list(path.join(session, 'hook-invocations')));
@@ -1436,16 +1492,14 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     marker.terminalDigest,
     digest(JSON.stringify([marker.correlation, 'published', marker.artifacts]))
   );
-  assert.deepEqual(
-    (marker.artifacts as Data[]).map((item) => item.name).sort(),
-    ['.meta.json', ...turnBytes.map((item) => item.name)].sort(),
-    'marker must bind the complete retained inventory, including unchanged A turns'
+  const currentArtifacts = list(session)
+    .filter((name) => publicationArtifactRole(name) !== undefined)
+    .map((name) => ({ name, bytes: fs.readFileSync(path.join(session, name)) }));
+  const sealedInventory = verifySealInventory(
+    priorArtifacts,
+    currentArtifacts,
+    marker.artifacts as Data[]
   );
-  for (const descriptor of marker.artifacts as Data[]) {
-    const artifact = fs.readFileSync(path.join(session, String(descriptor.name)));
-    assert.equal(artifact.length, descriptor.byteLength);
-    assert.equal(digest(artifact), descriptor.sha256);
-  }
   put(path.join(directory, 'marker.bin'), markerBytes);
   put(path.join(directory, 'metadata.bin'), metadataBytes);
   const events = ownerObservations();
@@ -1535,6 +1589,7 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     consumer,
     events,
     sealOperations,
+    sealedInventory,
     nativeCustody,
     requestCleanup,
     beforeObservation,
