@@ -1,9 +1,10 @@
 id: CAWS-STOCK-ROUTE-PARSE-INPUT-DIGEST-001
 title: 'Stock route: record the reviewed digest of parse-input.sh after its comment-only revision'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: stock-route-digest
 created_at: '2026-10-23T06:01:02.579Z'
-updated_at: '2026-10-23T06:01:02.579Z'
+updated_at: '2026-10-23T06:01:05.997Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
