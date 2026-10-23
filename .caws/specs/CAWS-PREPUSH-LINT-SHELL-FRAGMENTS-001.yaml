@@ -1,0 +1,32 @@
+id: CAWS-PREPUSH-LINT-SHELL-FRAGMENTS-001
+title: 'lint-shell: parse service-image render fragments with whole-line tokens elided'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-23T05:26:54.967Z'
+updated_at: '2026-10-23T05:26:54.967Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'caws-cli lint-shell gate script'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/lint-shell.sh'
+  out: []
+invariants:
+  - 'Every templates/**/*.sh is still parsed by bash -n; only lines consisting solely of a __CAWS_IMAGE_[A-Z_]+__ token are elided before parsing'
+  - 'A syntax error anywhere else in a fragment, or in any non-fragment template, still fails the gate'
+acceptance:
+  - id: A1
+    given: 'main refuses pre-push at lint-shell with bash -n syntax errors in runtime/service-image/handler-routes.sh and libraries.sh (whole-line __CAWS_IMAGE_*_CASES__ tokens inside case bodies)'
+    when: 'bash scripts/lint-shell.sh runs at the candidate revision'
+    then: 'it exits 0 and reports every template parsed, naming the fragments whose token lines were elided'
+  - id: A2
+    given: 'a disposable copy of the gate with a fixture templates dir'
+    when: 'a fragment carries a syntax error outside its token line, and separately a non-fragment template carries a syntax error'
+    then: 'the gate exits non-zero for each and names the file (negative controls), and exits 0 for a fragment whose only unparseable line is the token'
+rollback:
+  - 'revert the hotfix merge commit'
+non_functional: {}
+contracts: []
