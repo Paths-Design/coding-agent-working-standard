@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-source-landing
 created_at: '2026-10-22T22:51:57.793Z'
-updated_at: '2026-10-22T23:36:09.003Z'
+updated_at: '2026-10-23T11:54:47.750Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -307,6 +307,9 @@ scope:
     - packages/caws-cli/tests/transcripts/store-json.test.js
     - packages/caws-cli/tests/transcripts/zcode.test.ts
     - packages/caws-cli/tsconfig.vnext.json
+    - packages/caws-cli/tests/runtime/fixtures/agent-surface-json-lookup.sh
+    - .github/workflows/release-qualification.yml
+    - scripts/ci-governance-artifacts.test.mjs
 invariants:
   - 'Preserve main fixes and matched producer/consumer/build contracts; preserve foreign worktrees and all parent publication, residency and machine-cutover obligations'
   - 'A coherent source landing does not accept full runtime cutover, first-party Python retirement, ordinary publication or thirteen-session four-repository qualification'
