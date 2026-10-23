@@ -53,11 +53,11 @@ assert_rewrite_preserves_governed_failure() {
   # The envelope is valid JSON with the expected decision (jq is a hook-pack
   # dependency — quiet-merge itself shells out to it).
   decision="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')"
-  [[ "$decision" == "allow" ]]
+  assert_equal "$decision" "allow"
   rewritten="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.updatedInput.command')"
-  [[ "$rewritten" == "cd \"$CAWS_TEST_REPO\" && caws worktree merge wt-x" ]]
-  [[ "$rewritten" != *'2>/dev/null'* ]]
-  [[ "$rewritten" != *'git log'* ]]
+  assert_equal "$rewritten" "cd \"$CAWS_TEST_REPO\" && caws worktree merge wt-x"
+  [[ "$rewritten" != *'2>/dev/null'* ]] || return 1
+  [[ "$rewritten" != *'git log'* ]] || return 1
 }
 
 @test "quiet-merge: rewritten merge preserves a governed failure status and diagnostics" {
