@@ -39,3 +39,8 @@ evidence:
     evidence_ref: "Worktree shared-pack-client-input at the candidate: turbo build exit 0; npx jest tests/init/hook-install-layout.test.js tests/init/pack-fingerprint.test.js tests/init/init-hook-pack-render.test.js tests/adapter/machine-adoption.test.js --ci exit 0, 4 suites 193/193 (log ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/client-input-wt-jest.log). Baseline main 21a60fc9 pre-push log push-main-21a60fc9.log: init-hook-pack-render 5 failed, machine-adoption init exit 1."
     recorded_at: "2026-10-23T06:33:35.397Z"
     commit_sha: bd4a2c75c546c5d4cf40048f024f5f529895f328
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "pin-negative-control.js (artifacts dir) against canonical dist manifest at 21a60fc9 (version 106, client declared): declaresClient true, exit 1 (pin's manifest arm fails); against the lane dist: version 105, declaresClient false, exit 0. The no-managed-header arm is asserted directly in the pin test and holds on the live file."
+    recorded_at: "2026-10-23T06:33:40.712Z"
+    commit_sha: bd4a2c75c546c5d4cf40048f024f5f529895f328
