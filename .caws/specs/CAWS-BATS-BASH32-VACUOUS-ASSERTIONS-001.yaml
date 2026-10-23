@@ -1,11 +1,9 @@
 id: CAWS-BATS-BASH32-VACUOUS-ASSERTIONS-001
 title: 'Make standalone [[ assertions in hook bats suites fail under bash 3.2'
 mode: fix
-lifecycle_state: closed
-resolution: completed
-closure_notes: 'All 61 standalone [[ statements in nine hook bats suites rewritten to bats-assert forms or [[ ]] || return 1 with predicates preserved byte for byte, so a false assertion fails under /bin/bash 3.2 regardless of position. Evidence: 33 of 33 negated mutants red, baseline and rewritten TAP identical for 179 tests, inventory classifier 0 rows at fb1ba781; artifacts under ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/repair/. Not claimed: Linux bash, the dist used for the campaign was a sibling worktree build, owned-PGID receipts for that campaign. No pack version or fingerprint change.'
+lifecycle_state: active
 created_at: '2026-10-22T21:39:10.320Z'
-updated_at: '2026-10-23T03:20:02.378Z'
+updated_at: '2026-10-23T03:23:20.230Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
