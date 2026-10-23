@@ -66,6 +66,6 @@ evidence:
     commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
   - criterion_id: A3
     status: unchecked
-    evidence_ref: "Workflow source and executable blocks establish pinned Rust/locked fetch before offline build and unconditional macOS custody job on PR/push main. Full-repo hash inputs and real Turbo Rust-only fixture invalidation inspected; local actual custody16 pass. Hosted clean npm ci/macOS and Ubuntu execution NOT OBSERVED; root retains obligation after landing. No hosted pass or branch-protection claim. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/turbo-rust-invalidation-04/summary.json; --verify below checks commit existence only, not external artifact or execution."
-    recorded_at: "2026-10-23T08:32:35.856Z"
-    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
+    evidence_ref: "Hosted clean CI execution remains owed; normal push01 refused lint no-undef and first build custody mismatch despite later6454 passing tests, remote unchanged. Candidate d39121d3 plus e2c50a48 imports explicit timers and adds diagnostic-only checkpoints without predicate weakening. Retained final54-case hostile suite03, ordinary build01 and explicit qualifier ESLint01 all exit0 with committed source pins; timestamp02 failure retained and fixture repaired to forward mtime. Review C1 was lint not runtime; C2 metadata-only assertion passes; C3 all internal handles carry Buffer bytes; C4 checkpoint assertions expose count drift. Original intermittent marker mutation cause unresolved; one later build is not a fix claim. Evidence /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/. Root owns normal push retry and hosted macOS/Ubuntu results."
+    recorded_at: "2026-10-23T09:48:30.255Z"
+    commit_sha: e2c50a48
