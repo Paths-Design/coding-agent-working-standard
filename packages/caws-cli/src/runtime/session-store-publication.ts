@@ -15,12 +15,20 @@ import {
 import { createSessionLogPublicationConsumer } from './session-log';
 import { MAX_PUBLICATION_ARTIFACT_BYTES } from './session-publication-wire';
 import { RuntimeProtocolError } from './protocol';
+import {
+  STORE_JSON_PROFILE,
+  snapshotStoreJsonProfile,
+  type StoreJsonProfile,
+} from '../transcripts/store-json';
 
 export interface SessionStorePublicationOptions {
   readonly port: NativeTranscriptStorePublicationPort;
   readonly canonicalRoot: string;
   readonly sessionId: string;
   readonly limits: StoreProjectionLimits;
+  /** Existing callers default to 4300. Ordinary activation must supply an earned
+   * SQL profile explicitly; this is separate from prepareRender's profile. */
+  readonly sqlProfile?: StoreJsonProfile;
   readonly maximumProjectionBytes: number;
   /** Caller must supply admitted renderer context/calendar; no fixture defaults. */
   readonly prepareRender: (
@@ -43,12 +51,17 @@ export async function publishNativeTranscriptStore(
     !['opencode', 'zcode'].includes(options.port.surface)
   )
     throw new RuntimeProtocolError('Invalid native store publication adapter input');
+  const suppliedProfile = options.sqlProfile;
+  const sqlProfile = snapshotStoreJsonProfile(
+    suppliedProfile === undefined ? STORE_JSON_PROFILE : suppliedProfile
+  );
   const consume = createSessionLogPublicationConsumer(options.consumer);
   const projection = await reconstructNativeTranscriptStore(
     options.port,
     options.canonicalRoot,
     options.port.surface,
-    options.limits
+    options.limits,
+    sqlProfile
   );
   // Serialization follows actual exhausted acquisition; assertClosed alone
   // cannot authorize the handoff, which the same port independently enforces.

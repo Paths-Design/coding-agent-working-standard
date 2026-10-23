@@ -8,6 +8,10 @@ const { publishNativeTranscriptStore } = require('../../dist/runtime/session-sto
 const { getMember } = require('../../dist/transcripts/lossless-json');
 const { StoreProjectionContractError } = require('../../dist/transcripts/store-projection');
 const {
+  STORE_JSON_UNLIMITED_PROFILE,
+  StoreJsonError,
+} = require('../../dist/transcripts/store-json');
+const {
   TRANSCRIPT_STORE_CAPABILITY,
   SESSION_PUBLICATION_CAPABILITY,
   RuntimeProtocolError,
@@ -91,7 +95,7 @@ function setup(options = {}) {
   const text = (value) => ({ storageClass: 'text', base64: Buffer.from(value).toString('base64') });
   const cells = [
     text('m'),
-    text('{"role":"user"}'),
+    text(options.messageJson || '{"role":"user"}'),
     text('p'),
     text('{"type":"text","text":"hello"}'),
     { storageClass: 'integer', decimal: '0' },
@@ -590,3 +594,21 @@ test.each([undefined, null])(
     expect(state.render).not.toHaveBeenCalled();
   }
 );
+
+test('publication forwards explicit SQL profile independently of renderer preparation', async () => {
+  const state = setup({ messageJson: '{"role":"user","ignored":' + '7'.repeat(4301) + '}' });
+  const result = await state.run({ sqlProfile: STORE_JSON_UNLIMITED_PROFILE });
+  expect(result.status).toBe('published');
+  expect(state.render).toHaveBeenCalledTimes(1);
+  expect(state.published).toHaveBeenCalledTimes(1);
+});
+
+test('unsupported SQL profile is refused before native acquisition or renderer callbacks', async () => {
+  const state = setup();
+  await expect(state.run({ sqlProfile: 'unearned-profile' })).rejects.toBeInstanceOf(
+    StoreJsonError
+  );
+  expect(state.writes).toHaveLength(0);
+  expect(state.render).not.toHaveBeenCalled();
+  expect(state.published).not.toHaveBeenCalled();
+});

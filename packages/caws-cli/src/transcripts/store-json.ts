@@ -3,7 +3,17 @@ import { isSharedArrayBuffer, isUint8Array } from 'node:util/types';
 import { codepointText, type CodepointText } from './codepoint-text';
 import { jsonNumber, type JsonNumber } from './lossless-json';
 
+/** Legacy explicit profile and reconstruction default; never inferred from the host. */
 export const STORE_JSON_PROFILE = 'cpython-3.11.13-unicode14-int4300' as const;
+export const STORE_JSON_UNLIMITED_PROFILE = 'cpython-3.11.13-unicode14-int0' as const;
+export type StoreJsonProfile = typeof STORE_JSON_PROFILE | typeof STORE_JSON_UNLIMITED_PROFILE;
+
+/** Validate the caller's qualified SQL profile. This grants no native admission. */
+export function snapshotStoreJsonProfile(profile: unknown): StoreJsonProfile {
+  if (profile !== STORE_JSON_PROFILE && profile !== STORE_JSON_UNLIMITED_PROFILE)
+    throw new StoreJsonError('request', 'unsupported_profile', 0, 'request');
+  return profile;
+}
 export interface StoreJsonLimits {
   readonly maxInputBytes: number;
   readonly maxDecodedCodepoints: number;
@@ -17,7 +27,7 @@ export interface StoreJsonLimits {
 export interface StoreJsonRequest {
   readonly storageClass: 'text' | 'blob';
   readonly bytes: Uint8Array;
-  readonly profile: typeof STORE_JSON_PROFILE;
+  readonly profile: StoreJsonProfile;
   readonly limits: StoreJsonLimits;
 }
 export interface StoreJsonObject {
@@ -78,8 +88,7 @@ export function parseStoreJson(request: StoreJsonRequest): StoreJsonValue {
   ): never => {
     throw new StoreJsonError(category, code, offset, unit);
   };
-  if (!request || request.profile !== STORE_JSON_PROFILE)
-    fail('request', 'unsupported_profile', 0, 'request');
+  const profile = snapshotStoreJsonProfile(request?.profile);
   const storageClass = request.storageClass;
   if (storageClass !== 'text' && storageClass !== 'blob')
     fail('request', 'storage_class', 0, 'request');
@@ -256,7 +265,7 @@ export function parseStoreJson(request: StoreJsonRequest): StoreJsonValue {
     };
     while (offset < points.length) {
       let point = points[offset++]!;
-      if (point === 34) return codepointText(value, STORE_JSON_PROFILE);
+      if (point === 34) return codepointText(value, profile);
       if (point < 32) syntax();
       if (point === 92) {
         const escaped = points[offset++];
@@ -344,7 +353,8 @@ export function parseStoreJson(request: StoreJsonRequest): StoreJsonValue {
     }
     if (offset - from > limits.maxNumberChars) fail('resource', 'number_chars', from);
     const digits = offset - from - (points[from] === 45 ? 1 : 0);
-    if (integer && digits > 4300) fail('integer_limit', 'integer_digits', from);
+    if (integer && profile === STORE_JSON_PROFILE && digits > 4300)
+      fail('integer_limit', 'integer_digits', from);
     return jsonNumber(spelling(from, offset));
   };
   type Frame =

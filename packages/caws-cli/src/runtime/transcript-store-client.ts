@@ -10,6 +10,11 @@ import {
   type StoreProjectionLimits,
 } from '../transcripts/store-projection';
 import type { StoreUtcCalendarResult } from '../transcripts/store-timestamp';
+import {
+  STORE_JSON_PROFILE,
+  snapshotStoreJsonProfile,
+  type StoreJsonProfile,
+} from '../transcripts/store-json';
 import { parseJsonSource } from './json-custody';
 import { RuntimeProtocolError, TRANSCRIPT_STORE_CAPABILITY, type RuntimeRequest } from './protocol';
 import {
@@ -77,15 +82,19 @@ export async function reconstructNativeTranscriptStore(
   port: NativeTranscriptStorePort,
   canonicalRoot: string,
   surface: 'opencode' | 'zcode',
-  limits: StoreProjectionLimits
+  limits: StoreProjectionLimits,
+  requestedProfile: StoreJsonProfile = STORE_JSON_PROFILE
 ): Promise<StoreProjection> {
+  // Invalid qualification cannot begin an acquisition or pretend cleanup ran.
+  const profile = snapshotStoreJsonProfile(requestedProfile);
   let projection: StoreProjection;
   try {
     projection = await reconstructStoreProjection(
       port.rows(canonicalRoot),
       surface,
       (seconds) => port.calendar(seconds),
-      limits
+      limits,
+      profile
     );
   } catch (primary) {
     try {
