@@ -95,8 +95,8 @@ assert_scope_admitted() {
   [ -z "$output" ]
 }
 assert_scope_refused() {
-  [[ "$output" == *"not in the defined scope"* ]]
-  [[ "$output" == *"TEST-001"* ]]
+  assert_output --partial "not in the defined scope"
+  assert_output --partial "TEST-001"
 }
 
 # Ask the shared allowlist lib directly. Returns the function's own exit code,
@@ -177,7 +177,7 @@ _write_allowlisted() {
   _scope_guard_refusing_kernel "$foreign/native/core.rs"
   rm -rf "$foreign"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"DIFFERENT repository"* ]]
+  assert_output --partial "DIFFERENT repository"
 }
 
 @test "a config naming a reserved prefix is rejected whole, admitting nothing" {
@@ -268,8 +268,8 @@ _write_allowlisted() {
 '
   run_guard_missing_lib scope-guard.sh guard-config.sh "$(hook_envelope Edit "$CAWS_TEST_REPO/vendor/thirdparty.ts")"
   clear_yaml_policy
-  [[ "$output" == *"non_governed_zones are NOT honored"* ]]
-  [[ "$output" == *"caws init --adopt"* ]]
+  assert_output --partial "non_governed_zones are NOT honored"
+  assert_output --partial "caws init --adopt"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -311,8 +311,8 @@ _god_object_threshold() {
 @test "god-object: ENV outranks CONFIG (existing settings.json tuning keeps working)" {
   write_policy '{"version":1,"surfaces":{},"guards":{"god-object-check.sh":{"thresholds":{"loc":100}}}}'
   _god_object_threshold "10"
-  [[ "$output" == *"threshold: 10"* ]]
-  [[ "$output" != *"threshold: 100"* ]]
+  assert_output --partial "threshold: 10"
+  refute_output --partial "threshold: 100"
 }
 
 @test "god-object: CONFIG outranks the shipped default when no env is set" {
@@ -330,7 +330,7 @@ _god_object_threshold() {
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
     bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/god-object-check.sh'"
-  [[ "$output" == *"threshold: 100"* ]]
+  assert_output --partial "threshold: 100"
 }
 
 @test "loc-delta: CONFIG outranks the shipped default" {
@@ -348,7 +348,7 @@ _god_object_threshold() {
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
     bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/loc-delta-check.sh'"
-  [[ "$output" == *"threshold: 20"* ]]
+  assert_output --partial "threshold: 20"
 }
 
 @test "loc-delta: ENV outranks CONFIG" {
@@ -367,8 +367,8 @@ _god_object_threshold() {
     HOOK_CWD="$CAWS_TEST_REPO" \
     CAWS_LOC_DELTA_WARN_THRESHOLD="15" \
     bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/loc-delta-check.sh'"
-  [[ "$output" == *"threshold: 15"* ]]
-  [[ "$output" != *"threshold: 20"* ]]
+  assert_output --partial "threshold: 15"
+  refute_output --partial "threshold: 20"
 }
 
 @test "loc-delta: the threshold key is 'delta'; 'loc' is refused and applies nothing" {
@@ -390,7 +390,7 @@ _god_object_threshold() {
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
     bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/loc-delta-check.sh'"
-  [[ "$output" != *"threshold: 20"* ]]
+  refute_output --partial "threshold: 20"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -403,7 +403,7 @@ _god_object_threshold() {
   # and would let this arm pass without the scope path running at all.
   write_policy "$(scope_prefix_policy 'native/')"
   run_guard_missing_lib scope-guard.sh guard-config.sh "$(hook_envelope Edit "native/core.rs")"
-  [[ "$output" == *'"decision": "block"'* ]]
+  assert_output --partial '"decision": "block"'
 }
 
 @test "write-allowlist without the loader still allowlists its SHIPPED paths" {
@@ -493,6 +493,6 @@ COUNTER
   # unconfigured run produces depends on fixture state the earlier arms leave
   # behind (whether `caws scope show --json` can render a diagnostic for this
   # repo at all), so asserting the wording made this arm order-dependent.
-  [[ "$dispatch_output" != *'"decision": "block"'* ]]
-  [[ "$unconfigured_output" == *'"decision": "block"'* ]]
+  [[ "$dispatch_output" != *'"decision": "block"'* ]] || return 1
+  [[ "$unconfigured_output" == *'"decision": "block"'* ]] || return 1
 }

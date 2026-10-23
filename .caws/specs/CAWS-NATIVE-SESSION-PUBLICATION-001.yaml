@@ -1,0 +1,101 @@
+id: CAWS-NATIVE-SESSION-PUBLICATION-001
+title: 'Integrate original-bound native publication and exact SessionEnd sealing'
+mode: feature
+lifecycle_state: active
+worktree: native-session-publication
+created_at: '2026-10-22T07:45:38.932Z'
+updated_at: '2026-10-22T21:55:05.965Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Resident native session operations, anchored publication and ordinary typed consumers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/protocol.rs'
+    - 'packages/caws-native/src/render_bridge.rs'
+    - 'packages/caws-native/src/runner.rs'
+    - 'packages/caws-native/src/lib.rs'
+    - 'packages/caws-native/src/render_owner.rs'
+    - 'packages/caws-native/src/render_owner/'
+    - 'packages/caws-native/src/session_publication.rs'
+    - 'packages/caws-native/src/session_publication_wire.rs'
+    - 'packages/caws-native/src/service_journal/custody.rs'
+    - 'packages/caws-native/src/service_journal/'
+    - 'packages/caws-native/tests/'
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/engine-entry.ts'
+    - 'packages/caws-cli/src/runtime/protocol.ts'
+    - 'packages/caws-cli/src/runtime/transcript-store-client.ts'
+    - 'packages/caws-cli/src/runtime/session-publication-client.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/runtime/handler-executor.ts'
+    - 'packages/caws-cli/src/transcripts/session-seal-prepare.ts'
+    - 'packages/caws-cli/tests/runtime/'
+    - 'packages/caws-cli/tests/transcripts/session-seal-prepare.test.ts'
+    - 'packages/caws-cli/tests/transcripts/run.cjs'
+    - 'packages/caws-cli/tests/transcripts/tsconfig.json'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-log.schema.json'
+    - 'packages/caws-cli/templates/hook-packs/claude-code/README.md'
+    - 'packages/caws-cli/templates/hook-packs/shared/session-log.sh'
+    - 'docs/architecture/caws-native-runtime.md'
+    - packages/caws-cli/src/runtime/session-publication-wire.ts
+    - packages/caws-native/src/render_writer.rs
+    - packages/caws-native/src/service_journal.rs
+  out: []
+invariants:
+  - 'Only independently captured original invocation and native custody authorize destination effects; prepared bytes and correlation grant none'
+  - 'No publication after stopped or unsettled acquisition; preserve truthful post-rename uncertainty and no unsafe replay'
+  - 'Release heavy records after definitive terminal consumption while retaining durable original-ID rejection across same-home restart and generation'
+  - 'Preserve exact provider counts, top-level model order, unrelated metadata and explicit historical-summary preservation; never fallback after a native attempt'
+  - 'Continuous same-Arc writer custody spans actual warm-backend retirement, acquisition, anchored publication and exact ordinary-reader CONSUMED; keep at most 256 live heavy operations separately from durable terminal original-ID history, reject replays across restart/generation, and refuse explicit history exhaustion without eviction.'
+acceptance:
+  - id: A1
+    given: 'fresh original store and SessionEnd invocations'
+    when: 'operations are admitted and consumed'
+    then: 'native binding and durable replay reservation precede effects and heavy-record release restores capacity without replay after restart or generation change'
+  - id: A2
+    given: 'actual exhausted store acquisition and confirmed CLOSED delivery'
+    when: 'prepared projection and renderer artifacts traverse the same operation'
+    then: 'native fenced anchored publication and the ordinary reader consume the exact current generation without first-party per-handler interpreter fan-out'
+  - id: A3
+    given: 'ordinary SessionEnd with existing metadata and ordered turn-v2 files'
+    when: 'typed preparation and native publication execute'
+    then: 'all seven exact counts and independent models are preserved including the retained 4300-digit value while no-contribution summaries are explicitly preserved and unrelated metadata remains exact'
+  - id: A4
+    given: 'hostile paths changed snapshots superseded attempts cancellation failed closure and lost receipts'
+    when: 'publication or consumption is attempted'
+    then: 'no unauthorized partial or stale result is accepted and uncertain effects retain truthful custody without automatic replay'
+  - id: A5
+    given: 'warm renderer and repeated original invocations beyond the prior finite capacity'
+    when: 'real frontend engine owner and ordinary consumers execute'
+    then: 'writer handoff retains one lock and evidence shows terminal consumption release current-reader selection and replay refusal'
+  - id: A6
+    given: 'the committed integrated candidate'
+    when: 'focused checks gates doctor and independent review run'
+    then: 'source and existing documentation match inspected behavior and full package harness fairness and machine cutover obligations remain explicitly with the parent'
+observability:
+  - 'Actual native and engine frames, original and output digests, current-attempt markers, terminal truth, reader observations, retained failures and process cleanup'
+rollback:
+  - 'Revert the integrated source through normal governed history; retain failed and successful artifacts and preserve existing selected runtime'
+non_functional:
+  security:
+    - 'Bound all framing arithmetic and filesystem work; nofollow anchored effects and no broad row-control or authority widening'
+contracts:
+  - name: 'native-session-publication'
+    type: behavior
+  - name: 'session-seal-metadata'
+    type: contract-test
+evidence:
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "Human-authorized root ownership transfers11486/11487 remain complete; prior app/AIM notices unavailable, no worker started, original guard refusals retained and no guard/identity changes. Final bounded helper42e2 is integrated atabdb with3PASS preparation criteria; parser/number/resource controls establish the string API only. All original native hostile publication obligations remain unchecked: original binding, replaced inputs, writer custody, cancellation/closure, nofollow anchored effects, lost receipts, truthful uncertain effects and replay rejection need actual continuous operation and ordinary consumer evidence. Source-only progress replaces earlier c1/review-pending checkpoint; actual native effects not yet implemented/qualified."
+    recorded_at: "2026-10-22T15:23:26.512Z"
+    commit_sha: abdb033854c79ba506445e9abee7d84dacadd4b9
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Pure SessionEnd preparation42e2fa50 landed through normal no-close mergeabdb0338; all3 integrated source/schema/test blobs match. Child A1/A2/A3 PASS11509-11511 and A4 UNCHECKED11516 were read back with matching events. Actual check-03 strict compilation0 and Node22.22.2 TAP42pass/0fail/0skip include retained real4300-digit counts; Ajv6compatibility controls plus actual historical output validate; compiled Number-addition fault fails exact large-count test41pass/1fail. Independent committed reviewer found historical-fraction schema and mathematical-version2 gaps, both source-grounded and repaired before acceptance. No ordinary SessionEnd capture, writer barrier, anchored metadata replacement or actual reader consumption yet; pure helper grants no filesystem/capture/publication authority. Native Rust boundary remains03dclean/rootowned. Root retains A3 ordinary integration and all parent obligations; no native or production Python retirement claim."
+    recorded_at: "2026-10-22T15:23:19.656Z"
+    commit_sha: abdb033854c79ba506445e9abee7d84dacadd4b9

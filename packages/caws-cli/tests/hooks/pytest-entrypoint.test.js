@@ -26,7 +26,9 @@ function artifacts(label) {
   const parent = process.env.CAWS_EXPERIMENT_ARTIFACTS || os.tmpdir();
   if (!path.isAbsolute(parent)) throw new Error('CAWS_EXPERIMENT_ARTIFACTS must be absolute');
   fs.mkdirSync(parent, { recursive: true });
-  const root = fs.mkdtempSync(path.join(parent, `pytest-entrypoint-${label}-`));
+  // Handler selection reports canonical paths; on macOS os.tmpdir() sits under
+  // the /var -> /private/var symlink, so the fixture root must be canonical too.
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(parent, `pytest-entrypoint-${label}-`)));
   fs.writeFileSync(
     path.join(root, 'test-context.json'),
     JSON.stringify(

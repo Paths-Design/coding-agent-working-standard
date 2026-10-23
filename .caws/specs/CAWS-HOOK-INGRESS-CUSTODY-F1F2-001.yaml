@@ -1,0 +1,120 @@
+id: CAWS-HOOK-INGRESS-CUSTODY-F1F2-001
+title: 'Decide mail custody from the original hook bytes; inherited HOOK_* env never vouches'
+mode: fix
+lifecycle_state: active
+worktree: f1f2-ingress-custody
+created_at: '2026-10-22T21:51:53.116Z'
+updated_at: '2026-10-22T21:52:22.595Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/templates/hook-packs/shared'
+    - 'packages/caws-cli/templates/hook-packs/codex/hooks/lib'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh'
+    - 'packages/caws-cli/templates/hook-packs/codex/hooks/lib/parse-input.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/pre_tool_use.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/post_tool_use.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/pre_compact.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/session_start.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/session_end.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/stop.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/runtime-paths.sh'
+    - 'packages/caws-cli/tests/hooks/heartbeat-actor-custody.test.js'
+    - 'packages/caws-cli/tests/hooks/bats/dispatch-ingress.bats'
+  out: []
+invariants:
+  - 'No environment value inherited by a dispatcher or handler is ever trusted toward a main or subagent custody verdict; an inherited value can only make custody uncertain'
+  - 'The bytes handed to the nine guard handlers stay identical across slots and equal to the current re-serialized payload; guard execution and their refusal semantics are unchanged'
+  - 'SHARED_PACK_VERSION, pack-fingerprints.json, run-handlers.sh, runtime/caws-hook.py, runtime/dispatch.sh and src/runtime are not edited by this spec'
+acceptance:
+  - id: A1
+    given: 'the real dispatch/pre_tool_use.sh under env -i with recorder slots'
+    when: 'stdin carries a raw NUL inside the agent_id key (c3) or a 0xFF byte inside a string (c5)'
+    then: 'the heartbeat classifies uncertain and no mail offer is made, where at 7195f14f both read main'
+  - id: A2
+    given: 'subagent bytes on stdin and a preset HOOK_INPUT_JSON naming session spoof-s (c9)'
+    when: 'the dispatcher runs'
+    then: 'the heartbeat classifies subagent, HOOK_SESSION_ID is the stdin session, and every handler receives the stdin payload, not the preset'
+  - id: A3
+    given: 'an inherited HOOK_TOOL_NAME, set or empty, with HOOK_SESSION_ID parent-s (c8, c14, c15)'
+    when: 'the dispatcher runs'
+    then: 'it exits 0, every handler receives the real payload bytes, and custody is subagent for subagent bytes and main for a main object'
+  - id: A4
+    given: 'main, subagent, spilled and 40 KiB inline payloads (c1, c2, c10, c11)'
+    when: 'the dispatcher runs'
+    then: 'custody, HOOK_COMMAND, handler stdin sha per slot and zero TMPDIR residue are unchanged from 7195f14f'
+  - id: A5
+    given: >-
+      the dispatcher ingress runs with a stdin payload and one of its capture phases
+      fails: the private directory cannot be created before any byte is read
+      (setup), the capture write or the parser descriptor fails after bytes were
+      consumed (payload lost), only the custody descriptor fails to open (custody),
+      or the stage cannot be removed after both descriptors are open (unlink)
+    when: 'the dispatcher runs'
+    then: >-
+      setup: parsing proceeds on the untouched stdin,
+      HOOK_INGRESS_CAPTURE=setup_failed is exported, the heartbeat classifies
+      uncertain and the absence is named on stderr; payload lost: no handler runs,
+      pre_tool_use emits a block decision naming the phase and exits 2, every other
+      event writes the diagnostic and exits 1, and no stage remains; custody: every
+      guard parses the complete captured payload from the parser descriptor,
+      HOOK_INGRESS_CAPTURE=custody_failed is exported and the heartbeat classifies
+      uncertain; unlink: the failure is named on stderr, the EXIT cleanup retries
+      it, and parsing and custody proceed on the open descriptors; in no phase does
+      an inherited environment value or descriptor produce a main or subagent
+      verdict
+  - id: A6
+    given: 'agent-heartbeat.sh invoked directly with HOOK_TOOL_NAME preset and subagent bytes on stdin'
+    when: 'it runs'
+    then: 'it classifies subagent exactly as at 7195f14f'
+  - id: A7
+    given: 'the rewritten heartbeat-actor-custody.test.js and the new dispatch-ingress.bats'
+    when: 'each control row is negated in turn'
+    then: 'the corresponding test fails, with TAP or jest output retained'
+observability:
+  - 'Per-case recorder output under ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/<stamp>-<sha>/ with heartbeat.actor, handler stdin sha per slot, exit status and TMPDIR listing'
+rollback:
+  - 'revert the lane merge commit; the pack bump that carries it is recorded separately by root'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "20-case recorder control at e05c9c0b: c3 raw NUL key and c5 0xFF classify uncertain (were main at 7195f14f), c4 c6 c7 uncertain; jest stage-b-full 105/105 includes raw NUL and undecodable byte withheld through the project dispatcher. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated. Artifact (outside the repo, retained): /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt . Re-recorded with the commit as the re-derivable citation; the prior record with the absolute artifact path stays in history."
+    recorded_at: "2026-10-23T03:22:38.196Z"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "c9 (subagent stdin plus preset HOOK_INPUT_JSON spoof-s): heartbeat subagent, HOOK_SESSION_ID probe-s, HOOK_COMMAND from stdin, all nine slots receive the 135-byte stdin payload; jest preset case asserts the block decision names the stdin command git push --force and the spoofed session mail is untouched. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated. Artifact (outside the repo, retained): /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt . Re-recorded with the commit as the re-derivable citation; the prior record with the absolute artifact path stays in history."
+    recorded_at: "2026-10-23T03:22:41.696Z"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "c8 c14 c15 (inherited HOOK_TOOL_NAME set or empty, HOOK_SESSION_ID parent-s): exit 0, 135 or 81 byte real payload to every slot, custody subagent or main by the bytes (were exit 1 with 0 bytes at 7195f14f); jest inherited-marker cases pass. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated. Artifact (outside the repo, retained): /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt . Re-recorded with the commit as the re-derivable citation; the prior record with the absolute artifact path stays in history."
+    recorded_at: "2026-10-23T03:22:45.210Z"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "c1 c2 c10 c11 c12 c13 c16 c17 unchanged from 7195f14f in exit, custody, HOOK_COMMAND and per-slot stdin sha (distinct=1 in every case), tmp residue 0 except the known c17 KILL spill boundary; stage-d2 full bats 584/584 at e05c9c0b under env -i. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated. Artifact (outside the repo, retained): /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt . Re-recorded with the commit as the re-derivable citation; the prior record with the absolute artifact path stays in history."
+    recorded_at: "2026-10-23T03:22:48.927Z"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "dispatch-ingress.bats 18/18 at 499ca369 (file unchanged at e05c9c0b): setup_failed parses stdin, partial write and parser-descriptor failures return 3 with pre_tool_use block exit 2 and stop exit 1, custody-descriptor failure keeps guards fed with custody uncertain, unlink failure named and retried, link left in place; jest fault cases through a disposable tree copy pass; c19 and c20 rows in the control. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated. Artifact (outside the repo, retained): /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/receipts/phase-c-20261023T020442Z/phase-c-dispatch-ingress.stdout . Re-recorded with the commit as the re-derivable citation; the prior record with the absolute artifact path stays in history."
+    recorded_at: "2026-10-23T03:22:52.419Z"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "jest 105/105: read from stdin on the dispatcher fast path rows unchanged, a directly invoked heartbeat with HOOK_TOOL_NAME preset and subagent bytes withholds, and with a forged descriptor 8 plus capture report still withholds (agreement rule); capture report without descriptor, failed or unknown never delivers main-thread stdin. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated. Artifact (outside the repo, retained): /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/receipts/stage-b-full-20261023T024905Z/stage-b-custody-jest-full.stderr . Re-recorded with the commit as the re-derivable citation; the prior record with the absolute artifact path stays in history."
+    recorded_at: "2026-10-23T03:22:55.441Z"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Phase C negation: 17 of 18 single-assertion mutants fail at exactly the mutated line on the private fixture-499 clone; m18 fails one line below the mutated line (the exit-status assertion on the mutated command), so the case is sensitive but not at the cited coordinate. Product mutants on a disposable tree copy: no-agreement, no-scrub and ignore-report each fail only their targeted jest cases (1, 2 and 3 failures). Lane never written by any mutant. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated. Artifact (outside the repo, retained): /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/receipts/phase-c-mutants-20261023T024125Z/summary.txt . Re-recorded with the commit as the re-derivable citation; the prior record with the absolute artifact path stays in history."
+    recorded_at: "2026-10-23T03:22:58.537Z"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09

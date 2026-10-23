@@ -222,7 +222,8 @@ Three layers:
 ### Exit codes
 
 - `0` — success / observation
-- `1` — domain failure (gate failed, doctor finding, scope refused)
+- `1` — domain failure (gate failed, doctor error-severity finding or load
+  error, scope refused)
 - `2` — composition failure (not a git repo, can't read `.caws/`, missing
   required tooling)
 

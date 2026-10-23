@@ -1,0 +1,62 @@
+id: CAWS-CONTEXT-GIT-CUSTODY-001
+title: 'Request-owned native Git custody through the one-shot engine'
+mode: feature
+lifecycle_state: active
+worktree: context-git-custody
+created_at: '2026-10-23T03:26:46.296Z'
+updated_at: '2026-10-23T05:15:46.420Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native process custody and typed runtime project resolution'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/context_git.rs'
+    - 'packages/caws-native/src/context_git/tests.rs'
+    - 'packages/caws-native/tests/context_git.rs'
+    - 'packages/caws-cli/src/runtime/context-git-wire.ts'
+    - 'packages/caws-cli/src/runtime/context-git-client.ts'
+    - 'packages/caws-cli/src/runtime/context.ts'
+    - 'packages/caws-cli/tests/runtime/context-git-client.test.js'
+    - 'packages/caws-cli/tests/runtime/context.test.js'
+    - packages/caws-native/src/lib.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-cli/tests/runtime/engine-entry.test.js
+  out: []
+invariants:
+  - 'Original invocation owns Git child, private group and pipes through actual settlement; client cancellation never means cleanup complete.'
+  - 'Preserve mandatory one-shot safety, caller-selected Git semantics and legitimate inactive-project behavior; cancellation protocol and unsettled faults remain fatal.'
+  - 'Lead owns shared protocol, main/runner and engine injection; child completion requires assembled ordinary one-shot behavior, not helper-only checks.'
+acceptance:
+  - id: A1
+    given: 'the actual native and typed one-shot engine with Lead-owned injection'
+    when: 'project resolution runs on ordinary and linked worktrees using supported caller Git selection'
+    then: 'canonical project and checkout identities match the existing contract and real selected guard outcomes preserve caller authority.'
+  - id: A2
+    given: 'a Git child whose descendant survives leader exit or retains pipes'
+    when: 'cancellation deadline malformed protocol or output bounds interrupt the operation'
+    then: 'original child group and both output pipes settle before ownership release, with fatal typed failure for uncertain cleanup and retained runtime observations.'
+  - id: A3
+    given: 'two actual native clients in same and different repositories'
+    when: 'A is cancelled during owned Git and B executes a real guard control'
+    then: 'A actual child group and pipe settlement is observed, B authority output and journal identity remain isolated, and no resident-worker or 13-session acceptance is inferred.'
+  - id: A4
+    given: 'finite context Git protocol and original invocation identity'
+    when: 'wrong identity token ordinal replay unsupported argv after-Ready request or exceeded frame/output/deadline budget occurs'
+    then: 'the request is refused without unauthorized spawning or conversion to inactive governance.'
+observability:
+  - 'Retain command revision exit status raw frames actual child/group/pipe settlement and same/cross-project native consumer artifacts outside source ledger.'
+rollback:
+  - 'Normal corrective source commit preserving uncertain ownership and existing one-shot path; no machine runtime selection change.'
+non_functional: {}
+contracts:
+  - name: 'context-git-custody'
+    type: behavior
