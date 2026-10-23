@@ -7048,6 +7048,111 @@ Additional bounded evidence and unresolved dependencies:
   both capacity boundaries, resident execution, thirteen-session/four-repository
   qualification, existing guide reconciliation and machine cutover.
 
+- E263: The matched package reaches the actual private installed native entry.
+  The seven loader controls under
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/main-prefix-c9b919e6/`
+  accept the original, copied and restored image and reject missing, extra,
+  changed-engine and receipt-identity variants. The independent 5,786-member
+  prepared-image join establishes the selected package boundary; it does not
+  establish execution. The first real native invocation fails before its first
+  frame because multiline RawValue JSON splits the LF transport. That failure
+  remains retained rather than being counted as a guard refusal.
+
+  Two-file framing repair `85d301ad` lands on main in `c81dcedb`. Its actual
+  fresh release build exits 0; the independent installed-image join covers 5,901
+  files in generation `1da4f1a8…11df0`. Direct installed-entry controls produce
+  benign multiline Read exit 0 (PID 6040), foreign-worktree Bash exit 2 with the
+  specific ownership refusal (75243), CRLF/large-numeral Read exit 0 (74877),
+  malformed UTF-8 exit 2 (50520) and malformed JSON exit 2 (92623). The image
+  and input pins remain unchanged and the recorded groups settle. Raw commands,
+  outputs, terminal observations and joins are retained under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-image-invocation/`.
+  Framing A1–A3 have paired spec/event records 12070, 12071 and 12089; the
+  bounded framing spec is closed. The observed guard route is the compatibility
+  dispatcher. Native vendor callbacks, complete handler replacement,
+  publication, no-Python packaging, rollback and machine adoption remain
+  unqualified.
+
+  The user-appointed integration lead is session `01a164bc`. Audited claims
+  transfer the parent, publication boundary, session publication, seal
+  preparation and guard-documentation lanes to that lead. The former lead
+  completes and releases the framing slice. Existing source-landing obligations
+  remain under the new lead's accepted active bridge. The next source unit
+  connects native Git custody to the actual typed engine; separate publication
+  work retains original-ID durability, continuous writer custody,
+  ordinary-reader validation, exact CONSUMED and both 256-live-record limits.
+  Resident engine reuse and the thirteen-session/four-repository workload remain
+  integration obligations. No component checks or ownership transfer lower
+  parent acceptance.
+
+- E264: Explicit license-transport recovery unblocks the normal package build
+  without adopting or deleting retained license leaves. Candidate `4cec500a`
+  lands in `b5853bff`; A1/A2 have paired evidence events 12117/12118 and the
+  bounded recovery spec is closed. The 45-case suite exercises strict ordinary
+  refusal, changed marker identity/bytes, symlinks, locks and retention/close
+  failures. Actual stale marker `44f6240e…56b7d5` is retained byte-for-byte;
+  before/after observations preserve the existing LICENSE identity and bytes.
+  Normal build, cleanup and restaging exit 0. Raw evidence resides under
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/license-transport-recovery/`.
+  This relinquishes obsolete deletion authority; it does not prove reboot
+  causation, concurrent atomic-replacement safety or runtime cutover.
+
+- E265: Request-owned context Git reaches the actual typed one-shot engine. The
+  macOS candidate advertises its capability, performs the two fixed Git queries
+  through native custody before Ready, and preserves the absent- capability
+  legacy path elsewhere. Normal build, six actual-entry controls, 16 native
+  custody/frame-pump controls, seven protocol controls and 17 runner controls
+  execute with retained raw outputs. The initial entry fixture failure names its
+  missing runtime manifest; installing a real private runtime repairs the
+  fixture without changing the Ready/dispatch/handoff requirements.
+
+  `scripts/qualify-context-git.cjs` exercises ordinary and linked checkouts,
+  then four same/cross-repository SIGTERM/SIGKILL controls. The actual guarded
+  command refuses the one staged tracked-file deletion without arming the danger
+  latch. Each cancellation records the original native custodian, Git group and
+  pipe-holding descendant, observes all three processes disappear, and observes
+  B remain live before releasing it to its own guard and journal.
+  `integrated-main-02` exits 0 in 11.913 seconds with unchanged source/image
+  pins and no supervisor-group residue. Its native binary SHA is
+  `bea9e86db359cac4e331fb2bd0ef3beeef3515b9a6eba6f1c89bd410cff8ee9a`. Commands,
+  original failures, input/output bytes, per-client terminals, process
+  observations and journals reside under
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/`;
+  the integrated fixtures are in `ordinary-consumers-main-02/`. This qualifies
+  the bounded project-resolution path, not every classifier Git subprocess,
+  Linux custody, immutable executable launch, resident reuse, vendor callbacks,
+  full guard parity, no-Python packaging or the required
+  thirteen-session/four-repository workload. Source acceptance and landing
+  remain separate from these execution observations.
+
+- E266: Context-Git candidate `7db95f44`, integrated with main at `b18195ea`,
+  retains a normal build exit 0, the combined four-suite exit 0 with 193 checks,
+  and actual native ordinary/linked/cancellation controls in
+  `context-git-custody/{ts-committed-build-01,ts-committed-combined-01,integrated-committed-01}/`.
+  The two lint repairs reconstruct the prior checked test hashes exactly when
+  reversing only `globalThis.AbortController` and the `node:timers` import.
+  These checks preserve the six Ready/dispatch/handoff assertions, including
+  fatal cleanup uncertainty and the absent-capability legacy control.
+
+  `integrated-pending-02` adds a real escaped-group descendant holding both Git
+  pipes beyond the cleanup budget. The actual frontend exits 2 with protective
+  block JSON and the cleanup-pending diagnostic, without a pre-Ready invocation
+  journal.
+  `ordinary-consumers-pending-02/pending-pipe/retained-after-frontend.json`
+  records original Git PID 11428 unreaped, its pipe holder 11540 live, and
+  native custodian 11427 live after frontend 11365 exits. Only the fixture's
+  explicit pipe-release permits all three to disappear in the retained
+  settlement observations. The first probe's empty-output assertion was
+  incorrect: the existing native PreToolUse failure contract emits protective
+  JSON. Its failed output is retained in `integrated-pending-01/`; the repaired
+  oracle requires the exact block/diagnostic relation rather than accepting
+  arbitrary output. Both runs use the E265 native image and compiled ordinary
+  engine, with no production change. Artifact paths are relative to the E265
+  artifact root. This demonstrates retained custody through a concrete
+  unsettled-pipe case; it does not establish killing escaped groups, recovery
+  from kernel failure, immutable executable launch, residency or full cutover
+  acceptance.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

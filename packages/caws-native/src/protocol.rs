@@ -52,6 +52,8 @@ pub struct Request {
     event: String,
     configuration: String,
     session_cache: &'static str,
+    #[cfg(target_os = "macos")]
+    context_git: &'static str,
     #[cfg(feature = "sqlite-store")]
     session_store: &'static str,
     caller: Caller,
@@ -165,6 +167,8 @@ impl Request {
             event: config.event.clone(),
             configuration: config.configuration.clone(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            #[cfg(target_os = "macos")]
+            context_git: caws_native::context_git::CAPABILITY,
             #[cfg(feature = "sqlite-store")]
             session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller::capture()?,
@@ -232,6 +236,7 @@ pub struct Ready {
 
 pub enum EngineFrame {
     Ready(Ready),
+    ContextGitRequest(Vec<u8>),
     SessionCacheRequest(Vec<u8>),
     #[cfg(feature = "sqlite-store")]
     TranscriptStoreRequest(Vec<u8>),
@@ -337,6 +342,14 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    if header.schema == "caws.runtime.context-git.request.v1" {
+        if bytes.len() > caws_native::context_git::MAX_REQUEST {
+            return Err("context Git request exceeds frame budget".into());
+        }
+        // Classification does not grant spawning. The pre-Ready owner checks
+        // every field, sequence and invocation identity before creating custody.
+        return Ok(EngineFrame::ContextGitRequest(bytes.to_vec()));
+    }
     #[cfg(feature = "sqlite-store")]
     if header.schema == caws_native::transcript_store_wire::REQUEST_SCHEMA {
         // Classification is not admission. The single-use store owner must
@@ -522,6 +535,8 @@ mod tests {
             event: "pre_tool_use".into(),
             configuration: "system".into(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            #[cfg(target_os = "macos")]
+            context_git: caws_native::context_git::CAPABILITY,
             #[cfg(feature = "sqlite-store")]
             session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller {
@@ -534,6 +549,27 @@ mod tests {
             input_json: "{}".into(),
         }
     }
+    #[test]
+    fn context_git_capability_and_typed_owner_boundary_are_explicit() {
+        let request = fixture_request();
+        let encoded: serde_json::Value =
+            serde_json::from_slice(&request.encode_frame().unwrap()).unwrap();
+        #[cfg(target_os = "macos")]
+        assert_eq!(encoded["contextGit"], caws_native::context_git::CAPABILITY);
+        #[cfg(not(target_os = "macos"))]
+        assert!(!encoded.as_object().unwrap().contains_key("contextGit"));
+        let bytes = br#"{"schema":"caws.runtime.context-git.request.v1","id":"foreign","ordinal":2,"arbitrary":true}"#;
+        match validate_frame(bytes, &request).unwrap() {
+            EngineFrame::ContextGitRequest(retained) => assert_eq!(retained, bytes),
+            _ => panic!("context request did not reach its typed owner"),
+        }
+        let oversized = serde_json::to_vec(&serde_json::json!({"schema":"caws.runtime.context-git.request.v1", "padding":"x".repeat(caws_native::context_git::MAX_REQUEST)})).unwrap();
+        assert_eq!(
+            validate_frame(&oversized, &request).err(),
+            Some("context Git request exceeds frame budget".into())
+        );
+    }
+
     #[test]
     fn request_frame_preserves_raw_payload_and_original_input_across_formatting() {
         #[derive(Deserialize)]
