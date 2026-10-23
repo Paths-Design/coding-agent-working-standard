@@ -1,10 +1,11 @@
 id: CAWS-PREPUSH-TEST-STAGE-SOURCE-001
 title: 'Pre-push test stage: declare session-render-service-client in the shared pack; pytest fixture copies the repo-root LICENSE'
 mode: fix
-lifecycle_state: active
-worktree: prepush-test-stage
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Shared pack 106 declares lib/session-render-service-client.sh (template tree unchanged, fingerprint retained); pytest-entrypoint fixture copies the repo-root LICENSE so the cold pretest build reaches the entrypoint. 3 suites 42/42 in the lane; baselines on main failed both.'
 created_at: '2026-10-23T05:47:26.834Z'
-updated_at: '2026-10-23T05:47:28.616Z'
+updated_at: '2026-10-23T05:53:04.077Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
