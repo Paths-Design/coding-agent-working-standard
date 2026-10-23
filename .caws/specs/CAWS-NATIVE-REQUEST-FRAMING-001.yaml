@@ -38,3 +38,9 @@ rollback:
   - 'Normal corrective or revert commit while preserving prior immutable image generations and raw failed attempts'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed85d301ad adds lexical JSON-whitespace compaction outside quoted strings and one terminatingLF; mainusesencoder and preserves pre-LF requestsize limit. Original bug independently source-grounded RawValue/rawserializer+firstLFreader; actual oldinstalled benign2 beforefirstframe and diagnostic frame3654B ends payload opening, validUTF8/JSONerrorposition3654. Unit baseline4pass atoriginalsource; candidate6pass before rustfmt (format-only85commit), exact rawpayload expected hugeintegers/exponents/-0/duplicatekeys/escapedquote/backslash/Unicode and byte-exactinputJson assertions plus legacyuncompactednegativecontrol. Raw framing-unit-{baseline,candidate}-01 under /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-image-invocation. Actual freshproduction85consumer originalmultiline0 and CRLF701B+hugeint1e400/-0/escapes0 reach actual stricttypeddecoder and10compatibilityhandlers with inputSHA journaljoin; this discharges productioncallsite beyondhelpertests. No numericValue roundtrip, no allruntime/retirement claim."
+    recorded_at: "2026-10-23T05:26:32.006Z"
+    commit_sha: "85d301ad21b9a795f5c33451111baa6692f8f028"
