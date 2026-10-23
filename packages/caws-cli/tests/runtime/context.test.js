@@ -10,6 +10,7 @@ const {
 } = require('../../dist/runtime/context');
 const { resolveGitBinary, resolveGitBinaryForEnvironment } = require('../../dist/store/git-binary');
 const { repoRootFromGitCommonDir, resolveRepoRoot } = require('../../dist/store/repo-root');
+const { ContextGitError } = require('../../dist/runtime/context-git-wire');
 
 let root;
 const git = resolveGitBinary();
@@ -218,4 +219,56 @@ test('Git response limits reject elapsed deadlines, unavailable executables, ove
     )
   ).rejects.toThrow('ENOENT');
   expect(() => createContextGitPort(caller(root), NaN)).toThrow('integer');
+});
+
+test.each([
+  'cancelled',
+  'deadline',
+  'protocol',
+  'cleanup',
+  'identity',
+  'output_limit',
+  'signal',
+  'utf8',
+  'spawn_failed',
+  'unavailable',
+])('native context Git %s cannot silently deactivate governance', async (category) => {
+  const error = new ContextGitError(category, 'owned native failure');
+  const port = {
+    run: async () => {
+      throw error;
+    },
+  };
+  await expect(resolveRuntimeProject({}, caller(root), deadline(), port)).rejects.toBe(error);
+});
+
+test('a legitimate native Git nonzero first-query exit preserves outside-project behavior', async () => {
+  const port = {
+    run: async () => {
+      throw new ContextGitError('git_exit', 'not a repository');
+    },
+  };
+  await expect(resolveRuntimeProject({}, caller(root), deadline(), port)).resolves.toEqual({
+    status: 'inactive',
+    reason: 'outside a resolvable Git project',
+    diagnostic: '',
+  });
+});
+
+test('native common-directory failure is fatal after a successful checkout query', async () => {
+  const error = new ContextGitError('cleanup', 'second child is unsettled');
+  let calls = 0;
+  const port = {
+    run: async (args, cwd) => {
+      calls++;
+      if (calls === 1) {
+        expect(args).toEqual(['rev-parse', '--show-toplevel']);
+        return root;
+      }
+      expect(cwd).toBe(root);
+      throw error;
+    },
+  };
+  await expect(resolveRuntimeProject({}, caller(root), deadline(), port)).rejects.toBe(error);
+  expect(calls).toBe(2);
 });

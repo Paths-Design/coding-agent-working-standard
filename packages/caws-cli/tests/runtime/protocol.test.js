@@ -33,6 +33,29 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('context Git capability is optional, exact, and independent of other capabilities', () => {
+    expect(Object.hasOwn(decode(), 'contextGit')).toBe(false);
+    const decoded = decode({ contextGit: 'caws.runtime.context-git.v1' });
+    expect(decoded.contextGit).toBe('caws.runtime.context-git.v1');
+    expect(decoded.sessionCache).toBeUndefined();
+    expect(decoded.sessionStore).toBeUndefined();
+    expect(
+      decode({
+        contextGit: 'caws.runtime.context-git.v1',
+        sessionCache: 'caws.runtime.session-cache.v1',
+        sessionStore: 'caws.runtime.transcript-store.v1',
+      })
+    ).toMatchObject({
+      contextGit: 'caws.runtime.context-git.v1',
+      sessionCache: 'caws.runtime.session-cache.v1',
+      sessionStore: 'caws.runtime.transcript-store.v1',
+    });
+    for (const contextGit of [null, false, true, '', 'caws.runtime.context-git.v2', {}, []])
+      expect(() => decode({ contextGit })).toThrow(/context Git capability/);
+    expect(() => decode({ contextGitExtra: 'caws.runtime.context-git.v1' })).toThrow(
+      /request envelope/
+    );
+  });
   test('preserves the optional native store capability without borrowing cache authority', () => {
     expect(decode().sessionStore).toBeUndefined();
     expect(decode({ sessionStore: 'caws.runtime.transcript-store.v1' }).sessionStore).toBe(

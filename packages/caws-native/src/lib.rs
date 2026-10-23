@@ -1,5 +1,6 @@
 //! Native transport support components. These modules do not confer project authority.
 
+pub mod context_git;
 #[cfg(feature = "sqlite-store")]
 pub mod invocation_project;
 pub mod owned_group;

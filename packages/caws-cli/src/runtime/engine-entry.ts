@@ -19,6 +19,8 @@ import {
 import { prepareRuntimeInvocation, type PreparedRuntimeInvocation } from './engine';
 import { containmentWire } from './containment';
 import { createNativeSessionCachePort } from './session-cache-client';
+import { createNativeContextGitPort } from './context-git-client';
+import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
 
 /** Private one-shot protocol entry. Installation and resident-host selection are separate contracts. */
 export async function runEngineEntry(): Promise<void> {
@@ -65,7 +67,18 @@ export async function runEngineEntry(): Promise<void> {
             controller.signal
           )
         : undefined;
-    prepared = await prepareRuntimeInvocation(request, controller.signal, sessionCache);
+    const contextGit =
+      request.contextGit === CONTEXT_GIT_CAPABILITY
+        ? createNativeContextGitPort(
+            request,
+            {
+              read: (signal) => reader.read(signal),
+              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
+            },
+            controller.signal
+          )
+        : undefined;
+    prepared = await prepareRuntimeInvocation(request, controller.signal, sessionCache, contextGit);
     await writeRuntimeFrame(
       process.stdout,
       {
