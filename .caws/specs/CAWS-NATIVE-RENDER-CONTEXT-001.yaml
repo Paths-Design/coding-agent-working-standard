@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-RENDER-CONTEXT-001
 title: 'Produce original-bound Git context for typed session rendering'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-render-context
 created_at: '2026-10-23T12:21:41.938Z'
-updated_at: '2026-10-23T12:21:41.938Z'
+updated_at: '2026-10-23T12:21:43.143Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
