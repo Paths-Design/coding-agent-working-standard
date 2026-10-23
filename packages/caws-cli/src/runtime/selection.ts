@@ -1,4 +1,8 @@
-import * as fs from 'node:fs';
+import {
+  liveSelectionReadIo,
+  missingSelectionObservation,
+  type SelectionReadIo,
+} from '../init/selection-read-io';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
 import { sha, verifyRuntime, readManifest } from '../init/machine-runtime-state';
@@ -23,6 +27,7 @@ import type { AgentSurface } from '../init/hook-packs/types';
 import type { HookEvent } from './types';
 
 export interface SelectionOptions {
+  readonly io?: SelectionReadIo;
   readonly checkout: string;
   readonly canonical: string;
   readonly home: string;
@@ -72,27 +77,30 @@ export type InvocationSelection =
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-function confined(root: string, relative: string): string {
-  if (path.isAbsolute(relative) || relative.split('/').includes('..')) {
-    throw new Error(`Path escapes root: ${relative}`);
-  }
-  const target = path.join(root, relative);
-  assertMachinePath(root, target);
-  return target;
-}
-function isFile(file: string): boolean {
-  try {
-    return fs.statSync(file).isFile();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw error;
-  }
-}
-function readJson(file: string): unknown {
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
-}
-function source(file: string): SelectedSource {
-  return Object.freeze({ path: file, sha256: sha(fs.readFileSync(file)) });
+function selectionReads(io: SelectionReadIo) {
+  return {
+    confined(root: string, relative: string): string {
+      if (path.isAbsolute(relative) || relative.split('/').includes('..'))
+        throw new Error(`Path escapes root: ${relative}`);
+      const target = path.join(root, relative);
+      assertMachinePath(root, target, io);
+      return target;
+    },
+    isFile(file: string): boolean {
+      try {
+        return io.stat(file).kind === 'file';
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+        throw error;
+      }
+    },
+    readJson(file: string): unknown {
+      return JSON.parse(io.readFile(file).toString('utf8'));
+    },
+    source(file: string): SelectedSource {
+      return Object.freeze({ path: file, sha256: sha(io.readFile(file)) });
+    },
+  };
 }
 function inactive(reason: string): InvocationSelection {
   return Object.freeze({ status: 'inactive', reason });
@@ -102,6 +110,8 @@ function emptyMachinePolicy(): SystemSurfacePolicy {
 }
 
 function verifiedProjectMachineEntry(command: string, options: SelectionOptions): void {
+  const io = options.io ?? liveSelectionReadIo;
+  const { confined, isFile } = selectionReads(io);
   const legacy = path.join(options.home, 'bin/caws-hook');
   const native = path.join(options.home, 'bin/caws-hook-native');
   // Coverage requires the producer's exact command. Decoding shell words loses
@@ -114,20 +124,21 @@ function verifiedProjectMachineEntry(command: string, options: SelectionOptions)
   )
     throw new Error('Project CAWS invocation requires native-harness reconciliation');
   const entry = interpreter ? legacy : native;
-  assertMachinePath(options.home, entry);
-  if (!isFile(entry) || (!interpreter && (fs.statSync(entry).mode & 0o111) === 0))
+  assertMachinePath(options.home, entry, io);
+  if (!isFile(entry) || (!interpreter && (io.stat(entry).mode & 0o111) === 0))
     throw new Error('Project CAWS entry is missing or nonexecutable; requires reconciliation');
-  const identity = sha(fs.readFileSync(entry));
+  const identity = sha(io.readFile(entry));
   const member = entry === native ? 'native/caws-hook-native' : 'bootstrap.py';
   const runtimes = confined(options.home, 'lib/runtimes');
-  const known = fs.readdirSync(runtimes).some((digest) => {
+  const known = io.readDirectory(runtimes).some((digest) => {
     try {
-      const manifest = readManifest(options.home, digest);
+      const manifest = readManifest(options.home, digest, io);
       return (
         manifest[member] === identity ||
         (entry === legacy && manifest['launcher.py'] === identity && !manifest['bootstrap.py'])
       );
-    } catch {
+    } catch (error) {
+      if (missingSelectionObservation(error)) throw error;
       return false;
     }
   });
@@ -140,6 +151,8 @@ function verifiedProjectMachineEntry(command: string, options: SelectionOptions)
  * harness reconciliation; treating their mere presence as coverage skips guards.
  */
 function legacyRegistered(options: SelectionOptions): boolean {
+  const io = options.io ?? liveSelectionReadIo;
+  const { confined, isFile, readJson } = selectionReads(io);
   const vendors: Partial<Record<AgentSurface, string>> = {
     codex: '.codex',
     'claude-code': '.claude',
@@ -152,7 +165,7 @@ function legacyRegistered(options: SelectionOptions): boolean {
   let selected = 0;
   for (const root of new Set([options.canonical, options.checkout])) {
     const toml = confined(root, vendor + '/config.toml');
-    if (isFile(toml) && isCawsNativeCommand(fs.readFileSync(toml, 'utf8')))
+    if (isFile(toml) && isCawsNativeCommand(io.readFile(toml).toString('utf8')))
       throw new Error('Inline project CAWS hooks require native-harness reconciliation');
     for (const relative of [primary, vendor + '/settings.local.json']) {
       const file = confined(root, relative);
@@ -202,6 +215,8 @@ function legacyRegistered(options: SelectionOptions): boolean {
 function legacyPolicy(
   options: SelectionOptions
 ): { hooks: string; entries: string[]; libraries: Record<string, string> } | null {
+  const io = options.io ?? liveSelectionReadIo;
+  const { confined, isFile, readJson } = selectionReads(io);
   const file = confined(options.canonical, '.caws/hooks/adapter-policy.json');
   if (!isFile(file))
     throw new Error(
@@ -246,16 +261,18 @@ function legacyPolicy(
 
 /** Per-call policy selection. Explicit roots are resolved by the owning Git context port. */
 export function resolveInvocationSelection(options: SelectionOptions): InvocationSelection {
+  const io = options.io ?? liveSelectionReadIo;
+  const { confined, isFile, readJson, source } = selectionReads(io);
   for (const root of [options.home, options.canonical, options.checkout]) {
     if (!path.isAbsolute(root)) throw new Error('Selection roots must be absolute');
-    assertMachinePath(root, root);
+    assertMachinePath(root, root, io);
   }
   // Preserve the current immutable-snapshot integrity contract, including launcher.py.
-  verifyRuntime(options.home, options.runtimeDigest);
+  verifyRuntime(options.home, options.runtimeDigest, io);
   const runtime = confined(options.home, 'lib/runtimes/' + options.runtimeDigest);
   const projectFile = confined(options.home, 'state/projects/' + sha(options.canonical) + '.json');
-  const known = fs.existsSync(projectFile);
-  if (!fs.existsSync(confined(options.canonical, '.caws'))) {
+  const known = io.exists(projectFile);
+  if (!io.exists(confined(options.canonical, '.caws'))) {
     if (known) throw new Error('Adopted project governance is missing');
     return inactive('project governance is absent');
   }
@@ -263,12 +280,12 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
     return inactive('legacy native registration remains selected');
   const governanceReady =
     isFile(confined(options.canonical, '.caws/policy.yaml')) &&
-    fs.existsSync(confined(options.canonical, '.caws/specs')) &&
-    fs.statSync(confined(options.canonical, '.caws/specs')).isDirectory() &&
-    !fs.existsSync(confined(options.canonical, '.caws/working-spec.yaml'));
+    io.exists(confined(options.canonical, '.caws/specs')) &&
+    io.stat(confined(options.canonical, '.caws/specs')).kind === 'directory' &&
+    !io.exists(confined(options.canonical, '.caws/working-spec.yaml'));
   if (options.system && !known && !governanceReady)
     return inactive('project governance requires migration');
-  const settings = readSystemSurfaceSettings(options.home, options.surface);
+  const settings = readSystemSurfaceSettings(options.home, options.surface, io);
   let machine: SystemSurfacePolicy | null = null;
   if (settings?.enabled) {
     machine = emptyMachinePolicy();
@@ -286,7 +303,7 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
       if (!(options.surface in project.surfaces))
         throw new Error('System project requires migration for ' + options.surface);
       machine = project.surfaces[options.surface] as SystemSurfacePolicy;
-    } else if (fs.existsSync(confined(options.canonical, '.caws/hooks'))) {
+    } else if (io.exists(confined(options.canonical, '.caws/hooks'))) {
       if (isFile(confined(options.canonical, '.caws/hooks/adapter-policy.json'))) machine = null;
       else
         throw new Error(
@@ -308,7 +325,7 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
   if (machine !== null) {
     if (!governanceReady)
       throw new Error('Project governance requires migration before system hooks can run');
-    validateSystemPolicy(options.canonical, machine);
+    validateSystemPolicy(options.canonical, machine, undefined, io);
     const defaults = readJson(confined(runtime, 'system-policy.json'));
     if (
       !object(defaults) ||
@@ -323,7 +340,9 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
       throw new Error('Malformed system default policy');
     }
     const repoFile = confined(options.canonical, '.caws/hooks/hook-policy.json');
-    const parsed = parseRepoHookPolicy(isFile(repoFile) ? fs.readFileSync(repoFile, 'utf8') : null);
+    const parsed = parseRepoHookPolicy(
+      isFile(repoFile) ? io.readFile(repoFile).toString('utf8') : null
+    );
     if (!parsed.ok) throw new Error(parsed.error);
     const repo = effectiveRepoSurfacePolicy(parsed.policy, options.surface);
     const resolved = resolveChain({ stock, event: options.event, repo, machine });
@@ -353,7 +372,7 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
     const [name, ...args] = entry.split(' ') as [string, ...string[]];
     const target = overrides[name] ?? confined(hooks, name);
     if (!isFile(target)) throw new Error('Required handler missing or not executable: ' + target);
-    fs.accessSync(target, fs.constants.X_OK);
+    io.requireExecutable(target);
     return Object.freeze({
       ...source(target),
       entry,
@@ -378,8 +397,8 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
   const shared = confined(runtime, 'lib');
   const names = new Set(Object.keys(libraryPaths));
   for (const directory of [shared, surface, user]) {
-    if (!fs.existsSync(directory)) continue;
-    for (const name of fs.readdirSync(directory)) {
+    if (!io.exists(directory)) continue;
+    for (const name of io.readDirectory(directory)) {
       const target = confined(directory, name);
       if (isFile(target)) names.add(name);
       else if (directory === user) throw new Error('Invalid user adapter library: ' + target);

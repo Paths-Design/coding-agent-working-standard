@@ -1,3 +1,4 @@
+import { liveSelectionReadIo, type SelectionReadIo } from './selection-read-io';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertMachinePath } from './machine-paths';
@@ -10,12 +11,13 @@ export interface SystemSurfaceSettings {
 
 export function readSystemSurfaceSettings(
   home: string,
-  surface: string
+  surface: string,
+  io: SelectionReadIo = liveSelectionReadIo
 ): SystemSurfaceSettings | undefined {
   const file = path.join(home, 'surfaces', surface, 'settings.json');
-  assertMachinePath(home, file);
-  if (!fs.existsSync(file)) return undefined;
-  const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assertMachinePath(home, file, io);
+  if (!io.exists(file)) return undefined;
+  const value = JSON.parse(io.readFile(file).toString('utf8'));
   if (
     !value ||
     value.version !== 1 ||
