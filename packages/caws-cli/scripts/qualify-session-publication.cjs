@@ -25,6 +25,99 @@ if (process.argv[2] === '--agent-child') {
   let stdout = Buffer.alloc(0),
     stderr = Buffer.alloc(0),
     closed = false;
+  // This existing ancestor has its own event loop. The parent keeps sampling
+  // original process custody without delaying the one-shot hostile action.
+  let hostileTimer, hostileResult;
+  const finishHostile = (result) => {
+    if (!spec.hostileControl || hostileResult) return;
+    clearInterval(hostileTimer);
+    hostileResult = { ...result, observedAt: Date.now(), nativePid: child.pid };
+    fs.writeFileSync(spec.hostileControl.receipt, JSON.stringify(hostileResult, null, 2) + '\n', {
+      flag: 'wx',
+      mode: 0o600,
+    });
+    process.send?.({ type: 'hostile-result', result: hostileResult });
+  };
+  const armHostile = () => {
+    if (!spec.hostileControl) return;
+    const plan = spec.hostileControl;
+    const deadline = performance.now() + 15000;
+    const poll = () => {
+      try {
+        assert(performance.now() < deadline, 'hostile watcher deadline expired');
+        const directory = path.join(plan.session, 'hook-invocations');
+        if (!fs.existsSync(directory)) return;
+        const names = fs
+          .readdirSync(directory)
+          .filter((name) => new RegExp('^' + child.pid + '-[0-9]+\\.jsonl$').test(name));
+        assert(names.length <= 1, 'ambiguous original invocation journal');
+        if (!names.length) return;
+        const file = path.join(directory, names[0]);
+        assert(fs.statSync(file).size <= 1024 * 1024, 'hostile journal exceeds bound');
+        const bytes = fs.readFileSync(file, 'utf8');
+        const end = bytes.lastIndexOf('\n');
+        if (end < 0) return;
+        const entries = bytes.slice(0, end).split('\n').filter(Boolean).map(JSON.parse);
+        const started = entries[0];
+        const completed = entries.filter((row) => row.stage === 'session_seal_consumer_completed');
+        if (!completed.length) return;
+        assert.equal(completed.length, 1);
+        assert.equal(started.stage, 'invocation_started');
+        assert.equal(started.dispatch_cwd, spec.cwd);
+        assert.equal(started.resolved_session_id, plan.sid);
+        const consumer = completed[0];
+        for (const row of [started, consumer]) {
+          assert.equal(row.schema, 'caws.hook_invocation.v1');
+          assert.equal(row.invocation_id + '.jsonl', names[0]);
+          assert.equal(row.surface, 'codex');
+          assert.equal(row.event, 'session_end');
+          assert.equal(row.runtime_digest, plan.runtimeDigest);
+          assert.equal(row.input_sha256, hash(spec.input));
+        }
+        assert.equal(consumer.status, 'published');
+        const key = hash(
+          JSON.stringify(['caws-project-service-key-v1', spec.cwd, 'session-render'])
+        );
+        const request = hash(JSON.stringify(['caws.session.original.v1', started.invocation_id]));
+        const operationFile = path.join(
+          spec.environment.CAWS_HOME,
+          'state/render-service/custody/operations/services',
+          key,
+          request + '.json'
+        );
+        const operation = JSON.parse(fs.readFileSync(operationFile, 'utf8'));
+        assert.equal(operation.body.identity.requestId, request);
+        assert.equal(operation.body.identity.projectServiceKey, key);
+        assert.equal(operation.body.outcome.execution, 'returned', 'ACK race: A already consumed');
+        assert.equal(operation.body.outcome.result.terminalDigest, consumer.terminal_digest);
+        assert.equal(fs.statSync(plan.target).ino, plan.beforeInode);
+        const actionStartedAt = Date.now();
+        fs.renameSync(plan.replacement, plan.target);
+        const actionCompletedAt = Date.now();
+        const afterInode = fs.statSync(plan.target).ino;
+        const sameBytesSha256 = hash(fs.readFileSync(plan.target));
+        assert.notEqual(afterInode, plan.beforeInode);
+        assert.equal(sameBytesSha256, plan.originalSha256);
+        finishHostile({
+          status: 'applied',
+          type: 'changed-input',
+          invocationId: started.invocation_id,
+          journal: file,
+          consumer,
+          beforeAction: { file: operationFile, row: operation },
+          beforeInode: plan.beforeInode,
+          afterInode,
+          originalSha256: plan.originalSha256,
+          sameBytesSha256,
+          actionStartedAt,
+          actionCompletedAt,
+        });
+      } catch (error) {
+        finishHostile({ status: 'failed', error: String(error) });
+      }
+    };
+    hostileTimer = setInterval(poll, 2);
+  };
   child.stdout.on('data', (bytes) => {
     stdout = Buffer.concat([stdout, bytes]);
     process.stdout.write(bytes);
@@ -45,6 +138,7 @@ if (process.argv[2] === '--agent-child') {
   );
   child.once('close', (code, signal) => {
     closed = true;
+    finishHostile({ status: 'failed', error: 'native child closed before hostile action' });
     process.send?.({
       type: 'native-terminal',
       pid: child.pid,
@@ -59,6 +153,7 @@ if (process.argv[2] === '--agent-child') {
       const accepted = !closed && child.kill(message.signal);
       process.send?.({ type: 'signal-result', signal: message.signal, accepted, pid: child.pid });
     } else if (message.type === 'release') {
+      finishHostile({ status: 'failed', error: 'ancestor released before hostile action' });
       if (!closed) child.kill('SIGTERM');
       const finish = () => process.exit(0);
       if (closed) finish();
@@ -66,10 +161,12 @@ if (process.argv[2] === '--agent-child') {
     }
   });
   process.on('disconnect', () => {
+    finishHostile({ status: 'failed', error: 'parent disconnected before hostile action' });
     if (!closed) child.kill('SIGTERM');
     if (closed) process.exit(1);
     else child.once('close', () => process.exit(1));
   });
+  armHostile();
   child.stdin.end(spec.input);
 } else {
   const options = new Map();
@@ -658,7 +755,14 @@ if (process.argv[2] === '--agent-child') {
       [fixture.surface === 'codex' ? 'CODEX_THREAD_ID' : 'CLAUDE_SESSION_ID']: fixture.sid,
     };
     const spec = path.join(fixture.directory, 'agent-input.json');
-    put(spec, { native, argv, cwd: fixture.project, environment, input });
+    put(spec, {
+      native,
+      argv,
+      cwd: fixture.project,
+      environment,
+      input,
+      hostileControl: fixture.hostileControl,
+    });
     const agent = launch(
       fixture.name + '-agent',
       node,
@@ -671,7 +775,7 @@ if (process.argv[2] === '--agent-child') {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
       }
     );
-    let nativePid, signalResult, terminal, monitor;
+    let nativePid, signalResult, terminal, monitor, hostileResult;
     const coverage = fixture.capacityObservation
       ? { expected: null, originalFrontend: null, confirmedChains: [], witnesses: [] }
       : null;
@@ -745,6 +849,7 @@ if (process.argv[2] === '--agent-child') {
           signalResult = message;
           put(path.join(fixture.directory, 'signal-result.json'), message);
         }
+        if (message.type === 'hostile-result') hostileResult = message.result;
         if (message.type === 'native-terminal') {
           clearInterval(monitor);
           terminal = message;
@@ -787,6 +892,7 @@ if (process.argv[2] === '--agent-child') {
       reason,
       signalResult: () => signalResult,
       terminal: () => terminal,
+      hostileResult: () => hostileResult,
       coverage,
       collector,
       observationErrors,
@@ -1299,38 +1405,31 @@ if (process.argv[2] === '--agent-child') {
     const originalSha256 = hash(originalBytes);
     const beforeInode = fs.statSync(target).ino;
     put(replacement, originalBytes);
-    const originalA = await invoke(a);
-    const recordA = await waitFor(
-      () => {
-        const record = journal(a.session);
-        return record?.rows.some((row) => row.stage === 'session_seal_consumer_completed')
-          ? record
-          : null;
-      },
-      15000,
-      'A never reached the actual ordinary consumer'
-    );
-    const idA = recordA.rows[0].invocation_id;
-    const beforeAction = operation(a, idA);
-    assert.equal(
-      beforeAction.row?.body.outcome.execution,
-      'returned',
-      'ACK race: A already consumed'
-    );
-    // Keep expensive semantic checks and artifact writes out of the hostile window.
-    fs.renameSync(replacement, target);
-    assert.notEqual(fs.statSync(target).ino, beforeInode);
-    assert.equal(hash(fs.readFileSync(target)), originalSha256);
-    put(path.join(a.directory, 'pre-action-operation.json'), beforeAction);
-    put(path.join(a.directory, 'hostile-action.json'), {
-      type: 'changed-input',
-      at: Date.now(),
+    a.hostileControl = {
+      target,
+      replacement,
       originalSha256,
-      journal: recordA.file,
       beforeInode,
-      afterInode: fs.statSync(target).ino,
-      sameBytesSha256: hash(fs.readFileSync(target)),
-    });
+      session: a.session,
+      sid: a.sid,
+      runtimeDigest: a.installed.digest,
+      receipt: path.join(a.directory, 'hostile-action.json'),
+    };
+    const originalA = await invoke(a);
+    const action = await waitFor(
+      () => originalA.hostileResult(),
+      17000,
+      'A hostile watcher did not settle'
+    );
+    assert.equal(action.status, 'applied', action.error);
+    assert.equal(action.nativePid, originalA.nativePid);
+    assert.deepEqual(read(a.hostileControl.receipt), action);
+    const recordA = journal(a.session);
+    assert(recordA, 'A ordinary consumer journal missing');
+    const idA = recordA.rows[0].invocation_id;
+    assert.equal(action.invocationId, idA);
+    assert.equal(action.journal, recordA.file);
+    put(path.join(a.directory, 'pre-action-operation.json'), action.beforeAction);
     const terminalA = await bounded(originalA.nativeTerminal, 25000, 'A did not settle');
     checkPrefix(a, originalA, recordA);
     const consumerA = checkConsumer(a, recordA);
@@ -1389,7 +1488,12 @@ if (process.argv[2] === '--agent-child') {
     await writerProbe(a, 'retained');
     assertOwner('after-A');
 
-    const a2 = { ...a, name: 'codex-refused-A2', directory: path.join(a.directory, 'a2') };
+    const a2 = {
+      ...a,
+      hostileControl: undefined,
+      name: 'codex-refused-A2',
+      directory: path.join(a.directory, 'a2'),
+    };
     fs.mkdirSync(a2.directory, { mode: 0o700 });
     const priorJournals = fs.readdirSync(path.join(a.session, 'hook-invocations'));
     const originalA2 = await invoke(a2);
