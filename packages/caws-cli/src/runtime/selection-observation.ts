@@ -190,7 +190,11 @@ function observedError(result: Extract<SelectionReadResult, { kind: 'error' }>):
   return error;
 }
 
-/** Incremental discovery owns immutable records; seal closes discovery. No freshness authority. */
+/** Incremental discovery owns immutable records; seal closes discovery.
+ * Reads are ordered observations, not an atomic filesystem snapshot. Capture
+ * coherence and admission-time revalidation belong to the native owner; this
+ * computation grants no freshness or publication authority.
+ */
 export class SelectionObservationSnapshot {
   readonly io: SelectionReadIo;
   readonly limits: SelectionObservationLimits;
@@ -201,7 +205,7 @@ export class SelectionObservationSnapshot {
     Map<string, VerifiedSelectionRuntimeSnapshot>
   >();
   readonly #runtimeDigests = new Map<string, string>();
-  #collecting: Set<string> | null = null;
+  #collecting: Map<string, SelectionReadOperation> | null = null;
   #bytes = 0;
   #sealed = false;
   constructor(
@@ -299,11 +303,11 @@ export class SelectionObservationSnapshot {
     requireOperation(operation, this.limits.maximumPathBytes);
     const key = operationKey(operation),
       observation = this.#rows.get(key);
+    this.#collecting?.set(key, operation);
     if (!observation) {
       if (this.#sealed) throw new Error('Uncaptured read in sealed selection snapshot');
       return needSelectionObservation(operation);
     }
-    this.#collecting?.add(key);
     return observation.result;
   }
   private verifyRuntime(
@@ -319,17 +323,21 @@ export class SelectionObservationSnapshot {
         const operation = operationKey(observation.operation);
         if (this.#rows.get(operation) !== observation)
           throw new Error('Runtime observation snapshot changed');
-        this.#collecting?.add(operation);
+        this.#collecting?.set(operation, observation.operation);
       }
       return { ...existing.manifest };
     }
     const previous = this.#collecting,
-      dependencies = new Set<string>();
+      dependencies = new Map<string, SelectionReadOperation>();
     this.#collecting = dependencies;
     try {
       const files = verify(home, digest, this.io);
       const observations = Object.freeze(
-        [...dependencies].map((operation) => this.#rows.get(operation)!)
+        [...dependencies].map(([key, operation]) => {
+          const observation = this.#rows.get(key);
+          if (!observation) return needSelectionObservation(operation);
+          return observation;
+        })
       );
       const complete = Object.freeze({
         snapshotId: this.snapshotId,
@@ -342,7 +350,7 @@ export class SelectionObservationSnapshot {
         this.#verified.get(verify) ?? new Map<string, VerifiedSelectionRuntimeSnapshot>();
       entries.set(key, complete);
       this.#verified.set(verify, entries);
-      for (const operation of dependencies) previous?.add(operation);
+      for (const [key, operation] of dependencies) previous?.set(key, operation);
       return { ...complete.manifest };
     } finally {
       this.#collecting = previous;

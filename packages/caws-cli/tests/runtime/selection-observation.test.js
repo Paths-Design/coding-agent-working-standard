@@ -12,6 +12,25 @@ const {
   resolveObservedInvocationSelection,
 } = require('../../dist/runtime/selection-observation');
 
+test('a verifier that catches an uncaptured read cannot cache incomplete verification', () => {
+  const supplied = snapshot('swallowed-read');
+  const verify = (_home, _digest, io) => {
+    try {
+      io.readFile('/missing-verification-input');
+    } catch {
+      /* Exercise a consumer swallowing discovery. */
+    }
+    return { 'first.sh': 'not evidence of a completed read' };
+  };
+  expect(() => supplied.io.verifyRuntime('/home', 'a'.repeat(64), verify)).toThrow(
+    'Selection requires a captured read observation'
+  );
+  expect(supplied.runtimeSnapshots).toHaveLength(0);
+  expect(() => supplied.io.verifyRuntime('/home', 'a'.repeat(64), verify)).toThrow(
+    'Selection requires a captured read observation'
+  );
+});
+
 let root;
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-selection-observe-')));
@@ -365,6 +384,33 @@ test('fresh observation refuses changed runtime bytes instead of borrowing succe
     original.selection
   );
 });
+
+test.each(['access', 'not-directory'])(
+  'live and captured selection retain %s refusal type code and message',
+  async (kind) => {
+    const f = fixture();
+    if (kind === 'access') fs.chmodSync(path.join(f.runtime, 'first.sh'), 0o644);
+    else write(path.join(f.options.home, 'surfaces/codex/lib'), 'not a directory');
+    let liveError, observedError;
+    try {
+      resolveInvocationSelection(f.options);
+    } catch (error) {
+      liveError = error;
+    }
+    try {
+      await observe(f.options);
+    } catch (error) {
+      observedError = error;
+    }
+    expect(liveError.code).toBe(kind === 'access' ? 'EACCES' : 'ENOTDIR');
+    expect(observedError.constructor.name).toBe(liveError.constructor.name);
+    expect({
+      name: observedError.name,
+      message: observedError.message,
+      code: observedError.code,
+    }).toEqual({ name: liveError.name, message: liveError.message, code: liveError.code });
+  }
+);
 
 test.each(['mode', 'inventory'])('fresh snapshot rechecks native runtime %s', async (change) => {
   const f = fixture({}, true),
