@@ -1,9 +1,11 @@
 id: CAWS-BATS-ASSERTION-MAIN-001
 title: 'Land the verified Bash 3.2 assertion repair on main'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Verified nine-file assertion repair landed on main; exact predicates and retained179/33checks, current five gates and independent review. Native execution, publication, residency and machine cutover remain separately open.'
 created_at: '2026-10-23T03:29:13.497Z'
-updated_at: '2026-10-23T03:29:30.627Z'
+updated_at: '2026-10-23T03:38:01.170Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
