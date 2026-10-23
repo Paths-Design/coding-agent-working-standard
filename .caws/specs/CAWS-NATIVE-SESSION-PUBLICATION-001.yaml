@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-publication
 created_at: '2026-10-22T07:45:38.932Z'
-updated_at: '2026-10-22T21:55:05.965Z'
+updated_at: '2026-10-23T09:13:57.531Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -44,6 +44,20 @@ scope:
     - packages/caws-cli/src/runtime/session-publication-wire.ts
     - packages/caws-native/src/render_writer.rs
     - packages/caws-native/src/service_journal.rs
+    - docs/internal/caws-runtime-modernization.md
+    - packages/caws-cli/scripts/qualify-session-publication.cjs
+    - packages/caws-cli/src/runtime/committed-session-reader.ts
+    - packages/caws-cli/src/runtime/json-custody.ts
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/src/runtime/session-cache-client.ts
+    - packages/caws-cli/src/runtime/session-log.ts
+    - packages/caws-cli/src/runtime/session-seal-runtime.ts
+    - packages/caws-native/src/agent_pid_cache.rs
+    - packages/caws-native/src/agent_pid_cache/tests.rs
+    - packages/caws-native/src/session_cache.rs
+    - packages/caws-native/src/session_cache/tests.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/session_cache_wire/tests.rs
   out: []
 invariants:
   - 'Only independently captured original invocation and native custody authorize destination effects; prepared bytes and correlation grant none'
