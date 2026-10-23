@@ -32,7 +32,7 @@ if [ -p /dev/stdin ]; then kind=pipe; else kind=file; fi
 cat > "$OUT_DIR/reader-$$.bytes"
 printf '%s\n' "$kind" > "$OUT_DIR/reader-$$.kind"
 ls -A "$TMPDIR" > "$OUT_DIR/reader-$$.tmp"
-find "$TMPDIR" -type f > "$OUT_DIR/reader-$$.files"
+find "$TMPDIR" -path '*/caws-handler-stdin-*/*' -type f > "$OUT_DIR/reader-$$.files"
 exit 0
 EOF
   printf '#!/bin/bash\nexit 0\n' > "$STAGE_PACK/early-exit.sh"
@@ -222,17 +222,20 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   mkdir -p "$stub"
   # The stage is created normally; then TMPDIR (which this test owns) stops
   # accepting removals, as a hostile or misconfigured parent directory would.
-  printf '#!/bin/bash\ncase "$*" in *caws-handler-stdin-*) f=$(%q "$@") || exit 1; chmod a-w "$(dirname "$f")"; echo "$f"; exit 0 ;; esac\nexec %q "$@"\n' \
-    "$real_mktemp" "$real_mktemp" > "$stub/mktemp"
+  printf '#!/bin/bash\nif [ "$#" -eq 0 ]; then exec %q "$TMPDIR/dispatcher-XXXXXX"; fi\ncase "$*" in *caws-handler-stdin-*) f=$(%q "$@") || exit 1; chmod a-w "$(dirname "$f")"; echo "$f"; exit 0 ;; esac\nexec %q "$@"\n' \
+    "$real_mktemp" "$real_mktemp" "$real_mktemp" > "$stub/mktemp"
   chmod +x "$stub/mktemp"
   STAGE_PATH="$stub:$PATH" _chain "$big" reader.sh
   [ "$status" -eq 0 ]
   cmp "$expected" "$OUT_DIR"/reader-*.bytes
   # No payload pathname while the handler ran, and none afterwards.
   [ ! -s "$(ls "$OUT_DIR"/reader-*.files)" ]
-  [ -z "$(find "$STAGE_TMP" -type f)" ]
+  _has "$(cat "$OUT_DIR"/reader-*.tmp)" "dispatcher-"
+  [ -z "$(find "$STAGE_TMP" -path '*/caws-handler-stdin-*/*' -type f)" ]
   # What remains is one empty stage directory, named on stderr.
-  left=$(ls -A "$STAGE_TMP")
+  # GNU mktemp also places dispatcher stderr captures in TMPDIR. They are not
+  # payload stages and remain independently owned by the dispatcher.
+  left=$(find "$STAGE_TMP" -mindepth 1 -maxdepth 1 -type d -name 'caws-handler-stdin-*' -exec basename {} \;)
   [ "${left#caws-handler-stdin-}" != "$left" ]
   [ -d "$STAGE_TMP/$left" ]
   [ -z "$(ls -A "$STAGE_TMP/$left")" ]

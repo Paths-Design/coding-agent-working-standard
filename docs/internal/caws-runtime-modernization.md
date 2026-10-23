@@ -7749,6 +7749,78 @@ Additional bounded evidence and unresolved dependencies:
   establish full four-handler multi-project residency. Hosted Linux
   qualification of the repaired source remains required.
 
+- E290: Source commits `7ac28c52` and `ff10e085` land through governed merge
+  `c8f86504`. `/usr/bin/git push origin main` publishes `5a95747f`, exit 0 in
+  348.242s, with unchanged hook and source pins; its raw output records 350
+  suites, 6835 passing checks and fourteen skips. Receipts and logs are retained
+  under `main-push-08/`. Hosted run `39980339378` passes Linux native image
+  admission, macOS context-Git custody and all six packaged-upgrade jobs, but
+  fails the required Bats step. Its retained failed log identifies an actual
+  audit E2BIG error, a fixture that passes a 200KiB environment argument before
+  dispatch, a Linux `/bin/bash` assertion that requires macOS's major version,
+  and a stage assertion that counts GNU mktemp's dispatcher stderr file as a
+  payload. Root owns the audit transport repair and discriminating fixture
+  corrections; no package qualification or installed adoption follows from the
+  successful push.
+
+- E291: Publication-lane candidate `d0d24f78` moves the four fixed Render Git
+  queries into the existing actual-Child custodian. Retained native
+  `native-render-custodied-context-02` fails with a truncated final receipt;
+  incremental delimiter tracking removes repeated scans without extending the
+  reply budget. `native-render-custodied-context-03` exits 0 in 18.953s. Its
+  physical fixtures retain original frontend, custodian, Git and descendant
+  identities, TERM/KILL observations and absence after settlement. Carrier
+  `native-render-custodied-observation-02` exits 0 in 18.905s, and the two named
+  journal unknown/recovery controls each execute successfully. Earlier compile
+  and short-budget fixture failures remain retained. These feature-off checks do
+  not establish SQLite-enabled transport, production selection or complete
+  process-custody acceptance; independent review questions remain root-owned.
+
+  Reader repair `baabc30c` captures source identities once, checks copied byte
+  lengths and prevents failed admission from exposing a prior checkpoint.
+  `publication-buffer-{build-04,compile-02,test-02,eslint-02}` all exit 0; the
+  focused run exercises 48 cases, including actual resizable buffers, changing
+  getters and a stateful cross-kind collision control. The retained
+  `publication-buffer-review-check-join.json` joins four source files and 58
+  emitted modules to the executed checks. This completes those bounded repair
+  controls, not native source acquisition or the renderer callback.
+
+  Calendar repair `2f870ef7` refuses revoked arrays through typed request/reply
+  errors. Pinned CPython supplies short-fraction and after-transition DST
+  expectations. Strict compilation, 26 TypeScript cases, the normal build, 35
+  direct Jest cases and scoped lint exit 0. `renderer-calendar/mutation-03`
+  exits 0 in 285.200s, detecting 1172 of 1354 valid mutants (86.56%) against the
+  unchanged 80% floor. The new controls kill the fraction-padding and DST
+  inverse mutants; 165 survivors and seventeen uncovered mutants remain
+  explicitly counted. Source and emitted-consumer pins are retained. Calendar
+  integration and original-process observation consumption remain open.
+
+- E292: The hosted Bats repair sends audit tool-use fields through stdin using
+  NUL-separated shell values, avoiding Linux's per-argument exec ceiling while
+  preserving complete JSON objects. Shared pack v108 and its fingerprint carry
+  that executable change. The audit control refuses oversized jq arguments on
+  every host and compares complete expected/observed input and response JSON.
+  The direct dispatcher fixture uses a shell-local payload instead of an
+  oversized environment argument; installed dispatch controls retain actual file
+  transport. The system-shell control keeps macOS's Bash 3 requirement while
+  exercising Linux's actual `/bin/bash`. The hostile TMPDIR control explicitly
+  creates GNU-style dispatcher stderr files and distinguishes those from
+  payloads inside the private stage; it retains the payload absence and
+  empty-directory refusal assertions.
+
+  `publication-integration/hosted-bats-repair-build-01` exits 0 in 6.616s.
+  `hosted-bats-repair-cases-01` exits 0 in 23.864s across 47 Bats cases, with
+  stable source pins and no remaining group. Its retained
+  `tmp/bats-run-9QcwKk/test/5/{expected,observed}-payload.jsonl` files are each
+  140089 bytes with SHA256
+  `8f069edc265ec6f5b5a3e3b9d2a4384f54ec1378f272778d883cb04c3c71fb66`. Test42's
+  reader listing contains both a private stage and a dispatcher file, while its
+  payload-file inventory is empty. The fourteen fingerprint/version checks exit
+  0 in `hosted-bats-repair-fingerprint-02`; attempt01 retains a
+  command-selection failure for a nonexistent second test path. These local
+  observations do not replace fresh hosted Linux qualification or machine
+  adoption. Root owns committed review and the next coherent source landing.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7838,7 +7910,7 @@ command.
 | Spec criterion | State       | Required proof                                                                                                                                                                        |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A1             | in progress | Complete source/embedded/tooling feature inventory with destination, dependency, status and maintained evidence                                                                       |
-| A2             | unchecked   | Compiled native client through actual typed engine; native decisions and refusal/context/provenance parity                                                                            |
+| A2             | fail        | Canonical evidence retains the failed installed invocation; fresh compiled native client through actual typed engine must establish decisions and refusal/context/provenance parity   |
 | A3             | unchecked   | Lifecycle, isolation, freshness, concurrent start, cancellation, restart and uncertain-outcome hostile tests                                                                          |
 | A4             | unchecked   | Production/dev Python consumers replaced; package/source scans plus no-Python execution; classified foreign/historical material                                                       |
 | A5             | unchecked   | Supported harness and extension behavior through installed/native acceptance observations                                                                                             |
