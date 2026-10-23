@@ -7305,11 +7305,12 @@ Additional bounded evidence and unresolved dependencies:
 - E272: Normal push `main-push-02` at `51411cbf` exits 1 in 342.002 seconds,
   with source pins unchanged, no cleanup signals and no remaining process group.
   Typecheck, lint, audit and build pass. The complete test run exposes missing
-  quality-inventory classification for `session-seal-prepare.ts` and two
-  positive merge-hook fixtures without the staged runner dependency. The sparse
-  runner spec is reopened for its fixture repair; classification must preserve
-  existing mutation targets and floors. The earlier license-marker failure
-  remains unexplained despite this successful build.
+  quality-inventory classification for `session-seal-prepare.ts`, two positive
+  merge-hook fixtures without the staged runner dependency, and the shared-pack
+  fingerprint/version missing the changed session schema. The sparse runner spec
+  is reopened for its fixture repair; classification must preserve existing
+  mutation targets and floors. The earlier license-marker failure remains
+  unexplained despite this successful build.
 
   Publication candidate `42fbeb0c` passes both 64-MiB inventory-order controls
   from a fresh committed-source export. An isolated mutant restores alphabetical
@@ -7353,6 +7354,40 @@ Additional bounded evidence and unresolved dependencies:
   SessionEnd and B, with the native-prefix admission predicate checked before
   execution. No production admission relaxation or between-phase source change
   is authorized. Warm continuation and continuous publication remain unchecked.
+
+- E274: Normal push `main-push-03` at `06ed2a1b` exits 1 in 357.575 seconds with
+  unchanged source pins, no signals and no remaining process group. Its
+  typecheck, lint, audit and build pass. The complete Jest run has one failed
+  assertion: the shared pack fingerprint. The repaired inventory and merge-hook
+  fixtures pass. The full prior push-02 log contains that fingerprint failure
+  too; E272's earlier two-category account omitted it. Neither failed push
+  advances the remote.
+
+  Comparing all 75 tracked shared-pack files against baseline `bd4a2c75`
+  isolates `lib/session-log.schema.json`; live and committed trees both hash to
+  `cc16fd46cc2fbd646eadb6063a12db1d432df78d0e48ff9ab45adb427c4af157`. Shared
+  pack version 106 and its paired fingerprint describe that schema change. No
+  template, guard, mutation floor or selected installation is altered by the
+  version repair. The raw comparison is
+  `publication-integration/pack-fingerprint-diagnosis-01/tracked-pack-comparison.json`.
+  The normal CLI build exits 0 in 5.894 seconds. The unchanged fingerprint and
+  installation-rendering suites exit 0 in 2.584 seconds: all eight pack
+  identities, real-file-change and missing-surface controls, and managed
+  shared-hook version headers are exercised. Both runs retain unchanged input
+  pins and empty final process groups under
+  `publication-integration/pack-version-{build,tests}-01`. Full push, hosted
+  qualification and adoption remain separate obligations.
+
+  The failed warm-02 manifest remains unchanged. Separate retained request-009
+  configuration, original-input hash, Claude journal and native terminal witness
+  correlate to `confirmed_settled`; root independently re-executes the existing
+  pure correlator in
+  `publication-integration/warm-render-actual-02-reconciliation-01/root-correlation.json`.
+  Additive birth observations report all 61 retained PIDs absent; the corrected
+  actual rendezvous-socket observation is separate from the initially mistaken
+  path observation. This resolves the bounded cleanup inquiry, not native
+  SessionEnd publication or Render B. Compatibility dispatch did change
+  metadata; silent exit zero is not native publication evidence.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
