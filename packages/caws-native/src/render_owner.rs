@@ -666,6 +666,11 @@ pub use store::{
 
 mod pending;
 use pending::*;
+mod relay;
+mod session;
+pub use session::{
+    SessionAcquire, SessionAcquisition, SessionCompletion, SessionInvocation, acquire_session,
+};
 
 struct Budget {
     used: usize,
@@ -1426,6 +1431,37 @@ impl Actor {
         Ok(())
     }
     fn retire(&mut self) {
+        self.retire_backend(false);
+    }
+    /// Retire the actual warm backend without releasing/reacquiring its writer
+    /// capability. The operation keeps this exact Arc through SQL and ordinary
+    /// generation consumption. Failed retirement retains the actor quarantine.
+    fn publication_writer(
+        &mut self,
+        project: &Path,
+        expires: Instant,
+    ) -> Result<Arc<journal::Custody>> {
+        if self.writer_custody.is_none() {
+            self.writer_custody = Some(crate::render_writer::acquire(
+                &self.config.home,
+                project,
+                expires,
+            )?);
+        }
+        let retained = Arc::clone(self.writer_custody.as_ref().expect("writer acquired"));
+        self.retire_backend(true);
+        if self.unknown || self.process.is_some() || self.writer_intent.is_some() {
+            return Err("publication writer retirement is unsettled".into());
+        }
+        if !Arc::ptr_eq(
+            self.writer_custody.as_ref().expect("writer retained"),
+            &retained,
+        ) {
+            return Err("publication writer handoff changed capability".into());
+        }
+        Ok(retained)
+    }
+    fn retire_backend(&mut self, keep_writer: bool) {
         let mut backend_exit = None;
         if let Some(mut process) = self.process.take() {
             backend_exit = process.retire();
@@ -1458,7 +1494,7 @@ impl Actor {
                 .release();
             self.reserved = false;
         }
-        if !self.unknown && self.writer_intent.is_none() && self.process.is_none() {
+        if !keep_writer && !self.unknown && self.writer_intent.is_none() && self.process.is_none() {
             self.writer_custody.take();
         }
     }
@@ -2098,9 +2134,14 @@ pub fn host(path: &Path) -> Result<()> {
     listener.set_nonblocking(true).map_err(err)?;
     let routing = Arc::new(Mutex::new(routing));
     let active = Arc::new(AtomicUsize::new(0));
+    let operation_capacity = relay::OperationCapacity::new(c.limits.max_retained_records as usize);
+    let session_registry = Arc::new(Mutex::new(session::SessionRegistry::new(Arc::clone(
+        &operation_capacity,
+    ))));
     #[cfg(feature = "sqlite-store")]
-    let store_registry = Arc::new(Mutex::new(store::StoreRegistry::new(
+    let store_registry = Arc::new(Mutex::new(store::StoreRegistry::with_capacity(
         c.limits.max_retained_records as usize,
+        Arc::clone(&operation_capacity),
     )));
     let mut idle_since = Instant::now();
     loop {
@@ -2111,7 +2152,7 @@ pub fn host(path: &Path) -> Result<()> {
             .is_empty();
         #[cfg(not(feature = "sqlite-store"))]
         let retained_store = false;
-        if active.load(Ordering::Acquire) > 0 || retained_store {
+        if active.load(Ordering::Acquire) > 0 || retained_store || operation_capacity.retained() {
             idle_since = Instant::now();
         } else if idle_since.elapsed() >= Duration::from_millis(c.limits.idle_ms as u64) {
             break;
@@ -2129,6 +2170,7 @@ pub fn host(path: &Path) -> Result<()> {
                 let routing = Arc::clone(&routing);
                 let c = Arc::clone(&c);
                 let observations = Arc::clone(&observations);
+                let session_registry = Arc::clone(&session_registry);
                 #[cfg(feature = "sqlite-store")]
                 let store_registry = Arc::clone(&store_registry);
                 let received_at = Instant::now();
@@ -2142,6 +2184,20 @@ pub fn host(path: &Path) -> Result<()> {
                         c.limits.max_frame_bytes as usize,
                         receive,
                     );
+                    if let Ok(bytes) = &offer {
+                        if session::receive_first(
+                            &mut stream,
+                            bytes,
+                            &pending,
+                            received_at,
+                            &c,
+                            &routing,
+                            &permit,
+                            &session_registry,
+                        ) {
+                            return;
+                        }
+                    }
                     #[cfg(feature = "sqlite-store")]
                     if let Ok(bytes) = &offer {
                         if store::receive_first(

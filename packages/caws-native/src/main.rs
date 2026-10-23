@@ -44,6 +44,7 @@ struct Failure {
     dispatched: bool,
     ready: Option<Box<protocol::Ready>>,
     message: String,
+    session_settlement: Option<caws_native::render_owner::SessionAcquisition>,
     #[cfg(feature = "sqlite-store")]
     store_settlement: Option<StoreSettlement>,
     #[cfg(feature = "sqlite-store")]
@@ -55,6 +56,7 @@ impl Failure {
             dispatched: false,
             ready: None,
             message,
+            session_settlement: None,
             #[cfg(feature = "sqlite-store")]
             store_settlement: None,
             #[cfg(feature = "sqlite-store")]
@@ -87,10 +89,24 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     bytes.push(b'\n');
     let captured = (config.surface == "codex" && config.event == "pre_tool_use")
         .then(|| process_effect::CapturedAncestors::capture(deadline));
+    let prefix_ancestry = (cfg!(target_os = "macos")
+        && config.configuration == "system"
+        && config.event == "session_end"
+        && matches!(config.surface.as_str(), "codex" | "claude-code"))
+    .then(|| {
+        caws_native::agent_pid_cache::OriginalAncestry::capture(
+            &config.surface,
+            deadline,
+            cancellation::check,
+        )
+    })
+    .transpose()
+    .map_err(Failure::configuration)?;
     let mut session =
         runner::Session::start(config, &request.id, deadline).map_err(Failure::configuration)?;
     let mut ready = None;
     let mut dispatched = false;
+    let mut session_settlement = None;
     #[cfg(feature = "sqlite-store")]
     let mut store_settlement = None;
     #[cfg(feature = "sqlite-store")]
@@ -126,43 +142,129 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
             deadline,
         )?;
         let mut cache_attempted = false;
+        let mut prefix_complete = false;
+        let mut publication_attempted = false;
         #[cfg(feature = "sqlite-store")]
         let mut store_attempted = false;
         loop {
             match protocol::validate_frame(&session.frame(deadline)?, &request)? {
                 #[cfg(feature = "sqlite-store")]
                 protocol::EngineFrame::TranscriptStoreRequest(frame) => {
-                    if store_attempted {
+                    if store_attempted || publication_attempted {
                         return Err("transcript store exchange already attempted".into());
                     }
                     store_attempted = true;
+                    publication_attempted = true;
                     let context = ready.as_ref().ok_or("missing store readiness")?;
-                    let result =
-                        match render_bridge::captured_store_owner_config(config, &request, context)
-                        {
-                            Ok(owner) => caws_native::render_owner::acquire_store(
-                                &owner,
-                                caws_native::render_owner::StoreAcquire::capture(
-                                    &frame,
-                                    request.transcript_store_invocation(context, dispatched),
-                                    deadline,
-                                ),
+                    let result = match render_bridge::captured_publication_owner_config(
+                        config, &request, context,
+                    ) {
+                        Ok(owner) => caws_native::render_owner::acquire_store(
+                            &owner,
+                            caws_native::render_owner::StoreAcquire::capture(
+                                &frame,
+                                request.transcript_store_invocation(context, dispatched),
                                 deadline,
-                                || cancellation::check().is_err(),
-                                &mut session,
                             ),
-                            Err(error) => caws_native::render_owner::StoreCompletion::unavailable(
-                                &request.id,
-                                &request.runtime_digest,
-                                error,
-                            ),
-                        };
+                            deadline,
+                            || cancellation::check().is_err(),
+                            &mut session,
+                        ),
+                        Err(error) => caws_native::render_owner::StoreCompletion::unavailable(
+                            &request.id,
+                            &request.runtime_digest,
+                            error,
+                        ),
+                    };
                     let (binding, status) = retain_store_result(result, &mut store_settlement);
                     store_project_binding = binding;
                     status?;
                 }
+                protocol::EngineFrame::SessionSealRequest(frame) => {
+                    if publication_attempted || !prefix_complete {
+                        return Err(
+                            "session seal requires one completed native SessionEnd prefix".into(),
+                        );
+                    }
+                    publication_attempted = true;
+                    let context = ready.as_ref().ok_or("missing session readiness")?;
+                    let owner = render_bridge::captured_publication_owner_config(
+                        config, &request, context,
+                    )?;
+                    let acquisition = caws_native::render_owner::SessionAcquire::capture(
+                        &frame,
+                        &request.session_invocation(context, dispatched),
+                        deadline,
+                    )?;
+                    let result = caws_native::render_owner::acquire_session(
+                        &owner,
+                        acquisition,
+                        deadline,
+                        || cancellation::check().is_err(),
+                        &mut session,
+                    );
+                    let status = result.status();
+                    session_settlement = Some(result);
+                    status?;
+                }
+                protocol::EngineFrame::SessionEndPrefixRequest(frame) => {
+                    if cache_attempted || publication_attempted {
+                        return Err(
+                            "session prefix exchange already attempted or publication started"
+                                .into(),
+                        );
+                    }
+                    cache_attempted = true;
+                    let context = ready.as_ref().ok_or("missing prefix readiness")?;
+                    let original = prefix_ancestry
+                        .as_ref()
+                        .ok_or("missing original SessionEnd ancestry")?;
+                    let mut owner = request.session_prefix_owner(context, dispatched, original)?;
+                    let admitted = owner.admit(&frame).map_err(|error| error.to_string())?;
+                    session.credit_session_cache_control(frame.len() + 1)?;
+                    let mut exchange_failure = None;
+                    let mut decision_bytes = None;
+                    let execution =
+                        admitted.execute_checked(deadline, cancellation::check, |previous| {
+                            let exchange = (|| {
+                                session.send(previous, deadline)?;
+                                let decision = session.frame(deadline)?;
+                                decision_bytes = Some(decision.len() + 1);
+                                Ok(decision)
+                            })();
+                            exchange.map_err(|error| {
+                                exchange_failure = Some(error);
+                                caws_native::session_cache_wire::WireError(
+                                    "session prefix transport failed",
+                                )
+                            })
+                        });
+                    if let Some(error) = execution.cancellation_error {
+                        return Err(error);
+                    }
+                    if let Some(error) = execution.exchange_error {
+                        return Err(exchange_failure.unwrap_or_else(|| error.to_string()));
+                    }
+                    if let Some(bytes) = decision_bytes {
+                        session.credit_session_cache_control(bytes)?;
+                    }
+                    prefix_complete = execution.result.prefix_complete();
+                    if !prefix_complete && !execution.result.fallback_safe() {
+                        return Err(
+                            "session prefix did not complete; effects may be uncertain; no retry"
+                                .into(),
+                        );
+                    }
+                    session.send(
+                        &execution
+                            .result
+                            .encode()
+                            .map_err(|error| error.to_string())?,
+                        deadline,
+                    )?;
+                }
                 protocol::EngineFrame::SessionCacheRequest(frame) => {
-                    if cache_attempted {
+                    if cache_attempted || publication_attempted {
                         return Err("session cache exchange already attempted".into());
                     }
                     cache_attempted = true;
@@ -227,6 +329,7 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                 dispatched,
                 ready: ready.map(Box::new),
                 message,
+                session_settlement,
                 #[cfg(feature = "sqlite-store")]
                 store_settlement,
                 #[cfg(feature = "sqlite-store")]
@@ -354,9 +457,11 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     // Keep the resident record correlation through final frontend output.
     #[cfg(feature = "sqlite-store")]
     let _store_settlement = store_settlement.as_ref();
+    let _session_settlement = session_settlement.as_ref();
     Ok(code)
 }
 fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
+    let _session_settlement = error.session_settlement.as_ref();
     // Frontend failure retains finite metadata; the resident owns SQL cleanup.
     #[cfg(feature = "sqlite-store")]
     let _store_settlement = error.store_settlement.as_ref();

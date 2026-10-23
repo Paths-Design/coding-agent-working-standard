@@ -323,6 +323,7 @@ pub struct Session {
     diagnostics: Vec<u8>,
     stdout_bytes: usize,
     cache_control_credit: usize,
+    publication_control_credit: usize,
     #[cfg(feature = "sqlite-store")]
     store_control_credit: usize,
     out_done: bool,
@@ -330,6 +331,33 @@ pub struct Session {
     terminal_containment: bool,
     render_bank: Option<crate::render_bridge::DescriptorBank>,
     render_bridge: Option<crate::render_bridge::Bridge>,
+}
+
+impl caws_native::session_publication::Transport for Session {
+    fn write(&mut self, bytes: &[u8], deadline: Instant) -> Result<(), String> {
+        self.send(bytes, deadline)
+    }
+    fn read(&mut self, deadline: Instant) -> Result<Vec<u8>, String> {
+        // frame() consumes exactly one LF and leaves an optional CR in the
+        // returned bytes. Restore that consumed delimiter for exact credit.
+        let mut bytes = self.frame(deadline)?;
+        bytes.push(b'\n');
+        Ok(bytes)
+    }
+    fn credit(&mut self, bytes: usize) -> Result<(), String> {
+        let credit = self
+            .publication_control_credit
+            .checked_add(bytes)
+            .ok_or("publication control credit overflow")?;
+        if bytes == 0
+            || credit
+                > caws_native::session_publication_wire::MAX_EXTRA_PUBLICATION_ENGINE_STDOUT_BYTES
+        {
+            return Err("publication control credit exceeds one finite operation".into());
+        }
+        self.publication_control_credit = credit;
+        Ok(())
+    }
 }
 
 #[cfg(feature = "sqlite-store")]
@@ -462,6 +490,7 @@ impl Session {
             diagnostics: Vec::new(),
             stdout_bytes: 0,
             cache_control_credit: 0,
+            publication_control_credit: 0,
             #[cfg(feature = "sqlite-store")]
             store_control_credit: 0,
             out_done: false,
@@ -643,11 +672,11 @@ impl Session {
     fn control_credit(&self) -> usize {
         #[cfg(feature = "sqlite-store")]
         {
-            self.cache_control_credit + self.store_control_credit
+            self.cache_control_credit + self.publication_control_credit + self.store_control_credit
         }
         #[cfg(not(feature = "sqlite-store"))]
         {
-            self.cache_control_credit
+            self.cache_control_credit + self.publication_control_credit
         }
     }
 
@@ -1205,6 +1234,46 @@ mod tests {
         assert_eq!(
             outcome.unwrap_err(),
             "engine stream exceeded total byte budget"
+        );
+    }
+
+    #[test]
+    fn publication_credit_preserves_raw_delimiters_and_separate_fixed_budget() {
+        use caws_native::session_publication::Transport;
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        let mut bytes = vec![b'p'; 1024 * 1024];
+        bytes.extend_from_slice(b"\r\n");
+        for _ in 0..5 {
+            session.send(&bytes, expires).unwrap();
+            let received = Transport::read(&mut session, expires).unwrap();
+            assert_eq!(
+                received, bytes,
+                "credit must account for exact consumed CR/LF"
+            );
+            Transport::credit(&mut session, received.len()).unwrap();
+        }
+        assert_eq!(session.publication_control_credit, bytes.len() * 5);
+        assert_eq!(session.cache_control_credit, 0);
+        #[cfg(feature = "sqlite-store")]
+        assert_eq!(session.store_control_credit, 0);
+        assert!(Transport::credit(&mut session, 0).is_err());
+        let maximum =
+            caws_native::session_publication_wire::MAX_EXTRA_PUBLICATION_ENGINE_STDOUT_BYTES;
+        let remaining = maximum - session.publication_control_credit;
+        Transport::credit(&mut session, remaining).unwrap();
+        assert!(Transport::credit(&mut session, 1).is_err());
+        assert!(Transport::credit(&mut session, usize::MAX).is_err());
+        assert_eq!(session.publication_control_credit, maximum);
+        // Credit cannot enlarge a single frame even when the full operation
+        // allowance remains. Owner validation is exercised by owner tests.
+        let oversized = vec![b'x'; MAX_FRAME + 1];
+        let outcome = session
+            .send(&oversized, expires)
+            .and_then(|()| Transport::read(&mut session, expires).map(|_| ()));
+        assert_eq!(
+            outcome.unwrap_err(),
+            format!("pipe exceeded {MAX_FRAME} byte budget")
         );
     }
 

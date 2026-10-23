@@ -1201,3 +1201,110 @@ fn resident_actor_run_orders_prepared_renderer_store_and_later_renderer() {
         fixture_path.display()
     );
 }
+
+#[test]
+fn sql_control_512_bound_is_independent_from_publication_read_and_credit() {
+    for (publication, length, allowed) in
+        [(false, 512, true), (false, 513, false), (true, 513, true)]
+    {
+        let (mut relay, mut caller, replies) = relay_pair();
+        let join = thread::spawn(move || {
+            if publication {
+                publication::Transport::read(&mut relay, expires())
+            } else {
+                store::Transport::read(&mut relay, expires())
+            }
+        });
+        match command(&mut caller) {
+            OwnerFrame::ReadEngineFrame { sequence } => {
+                assert!(!publication);
+                assert_eq!(sequence, 1);
+            }
+            OwnerFrame::PublicationReadEngineFrame { sequence } => {
+                assert!(publication);
+                assert_eq!(sequence, 1);
+            }
+            _ => panic!("wrong read operation"),
+        }
+        ack(
+            &replies,
+            1,
+            Ok(ReplyValue::Read {
+                base64: STANDARD.encode(vec![b'x'; length]),
+            }),
+        );
+        let result = join.join().unwrap();
+        assert_eq!(result.is_ok(), allowed, "{result:?}");
+        if allowed {
+            assert_eq!(result.unwrap(), vec![b'x'; length]);
+        }
+    }
+}
+#[test]
+fn publication_credit_requires_exact_delivery_ack_sequence_and_operation() {
+    for wrong_sequence in [false, true] {
+        let (mut relay, mut caller, replies) = relay_pair();
+        let join = thread::spawn(move || publication::Transport::credit(&mut relay, 73));
+        match command(&mut caller) {
+            OwnerFrame::PublicationCredit { sequence, bytes } => {
+                assert_eq!(sequence, 1);
+                assert_eq!(bytes, 73);
+            }
+            _ => panic!("SQL credit must not carry publication credit"),
+        }
+        ack(
+            &replies,
+            if wrong_sequence { 2 } else { 1 },
+            Ok(ReplyValue::Credited),
+        );
+        let result = join.join().unwrap();
+        assert_eq!(result.is_ok(), !wrong_sequence);
+        if wrong_sequence {
+            assert!(result.unwrap_err().contains("acknowledgement mismatch"));
+        }
+    }
+}
+
+#[test]
+fn publication_write_outer_envelope_does_not_widen_sql_write_variant() {
+    let inner = publication_wire::MAX_FRAME_BYTES;
+    let (mut relay, mut caller, replies) = relay_pair();
+    let join = thread::spawn(move || {
+        publication::Transport::write(&mut relay, &vec![b'x'; inner], expires()).unwrap();
+        assert!(
+            publication::Transport::write(&mut relay, &vec![b'x'; inner + 1], expires()).is_err()
+        );
+        assert!(store::Transport::write(&mut relay, &vec![b'x'; inner], expires()).is_err());
+    });
+    let bytes = frame(
+        &mut caller,
+        &mut Vec::new(),
+        publication_wire::MAX_RELAY_FRAME_BYTES,
+        expires(),
+    )
+    .unwrap();
+    assert!(bytes.len() > inner);
+    match decode_owner_frame(&bytes, inner).unwrap() {
+        OwnerFrame::PublicationWriteEngineFrame { sequence, base64 } => {
+            assert_eq!(sequence, 1);
+            assert_eq!(STANDARD.decode(base64).unwrap(), vec![b'x'; inner]);
+        }
+        _ => panic!("wrong publication write variant"),
+    }
+    ack(&replies, 1, Ok(ReplyValue::Written));
+    join.join().unwrap();
+    let wrong = encoded(
+        &OwnerFrame::WriteEngineFrame {
+            sequence: 1,
+            base64: STANDARD.encode(vec![b'x'; inner]),
+        },
+        publication_wire::MAX_RELAY_FRAME_BYTES,
+    )
+    .unwrap();
+    assert!(
+        decode_owner_frame(&wrong, inner)
+            .err()
+            .unwrap()
+            .contains("variant envelope bound")
+    );
+}

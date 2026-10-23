@@ -3,9 +3,18 @@ import { isAbsolute, normalize } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { parseJsonSource } from './json-custody';
 import { parsePythonJson } from '../transcripts/lossless-json';
-import { RuntimeProtocolError, SESSION_CACHE_CAPABILITY, type RuntimeRequest } from './protocol';
+import {
+  RuntimeProtocolError,
+  SESSION_CACHE_CAPABILITY,
+  SESSION_END_PREFIX_CAPABILITY,
+  type RuntimeRequest,
+} from './protocol';
 
-export { SESSION_CACHE_CAPABILITY } from './protocol';
+export { SESSION_CACHE_CAPABILITY, SESSION_END_PREFIX_CAPABILITY } from './protocol';
+export const SESSION_END_PREFIX_REQUEST_SCHEMA = 'caws.runtime.session-end-prefix.request.v1';
+export const SESSION_END_PREFIX_PREVIOUS_SCHEMA = 'caws.runtime.session-end-prefix.previous.v1';
+export const SESSION_END_PREFIX_DECISION_SCHEMA = 'caws.runtime.session-end-prefix.decision.v1';
+export const SESSION_END_PREFIX_RESULT_SCHEMA = 'caws.runtime.session-end-prefix.result.v1';
 const REQUEST = 'caws.runtime.session-cache.request.v1';
 const PREVIOUS = 'caws.runtime.session-cache.previous.v1';
 const DECISION = 'caws.runtime.session-cache.decision.v1';
@@ -27,6 +36,181 @@ export interface NativeSessionCachePort {
 export interface SessionCacheTransport {
   read(signal: AbortSignal): Promise<Uint8Array>;
   write(frame: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<void>;
+}
+
+export interface NativeSessionEndPrefixResult {
+  readonly status: 'completed' | 'declined' | 'unavailable';
+  readonly prefixComplete: boolean;
+  readonly envelopePublished: boolean;
+  readonly pointerPublished: boolean;
+  readonly agentPid: 'refreshed' | 'not_found' | 'unavailable' | 'not_run';
+  readonly reap: 'completed' | 'rate_limited' | 'unavailable' | 'not_run';
+  readonly diagnostic: string | null;
+}
+export interface NativeSessionEndPrefixPort {
+  /** Only a fully correlated, no-effect decline permits compatibility replay. */
+  capture(canonicalRoot: string): Promise<NativeSessionEndPrefixResult>;
+}
+
+function prefixTerminal(row: Record<string, unknown>, bytes: number): NativeSessionEndPrefixResult {
+  if (
+    bytes > MAX_RESULT_FRAME ||
+    !keys(row, [
+      'schema',
+      'id',
+      'runtimeDigest',
+      'token',
+      'status',
+      'prefixComplete',
+      'envelopePublished',
+      'pointerPublished',
+      'agentPid',
+      'reap',
+      'diagnostic',
+    ]) ||
+    row.schema !== SESSION_END_PREFIX_RESULT_SCHEMA ||
+    !['completed', 'declined', 'unavailable'].includes(row.status as string) ||
+    typeof row.prefixComplete !== 'boolean' ||
+    typeof row.envelopePublished !== 'boolean' ||
+    typeof row.pointerPublished !== 'boolean' ||
+    !['refreshed', 'not_found', 'unavailable', 'not_run'].includes(row.agentPid as string) ||
+    !['completed', 'rate_limited', 'unavailable', 'not_run'].includes(row.reap as string)
+  )
+    throw new RuntimeProtocolError('Invalid SessionEnd prefix result');
+  const {
+    status,
+    prefixComplete,
+    envelopePublished,
+    pointerPublished,
+    agentPid,
+    reap,
+    diagnostic,
+  } = row;
+  if (
+    (pointerPublished && !envelopePublished) ||
+    (status === 'completed' &&
+      (!prefixComplete ||
+        !envelopePublished ||
+        !pointerPublished ||
+        !['refreshed', 'not_found'].includes(agentPid as string) ||
+        diagnostic !== null)) ||
+    (status === 'declined' &&
+      (prefixComplete ||
+        envelopePublished ||
+        pointerPublished ||
+        agentPid !== 'not_run' ||
+        reap !== 'not_run')) ||
+    (agentPid !== 'refreshed' && reap !== 'not_run') ||
+    (agentPid === 'refreshed' && prefixComplete && reap === 'not_run') ||
+    ((agentPid === 'unavailable' || reap === 'unavailable') && status !== 'unavailable') ||
+    (prefixComplete && agentPid === 'not_run') ||
+    (status !== 'completed' &&
+      (typeof diagnostic !== 'string' ||
+        !diagnostic ||
+        Buffer.byteLength(diagnostic) > MAX_DIAGNOSTIC_BYTES))
+  )
+    throw new RuntimeProtocolError('Inconsistent SessionEnd prefix result');
+  return Object.freeze({
+    status,
+    prefixComplete,
+    envelopePublished,
+    pointerPublished,
+    agentPid,
+    reap,
+    diagnostic,
+  }) as NativeSessionEndPrefixResult;
+}
+
+/** Separate from cache v1: the native owner attempts envelope, pointer, original
+ * agent-PID refresh and applicable reaping before reporting prefixComplete.
+ * This client never supplies a PID, opens a cache, retries, or spawns a process.
+ */
+export function createNativeSessionEndPrefixPort(
+  request: RuntimeRequest,
+  transport: SessionCacheTransport,
+  signal: AbortSignal
+): NativeSessionEndPrefixPort {
+  let used = false;
+  return Object.freeze({
+    async capture(canonicalRoot: string): Promise<NativeSessionEndPrefixResult> {
+      if (used) throw new RuntimeProtocolError('SessionEnd prefix operation is single-use');
+      used = true;
+      if (signal.aborted) throw signal.reason;
+      if (
+        !isAbsolute(canonicalRoot) ||
+        normalize(canonicalRoot) !== canonicalRoot ||
+        (canonicalRoot !== '/' && canonicalRoot.endsWith('/')) ||
+        Buffer.byteLength(canonicalRoot) > 4096 ||
+        /[\x00-\x1f\x7f-\x9f]/.test(canonicalRoot) ||
+        Buffer.from(canonicalRoot).toString('utf8') !== canonicalRoot
+      )
+        throw new RuntimeProtocolError('Invalid SessionEnd prefix root');
+      if (
+        !['codex', 'claude-code'].includes(request.surface) ||
+        request.event !== 'session_end' ||
+        request.configuration !== 'system' ||
+        request.sessionEndPrefix !== SESSION_END_PREFIX_CAPABILITY
+      )
+        throw new RuntimeProtocolError('Unsupported SessionEnd prefix invocation');
+      const supplied = request.payload.session_id;
+      if (
+        typeof supplied !== 'string' ||
+        !supplied ||
+        supplied === 'unknown' ||
+        supplied === '.' ||
+        supplied === '..' ||
+        Buffer.byteLength(supplied) > 128 ||
+        !/^[A-Za-z0-9_.@:-]+$/.test(supplied)
+      )
+        throw new RuntimeProtocolError('SessionEnd prefix lacks safe original identity');
+      const identity = {
+        id: request.id,
+        runtimeDigest: request.runtimeDigest,
+        token: randomUUID(),
+      };
+      await transport.write(
+        { schema: SESSION_END_PREFIX_REQUEST_SCHEMA, ...identity, canonicalRoot },
+        signal
+      );
+      const first = await transport.read(signal);
+      if (signal.aborted) throw signal.reason;
+      const row = decodeControl(first, request, identity.token);
+      if (row.schema === SESSION_END_PREFIX_RESULT_SCHEMA) {
+        const result = prefixTerminal(row, first.byteLength);
+        if (result.status === 'completed' || result.envelopePublished || result.pointerPublished)
+          throw new RuntimeProtocolError('SessionEnd prefix effects preceded interpretation');
+        return result;
+      }
+      if (
+        row.schema !== SESSION_END_PREFIX_PREVIOUS_SCHEMA ||
+        !keys(row, ['schema', 'id', 'runtimeDigest', 'token', 'existingBase64']) ||
+        (row.existingBase64 !== null && typeof row.existingBase64 !== 'string')
+      )
+        throw new RuntimeProtocolError('Invalid previous SessionEnd prefix frame');
+      let previous: Buffer | null = null;
+      if (typeof row.existingBase64 === 'string') {
+        previous = Buffer.from(row.existingBase64, 'base64');
+        if (
+          previous.byteLength > MAX_EXISTING_BYTES ||
+          previous.toString('base64') !== row.existingBase64
+        )
+          throw new RuntimeProtocolError('Invalid previous SessionEnd prefix encoding');
+      }
+      const decision = decideSessionCacheCreation(previous, supplied);
+      await transport.write(
+        { schema: SESSION_END_PREFIX_DECISION_SCHEMA, ...identity, ...decision },
+        signal
+      );
+      const last = await transport.read(signal);
+      const result = prefixTerminal(decodeControl(last, request, identity.token), last.byteLength);
+      if (decision.action === 'decline' && result.status !== 'declined')
+        throw new RuntimeProtocolError('SessionEnd prefix decline was not confirmed');
+      if (decision.action === 'capture' && result.status === 'declined')
+        throw new RuntimeProtocolError('Unexpected SessionEnd prefix decision result');
+      if (signal.aborted) throw signal.reason;
+      return result;
+    },
+  });
 }
 
 /** Numeric tokens in the original parser input can change even unused-field

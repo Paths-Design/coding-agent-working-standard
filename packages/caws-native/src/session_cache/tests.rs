@@ -11,6 +11,75 @@ use std::{
 
 const NOW: &str = "2026-10-21T04:05:06Z";
 const OLD: &str = "2001-02-03T04:05:06Z";
+
+#[test]
+fn prefix_preparation_does_not_create_directories_before_a_decoder_decline() {
+    let f = Fixture::new();
+    let prepared = match prepare_prefix(
+        &f.input(Some("s"), Some("SessionEnd")),
+        expires(),
+        &mut || Ok(()),
+    )
+    .unwrap()
+    {
+        PrefixPreparation::Ready(value) => value,
+        _ => panic!("unexpected decline"),
+    };
+    assert!(matches!(prepared.existing(), ExistingEnvelope::Missing));
+    assert!(prepared.sessions().is_none());
+    assert!(!f.root.join(".caws/sessions").exists());
+}
+
+#[test]
+fn prefix_keeps_pid_directory_capability_when_session_open_fails() {
+    let f = Fixture::new();
+    fs::create_dir_all(f.root.join(".caws/sessions")).unwrap();
+    fs::write(f.session("s"), b"not a directory").unwrap();
+    let mut prepared = match prepare_prefix(
+        &f.input(Some("s"), Some("SessionEnd")),
+        expires(),
+        &mut || Ok(()),
+    )
+    .unwrap()
+    {
+        PrefixPreparation::Ready(value) => value,
+        _ => panic!("unexpected decline"),
+    };
+    assert!(prepared.sessions().is_some());
+    let failure = prepared.take_preflight_failure().unwrap();
+    assert_eq!(failure.stage, Stage::Session);
+    assert!(!failure.envelope_published);
+    assert_eq!(fs::read(f.session("s")).unwrap(), b"not a directory");
+    assert!(!f.pointer().exists());
+}
+
+#[test]
+fn admitted_prefix_preserves_creation_and_selected_claude_platform() {
+    let f = Fixture::new();
+    let mut prepared = match prepare_prefix(
+        &f.input(Some("s"), Some("SessionEnd")),
+        expires(),
+        &mut || Ok(()),
+    )
+    .unwrap()
+    {
+        PrefixPreparation::Ready(value) => value,
+        _ => panic!("unexpected decline"),
+    };
+    commit_prefix(
+        &mut prepared,
+        "claude-code",
+        Some(OLD.encode_utf16().collect()),
+        expires(),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let envelope = value(&f.envelope("s"));
+    assert_eq!(envelope["created_at"], OLD);
+    assert_eq!(envelope["hook_event"], "SessionEnd");
+    assert_eq!(envelope["platform"], "claude-code");
+    assert_eq!(value(&f.pointer())["session_id"], "s");
+}
 struct Fixture {
     base: PathBuf,
     root: PathBuf,

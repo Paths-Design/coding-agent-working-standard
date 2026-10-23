@@ -1,4 +1,7 @@
 const { createHash } = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { AbortController, structuredClone } = globalThis;
 const {
   continueNativeSessionPublication,
@@ -6,6 +9,11 @@ const {
 } = require('../../dist/runtime/session-publication-client');
 const { SESSION_PUBLICATION_CAPABILITY } = require('../../dist/runtime/protocol');
 const wire = require('../../dist/runtime/session-publication-wire');
+const { readCommittedSessionLog } = require('../../dist/runtime/session-log');
+const {
+  executeNativeSessionSeal,
+  prepareCapturedSessionSeal,
+} = require('../../dist/runtime/session-seal-runtime');
 
 const request = {
   id: 'publication-test',
@@ -14,10 +22,10 @@ const request = {
   event: 'session_end',
   configuration: 'system',
   sessionPublication: SESSION_PUBLICATION_CAPABILITY,
+  deadlineEpochMs: Date.now() + 60_000,
 };
 const token = 'original-token';
 const attempt = 'native-attempt';
-const terminalDigest = 'c'.repeat(64);
 const inputBytes = Buffer.from('{"usage":{"input_tokens":9007199254740993}}');
 const outputBytes = Buffer.from('{"ended":{"reason":"exit"}}');
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -29,6 +37,46 @@ const descriptor = (name, role, bytes) => ({
 });
 const inputDescriptor = descriptor('turn-001.json', 'turn', inputBytes);
 const outputDescriptor = descriptor('.meta.json', 'metadata', outputBytes);
+const ordered = (artifacts) =>
+  [...artifacts].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+const terminal = (status, artifacts, selectedToken = token) =>
+  sha(
+    Buffer.from(
+      JSON.stringify(
+        status === 'not_published'
+          ? [
+              {
+                id: request.id,
+                runtimeDigest: request.runtimeDigest,
+                token: selectedToken,
+                attempt,
+              },
+              status,
+            ]
+          : [
+              {
+                id: request.id,
+                runtimeDigest: request.runtimeDigest,
+                token: selectedToken,
+                attempt,
+              },
+              'published',
+              ordered(artifacts),
+            ]
+      )
+    )
+  );
+const terminalDigest = terminal('published', [outputDescriptor]);
+const notPublishedDigest = terminal('not_published', []);
+let canonicalRoot, sessionDirectory;
+beforeEach(() => {
+  canonicalRoot = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'session-publication-client-'))
+  );
+  sessionDirectory = path.join(canonicalRoot, '.caws/sessions/session-one');
+  fs.mkdirSync(sessionDirectory, { recursive: true, mode: 0o700 });
+});
+afterEach(() => fs.rmSync(canonicalRoot, { recursive: true, force: true }));
 const prepareFrame = (kind = 'seal', files = [inputDescriptor], priorInventory = []) => ({
   schema: wire.SESSION_PUBLICATION_PREPARE_SCHEMA,
   kind,
@@ -62,8 +110,8 @@ const readyFrame = (kind = 'seal') => ({
 const resultFrame = (status = 'published', artifacts = [outputDescriptor]) => ({
   schema: wire.SESSION_PUBLICATION_RESULT_SCHEMA,
   status,
-  terminalDigest,
-  artifacts,
+  terminalDigest: terminal(status, artifacts),
+  artifacts: ordered(artifacts),
 });
 const readyPreparation = () => ({
   disposition: 'ready',
@@ -73,9 +121,127 @@ const readyPreparation = () => ({
 });
 const sealFrames = () => [prepareFrame(), inputFrame(), readyFrame(), resultFrame()];
 
-function setup(frames, { failWrite, dynamicToken = false } = {}) {
+test.each([false, true])(
+  'ordinary SessionEnd closure reads exact seven counts and unrelated metadata before ack; consumer failure=%s',
+  async (failConsumer) => {
+    const fields = [
+      'input_tokens',
+      'output_tokens',
+      'cache_read_input_tokens',
+      'cache_creation_input_tokens',
+      'cached_input_tokens',
+      'reasoning_output_tokens',
+      'total_tokens',
+    ];
+    const huge = '9'.repeat(4300);
+    const meta = Buffer.from('{"unrelated":{"exact":9007199254740993},"models":["prior"]}');
+    const turn = Buffer.from(
+      '{"schema_version":2,"models":["actual","second"],"usage":{' +
+        fields.map((field) => JSON.stringify(field) + ':' + huge).join(',') +
+        '}}'
+    );
+    const files = [
+      descriptor('.meta.json', 'metadata', meta),
+      descriptor('turn-001.json', 'turn', turn),
+    ];
+    const preparation = prepareCapturedSessionSeal({
+      kind: 'seal',
+      sessionId: 'session-one',
+      reason: 'exit',
+      endedAt: '2026-10-22T00:00:00Z',
+      files,
+      bytes: (name) => (name === '.meta.json' ? meta : turn),
+    });
+    expect(preparation.disposition).toBe('ready');
+    const sealed = Buffer.from(preparation.artifacts[0].bytes);
+    const state = setup(
+      [
+        prepareFrame('seal', files, files),
+        inputFrame('seal', '.meta.json', meta),
+        inputFrame('seal', 'turn-001.json', turn),
+        readyFrame(),
+        resultFrame('published', [descriptor('.meta.json', 'metadata', sealed), files[1]]),
+      ],
+      { dynamicToken: true, retainedFiles: new Map([['turn-001.json', turn]]) }
+    );
+    fs.writeFileSync(path.join(sessionDirectory, 'turn-001.json'), turn, { mode: 0o600 });
+    const observations = [],
+      failure = new Error('actual ordinary consumer failed');
+    const run = executeNativeSessionSeal({
+      port: createNativeSessionSealPort(request, state.transport, state.controller.signal),
+      canonicalRoot,
+      sessionId: 'session-one',
+      signal: state.controller.signal,
+      observe: (row) => {
+        expect(
+          state.writes.some((item) => item.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+        ).toBe(false);
+        expect(row.status).toBe('published');
+        expect(row.counts.map(({ field, value }) => [field, value.lexeme])).toEqual(
+          fields.map((field) => [field, huge])
+        );
+        expect(row.models).toEqual(['actual', 'second']);
+        expect(row.reason).toBe('exit');
+        expect(row.ended_at).toBe('2026-10-22T00:00:00Z');
+        const raw = fs.readFileSync(path.join(sessionDirectory, '.meta.json'), 'utf8');
+        expect(raw).toContain('"exact":9007199254740993');
+        expect(row.metadata_sha256).toBe(sha(Buffer.from(raw)));
+        observations.push(row);
+        if (failConsumer) throw failure;
+      },
+    });
+    if (failConsumer) {
+      await expect(run).rejects.toBe(failure);
+      expect(
+        state.writes.some((item) => item.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+      ).toBe(false);
+    } else {
+      await expect(run).resolves.toEqual({
+        exitCode: 0,
+        stdout: new Uint8Array(),
+        stderr: new Uint8Array(),
+      });
+      expect(state.writes.at(-1).schema).toBe(wire.SESSION_PUBLICATION_CONSUMED_SCHEMA);
+    }
+    expect(observations).toHaveLength(1);
+  }
+);
+
+test('ordinary missing-metadata seal is silent and explicitly consumed as not_published', async () => {
+  const state = setup([prepareFrame('seal', []), readyFrame(), resultFrame('not_published', [])], {
+    dynamicToken: true,
+  });
+  const observations = [];
+  await expect(
+    executeNativeSessionSeal({
+      port: createNativeSessionSealPort(request, state.transport, state.controller.signal),
+      canonicalRoot,
+      sessionId: 'session-one',
+      signal: state.controller.signal,
+      observe: (row) => observations.push(row),
+    })
+  ).resolves.toEqual({ exitCode: 0, stdout: new Uint8Array(), stderr: new Uint8Array() });
+  expect(observations).toEqual([
+    expect.objectContaining({ status: 'not_published', missing_metadata: true }),
+  ]);
+  expect(fs.existsSync(path.join(sessionDirectory, '.session-publication.json'))).toBe(false);
+  expect(state.writes.at(-1).schema).toBe(wire.SESSION_PUBLICATION_CONSUMED_SCHEMA);
+});
+
+function setup(
+  frames,
+  {
+    failWrite,
+    dynamicToken = false,
+    publish = true,
+    afterPublish,
+    consume,
+    retainedFiles = new Map([[inputDescriptor.name, inputBytes]]),
+  } = {}
+) {
   const writes = [],
-    reads = [];
+    reads = [],
+    consumptions = [];
   const controller = new AbortController();
   const transport = {
     async read() {
@@ -89,6 +255,54 @@ function setup(frames, { failWrite, dynamicToken = false } = {}) {
         attempt,
         ...frame,
       };
+      if (correlated.schema === wire.SESSION_PUBLICATION_RESULT_SCHEMA && dynamicToken)
+        correlated.terminalDigest = terminal(
+          correlated.status,
+          correlated.artifacts,
+          correlated.token
+        );
+      if (
+        correlated.schema === wire.SESSION_PUBLICATION_RESULT_SCHEMA &&
+        correlated.status === 'published' &&
+        publish
+      ) {
+        const contents = new Map(retainedFiles);
+        for (const item of writes.filter(
+          (item) => item.schema === wire.SESSION_PUBLICATION_CHUNK_SCHEMA
+        )) {
+          if (item.offset === 0) contents.set(item.name, Buffer.alloc(0));
+          contents.set(
+            item.name,
+            Buffer.concat([
+              contents.get(item.name) ?? Buffer.alloc(0),
+              Buffer.from(item.base64, 'base64'),
+            ])
+          );
+        }
+        for (const artifact of correlated.artifacts) {
+          const bytes = contents.get(artifact.name);
+          if (bytes)
+            fs.writeFileSync(path.join(sessionDirectory, artifact.name), bytes, { mode: 0o600 });
+        }
+        fs.writeFileSync(
+          path.join(sessionDirectory, '.session-publication.json'),
+          JSON.stringify({
+            schema: 'caws.session.publication.v1',
+            canonicalRoot,
+            sessionId: 'session-one',
+            correlation: {
+              id: correlated.id,
+              runtimeDigest: correlated.runtimeDigest,
+              token: correlated.token,
+              attempt: correlated.attempt,
+            },
+            terminalDigest: correlated.terminalDigest,
+            artifacts: correlated.artifacts,
+          }),
+          { mode: 0o600 }
+        );
+        await afterPublish?.();
+      }
       const bytes =
         typeof frame === 'string' || Buffer.isBuffer(frame)
           ? Buffer.from(frame)
@@ -105,12 +319,29 @@ function setup(frames, { failWrite, dynamicToken = false } = {}) {
     transport,
     writes,
     reads,
+    consumptions,
     controller,
     run(prepare = async () => readyPreparation(), expectedKinds = ['seal'], invocation = request) {
       return continueNativeSessionPublication(invocation, transport, controller.signal, {
         token,
         expectedKinds,
         prepare,
+        canonicalRoot,
+        sessionId: 'session-one',
+        consume:
+          consume ??
+          (async (outcome) => {
+            consumptions.push(
+              outcome.status === 'published'
+                ? {
+                    status: outcome.status,
+                    bytes: outcome.session.artifacts.map((item) =>
+                      Buffer.from(outcome.session.bytes(item.name))
+                    ),
+                  }
+                : { status: outcome.status }
+            );
+          }),
       });
     },
   };
@@ -326,7 +557,8 @@ test('aborted preparation sends no output bytes and consumes a definite refusal'
   ]);
   expect(
     await state.run(async () => ({ disposition: 'aborted', diagnostic: 'invalid turn' }))
-  ).toEqual({ status: 'not_published', terminalDigest, artifacts: [] });
+  ).toEqual({ status: 'not_published', terminalDigest: notPublishedDigest, artifacts: [] });
+  expect(state.consumptions).toEqual([{ status: 'not_published' }]);
   expect(state.writes.map((frame) => frame.schema)).toEqual([
     wire.SESSION_PUBLICATION_PREPARED_SCHEMA,
     wire.SESSION_PUBLICATION_READY_SCHEMA,
@@ -429,8 +661,8 @@ test('published inventory retains unchanged prior artifacts exactly', async () =
   ]);
   expect(await state.run()).toEqual({
     status: 'published',
-    terminalDigest,
-    artifacts: [prior, outputDescriptor],
+    terminalDigest: terminal('published', [prior, outputDescriptor]),
+    artifacts: ordered([prior, outputDescriptor]),
   });
   expect(state.writes.at(-1).schema).toBe(wire.SESSION_PUBLICATION_CONSUMED_SCHEMA);
 });
@@ -534,7 +766,7 @@ test('projection then render retain prior bytes, apply removals and chunk bounde
     ['projection', 'render']
   );
   expect(phases).toEqual(['projection', 'render']);
-  expect(receipt.artifacts).toEqual([projectionDescriptor, index]);
+  expect(receipt.artifacts).toEqual(ordered([projectionDescriptor, index]));
   const chunks = state.writes.filter(
     (frame) => frame.schema === wire.SESSION_PUBLICATION_CHUNK_SCHEMA && frame.kind === 'render'
   );
@@ -548,7 +780,7 @@ test('projection then render retain prior bytes, apply removals and chunk bounde
   );
   expect(state.writes.at(-1)).toMatchObject({
     schema: wire.SESSION_PUBLICATION_CONSUMED_SCHEMA,
-    terminalDigest,
+    terminalDigest: terminal('published', [projectionDescriptor, index]),
   });
 });
 
@@ -570,7 +802,7 @@ test('a second preparation cannot substitute a different prior inventory', async
   expect(state.writes.at(-1).schema).toBe(wire.SESSION_PUBLICATION_READY_SCHEMA);
 });
 
-test.each(['render', 'projection', 'seal,render', 'render,projection'])(
+test.each(['projection', 'seal,render', 'render,projection'])(
   'partial or reordered phase sequence %s is unavailable',
   async (sequence) => {
     const state = setup([]);
@@ -597,22 +829,30 @@ test('cancellation during preparation emits no prepared bytes or consumption', a
 test('ordinary seal port has one attempt and a fresh correlated token', async () => {
   const state = setup([resultFrame('not_published', [])], { dynamicToken: true });
   const port = createNativeSessionSealPort(request, state.transport, state.controller.signal);
-  expect(await port.seal('/private/tmp/project', async () => readyPreparation())).toEqual({
+  const consumed = jest.fn(async () => {});
+  const receipt = await port.seal(
+    canonicalRoot,
+    'session-one',
+    async () => readyPreparation(),
+    consumed
+  );
+  expect(receipt).toEqual({
     status: 'not_published',
-    terminalDigest,
+    terminalDigest: terminal('not_published', [], state.writes[0].token),
     artifacts: [],
   });
   expect(state.writes[0]).toMatchObject({
     schema: wire.SESSION_SEAL_REQUEST_SCHEMA,
     id: request.id,
     runtimeDigest: request.runtimeDigest,
-    canonicalRoot: '/private/tmp/project',
+    canonicalRoot,
   });
   expect(state.writes[0].token).toMatch(/^[0-9a-f-]{36}$/);
   expect(state.writes[1].token).toBe(state.writes[0].token);
-  await expect(port.seal('/private/tmp/project', async () => readyPreparation())).rejects.toThrow(
-    'repeated'
-  );
+  expect(consumed).toHaveBeenCalledWith(expect.objectContaining({ status: 'not_published' }));
+  await expect(
+    port.seal(canonicalRoot, 'session-one', async () => readyPreparation(), consumed)
+  ).rejects.toThrow('repeated');
   expect(state.writes).toHaveLength(2);
 });
 
@@ -630,3 +870,130 @@ test.each([{ event: 'stop' }, { configuration: 'project' }, { sessionPublication
     expect(state.writes).toEqual([]);
   }
 );
+
+test('receipt parsing cannot acknowledge a generation absent from the ordinary filesystem', async () => {
+  const consume = jest.fn();
+  const state = setup(sealFrames(), { publish: false, consume });
+  await expect(state.run()).rejects.toThrow();
+  expect(consume).not.toHaveBeenCalled();
+  expect(
+    state.writes.some((item) => item.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+  ).toBe(false);
+});
+
+test('actual semantic log use completes before CONSUMED is sent', async () => {
+  let entered, release;
+  const enteredConsumer = new Promise((accept) => {
+    entered = accept;
+  });
+  const consumerMayFinish = new Promise((accept) => {
+    release = accept;
+  });
+  let used;
+  const state = setup(sealFrames(), {
+    consume: async (outcome) => {
+      expect(outcome.status).toBe('published');
+      used = readCommittedSessionLog(outcome.session);
+      entered();
+      await consumerMayFinish;
+    },
+  });
+  const pending = state.run();
+  await enteredConsumer;
+  expect(used.metadata.json).toBe(outputBytes.toString());
+  expect(
+    state.writes.some((item) => item.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+  ).toBe(false);
+  release();
+  await expect(pending).resolves.toMatchObject({ status: 'published' });
+  expect(state.writes.at(-1).schema).toBe(wire.SESSION_PUBLICATION_CONSUMED_SCHEMA);
+});
+
+test.each(['consumer', 'marker', 'artifact', 'cancelled'])(
+  '%s failure after independent read never acknowledges or falls back',
+  async (failure) => {
+    const cause = new Error('ordinary consumer failed');
+    let used = false;
+    const state = setup(sealFrames(), {
+      consume: async (outcome) => {
+        used = readCommittedSessionLog(outcome.session).metadata.json === outputBytes.toString();
+        if (failure === 'consumer') throw cause;
+        if (failure === 'cancelled') state.controller.abort(cause);
+        if (failure === 'marker')
+          fs.appendFileSync(path.join(sessionDirectory, '.session-publication.json'), ' ');
+        if (failure === 'artifact') {
+          const replacement = path.join(sessionDirectory, 'replacement');
+          fs.writeFileSync(replacement, outputBytes, { mode: 0o600 });
+          fs.renameSync(replacement, path.join(sessionDirectory, '.meta.json'));
+        }
+      },
+    });
+    await expect(state.run()).rejects.toThrow();
+    expect(used).toBe(true);
+    expect(
+      state.writes.some((item) => item.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+    ).toBe(false);
+  }
+);
+
+test('uncertain publication cannot invoke an outcome consumer or send CONSUMED', async () => {
+  const frames = sealFrames();
+  frames.at(-1).status = 'publication_uncertain';
+  const consume = jest.fn();
+  const state = setup(frames, { consume });
+  await expect(state.run()).rejects.toThrow('uncertain');
+  expect(consume).not.toHaveBeenCalled();
+  expect(
+    state.writes.some((item) => item.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+  ).toBe(false);
+});
+
+test('wrong original session and forged terminal digest refuse consumption', async () => {
+  const foreign = sealFrames();
+  foreign[0].snapshot.sessionId = 'foreign';
+  const first = setup(foreign);
+  await expect(first.run()).rejects.toThrow('snapshot');
+  expect(first.writes).toEqual([]);
+  const forged = sealFrames();
+  forged.at(-1).terminalDigest = '0'.repeat(64);
+  const second = setup(forged);
+  await expect(second.run()).rejects.toThrow('terminal digest');
+  expect(second.consumptions).toEqual([]);
+  expect(
+    second.writes.some((item) => item.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+  ).toBe(false);
+});
+
+test('non-store render publishes and consumes a semantic log without fabricating a projection', async () => {
+  const bytes = Buffer.from('{"session_id":"session-one","turn_count":0}');
+  const index = descriptor('session-index.json', 'index', bytes);
+  let used;
+  const state = setup(
+    [prepareFrame('render', []), readyFrame('render'), resultFrame('published', [index])],
+    {
+      consume: async (outcome) => {
+        used = readCommittedSessionLog(outcome.session);
+      },
+    }
+  );
+  await expect(
+    state.run(
+      async (input) => {
+        expect(input.kind).toBe('render');
+        expect(input.files).toEqual([]);
+        return {
+          disposition: 'ready',
+          artifacts: [{ name: index.name, role: index.role, bytes }],
+          removals: [],
+        };
+      },
+      ['render']
+    )
+  ).resolves.toMatchObject({ status: 'published', artifacts: [index] });
+  expect(used.index.json).toBe(bytes.toString());
+  expect(used.projectionJsonl).toBeUndefined();
+  expect(state.writes.filter((item) => item.kind).every((item) => item.kind === 'render')).toBe(
+    true
+  );
+  expect(state.writes.at(-1).schema).toBe(wire.SESSION_PUBLICATION_CONSUMED_SCHEMA);
+});

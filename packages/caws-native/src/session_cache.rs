@@ -148,7 +148,7 @@ fn opened(raw: libc::c_int) -> io::Result<File> {
         Ok(unsafe { File::from_raw_fd(raw) })
     }
 }
-fn directory_at(parent: &File, component: &CStr, create: bool) -> io::Result<File> {
+pub(crate) fn directory_at(parent: &File, component: &CStr, create: bool) -> io::Result<File> {
     if create && unsafe { libc::mkdirat(parent.as_raw_fd(), component.as_ptr(), 0o700) } != 0 {
         let error = io::Error::last_os_error();
         if error.raw_os_error() != Some(libc::EEXIST) {
@@ -163,7 +163,7 @@ fn directory_at(parent: &File, component: &CStr, create: bool) -> io::Result<Fil
         )
     })
 }
-fn timestamp() -> io::Result<String> {
+pub(crate) fn timestamp() -> io::Result<String> {
     let seconds: libc::time_t = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(io::Error::other)?
@@ -527,9 +527,15 @@ fn atomic_json(
     let mut temporary = None;
     for _ in 0..16 {
         check(expires, checkpoint)?;
+        let target_text = target.to_string_lossy();
+        let stem = if target_text.starts_with("agent-pid-") && target_text.ends_with(".json") {
+            format!(".{}.tmp", target_text.trim_end_matches(".json"))
+        } else {
+            format!("tmp-{target_text}")
+        };
         let temporary_name = name(&format!(
-            "tmp-{}.{}.{}",
-            target.to_string_lossy(),
+            "{}.{}.{}",
+            stem,
             std::process::id(),
             TEMPORARY.fetch_add(1, Ordering::Relaxed)
         ))
@@ -585,5 +591,279 @@ fn atomic_json(
     Ok(())
 }
 
+/// Nonmutating SessionEnd preparation. Directory creation is delayed until the
+/// complete envelope/PID profile and the engine's creation decision admit.
+pub(crate) struct PreparedPrefix {
+    caws: File,
+    sessions: Option<File>,
+    session: Option<File>,
+    existing: Option<Vec<u8>>,
+    root: String,
+    sid: String,
+    preflight_failure: Option<CaptureFailure>,
+}
+pub(crate) enum PrefixPreparation {
+    Ready(PreparedPrefix),
+    Declined(DeclineReason),
+}
+impl PreparedPrefix {
+    pub(crate) fn existing(&self) -> ExistingEnvelope<'_> {
+        match self.existing.as_deref() {
+            Some(bytes) => ExistingEnvelope::Bytes(bytes),
+            None => ExistingEnvelope::Missing,
+        }
+    }
+    pub(crate) fn sessions(&self) -> Option<&File> {
+        self.sessions.as_ref()
+    }
+    pub(crate) fn take_preflight_failure(&mut self) -> Option<CaptureFailure> {
+        self.preflight_failure.take()
+    }
+    pub(crate) fn ensure_sessions(&mut self) -> io::Result<&File> {
+        if self.sessions.is_none() {
+            self.sessions = Some(directory_at(&self.caws, c"sessions", true)?);
+        }
+        Ok(self.sessions.as_ref().unwrap())
+    }
+}
+fn optional_directory(parent: &File, component: &CStr) -> io::Result<Option<File>> {
+    match directory_at(parent, component, false) {
+        Ok(file) => Ok(Some(file)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+pub(crate) fn prepare_prefix(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+) -> Result<PrefixPreparation, CaptureFailure> {
+    let mut stage = Stage::Root;
+    let result = (|| {
+        check(expires, checkpoint)?;
+        let sid = input
+            .supplied_session_id
+            .filter(|sid| {
+                !sid.is_empty()
+                    && *sid != "unknown"
+                    && *sid != "."
+                    && *sid != ".."
+                    && sid
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"_.@:-".contains(&b))
+            })
+            .ok_or_else(|| FailureKind::Io(io::Error::other("unsafe prefix session identity")))?;
+        if !input.canonical_root.is_absolute() {
+            return Err(FailureKind::Io(io::Error::other(
+                "absolute prefix root required",
+            )));
+        }
+        let root_text = input
+            .canonical_root
+            .to_str()
+            .ok_or_else(|| FailureKind::Io(io::Error::other("UTF-8 prefix root required")))?;
+        let root_name = name(root_text).map_err(FailureKind::Io)?;
+        let root = opened(unsafe {
+            libc::open(
+                root_name.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        })
+        .map_err(FailureKind::Io)?;
+        stage = Stage::Governance;
+        let caws = directory_at(&root, c".caws", false).map_err(FailureKind::Io)?;
+        stage = Stage::Sessions;
+        let sessions = optional_directory(&caws, c"sessions").map_err(FailureKind::Io)?;
+        check(expires, checkpoint)?;
+        stage = Stage::Session;
+        let mut preflight_failure = None;
+        let session = match &sessions {
+            Some(sessions) => {
+                match optional_directory(sessions, &name(sid).map_err(FailureKind::Io)?) {
+                    Ok(session) => session,
+                    Err(error) => {
+                        preflight_failure = Some(CaptureFailure {
+                            stage,
+                            envelope_published: false,
+                            kind: FailureKind::Io(error),
+                        });
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+        stage = Stage::ExistingEnvelope;
+        let existing = match &session {
+            Some(session) => match previous_bytes(session, expires, checkpoint) {
+                Ok(Previous::Missing) => None,
+                Ok(Previous::Bytes(bytes)) => Some(bytes),
+                Ok(Previous::Declined(reason)) => return Ok(PrefixPreparation::Declined(reason)),
+                Err(kind @ (FailureKind::Cancelled(_) | FailureKind::Deadline)) => {
+                    return Err(kind);
+                }
+                Err(kind) => {
+                    preflight_failure = Some(CaptureFailure {
+                        stage,
+                        envelope_published: false,
+                        kind,
+                    });
+                    None
+                }
+            },
+            None => None,
+        };
+        Ok(PrefixPreparation::Ready(PreparedPrefix {
+            caws,
+            sessions,
+            session,
+            existing,
+            root: root_text.into(),
+            sid: sid.into(),
+            preflight_failure,
+        }))
+    })();
+    result.map_err(|kind| CaptureFailure {
+        stage,
+        envelope_published: false,
+        kind,
+    })
+}
+
+/// Independent sibling open after an envelope root/sessions open failed. It
+/// deliberately does not inspect or reinterpret the unavailable envelope.
+pub(crate) fn prepare_pid_prefix(
+    input: &CaptureInput<'_>,
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+) -> Result<PreparedPrefix, CaptureFailure> {
+    let mut stage = Stage::Root;
+    let result = (|| {
+        check(expires, checkpoint)?;
+        let root_text = input
+            .canonical_root
+            .to_str()
+            .ok_or_else(|| FailureKind::Io(io::Error::other("UTF-8 prefix root required")))?;
+        let root_name = name(root_text).map_err(FailureKind::Io)?;
+        let root = opened(unsafe {
+            libc::open(
+                root_name.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        })
+        .map_err(FailureKind::Io)?;
+        stage = Stage::Governance;
+        let caws = directory_at(&root, c".caws", false).map_err(FailureKind::Io)?;
+        stage = Stage::Sessions;
+        let sessions = optional_directory(&caws, c"sessions").map_err(FailureKind::Io)?;
+        Ok(PreparedPrefix {
+            caws,
+            sessions,
+            session: None,
+            existing: None,
+            root: root_text.into(),
+            sid: input.supplied_session_id.unwrap_or("").into(),
+            preflight_failure: None,
+        })
+    })();
+    result.map_err(|kind| CaptureFailure {
+        stage,
+        envelope_published: false,
+        kind,
+    })
+}
+
+pub(crate) fn publish_json(
+    parent: &File,
+    target: &CStr,
+    bytes: &[u8],
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), FailureKind> {
+    atomic_json(
+        parent,
+        target,
+        bytes,
+        expires,
+        Point::PointerStaged,
+        &mut NativePort,
+        checkpoint,
+    )
+}
+
+/// Envelope and pointer are one ordered best-effort stage. PID refresh is a
+/// sibling operation and is attempted by the owner even after an I/O failure.
+pub(crate) fn commit_prefix(
+    prepared: &mut PreparedPrefix,
+    surface: &str,
+    created: Option<Vec<u16>>,
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), CaptureFailure> {
+    let mut stage = Stage::Sessions;
+    let mut envelope_published = false;
+    let result = (|| {
+        check(expires, checkpoint)?;
+        prepared.ensure_sessions().map_err(FailureKind::Io)?;
+        stage = Stage::Session;
+        if prepared.session.is_none() {
+            prepared.session = Some(
+                directory_at(
+                    prepared.sessions.as_ref().unwrap(),
+                    &name(&prepared.sid).map_err(FailureKind::Io)?,
+                    true,
+                )
+                .map_err(FailureKind::Io)?,
+            );
+        }
+        stage = Stage::Clock;
+        let now = timestamp().map_err(FailureKind::Io)?;
+        let mut envelope = serde_json::to_vec(&json!({
+            "session_id": prepared.sid, "repo_root": prepared.root,
+            "last_seen_at": now, "hook_event": "SessionEnd", "platform": surface,
+        }))
+        .map_err(|error| FailureKind::Io(io::Error::other(error)))?;
+        envelope.pop();
+        envelope.extend_from_slice(b",\"created_at\":");
+        let default_created = now.encode_utf16().collect::<Vec<_>>();
+        append_utf16_string(
+            &mut envelope,
+            created
+                .as_deref()
+                .filter(|units| !units.is_empty())
+                .unwrap_or(&default_created),
+        );
+        envelope.extend_from_slice(b"}\n");
+        stage = Stage::Envelope;
+        publish_json(
+            prepared.session.as_ref().unwrap(),
+            ENVELOPE,
+            &envelope,
+            expires,
+            checkpoint,
+        )?;
+        envelope_published = true;
+        stage = Stage::Pointer;
+        let mut pointer = serde_json::to_vec(
+            &json!({ "session_id":prepared.sid, "repo_root":prepared.root, "last_seen_at":now }),
+        )
+        .map_err(|error| FailureKind::Io(io::Error::other(error)))?;
+        pointer.push(b'\n');
+        publish_json(
+            prepared.sessions.as_ref().unwrap(),
+            POINTER,
+            &pointer,
+            expires,
+            checkpoint,
+        )
+    })();
+    result.map_err(|kind| CaptureFailure {
+        stage,
+        envelope_published,
+        kind,
+    })
+}
+
 #[cfg(test)]
+#[path = "session_cache/tests.rs"]
 mod tests;

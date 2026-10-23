@@ -142,6 +142,166 @@ fn identity(id: u64) -> Identity {
         execution_image_digest: "b".repeat(64),
     }
 }
+#[test]
+fn consumed_payload_capacity_progresses_beyond_256_and_rejects_original_after_reopen() {
+    let f = Fixture::new();
+    let mut journal = f.open(1);
+    for id in 1..=257 {
+        admitted(&mut journal, id);
+        let dispatch = journal
+            .begin_next(&"a".repeat(64), &"b".repeat(64), soon())
+            .unwrap()
+            .unwrap();
+        let returned = journal
+            .returned(
+                &dispatch,
+                ReturnedResult::ProcessExit {
+                    code: Some(0),
+                    signal: None,
+                },
+                None,
+                soon(),
+            )
+            .unwrap();
+        let terminal = returned.consumption_digest().unwrap();
+        let consumed = journal.consume(&returned, &terminal, soon()).unwrap();
+        assert!(
+            matches!(consumed.outcome(), AcceptedOutcome::Consumed { terminal_digest, .. } if terminal_digest == &terminal)
+        );
+        assert!(
+            consumed
+                .verified_request()
+                .unwrap_err()
+                .to_string()
+                .contains("payload was released")
+        );
+        assert_eq!(journal.live_count(), 0);
+    }
+    assert_eq!(journal.history_size().unwrap().0, 257);
+    drop(journal);
+    let mut reopened = f.open(1);
+    assert_eq!(reopened.live_count(), 0);
+    let mut other_generation = identity(1);
+    other_generation.source_generation = "e".repeat(64);
+    assert!(
+        matches!(reopened.admit(other_generation, b"different", soon()).unwrap(), Admission::Rejected(ref outcome) if outcome.reason.contains("no replay across generations"))
+    );
+    admitted(&mut reopened, 258);
+    assert!(
+        matches!(reopened.admit(identity(259), b"extra-live", soon()).unwrap(), Admission::Rejected(ref outcome) if outcome.reason.contains("capacity exhausted"))
+    );
+}
+#[test]
+fn publication_returned_is_a_restart_fence_until_exact_consumption() {
+    let f = Fixture::new();
+    let mut journal = f.open(2);
+    admitted(&mut journal, 1);
+    let dispatch = journal
+        .begin_next(&"a".repeat(64), &"b".repeat(64), soon())
+        .unwrap()
+        .unwrap();
+    assert!(
+        journal
+            .consume(dispatch.operation(), &"d".repeat(64), soon())
+            .is_err()
+    );
+    let before = fs::read(f.record(1)).unwrap();
+    for manifest in [None, Some("f".repeat(64))] {
+        assert!(
+            journal
+                .returned(
+                    &dispatch,
+                    ReturnedResult::SessionPublication {
+                        terminal_digest: "e".repeat(64),
+                    },
+                    manifest,
+                    soon()
+                )
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(f.record(1)).unwrap(),
+            before,
+            "a mismatched publication terminal changed durable Running"
+        );
+        assert_eq!(
+            journal
+                .lookup(&identity(1).request_id, soon())
+                .unwrap()
+                .unwrap(),
+            *dispatch.operation()
+        );
+    }
+    let terminal = "e".repeat(64);
+    let returned = journal
+        .returned(
+            &dispatch,
+            ReturnedResult::SessionPublication {
+                terminal_digest: terminal.clone(),
+            },
+            Some(terminal.clone()),
+            soon(),
+        )
+        .unwrap();
+    assert!(
+        journal.has_unknown(soon()).unwrap(),
+        "unconsumed publication lost its restart fence"
+    );
+    assert!(
+        journal
+            .consume(&returned, &"f".repeat(64), soon())
+            .unwrap_err()
+            .to_string()
+            .contains("digest mismatch")
+    );
+    drop(journal);
+    let mut reopened = f.open(2);
+    let exact = reopened
+        .lookup(&format!("{:064x}", 1), soon())
+        .unwrap()
+        .unwrap();
+    assert_eq!(exact, returned);
+    assert!(reopened.has_unknown(soon()).unwrap());
+    reopened.consume(&exact, &terminal, soon()).unwrap();
+    assert!(!reopened.has_unknown(soon()).unwrap());
+    admitted(&mut reopened, 2);
+    assert!(
+        reopened
+            .begin_next(&"a".repeat(64), &"b".repeat(64), soon())
+            .unwrap()
+            .is_some()
+    );
+}
+#[test]
+fn consumed_tombstone_corruption_is_refused_and_cannot_restore_payload_admission() {
+    let f = Fixture::new();
+    let mut journal = f.open(1);
+    admitted(&mut journal, 1);
+    let dispatch = journal
+        .begin_next(&"a".repeat(64), &"b".repeat(64), soon())
+        .unwrap()
+        .unwrap();
+    let returned = journal
+        .returned(
+            &dispatch,
+            ReturnedResult::ProcessExit {
+                code: Some(0),
+                signal: None,
+            },
+            None,
+            soon(),
+        )
+        .unwrap();
+    journal
+        .consume(&returned, &returned.consumption_digest().unwrap(), soon())
+        .unwrap();
+    drop(journal);
+    let file = f.record(1);
+    let original = fs::read(&file).unwrap();
+    fs::write(&file, &original[..original.len() - 1]).unwrap();
+    assert!(Journal::open(Arc::clone(&f.custody), &"c".repeat(64), 1, soon()).is_err());
+    assert_eq!(fs::read(&file).unwrap(), original[..original.len() - 1]);
+}
 fn admitted(journal: &mut Journal, id: u64) -> Operation {
     match journal
         .admit(identity(id), br#"{"args":[]}"#, soon())

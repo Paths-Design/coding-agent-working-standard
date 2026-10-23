@@ -52,6 +52,10 @@ pub struct Request {
     event: String,
     configuration: String,
     session_cache: &'static str,
+    #[cfg(target_os = "macos")]
+    session_end_prefix: &'static str,
+    #[cfg(target_os = "macos")]
+    session_publication: &'static str,
     #[cfg(feature = "sqlite-store")]
     session_store: &'static str,
     caller: Caller,
@@ -61,6 +65,52 @@ pub struct Request {
 }
 
 impl Request {
+    pub fn session_invocation<'a>(
+        &'a self,
+        ready: &'a Ready,
+        dispatched: bool,
+    ) -> caws_native::render_owner::SessionInvocation<'a> {
+        caws_native::render_owner::SessionInvocation {
+            id: &self.id,
+            runtime_digest: &self.runtime_digest,
+            original_payload: &self.payload,
+            surface: &self.surface,
+            event: &self.event,
+            configuration: &self.configuration,
+            ready_active: ready.active,
+            ready_project_digest: ready.project_digest.as_deref(),
+            ready_session_id: ready.session_id.as_deref(),
+            dispatched,
+            caller_cwd: &self.caller.cwd,
+            caller_environment: &self.caller.environment,
+        }
+    }
+    pub fn session_prefix_owner<'a>(
+        &'a self,
+        ready: &'a Ready,
+        dispatched: bool,
+        original: &'a caws_native::agent_pid_cache::OriginalAncestry,
+    ) -> Result<caws_native::session_cache_wire::PrefixOwner<'a>, String> {
+        use caws_native::session_cache_wire::{
+            Invocation, PREFIX_CAPABILITY, PrefixInvocation, PrefixOwner,
+        };
+        PrefixOwner::new(PrefixInvocation {
+            invocation: Invocation {
+                id: &self.id,
+                runtime_digest: &self.runtime_digest,
+                original_payload: &self.payload,
+                surface: &self.surface,
+                event: &self.event,
+                configuration: &self.configuration,
+                ready_active: ready.active,
+                ready_project_digest: ready.project_digest.as_deref(),
+                dispatched,
+                advertised_capability: cfg!(target_os = "macos").then_some(PREFIX_CAPABILITY),
+            },
+            original_ancestry: original,
+        })
+        .map_err(|error| error.to_string())
+    }
     #[cfg(feature = "sqlite-store")]
     pub fn transcript_store_invocation<'a>(
         &'a self,
@@ -137,6 +187,10 @@ impl Request {
             event: config.event.clone(),
             configuration: config.configuration.clone(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            #[cfg(target_os = "macos")]
+            session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
+            #[cfg(target_os = "macos")]
+            session_publication: "caws.runtime.session-publication.v1",
             #[cfg(feature = "sqlite-store")]
             session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller::capture()?,
@@ -205,6 +259,8 @@ pub struct Ready {
 pub enum EngineFrame {
     Ready(Ready),
     SessionCacheRequest(Vec<u8>),
+    SessionEndPrefixRequest(Vec<u8>),
+    SessionSealRequest(Vec<u8>),
     #[cfg(feature = "sqlite-store")]
     TranscriptStoreRequest(Vec<u8>),
     Proposal {
@@ -309,6 +365,18 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    if header.schema == caws_native::session_cache_wire::PREFIX_REQUEST_SCHEMA {
+        if bytes.len() > caws_native::session_cache_wire::MAX_REQUEST_BYTES {
+            return Err("session prefix request exceeds frame budget".into());
+        }
+        return Ok(EngineFrame::SessionEndPrefixRequest(bytes.to_vec()));
+    }
+    if header.schema == "caws.runtime.session-seal.request.v1" {
+        if bytes.len() > 32_768 {
+            return Err("session seal request exceeds frame budget".into());
+        }
+        return Ok(EngineFrame::SessionSealRequest(bytes.to_vec()));
+    }
     #[cfg(feature = "sqlite-store")]
     if header.schema == caws_native::transcript_store_wire::REQUEST_SCHEMA {
         // Classification is not admission. The single-use store owner must
@@ -494,6 +562,10 @@ mod tests {
             event: "pre_tool_use".into(),
             configuration: "system".into(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            #[cfg(target_os = "macos")]
+            session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
+            #[cfg(target_os = "macos")]
+            session_publication: "caws.runtime.session-publication.v1",
             #[cfg(feature = "sqlite-store")]
             session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller {
@@ -506,6 +578,34 @@ mod tests {
             input_json: "{}".into(),
         }
     }
+    #[test]
+    fn prefix_and_seal_classification_preserves_bytes_without_granting_admission() {
+        let request = fixture_request();
+        for (schema, prefix) in [
+            (caws_native::session_cache_wire::PREFIX_REQUEST_SCHEMA, true),
+            ("caws.runtime.session-seal.request.v1", false),
+        ] {
+            // Deliberately missing identity and operation fields: only the
+            // typed owner may admit these bytes after the dispatch phase.
+            let bytes = format!("{{\"schema\":\"{schema}\",\"unknown\":true}} ").into_bytes();
+            match validate_frame(&bytes, &request).unwrap() {
+                EngineFrame::SessionEndPrefixRequest(retained) if prefix => {
+                    assert_eq!(retained, bytes)
+                }
+                EngineFrame::SessionSealRequest(retained) if !prefix => assert_eq!(retained, bytes),
+                _ => panic!("operation lost its typed owner"),
+            }
+            let oversized = serde_json::to_vec(&serde_json::json!({
+                "schema": schema, "padding": "x".repeat(32_768)
+            }))
+            .unwrap();
+            assert!(validate_frame(&oversized, &request).is_err());
+            let duplicate =
+                format!("{{\"schema\":\"{schema}\",\"schema\":\"caws.runtime.ready.v1\"}}");
+            assert!(validate_frame(duplicate.as_bytes(), &request).is_err());
+        }
+    }
+
     #[test]
     #[cfg(feature = "sqlite-store")]
     fn oversized_store_frame_reaches_the_typed_owner_without_admission() {

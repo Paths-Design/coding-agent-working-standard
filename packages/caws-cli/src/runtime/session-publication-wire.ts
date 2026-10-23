@@ -1,4 +1,9 @@
 /** Framing limits and correlation carry observations, never publication rights. */
+import { createHash } from 'node:crypto';
+
+export const SESSION_PUBLICATION_MARKER_NAME = '.session-publication.json';
+export const SESSION_PUBLICATION_MARKER_SCHEMA = 'caws.session.publication.v1';
+export const MAX_PUBLICATION_MARKER_BYTES = 2 * 1024 * 1024;
 export const SESSION_SEAL_REQUEST_SCHEMA = 'caws.runtime.session-seal.request.v1';
 export const SESSION_PUBLICATION_PREPARE_SCHEMA = 'caws.runtime.session-publication.prepare.v1';
 export const SESSION_PUBLICATION_INPUTS_SCHEMA = 'caws.runtime.session-publication.inputs.v1';
@@ -39,4 +44,65 @@ export interface SessionPublicationSnapshot {
   readonly endedAt: string;
   readonly files: readonly SessionPublicationDescriptor[];
   readonly priorInventory: readonly SessionPublicationDescriptor[];
+}
+
+export interface CommittedSessionSelection {
+  readonly canonicalRoot: string;
+  readonly sessionId: string;
+  readonly correlation: SessionOperationCorrelation;
+  readonly terminalDigest: string;
+  readonly artifacts: readonly SessionPublicationDescriptor[];
+}
+
+/** The native owner's finite known-output namespace. Other session files are not outputs. */
+export function sessionPublicationRole(name: string): string | undefined {
+  if (name === '.meta.json') return 'metadata';
+  if (name === 'store-projection.jsonl') return 'projection';
+  if (name === 'session-index.json') return 'index';
+  if (/^turn-[0-9]+\.payloads\.json$/.test(name)) return 'spill';
+  if (/^turn-[0-9]+\.json$/.test(name)) return 'turn';
+  return undefined;
+}
+
+function orderedCorrelation(value: SessionOperationCorrelation): SessionOperationCorrelation {
+  return {
+    id: value.id,
+    runtimeDigest: value.runtimeDigest,
+    token: value.token,
+    attempt: value.attempt,
+  };
+}
+function orderedArtifacts(
+  values: readonly SessionPublicationDescriptor[]
+): readonly SessionPublicationDescriptor[] {
+  return values.map((value) => ({
+    name: value.name,
+    role: value.role,
+    byteLength: value.byteLength,
+    sha256: value.sha256,
+  }));
+}
+export function sessionPublicationTerminalDigest(
+  correlation: SessionOperationCorrelation,
+  status: 'published' | 'not_published',
+  artifacts: readonly SessionPublicationDescriptor[] = []
+): string {
+  const value =
+    status === 'published'
+      ? [orderedCorrelation(correlation), status, orderedArtifacts(artifacts)]
+      : [orderedCorrelation(correlation), status];
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+/** Canonical native struct field order; neither paths nor authority come from marker bytes. */
+export function sessionPublicationMarkerBytes(selection: CommittedSessionSelection): Buffer {
+  return Buffer.from(
+    JSON.stringify({
+      schema: SESSION_PUBLICATION_MARKER_SCHEMA,
+      canonicalRoot: selection.canonicalRoot,
+      sessionId: selection.sessionId,
+      correlation: orderedCorrelation(selection.correlation),
+      terminalDigest: selection.terminalDigest,
+      artifacts: orderedArtifacts(selection.artifacts),
+    })
+  );
 }

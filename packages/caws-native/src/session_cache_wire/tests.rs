@@ -11,6 +11,194 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 const ID: &str = "123-456";
 const TOKEN: &str = "123e4567-e89b-42d3-a456-426614174000";
 const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+#[cfg(target_os = "macos")]
+mod prefix {
+    use super::*;
+    use crate::agent_pid_cache::OriginalAncestry;
+    fn admit(f: &Fixture, payload: &RawValue, original: &OriginalAncestry) -> PrefixAdmitted {
+        let mut invocation = f.invocation(payload);
+        invocation.event = "session_end";
+        invocation.advertised_capability = Some(PREFIX_CAPABILITY);
+        let mut owner = PrefixOwner::new(PrefixInvocation {
+            invocation,
+            original_ancestry: original,
+        })
+        .unwrap();
+        let mut request = f.request();
+        request["schema"] = json!(PREFIX_REQUEST_SCHEMA);
+        owner.admit(&bytes(&request)).unwrap()
+    }
+    fn decision() -> Vec<u8> {
+        bytes(
+            &json!({"schema":PREFIX_DECISION_SCHEMA,"id":ID,"runtimeDigest":DIGEST,"token":TOKEN,"action":"capture","createdUnits":[111,108,100]}),
+        )
+    }
+    fn result(frame: &PrefixResultFrame) -> Value {
+        serde_json::from_slice(&frame.encode().unwrap()).unwrap()
+    }
+    #[test]
+    fn distinct_prefix_capability_cannot_be_confused_with_cache_only_v1() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let original = OriginalAncestry::fixture_not_found("codex");
+        let mut invocation = f.invocation(&payload);
+        invocation.event = "session_end";
+        assert!(
+            PrefixOwner::new(PrefixInvocation {
+                invocation,
+                original_ancestry: &original
+            })
+            .is_err()
+        );
+        let mut invocation = f.invocation(&payload);
+        invocation.advertised_capability = Some(PREFIX_CAPABILITY);
+        assert!(Owner::new(invocation).is_err());
+    }
+    #[test]
+    fn complete_prefix_has_exact_terminal_fields_and_real_envelope_pointer_values() {
+        let f = Fixture::new();
+        let original = OriginalAncestry::fixture_not_found("codex");
+        let execution = admit(&f, &raw(r#"{"session_id":"s"}"#), &original).execute_checked(
+            expires(),
+            || Ok(()),
+            |previous| {
+                let previous: Value = serde_json::from_slice(previous).unwrap();
+                assert_eq!(previous["schema"], PREFIX_PREVIOUS_SCHEMA);
+                assert!(previous["existingBase64"].is_null());
+                Ok(decision())
+            },
+        );
+        assert!(execution.exchange_error.is_none());
+        assert!(execution.cancellation_error.is_none());
+        assert!(execution.result.prefix_complete());
+        let terminal = result(&execution.result);
+        let keys: std::collections::BTreeSet<_> = terminal
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(keys, PREFIX_RESULT_KEYS.iter().copied().collect());
+        assert_eq!(terminal["status"], "completed");
+        assert_eq!(terminal["envelopePublished"], true);
+        assert_eq!(terminal["pointerPublished"], true);
+        assert_eq!(terminal["agentPid"], "not_found");
+        assert_eq!(terminal["reap"], "not_run");
+        assert!(!execution.result.fallback_safe());
+        assert_eq!(read(&f.envelope("s"))["created_at"], "old");
+        assert_eq!(read(&f.envelope("s"))["hook_event"], "SessionEnd");
+        assert_eq!(read(&f.pointer())["session_id"], "s");
+    }
+    #[test]
+    fn unsupported_pid_json_declines_before_any_envelope_pointer_or_marker_effect() {
+        for old in [
+            br#"{"agent_pid":true}"#.as_slice(),
+            br#"{"agent_pid":1,"created_at":"\ud800"}"#,
+            br#"{"agent_pid":1,"started_at":123}"#,
+        ] {
+            let f = Fixture::new();
+            let original = OriginalAncestry::fixture_current("codex");
+            let own = f.root.join(format!(
+                ".caws/sessions/agent-pid-{}.json",
+                std::process::id()
+            ));
+            fs::create_dir_all(own.parent().unwrap()).unwrap();
+            fs::write(&own, old).unwrap();
+            let execution = admit(&f, &raw(r#"{"session_id":"s"}"#), &original).execute_checked(
+                expires(),
+                || Ok(()),
+                |_| panic!("unsupported PID JSON must decline before decision/effects"),
+            );
+            assert!(execution.result.fallback_safe());
+            assert!(!execution.result.prefix_complete());
+            assert_eq!(fs::read(own).unwrap(), old);
+            assert!(!f.envelope("s").parent().unwrap().exists());
+            assert!(!f.pointer().exists());
+            assert!(
+                !f.root
+                    .join(".caws/sessions/.agent-pid-reap-marker")
+                    .exists()
+            );
+        }
+    }
+    #[test]
+    fn unavailable_envelope_preserves_it_and_completes_the_independent_pid_attempt() {
+        let f = Fixture::new();
+        let original = OriginalAncestry::fixture_not_found("codex");
+        fs::create_dir_all(f.root.join(".caws/sessions")).unwrap();
+        let blocked = f.root.join(".caws/sessions/s");
+        fs::write(&blocked, b"not directory").unwrap();
+        let execution = admit(&f, &raw(r#"{"session_id":"s"}"#), &original).execute_checked(
+            expires(),
+            || Ok(()),
+            |_| panic!("unavailable envelope must not be pretended Missing"),
+        );
+        let terminal = result(&execution.result);
+        assert_eq!(terminal["status"], "unavailable");
+        assert_eq!(terminal["prefixComplete"], true);
+        assert_eq!(terminal["envelopePublished"], false);
+        assert_eq!(terminal["pointerPublished"], false);
+        assert_eq!(terminal["agentPid"], "not_found");
+        assert_eq!(fs::read(blocked).unwrap(), b"not directory");
+        assert!(!execution.result.fallback_safe());
+    }
+    #[test]
+    fn pointer_failure_keeps_partial_effect_truth_and_still_attempts_pid() {
+        let f = Fixture::new();
+        let original = OriginalAncestry::fixture_not_found("codex");
+        fs::create_dir_all(f.pointer()).unwrap();
+        let execution = admit(&f, &raw(r#"{"session_id":"s"}"#), &original).execute_checked(
+            expires(),
+            || Ok(()),
+            |_| Ok(decision()),
+        );
+        let terminal = result(&execution.result);
+        assert_eq!(terminal["status"], "unavailable");
+        assert_eq!(terminal["prefixComplete"], true);
+        assert_eq!(terminal["envelopePublished"], true);
+        assert_eq!(terminal["pointerPublished"], false);
+        assert_eq!(terminal["agentPid"], "not_found");
+        assert!(f.pointer().is_dir());
+        assert_eq!(read(&f.envelope("s"))["session_id"], "s");
+    }
+    #[test]
+    fn lost_decision_and_late_cancellation_are_never_completion_or_replay_grants() {
+        let f = Fixture::new();
+        let original = OriginalAncestry::fixture_not_found("codex");
+        let execution = admit(&f, &raw(r#"{"session_id":"s"}"#), &original).execute_checked(
+            expires(),
+            || Ok(()),
+            |_| Err(WireError("transport lost")),
+        );
+        assert!(execution.exchange_error.is_some());
+        assert!(!execution.result.prefix_complete());
+        assert!(!execution.result.fallback_safe());
+        assert!(!f.root.join(".caws/sessions").exists());
+        let cancelled = std::cell::Cell::new(false);
+        let execution = admit(&f, &raw(r#"{"session_id":"s"}"#), &original).execute_checked(
+            expires(),
+            || {
+                if cancelled.get() {
+                    Err("caller exited".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |_| {
+                cancelled.set(true);
+                Ok(decision())
+            },
+        );
+        assert_eq!(
+            execution.cancellation_error.as_deref(),
+            Some("caller exited")
+        );
+        assert!(!execution.result.prefix_complete());
+        assert!(!execution.result.fallback_safe());
+        assert!(!f.root.join(".caws/sessions").exists());
+    }
+}
 struct Fixture {
     base: PathBuf,
     root: PathBuf,
