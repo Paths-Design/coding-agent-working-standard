@@ -590,7 +590,7 @@ impl Publication {
         self.write(transport, wire::PREPARE, json!({"kind":kind,"snapshot":{"observationId":observation_id,"inputDigest":input_digest,"sessionId":self.original.session_id,"reason":self.original.reason,"endedAt":self.original.ended_at,"files":descriptors,"priorInventory":self.prior_descriptors()}}), expires)?;
         for (descriptor, bytes) in files {
             for (index, chunk) in bytes.chunks(wire::MAX_CHUNK_BYTES).enumerate() {
-                self.write(transport, wire::CHUNK, json!({"kind":kind,"name":descriptor.name,"offset":index*wire::MAX_CHUNK_BYTES,"base64":STANDARD.encode(chunk)}), expires)?;
+                self.write(transport, wire::INPUTS, json!({"kind":kind,"name":descriptor.name,"offset":index*wire::MAX_CHUNK_BYTES,"base64":STANDARD.encode(chunk)}), expires)?;
             }
         }
         self.write(
@@ -1141,6 +1141,43 @@ mod tests {
             .unwrap()
     }
     #[test]
+    fn captured_input_chunks_use_input_direction_schema_and_exact_bytes() {
+        let f = Fixture::new();
+        let bytes =
+            serde_json::to_vec(&json!({"padding":"x".repeat(wire::MAX_CHUNK_BYTES + 7)})).unwrap();
+        fs::write(f.path(".meta.json"), &bytes).unwrap();
+        let mut publication = f.capture();
+        let mut transport = Exchange::new();
+        publication
+            .exchange_phase(wire::Kind::Seal, &mut transport, expires())
+            .unwrap();
+        let inputs: Vec<_> = transport
+            .frames
+            .iter()
+            .filter(|frame| frame["schema"] == "caws.runtime.session-publication.inputs.v1")
+            .collect();
+        assert_eq!(inputs.len(), bytes.len().div_ceil(wire::MAX_CHUNK_BYTES));
+        assert!(
+            transport
+                .frames
+                .iter()
+                .all(|frame| frame["schema"] != wire::CHUNK)
+        );
+        let prepare = &transport.frames[0];
+        let mut recovered = Vec::new();
+        for (index, frame) in inputs.iter().enumerate() {
+            assert_eq!(frame["kind"], "seal");
+            assert_eq!(frame["name"], ".meta.json");
+            assert_eq!(frame["offset"], index * wire::MAX_CHUNK_BYTES);
+            for key in ["id", "runtimeDigest", "token", "attempt"] {
+                assert_eq!(frame[key], prepare[key]);
+            }
+            recovered.extend(STANDARD.decode(frame["base64"].as_str().unwrap()).unwrap());
+        }
+        assert_eq!(recovered, bytes);
+        assert_eq!(prepare["snapshot"]["files"][0]["sha256"], sha(&recovered));
+    }
+    #[test]
     fn invalid_prepared_or_short_or_padded_chunks_never_earn_credit() {
         for fault in ["prepared", "short", "padding"] {
             let f = Fixture::new();
@@ -1320,18 +1357,24 @@ mod tests {
         }
     }
     #[test]
-    fn same_bytes_replaced_marker_and_symlinked_artifact_refuse_consumption() {
-        for marker in [false, true] {
+    fn same_bytes_replaced_marker_artifact_and_symlink_refuse_consumption() {
+        for replacement_kind in ["marker", "artifact", "symlink"] {
             let f = Fixture::new();
             let mut publication = f.capture();
             publication
                 .exchange_phase(wire::Kind::Seal, &mut Exchange::new(), expires())
                 .unwrap();
             let selected = publication.publish(expires()).unwrap();
-            if marker {
+            if replacement_kind == "marker" {
                 let replacement = f.path("replacement");
                 fs::write(&replacement, selected.marker_bytes().unwrap()).unwrap();
                 fs::rename(&replacement, f.path(MARKER_NAME)).unwrap();
+            } else if replacement_kind == "artifact" {
+                let replacement = f.path("replacement");
+                let original = fs::read(f.path(".meta.json")).unwrap();
+                fs::write(&replacement, &original).unwrap();
+                fs::rename(&replacement, f.path(".meta.json")).unwrap();
+                assert_eq!(fs::read(f.path(".meta.json")).unwrap(), original);
             } else {
                 let target = f.root.join("foreign.json");
                 fs::write(&target, fs::read(f.path(".meta.json")).unwrap()).unwrap();

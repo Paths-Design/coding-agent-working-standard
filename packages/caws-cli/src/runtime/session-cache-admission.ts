@@ -94,6 +94,11 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
   'lib/parse-input.sh': 'b61ca58672ec23722042fa55b4ba65b8c95ebc67a28dbcdc4f335770fe32d5de',
   'lib/agent-pid.sh': 'f075356c6fe4179ac14ff3e1131ba355690f55a2ced04dd2f42df6aa0f8ff800',
   'lib/emit.sh': '32bd200bf9160dffc5d349a7e13341bbcf6644ab9c47ad3f491f68d3ba77bcf4',
+  'lib/run-handlers.sh': '90945b5dd70c9c6e223beefab24208603c2c1a822e4ba85d8bd298d430660093',
+  'surfaces/codex/lib/run-handlers.sh':
+    '8ebf6a8c131cc51e8f2ecd549db890340634d8fc1ebf38e5fc185a20e4532696',
+  'lib/reprieve.sh': '4e6aa88e6021843fd41dedfe910e4e3c650695970c70a1a8c049cf2f6f8c6cff',
+  'lib/guard-config.sh': '934d60a8a56068caf2129a5705f207bf4b1203f2164dd385a057e510505cbd55',
 };
 
 /** Finite complete-prefix profile for the sole reviewed SessionEnd logger.
@@ -193,6 +198,9 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       'session-cache.sh': 'shared',
       'session-id.sh': 'shared',
       'agent-pid.sh': 'shared',
+      'run-handlers.sh': request.surface === 'codex' ? 'surface' : 'shared',
+      'reprieve.sh': 'shared',
+      'guard-config.sh': 'shared',
       'emit.sh': request.surface === 'codex' ? 'surface' : 'shared',
     };
     const required = new Set([
@@ -204,6 +212,7 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       'lib/agent-surface.sh',
       'lib/session-cache.sh',
       'lib/agent-pid.sh',
+      'lib/run-handlers.sh',
     ]);
     for (const [name, kind] of Object.entries(libraries)) {
       const relative =

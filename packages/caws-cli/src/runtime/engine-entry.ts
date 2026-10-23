@@ -4,6 +4,8 @@ import {
   encodeRuntimeResponse,
   MAX_REQUEST_DURATION_MS,
   SESSION_CACHE_CAPABILITY,
+  SESSION_END_PREFIX_CAPABILITY,
+  SESSION_PUBLICATION_CAPABILITY,
   type RuntimeRequest,
 } from './protocol';
 import {
@@ -18,7 +20,11 @@ import {
 } from './live-protocol';
 import { prepareRuntimeInvocation, type PreparedRuntimeInvocation } from './engine';
 import { containmentWire } from './containment';
-import { createNativeSessionCachePort } from './session-cache-client';
+import {
+  createNativeSessionCachePort,
+  createNativeSessionEndPrefixPort,
+} from './session-cache-client';
+import { createNativeSessionSealPort } from './session-publication-client';
 import { createNativeContextGitPort } from './context-git-client';
 import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
 
@@ -78,7 +84,40 @@ export async function runEngineEntry(): Promise<void> {
             controller.signal
           )
         : undefined;
-    prepared = await prepareRuntimeInvocation(request, controller.signal, sessionCache, contextGit);
+    const sessionSeal =
+      request.configuration === 'system' &&
+      request.event === 'session_end' &&
+      request.sessionPublication === SESSION_PUBLICATION_CAPABILITY
+        ? createNativeSessionSealPort(
+            request,
+            {
+              read: (signal) => reader.read(signal),
+              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
+            },
+            controller.signal
+          )
+        : undefined;
+    const sessionEndPrefix =
+      request.configuration === 'system' &&
+      request.event === 'session_end' &&
+      request.sessionEndPrefix === SESSION_END_PREFIX_CAPABILITY
+        ? createNativeSessionEndPrefixPort(
+            request,
+            {
+              read: (signal) => reader.read(signal),
+              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
+            },
+            controller.signal
+          )
+        : undefined;
+    prepared = await prepareRuntimeInvocation(
+      request,
+      controller.signal,
+      sessionCache,
+      contextGit,
+      sessionSeal,
+      sessionEndPrefix
+    );
     await writeRuntimeFrame(
       process.stdout,
       {

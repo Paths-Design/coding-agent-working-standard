@@ -53,6 +53,94 @@ const sameDirectory = (left: fs.BigIntStats, right: fs.BigIntStats): boolean =>
   left.dev === right.dev && left.ino === right.ino;
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
+/** Bound waiting for publication preparation/consumption, not callback side effects.
+ * Late completion/rejection is observed but cannot resume this operation. Native
+ * custody separately owns process termination and unsettled writer resources.
+ */
+export function awaitSessionPublicationCallback<T>(
+  options: { readonly signal: AbortSignal; readonly deadlineEpochMs: number },
+  consume: () => T | PromiseLike<T>
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = (): void => {
+      if (timer !== undefined) clearTimeout(timer);
+      options.signal.removeEventListener('abort', aborted);
+    };
+    const fail = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const aborted = (): void => fail(options.signal.reason);
+    const check = (): void => {
+      if (options.signal.aborted) throw options.signal.reason;
+      requireValue(
+        Date.now() < options.deadlineEpochMs,
+        'Session publication callback deadline expired'
+      );
+    };
+    const arm = (): void => {
+      const remaining = options.deadlineEpochMs - Date.now();
+      if (remaining <= 0) {
+        fail(new RuntimeProtocolError('Session publication callback deadline expired'));
+        return;
+      }
+      // Long public-reader deadlines must not overflow Node's timer interval.
+      timer = setTimeout(
+        () => {
+          timer = undefined;
+          try {
+            check();
+            arm();
+          } catch (error) {
+            fail(error);
+          }
+        },
+        Math.min(remaining, 2_147_483_647)
+      );
+    };
+    try {
+      requireValue(
+        Number.isSafeInteger(options.deadlineEpochMs) &&
+          options.deadlineEpochMs > 0 &&
+          typeof consume === 'function',
+        'Invalid session publication callback contract'
+      );
+      check();
+      options.signal.addEventListener('abort', aborted, { once: true });
+      check();
+      arm();
+    } catch (error) {
+      fail(error);
+      return;
+    }
+    // Both handlers stay attached after cancellation. An abandoned callback
+    // rejection is observed without granting a late acknowledgement or retry.
+    void Promise.resolve()
+      .then(() => {
+        if (settled)
+          throw new RuntimeProtocolError('Session publication callback is no longer active');
+        check();
+        return consume();
+      })
+      .then((value) => {
+        if (settled) return;
+        try {
+          check();
+        } catch (error) {
+          fail(error);
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(value);
+      }, fail);
+  });
+}
+
 /** Hold anchors through actual consumer use, then check the current generation again.
  * Node has no openat API: paths are opened nofollow/nonblocking, compared with held
  * descriptors before/after reads, and revalidated before consumption and return.
@@ -343,7 +431,7 @@ export async function consumeCommittedSession<T>(
       },
     });
     issued.add(session);
-    const result = await consume(session);
+    const result = await awaitSessionPublicationCallback(options, () => consume(session));
     revalidate();
     return result;
   } catch (error) {

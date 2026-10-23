@@ -213,3 +213,86 @@ test('consumer failure and cancellation do not turn the validated snapshot into 
     })
   ).rejects.toBe(cancelled);
 });
+
+test.each([
+  ['abort', 'resolve'],
+  ['abort', 'reject'],
+  ['deadline', 'resolve'],
+  ['deadline', 'reject'],
+])('held reader closes on %s before deferred consumer may %s', async (stop, late) => {
+  const live = new Set(),
+    actualOpen = fs.openSync,
+    actualClose = fs.closeSync;
+  const open = jest.spyOn(fs, 'openSync').mockImplementation((...args) => {
+    const fd = actualOpen(...args);
+    live.add(fd);
+    return fd;
+  });
+  const close = jest.spyOn(fs, 'closeSync').mockImplementation((fd) => {
+    const result = actualClose(fd);
+    live.delete(fd);
+    return result;
+  });
+  const now = Date.now();
+  if (stop === 'deadline') jest.useFakeTimers({ now, doNotFake: ['setImmediate', 'nextTick'] });
+  let entered, release, rejectLate, view;
+  const enteredConsumer = new Promise((accept) => {
+    entered = accept;
+  });
+  const deferred = new Promise((accept, reject) => {
+    release = accept;
+    rejectLate = reject;
+  });
+  const unhandled = jest.fn(),
+    cancelled = new Error('original invocation aborted'),
+    lateFailure = new Error('late consumer rejection');
+  process.on('unhandledRejection', unhandled);
+  const pending = consumeCommittedSession(
+    expected,
+    { signal: controller.signal, deadlineEpochMs: now + 1000 },
+    async (session) => {
+      view = session;
+      entered();
+      await deferred;
+      return 'late result';
+    }
+  );
+  const observed = pending.then(
+    (value) => ({ kind: 'resolved', value }),
+    (error) => ({ kind: 'rejected', error })
+  );
+  try {
+    await Promise.race([
+      enteredConsumer,
+      observed.then(() => {
+        throw new Error('Reader settled before consumption began');
+      }),
+    ]);
+    expect(live.size).toBeGreaterThan(0);
+    if (stop === 'abort') controller.abort(cancelled);
+    else jest.advanceTimersByTime(1000);
+    const result = await Promise.race([
+      observed,
+      new Promise((accept) => setImmediate(() => accept({ kind: 'pending' }))),
+    ]);
+    expect(result.kind).toBe('rejected');
+    if (stop === 'abort') expect(result.error).toBe(cancelled);
+    else expect(result.error.message).toMatch(/deadline/);
+    // This occurs while the consumer is still deferred, not after releasing it.
+    expect(live.size).toBe(0);
+    expect(Buffer.from(view.bytes('turn-001.json'))).toEqual(files.get('turn-001.json'));
+    if (late === 'reject') rejectLate(lateFailure);
+    else release();
+    await new Promise((accept) => setImmediate(accept));
+    expect(await observed).toBe(result);
+    expect(unhandled).not.toHaveBeenCalled();
+  } finally {
+    release();
+    await observed;
+    await new Promise((accept) => setImmediate(accept));
+    process.removeListener('unhandledRejection', unhandled);
+    open.mockRestore();
+    close.mockRestore();
+    if (stop === 'deadline') jest.useRealTimers();
+  }
+});

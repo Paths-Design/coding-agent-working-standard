@@ -121,6 +121,38 @@ const readyPreparation = () => ({
 });
 const sealFrames = () => [prepareFrame(), inputFrame(), readyFrame(), resultFrame()];
 
+// Literal native encoder shape (session_publication.rs publication input loop),
+// independently spelled instead of using inputFrame or a TS schema constant.
+const nativeInputWire =
+  '{"attempt":"native-attempt","base64":"eyJ1c2FnZSI6eyJpbnB1dF90b2tlbnMiOjkwMDcxOTkyNTQ3NDA5OTN9fQ==","id":"publication-test","kind":"seal","name":"turn-001.json","offset":0,"runtimeDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","schema":"caws.runtime.session-publication.inputs.v1","token":"original-token"}';
+
+test('literal native INPUTS frame reaches preparation with exact captured bytes', async () => {
+  const prepare = jest.fn(async (input) => {
+    expect(Buffer.from(input.bytes('turn-001.json'))).toEqual(inputBytes);
+    return readyPreparation();
+  });
+  const state = setup([prepareFrame(), nativeInputWire, readyFrame(), resultFrame()]);
+  await expect(state.run(prepare)).resolves.toMatchObject({ status: 'published' });
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(state.writes[0].schema).toBe('caws.runtime.session-publication.prepared.v1');
+  expect(state.writes.at(-1).schema).toBe('caws.runtime.session-publication.consumed.v1');
+});
+
+test('native captured bytes mislabeled CHUNK refuse before preparation or downstream output', async () => {
+  const wrongDirection = nativeInputWire.replace(
+    'caws.runtime.session-publication.inputs.v1',
+    'caws.runtime.session-publication.chunk.v1'
+  );
+  const prepare = jest.fn(async () => readyPreparation());
+  const state = setup([prepareFrame(), wrongDirection, readyFrame(), resultFrame()]);
+  await expect(state.run(prepare)).rejects.toThrow('Invalid native publication chunk');
+  expect(prepare).not.toHaveBeenCalled();
+  expect(state.consumptions).toEqual([]);
+  // This client rejects; its entry adapter owns FAILURE framing. It must never
+  // disguise protocol failure as Prepared, output bytes, or CONSUMED.
+  expect(state.writes).toEqual([]);
+});
+
 test.each([false, true])(
   'ordinary SessionEnd closure reads exact seven counts and unrelated metadata before ack; consumer failure=%s',
   async (failConsumer) => {
@@ -909,6 +941,91 @@ test('actual semantic log use completes before CONSUMED is sent', async () => {
   expect(state.writes.at(-1).schema).toBe(wire.SESSION_PUBLICATION_CONSUMED_SCHEMA);
 });
 
+test.each([
+  ['published', 'abort', 'resolve'],
+  ['published', 'abort', 'reject'],
+  ['published', 'deadline', 'resolve'],
+  ['published', 'deadline', 'reject'],
+  ['not_published', 'abort', 'resolve'],
+  ['not_published', 'abort', 'reject'],
+  ['not_published', 'deadline', 'resolve'],
+  ['not_published', 'deadline', 'reject'],
+])(
+  '%s deferred consumption rejects on %s and cannot acknowledge a late %s',
+  async (status, stop, late) => {
+    const now = Date.now();
+    if (stop === 'deadline') jest.useFakeTimers({ now, doNotFake: ['setImmediate', 'nextTick'] });
+    let entered, release, rejectLate;
+    const enteredConsumer = new Promise((accept) => {
+      entered = accept;
+    });
+    const deferred = new Promise((accept, reject) => {
+      release = accept;
+      rejectLate = reject;
+    });
+    const unhandled = jest.fn(),
+      cancelled = new Error('same invocation cancelled'),
+      lateFailure = new Error('late consumer rejection');
+    process.on('unhandledRejection', unhandled);
+    const state = setup(
+      status === 'published' ? sealFrames() : [resultFrame('not_published', [])],
+      {
+        consume: async (outcome) => {
+          expect(outcome.status).toBe(status);
+          if (outcome.status === 'published')
+            expect(readCommittedSessionLog(outcome.session).metadata.json).toBe(
+              outputBytes.toString()
+            );
+          entered();
+          await deferred;
+        },
+      }
+    );
+    const pending = state.run(async () => readyPreparation(), ['seal'], {
+      ...request,
+      deadlineEpochMs: now + 1000,
+    });
+    const observed = pending.then(
+      (value) => ({ kind: 'resolved', value }),
+      (error) => ({ kind: 'rejected', error })
+    );
+    try {
+      await Promise.race([
+        enteredConsumer,
+        observed.then(() => {
+          throw new Error('Publication settled before consumption began');
+        }),
+      ]);
+      if (stop === 'abort') state.controller.abort(cancelled);
+      else jest.advanceTimersByTime(1000);
+      const result = await Promise.race([
+        observed,
+        new Promise((accept) => setImmediate(() => accept({ kind: 'pending' }))),
+      ]);
+      expect(result.kind).toBe('rejected');
+      if (stop === 'abort') expect(result.error).toBe(cancelled);
+      else expect(result.error.message).toMatch(/deadline/);
+      expect(
+        state.writes.some((frame) => frame.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+      ).toBe(false);
+      if (late === 'reject') rejectLate(lateFailure);
+      else release();
+      await new Promise((accept) => setImmediate(accept));
+      expect(await observed).toBe(result);
+      expect(
+        state.writes.some((frame) => frame.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
+      ).toBe(false);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await observed;
+      await new Promise((accept) => setImmediate(accept));
+      process.removeListener('unhandledRejection', unhandled);
+      if (stop === 'deadline') jest.useRealTimers();
+    }
+  }
+);
+
 test.each(['consumer', 'marker', 'artifact', 'cancelled'])(
   '%s failure after independent read never acknowledges or falls back',
   async (failure) => {
@@ -933,6 +1050,76 @@ test.each(['consumer', 'marker', 'artifact', 'cancelled'])(
     expect(
       state.writes.some((item) => item.schema === wire.SESSION_PUBLICATION_CONSUMED_SCHEMA)
     ).toBe(false);
+  }
+);
+
+test.each([
+  ['abort', 'resolve'],
+  ['abort', 'reject'],
+  ['deadline', 'resolve'],
+  ['deadline', 'reject'],
+])(
+  'deferred preparation rejects on %s and emits no prepared/chunk/ack after late %s',
+  async (stop, late) => {
+    const now = Date.now();
+    if (stop === 'deadline') jest.useFakeTimers({ now, doNotFake: ['setImmediate', 'nextTick'] });
+    let entered, release, rejectLate;
+    const enteredPreparation = new Promise((accept) => {
+      entered = accept;
+    });
+    const deferred = new Promise((accept, reject) => {
+      release = accept;
+      rejectLate = reject;
+    });
+    const cancelled = new Error('preparation cancelled'),
+      unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+    const state = setup(sealFrames());
+    const pending = state.run(
+      async (input) => {
+        expect(Buffer.from(input.bytes(inputDescriptor.name))).toEqual(inputBytes);
+        entered();
+        await deferred;
+        return readyPreparation();
+      },
+      ['seal'],
+      { ...request, deadlineEpochMs: now + 1000 }
+    );
+    const observed = pending.then(
+      (value) => ({ kind: 'resolved', value }),
+      (error) => ({ kind: 'rejected', error })
+    );
+    try {
+      await Promise.race([
+        enteredPreparation,
+        observed.then(() => {
+          throw new Error('Publication settled before preparation began');
+        }),
+      ]);
+      expect(state.writes).toEqual([]);
+      if (stop === 'abort') state.controller.abort(cancelled);
+      else jest.advanceTimersByTime(1000);
+      const result = await Promise.race([
+        observed,
+        new Promise((accept) => setImmediate(() => accept({ kind: 'pending' }))),
+      ]);
+      expect(result.kind).toBe('rejected');
+      if (stop === 'abort') expect(result.error).toBe(cancelled);
+      else expect(result.error.message).toMatch(/deadline/);
+      expect(state.writes).toEqual([]);
+      if (late === 'reject') rejectLate(new Error('late preparation failure'));
+      else release();
+      await new Promise((accept) => setImmediate(accept));
+      expect(await observed).toBe(result);
+      expect(state.writes).toEqual([]);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await observed;
+      await new Promise((accept) => setImmediate(accept));
+      process.removeListener('unhandledRejection', unhandled);
+      if (stop === 'deadline') jest.useRealTimers();
+    }
   }
 );
 

@@ -3,7 +3,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, normalize } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { parseJsonSource } from './json-custody';
-import { consumeCommittedSession, type CommittedSession } from './committed-session-reader';
+import {
+  awaitSessionPublicationCallback,
+  consumeCommittedSession,
+  type CommittedSession,
+} from './committed-session-reader';
 import {
   RuntimeProtocolError,
   SESSION_PUBLICATION_CAPABILITY,
@@ -220,6 +224,7 @@ export async function continueNativeSessionPublication(
   const expectedOutputs = new Map<string, SessionPublicationDescriptor>();
   const cancelled = (): void => {
     if (signal.aborted) throw signal.reason;
+    requireValue(Date.now() < request.deadlineEpochMs, 'Publication deadline expired');
   };
   const read = async (): Promise<Row> => {
     cancelled();
@@ -324,12 +329,18 @@ export async function continueNativeSessionPublication(
         );
       } else {
         requireValue(artifacts.length === 0, 'Non-publication result contains artifacts');
-        await options.consume(
-          Object.freeze({
-            status: 'not_published',
-            correlation,
-            receipt: receipt as SessionPublicationReceipt & { readonly status: 'not_published' },
-          })
+        await awaitSessionPublicationCallback(
+          { signal, deadlineEpochMs: request.deadlineEpochMs },
+          () =>
+            options.consume(
+              Object.freeze({
+                status: 'not_published',
+                correlation,
+                receipt: receipt as SessionPublicationReceipt & {
+                  readonly status: 'not_published';
+                },
+              })
+            )
         );
       }
       // Only actual ordinary consumption and current-generation revalidation
@@ -441,7 +452,10 @@ export async function continueNativeSessionPublication(
       },
     });
     cancelled();
-    const preparation = await options.prepare(input);
+    const preparation = await awaitSessionPublicationCallback(
+      { signal, deadlineEpochMs: request.deadlineEpochMs },
+      () => options.prepare(input)
+    );
     cancelled();
     requireValue(
       preparation !== null &&

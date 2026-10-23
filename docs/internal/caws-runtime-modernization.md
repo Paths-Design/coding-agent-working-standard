@@ -7153,6 +7153,93 @@ Additional bounded evidence and unresolved dependencies:
   from kernel failure, immutable executable launch, residency or full cutover
   acceptance.
 
+- E267: Ordinary test preparation lands on main in `4a584028` from candidate
+  `74e174a5`. The package test command builds the CLI, both qualification helper
+  entrypoints and the feature-off host native binary before Jest. Retained
+  fresh-output execution exits 0 with 37 consumer/routing checks, and the Rust
+  1.90 context-custody suite executes 16 cases without skips. The committed
+  preparation/failure-path replay exits 0 with 33 checks. A real Turbo probe
+  changes only Rust source in a finite fixture: the CLI test hash changes while
+  CLI-local inputs remain identical. The separate full-repository dry run
+  records native source among global cache inputs.
+
+  Evidence resides in
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/`,
+  including `testprep-ordinary-01`, `testprep-context-01`,
+  `testprep-committed-js-01` and `turbo-rust-invalidation-04`. Independent
+  review questions were grounded against workflow triggers, macOS-only C build
+  selection, the artifact linker's single target-directory symlink and actual
+  Turbo invalidation. These observations do not qualify Linux execution, Windows
+  native support or hosted CI. A1/A2 are recorded pass; A3 remains unchecked in
+  events 12164–12166. The source lane is removed by the governed merge with
+  `--no-close`; lead session `01a164bc-7a2b-75e2-be81-5da9d0a29252` retains the
+  active spec bridge and hosted clean-checkout qualification.
+
+- E268: Publication component `2fa83e17`, integrated with main at `f2ca021e`,
+  has bounded native journal, Actor, writer, prefix and relay checks. Additional
+  probes reject byte-identical artifact replacement before CONSUMED and retain
+  journal uncertainty after reported file/directory sync failure. The latter
+  injects an error after real sync; it does not simulate power loss. The
+  TypeScript callback repair bounds preparation and semantic-consumer waits,
+  closes held reader descriptors, observes late rejection and forbids subsequent
+  publication output after abort/deadline. A normal build and 14 focused suites
+  exit 0 with 594 checks and unchanged source/native-image pins.
+
+  Actual frontend qualification contradicts an integrated success claim:
+  `actual-session-publication-fixture-01` records native prefix completion,
+  original reservation and writer retention, followed by the ordinary handler's
+  `Invalid native publication chunk` error. The frontend exits 2 and the Actor
+  records `session_retained`; cleanup observations contain no remaining
+  processes. No semantic-consumer completion or durable CONSUMED is established.
+  Source-progress owns the Rust/TypeScript wire-contract investigation and
+  client repair; root owns the qualifier, native integration, evidence and
+  landing. Publication-integration owns the read-only next-slice investigation
+  for SQL publication and actual warm-renderer residency. Artifacts are under
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/`.
+  The next decisive check reruns the real frontend through semantic readback,
+  durable consumption and writer release, then exercises changed input and lost
+  acknowledgment. These checks leave full Render discovery, SQL publication,
+  residency, package adoption and complete cutover acceptance open.
+
+- E269: The E268 failure exposes a real direction-schema mismatch: native
+  captured inputs used the prepared-output `chunk.v1` schema while the ordinary
+  TypeScript client required `inputs.v1`. The native emitter uses the declared
+  input schema; strict TypeScript refusal is preserved. Six native publication
+  tests include exact multi-chunk emitted bytes and correlation. Literal wire
+  controls and actual compiled-entry refusal execute in 95 checks across two
+  suites. No decoder relaxation or failure-to-success fallback is introduced.
+
+  `publication-integration/actual-session-publication-03` exits 0 in 20.732
+  seconds against the rebuilt feature-off binary and compiled ordinary engine.
+  `actual-session-publication-fixture-03` retains five cases and same-host
+  subsequent invocations. Codex and Claude publish exact seven-field 4301-digit
+  sums, ordered independent models and the unrelated 9007199254740993 token;
+  marker, final metadata, invocation journal and durable operation agree on the
+  terminal digest. Missing metadata is explicitly not published and exits
+  silently. Each successful case records durable CONSUMED before heavy release,
+  admits a writer probe while the host remains live, and admits another original
+  with the configured one-record live capacity.
+
+  A byte-identical turn-file replacement after ordinary semantic observation
+  causes frontend exit 2; killing the original frontend in the same window
+  preserves its SIGKILL terminal. Both cases retain the returned publication,
+  refuse writer reacquisition with exit 75 and refuse later original admission
+  on the same host. Neither records CONSUMED. Final process observations are
+  empty and all input/source/tool pins are unchanged. Probe 02 retains the
+  successful normal cases and the first hostile result, but fails because its
+  writer-refusal oracle expected a different diagnostic. Probe 03 requires the
+  actual source-defined custody diagnostic exactly. These are single observed
+  hostile windows, not repeatability or timing-distribution claims.
+
+  This establishes the bounded direct-native SessionEnd chain. Vendor harness
+  delivery, SQL publication, full Render inputs, warm renderer retirement and
+  more than 256 actual original operations remain separate obligations. The next
+  coherent integration is actual warm Codex Render A, Claude SessionEnd seal and
+  actual Codex Render B under one project owner, followed by SQL
+  acquisition-to-publication wiring. Switching `capture_publication` alone is
+  insufficient: the compiled engine also needs the selected store port,
+  Projection/Render preparation and complete native renderer observations.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

@@ -175,8 +175,18 @@ function sessionEnd(surface = 'codex') {
   selection.surface = request.surface = surface;
   selection.event = request.event = 'session_end';
   payload({ session_id: 'original', cwd: checkout, reason: 'clear' });
-  for (const name of ['agent-pid.sh', 'parse-input.sh', 'emit.sh']) {
-    const kind = surface === 'codex' && name !== 'agent-pid.sh' ? 'surface' : 'shared';
+  for (const name of [
+    'agent-pid.sh',
+    'parse-input.sh',
+    'emit.sh',
+    'run-handlers.sh',
+    'reprieve.sh',
+    'guard-config.sh',
+  ]) {
+    const kind =
+      surface === 'codex' && ['parse-input.sh', 'emit.sh', 'run-handlers.sh'].includes(name)
+        ? 'surface'
+        : 'shared';
     const file = path.join(runtime, kind === 'shared' ? 'lib' : 'surfaces/codex/lib', name);
     selection.libraries[name] = { path: file, sha256: sha(fs.readFileSync(file)), kind };
   }
@@ -221,9 +231,13 @@ test.each([
   'lib/agent-surface.sh',
   'lib/session-cache.sh',
   'lib/agent-pid.sh',
+  'lib/run-handlers.sh',
+  'lib/reprieve.sh',
+  'lib/guard-config.sh',
   'lib/session-id.sh',
   'surfaces/codex/lib/parse-input.sh',
   'surfaces/codex/lib/emit.sh',
+  'surfaces/codex/lib/run-handlers.sh',
 ])('SessionEnd source mutation declines before effects: %s', (relative) => {
   sessionEnd();
   expect(qualifyEnd()).toBe(true);

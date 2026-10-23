@@ -24,9 +24,25 @@ import { InvocationJournal } from './journal';
 import { AdvisoryDedup } from './advisory-dedup';
 import { normalizeNativeResult } from './native-response';
 import { resolveInvocationSelection, type ActiveInvocationSelection } from './selection';
-import { encodeRuntimeResponse, SESSION_CACHE_CAPABILITY, type RuntimeRequest } from './protocol';
-import { qualifiesForNativeSessionCache } from './session-cache-admission';
-import { sessionCacheInputSupported, type NativeSessionCachePort } from './session-cache-client';
+import {
+  encodeRuntimeResponse,
+  SESSION_CACHE_CAPABILITY,
+  SESSION_END_PREFIX_CAPABILITY,
+  SESSION_PUBLICATION_CAPABILITY,
+  type RuntimeRequest,
+} from './protocol';
+import {
+  qualifiesForNativeSessionCache,
+  qualifiesForNativeSessionEndPrefix,
+} from './session-cache-admission';
+import {
+  sessionCacheInputSupported,
+  type NativeSessionCachePort,
+  type NativeSessionEndPrefixPort,
+} from './session-cache-client';
+import type { NativeSessionSealPort } from './session-publication-client';
+import { executeNativeSessionSeal } from './session-seal-runtime';
+import type { NativeSessionSealExecution } from './stock-handlers';
 import type { NativeResult } from './types';
 import { prepareNativeRenderOffer, type NativeRenderOffer } from './service-offer';
 import { type NativeRenderAdmission, disposeNativeRenderAdmission } from './service-image';
@@ -198,7 +214,9 @@ export async function prepareRuntimeInvocation(
   request: RuntimeRequest,
   signal: AbortSignal,
   nativeSessionCache?: NativeSessionCachePort,
-  contextGit?: ContextGitPort
+  contextGit?: ContextGitPort,
+  nativeSessionSeal?: NativeSessionSealPort,
+  nativeSessionEndPrefix?: NativeSessionEndPrefixPort
 ): Promise<PreparedRuntimeInvocation> {
   if (request.contextGit === CONTEXT_GIT_CAPABILITY && !contextGit)
     throw new Error('Native context Git capability requires its request-owned port');
@@ -325,7 +343,65 @@ export async function prepareRuntimeInvocation(
           signal,
         };
         let compatibility = compatibilityRequired(request, selection, environment);
-        if (!compatibility) {
+        let sessionSeal: NativeSessionSealExecution | undefined;
+        if (
+          nativeSessionSeal &&
+          nativeSessionEndPrefix &&
+          request.sessionPublication === SESSION_PUBLICATION_CAPABILITY &&
+          request.sessionEndPrefix === SESSION_END_PREFIX_CAPABILITY &&
+          sessionCacheInputSupported(request.inputJson) &&
+          qualifiesForNativeSessionEndPrefix({
+            request,
+            selection,
+            environment,
+            sessionId: identity.sessionId,
+          })
+        ) {
+          // This mandatory parser prefix precedes discretionary handler admission,
+          // including a reprieved logger. Only its explicit no-effect decline can
+          // return to full compatibility; no uncertain operation is replayed.
+          const prefix = await nativeSessionEndPrefix.capture(selection.canonical);
+          if (signal.aborted) throw signal.reason;
+          journal.append('session_end_prefix_completed', {
+            status: prefix.status,
+            prefix_complete: prefix.prefixComplete,
+            envelope_published: prefix.envelopePublished,
+            pointer_published: prefix.pointerPublished,
+            agent_pid: prefix.agentPid,
+            reap: prefix.reap,
+          });
+          if (prefix.status === 'declined') {
+            if (
+              prefix.prefixComplete ||
+              prefix.envelopePublished ||
+              prefix.pointerPublished ||
+              prefix.agentPid !== 'not_run' ||
+              prefix.reap !== 'not_run'
+            )
+              throw new Error(
+                'Native SessionEnd decline has effects; compatibility replay refused'
+              );
+            compatibility = true;
+          } else {
+            if (!prefix.prefixComplete || !['completed', 'unavailable'].includes(prefix.status))
+              throw new Error('Native SessionEnd prefix incomplete; compatibility replay refused');
+            compatibility = false;
+            if (prefix.status === 'unavailable')
+              cacheDiagnostic = '[caws runtime] ' + prefix.diagnostic + '\n';
+            const sessionId = identity.sessionId!;
+            sessionSeal = Object.freeze({
+              sessionId,
+              execute: () =>
+                executeNativeSessionSeal({
+                  port: nativeSessionSeal,
+                  canonicalRoot: selection.canonical,
+                  sessionId,
+                  signal,
+                  observe: (fields) => journal.append('session_seal_consumer_completed', fields),
+                }),
+            });
+          }
+        } else if (!compatibility) {
           const sid = request.payload.session_id;
           // Unsafe/non-string identity retains the complete parser's diagnostic
           // behavior. Resolved fallback identity must never select cache writes.
@@ -391,7 +467,10 @@ export async function prepareRuntimeInvocation(
                 : 32768,
             },
             {
-              execute: createHandlerExecutor(options),
+              execute: createHandlerExecutor({
+                ...options,
+                ...(sessionSeal ? { nativeSessionSeal: sessionSeal } : {}),
+              }),
               record: (observation) => journal.record(observation),
               eligibility: (handler) =>
                 handlerEligibility(handler, {

@@ -192,6 +192,74 @@ fn consumed_payload_capacity_progresses_beyond_256_and_rejects_original_after_re
     );
 }
 #[test]
+fn failed_consumption_sync_never_reports_release_and_reopen_never_replays_original() {
+    for offset in [1, 2] {
+        let f = Fixture::new();
+        let mut journal = f.open(1);
+        admitted(&mut journal, 1);
+        let dispatch = begin(&mut journal);
+        let terminal = "e".repeat(64);
+        let returned = journal
+            .returned(
+                &dispatch,
+                ReturnedResult::SessionPublication {
+                    terminal_digest: terminal.clone(),
+                },
+                Some(terminal.clone()),
+                soon(),
+            )
+            .unwrap();
+        let before = fs::read(f.record(1)).unwrap();
+        journal.fail_sync = Some(journal.sync_count + offset);
+        let failure = journal.consume(&returned, &terminal, soon()).unwrap_err();
+        assert_eq!(failure.kind, ErrorKind::Io);
+        assert_eq!(failure.publication_may_have_happened, offset == 2);
+        assert_eq!(
+            journal.live_count(),
+            1,
+            "a failed consume must not release the in-memory payload"
+        );
+        assert_eq!(journal.entries[0].operation, returned);
+        error(
+            journal.admit(identity(2), b"{}", soon()),
+            ErrorKind::Poisoned,
+        );
+        let after = fs::read(f.record(1)).unwrap();
+        if offset == 1 {
+            assert_eq!(after, before);
+        } else {
+            assert_ne!(after, before);
+        }
+        drop(journal);
+        let mut reopened = f.open(1);
+        let recovered = reopened
+            .lookup(&identity(1).request_id, soon())
+            .unwrap()
+            .unwrap();
+        if offset == 1 {
+            assert_eq!(recovered, returned);
+            assert!(reopened.has_unknown(soon()).unwrap());
+            error(
+                reopened.begin_next(&"a".repeat(64), &"b".repeat(64), soon()),
+                ErrorKind::Fenced,
+            );
+        } else {
+            assert!(
+                matches!(recovered.outcome(), AcceptedOutcome::Consumed { terminal_digest, .. } if terminal_digest == &terminal)
+            );
+            assert!(recovered.verified_request().is_err());
+            assert!(!reopened.has_unknown(soon()).unwrap());
+        }
+        let mut changed = identity(1);
+        changed.source_generation = "f".repeat(64);
+        assert!(matches!(
+            reopened.admit(changed, b"foreign", soon()).unwrap(),
+            Admission::Rejected(_)
+        ));
+    }
+}
+
+#[test]
 fn publication_returned_is_a_restart_fence_until_exact_consumption() {
     let f = Fixture::new();
     let mut journal = f.open(2);
