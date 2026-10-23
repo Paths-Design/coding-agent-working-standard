@@ -112,9 +112,9 @@ test('a failed Bats suite retains raw bytes and does not suppress pytest evidenc
     fs.writeFileSync(path.join(hook, '.caws/receipt.bin'), receipt);
     fs.writeFileSync(path.join(release, 'raw.bin'), releaseBytes);
     fs.symlinkSync('loop', path.join(hook, 'loop'));
-    const runArchive = () =>
+    const runArchive = (cwd = fixture) =>
       spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', archive.run], {
-        cwd: fixture,
+        cwd,
         encoding: 'utf8',
         timeout: 10000,
       });
@@ -128,8 +128,8 @@ test('a failed Bats suite retains raw bytes and does not suppress pytest evidenc
     expect(fs.lstatSync(archivePath).isFile()).toBe(true);
     const listing = spawnSync('tar', ['-tzf', archivePath], { encoding: 'utf8', timeout: 10000 });
     expect({ status: listing.status, stderr: listing.stderr }).toEqual({ status: 0, stderr: '' });
-    expect(listing.stdout.trim().split('\n').sort()).toEqual(
-      [
+    expect(listing.stdout.trim().split('\n')).toEqual(
+      expect.arrayContaining([
         'hook-artifacts/',
         'hook-artifacts/project/',
         'hook-artifacts/project/.caws/',
@@ -137,7 +137,7 @@ test('a failed Bats suite retains raw bytes and does not suppress pytest evidenc
         'hook-artifacts/project/loop',
         'release-scenarios/',
         'release-scenarios/raw.bin',
-      ].sort()
+      ])
     );
     const extracted = path.join(fixture, 'extracted');
     fs.mkdirSync(extracted);
@@ -160,6 +160,37 @@ test('a failed Bats suite retains raw bytes and does not suppress pytest evidenc
       releaseBytes
     );
 
+    // Earlier workflow failures may leave either evidence producer unstarted.
+    // Existing evidence must survive independently; no evidence is an explicit
+    // no-archive result, not an attempt to archive nonexistent directories.
+    for (const [name, directories] of [
+      ['hook-only', ['hook-artifacts']],
+      ['release-only', ['release-scenarios']],
+      ['neither', []],
+    ]) {
+      const partial = path.join(fixture, name);
+      fs.mkdirSync(partial);
+      for (const directory of directories) {
+        fs.mkdirSync(path.join(partial, directory));
+        fs.writeFileSync(path.join(partial, directory, 'evidence.bin'), receipt);
+      }
+      const result = runArchive(partial);
+      expect({ status: result.status, signal: result.signal, stderr: result.stderr }).toEqual({
+        status: 0,
+        signal: null,
+        stderr: '',
+      });
+      const produced = path.join(partial, upload.with.path);
+      expect(fs.existsSync(produced)).toBe(directories.length > 0);
+      for (const directory of directories) {
+        const contents = spawnSync('tar', ['-xOzf', produced, `${directory}/evidence.bin`], {
+          timeout: 10000,
+        });
+        expect(contents.status).toBe(0);
+        expect(contents.stdout).toEqual(receipt);
+      }
+    }
+
     // A real output-path conflict must fail the workflow Bash step; it cannot
     // turn an absent archive into apparently successful evidence retention.
     fs.renameSync(archivePath, path.join(fixture, 'retained-success.tgz'));
@@ -168,7 +199,6 @@ test('a failed Bats suite retains raw bytes and does not suppress pytest evidenc
     expect(failed.error).toBeUndefined();
     expect(failed.signal).toBeNull();
     expect(failed.status).toBeGreaterThan(0);
-    expect(failed.stderr).toContain('hook-byte-artifacts.tgz');
     expect(fs.lstatSync(archivePath).isDirectory()).toBe(true);
   } finally {
     if (!process.env.CAWS_TEST_ARTIFACT_DIR) fs.rmSync(fixture, { recursive: true, force: true });

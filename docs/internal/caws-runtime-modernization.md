@@ -7552,6 +7552,16 @@ Additional bounded evidence and unresolved dependencies:
   borrowed, not a new build. Hosted GNU tar/upload and the next full push remain
   unverified.
 
+  Independent review identifies missing one-directory/empty-input coverage.
+  `release-workflow-tests-02` adds real hook-only, release-only and neither
+  cases; all four focused tests pass, exit 0 in 2.767 seconds, with unchanged
+  source/dependency pins and no remaining group. Directory-only cases retain
+  exact bytes; the empty case creates no archive. Listing checks permit benign
+  tar metadata while exact extracted bytes and symlink targets remain required.
+  The output-conflict refusal does not depend on platform-specific error text.
+  Retained fixtures deliberately remain in a distinct test directory for
+  inspection, including their archive and extracted hostile link.
+
   Capacity qualifier `f31e8401` removes the derived admission-count field and
   requires each original's actual owner observations in order: reservation,
   writer retention, durable consumption and heavy release. The reservation
@@ -7565,6 +7575,38 @@ Additional bounded evidence and unresolved dependencies:
   frontend cases. These observations do not establish the new sampler's timing
   or 258-original completion. The first actual run retains the original
   per-request and aggregate budgets, and partial completion cannot pass.
+
+- E282: `publication-integration/capacity-actual-01/` executes the reviewed
+  `f31e8401` qualifier with pinned native build02, current compiled CLI, tools05
+  and the native process observer. The supervisor exits 0 in 209.873 seconds;
+  source pins remain unchanged, all 258 originals complete, every strict
+  request-custody/cleanup result is settled/inactive, and the final observed
+  census is empty. No supervisor cleanup signal is needed. The qualifier
+  intentionally stops its original owner Child after the workload.
+
+  `fixture/result.json`, SHA
+  `172380268f12f80cafeac339525ddaa613cdd56e1798c5f32b6a321f1fce80da`, retains
+  258 distinct originals on owner PID 98305, with original birth
+  seconds/microseconds `1792759602/231522` and `maxRetainedRecords: 1`. Every
+  original has the four ordered lifecycle observations; root inspection confirms
+  each release precedes the next reservation. There are 268 discovered native
+  invocation directories, including the five default cases and their followups.
+  Every capacity ID joins a terminal cleanup receipt. Original 258,
+  `52826-1792759792120534000`, has exact ordinary-consumer counts/models,
+  terminal digest
+  `4cd3bae1a6eb298c6f49c7a5bf32601fe835730f5062ef9912c81437d48552d7`, an empty
+  heavy request in its durable consumed record, a current marker and a
+  successful writer-release probe. Earlier marker/tombstone bytes remain
+  unchanged after the last admission.
+
+  This establishes sequential successful-operation capacity reuse beyond 256
+  originals. It does not establish concurrent fairness, thirteen-session/four-
+  repository load, uninterrupted warm-writer exclusion under a contender,
+  restart/upgrade behavior at this scale, SQL Render activation, the eventual
+  combined package or machine adoption. Scanner observations cost 83.327 seconds
+  in aggregate, with a maximum sample of 0.337 seconds; this instrumented run is
+  not a production latency benchmark. A5 remains unchecked with this bounded
+  evidence recorded through the authoritative CLI.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
