@@ -239,6 +239,27 @@ pub(crate) fn read_metadata(
     read_bounded(&confined(root, relative, verify)?, maximum, verify)
 }
 
+/// Bind the exact retained bytes supplied to a metadata parser to the
+/// selected manifest, rather than relying on an earlier read of the pathname.
+fn read_manifest_metadata(
+    root: &Path,
+    relative: &str,
+    maximum: u64,
+    manifest: &BTreeMap<String, String>,
+    verify: &mut Verification<'_>,
+) -> Result<Vec<u8>, String> {
+    let expected = manifest
+        .get(relative)
+        .ok_or_else(|| format!("Runtime metadata is not in manifest: {relative}"))?;
+    let bytes = read_metadata(root, relative, maximum, verify)?;
+    verify.checkpoint()?;
+    if format!("{:x}", Sha256::digest(&bytes)) != *expected {
+        return Err(format!("Runtime member integrity failure: {relative}"));
+    }
+    verify.checkpoint()?;
+    Ok(bytes)
+}
+
 fn file_digest(path: &Path, verify: &mut Verification<'_>) -> Result<String, String> {
     let mut hash = Sha256::new();
     read_regular(path, None, verify, |chunk| hash.update(chunk))?;
@@ -275,10 +296,14 @@ fn verify_files(
         }
     }
     if manifest.contains_key(METADATA) {
-        let mode_file = confined(root, "native-modes.json", verify)?;
-        let modes: BTreeMap<String, u32> =
-            serde_json::from_slice(&read_bounded(&mode_file, MAX_MANIFEST, verify)?)
-                .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
+        let modes: BTreeMap<String, u32> = serde_json::from_slice(&read_manifest_metadata(
+            root,
+            "native-modes.json",
+            MAX_MANIFEST,
+            manifest,
+            verify,
+        )?)
+        .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
         verify.checkpoint()?;
         if modes.keys().ne(manifest.keys()) || !manifest.contains_key("native/caws-hook-native") {
             return Err(
@@ -368,9 +393,14 @@ impl Selection {
         }
         verify_files(&root, &manifest, verify)?;
         let route = if manifest.contains_key(METADATA) {
-            let entry: NativeEntry =
-                serde_json::from_slice(&read_metadata(&root, METADATA, MAX_METADATA, verify)?)
-                    .map_err(|e| format!("Malformed native entry: {e}"))?;
+            let entry: NativeEntry = serde_json::from_slice(&read_manifest_metadata(
+                &root,
+                METADATA,
+                MAX_METADATA,
+                &manifest,
+                verify,
+            )?)
+            .map_err(|e| format!("Malformed native entry: {e}"))?;
             verify.checkpoint()?;
             if entry.schema != SCHEMA || !(1..=120_000).contains(&entry.timeout_ms) {
                 return Err("Unsupported native entry schema or timeout".into());

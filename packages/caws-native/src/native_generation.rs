@@ -819,4 +819,188 @@ mod tests {
         assert_eq!(error, "Undeclared native runtime directory: undeclared");
         f.record("undeclared-directory", serde_json::json!({"error":error,"firstUndeclaredComponent":"undeclared","descendantDepth":3}));
     }
+
+    // The existing read observer changes a DIFFERENT member while a later
+    // manifest member is being hashed. It never mutates the file currently
+    // being read, so the ordinary in-read identity checks remain effective.
+    fn metadata_hash_to_parse_window(target_name: &'static str) {
+        use std::{cell::RefCell, rc::Rc};
+        let f = Fixture::new();
+        let target = f.root.join(target_name);
+        let original = fs::read(&target).unwrap();
+        let manifest: BTreeMap<String, String> =
+            serde_json::from_slice(&fs::read(f.root.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(hash(&original), manifest[target_name]);
+        let mut value: serde_json::Value = serde_json::from_slice(&original).unwrap();
+        let engine = f.root.join("engine.js");
+        let original_mode = fs::metadata(&engine).unwrap().permissions().mode() & 0o7777;
+        let trigger_name = match target_name {
+            "native-entry.json" => {
+                value["timeoutMs"] = serde_json::json!(1001);
+                "native-modes.json"
+            }
+            "native-modes.json" => {
+                value["engine.js"] = serde_json::json!(0o755);
+                "native/caws-hook-native"
+            }
+            _ => panic!("unsupported test metadata member"),
+        };
+        let altered = serde_json::to_vec(&value).unwrap();
+        assert_eq!(altered.len(), original.len());
+        assert_ne!(hash(&altered), manifest[target_name]);
+        let trigger = f.root.join(trigger_name);
+        let reads = Rc::new(RefCell::new(Vec::<serde_json::Value>::new()));
+        let observed_reads = reads.clone();
+        let changed = Rc::new(std::cell::Cell::new(false));
+        let mutation_done = changed.clone();
+        let target_in_hook = target.clone();
+        let engine_in_hook = engine.clone();
+        let altered_in_hook = altered.clone();
+        let original_len = original.len() as u64;
+        let deadline = expires();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(deadline, &mut cancel);
+        verify.on_chunk = Some(Box::new(move |path, total| {
+            if path == target_in_hook {
+                assert_eq!(total, original_len);
+                let mut events = observed_reads.borrow_mut();
+                let read = events.len() + 1;
+                events.push(serde_json::json!({
+                    "phase":if read == 1 { "manifest_member_hash" } else { "metadata_parse_read" },
+                    "read":read,"observedBytes":total,
+                    "namedPayloadSha256":hash(&fs::read(&target_in_hook).unwrap())
+                }));
+            }
+            if path == trigger && !mutation_done.get() {
+                // BTreeMap order gives a completed first target hash and a
+                // later still-original parse read, with no clock or race loop.
+                assert_eq!(observed_reads.borrow().len(), 1);
+                fs::write(&target_in_hook, &altered_in_hook).unwrap();
+                if target_name == "native-modes.json" {
+                    fs::set_permissions(&engine_in_hook, fs::Permissions::from_mode(0o755))
+                        .unwrap();
+                }
+                mutation_done.set(true);
+            }
+        }));
+        let selected = Selection::read_generation(&f.home, &f.config.digest, &mut verify);
+        drop(verify);
+        assert!(changed.get(), "test never installed its hostile metadata");
+        assert_eq!(
+            reads.borrow().len(),
+            2,
+            "test missed the actual parser read"
+        );
+        assert_eq!(reads.borrow()[0]["namedPayloadSha256"], hash(&original));
+        assert_eq!(reads.borrow()[1]["namedPayloadSha256"], hash(&altered));
+        let mode_at_return = fs::metadata(&engine).unwrap().permissions().mode() & 0o7777;
+        let bytes_at_return = hash(&fs::read(&target).unwrap());
+        // Restore OUTSIDE the completed parser read. No inode/timestamp spoof
+        // and no mutation of the current read descriptor is needed. The old
+        // Selection revalidation sees the original hashes/modes again.
+        fs::write(&target, &original).unwrap();
+        fs::set_permissions(&engine, fs::Permissions::from_mode(original_mode)).unwrap();
+        assert_eq!(hash(&fs::read(&target).unwrap()), manifest[target_name]);
+        let (admitted, selected_timeout, revalidation_ok, revalidation_error, error) =
+            match selected {
+                Ok(selection) => {
+                    let timeout = selection.native_entry().unwrap().timeout_ms;
+                    let mut verify = Verification::new(deadline, &mut cancel);
+                    let result = selection.revalidate(&mut verify);
+                    (
+                        true,
+                        Some(timeout),
+                        Some(result.is_ok()),
+                        result.err(),
+                        None,
+                    )
+                }
+                Err(error) => (false, None, None, None, Some(error)),
+            };
+        f.record(target_name, serde_json::json!({
+            "schema":"caws.metadata_hash_to_parse.observation.v1","synthetic":true,
+            "component":"Selection::read_generation","target":target_name,
+            "trigger":trigger_name,"manifestDigest":f.config.digest,
+            "expectedPayloadSha256":manifest[target_name],"alteredPayloadSha256":hash(&altered),
+            "namedPayloadSha256AtReturn":bytes_at_return,"reads":*reads.borrow(),
+            "admitted":admitted,"selectedTimeoutMs":selected_timeout,
+            "originalTimeoutMs":1000,"originalEngineMode":original_mode,
+            "engineModeAtReturn":mode_at_return,"alteredMode":if target_name == "native-modes.json" { Some(0o755) } else { None },
+            "restoredPayloadSha256":hash(&fs::read(&target).unwrap()),
+            "restoredRevalidationOk":revalidation_ok,"restoredRevalidationError":revalidation_error,
+            "error":error,"originalDeadlineReused":true
+        }));
+        if admitted {
+            assert_eq!(
+                revalidation_ok,
+                Some(true),
+                "old admission was not restored before revalidation: {revalidation_error:?}"
+            );
+            if target_name == "native-entry.json" {
+                assert_eq!(selected_timeout, Some(1001));
+            } else {
+                assert_eq!(mode_at_return, 0o755);
+                assert_eq!(selected_timeout, Some(1000));
+            }
+        }
+        assert_eq!(
+            error,
+            Some(format!("Runtime member integrity failure: {target_name}")),
+            "metadata parser admitted unbound bytes; admitted={admitted}, selected_timeout={selected_timeout:?}, restored_revalidation={revalidation_ok:?}"
+        );
+    }
+
+    #[test]
+    fn hash_to_parse_native_entry_bytes_must_match_manifest() {
+        metadata_hash_to_parse_window("native-entry.json");
+    }
+
+    #[test]
+    fn hash_to_parse_native_modes_bytes_must_match_manifest() {
+        metadata_hash_to_parse_window("native-modes.json");
+    }
+
+    #[test]
+    fn hash_to_parse_unchanged_metadata_retains_admission_and_revalidation() {
+        use std::{cell::RefCell, rc::Rc};
+        let f = Fixture::new();
+        let expected: BTreeMap<String, String> = ["native-entry.json", "native-modes.json"]
+            .into_iter()
+            .map(|name| (name.into(), hash(&fs::read(f.root.join(name)).unwrap())))
+            .collect();
+        let reads = Rc::new(RefCell::new(BTreeMap::<String, Vec<String>>::new()));
+        let observed = reads.clone();
+        let root = f.root.clone();
+        let deadline = expires();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(deadline, &mut cancel);
+        verify.on_chunk = Some(Box::new(move |path, _| {
+            for name in ["native-entry.json", "native-modes.json"] {
+                if path == root.join(name) {
+                    observed
+                        .borrow_mut()
+                        .entry(name.into())
+                        .or_default()
+                        .push(hash(&fs::read(path).unwrap()));
+                }
+            }
+        }));
+        let selection = Selection::read_generation(&f.home, &f.config.digest, &mut verify).unwrap();
+        drop(verify);
+        assert_eq!(selection.native_entry().unwrap().timeout_ms, 1000);
+        for (name, digest) in &expected {
+            assert_eq!(reads.borrow()[name], vec![digest.clone(), digest.clone()]);
+        }
+        let mut verify = Verification::new(deadline, &mut cancel);
+        selection.revalidate(&mut verify).unwrap();
+        f.record(
+            "unchanged-metadata-hash-to-parse",
+            serde_json::json!({
+                "schema":"caws.metadata_hash_to_parse.observation.v1","synthetic":true,
+                "component":"Selection::read_generation","reads":*reads.borrow(),
+                "expectedPayloadSha256":expected,"admitted":true,"selectedTimeoutMs":1000,
+                "restoredRevalidationOk":true,"originalDeadlineReused":true
+            }),
+        );
+    }
 }
