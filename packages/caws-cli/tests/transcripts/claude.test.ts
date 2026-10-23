@@ -10,7 +10,10 @@ import {
   matchesClaude,
   normalizeClaude,
 } from '../../src/transcripts/harness-claude';
-import { PYTHON_HTML_PROFILE_ID } from '../../src/transcripts/python-html';
+import {
+  PYTHON_HTML_PROFILE_ID,
+  PythonHtmlDecimalDigitLimitError,
+} from '../../src/transcripts/python-html';
 import {
   createAdapterState,
   makeNormalizationContext,
@@ -67,6 +70,8 @@ test('broad Claude matching and malformed type failures preserve historical disp
   }, TypeError);
   assert.equal(CLAUDE_ADAPTER.matches(row('{\"type\":\"user\"}')), true);
   assert(CLAUDE_ADAPTER_REVISION.includes(PYTHON_HTML_PROFILE_ID));
+  assert.match(CLAUDE_ADAPTER_REVISION, /^native-claude\/2;html-reference:/);
+  assert(CLAUDE_ADAPTER_REVISION.includes(';html-decimal-policy:transcript-numeric-profile/1;'));
   assert(
     CLAUDE_ADAPTER_REVISION.includes(
       'c6d94da874c7af48c9dcb90e5f6fa53671bf04154f8a1b8e3c945e71c853026d'
@@ -164,6 +169,57 @@ test('shell wrappers decode matched interiors only, with strict startswith dispa
     { ev: 'user_shell', stdout: '', stderr: '', ts: null },
   ]);
 });
+test('both Claude user-content forms carry selected numeric policy to every shell field', () => {
+  const minimum = makeNormalizationContext(
+    { numericProfile: { id: 'claude-html-640', integerMaxDigits: 640 } },
+    [CLAUDE_ADAPTER]
+  );
+  const unlimited = makeNormalizationContext(
+    { numericProfile: { id: 'claude-html-unlimited', integerMaxDigits: 0 } },
+    [CLAUDE_ADAPTER]
+  );
+  for (const [tag, expected] of [
+    ['bash-input', { ev: 'user_shell', command: 'A', ts: null }],
+    ['bash-stdout', { ev: 'user_shell', stdout: 'A', stderr: '', ts: null }],
+    ['bash-stderr', { ev: 'user_shell', stdout: '', stderr: 'A', ts: null }],
+  ] as const) {
+    for (const blocks of [false, true]) {
+      const source = (reference: string) => {
+        const text = `<${tag}>${reference}</${tag}>`;
+        return row(
+          JSON.stringify({
+            type: 'user',
+            message: { content: blocks ? [{ type: 'text', text }] : text },
+          })
+        );
+      };
+      assert.deepEqual(
+        normalizeClaude(source('&#' + '0'.repeat(638) + '65;'), minimum).map(({ event }) => event),
+        [expected]
+      );
+      assert.throws(
+        () => normalizeClaude(source('&#' + '0'.repeat(639) + '65;'), minimum),
+        (error: unknown) =>
+          error instanceof PythonHtmlDecimalDigitLimitError &&
+          error.limit === 640 &&
+          error.digits === 641
+      );
+      assert.deepEqual(
+        normalizeClaude(source('&#' + '0'.repeat(4299) + '65;'), unlimited).map(
+          ({ event }) => event
+        ),
+        [expected]
+      );
+      assert.deepEqual(
+        normalizeClaude(source('&#x' + '0'.repeat(10000) + '41;'), minimum).map(
+          ({ event }) => event
+        ),
+        [expected]
+      );
+    }
+  }
+});
+
 test('assistant events and duplicate metadata preserve ordering, Python truthiness and exact numeric custody', () => {
   const raw =
     '{"type":"assistant","requestId":"r","message":{"id":"m","model":{"x":1},"stop_reason":true,"usage":{"input_tokens":9007199254740993,"output_tokens":true,"cache_read_input_tokens":1e999,"cache_creation_input_tokens":"9","extra":99},"content":[{"type":"text","text":false},{"type":"thinking","thinking":[],"text":"fallback"},{"type":"thinking","thinking":[1],"text":"dropped"},{"type":"tool_use","name":"Agent","input":{"run_in_background":"false","other":"true"}}]}}';

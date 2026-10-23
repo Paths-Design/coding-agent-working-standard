@@ -11,6 +11,7 @@ import {
   type NormalizationContext,
 } from '../../src/transcripts/harness-common';
 import { TranscriptJsonNumericConversionError } from '../../src/transcripts/transcript-json-profile';
+import { PythonHtmlDecimalDigitLimitError } from '../../src/transcripts/python-html';
 import {
   decodeOccurrence,
   type OccurrenceCoordinates,
@@ -608,6 +609,55 @@ test('selected Claude hook stdout conversion is fatal after quoted outer admissi
   const historical = createDefaultTranscriptRegistry({ dshProfile: profile });
   const result = historical.normalize(parsed, initial(historical));
   assert.equal(result.events[0]!.event.additional_context, 'retained');
+});
+
+test('actual stock registry applies selected zero and 640 numeric policies to Claude shell HTML', () => {
+  const minimum = createDefaultTranscriptRegistry({
+    numericProfile: { id: 'registry-html-640', integerMaxDigits: 640 },
+  });
+  const unlimited = createDefaultTranscriptRegistry({
+    numericProfile: { id: 'registry-html-unlimited', integerMaxDigits: 0 },
+  });
+  for (const [tag, expected] of [
+    ['bash-input', { ev: 'user_shell', command: 'A', ts: null }],
+    ['bash-stdout', { ev: 'user_shell', stdout: 'A', stderr: '', ts: null }],
+    ['bash-stderr', { ev: 'user_shell', stdout: '', stderr: 'A', ts: null }],
+  ] as const) {
+    for (const blocks of [false, true]) {
+      const parsed = (reference: string) => {
+        const text = `<${tag}>${reference}</${tag}>`;
+        const occurrence = row(
+          JSON.stringify({
+            type: 'user',
+            message: { content: blocks ? [{ type: 'text', text }] : text },
+          })
+        );
+        assert.equal(occurrence.disposition, 'parsed');
+        return occurrence;
+      };
+      const checkpoint = initial(minimum);
+      assert.throws(
+        () => minimum.normalize(parsed('&#' + '0'.repeat(639) + '65;'), checkpoint),
+        (error: unknown) =>
+          error instanceof PythonHtmlDecimalDigitLimitError &&
+          error.limit === 640 &&
+          error.digits === 641
+      );
+      for (const [registry, selectedCheckpoint, reference] of [
+        [minimum, checkpoint, '&#' + '0'.repeat(638) + '65;'],
+        [minimum, checkpoint, '&#x' + '0'.repeat(10000) + '41;'],
+        [unlimited, initial(unlimited), '&#' + '0'.repeat(4299) + '65;'],
+      ] as const) {
+        const result = registry.normalize(parsed(reference), selectedCheckpoint);
+        assert.equal(result.commitAllowed, true);
+        assert.equal(result.selectedAdapter?.id, 'claude');
+        assert.deepEqual(
+          result.events.map(({ event }) => event),
+          [expected]
+        );
+      }
+    }
+  }
 });
 
 test('selected Codex tool output threads the policy to structured text and error classification fallbacks', () => {
