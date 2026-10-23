@@ -1,10 +1,11 @@
 id: CAWS-CONTEXT-GIT-CUSTODY-001
 title: 'Request-owned native Git custody through the one-shot engine'
 mode: feature
-lifecycle_state: active
-worktree: context-git-custody
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded macOS context-Git custody landed: actual ordinary/linked guard outcomes, same/cross-repository cancellation isolation, and retained custodian through unsettled-pipe failure demonstrated in retained artifacts. A1-A4 recorded through specs evidence with raw execution inspected; commit verification is existence only. Parent cutover, residency, full no-Python parity, all classifier Git and immutable launch remain open.'
 created_at: '2026-10-23T03:26:46.296Z'
-updated_at: '2026-10-23T05:37:41.832Z'
+updated_at: '2026-10-23T07:24:48.169Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
