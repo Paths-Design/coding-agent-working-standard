@@ -1,9 +1,10 @@
 id: CAWS-PREPUSH-LINT-HOTFIX-001
 title: 'Pre-push lint mirror: prefer-const and deferred require in native-runtime tooling'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: prepush-lint-hotfix
 created_at: '2026-10-23T05:10:55.701Z'
-updated_at: '2026-10-23T05:10:55.701Z'
+updated_at: '2026-10-23T05:11:14.075Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
