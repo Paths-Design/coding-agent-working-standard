@@ -3,7 +3,9 @@
 #![cfg(target_os = "macos")]
 use base64::{Engine, engine::general_purpose::STANDARD};
 use caws_native::{
-    render_context::{CapturedRenderContext, OriginalInvocation as GitInvocation},
+    render_context::{
+        CapturedRenderContext, CustodiedRenderContext, OriginalInvocation as GitInvocation,
+    },
     render_observation::{self as observation, ObservationOwner},
     renderer_calendar::{
         self as calendar, CapturedCalendar, OriginalInvocation as CalendarInvocation,
@@ -52,7 +54,7 @@ impl Fixture {
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
         Self { root }
     }
-    fn git(&self, expires: Instant) -> CapturedRenderContext {
+    fn git(&self, expires: Instant) -> CustodiedRenderContext {
         CapturedRenderContext::capture(
             GitInvocation {
                 id: ID.into(),
@@ -72,6 +74,11 @@ impl Fixture {
             &|| false,
         )
         .unwrap()
+        .custodied(
+            std::path::Path::new(env!("CARGO_BIN_EXE_caws-native")),
+            &|| false,
+        )
+        .unwrap()
     }
     fn owner(&self, expires: Instant) -> ObservationOwner {
         ObservationOwner::new(self.git(expires), captured_calendar(ID, expires), expires)
@@ -88,6 +95,17 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        if let Some(root) = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT") {
+            fs::write(
+                PathBuf::from(root).join(format!(
+                    "render-observation-root-{}.json",
+                    self.root.file_name().unwrap().to_str().unwrap()
+                )),
+                serde_json::to_vec(&json!({"retainedFixtureRoot":self.root})).unwrap(),
+            )
+            .unwrap();
+            return;
+        }
         fs::remove_dir_all(&self.root).unwrap();
     }
 }
@@ -459,7 +477,7 @@ fn prepared_ready_requires_git_abort_may_close_early_and_closed_lease_rejects_re
 #[test]
 fn actual_git_failure_survives_failed_failure_write_and_explicit_custody_transfer() {
     let fixture = Fixture::new("printf admitted; /bin/sleep 30");
-    let expires = Instant::now() + Duration::from_millis(900);
+    let expires = Instant::now() + Duration::from_secs(5);
     let mut owner = fixture.owner(expires);
     let mut recording = Recording {
         reads: VecDeque::from([git_request()]),
@@ -484,10 +502,10 @@ fn actual_git_failure_survives_failed_failure_write_and_explicit_custody_transfe
     assert_eq!(failure.category, "query");
     let git = failure.git.as_ref().unwrap();
     assert_eq!(git.stdout, b"admitted");
-    assert!(git.cause.as_ref().unwrap().cleanup.pid.is_some());
+    assert!(git.remote.as_ref().unwrap().custodian_pid() > 1);
     assert!(failure.cleanup_settled(), "{failure:?}");
-    let original_pid = git.cause.as_ref().unwrap().cleanup.pid;
-    let first_message = git.cause.as_ref().unwrap().first_message.clone();
+    let original_pid = git.remote.as_ref().unwrap().custodian_pid();
+    let first_message = git.remote.as_ref().unwrap().diagnostic.clone();
     let reads = recording.read_count;
     assert!(
         owner
@@ -502,11 +520,10 @@ fn actual_git_failure_survives_failed_failure_write_and_explicit_custody_transfe
             .git
             .as_ref()
             .unwrap()
-            .cause
+            .remote
             .as_ref()
             .unwrap()
-            .cleanup
-            .pid,
+            .custodian_pid(),
         original_pid
     );
     assert_eq!(
@@ -514,10 +531,10 @@ fn actual_git_failure_survives_failed_failure_write_and_explicit_custody_transfe
             .git
             .as_ref()
             .unwrap()
-            .cause
+            .remote
             .as_ref()
             .unwrap()
-            .first_message,
+            .diagnostic,
         first_message
     );
     assert_eq!(transferred.git.as_ref().unwrap().stdout, b"admitted");
@@ -631,18 +648,16 @@ fn cancellation_and_original_deadline_prevent_query_even_with_a_later_transport_
     for cancelled in [false, true] {
         let fixture = Fixture::new(FOUR_QUERIES);
         let captured_expires = Instant::now() + Duration::from_secs(3);
+        let captured_git = fixture.git(captured_expires);
+        let captured_calendar = captured_calendar(ID, captured_expires);
         let expires = if cancelled {
             captured_expires
         } else {
             Instant::now() + Duration::from_millis(100)
         };
-        let mut owner = ObservationOwner::new(
-            fixture.git(captured_expires),
-            captured_calendar(ID, captured_expires),
-            expires,
-        )
-        .ok()
-        .unwrap();
+        let mut owner = ObservationOwner::new(captured_git, captured_calendar, expires)
+            .ok()
+            .unwrap();
         let mut recording = Recording {
             reads: VecDeque::from([git_request()]),
             ..Default::default()

@@ -68,7 +68,302 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        if let Some(retained) = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT") {
+            let path = PathBuf::from(retained).join(format!(
+                "render-context-root-{}.json",
+                self.root.file_name().unwrap().to_str().unwrap()
+            ));
+            fs::write(
+                path,
+                serde_json::to_vec(&json!({"retainedFixtureRoot":self.root})).unwrap(),
+            )
+            .unwrap();
+            return;
+        }
         fs::remove_dir_all(&self.root).unwrap();
+    }
+}
+
+fn custodied(invocation: Invocation, expires: Instant) -> RenderContextOwner {
+    let Invocation {
+        id,
+        runtime_digest,
+        token,
+        caller_cwd,
+        cwd,
+        environment,
+    } = invocation;
+    CapturedRenderContext::capture(
+        OriginalInvocation {
+            id,
+            runtime_digest,
+            caller_cwd,
+            cwd,
+            environment,
+        },
+        expires,
+        &|| false,
+    )
+    .unwrap()
+    .custodied(Path::new(env!("CARGO_BIN_EXE_caws-native")), &|| false)
+    .unwrap()
+    .bind(token)
+    .unwrap()
+}
+
+#[test]
+fn real_render_custodian_preserves_four_fixed_queries_and_does_not_replay() {
+    let fixture = Fixture::new();
+    let repo = repository(&fixture, "custodied", true);
+    fs::write(repo.join("tracked"), "changed\n").unwrap();
+    let invocation = fixture.invocation(&repo);
+    let expected = oracle(&invocation);
+    let expires = Instant::now() + Duration::from_secs(5);
+    let mut owner = custodied(invocation, expires);
+    let result = owner.observe(expires, &|| false).unwrap();
+    assert_eq!(result.queries.len(), 4);
+    compare_shell(&serde_json::to_value(&result).unwrap(), &expected);
+    for row in &result.queries {
+        assert!(
+            row.cleanup.group_settled
+                && row.cleanup.stdout_eof
+                && row.cleanup.stderr_eof
+                && row.cleanup.reaped
+                && !row.cleanup.ownership_retained
+        );
+    }
+    assert_eq!(
+        owner.observe(expires, &|| false).unwrap_err().category,
+        "consumed"
+    );
+    retain(
+        "custodied-render-context.json",
+        &[serde_json::to_value(result).unwrap()],
+    );
+}
+
+#[test]
+fn custodied_leader_exit_pipeholder_deadline_cancel_and_output_keep_actual_receipts() {
+    let mut rows = Vec::new();
+    for (name, body, cancel) in [
+        (
+            "leader-exit",
+            "/bin/sleep 30 & echo $! > descendant; printf outside; exit 7",
+            false,
+        ),
+        ("deadline", "printf admitted; /bin/sleep 30", false),
+        (
+            "cancelled",
+            "printf started > started; printf admitted; /bin/sleep 30",
+            true,
+        ),
+        ("output", "exec /usr/bin/yes x", false),
+    ] {
+        let fixture = Fixture::new();
+        let invocation = fixture.wrapper(body);
+        let start = Instant::now();
+        let expires = start + Duration::from_secs(5);
+        let mut owner = custodied(invocation, expires);
+        let outcome = owner.observe(expires + Duration::from_secs(30), &|| {
+            cancel && fixture.root.join("started").exists()
+        });
+        match outcome {
+            Ok(result) => {
+                assert_eq!(name, "leader-exit");
+                assert_eq!(result.queries.len(), 1);
+                assert_eq!(result.queries[0].exit_code, Some(7));
+                assert!(
+                    result.queries[0].cleanup.stdout_eof
+                        && result.queries[0].cleanup.stderr_eof
+                        && result.queries[0].cleanup.reaped
+                );
+                rows.push(json!({"name":name,"result":result}));
+            }
+            Err(mut failure) => {
+                let until = Instant::now() + Duration::from_secs(3);
+                while !failure.cleanup_settled() && Instant::now() < until {
+                    let _ = failure.retry_cleanup();
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                let remote = failure
+                    .remote
+                    .as_ref()
+                    .expect("actual native remote custody");
+                let receipt = remote.receipt();
+                rows.push(json!({"name":name,"category":failure.category,"diagnostic":failure.diagnostic,"custodianPid":remote.custodian_pid(),"settled":failure.cleanup_settled(),"receipt":receipt,"partialStdout":STANDARD.encode(&failure.stdout),"partialStderr":STANDARD.encode(&failure.stderr)}));
+                retain("custodied-render-lifecycle.json", &rows);
+                assert!(failure.cleanup_settled(), "{name}: {failure:?}");
+                assert!(remote.custodian_pid() > 1);
+                let reply = receipt.expect("actual final private receipt");
+                let status = reply["rows"][0]["receipt"]["status"].as_str().unwrap();
+                assert!(
+                    reply["rows"][0]["receipt"]["pid"]
+                        .as_u64()
+                        .is_some_and(|pid| pid > 1),
+                    "{name} did not exercise an actual Git Child"
+                );
+                assert_eq!(
+                    status,
+                    match name {
+                        "deadline" => "deadline",
+                        "cancelled" => "cancelled",
+                        "output" => "output_limit",
+                        _ => panic!("unexpected failure {name}: {failure:?}"),
+                    }
+                );
+                assert!(
+                    failure.cause.is_none(),
+                    "remote custody must not fabricate a local ProjectFailure"
+                );
+                assert_eq!(
+                    owner.observe(expires, &|| false).unwrap_err().category,
+                    "consumed"
+                );
+            }
+        }
+    }
+    retain("custodied-render-lifecycle.json", &rows);
+}
+
+#[derive(Clone, Debug, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ProcessBirth {
+    pid: u32,
+    parent: u32,
+    group: u32,
+    start_seconds: u64,
+    start_micros: u64,
+    status: u32,
+}
+fn process_birth(pid: u32) -> Option<ProcessBirth> {
+    let mut raw = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+    let size = std::mem::size_of::<libc::proc_bsdinfo>();
+    unsafe {
+        *libc::__error() = 0;
+    }
+    let count = unsafe {
+        libc::proc_pidinfo(
+            pid as i32,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            raw.as_mut_ptr().cast(),
+            size as i32,
+        )
+    };
+    if count == 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
+        return None;
+    }
+    assert_eq!(
+        count,
+        size as i32,
+        "process observation unavailable for {pid}: {}",
+        std::io::Error::last_os_error()
+    );
+    let raw = unsafe { raw.assume_init() };
+    assert_eq!(raw.pbi_pid, pid);
+    assert!(raw.pbi_start_tvsec > 0 && raw.pbi_start_tvusec < 1_000_000);
+    Some(ProcessBirth {
+        pid,
+        parent: raw.pbi_ppid,
+        group: raw.pbi_pgid,
+        start_seconds: raw.pbi_start_tvsec,
+        start_micros: raw.pbi_start_tvusec,
+        status: raw.pbi_status,
+    })
+}
+fn same_birth(a: &ProcessBirth, b: &ProcessBirth) -> bool {
+    a.pid == b.pid && a.start_seconds == b.start_seconds && a.start_micros == b.start_micros
+}
+
+#[test]
+fn actual_original_frontend_term_and_kill_leave_custodian_to_settle_git_and_descendant() {
+    const CHILD: &str = "CAWS_TEST_RENDER_FRONTEND_ROOT";
+    if let Some(root) = std::env::var_os(CHILD) {
+        let root = PathBuf::from(root);
+        let expires = Instant::now() + Duration::from_secs(10);
+        let invocation = Invocation {
+            id: "actual-original-death".into(),
+            runtime_digest: "a".repeat(64),
+            token: "native-original-token".into(),
+            caller_cwd: root.to_str().unwrap().into(),
+            cwd: root.to_str().unwrap().into(),
+            environment: BTreeMap::from([
+                (
+                    "PATH".into(),
+                    format!("{}:/usr/bin:/bin", root.join("bin").display()),
+                ),
+                ("HOME".into(), root.to_str().unwrap().into()),
+            ]),
+        };
+        let outcome = custodied(invocation, expires).observe(expires, &|| false);
+        fs::write(
+            root.join("unexpected-return.json"),
+            serde_json::to_vec(&json!({"outcome":format!("{outcome:?}")})).unwrap(),
+        )
+        .unwrap();
+        panic!("death fixture returned before parent terminated original");
+    }
+    let mut records = Vec::new();
+    for signal in [libc::SIGTERM, libc::SIGKILL] {
+        let fixture = Fixture::new();
+        let invocation = fixture
+            .wrapper("/bin/sleep 30 & printf '%s %s %s\\n' \"$PPID\" \"$$\" \"$!\" > chain; wait");
+        drop(invocation);
+        let stdout = fs::File::create(fixture.root.join("frontend.stdout.log")).unwrap();
+        let stderr = fs::File::create(fixture.root.join("frontend.stderr.log")).unwrap();
+        let mut child=Command::new(std::env::current_exe().unwrap()).args(["--exact","actual_original_frontend_term_and_kill_leave_custodian_to_settle_git_and_descendant","--nocapture","--test-threads=1"]).env(CHILD,&fixture.root).stdin(std::process::Stdio::null()).stdout(stdout).stderr(stderr).spawn().unwrap();
+        let until = Instant::now() + Duration::from_secs(4);
+        let ids = loop {
+            if let Ok(bytes) = fs::read_to_string(fixture.root.join("chain")) {
+                let ids: Vec<u32> = bytes
+                    .split_whitespace()
+                    .map(|s| s.parse().unwrap())
+                    .collect();
+                if ids.len() == 3 {
+                    break ids;
+                }
+            }
+            assert!(Instant::now() < until, "actual Git chain never appeared");
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        let frontend = process_birth(child.id()).unwrap();
+        let custodian = process_birth(ids[0]).unwrap();
+        let git = process_birth(ids[1]).unwrap();
+        let descendant = process_birth(ids[2]).unwrap();
+        assert_eq!(custodian.parent, frontend.pid);
+        assert_eq!(git.parent, custodian.pid);
+        assert_eq!(descendant.parent, git.pid);
+        assert_eq!(git.group, git.pid);
+        assert_eq!(descendant.group, git.group);
+        // Only the actual retained frontend Child supplies signal authority.
+        assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
+        let status = child.wait().unwrap();
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(status.signal(), Some(signal));
+        let until = Instant::now() + Duration::from_secs(4);
+        let mut after = Vec::new();
+        loop {
+            after.clear();
+            for before in [&custodian, &git, &descendant] {
+                after.push(process_birth(before.pid));
+            }
+            if after
+                .iter()
+                .zip([&custodian, &git, &descendant])
+                .all(|(a, b)| a.as_ref().is_none_or(|a| !same_birth(a, b)))
+            {
+                break;
+            }
+            if Instant::now() >= until {
+                records.push(json!({"signal":signal,"frontend":frontend,"custodian":custodian,"git":git,"descendant":descendant,"after":after,"settled":false,"root":fixture.root}));
+                retain("custodied-frontend-death.json", &records);
+                panic!("original process instance still present: {after:?}");
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(!fixture.root.join("unexpected-return.json").exists());
+        records.push(json!({"signal":signal,"frontend":frontend,"custodian":custodian,"git":git,"descendant":descendant,"after":after,"settled":true,"root":fixture.root}));
+        retain("custodied-frontend-death.json", &records);
     }
 }
 fn git(cwd: &Path, args: &[&str]) {

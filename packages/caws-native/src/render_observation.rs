@@ -3,7 +3,7 @@
 //! This adapter is dormant until its owner wraps a publication Transport. It
 //! adds no reader and transfers no observation custody to the resident Actor.
 use crate::{
-    render_context::{self as git, CapturedRenderContext, RenderContextOwner},
+    render_context::{self as git, CustodiedRenderContext, RenderContextOwner},
     renderer_calendar::{CalendarFailure, CapturedCalendar, OriginalCalendar, OriginalContext},
     session_publication::Transport,
     session_publication_wire as publication,
@@ -92,7 +92,7 @@ pub struct ObservationOwner {
     cwd: String,
     executable: git::Executable,
     calendar_context: OriginalContext,
-    captured_git: Option<CapturedRenderContext>,
+    captured_git: Option<CustodiedRenderContext>,
     captured_calendar: Option<CapturedCalendar>,
     git: Option<RenderContextOwner>,
     calendar: Option<OriginalCalendar>,
@@ -111,7 +111,7 @@ pub struct ObservationOwner {
 }
 impl ObservationOwner {
     pub fn new(
-        git: CapturedRenderContext,
+        git: CustodiedRenderContext,
         calendar: CapturedCalendar,
         expires: Instant,
     ) -> Result<Self, Failure> {
@@ -472,6 +472,30 @@ impl<T: Transport> Transport for ObservationTransport<'_, T> {
         self.checkpoint(self.owner.expires)?;
         self.inner
             .credit(bytes)
+            .map_err(|error| self.fail("transport", error))
+    }
+}
+
+// Store acquisition precedes the publication exchange on this same reader.
+// Its fixed-query protocol is passed to the original transport, while the
+// original cancellation/deadline and first-failure latch remain authoritative.
+#[cfg(feature = "sqlite-store")]
+impl<T: Transport + crate::transcript_store_wire::Transport> crate::transcript_store_wire::Transport
+    for ObservationTransport<'_, T>
+{
+    fn write(&mut self, bytes: &[u8], deadline: Instant) -> Result<(), String> {
+        let deadline = self.checkpoint(deadline)?;
+        crate::transcript_store_wire::Transport::write(self.inner, bytes, deadline)
+            .map_err(|error| self.fail("transport", error))
+    }
+    fn read(&mut self, deadline: Instant) -> Result<Vec<u8>, String> {
+        let deadline = self.checkpoint(deadline)?;
+        crate::transcript_store_wire::Transport::read(self.inner, deadline)
+            .map_err(|error| self.fail("transport", error))
+    }
+    fn credit(&mut self, bytes: usize) -> Result<(), String> {
+        self.checkpoint(self.owner.expires)?;
+        crate::transcript_store_wire::Transport::credit(self.inner, bytes)
             .map_err(|error| self.fail("transport", error))
     }
 }
