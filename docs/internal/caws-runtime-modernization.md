@@ -29,14 +29,15 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-This working ledger is published on `main` independently of candidate source.
-The integration branch is `native-runtime-modernization`; its source-tree
-checkpoint is `bb3a8b99c978fbde8023b83e366030fc25cbb286`. Later branch commits
-that change only this ledger leave that checkpoint unchanged. Evidence entries
-identify their actual component branch or historical revision. Publishing this
-document does not land those implementations on `main`. Inspect the candidate
-architecture with `git show bb3a8b99:docs/architecture/caws-native-runtime.md`;
-the relative architecture link follows the branch containing this document.
+The matched native runtime source is published on `main` through merge
+`1c39bd3cd708076d54a34bfec10d8992de8f3286`, including reconciled candidate
+`c9b919e64f9149a09e2e9fff62f40cfdf141d1a8`, shared pack v105 and F3 cleanup.
+`native-runtime-modernization` remains the integration branch for owed work.
+Evidence entries identify their actual component branch or historical revision;
+ledger-only commits do not qualify different runtime bytes. The relative
+architecture link follows this document's branch. Source publication, fresh
+package qualification, actual native execution and cutover acceptance remain
+separate obligations; E262 records the landing and its bounded checks.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
@@ -7014,6 +7015,39 @@ Additional bounded evidence and unresolved dependencies:
   the existing guide updates, full observer qualification and machine cutover
   remain open. Parent evidence 11841 retains the detailed ownership/nonclaims.
 
+- E262: Normal source merge `1c39bd3cd708076d54a34bfec10d8992de8f3286` lands
+  `c9b919e6`, frozen `7195f14f`, shared pack v105 and the F3 cleanup on main.
+  Root verifies ancestry, clean canonical checkout and the merged event's
+  `canonical_checkout_state: in_sync`. Event 11869 leaves the source-landing
+  spec active; 11870 removes the lane; 11871 explicitly binds the remaining work
+  to root through its active bridge. Source A1 passes; A2/A3 and every parent
+  criterion remain unchecked. This is source publication, not machine
+  installation, native callback proof or cutover acceptance.
+
+  Exact-candidate isolated dependency installation PID 31860 exits 0 and selects
+  Handlebars 4.7.10 without changing shared caches. Fresh normal build PID 61189
+  exits 0. Focused PID 90661 exits 1 solely because root supplied the
+  nonexistent plural fingerprint filename: seven executed suites pass all 648
+  assertions. The failed attempt remains retained. Correct singular fingerprint
+  PID 98328 exits 0 with all 14 checks. Full-basis gates evaluate all 261
+  changed files; all five pass, including the run after admitting 26 exact
+  historical support paths whose final bytes equal main. Independent committed
+  source review and raw-check followup find no consequential merge-loss
+  counterexample.
+
+  Normal package PID 94849 exits 0, retaining 1,273 regular members in the
+  2,580,893-byte archive, SHA256
+  `7b69981d6d29a351878d31f30d537da8fb6bd3c68fb1a0ca7bed073b26a7b445`, under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/source-landing-c9b919e6/`.
+  Native source equals frozen `7195f14f`; 1,257 of 1,260 inspected fresh build
+  members match, with only the shared-manifest history comments and two maps
+  differing. The earlier frozen-candidate image proof does not qualify the
+  changed package. Its fresh installed prefix and actual native consumer checks
+  remain owed. The R01 chat is archived; its fixture and six retained homes are
+  preserved. Root retains execution and acceptance, publication/CONSUMED and
+  both capacity boundaries, resident execution, thirteen-session/four-repository
+  qualification, existing guide reconciliation and machine cutover.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7406,7 +7440,7 @@ operational correctness or selected execution.
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend settlement lands in87b70fcc; resident acquisition, cancellation, bounded retention and status contract land with bb3a8b99, E240. | Update publication permit, record release and actual-reader contracts with their implementations and consumer evidence.                                                                                                                            |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.                                           | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
 | `docs/guides/sterling-machine-runtime-migration.md`                             | Qualified main84079dfb and source16981627 match actual SHA1d5041f4, E242.                                                                 | Recheck operations against the eventual combined package and isolated native/harness execution before machine cutover.                                                                                                                             |
-| This tracker and canonical parent acceptance                                    | E231–E261 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
+| This tracker and canonical parent acceptance                                    | E231–E262 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
 
 ## Landing obligations
 
