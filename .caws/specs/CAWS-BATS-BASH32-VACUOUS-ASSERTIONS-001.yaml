@@ -58,7 +58,6 @@ evidence:
     commit_sha: fb1ba781ff093cad38a8823a416ff6cccf3521f4
   - criterion_id: A3
     status: pass
-    evidence_ref: "awk -f inventory.awk over packages/caws-cli/tests/hooks/bats/*.bats at fb1ba781 from the clean lane printed 0 rows; my read-only run preceded the first A3 record (before 22:17:00Z; the earlier ref wrongly said 22:22Z) and root independently re-ran the same command at 22:21:13Z with 0 rows, exit 0. The same classifier reported 61 rows, 33 non-last, at 7195f14f (inventory-integ.tsv). Classifier limits: a [[ followed only by else or fi counts as last; multi-line [[ not matched. This record corrects the time in the previous A3 record, which is retained in history."
-    recorded_at: "2026-10-22T22:43:37.512Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/inventory.awk"
+    evidence_ref: "awk -f inventory.awk over packages/caws-cli/tests/hooks/bats/*.bats at fb1ba781 prints 0 rows (my run before 22:17Z and root's independent run at 22:21:13Z, exit 0) versus 61 rows, 33 non-last, at 7195f14f. Classifier outside the repo, retained: /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/inventory.awk; limits: a [[ followed only by else or fi counts as last, multi-line [[ not matched. Re-recorded with the commit as citation."
+    recorded_at: "2026-10-23T03:23:27.920Z"
     commit_sha: fb1ba781ff093cad38a8823a416ff6cccf3521f4
