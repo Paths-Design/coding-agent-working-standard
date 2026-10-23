@@ -94,3 +94,8 @@ evidence:
     evidence_ref: "Inspected actual-session-publication-fixture-04 logs, durable operation records, markers and metadata: same-byte input replacement and lost ACK retain writer custody; same-session retry with spare capacity refuses unknown_fence without another consumer or artifact change. Focused native fsync/replacement/replay controls retained. Full store/Render hostile composition remains owed; no general replay/power-loss claim."
     recorded_at: "2026-10-23T09:30:29.872Z"
     commit_sha: e7936a8061654c93a6924b74ef86b2c3f9b1822c
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Actual frontend04 exits0/21.074s, normal semantic consumer preserves seven4300-digit counts/model order/unrelated metadata before exact CONSUMED; missing metadata explicitly not_published. Focused339 tests pass. Inspected raw artifacts under /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/. Full ordinary acquisition/renderer current generation integration not yet executed. Root carries remaining work in active CAWS-NATIVE-SESSION-PUBLICATION-001; this is source landing, not cutover acceptance."
+    recorded_at: "2026-10-23T09:30:39.257Z"
+    commit_sha: e7936a8061654c93a6924b74ef86b2c3f9b1822c
