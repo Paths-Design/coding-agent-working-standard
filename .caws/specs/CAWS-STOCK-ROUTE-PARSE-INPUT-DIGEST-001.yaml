@@ -31,3 +31,9 @@ rollback:
   - 'revert the hotfix merge commit; the stock route then declines parse-input again'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Worktree stock-route-digest at the candidate: turbo build exit 0; npx jest tests/runtime/stock-handlers.test.js --ci exit 0, 79/79 (log ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/stock-digest-wt-jest.log). Baseline canonical main e9073353 (native-suites-canonical.log): 22 failed. Review basis: comment-stripped sha256 of parse-input.sh at 6bc038d8 and f4168df9 both 3d34179400a60d69...; full-file d1823c39 -> b61ca586."
+    recorded_at: "2026-10-23T06:05:10.882Z"
+    commit_sha: "0267c0640c0f5fb352495db1eeee96715f6e3289"
