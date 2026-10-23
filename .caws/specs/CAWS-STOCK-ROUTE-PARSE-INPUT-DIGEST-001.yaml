@@ -1,0 +1,32 @@
+id: CAWS-STOCK-ROUTE-PARSE-INPUT-DIGEST-001
+title: 'Stock route: record the reviewed digest of parse-input.sh after its comment-only revision'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-23T06:01:02.579Z'
+updated_at: '2026-10-23T06:01:02.579Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'caws-cli runtime stock-handlers reviewed library table'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+  out: []
+invariants:
+  - 'A digest is added only for a parse-input.sh revision whose comment-stripped bytes equal an already reviewed revision; no digest is removed and no gate is relaxed'
+  - 'The stock route still declines any library whose digest is absent from the table'
+acceptance:
+  - id: A1
+    given: 'LIBRARIES[''parse-input.sh''] lists d1823c39 (parse-input.sh at 6bc038d8) and the live file at f4168df9 digests to b61ca586 with a comment-only diff (code-only sha256 equal), so tryExecuteStockHandler declines and stock-handlers.test.js fails 22 of 116'
+    when: 'b61ca586 is appended with its review basis'
+    then: 'npx jest tests/runtime/stock-handlers.test.js passes 116/116 against the rebuilt dist'
+  - id: A2
+    given: 'the table must keep refusing unreviewed sources'
+    when: 'the suite''s ''a rehashed unreviewed library keeps the selected shell route'' case runs at the candidate'
+    then: 'it passes, showing an unknown digest still routes to the shell handler'
+rollback:
+  - 'revert the hotfix merge commit; the stock route then declines parse-input again'
+non_functional: {}
+contracts: []
