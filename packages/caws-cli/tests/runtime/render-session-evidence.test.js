@@ -8,7 +8,7 @@ const helper =
   process.env.CAWS_RENDER_HARNESS_HELPER ??
   path.resolve(
     __dirname,
-    '../../../caws-native/target/qualification-tools/render-qualification-harness.js'
+    '../../../caws-native/target/qualification-tools/scripts/render-qualification-harness.js'
   );
 const artifacts =
   process.env.CAWS_TEST_ARTIFACT_DIR ??
