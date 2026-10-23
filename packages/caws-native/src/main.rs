@@ -79,12 +79,12 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     let (payload, input_json) = runner::read_payload(deadline).map_err(Failure::configuration)?;
     let request = protocol::Request::new(config, payload, input_json, deadline)
         .map_err(Failure::configuration)?;
-    let mut bytes = serde_json::to_vec(&request)
+    let bytes = request
+        .encode_frame()
         .map_err(|e| Failure::configuration(format!("request encoding: {e}")))?;
-    if bytes.len() > runner::MAX_REQUEST {
+    if bytes.len() - 1 > runner::MAX_REQUEST {
         return Err(Failure::configuration("request exceeds byte limit".into()));
     }
-    bytes.push(b'\n');
     let captured = (config.surface == "codex" && config.event == "pre_tool_use")
         .then(|| process_effect::CapturedAncestors::capture(deadline));
     let mut session =

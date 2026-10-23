@@ -61,6 +61,34 @@ pub struct Request {
 }
 
 impl Request {
+    /// RawValue retains payload formatting. Compact only JSON whitespace outside
+    /// strings so a payload newline cannot terminate the transport frame early.
+    /// Keep input_json's decoded bytes and every raw number token unchanged.
+    pub fn encode_frame(&self) -> serde_json::Result<Vec<u8>> {
+        let mut bytes = serde_json::to_vec(self)?;
+        let mut quoted = false;
+        let mut escaped = false;
+        bytes.retain(|byte| {
+            if quoted {
+                if escaped {
+                    escaped = false;
+                } else if *byte == b'\\' {
+                    escaped = true;
+                } else if *byte == b'"' {
+                    quoted = false;
+                }
+                true
+            } else if *byte == b'"' {
+                quoted = true;
+                true
+            } else {
+                !matches!(*byte, b' ' | b'\t' | b'\r' | b'\n')
+            }
+        });
+        bytes.push(b'\n');
+        Ok(bytes)
+    }
+
     #[cfg(feature = "sqlite-store")]
     pub fn transcript_store_invocation<'a>(
         &'a self,
@@ -505,6 +533,64 @@ mod tests {
             payload: RawValue::from_string("{}".into()).unwrap(),
             input_json: "{}".into(),
         }
+    }
+    #[test]
+    fn request_frame_preserves_raw_payload_and_original_input_across_formatting() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct RetainedRequest {
+            payload: Box<RawValue>,
+            input_json: String,
+        }
+        let cases = [
+            ("{}", "{}"),
+            ("{\n  \"tool\": \"Read\"\n}\n", r#"{"tool":"Read"}"#),
+            (
+                "{\r\n\t\"nested\": [\r\n 1, { \"value\": true }\r\n ]\r\n}\r\n",
+                r#"{"nested":[1,{"value":true}]}"#,
+            ),
+            (
+                r#"{ "quoted": " space \n \r \t \" \\ 雪 " }"#,
+                r#"{"quoted":" space \n \r \t \" \\ 雪 "}"#,
+            ),
+            (
+                "{\n \"large\": 900719925474099312345678901234567890,\n \"exponent\": 1.000e+400,\n \"negativeZero\": -0.00\n}",
+                r#"{"large":900719925474099312345678901234567890,"exponent":1.000e+400,"negativeZero":-0.00}"#,
+            ),
+            (
+                r#"{ "same": -0, "same": 2.000e-09, "slash": "\\", "after": [ 3 ] }"#,
+                r#"{"same":-0,"same":2.000e-09,"slash":"\\","after":[3]}"#,
+            ),
+        ];
+        for (input, expected_payload) in cases {
+            let mut request = fixture_request();
+            request.payload = RawValue::from_string(input.to_owned()).unwrap();
+            request.input_json = input.to_owned();
+            let frame = request.encode_frame().unwrap();
+            assert_eq!(frame.iter().filter(|byte| **byte == b'\n').count(), 1);
+            assert_eq!(frame.last(), Some(&b'\n'));
+            assert!(!frame.contains(&b'\r'));
+            let decoded: RetainedRequest = serde_json::from_slice(&frame).unwrap();
+            assert_eq!(decoded.input_json.as_bytes(), input.as_bytes());
+            assert_eq!(decoded.payload.get(), expected_payload);
+            // The ordinary first-LF reader must receive the entire JSON envelope.
+            let first = frame.split(|byte| *byte == b'\n').next().unwrap();
+            let first_decoded: RetainedRequest = serde_json::from_slice(first).unwrap();
+            assert_eq!(first_decoded.input_json, input);
+        }
+    }
+
+    #[test]
+    fn pretty_raw_payload_is_a_real_negative_control_for_uncompacted_framing() {
+        let mut request = fixture_request();
+        request.input_json = "{\n \"nested\": {\n \"n\": 123\n }\n}".into();
+        request.payload = RawValue::from_string(request.input_json.clone()).unwrap();
+        let unframed = serde_json::to_vec(&request).unwrap();
+        let truncated = unframed.split(|byte| *byte == b'\n').next().unwrap();
+        assert!(truncated.ends_with(b"\"payload\":{"));
+        assert!(serde_json::from_slice::<Box<RawValue>>(truncated).is_err());
+        let repaired = request.encode_frame().unwrap();
+        assert!(serde_json::from_slice::<Box<RawValue>>(&repaired).is_ok());
     }
     #[test]
     #[cfg(feature = "sqlite-store")]
