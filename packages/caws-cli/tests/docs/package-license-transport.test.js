@@ -420,6 +420,7 @@ function custodyDiagnostic(result) {
 test.each([
   ['marker_open', 'append', 1],
   ['marker_open', 'replacement', 1],
+  ['marker_open', 'timestamps', 1],
   ['before_write', 'append', 2],
   ['after_write', 'append', 4],
   ['before_retire', 'append', 14],
@@ -447,6 +448,8 @@ test.each([
           const replacement = marker + '.foreign';
           fs.writeFileSync(replacement, fs.readFileSync(marker), { mode: 0o600 });
           fs.renameSync(replacement, marker);
+        } else if (${JSON.stringify(mutation)} === 'timestamps') {
+          fs.utimesSync(marker, Number(observed.atimeMs) / 1000, Number(observed.mtimeMs) / 1000 + 60);
         } else fs.appendFileSync(marker, ' ');
         faults.mutations++;
       }
@@ -466,6 +469,13 @@ test.each([
     expect(data.observed).toEqual({ identity: after.identity, sha256: after.sha256 });
     expect(data.expected.identity).not.toEqual(data.observed.identity);
     if (mutation === 'replacement') expect(data.observed.sha256).toBe(data.expected.sha256);
+    if (mutation === 'timestamps') {
+      expect(data.observed.sha256).toBe(data.expected.sha256);
+      expect(data.observed.identity.mtimeNs).not.toBe(data.expected.identity.mtimeNs);
+      for (const field of ['dev', 'ino', 'birthtimeNs', 'size', 'mode', 'nlink'])
+        expect(data.observed.identity[field]).toBe(data.expected.identity[field]);
+      expect(fs.readFileSync(marker)).toEqual(Buffer.from(before.bytesBase64, 'base64'));
+    }
     if (checkpoint === 'marker_open' || checkpoint === 'before_write')
       expect(data.expected).toEqual({ identity: before.identity, sha256: before.sha256 });
     expect(after.type).toBe('file');
