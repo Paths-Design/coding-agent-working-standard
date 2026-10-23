@@ -135,14 +135,29 @@ function read(file, optional = false) {
   });
 }
 
-function current(handle) {
+function current(handle, checkpoint) {
   const observed = read(handle.file);
-  if (
-    !same(observed.identity, handle.identity) ||
-    !observed.bytes.equals(handle.bytes) ||
-    !same(identity(fs.fstatSync(handle.fd, { bigint: true })), handle.identity)
-  )
-    fail(`owned record replaced or changed: ${handle.file}`);
+  // Keep the custody predicates and their short-circuit observation order. In
+  // particular, a changed path must not cause an additional held-FD observation.
+  let failedPredicate;
+  let heldFdIdentity = 'not_observed';
+  if (!same(observed.identity, handle.identity)) failedPredicate = 'path_identity';
+  else if (!observed.bytes.equals(handle.bytes)) failedPredicate = 'path_bytes';
+  else {
+    heldFdIdentity = identity(fs.fstatSync(handle.fd, { bigint: true }));
+    if (!same(heldFdIdentity, handle.identity)) failedPredicate = 'held_fd_identity';
+  }
+  if (failedPredicate)
+    fail(
+      `owned record replaced or changed: ${handle.file}; custody=${JSON.stringify({
+        schema: 'caws.license-transport.refusal.v1',
+        checkpoint,
+        failedPredicate,
+        expected: { identity: handle.identity, sha256: hash(handle.bytes) },
+        observed: { identity: observed.identity, sha256: hash(observed.bytes) },
+        heldFdIdentity,
+      })}`
+    );
 }
 
 function withLock(packageRoot, body) {
@@ -168,7 +183,7 @@ function withLock(packageRoot, body) {
     }
     let cleanup;
     try {
-      current(lock);
+      current(lock, 'lock_cleanup');
       fs.unlinkSync(file);
     } catch (error) {
       cleanup = error;
@@ -238,7 +253,7 @@ function openMarker(root) {
   try {
     const stat = fs.fstatSync(fd, { bigint: true });
     const handle = { file, fd, ...observed, data: markerData(observed.bytes, stat) };
-    current(handle);
+    current(handle, 'marker_open');
     return handle;
   } catch (error) {
     closeFailed(fd, error);
@@ -246,7 +261,7 @@ function openMarker(root) {
 }
 
 function writeMarker(handle) {
-  current(handle);
+  current(handle, 'before_write');
   const bytes = Buffer.from(JSON.stringify(handle.data) + '\n');
   let offset = 0;
   while (offset < bytes.length) {
@@ -258,7 +273,7 @@ function writeMarker(handle) {
   fs.fsyncSync(handle.fd);
   handle.bytes = bytes;
   handle.identity = identity(fs.fstatSync(handle.fd, { bigint: true }));
-  current(handle);
+  current(handle, 'after_write');
 }
 
 function createMarker(root) {
@@ -392,7 +407,7 @@ export function cleanLicenseTransport(packageRoot = PKG_ROOT) {
         marker.data.entries = marker.data.entries.filter((item) => item.name !== entry.name);
         writeMarker(marker);
       }
-      current(marker);
+      current(marker, 'before_retire');
       fs.unlinkSync(marker.file);
       return { removed };
     } catch (error) {
@@ -466,7 +481,7 @@ export function recoverLicenseTransport(
       const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
       return closeAfter(fd, () => {
         const marker = { file, fd, ...observed };
-        current(marker);
+        current(marker, 'marker_open');
         const data = markerRecord(observed.bytes);
         // Do not infer a persistent filesystem identity from a device-number change.
         // Recovery abandons all old deletion authority instead of rebinding it.
@@ -500,7 +515,7 @@ export function recoverLicenseTransport(
         verifyRetention();
         syncDirectory(path.dirname(retention));
         verifyRetention();
-        current(marker);
+        current(marker, 'before_retire');
         retirementAttempted = true;
         fs.unlinkSync(file);
         syncDirectory(root);
