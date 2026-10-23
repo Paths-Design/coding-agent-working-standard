@@ -8,6 +8,11 @@ const { publishNativeTranscriptStore } = require('../../dist/runtime/session-sto
 const { getMember } = require('../../dist/transcripts/lossless-json');
 const { StoreProjectionContractError } = require('../../dist/transcripts/store-projection');
 const {
+  STORE_JSON_PROFILE,
+  STORE_JSON_UNLIMITED_PROFILE,
+  StoreJsonError,
+} = require('../../dist/transcripts/store-json');
+const {
   TRANSCRIPT_STORE_CAPABILITY,
   SESSION_PUBLICATION_CAPABILITY,
   RuntimeProtocolError,
@@ -91,7 +96,7 @@ function setup(options = {}) {
   const text = (value) => ({ storageClass: 'text', base64: Buffer.from(value).toString('base64') });
   const cells = [
     text('m'),
-    text('{"role":"user"}'),
+    text(options.messageJson || '{"role":"user"}'),
     text('p'),
     text('{"type":"text","text":"hello"}'),
     { storageClass: 'integer', decimal: '0' },
@@ -311,6 +316,8 @@ function setup(options = {}) {
       canonicalRoot,
       sessionId: 'original-session',
       limits,
+      // Explicit reference profile for this synthetic fixture, not production qualification.
+      sqlProfile: STORE_JSON_PROFILE,
       maximumProjectionBytes: 65536,
       prepareRender: render,
       consumer: { published, notPublished },
@@ -590,3 +597,61 @@ test.each([undefined, null])(
     expect(state.render).not.toHaveBeenCalled();
   }
 );
+
+test('publication forwards explicit SQL profile independently of renderer preparation', async () => {
+  const state = setup({ messageJson: '{"role":"user","ignored":' + '7'.repeat(4301) + '}' });
+  const result = await state.run({ sqlProfile: STORE_JSON_UNLIMITED_PROFILE });
+  expect(result.status).toBe('published');
+  expect(state.render).toHaveBeenCalledTimes(1);
+  expect(state.published).toHaveBeenCalledTimes(1);
+});
+
+test.each(['omitted', 'undefined', 'null'])(
+  '%s SQL profile is refused before observing the port or consumer',
+  async (kind) => {
+    const state = setup();
+    const observed = jest.fn((name) => {
+      throw new Error(`Publication observed ${name} before profile validation`);
+    });
+    const options = {
+      get port() {
+        observed('port');
+        return state.port;
+      },
+      canonicalRoot,
+      sessionId: 'original-session',
+      limits,
+      maximumProjectionBytes: 65536,
+      prepareRender: state.render,
+      get consumer() {
+        observed('consumer');
+        return { published: state.published, notPublished: state.notPublished };
+      },
+    };
+    // The omitted case is an actual JS options object with no sqlProfile key.
+    if (kind !== 'omitted') options.sqlProfile = kind === 'null' ? null : undefined;
+    const error = await refusal(
+      publishNativeTranscriptStore(options),
+      StoreJsonError,
+      'request:unsupported_profile at request 0'
+    );
+    expect(error).toMatchObject({ category: 'request', code: 'unsupported_profile' });
+    expect(observed).not.toHaveBeenCalled();
+    expect(state.reads).toBe(0);
+    expect(state.writes).toEqual([]);
+    expect(state.render).not.toHaveBeenCalled();
+    expect(state.published).not.toHaveBeenCalled();
+    expect(state.notPublished).not.toHaveBeenCalled();
+    expect(fs.readdirSync(directory)).toEqual([]);
+  }
+);
+
+test('unsupported SQL profile is refused before native acquisition or renderer callbacks', async () => {
+  const state = setup();
+  await expect(state.run({ sqlProfile: 'unsupported-profile' })).rejects.toBeInstanceOf(
+    StoreJsonError
+  );
+  expect(state.writes).toHaveLength(0);
+  expect(state.render).not.toHaveBeenCalled();
+  expect(state.published).not.toHaveBeenCalled();
+});

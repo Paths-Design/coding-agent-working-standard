@@ -25,6 +25,108 @@ if (process.argv[2] === '--agent-child') {
   let stdout = Buffer.alloc(0),
     stderr = Buffer.alloc(0),
     closed = false;
+  // This existing ancestor has its own event loop. The parent keeps sampling
+  // original process custody without delaying the one-shot hostile action.
+  let hostileTimer, hostileResult;
+  const finishHostile = (result) => {
+    if (!spec.hostileControl || hostileResult) return;
+    clearInterval(hostileTimer);
+    hostileResult = { ...result, observedAt: Date.now(), nativePid: child.pid };
+    try {
+      fs.writeFileSync(spec.hostileControl.receipt, JSON.stringify(hostileResult, null, 2) + '\n', {
+        flag: 'wx',
+        mode: 0o600,
+      });
+    } catch (error) {
+      hostileResult = {
+        ...hostileResult,
+        actionStatus: hostileResult.status,
+        status: 'failed',
+        error: 'hostile action receipt failed: ' + String(error),
+      };
+    }
+    if (process.connected) process.send?.({ type: 'hostile-result', result: hostileResult });
+  };
+  const armHostile = () => {
+    if (!spec.hostileControl) return;
+    const plan = spec.hostileControl;
+    const deadline = performance.now() + 15000;
+    const poll = () => {
+      try {
+        assert(performance.now() < deadline, 'hostile watcher deadline expired');
+        const directory = path.join(plan.session, 'hook-invocations');
+        if (!fs.existsSync(directory)) return;
+        const names = fs
+          .readdirSync(directory)
+          .filter((name) => new RegExp('^' + child.pid + '-[0-9]+\\.jsonl$').test(name));
+        assert(names.length <= 1, 'ambiguous original invocation journal');
+        if (!names.length) return;
+        const file = path.join(directory, names[0]);
+        assert(fs.statSync(file).size <= 1024 * 1024, 'hostile journal exceeds bound');
+        const bytes = fs.readFileSync(file, 'utf8');
+        const end = bytes.lastIndexOf('\n');
+        if (end < 0) return;
+        const entries = bytes.slice(0, end).split('\n').filter(Boolean).map(JSON.parse);
+        const started = entries[0];
+        const completed = entries.filter((row) => row.stage === 'session_seal_consumer_completed');
+        if (!completed.length) return;
+        assert.equal(completed.length, 1);
+        assert.equal(started.stage, 'invocation_started');
+        assert.equal(started.dispatch_cwd, spec.cwd);
+        assert.equal(started.resolved_session_id, plan.sid);
+        const consumer = completed[0];
+        for (const row of [started, consumer]) {
+          assert.equal(row.schema, 'caws.hook_invocation.v1');
+          assert.equal(row.invocation_id + '.jsonl', names[0]);
+          assert.equal(row.surface, 'codex');
+          assert.equal(row.event, 'session_end');
+          assert.equal(row.runtime_digest, plan.runtimeDigest);
+          assert.equal(row.input_sha256, hash(spec.input));
+        }
+        assert.equal(consumer.status, 'published');
+        const key = hash(
+          JSON.stringify(['caws-project-service-key-v1', spec.cwd, 'session-render'])
+        );
+        const request = hash(JSON.stringify(['caws.session.original.v1', started.invocation_id]));
+        const operationFile = path.join(
+          spec.environment.CAWS_HOME,
+          'state/render-service/custody/operations/services',
+          key,
+          request + '.json'
+        );
+        const operation = JSON.parse(fs.readFileSync(operationFile, 'utf8'));
+        assert.equal(operation.body.identity.requestId, request);
+        assert.equal(operation.body.identity.projectServiceKey, key);
+        assert.equal(operation.body.outcome.execution, 'returned', 'ACK race: A already consumed');
+        assert.equal(operation.body.outcome.result.terminalDigest, consumer.terminal_digest);
+        assert.equal(fs.statSync(plan.target).ino, plan.beforeInode);
+        const actionStartedAt = Date.now();
+        fs.renameSync(plan.replacement, plan.target);
+        const actionCompletedAt = Date.now();
+        const afterInode = fs.statSync(plan.target).ino;
+        const sameBytesSha256 = hash(fs.readFileSync(plan.target));
+        assert.notEqual(afterInode, plan.beforeInode);
+        assert.equal(sameBytesSha256, plan.originalSha256);
+        finishHostile({
+          status: 'applied',
+          type: 'changed-input',
+          invocationId: started.invocation_id,
+          journal: file,
+          consumer,
+          beforeAction: { file: operationFile, row: operation },
+          beforeInode: plan.beforeInode,
+          afterInode,
+          originalSha256: plan.originalSha256,
+          sameBytesSha256,
+          actionStartedAt,
+          actionCompletedAt,
+        });
+      } catch (error) {
+        finishHostile({ status: 'failed', error: String(error) });
+      }
+    };
+    hostileTimer = setInterval(poll, 2);
+  };
   child.stdout.on('data', (bytes) => {
     stdout = Buffer.concat([stdout, bytes]);
     process.stdout.write(bytes);
@@ -45,6 +147,7 @@ if (process.argv[2] === '--agent-child') {
   );
   child.once('close', (code, signal) => {
     closed = true;
+    finishHostile({ status: 'failed', error: 'native child closed before hostile action' });
     process.send?.({
       type: 'native-terminal',
       pid: child.pid,
@@ -59,6 +162,7 @@ if (process.argv[2] === '--agent-child') {
       const accepted = !closed && child.kill(message.signal);
       process.send?.({ type: 'signal-result', signal: message.signal, accepted, pid: child.pid });
     } else if (message.type === 'release') {
+      finishHostile({ status: 'failed', error: 'ancestor released before hostile action' });
       if (!closed) child.kill('SIGTERM');
       const finish = () => process.exit(0);
       if (closed) finish();
@@ -66,10 +170,12 @@ if (process.argv[2] === '--agent-child') {
     }
   });
   process.on('disconnect', () => {
+    finishHostile({ status: 'failed', error: 'parent disconnected before hostile action' });
     if (!closed) child.kill('SIGTERM');
     if (closed) process.exit(1);
     else child.once('close', () => process.exit(1));
   });
+  armHostile();
   child.stdin.end(spec.input);
 } else {
   const options = new Map();
@@ -82,32 +188,41 @@ if (process.argv[2] === '--agent-child') {
         '--node',
         '--artifacts',
         '--original-count',
+        '--scenario',
         '--custody-tools',
         '--process-observer',
       ].includes(key) &&
         value &&
         !options.has(key),
-      'usage: qualify-session-publication.cjs --native <absolute> --node <absolute> --artifacts <fresh absolute> [--original-count 258 --custody-tools <physical emitted root> --process-observer <physical binary>]'
+      'usage: qualify-session-publication.cjs --native <absolute> --node <absolute> --artifacts <fresh absolute> [--original-count 258 | --scenario uncertain-project-progress] [--custody-tools <physical emitted root> --process-observer <physical binary>]'
     );
     if (key === '--original-count')
       assert.equal(value, '258', 'capacity qualification requires exactly 258 originals');
+    else if (key === '--scenario') assert.equal(value, 'uncertain-project-progress');
     else assert(path.isAbsolute(value));
     options.set(key, value);
   }
   for (const key of ['--native', '--node', '--artifacts'])
     assert(options.has(key), 'missing ' + key);
   const originalCount = options.has('--original-count') ? 258 : 0;
+  const uncertainProgress = options.get('--scenario') === 'uncertain-project-progress';
+  assert(
+    !(originalCount && uncertainProgress),
+    'Select the original workload or the bounded progress scenario'
+  );
+  const requestProofRequired = Boolean(originalCount || uncertainProgress);
   for (const key of ['--custody-tools', '--process-observer'])
     assert.equal(
       options.has(key),
-      Boolean(originalCount),
-      'capacity-only dependency required with --original-count: ' + key
+      requestProofRequired,
+      'custody dependency requires --original-count or --scenario uncertain-project-progress: ' +
+        key
     );
-  const custodyTools = originalCount ? options.get('--custody-tools') : null;
-  const observer = originalCount ? options.get('--process-observer') : null;
+  const custodyTools = requestProofRequired ? options.get('--custody-tools') : null;
+  const observer = requestProofRequired ? options.get('--process-observer') : null;
   for (const file of [custodyTools, observer].filter(Boolean))
     assert.equal(fs.realpathSync(file), file, 'capacity dependency must use its physical path');
-  const strictCustody = originalCount
+  const strictCustody = requestProofRequired
     ? {
         ...require(path.join(custodyTools, 'scripts/render-request-topology.js')),
         ...require(path.join(custodyTools, 'scripts/render-request-custody.js')),
@@ -209,7 +324,7 @@ if (process.argv[2] === '--agent-child') {
     ]
       .map(pin)
       .concat(
-        ...(originalCount
+        ...(requestProofRequired
           ? [
               observer,
               path.join(cli, 'scripts/render-request-custody.ts'),
@@ -237,6 +352,7 @@ if (process.argv[2] === '--agent-child') {
     beforePins,
     limits,
     originalCount,
+    scenario: uncertainProgress ? 'uncertain-project-progress' : null,
     custodyTools,
     observer,
   });
@@ -415,12 +531,12 @@ if (process.argv[2] === '--agent-child') {
     expectedCount = '1' + '0'.repeat(4299) + '1';
   const usage = (value) =>
     '{' + fields.map((key) => JSON.stringify(key) + ':' + value).join(',') + '}';
-  function createCase(name, surface, missing, large) {
+  function createCase(name, surface, missing, large, shared = null) {
     const directory = path.join(root, name);
     fs.mkdirSync(directory, { mode: 0o700 });
     const environment = {
-      HOME: path.join(directory, 'user'),
-      CAWS_HOME: path.join(directory, 'machine'),
+      HOME: shared ? shared.environment.HOME : path.join(directory, 'user'),
+      CAWS_HOME: shared ? shared.environment.CAWS_HOME : path.join(directory, 'machine'),
       PATH: path.dirname(node) + ':/usr/bin:/bin',
       TMPDIR: directory,
       LANG: 'C',
@@ -428,18 +544,19 @@ if (process.argv[2] === '--agent-child') {
       TZ: 'UTC',
       CAWS_TRAP_KILL: '0',
     };
-    fs.mkdirSync(environment.HOME, { mode: 0o700 });
-    const installed = installMachineRuntime({
-      home: environment.CAWS_HOME,
-      templatesRoot: templates,
-    });
+    if (!shared) fs.mkdirSync(environment.HOME, { mode: 0o700 });
+    const installed = shared
+      ? shared.installed
+      : installMachineRuntime({
+          home: environment.CAWS_HOME,
+          templatesRoot: templates,
+        });
     const defaults = read(
       path.join(environment.CAWS_HOME, 'lib/runtimes', installed.digest, 'system-policy.json')
     ).events;
-    put(path.join(environment.CAWS_HOME, 'surfaces', surface, 'settings.json'), {
-      version: 1,
-      enabled: true,
-    });
+    const settings = path.join(environment.CAWS_HOME, 'surfaces', surface, 'settings.json');
+    if (shared) assert.deepEqual(read(settings), { version: 1, enabled: true });
+    else put(settings, { version: 1, enabled: true });
     const policy = {
       disabled: {
         session_end: [...new Set(defaults.session_end.map((entry) => entry.split(' ')[0]))].filter(
@@ -514,36 +631,38 @@ if (process.argv[2] === '--agent-child') {
           JSON.stringify({ schema_version: 2, retained: 'r'.repeat(900 * 1024) }),
         ]);
     if (!missing) for (const [file, bytes] of turns) put(path.join(session, file), bytes);
-    const owner = {
-      schema: 'caws.render.owner.config.v1',
-      home: environment.CAWS_HOME,
-      clientRoot: path.dirname(engine),
-      templateRoot: path.join(templates, 'runtime/service-image'),
-      clientShellSource: path.join(templates, 'shared/lib/session-render-service-client.sh'),
-      nativeExecutable: native,
-      limits: {
-        maxConnections: 8,
-        maxProjects: 4,
-        maxBackends: 1,
-        maxQueuePerProject: 4,
-        maxFrameBytes: 2097152,
-        maxRetainedRecords: large ? 2 : 1,
-        firstFrameMs: 3000,
-        requestMs: 20000,
-        startupMs: 3000,
-        idleMs: 300000,
-        backendIdleSeconds: 30,
-        cacheMegabytes: 1,
-        worker: {
-          startupMs: 3000,
-          connectMs: 3000,
-          writeMs: 3000,
-          renderMs: 20000,
-          readMs: 3000,
-          cleanupMs: 3000,
-        },
-      },
-    };
+    const owner = shared
+      ? shared.owner
+      : {
+          schema: 'caws.render.owner.config.v1',
+          home: environment.CAWS_HOME,
+          clientRoot: path.dirname(engine),
+          templateRoot: path.join(templates, 'runtime/service-image'),
+          clientShellSource: path.join(templates, 'shared/lib/session-render-service-client.sh'),
+          nativeExecutable: native,
+          limits: {
+            maxConnections: 8,
+            maxProjects: 4,
+            maxBackends: 1,
+            maxQueuePerProject: 4,
+            maxFrameBytes: 2097152,
+            maxRetainedRecords: large ? 2 : 1,
+            firstFrameMs: 3000,
+            requestMs: 20000,
+            startupMs: 3000,
+            idleMs: 300000,
+            backendIdleSeconds: 30,
+            cacheMegabytes: 1,
+            worker: {
+              startupMs: 3000,
+              connectMs: 3000,
+              writeMs: 3000,
+              renderMs: 20000,
+              readMs: 3000,
+              cleanupMs: 3000,
+            },
+          },
+        };
     put(path.join(directory, 'owner-input.json'), owner);
     put(path.join(directory, 'fixture.json'), {
       name,
@@ -645,7 +764,14 @@ if (process.argv[2] === '--agent-child') {
       [fixture.surface === 'codex' ? 'CODEX_THREAD_ID' : 'CLAUDE_SESSION_ID']: fixture.sid,
     };
     const spec = path.join(fixture.directory, 'agent-input.json');
-    put(spec, { native, argv, cwd: fixture.project, environment, input });
+    put(spec, {
+      native,
+      argv,
+      cwd: fixture.project,
+      environment,
+      input,
+      hostileControl: fixture.hostileControl,
+    });
     const agent = launch(
       fixture.name + '-agent',
       node,
@@ -658,7 +784,7 @@ if (process.argv[2] === '--agent-child') {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
       }
     );
-    let nativePid, signalResult, terminal, monitor;
+    let nativePid, signalResult, terminal, monitor, hostileResult;
     const coverage = fixture.capacityObservation
       ? { expected: null, originalFrontend: null, confirmedChains: [], witnesses: [] }
       : null;
@@ -732,6 +858,7 @@ if (process.argv[2] === '--agent-child') {
           signalResult = message;
           put(path.join(fixture.directory, 'signal-result.json'), message);
         }
+        if (message.type === 'hostile-result') hostileResult = message.result;
         if (message.type === 'native-terminal') {
           clearInterval(monitor);
           terminal = message;
@@ -774,6 +901,7 @@ if (process.argv[2] === '--agent-child') {
       reason,
       signalResult: () => signalResult,
       terminal: () => terminal,
+      hostileResult: () => hostileResult,
       coverage,
       collector,
       observationErrors,
@@ -1206,6 +1334,291 @@ if (process.argv[2] === '--agent-child') {
       action: action ?? null,
     };
   }
+  async function runUncertainProjectProgress() {
+    const a = createCase('codex-uncertain-A', 'codex', false, true);
+    const policyA = path.join(a.environment.CAWS_HOME, 'state/projects', hash(a.project) + '.json');
+    const policyBeforeB = pin(policyA);
+    const b = createCase('codex-progress-B', 'codex', false, false, a);
+    assert.deepEqual(pin(policyA), policyBeforeB, 'B setup changed A policy');
+    a.capacityObservation = true;
+    b.capacityObservation = true;
+    assert.equal(a.owner.limits.maxRetainedRecords, 2);
+    assert.notEqual(a.project, b.project);
+    assert.equal(a.environment.CAWS_HOME, b.environment.CAWS_HOME);
+    assert.equal(a.installed.digest, b.installed.digest);
+    const { host, observations } = await provision(a);
+    const hostBirth = observeInstance(host.child.pid);
+    const assertOwner = (label) => {
+      assert.equal(host.child.exitCode, null);
+      assert.equal(host.child.signalCode, null);
+      const observed = observeInstance(host.child.pid);
+      assert(sameOwnerBirth(hostBirth, observed), 'original owner birth changed');
+      assert.deepEqual(
+        read(path.join(a.environment.CAWS_HOME, 'state/render-service/config.json')),
+        a.owner
+      );
+      put(path.join(a.directory, label + '-owner.json'), observed);
+    };
+    const identity = (file) => {
+      const stat = fs.lstatSync(file, { bigint: true });
+      assert(stat.isFile() && !stat.isSymbolicLink());
+      return {
+        ...pin(file),
+        ...Object.fromEntries(
+          ['dev', 'ino', 'birthtimeNs', 'ctimeNs', 'mtimeNs', 'nlink'].map((key) => [
+            key,
+            String(stat[key]),
+          ])
+        ),
+      };
+    };
+    const settle = async (fixture, invocation, id, success) => {
+      const ancestor = await release(invocation);
+      assert.deepEqual(invocation.observationErrors, []);
+      const custody = invocation.collector.collect({
+        coverage: invocation.coverage,
+        invocationId: id,
+        runtimeDigest: fixture.installed.digest,
+        node,
+        engine,
+      });
+      put(path.join(fixture.directory, 'custody-observed.json'), custody);
+      assert.equal(custody.state, 'confirmed_settled', custody.error);
+      assert(Number.isSafeInteger(custody.terminal.child_exit_raw));
+      if (success) assert.equal(custody.terminal.child_exit_raw, 0);
+      let cleanup;
+      await waitFor(
+        () => {
+          cleanup = strictCustody.requestCleanupObservation(
+            invocation.coverage,
+            topologyRows(),
+            observeInstance
+          );
+          return cleanup.state === 'confirmed_inactive';
+        },
+        2000,
+        'original request birth/group cleanup remains unknown'
+      );
+      assert.equal(strictCustody.combinedRequestCleanup(cleanup, custody), 'confirmed_inactive');
+      put(path.join(fixture.directory, 'cleanup-observed.json'), cleanup);
+      return {
+        ancestor: { pid: ancestor.pid, code: ancestor.code, signal: ancestor.signal },
+        custody,
+        cleanup,
+      };
+    };
+    assertOwner('before-A');
+    const target = path.join(a.session, a.turns[0][0]);
+    const replacement = path.join(a.directory, 'replacement-turn.json');
+    const originalBytes = fs.readFileSync(target);
+    const originalSha256 = hash(originalBytes);
+    const beforeInode = fs.statSync(target).ino;
+    put(replacement, originalBytes);
+    a.hostileControl = {
+      target,
+      replacement,
+      originalSha256,
+      beforeInode,
+      session: a.session,
+      sid: a.sid,
+      runtimeDigest: a.installed.digest,
+      receipt: path.join(a.directory, 'hostile-action.json'),
+    };
+    const originalA = await invoke(a);
+    const action = await waitFor(
+      () => originalA.hostileResult(),
+      17000,
+      'A hostile watcher did not settle'
+    );
+    assert.equal(action.status, 'applied', action.error);
+    assert.equal(action.nativePid, originalA.nativePid);
+    assert.deepEqual(read(a.hostileControl.receipt), action);
+    const recordA = journal(a.session);
+    assert(recordA, 'A ordinary consumer journal missing');
+    const idA = recordA.rows[0].invocation_id;
+    assert.equal(action.invocationId, idA);
+    assert.equal(action.journal, recordA.file);
+    put(path.join(a.directory, 'pre-action-operation.json'), action.beforeAction);
+    const terminalA = await bounded(originalA.nativeTerminal, 25000, 'A did not settle');
+    // Native terminal IPC can arrive before the ancestor's forwarded stderr.
+    // Settle the original ancestor and its pipes before inspecting those bytes.
+    const proofA = await settle(a, originalA, idA, false);
+    assert.equal(hash(originalA.agent.output().stderr), terminalA.stderrSha256);
+    assert.equal(fs.statSync(target).ino, action.afterInode);
+    assert.equal(hash(fs.readFileSync(target)), action.sameBytesSha256);
+    checkPrefix(a, originalA, recordA);
+    const consumerA = checkConsumer(a, recordA);
+    assert.match(
+      originalA.agent.output().stderr.toString(),
+      /published generation bytes or inventory changed/
+    );
+    assert.equal(terminalA.signal, null);
+    assert.equal(terminalA.code, 2, 'A did not preserve the native infrastructure refusal');
+    await waitFor(
+      () =>
+        ownerRows(observations).some(
+          (row) => row.stage === 'session_retained' && row.invocationId === idA
+        ),
+      5000,
+      'A was not retained; hostile window missed'
+    );
+    const durableA = operation(a, idA);
+    assert.equal(durableA.row.body.outcome.execution, 'returned');
+    assert.equal(durableA.row.body.outcome.result.terminalDigest, consumerA.terminal_digest);
+    assert(durableA.row.body.verifiedRequestBase64.length > 0);
+    assert(
+      !ownerRows(observations).some(
+        (row) => row.stage === 'session_consumed_durable' && row.invocationId === idA
+      )
+    );
+    const guardedFiles = [
+      durableA.file,
+      path.join(a.session, '.meta.json'),
+      path.join(a.session, '.session-publication.json'),
+      policyA,
+      path.join(a.environment.CAWS_HOME, 'surfaces/codex/settings.json'),
+    ];
+    const retainedBefore = guardedFiles.map(identity);
+    const assertA = (label) => {
+      assert(
+        !ownerRows(observations).some(
+          (row) =>
+            row.invocationId === idA &&
+            [
+              'session_consumed_durable',
+              'session_heavy_released',
+              'session_rejected_before_effects',
+            ].includes(row.stage)
+        ),
+        'A was consumed or released while its uncertainty remained'
+      );
+      const observed = guardedFiles.map(identity);
+      assert.deepEqual(observed, retainedBefore, 'A custody changed during other admission');
+      put(path.join(a.directory, label + '-retained-A.json'), observed);
+    };
+    await writerProbe(a, 'retained');
+    assertOwner('after-A');
+
+    const a2 = {
+      ...a,
+      hostileControl: undefined,
+      name: 'codex-refused-A2',
+      directory: path.join(a.directory, 'a2'),
+    };
+    fs.mkdirSync(a2.directory, { mode: 0o700 });
+    const priorJournals = fs.readdirSync(path.join(a.session, 'hook-invocations'));
+    const originalA2 = await invoke(a2);
+    const terminalA2 = await bounded(originalA2.nativeTerminal, 25000, 'A2 did not settle');
+    const recordA2 = journal(a2.session, priorJournals);
+    assert(recordA2, 'A2 did not execute the ordinary engine');
+    checkPrefix(a2, originalA2, recordA2, false);
+    const idA2 = recordA2.rows[0].invocation_id;
+    assert.notEqual(idA2, idA);
+    assert.equal(terminalA2.signal, null);
+    assert(Number.isInteger(terminalA2.code) && terminalA2.code !== 0);
+    assert(!recordA2.rows.some((row) => row.stage === 'session_seal_consumer_completed'));
+    await waitFor(
+      () => {
+        const observed = ownerRows(observations);
+        return (
+          observed.some(
+            (row) =>
+              row.event === 'admission_denied' &&
+              row.reason === 'unknown_fence' &&
+              row.invocationId === idA2
+          ) &&
+          observed.some(
+            (row) => row.stage === 'session_rejected_before_effects' && row.invocationId === idA2
+          )
+        );
+      },
+      3000,
+      'A2 did not reach the proven non-execution refund'
+    );
+    assert(
+      !ownerRows(observations).some(
+        (row) => row.stage === 'session_original_reserved' && row.invocationId === idA2
+      )
+    );
+    const durableA2 = operation(a2, idA2);
+    assert.equal(durableA2.row, null);
+    put(path.join(a2.directory, 'operation-observed.json'), durableA2);
+    const proofA2 = await settle(a2, originalA2, idA2, false);
+    assertA('after-A2');
+    assertOwner('after-A2');
+
+    const originalB = await invoke(b);
+    const terminalB = await bounded(originalB.nativeTerminal, 25000, 'B did not progress');
+    assert.equal(terminalB.code, 0, originalB.agent.output().stderr.toString());
+    assert.equal(terminalB.signal, null);
+    assert.equal(originalB.agent.output().stdout.length, 0);
+    assert.equal(originalB.agent.output().stderr.length, 0);
+    const recordB = journal(b.session);
+    assert(recordB, 'B did not execute the ordinary engine');
+    checkPrefix(b, originalB, recordB);
+    const idB = recordB.rows[0].invocation_id;
+    assert.notEqual(idB, idA);
+    assert.notEqual(idB, idA2);
+    const consumerB = checkConsumer(b, recordB);
+    const durableB = operation(b, idB);
+    assert.equal(durableB.row.body.outcome.execution, 'consumed');
+    assert.equal(durableB.row.body.outcome.terminalDigest, consumerB.terminal_digest);
+    assert.equal(durableB.row.body.verifiedRequestBase64, '');
+    await waitFor(
+      () =>
+        ownerRows(observations).some(
+          (row) => row.stage === 'session_heavy_released' && row.invocationId === idB
+        ),
+      3000,
+      'B did not release its heavy record'
+    );
+    const lifecycleB = capacityLifecycle(ownerRows(observations), idB);
+    const proofB = await settle(b, originalB, idB, true);
+    assertA('after-B');
+    assertOwner('after-B');
+    await writerProbe({ ...a, name: a.name + '-after-B' }, 'retained');
+    await writerProbe(b, 'released');
+    assertA('after-writer-probes');
+    assertOwner('before-shutdown');
+    put(path.join(a.directory, 'owner-observations.json'), ownerRows(observations));
+    const hostTerminal = await stopHost(host);
+    return {
+      name: 'uncertain-project-progress',
+      hostPid: host.child.pid,
+      hostBirth,
+      limits: a.owner.limits,
+      hostTerminal: { code: hostTerminal.code, signal: hostTerminal.signal },
+      A: {
+        id: idA,
+        terminal: terminalA,
+        journal: recordA.file,
+        operation: durableA.file,
+        retainedBefore,
+        proof: proofA,
+      },
+      A2: {
+        id: idA2,
+        terminal: terminalA2,
+        journal: recordA2.file,
+        operation: durableA2.file,
+        proof: proofA2,
+      },
+      B: {
+        id: idB,
+        terminal: terminalB,
+        journal: recordB.file,
+        operation: durableB.file,
+        terminalDigest: consumerB.terminal_digest,
+        lifecycle: lifecycleB,
+        proof: proofB,
+      },
+      nonclaims: [
+        'Bounded cross-project SessionEnd progress only; no general scheduling fairness',
+        'A remained retained through B consumption; owner shutdown is explicit fixture teardown',
+      ],
+    };
+  }
+
   function engineCustody(fixture, invocation, id) {
     assert.deepEqual(invocation.observationErrors, [], 'request birth/topology observation failed');
     const custody = invocation.collector.collect({
@@ -1446,12 +1859,15 @@ if (process.argv[2] === '--agent-child') {
   async function main() {
     const overallStarted = performance.now();
     const results = [];
-    results.push(await runCase('codex-normal', 'codex', false));
-    results.push(await runCase('claude-normal', 'claude-code', false));
-    results.push(await runCase('codex-missing-metadata', 'codex', true));
-    results.push(await runCase('codex-changed-input', 'codex', false, 'changed-input'));
-    results.push(await runCase('codex-lost-ack', 'codex', false, 'lost-ack'));
-    if (originalCount) results.push(await runCapacityCase(overallStarted));
+    if (uncertainProgress) results.push(await runUncertainProjectProgress());
+    else {
+      results.push(await runCase('codex-normal', 'codex', false));
+      results.push(await runCase('claude-normal', 'claude-code', false));
+      results.push(await runCase('codex-missing-metadata', 'codex', true));
+      results.push(await runCase('codex-changed-input', 'codex', false, 'changed-input'));
+      results.push(await runCase('codex-lost-ack', 'codex', false, 'lost-ack'));
+      if (originalCount) results.push(await runCapacityCase(overallStarted));
+    }
     await settleTracked();
     const afterPins = pinInputs();
     assert.deepEqual(afterPins, beforePins, 'source/tool input changed during qualification');

@@ -3,6 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, normalize } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { parseJsonSource } from './json-custody';
+import { openNativeRenderObservations } from './render-observation-client';
+import type { NativeRenderObservations } from './render-observation-wire';
 import {
   awaitSessionPublicationCallback,
   consumeCommittedSession,
@@ -46,6 +48,8 @@ export interface SessionPublicationInput {
   readonly endedAt: string;
   readonly files: readonly SessionPublicationDescriptor[];
   readonly priorInventory: readonly SessionPublicationDescriptor[];
+  /** Present only for an explicitly enabled, complete native Render input phase. */
+  readonly observations?: NativeRenderObservations;
   /** Owned copies; mutating one cannot alter another observation. */
   bytes(name: string): Uint8Array;
 }
@@ -191,6 +195,8 @@ export async function continueNativeSessionPublication(
     readonly token: string;
     readonly expectedKinds: readonly SessionPublicationKind[];
     readonly prepare: Prepare;
+    /** Caller has selected the original-frontend observation carrier. No activation is inferred. */
+    readonly renderObservations?: boolean;
     /** Original admitted context. A snapshot or on-disk marker cannot select these. */
     readonly canonicalRoot: string;
     readonly sessionId: string;
@@ -210,6 +216,8 @@ export async function continueNativeSessionPublication(
       !['.', '..'].includes(options.sessionId) &&
       typeof options.prepare === 'function' &&
       typeof options.consume === 'function' &&
+      (options.renderObservations === undefined ||
+        typeof options.renderObservations === 'boolean') &&
       ((options.expectedKinds.length === 1 &&
         ['seal', 'render'].includes(options.expectedKinds[0]!)) ||
         (options.expectedKinds.length === 2 &&
@@ -436,6 +444,22 @@ export async function continueNativeSessionPublication(
         ready.direction === 'inputs',
       'Native snapshot is incomplete'
     );
+    const observations =
+      kind === 'render' && options.renderObservations === true
+        ? await openNativeRenderObservations({
+            binding: {
+              id: request.id,
+              runtimeDigest: request.runtimeDigest,
+              token: options.token,
+              attempt: attempt!,
+              observationId: snapshot.observationId as string,
+              inputDigest: snapshot.inputDigest as string,
+            },
+            transport,
+            signal,
+            deadlineEpochMs: request.deadlineEpochMs,
+          })
+        : undefined;
     const input: SessionPublicationInput = Object.freeze({
       kind,
       observationId: snapshot.observationId as string,
@@ -445,24 +469,32 @@ export async function continueNativeSessionPublication(
       endedAt: snapshot.endedAt as string,
       files,
       priorInventory,
+      ...(observations ? { observations: observations.observations } : {}),
       bytes(fileName: string): Uint8Array {
         const bytes = contents.get(fileName);
         requireValue(bytes !== undefined, 'Unknown native snapshot file');
         return Buffer.from(bytes);
       },
     });
-    cancelled();
-    const preparation = await awaitSessionPublicationCallback(
-      { signal, deadlineEpochMs: request.deadlineEpochMs },
-      () => options.prepare(input)
-    );
-    cancelled();
-    requireValue(
-      preparation !== null &&
-        typeof preparation === 'object' &&
-        (preparation.disposition === 'ready' || preparation.disposition === 'aborted'),
-      'Invalid publication preparation disposition'
-    );
+    let preparation: SessionPublicationPreparation;
+    try {
+      cancelled();
+      preparation = await awaitSessionPublicationCallback(
+        { signal, deadlineEpochMs: request.deadlineEpochMs },
+        () => options.prepare(input)
+      );
+      cancelled();
+      requireValue(
+        preparation !== null &&
+          typeof preparation === 'object' &&
+          (preparation.disposition === 'ready' || preparation.disposition === 'aborted'),
+        'Invalid publication preparation disposition'
+      );
+      observations?.assertIdle();
+      if (preparation.disposition === 'ready') observations?.assertReady();
+    } finally {
+      observations?.close();
+    }
     if (preparation.disposition === 'aborted') {
       requireValue(text(preparation.diagnostic, 4096), 'Invalid preparation diagnostic');
       aborted = true;

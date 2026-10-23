@@ -4,6 +4,8 @@ mod cancellation;
 mod cli;
 #[cfg(any(target_os = "macos", test))]
 mod engine_custody;
+mod installed_generation;
+mod native_generation;
 mod process_effect;
 mod protocol;
 mod render_bridge;

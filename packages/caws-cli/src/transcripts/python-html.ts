@@ -1,10 +1,14 @@
 /** Pinned CPython 3.11.13 html.unescape semantics, independent of host libraries.
  * Derived from Lib/html/__init__.py; full retained license and data provenance
- * accompany html311/. The configurable Python integer limit is fixed at 4300.
+ * accompany html311/. Omitted numeric profiles retain the qualified 4300-digit default.
  */
 import { HTML5_ENTITIES } from './html311/entities.generated';
 import { PYTHON_HTML_MANIFEST } from './html311/manifest.generated';
 import { INVALID_NUMERIC_RANGES, NUMERIC_CORRECTIONS } from './html311/numeric.generated';
+import {
+  snapshotTranscriptJsonProfile,
+  type TranscriptJsonNumericProfile,
+} from './transcript-json-profile';
 
 export const PYTHON_HTML_PROFILE_ID = PYTHON_HTML_MANIFEST.profileId;
 export const PYTHON_HTML_DECIMAL_DIGIT_LIMIT = PYTHON_HTML_MANIFEST.decimalDigitLimit;
@@ -12,10 +16,12 @@ export const PYTHON_HTML_DECIMAL_DIGIT_LIMIT = PYTHON_HTML_MANIFEST.decimalDigit
 /** Historical decimal int() refusal; leading zeroes count toward the limit. */
 export class PythonHtmlDecimalDigitLimitError extends RangeError {
   readonly code = 'PYTHON_HTML_DECIMAL_DIGIT_LIMIT';
-  readonly limit = PYTHON_HTML_DECIMAL_DIGIT_LIMIT;
-  constructor(readonly digits: number) {
+  constructor(
+    readonly digits: number,
+    readonly limit: number = PYTHON_HTML_DECIMAL_DIGIT_LIMIT
+  ) {
     super(
-      `Exceeds the limit (${PYTHON_HTML_DECIMAL_DIGIT_LIMIT} digits) for integer string conversion: value has ${digits} digits; use sys.set_int_max_str_digits() to increase the limit`
+      `Exceeds the limit (${limit} digits) for integer string conversion: value has ${digits} digits; use sys.set_int_max_str_digits() to increase the limit`
     );
     this.name = 'PythonHtmlDecimalDigitLimitError';
   }
@@ -25,12 +31,12 @@ export class PythonHtmlDecimalDigitLimitError extends RangeError {
 // codepoint named-reference scan. HTML named references are case-sensitive.
 const CHARACTER_REFERENCE = /&(#[0-9]+;?|#[xX][0-9a-fA-F]+;?|[^\t\n\f <&#;]{1,32};?)/gu;
 
-function replaceReference(reference: string): string {
+function replaceReference(reference: string, decimalDigitLimit: number): string {
   if (reference.startsWith('#')) {
     const hexadecimal = reference[1] === 'x' || reference[1] === 'X';
     const digits = reference.slice(hexadecimal ? 2 : 1, reference.endsWith(';') ? -1 : undefined);
-    if (!hexadecimal && digits.length > PYTHON_HTML_DECIMAL_DIGIT_LIMIT) {
-      throw new PythonHtmlDecimalDigitLimitError(digits.length);
+    if (!hexadecimal && decimalDigitLimit !== 0 && digits.length > decimalDigitLimit) {
+      throw new PythonHtmlDecimalDigitLimitError(digits.length, decimalDigitLimit);
     }
     // Every in-range result is an exactly representable integer. Overflow can
     // only mean out-of-Unicode-range, whose disposition is replacement below.
@@ -55,8 +61,15 @@ function replaceReference(reference: string): string {
 }
 
 /** One substitution pass, preserving unknown references and all other text. */
-export function pythonHtmlUnescape(value: string): string {
+export function pythonHtmlUnescape(
+  value: string,
+  numericProfile?: TranscriptJsonNumericProfile
+): string {
+  const decimalDigitLimit =
+    numericProfile === undefined
+      ? PYTHON_HTML_DECIMAL_DIGIT_LIMIT
+      : snapshotTranscriptJsonProfile(numericProfile).integerMaxDigits;
   return value.replace(CHARACTER_REFERENCE, (_whole: string, reference: string) =>
-    replaceReference(reference)
+    replaceReference(reference, decimalDigitLimit)
   );
 }

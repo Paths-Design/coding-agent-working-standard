@@ -3,7 +3,7 @@
 use crate::invocation_project::{self as project, ProjectFailure, RenderQuery, SelectedExecutable};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Serialize;
-use std::{collections::BTreeMap, path::Path, time::Instant};
+use std::{collections::BTreeMap, marker::PhantomData, path::Path, rc::Rc, time::Instant};
 
 pub const SCHEMA: &str = "caws.render.context.observation.v1";
 pub const MAX_BYTES: usize = 6 * 1024 * 1024;
@@ -15,6 +15,14 @@ pub struct Invocation {
     pub id: String,
     pub runtime_digest: String,
     pub token: String,
+    pub caller_cwd: String,
+    pub cwd: String,
+    pub environment: BTreeMap<String, String>,
+}
+/// Captured before the engine exists; the publication token is bound later.
+pub struct OriginalInvocation {
+    pub id: String,
+    pub runtime_digest: String,
     pub caller_cwd: String,
     pub cwd: String,
     pub environment: BTreeMap<String, String>,
@@ -72,14 +80,16 @@ impl Observation {
     }
 }
 /// First failure, completed raw observations and the failed query's admitted
-/// partial bytes remain separate. `cause` owns any uncertain Child until retry.
+/// partial bytes remain separate. `remote` retains the production custodian;
+/// `cause` owns a Child only for the explicitly local component helper.
 ///
 /// The invocation owner MUST retain this value until `cleanup_settled()` is
 /// true. `retry_cleanup()` is one bounded attempt, not a guarantee that a refusal
 /// will become transient. Exhausting the owner's cleanup allowance requires
 /// retaining/transferring this exact value as uncertain custody; it never
 /// authorizes replay, success, or destruction as a substitute for settlement.
-/// This dormant component supplies no durable owner after this value is dropped.
+/// Remote Drop closes frontend liveness while the separate custodian keeps the
+/// actual Git Child. Drop itself supplies no settlement observation.
 #[must_use = "retain Render context failure custody until cleanup_settled()"]
 #[derive(Debug)]
 pub struct Failure {
@@ -89,6 +99,7 @@ pub struct Failure {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
     pub cause: Option<ProjectFailure>,
+    pub remote: Option<crate::context_git::render::Failure>,
 }
 impl Failure {
     fn plain(category: &'static str, message: &str) -> Self {
@@ -99,17 +110,35 @@ impl Failure {
             stdout: Vec::new(),
             stderr: Vec::new(),
             cause: None,
+            remote: None,
         }
     }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
-        self.cause
+        let local = self
+            .cause
             .as_mut()
-            .map_or(Ok(()), ProjectFailure::retry_cleanup)
+            .map_or(Ok(()), ProjectFailure::retry_cleanup);
+        let remote = self
+            .remote
+            .as_mut()
+            .map_or(Ok(()), crate::context_git::render::Failure::retry_cleanup);
+        self.sync_remote();
+        local.and(remote)
     }
     pub fn cleanup_settled(&self) -> bool {
         self.cause
             .as_ref()
             .is_none_or(|failure| !failure.retained_uncertain())
+            && self
+                .remote
+                .as_ref()
+                .is_none_or(crate::context_git::render::Failure::cleanup_settled)
+    }
+    fn sync_remote(&mut self) {
+        if let Some(remote) = &self.remote {
+            self.completed = remote.completed();
+            (self.stdout, self.stderr) = remote.partial();
+        }
     }
 }
 fn digest(value: &str) -> bool {
@@ -130,15 +159,17 @@ fn token(value: &str) -> bool {
 fn native_path(value: &str) -> bool {
     value.len() <= 4096 && value.starts_with('/') && !value.contains(['\0', '\r', '\n'])
 }
-pub struct RenderContextOwner {
-    invocation: Invocation,
+/// A process-local capability. Selection does not execute a Git query.
+pub struct CapturedRenderContext {
+    invocation: OriginalInvocation,
     selected: SelectedExecutable,
-    used: bool,
     expires: Instant,
+    original_pid: u32,
+    _original_thread: PhantomData<Rc<()>>,
 }
-impl RenderContextOwner {
+impl CapturedRenderContext {
     pub fn capture(
-        invocation: Invocation,
+        invocation: OriginalInvocation,
         expires: Instant,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, Failure> {
@@ -146,7 +177,6 @@ impl RenderContextOwner {
             || invocation.id.len() > 128
             || invocation.id.contains('\0')
             || !digest(&invocation.runtime_digest)
-            || !token(&invocation.token)
             || !native_path(&invocation.cwd)
             || !native_path(&invocation.caller_cwd)
         {
@@ -206,9 +236,159 @@ impl RenderContextOwner {
         Ok(Self {
             invocation,
             selected,
-            used: false,
             expires,
+            original_pid: std::process::id(),
+            _original_thread: PhantomData,
         })
+    }
+    pub fn id(&self) -> &str {
+        &self.invocation.id
+    }
+    pub fn runtime_digest(&self) -> &str {
+        &self.invocation.runtime_digest
+    }
+    pub fn cwd(&self) -> &str {
+        &self.invocation.cwd
+    }
+    /// Identity from selection, independent of a query's returned bytes.
+    pub fn executable(&self) -> Executable {
+        Executable {
+            path: self
+                .selected
+                .path
+                .to_str()
+                .expect("validated native path")
+                .into(),
+            physical_path: self
+                .selected
+                .physical_path
+                .to_str()
+                .expect("validated native path")
+                .into(),
+            sha256: self.selected.sha256.clone(),
+        }
+    }
+    /// Pin the original native executable before Node. The sole later query
+    /// launches one custodian; that process parents every actual Git Child.
+    pub fn custodied(
+        self,
+        native_executable: &Path,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<CustodiedRenderContext, Failure> {
+        if self.original_pid != std::process::id() || Instant::now() >= self.expires {
+            return Err(Failure::plain(
+                "binding",
+                "Original Render process or deadline changed",
+            ));
+        }
+        if native_executable
+            .to_str()
+            .is_none_or(|path| !native_path(path))
+        {
+            return Err(Failure::plain(
+                "unsupported",
+                "Original native custodian path must be absolute native UTF-8",
+            ));
+        }
+        let executor = project::pin_executable(native_executable, self.expires, cancelled)
+            .map_err(|cause| Failure {
+                category: "selection",
+                diagnostic: cause.first_message.clone(),
+                cause: Some(cause),
+                ..Failure::plain("selection", "")
+            })?;
+        Ok(CustodiedRenderContext {
+            captured: self,
+            executor,
+        })
+    }
+    pub fn bind(self, token_value: String) -> Result<RenderContextOwner, Failure> {
+        if !token(&token_value) {
+            return Err(Failure::plain(
+                "unsupported",
+                "Invalid original Render token",
+            ));
+        }
+        if self.original_pid != std::process::id() || Instant::now() >= self.expires {
+            return Err(Failure::plain(
+                "binding",
+                "Original Render process or deadline changed",
+            ));
+        }
+        Ok(RenderContextOwner {
+            captured: self,
+            token: token_value,
+            used: false,
+            executor: None,
+        })
+    }
+}
+/// The production carrier requires this capability rather than the local-only
+/// convenience owner. Original data and the native image are captured once.
+pub struct CustodiedRenderContext {
+    captured: CapturedRenderContext,
+    executor: SelectedExecutable,
+}
+impl CustodiedRenderContext {
+    pub fn id(&self) -> &str {
+        self.captured.id()
+    }
+    pub fn runtime_digest(&self) -> &str {
+        self.captured.runtime_digest()
+    }
+    pub fn cwd(&self) -> &str {
+        self.captured.cwd()
+    }
+    pub fn executable(&self) -> Executable {
+        self.captured.executable()
+    }
+    pub fn bind(self, token: String) -> Result<RenderContextOwner, Failure> {
+        let mut owner = self.captured.bind(token)?;
+        owner.executor = Some(self.executor);
+        Ok(owner)
+    }
+}
+pub struct RenderContextOwner {
+    captured: CapturedRenderContext,
+    token: String,
+    used: bool,
+    executor: Option<SelectedExecutable>,
+}
+impl RenderContextOwner {
+    /// Local-only component/reference convenience. Production carriers must
+    /// use CapturedRenderContext::custodied before binding.
+    pub fn capture(
+        invocation: Invocation,
+        expires: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, Failure> {
+        let Invocation {
+            id,
+            runtime_digest,
+            token: token_value,
+            caller_cwd,
+            cwd,
+            environment,
+        } = invocation;
+        // Preserve rejection before selection for malformed bound callers.
+        if !token(&token_value) {
+            return Err(Failure::plain(
+                "unsupported",
+                "Invalid original Render token",
+            ));
+        }
+        CapturedRenderContext::capture(
+            OriginalInvocation {
+                id,
+                runtime_digest,
+                caller_cwd,
+                cwd,
+                environment,
+            },
+            expires,
+            cancelled,
+        )?
+        .bind(token_value)
     }
     pub fn observe(
         &mut self,
@@ -222,10 +402,45 @@ impl RenderContextOwner {
             ));
         }
         self.used = true;
-        let expires = expires.min(self.expires);
+        let expires = expires.min(self.captured.expires);
+        if self.captured.original_pid != std::process::id() {
+            return Err(Failure::plain("binding", "Original Render process changed"));
+        }
+        if let Some(executor) = &self.executor {
+            let queries = crate::context_git::render::observe(
+                crate::context_git::render::Input {
+                    invocation: &self.captured.invocation,
+                    git: &self.captured.selected,
+                    executor,
+                    token: &self.token,
+                    expires,
+                },
+                cancelled,
+            )
+            .map_err(|remote| {
+                let mut failure = Failure {
+                    category: "query",
+                    diagnostic: remote.diagnostic.clone(),
+                    remote: Some(remote),
+                    ..Failure::plain("query", "")
+                };
+                failure.sync_remote();
+                failure
+            })?;
+            return Ok(Observation {
+                schema: SCHEMA,
+                id: self.captured.invocation.id.clone(),
+                runtime_digest: self.captured.invocation.runtime_digest.clone(),
+                token: self.token.clone(),
+                cwd: self.captured.invocation.cwd.clone(),
+                executable: self.captured.executable(),
+                queries,
+            });
+        }
         // Match the direct runtime's inherited routing removal. No process-wide
         // environment or PATH cache can enter this observation.
         let environment = self
+            .captured
             .invocation
             .environment
             .iter()
@@ -240,8 +455,8 @@ impl RenderContextOwner {
             (RenderQuery::Status, "status"),
         ] {
             let output = project::query_render_context(
-                &self.selected,
-                Path::new(&self.invocation.cwd),
+                &self.captured.selected,
+                Path::new(&self.captured.invocation.cwd),
                 &environment,
                 operation,
                 expires,
@@ -254,6 +469,7 @@ impl RenderContextOwner {
                 stdout: error.stdout,
                 stderr: error.stderr,
                 cause: Some(error.failure),
+                remote: None,
             })?;
             let state = &output.cleanup;
             let status = state.reaped;
@@ -285,15 +501,11 @@ impl RenderContextOwner {
         }
         Ok(Observation {
             schema: SCHEMA,
-            id: self.invocation.id.clone(),
-            runtime_digest: self.invocation.runtime_digest.clone(),
-            token: self.invocation.token.clone(),
-            cwd: self.invocation.cwd.clone(),
-            executable: Executable {
-                path: self.selected.path.to_str().unwrap().into(),
-                physical_path: self.selected.physical_path.to_str().unwrap().into(),
-                sha256: self.selected.sha256.clone(),
-            },
+            id: self.captured.invocation.id.clone(),
+            runtime_digest: self.captured.invocation.runtime_digest.clone(),
+            token: self.token.clone(),
+            cwd: self.captured.invocation.cwd.clone(),
+            executable: self.captured.executable(),
             queries,
         })
     }

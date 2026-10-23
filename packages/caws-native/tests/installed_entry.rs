@@ -13,6 +13,8 @@ use std::{
 #[allow(dead_code)]
 #[path = "../src/installed_entry.rs"]
 mod installed_entry;
+#[path = "../src/installed_generation.rs"]
+mod installed_generation;
 
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 struct Fixture(PathBuf);

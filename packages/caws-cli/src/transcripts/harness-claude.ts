@@ -23,8 +23,9 @@ import {
 } from './harness-common';
 import { PYTHON_WHITESPACE_PATTERN } from './source-occurrence';
 import { pythonHtmlUnescape, PYTHON_HTML_PROFILE_ID } from './python-html';
+import type { TranscriptJsonNumericProfile } from './transcript-json-profile';
 
-export const CLAUDE_ADAPTER_REVISION = `native-claude/1;html-profile:${PYTHON_HTML_PROFILE_ID};python-sha256:c6d94da874c7af48c9dcb90e5f6fa53671bf04154f8a1b8e3c945e71c853026d`;
+export const CLAUDE_ADAPTER_REVISION = `native-claude/2;html-reference:${PYTHON_HTML_PROFILE_ID};html-decimal-policy:transcript-numeric-profile/1;python-sha256:c6d94da874c7af48c9dcb90e5f6fa53671bf04154f8a1b8e3c945e71c853026d`;
 export const CLAUDE_NOISE_PREFIXES = Object.freeze([
   '<local-command',
   '<command-name',
@@ -115,20 +116,28 @@ export function extractToolResultContent(entry: JsonObject): JsonValue {
   if (pythonStrip(text)) return text;
   return pythonTruthy(content) ? content! : '';
 }
-export function claudeShellEvent(text: JsonValue, ts: string | null): CanonicalEvent | null {
+export function claudeShellEvent(
+  text: JsonValue,
+  ts: string | null,
+  numericProfile?: TranscriptJsonNumericProfile
+): CanonicalEvent | null {
   if (typeof text !== 'string')
     throw new ClaudeProjectionError('AttributeError', "text has no attribute 'startswith'");
   if (text.startsWith('<bash-input>')) {
     const match = /<bash-input>([\s\S]*?)<\/bash-input>/u.exec(text);
-    return { ev: 'user_shell', command: match ? pythonHtmlUnescape(match[1]!) : text, ts };
+    return {
+      ev: 'user_shell',
+      command: match ? pythonHtmlUnescape(match[1]!, numericProfile) : text,
+      ts,
+    };
   }
   if (text.startsWith('<bash-stdout>') || text.startsWith('<bash-stderr>')) {
     const stdout = /<bash-stdout>([\s\S]*?)<\/bash-stdout>/u.exec(text);
     const stderr = /<bash-stderr>([\s\S]*?)<\/bash-stderr>/u.exec(text);
     return {
       ev: 'user_shell',
-      stdout: stdout ? pythonHtmlUnescape(stdout[1]!) : '',
-      stderr: stderr ? pythonHtmlUnescape(stderr[1]!) : '',
+      stdout: stdout ? pythonHtmlUnescape(stdout[1]!, numericProfile) : '',
+      stderr: stderr ? pythonHtmlUnescape(stderr[1]!, numericProfile) : '',
       ts,
     };
   }
@@ -239,7 +248,12 @@ export function normalizeClaude(
     if (typeof content === 'string')
       events.push(
         located(
-          claudeShellEvent(content, ts) ?? { ev: 'user_text', text: content, ts, ...lineage(row) },
+          claudeShellEvent(content, ts, context?.numericProfile) ?? {
+            ev: 'user_text',
+            text: content,
+            ts,
+            ...lineage(row),
+          },
           'message',
           'content'
         )
@@ -267,7 +281,12 @@ export function normalizeClaude(
           const text = member(item, 'text', '');
           events.push(
             located(
-              claudeShellEvent(text, ts) ?? { ev: 'user_text', text, ts, ...lineage(row) },
+              claudeShellEvent(text, ts, context?.numericProfile) ?? {
+                ev: 'user_text',
+                text,
+                ts,
+                ...lineage(row),
+              },
               'message',
               'content',
               index
