@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-publication
 created_at: '2026-10-22T07:45:38.932Z'
-updated_at: '2026-10-23T19:33:34.852Z'
+updated_at: '2026-10-23T21:25:59.320Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -80,6 +80,16 @@ scope:
     - packages/caws-cli/tests/transcripts/python-html.test.ts
     - packages/caws-cli/tests/transcripts/claude.test.ts
     - packages/caws-cli/tests/transcripts/registry.test.ts
+    - packages/caws-cli/src/init/machine-paths.ts
+    - packages/caws-cli/src/init/machine-runtime-state.ts
+    - packages/caws-cli/src/init/selection-read-io.ts
+    - packages/caws-cli/src/init/system-project-policy.ts
+    - packages/caws-cli/src/init/system-surface-settings.ts
+    - packages/caws-cli/src/runtime/selection.ts
+    - packages/caws-cli/src/runtime/selection-observation.ts
+    - packages/caws-cli/tests/init/selection-read-io.test.js
+    - packages/caws-cli/tests/runtime/selection.test.js
+    - packages/caws-cli/tests/runtime/selection-observation.test.js
   out: []
   support:
     - .github/workflows/release-qualification.yml
