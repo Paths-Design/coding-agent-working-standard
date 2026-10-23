@@ -620,7 +620,7 @@ import { isAdapterCoveredSurface } from './types';
 // lib/session-render-service-client.sh ships in this tree but is not installed:
 // it is a native-image build input (src/runtime/service-image.ts) carrying
 // builder markers, with no managed header and no dispatcher that sources it.
-export const SHARED_PACK_VERSION = 106;
+export const SHARED_PACK_VERSION = 107;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

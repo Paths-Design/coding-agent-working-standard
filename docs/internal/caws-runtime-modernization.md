@@ -7389,6 +7389,66 @@ Additional bounded evidence and unresolved dependencies:
   SessionEnd publication or Render B. Compatibility dispatch did change
   metadata; silent exit zero is not native publication evidence.
 
+- E275: Normal push `main-push-04` publishes `03997170` to remote `main` with
+  unchanged hooks and source pins, exit 0 in 326.763 seconds and no remaining
+  process group. Typecheck, lint, audit and build pass; the full Jest run passes
+  347 suites with 6685 passing and 13 skipped checks. The retained execution,
+  stdout, stderr and process observations live under
+  `publication-integration/main-push-04`. Remote ref readback matches the pushed
+  revision. This completes that source-delivery attempt, not hosted
+  qualification.
+
+  Hosted Release Qualification run `39946247481` on that exact revision passes
+  native context Git custody but fails candidate tests/contracts and all six
+  packaged-upgrade jobs. Inspected macOS/Node22 and Ubuntu/Node22 logs fail at
+  `runtime-upgrade-smoke.mjs:241`: the freshness generator writes a diagnostic
+  before `npm pack --json` output, so JSON parsing fails. The candidate-test
+  failure is a separate investigation. Neither hosted failure grants adoption.
+
+- E276: A real npm lifecycle fixture reproduces the package JSON failure in
+  `pack-json-baseline-01`, exit 1. The generator's success diagnostics move to
+  stderr. Regenerating the owned projection changes only its generator-source
+  digest; shared pack version 107 and fingerprint
+  `027a5417546af3c7b4056c7f20aeb7d73eec8ef40db95458138c905fb9f49f64` cover all
+  75 tracked files. The initial repair check correctly refuses the stale
+  generated header; `pack-json-repair-01` retains that failure.
+
+  The fresh build exits 0 in 6.029 seconds. The generated-asset, fingerprint and
+  installation-rendering suites exit 0 in 5.563 seconds with 89 checks. These
+  exercise actual npm JSON output, stderr diagnostics, stale/missing/mutated
+  assets, detached binary behavior, pack identity and installed version headers.
+  `pack-json-actual-execution-01` runs the candidate's actual prepack/postpack
+  lifecycle and exits 0 in 3.314 seconds; its stdout parses as one JSON result.
+  `pack-json-actual-01/inspection.json` identifies the 1305-file tarball with
+  SHA `4c41479d4fe41fd12c3afb22767aa8b2f310825c3edc0c0f0418171bad716d7c`. Each
+  execution retains unchanged source pins and no remaining process group. These
+  artifacts live under `publication-integration/`. They establish the repaired
+  output contract, not the full upgrade matrix, package installation, native
+  activation or rollback.
+
+- E277: SQL adapter `2002df5d` connects the original port's actually exhausted
+  CLOSED acquisition to Projection, exact captured projection bytes, supplied
+  Render preparation and the ordinary current-generation consumer before ACK.
+  Review-response tests `09a06eac` require exact failure causes and callback
+  identity, distinguish EOF from the intended rejection, and reject wrong Render
+  names, roles, duplicate outputs and renderer exceptions before PREPARED/ACK.
+  `publication-integration/ts-store-adapter-focused-03` retains exit 0 in 1.671
+  seconds, 65 focused checks, unchanged source/dist pins, empty final process
+  group and a committed-blob comparison. The production route is unselected;
+  real Render context/calendar observations and matched native/TS activation
+  remain required. Mock transport composition does not establish native custody.
+
+  Warm qualifier `cf958215` requires seven positive usage values from recognized
+  Codex input records and exact rendered values, and describes its ancestor as a
+  Claude-named pinned Node fixture. Actual `warm-render-execution-03` exits 1 in
+  18.105 seconds at the seal inventory assertion: the marker includes
+  `session-index.json` in addition to metadata and the retained A turn. B is not
+  attempted. `warm-render-actual-03/manifest.json` retains the failure, both
+  exactly correlated settled native requests, confirmed inactive cleanup and the
+  one actual worker birth/cleanup/exit tuple. Root preserves that failure while
+  the qualifier owner compares the inventory oracle to producer and reader
+  contracts. No completed warm continuation is inferred.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7495,17 +7555,19 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                     | Next decisive check                                                                                                                                                            |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Coherent source and package delivery, isolated invocation and rollback               | Root integrates the repaired merge-hook fixture and quality inventory                                                               | Normal push with unchanged gates, hosted checks on that exact commit, then a fresh installed package/image join and actual native refusal/rollback observations                |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration owns the supported warm fixture and cleanup accounting; source-progress owns the SQL adapter contract | Actual warm Render A → SessionEnd → Render B, followed by SQL CLOSED-to-publication; retain ordinary semantic consumption and exact custody evidence                           |
-| Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                               | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
+| Integrated outcome                                                                   | Execution owner                                                                                                                      | Next decisive check                                                                                                                                                            |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns package JSON repair and landing; native-context-git investigates the separate hosted candidate failure                     | Exact repaired candidate pack/upgrade and unchanged hosted checks, then a fresh installed package/image join and actual native refusal/rollback observations                   |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration owns warm inventory qualification; source-progress identifies the real Render observation prerequisite | Complete actual warm Render A → SessionEnd → Render B, then actual SQL CLOSED-to-publication with real context/calendar inputs and ordinary semantic consumption               |
+| Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                                | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
 
-The E273 image and rejected-replay repairs have finite executed controls. The
-second warm attempt reaches Render A but exposes an incompatible fixture profile
-for native SessionEnd and cleanup-accounting defects in the qualifier. Use the
-same admissible profile for every phase and capture identities before semantic
-assertions. Existing successful-operation compaction and shared-permit release
+The E273 image and rejected-replay repairs have finite executed controls. E275
+publishes the coherent source slice; E276 repairs a hosted packaging defect. The
+third warm attempt retains settled custody but stops at the complete-marker
+inventory oracle before B. Derive the expected retained index and turn inventory
+from the producer and ordinary reader before the next actual probe. The SQL
+adapter is committed but its production observation inputs and selector remain
+unwired. Existing successful-operation compaction and shared-permit release
 require the sustained actual workload before residency acceptance. Package
 adoption, Python retirement and machine cutover acceptance remain open.
 
