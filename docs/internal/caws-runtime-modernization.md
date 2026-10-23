@@ -7324,6 +7324,36 @@ Additional bounded evidence and unresolved dependencies:
   admission. Composed crash-after-unlink → host restart → frontend refusal and
   actual directory-sync/Nth-removal fault injection remain unexercised.
 
+- E273: Candidate `0699c408` contains the strict TypeScript/Rust staged-image
+  transformation repair and typed known-not-executed replay-capacity refund. The
+  image checks execute file, pipe, large-input staging and staging-failure paths
+  with exact arguments, stdin, exit status and selected-only descriptors; the
+  TypeScript suite passes 73 checks with ten existing profile skips and Rust
+  passes three focused controls. The replay control first fails with
+  `retained: true` and exhausted fresh-original capacity, then passes after the
+  repair while preserving the durable consumed tombstone and session files. Nine
+  focused session controls retain wrong-ACK and uncertain-effect records.
+  Evidence is under `publication-integration/runner-transform-*` and
+  `publication-integration/session-consumed-replay-*`. Strict compilation,
+  normal CLI build, the pinned release-native build, scoped doctor and five
+  ten-path gates exit 0; independent committed feedback is source-grounded.
+  These finite checks do not establish sustained capacity or machine adoption.
+
+  `warm-render-execution-02` exits 1 in 28.079 seconds with unchanged source
+  pins and no remaining supervisor process group. Actual Render A traverses the
+  repaired image successfully. SessionEnd exits 0 through compatibility dispatch
+  without a native-prefix completion record, so Render B is not attempted. The
+  fixture's project `runtime-paths.sh` makes native SessionEnd admission
+  ineligible; a selected stock handler alone is insufficient. The original
+  failed manifest also records unknown cleanup because identity assignment
+  followed the failed semantic assertion, and expects two worker cleanups
+  despite creating only A. Preserve that manifest and reconcile custody from
+  request 009's retained original identity and terminal witness separately. The
+  next fixture uses one supported alternate Render-source root throughout A,
+  SessionEnd and B, with the native-prefix admission predicate checked before
+  execution. No production admission relaxation or between-phase source change
+  is authorized. Warm continuation and continuous publication remain unchecked.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7430,19 +7460,18 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                      | Next decisive check                                                                                                                                                                          |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root; native-context-git repairs the merge-hook fixture; source-progress reconciles the seal-preparation quality inventory           | Normal push with unchanged gates, hosted checks on that exact commit, then a fresh installed package/image join and actual native refusal/rollback observations                              |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration repairs both independent image transformers; native-context-git follows with the capacity/replay probe | Actual warm Render A → SessionEnd → Render B, followed by SQL CLOSED-to-publication; rejected consumed-ID replay must preserve the durable tombstone and leave capacity for a fresh original |
-| Resident operation with fair, bounded capacity                                       | Root retains integration; bounded worker probes feed the same owner/engine contract                                                  | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence               |
+| Integrated outcome                                                                   | Execution owner                                                                                                                     | Next decisive check                                                                                                                                                            |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coherent source and package delivery, isolated invocation and rollback               | Root integrates the repaired merge-hook fixture and quality inventory                                                               | Normal push with unchanged gates, hosted checks on that exact commit, then a fresh installed package/image join and actual native refusal/rollback observations                |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration owns the supported warm fixture and cleanup accounting; source-progress owns the SQL adapter contract | Actual warm Render A → SessionEnd → Render B, followed by SQL CLOSED-to-publication; retain ordinary semantic consumption and exact custody evidence                           |
+| Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                               | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
 
-The actual warm attempt refuses before requests because the selected runtime's
-staged handler launches do not match the image transformers' earlier direct-call
-anchors. Repair TypeScript generation and Rust independent re-derivation
-together; retain strict source admission and handler descriptor isolation.
-Existing successful-operation compaction and shared-permit release are
-implemented. Their source and finite tests do not establish the larger actual
-workload or refund of a rejected replay's newly reserved permit. Package
+The E273 image and rejected-replay repairs have finite executed controls. The
+second warm attempt reaches Render A but exposes an incompatible fixture profile
+for native SessionEnd and cleanup-accounting defects in the qualifier. Use the
+same admissible profile for every phase and capture identities before semantic
+assertions. Existing successful-operation compaction and shared-permit release
+require the sustained actual workload before residency acceptance. Package
 adoption, Python retirement and machine cutover acceptance remain open.
 
 1. Refresh complete source/build/dependency identities after E188, including
