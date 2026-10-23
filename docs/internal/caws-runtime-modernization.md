@@ -7608,6 +7608,39 @@ Additional bounded evidence and unresolved dependencies:
   not a production latency benchmark. A5 remains unchecked with this bounded
   evidence recorded through the authoritative CLI.
 
+- E283: Dormant Git-context component `848056e9` lands through governed merge
+  `b607d88a`; its three bounded criteria are recorded and read back in events
+  12362–12364 before closure. `publication-integration/render-context-build-03`
+  exits 0 in 6.432s, project regression02 executes 15 checks in 5.298s, native05
+  executes six integration cases in 6.568s, and JS03 executes 57 checks in
+  0.964s with 14 actual native captures and zero skips. All six committed source
+  blobs join the before/after pins in
+  `render-context-review-repair-committed-source-join.json`.
+
+  Actual shell/native controls retain linked/subdirectory/lexical-CWD, detached,
+  dirty, unborn and outside behavior. The review exposes an over-strict UTF-8
+  check on ignored stderr/probe/status bytes; the repair decodes only consumed
+  text and counts status LF bytes. A bare repository's successful false-valued
+  probe still reaches the failing status command, matching the shell's exit128
+  and absent context. Timeout, cancellation, held pipes and output exhaustion
+  retain raw failures and independently settled final custody. Three injected
+  persistent stop refusals retain one actual Child; only independent teardown
+  establishes settlement. Historical native02 cleanup remains unknown. The
+  component does not activate a caller; the parent owns pre-Node capture,
+  one-time publication-token binding, finite cleanup with retained uncertainty,
+  calendar transport and actual Render consumption.
+
+- E284: Local source merge `821afd74` integrates the publication adapter and
+  qualifiers without closing the combined-image obligation. The unchanged
+  `main-push-06` hook run at `98003636` exits 1 in 341.870s. All 349 suites pass
+  (6779 tests, 13 skipped); lint reports five undefined interval-timer names in
+  `qualify-session-publication.cjs`. Commit `60207241` imports those existing
+  Node timer functions explicitly. Focused ESLint in
+  `publication-integration/source-publication-lint-03` exits 0 in 0.983s with
+  stable source pins and no residue. Attempts01/02 fail during tool-path setup
+  and establish no lint result. Remote publication remains pending a successful
+  unchanged full push. No hook floor or runtime timing behavior is changed.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

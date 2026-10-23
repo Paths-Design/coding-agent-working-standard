@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const cp = require('node:child_process');
-const { setTimeout, clearTimeout } = require('node:timers');
+const { setTimeout, clearTimeout, setInterval, clearInterval } = require('node:timers');
 const { setTimeout: delay } = require('node:timers/promises');
 const { performance } = require('node:perf_hooks');
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
