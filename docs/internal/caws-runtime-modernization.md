@@ -254,7 +254,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration                                                         | TS configuration module                                                    | selected-stock root integration and public-control repair exercised, E119                                                                                   | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim                                                                                                                                                                                                                                                                                |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                                      | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                                                                                                                                                                                   |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                                          | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate                                                                                                                                                      |
-| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | Bounded native acquisition/reconstruction E211/E212, original-invocation binding E216 and resident acquisition/settlement E240; production store unreplaced | E240 retains actual acquisition beyond frontend loss and exercises the real Actor mailbox across prepared renderer withdrawals. Root owns single-use publication under continuous writer custody, record release, receipt/delivery and ordinary renderer consumption. Complete path/calendar/profile/WAL/cleanup, sustained capacity and adoption remain open.                                                                                                                                                                                                            |
+| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | Bounded native acquisition/reconstruction E211/E212, original-invocation binding E216 and resident acquisition/settlement E240; production store unreplaced | E240 retains actual acquisition beyond frontend loss and exercises the real Actor mailbox across prepared renderer withdrawals. E307/E310 establish finite SQL numeric-profile parity and explicit-selector refusal before adapter effects. Root owns native admission, single-use publication under continuous writer custody, record release, receipt/delivery and ordinary renderer consumption. Complete path/calendar/profile/WAL/cleanup, sustained capacity and adoption remain open.                                                                              |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | lossless/common foundation and ordered registry imported and exercised, E157/E192; production consumer unreplaced                                           | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                                                                                                                                                                 |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                                       | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                                | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                                                                                                                                                                |
@@ -8102,22 +8102,108 @@ Additional bounded evidence and unresolved dependencies:
   and fabricated journal rows establish watcher behavior only, not native
   publication or fairness.
 
-- E306: SQL numeric-profile parity remains an activation dependency. In the
-  publication candidate, `store-json.ts:6,346-347` declares and enforces a
-  4300-digit integer limit; `store-projection.ts:231-234` always supplies that
-  profile. Stock `shared/session-log.sh:91-95` invokes ambient `python3` for SQL
-  projection, independently of its renderer invocation or optional writer
-  interpreter. `shared/lib/transcript-store.py:56-57` parses entire message and
-  part JSON, so oversized integers in otherwise ignored members can affect the
-  old result. The effective installed hook interpreter and startup numeric limit
-  have not been qualified. Renderer profile support alone cannot establish SQL
-  equivalence. Root owns capturing each stage's executable/source identity,
-  startup arguments and effective limit, then carrying the qualified SQL profile
-  through admission and projection. Boundary, signed-integer, ignored-member,
-  string and float controls must retain projection bytes or failure stage and
-  actual renderer artifacts; changed-profile controls must reject or select a
-  qualified alternative. No global relaxation or ambient-interpreter assumption
-  discharges this requirement.
+- E306: SQL numeric-profile parity remains an activation dependency. In
+  publication candidate `d3e994f7`, `store-json.ts:6,346-347` declares and
+  enforces a 4300-digit integer limit; `store-projection.ts:231-234` always
+  supplies that profile. Stock `shared/session-log.sh:91-95` invokes ambient
+  `python3` for SQL projection, independently of its renderer invocation or
+  optional writer interpreter. `shared/lib/transcript-store.py:56-57` parses
+  entire message and part JSON, so oversized integers in otherwise ignored
+  members can affect the old result. The effective installed hook interpreter
+  and startup numeric limit have not been qualified. Renderer profile support
+  alone cannot establish SQL equivalence. Root owns capturing each stage's
+  executable/source identity, startup arguments and effective limit, then
+  carrying the qualified SQL profile through admission and projection. Boundary,
+  signed-integer, ignored-member, string and float controls must retain
+  projection bytes or failure stage and actual renderer artifacts;
+  changed-profile controls must reject or select a qualified alternative. No
+  global relaxation or ambient-interpreter assumption discharges this
+  requirement.
+
+- E307: SQL profile implementation `09a7ae8d` carries explicit finite
+  `cpython-3.11.13-unicode14-int4300` and `cpython-3.11.13-unicode14-int0`
+  selectors through parsing, projection, serialization and publication. Actual
+  stock `transcript-store.py` executions under the same CPython3.11.13 binary
+  with `-B -S -X int_max_str_digits=4300` and `=0` distinguish ignored message
+  and part integers, signed integers, strings and floats. The4300 profile
+  refuses4301-digit integers with exit1 and no projection; int0 produces the
+  visible `qualified-visible` event with exit0. Projection bytes have SHA
+  `0b3ab538fae18f30cd84072d408ccbe457181d39f9476c0f413bae55a35fc102`.
+  `sql-profile-qualification-01` retains23 stock cases and three interpreter
+  probes; `sql-profile-zcode-baseline-01` adds12 actual Zcode cases. Under the
+  root external `publication-integration/` artifact directory, each case
+  preserves SQLite inputs, argv, stdout/stderr, exit and projection/error state.
+  Pinned Node22.22.2 `replay-candidate.cjs` exits0 in0.486s under
+  `sql-profile-semantic-01`:28/28 same-surface/profile comparisons match,
+  comprising22 byte-equal projections and six integer-limit refusals. Copied
+  emitted-module controls that always choose4300 or always choose unlimited each
+  produce six mismatches. `semantic-summary.json`, per-case
+  `projection.jsonl`/`error.json`, source/dist pins and `execution.json` retain
+  the distinction. The five focused Jest suites exit0 with204 checks under
+  `sql-profile-tests-01`; build and explicit package-cwd lint exit0 under
+  `sql-profile-build-01` and `sql-profile-lint-01`. These establish finite SQL
+  reconstruction parity, not the effective installed interpreter profile, native
+  acquisition/calendar, ordinary Stop rendering or full mutation quality.
+  Explicit selector support alone does not establish production qualification.
+
+- E308: Native foundation `9272df9a` retains a private request-owned generation
+  receipt and bounded verification using the original expiry and cancellation
+  callback. Reads retain one64KiB chunk and stop at the observed original size;
+  pre/open/post descriptor and path metadata detect replacement, growth and
+  truncation. Manifest-derived directory traversal refuses undeclared trees
+  before descent. `native-generation-check-01` exits0 with17 selected tests;
+  `generation-installed-entry-01` exits0 with10 installed-entry controls.
+  Retained `chunk-cancellation.json` and `chunk-deadline.json` observe65536 of
+  131089 bytes; `during-read-refusal.json` records growth/same-byte replacement
+  refusal after at most131089 bytes and truncation after65536. The
+  `retained-expiry.json` control refuses lookup/revalidation despite a later
+  caller expiry. Root rehashes110 native inputs and1049 TypeScript/build inputs
+  against their execution receipts with no differences. The module split
+  `3612a2cd` places reusable verification in `installed_generation.rs` and keeps
+  pointer/argv/launch policy in `installed_entry.rs`.
+  `native-generation-split-01` and `generation-split-installed-entry-01` repeat
+  the17/10 selected controls with exit0 in3.883s/4.238s, unchanged source/tool
+  pins and empty observed groups. Fixture images and cooperative on-disk
+  identity checks do not seal running code, prove launcher provenance, prevent
+  mutation after the final observation or interrupt stalled kernel syscalls. The
+  receipt has no ordinary production caller; strict Clippy and complete
+  installed-image qualification remain open.
+
+- E309: Source inspection of `9272df9a` identifies the next activation boundary.
+  `main.rs:187` uses non-publication `StoreAcquire::capture`; the typed engine
+  entry injects no ordinary SQL port. `render_owner/store.rs:1006-1013` reserves
+  the journal and retains a writer before SQL, so selection revalidation after
+  queueing must precede reservation, not merely precede SQLite open. The
+  receiver's `received + remaining_budget_ms` at1234-1236 renews transit time;
+  the publication carrier must preserve the original native monotonic deadline.
+  Native constructs the carrier from retained observations, never from an
+  engine-supplied claim. The receiver independently validates generation,
+  positive/negative readset, roots, profiles and deadline before effects. Peer
+  admission authenticates UID, not executable identity; the cooperative runtime
+  TCB remains explicit. Root owns this join and the actual ordinary Stop proof.
+  Its decisive negative control creates a higher-priority adapter while queued
+  and must observe zero reservation/writer/SQLite-open/publication/compatibility
+  effects. Instrument the actual SQLite-open seam; unchanged database bytes
+  cannot prove no open. The valid control must retain rows, exhausted/CLOSED,
+  projection, real consumer result and resource release under one invocation.
+
+- E310: Publication boundary `b34f2992` requires an explicit supported SQL
+  profile and validates it before observing the port or consumer. Lower-level
+  reconstruction defaults remain separate from publication admission.
+  `sql-profile-required-build-01`, `sql-profile-required-tests-01` and
+  `sql-profile-required-lint-01` exit0; the five focused suites execute207
+  checks. The emitted-adapter observer `observe-sql-profile-refusal.cjs` exits0
+  in0.156s under `sql-profile-refusal-observation-01`. Its four case JSON files
+  retain actual absent/undefined/null/unsupported selectors, exact
+  `StoreJsonError` category `request`, code `unsupported_profile`, and message
+  `request:unsupported_profile at request 0`. Port/consumer getter counts and
+  renderer callback counts are all0. `fixtures/result.json` and `execution.json`
+  retain module/driver/source/dist identities, process exit0 and an empty
+  observed process group. This establishes early adapter refusal, not native SQL
+  no-effects: the observer deliberately supplies no native port. Earned profile
+  qualification, binding to native admission and the ordinary consumer join
+  remain root-owned under E309. Commit formatting collapses an import; it does
+  not change the exercised statements or emitted implementation.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -8225,11 +8311,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                             | Next decisive check                                                                                                                                                                                                |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                                               |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns integration and acceptance; admission-contract supplies selection and route investigation; custody-finish supplies the command-transport proposal | E301 ordinary SQL Stop proof, with native-owned selection freshness and bounded runtime digest custody before activation; reconcile foreign parser ownership before command-transport writes                       |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane  | Qualify and land the exact combined image; E305 discharges bounded qualifier review; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                           | Next decisive check                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                              | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                                                                              |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns integration and acceptance; admission-contract supplies the original-deadline primitive; custody-finish repairs metadata hash/parse binding; html-profile supplies explicit SQL-profile refusal | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
