@@ -62,3 +62,9 @@ non_functional: {}
 contracts:
   - name: 'context-git-custody'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Actual native binary bea9e86d and compiled engine d4ca764f: ordinary and linked checkout staged owned.txt deletion refused with exact protective output, selected guard hash, canonical/checkout identities, input digest and distinct matching journal. See /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/ordinary-consumers-pending-02/result.json and ordinary/linked terminals and project-a/.caws/sessions journals; integrated-pending-02 execution.json command exit0, source pins match88a3108c. Normal build ts-committed-build-01 exit0. No full guard or installed-harness claim."
+    recorded_at: "2026-10-23T07:22:50.233Z"
+    commit_sha: "88a3108c5581a5610f2d24398ad7be0d2efb3b38"
