@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-RENDER-CONTEXT-001
+title: 'Produce original-bound Git context for typed session rendering'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-23T12:21:41.938Z'
+updated_at: '2026-10-23T12:21:41.938Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native original invocation Git observations and typed Render context consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/invocation_project.rs'
+    - 'packages/caws-native/src/render_context.rs'
+    - 'packages/caws-native/src/lib.rs'
+    - 'packages/caws-native/tests/render_context.rs'
+    - 'packages/caws-cli/src/runtime/render-context.ts'
+    - 'packages/caws-cli/tests/runtime/render-context.test.js'
+  out: []
+invariants:
+  - 'Actual original CWD spelling and captured environment select the Git observation; no synthetic context defaults or publication authority are introduced'
+  - 'Preserve selected executable checks, original Child/group/pipe custody, cancellation, bounded output and retained cleanup uncertainty; nonzero Git exits do not erase query evidence'
+  - 'Keep the existing context_git v1 two-query contract unchanged and production Render activation closed until carrier and calendar integration are qualified'
+acceptance:
+  - id: A1
+    given: 'ordinary linked subdirectory detached unborn and dirty repositories'
+    when: 'the actual native producer and unchanged shell context commands observe them'
+    then: 'retained raw bytes statuses and typed branch head dirty-count values match the reviewed command semantics'
+  - id: A2
+    given: 'cancellation held pipes changed executable output exhaustion and partial nonzero output'
+    when: 'context observation runs within the original deadline'
+    then: 'exact failure and cleanup state are retained without stale context replay or publication effects'
+  - id: A3
+    given: 'native serialized observations and hostile malformed or mismatched records'
+    when: 'the typed consumer derives Render context'
+    then: 'original correlation and CWD remain exact invalid observations are refused and no fixture defaults or generic whitespace trimming replace source semantics'
+rollback:
+  - 'Leave the new producer and consumer unselected; revert the coherent source unit through ordinary governed history if its contracts fail'
+non_functional: {}
+contracts: []
