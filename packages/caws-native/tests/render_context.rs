@@ -8,12 +8,23 @@ use caws_native::{
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
+    cell::Cell,
     collections::BTreeMap,
     fs,
-    os::unix::fs::PermissionsExt,
+    io::{Read, Write},
+    os::{
+        fd::{AsRawFd, FromRawFd, OwnedFd},
+        unix::{
+            fs::PermissionsExt,
+            net::{UnixListener, UnixStream},
+        },
+    },
     path::{Path, PathBuf},
     process::Command,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -139,6 +150,292 @@ fn real_render_custodian_preserves_four_fixed_queries_and_does_not_replay() {
     retain(
         "custodied-render-context.json",
         &[serde_json::to_value(result).unwrap()],
+    );
+}
+
+#[test]
+fn inside_signal_matches_shell_outside_semantics_and_preserves_actual_signal() {
+    let fixture = Fixture::new();
+    let invocation = fixture.wrapper("kill -TERM $$");
+    let expected = oracle(&invocation);
+    assert_eq!(
+        expected,
+        json!({"cwd":fixture.root,"branch":"unknown","headSha":"unknown","dirtyFiles":"0"})
+    );
+    let expires = Instant::now() + Duration::from_secs(5);
+    let result = custodied(invocation, expires)
+        .observe(expires, &|| false)
+        .unwrap();
+    assert_eq!(result.queries.len(), 1);
+    let query = &result.queries[0];
+    assert_eq!(query.operation, "inside");
+    assert_eq!(query.exit_code, None);
+    assert_eq!(query.signal, Some(libc::SIGTERM));
+    assert!(
+        query.cleanup.exit_observed
+            && query.cleanup.group_settled
+            && query.cleanup.stdout_eof
+            && query.cleanup.stderr_eof
+            && query.cleanup.reaped
+            && !query.cleanup.ownership_retained
+    );
+    retain(
+        "custodied-render-inside-signal.json",
+        &[json!({"shell":expected,"native":result})],
+    );
+}
+
+fn transfer_pipe_writer(mut socket: &UnixStream) {
+    let mut pid = std::process::id().to_ne_bytes();
+    let mut iov = libc::iovec {
+        iov_base: pid.as_mut_ptr().cast(),
+        iov_len: pid.len(),
+    };
+    let mut control = [0usize; 8];
+    let size = std::mem::size_of::<i32>() as u32;
+    let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
+    message.msg_iov = &mut iov;
+    message.msg_iovlen = 1;
+    message.msg_control = control.as_mut_ptr().cast();
+    message.msg_controllen = unsafe { libc::CMSG_SPACE(size) } as _;
+    assert!((message.msg_controllen as usize) <= std::mem::size_of_val(&control));
+    unsafe {
+        let header = libc::CMSG_FIRSTHDR(&message);
+        assert!(!header.is_null());
+        (*header).cmsg_level = libc::SOL_SOCKET;
+        (*header).cmsg_type = libc::SCM_RIGHTS;
+        (*header).cmsg_len = libc::CMSG_LEN(size) as _;
+        *libc::CMSG_DATA(header).cast::<i32>() = libc::STDOUT_FILENO;
+    }
+    assert_eq!(
+        unsafe { libc::sendmsg(socket.as_raw_fd(), &message, 0) },
+        pid.len() as isize
+    );
+    let mut ack = [0u8; 1];
+    socket.read_exact(&mut ack).unwrap();
+    assert_eq!(&ack, b"A");
+}
+fn receive_pipe_writer(socket: &UnixStream) -> (OwnedFd, u32) {
+    socket.set_nonblocking(true).unwrap();
+    let mut pid = [0u8; 4];
+    let mut iov = libc::iovec {
+        iov_base: pid.as_mut_ptr().cast(),
+        iov_len: pid.len(),
+    };
+    let mut control = [0usize; 8];
+    let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
+    message.msg_iov = &mut iov;
+    message.msg_iovlen = 1;
+    message.msg_control = control.as_mut_ptr().cast();
+    message.msg_controllen = std::mem::size_of_val(&control) as _;
+    let until = Instant::now() + Duration::from_secs(2);
+    loop {
+        assert!(Instant::now() < until, "pipe transfer receive deadline");
+        message.msg_controllen = std::mem::size_of_val(&control) as _;
+        message.msg_flags = 0;
+        let count = unsafe { libc::recvmsg(socket.as_raw_fd(), &mut message, 0) };
+        if count < 0
+            && matches!(
+                std::io::Error::last_os_error().kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+            )
+        {
+            std::thread::sleep(Duration::from_millis(2));
+            continue;
+        }
+        assert_eq!(
+            count,
+            pid.len() as isize,
+            "pipe transfer receive: {}",
+            std::io::Error::last_os_error()
+        );
+        break;
+    }
+    assert_eq!(message.msg_flags & libc::MSG_CTRUNC, 0);
+    let writer = unsafe {
+        let header = libc::CMSG_FIRSTHDR(&message);
+        assert!(!header.is_null());
+        assert_eq!((*header).cmsg_level, libc::SOL_SOCKET);
+        assert_eq!((*header).cmsg_type, libc::SCM_RIGHTS);
+        assert_eq!(
+            (*header).cmsg_len,
+            libc::CMSG_LEN(std::mem::size_of::<i32>() as u32) as libc::socklen_t
+        );
+        assert!(libc::CMSG_NXTHDR(&message, header).is_null());
+        OwnedFd::from_raw_fd(*libc::CMSG_DATA(header).cast::<i32>())
+    };
+    assert_eq!(
+        unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) },
+        0
+    );
+    let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+    assert_eq!(unsafe { libc::fstat(writer.as_raw_fd(), &mut stat) }, 0);
+    assert_eq!(stat.st_mode & libc::S_IFMT, libc::S_IFIFO);
+    assert_eq!(
+        unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) } & libc::O_ACCMODE,
+        libc::O_WRONLY
+    );
+    (writer, u32::from_ne_bytes(pid))
+}
+
+// A read-only kernel process-table observation. This never supplies signal or
+// reap authority; proc_pidinfo alone may omit the exited process being checked.
+fn process_table_state(pid: u32) -> Result<Value, String> {
+    let mut child = Command::new("/bin/ps")
+        .args(["-p", &pid.to_string(), "-o", "pid=,ppid=,pgid=,stat="])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let until = Instant::now() + Duration::from_secs(2);
+    loop {
+        if child.try_wait().map_err(|e| e.to_string())?.is_some() {
+            break;
+        }
+        if Instant::now() >= until {
+            // Only this retained, unreaped diagnostic Child anchors its kill.
+            let _ = child.kill();
+            let stop = Instant::now() + Duration::from_secs(2);
+            while child.try_wait().map_err(|e| e.to_string())?.is_none() && Instant::now() < stop {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            return Err("read-only ps observation exceeded its bound".into());
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    let text = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
+    if !output.status.success() || !output.stderr.is_empty() {
+        return Err(format!("ps {}: {text}; {:?}", output.status, output.stderr));
+    }
+    let fields: Vec<_> = text.split_whitespace().collect();
+    if fields.len() != 4 {
+        return Err(format!("unexpected process table row: {text}"));
+    }
+    let number = |index: usize| fields[index].parse::<u32>().map_err(|e| e.to_string());
+    Ok(
+        json!({"pid":number(0)?,"parent":number(1)?,"group":number(2)?,"state":fields[3],"raw":text}),
+    )
+}
+
+#[test]
+fn retained_test_owned_pipe_bounds_frontend_failure_without_releasing_actual_child() {
+    const ROLE: &str = "CAWS_TEST_RENDER_PIPE_SOCKET";
+    if let Some(socket) = std::env::var_os(ROLE) {
+        let socket = UnixStream::connect(socket).unwrap();
+        let marker = b"held-by-test\n";
+        assert_eq!(
+            unsafe { libc::write(libc::STDOUT_FILENO, marker.as_ptr().cast(), marker.len()) },
+            marker.len() as isize
+        );
+        transfer_pipe_writer(&socket);
+        std::process::exit(7);
+    }
+    let fixture = Fixture::new();
+    // Darwin's Unix socket path bound is smaller than the retained artifact
+    // root. Only this disposable IPC anchor uses a short private /tmp path.
+    let anchor = PathBuf::from(format!(
+        "/private/tmp/caws-rpipe-{}-{}",
+        std::process::id(),
+        SERIAL.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir(&anchor).unwrap();
+    fs::set_permissions(&anchor, fs::Permissions::from_mode(0o700)).unwrap();
+    let socket_path = anchor.join("s");
+    let listener = UnixListener::bind(&socket_path).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let invocation=fixture.wrapper(&format!("{ROLE}='{}' exec '{}' --exact retained_test_owned_pipe_bounds_frontend_failure_without_releasing_actual_child --nocapture --test-threads=1",socket_path.display(),std::env::current_exe().unwrap().display()));
+    let expires = Instant::now() + Duration::from_secs(4);
+    let mut owner = custodied(invocation, expires);
+    let (captured_tx, captured_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let holder = std::thread::spawn(move || {
+        let until = Instant::now() + Duration::from_secs(6);
+        let peer = loop {
+            match listener.accept() {
+                Ok((peer, _)) => break peer,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < until, "Git pipe transfer never arrived");
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                Err(error) => panic!("pipe transfer accept: {error}"),
+            }
+        };
+        let (writer, pid) = receive_pipe_writer(&peer);
+        let birth = process_birth(pid).expect("sender must remain alive until ACK");
+        (&peer).write_all(b"A").unwrap();
+        captured_tx.send(birth).unwrap();
+        // Even failed assertions or sender loss cannot keep this test FD open
+        // indefinitely. This release is not production kill/cleanup authority.
+        let result = release_rx.recv_timeout(Duration::from_secs(6));
+        drop(writer);
+        result.is_ok()
+    });
+    let outcome = owner.observe(expires, &|| false);
+    let returned = Instant::now();
+    let mut failure = outcome.expect_err("held stdout cannot produce a settled successful receipt");
+    let remote = failure.remote.as_ref().unwrap();
+    let custodian_pid = remote.custodian_pid();
+    let git_birth = captured_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    let git_pid = git_birth.pid;
+    let initial_settled = failure.cleanup_settled();
+    let initial_receipt = remote.receipt();
+    let custodian_before = process_birth(custodian_pid);
+    let git_before = process_table_state(git_pid);
+    release_tx.send(()).unwrap();
+    let released = holder.join().unwrap();
+    fs::remove_file(&socket_path).unwrap();
+    fs::remove_dir(&anchor).unwrap();
+    let cleanup_until = Instant::now() + Duration::from_secs(2);
+    while !failure.cleanup_settled() && Instant::now() < cleanup_until {
+        let _ = failure.retry_cleanup();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let receipt = failure.remote.as_ref().unwrap().receipt();
+    let custodian_after = process_birth(custodian_pid);
+    let git_after = process_birth(git_pid);
+    retain(
+        "custodied-retained-test-pipe.json",
+        &[
+            json!({"scope":"test-owned transferred stdout FD; not escaped-descendant termination","root":fixture.root,"initialReceipt":initial_receipt,"initialCleanupSettled":initial_settled,"custodianBefore":custodian_before,"gitBirthBeforeExit":git_birth,"gitBefore":git_before,"testWriterReleased":released,"finalReceipt":receipt,"finalCleanupSettled":failure.cleanup_settled(),"custodianAfter":custodian_after,"gitAfter":git_after}),
+        ],
+    );
+    assert!(returned <= expires + Duration::from_millis(250));
+    assert!(!initial_settled);
+    assert!(initial_receipt.is_none());
+    assert!(released);
+    assert!(custodian_before.is_some_and(|p| p.status != libc::SZOMB));
+    assert_eq!(git_birth.parent, custodian_pid);
+    assert_eq!(git_birth.group, git_pid);
+    assert_ne!(git_birth.status, libc::SZOMB);
+    let git_before = git_before.unwrap();
+    assert_eq!(git_before["pid"], git_pid);
+    assert_eq!(git_before["parent"], custodian_pid);
+    assert_eq!(git_before["group"], git_pid);
+    assert!(
+        git_before["state"].as_str().unwrap().starts_with('Z'),
+        "Git exited but its actual Child must remain unreaped: {git_before}"
+    );
+    assert!(failure.cleanup_settled(), "{failure:?}");
+    let receipt = receipt.unwrap();
+    assert!(!receipt["complete"].as_bool().unwrap());
+    assert_eq!(receipt["rows"][0]["receipt"]["status"], "deadline");
+    assert_eq!(receipt["rows"][0]["receipt"]["exitCode"], 7);
+    assert_eq!(receipt["rows"][0]["receipt"]["pid"], git_pid);
+    assert_eq!(receipt["rows"][0]["receipt"]["signal"], Value::Null);
+    assert!(failure.completed.is_empty());
+    assert!(
+        failure
+            .stdout
+            .windows(b"held-by-test\n".len())
+            .any(|w| w == b"held-by-test\n")
+    );
+    assert!(custodian_after.is_none());
+    assert!(git_after.is_none());
+    assert_eq!(
+        owner.observe(expires, &|| false).unwrap_err().category,
+        "consumed"
     );
 }
 
@@ -744,7 +1041,7 @@ fn timeout_cancellation_held_pipes_and_output_exhaustion_retain_failure_and_clea
         ),
         (
             "held-pipes",
-            "(/bin/sleep 30) & printf admitted; exit 0",
+            "printf admitted; (/bin/sleep 30) & exit 0",
             ProjectPhase::QueryDeadline,
             false,
         ),
@@ -820,12 +1117,11 @@ fn timeout_cancellation_held_pipes_and_output_exhaustion_retain_failure_and_clea
             cleanup.pipes.stderr_bytes,
             "{name} admitted stderr"
         );
-        if name == "cancelled" {
-            // Cancellation can win after spawn but before the first read. Only
-            // bytes actually admitted by that read belong in failure evidence.
+        if name != "output" {
+            // Either stop condition can precede a pipe read. Only admitted
+            // bytes belong here; the deterministic positive control below
+            // independently requires the complete exact bytes.
             assert!(b"admitted".starts_with(&error.stdout));
-        } else if name != "output" {
-            assert_eq!(error.stdout, b"admitted", "{name}: {error:?}");
         }
         assert!(
             start.elapsed() < Duration::from_secs(3),
@@ -836,6 +1132,58 @@ fn timeout_cancellation_held_pipes_and_output_exhaustion_retain_failure_and_clea
             "consumed"
         );
     }
+}
+
+#[test]
+fn local_deadline_after_observed_admission_preserves_exact_partial_bytes() {
+    let fixture = Fixture::new();
+    let invocation = fixture.wrapper("printf admitted; printf ready > ready; exec /bin/sleep 30");
+    let expires = Instant::now() + Duration::from_secs(2);
+    let execution_expires = expires - Duration::from_millis(500);
+    let mut owner = RenderContextOwner::capture(invocation, expires, &|| false).unwrap();
+    let calls = Cell::new(0);
+    let mut failure = owner
+        .observe(expires + Duration::from_secs(20), &|| {
+            // The marker is written after stdout. By the third checkpoint after
+            // the marker, a drain read has occurred; expire only after that read.
+            if fixture.root.join("ready").exists() {
+                calls.set(calls.get() + 1);
+                if calls.get() == 3 {
+                    std::thread::sleep(
+                        execution_expires.saturating_duration_since(Instant::now())
+                            + Duration::from_millis(1),
+                    );
+                }
+            }
+            false
+        })
+        .unwrap_err();
+    let until = Instant::now() + Duration::from_secs(2);
+    while !failure.cleanup_settled() && Instant::now() < until {
+        let _ = failure.retry_cleanup();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    retain(
+        "local-admission-before-deadline.json",
+        &[
+            json!({"root":fixture.root,"callbacksAfterReady":calls.get(),"phase":format!("{:?}",failure.cause.as_ref().unwrap().first_phase),"stdout":STANDARD.encode(&failure.stdout),"cleanup":format!("{:?}",failure.cause.as_ref().unwrap().cleanup),"settled":failure.cleanup_settled()}),
+        ],
+    );
+    assert!(calls.get() >= 3);
+    assert_eq!(
+        failure.cause.as_ref().unwrap().first_phase,
+        ProjectPhase::QueryDeadline
+    );
+    assert_eq!(failure.stdout, b"admitted");
+    assert_eq!(
+        failure.cause.as_ref().unwrap().cleanup.pipes.stdout_bytes,
+        8
+    );
+    assert!(failure.cleanup_settled());
+    assert_eq!(
+        owner.observe(expires, &|| false).unwrap_err().category,
+        "consumed"
+    );
 }
 
 #[test]

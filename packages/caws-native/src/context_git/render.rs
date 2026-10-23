@@ -127,6 +127,13 @@ fn positive_cleanup(row: &QueryReceipt) -> bool {
     let c = &row.cleanup;
     c.group_settled && c.stdout_eof && c.stderr_eof && c.reaped
 }
+fn verification_status(error: &project::ProjectFailure) -> &'static str {
+    match error.first_phase {
+        project::ProjectPhase::Cancelled => "cancelled",
+        project::ProjectPhase::QueryDeadline => "deadline",
+        _ => "identity_changed",
+    }
+}
 fn validate_reply(reply: &Reply, id: &str, digest: &str, token: &str) -> Result<(), String> {
     if reply.schema != REPLY_SCHEMA
         || reply.id != id
@@ -195,6 +202,69 @@ fn validate_reply(reply: &Reply, id: &str, digest: &str, token: &str) -> Result<
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::{cell::Cell, os::unix::fs::PermissionsExt};
+
+    #[test]
+    fn verification_classification_preserves_typed_deadline_and_cancellation_during_hash() {
+        let root = std::env::temp_dir().join(format!(
+            "render-verification-{}-{}",
+            std::process::id(),
+            monotonic_ns()
+        ));
+        fs::create_dir(&root).unwrap();
+        let image = root.join("image");
+        fs::write(&image, vec![b'x'; 65536]).unwrap();
+        fs::set_permissions(&image, fs::Permissions::from_mode(0o700)).unwrap();
+        let selected =
+            project::pin_executable(&image, Instant::now() + Duration::from_secs(5), &|| false)
+                .unwrap();
+        let calls = Cell::new(0);
+        let cancelled = project::verify_executable(
+            &selected,
+            project::ProjectPhase::BeforeLaunch,
+            Instant::now() + Duration::from_secs(5),
+            &|| {
+                calls.set(calls.get() + 1);
+                calls.get() == 3
+            },
+        )
+        .unwrap_err();
+        assert_eq!(calls.get(), 3);
+        assert_eq!(cancelled.first_phase, project::ProjectPhase::Cancelled);
+        assert_eq!(verification_status(&cancelled), "cancelled");
+        let calls = Cell::new(0);
+        let expires = Instant::now() + Duration::from_secs(1);
+        let deadline = project::verify_executable(
+            &selected,
+            project::ProjectPhase::BeforeLaunch,
+            expires,
+            &|| {
+                calls.set(calls.get() + 1);
+                if calls.get() == 3 {
+                    std::thread::sleep(
+                        expires.saturating_duration_since(Instant::now())
+                            + Duration::from_millis(1),
+                    );
+                }
+                false
+            },
+        )
+        .unwrap_err();
+        assert_eq!(calls.get(), 3);
+        assert_eq!(deadline.first_phase, project::ProjectPhase::QueryDeadline);
+        assert_eq!(verification_status(&deadline), "deadline");
+        fs::write(&image, b"changed").unwrap();
+        let replaced = project::verify_executable(
+            &selected,
+            project::ProjectPhase::AfterLaunch,
+            Instant::now() + Duration::from_secs(5),
+            &|| false,
+        )
+        .unwrap_err();
+        assert_eq!(replaced.first_phase, project::ProjectPhase::AfterLaunch);
+        assert_eq!(verification_status(&replaced), "identity_changed");
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn receipt(status: &str) -> QueryReceipt {
         QueryReceipt {
@@ -824,16 +894,7 @@ pub(super) fn run_configuration(
         });
         let receipt = match checked {
             Err(error) => {
-                let mut r = QueryReceipt::new(
-                    if cancelled {
-                        "cancelled"
-                    } else if remaining == 0 {
-                        "deadline"
-                    } else {
-                        "identity_changed"
-                    },
-                    &error.to_string(),
-                );
+                let mut r = QueryReceipt::new(verification_status(&error), &error.to_string());
                 r.cleanup = Cleanup {
                     group_settled: true,
                     stdout_eof: true,
@@ -870,7 +931,7 @@ pub(super) fn run_configuration(
                         &|| false,
                     )
                 {
-                    r.status = "identity_changed".into();
+                    r.status = verification_status(&error).into();
                     r.diagnostic = QueryReceipt::new("", &error.to_string()).diagnostic;
                 }
                 r
