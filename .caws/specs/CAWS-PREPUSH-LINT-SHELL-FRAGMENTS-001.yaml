@@ -37,3 +37,8 @@ evidence:
     evidence_ref: "bash packages/caws-cli/scripts/lint-shell.sh at the candidate in worktree prepush-lint-shell: exit 0, 'bash -n OK for 81 template script(s) (2 render fragment(s) parsed with token lines elided)', fragments named: runtime/service-image/handler-routes.sh and libraries.sh, zero 'syntax error in' lines (log: ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/lint-shell-gate-worktree.log). Baseline main ca021e51: same two files fail bash -n."
     recorded_at: "2026-10-23T05:29:46.554Z"
     commit_sha: b9a0354f284a2e5a3e0135c42cf441ef1cacea71
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Disposable fixture ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/lint-shell-controls: NEW gate exit 2 naming exactly frag-bad.sh (token + stray '}' -> 'line 6: syntax error') and plain-bad.sh (unterminated for -> 'unexpected end of file'); frag-ok.sh, indented-token.sh, plain-ok.sh (inline token) pass. OLD gate (main) on the same fixture names 4 files incl. frag-ok.sh and indented-token.sh: the delta is exactly token-line elision."
+    recorded_at: "2026-10-23T05:29:48.250Z"
+    commit_sha: b9a0354f284a2e5a3e0135c42cf441ef1cacea71
