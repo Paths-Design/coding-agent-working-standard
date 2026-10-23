@@ -107,3 +107,9 @@ evidence:
     recorded_at: "2026-10-23T03:21:49.154Z"
     artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt"
     commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "dispatch-ingress.bats 18/18 at 499ca369 (file unchanged at e05c9c0b): setup_failed parses stdin, partial write and parser-descriptor failures return 3 with pre_tool_use block exit 2 and stop exit 1, custody-descriptor failure keeps guards fed with custody uncertain, unlink failure named and retried, link left in place; jest fault cases through a disposable tree copy pass; c19 and c20 rows in the control. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated."
+    recorded_at: "2026-10-23T03:21:51.608Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/receipts/phase-c-20261023T020442Z/phase-c-dispatch-ingress.stdout"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
