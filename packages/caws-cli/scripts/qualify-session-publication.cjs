@@ -1221,7 +1221,10 @@ if (process.argv[2] === '--agent-child') {
   }
   async function runUncertainProjectProgress() {
     const a = createCase('codex-uncertain-A', 'codex', false, true);
+    const policyA = path.join(a.environment.CAWS_HOME, 'state/projects', hash(a.project) + '.json');
+    const policyBeforeB = pin(policyA);
     const b = createCase('codex-progress-B', 'codex', false, false, a);
+    assert.deepEqual(pin(policyA), policyBeforeB, 'B setup changed A policy');
     a.capacityObservation = true;
     b.capacityObservation = true;
     assert.equal(a.owner.limits.maxRetainedRecords, 2);
@@ -1290,6 +1293,12 @@ if (process.argv[2] === '--agent-child') {
       };
     };
     assertOwner('before-A');
+    const target = path.join(a.session, a.turns[0][0]);
+    const replacement = path.join(a.directory, 'replacement-turn.json');
+    const originalBytes = fs.readFileSync(target);
+    const originalSha256 = hash(originalBytes);
+    const beforeInode = fs.statSync(target).ino;
+    put(replacement, originalBytes);
     const originalA = await invoke(a);
     const recordA = await waitFor(
       () => {
@@ -1301,27 +1310,34 @@ if (process.argv[2] === '--agent-child') {
       15000,
       'A never reached the actual ordinary consumer'
     );
-    checkPrefix(a, originalA, recordA);
     const idA = recordA.rows[0].invocation_id;
-    const consumerA = checkConsumer(a, recordA);
     const beforeAction = operation(a, idA);
-    assert.equal(beforeAction.row?.body.outcome.execution, 'returned');
-    put(path.join(a.directory, 'pre-action-operation.json'), beforeAction);
-    const target = path.join(a.session, a.turns[0][0]);
-    const replacement = path.join(a.directory, 'replacement-turn.json');
-    const beforeInode = fs.statSync(target).ino;
-    put(replacement, fs.readFileSync(target));
+    assert.equal(
+      beforeAction.row?.body.outcome.execution,
+      'returned',
+      'ACK race: A already consumed'
+    );
+    // Keep expensive semantic checks and artifact writes out of the hostile window.
     fs.renameSync(replacement, target);
     assert.notEqual(fs.statSync(target).ino, beforeInode);
+    assert.equal(hash(fs.readFileSync(target)), originalSha256);
+    put(path.join(a.directory, 'pre-action-operation.json'), beforeAction);
     put(path.join(a.directory, 'hostile-action.json'), {
       type: 'changed-input',
       at: Date.now(),
+      originalSha256,
       journal: recordA.file,
       beforeInode,
       afterInode: fs.statSync(target).ino,
       sameBytesSha256: hash(fs.readFileSync(target)),
     });
     const terminalA = await bounded(originalA.nativeTerminal, 25000, 'A did not settle');
+    checkPrefix(a, originalA, recordA);
+    const consumerA = checkConsumer(a, recordA);
+    assert.match(
+      originalA.agent.output().stderr.toString(),
+      /published generation bytes or inventory changed/
+    );
     assert.equal(terminalA.signal, null);
     assert(
       Number.isInteger(terminalA.code) && terminalA.code !== 0,
@@ -1348,9 +1364,23 @@ if (process.argv[2] === '--agent-child') {
       durableA.file,
       path.join(a.session, '.meta.json'),
       path.join(a.session, '.session-publication.json'),
+      policyA,
+      path.join(a.environment.CAWS_HOME, 'surfaces/codex/settings.json'),
     ];
     const retainedBefore = guardedFiles.map(identity);
     const assertA = (label) => {
+      assert(
+        !ownerRows(observations).some(
+          (row) =>
+            row.invocationId === idA &&
+            [
+              'session_consumed_durable',
+              'session_heavy_released',
+              'session_rejected_before_effects',
+            ].includes(row.stage)
+        ),
+        'A was consumed or released while its uncertainty remained'
+      );
       const observed = guardedFiles.map(identity);
       assert.deepEqual(observed, retainedBefore, 'A custody changed during other admission');
       put(path.join(a.directory, label + '-retained-A.json'), observed);
