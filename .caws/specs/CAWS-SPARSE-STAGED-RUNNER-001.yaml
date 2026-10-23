@@ -1,10 +1,11 @@
 id: CAWS-SPARSE-STAGED-RUNNER-001
 title: 'Preserve sparse staged governance and commit failure fidelity'
 mode: fix
-lifecycle_state: active
-worktree: sparse-staged-runner
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Integrated real merge-hook fixture dependency and positive formatter/index proof at703bb30. Original guard assertions and four runner criteria remain accepted; root grounded independent review in hook/runner/config and checked exact tested bytes. Focused Jest5/hooks57 and gates pass. Full normal push and runtime cutover remain parent obligations.'
 created_at: '2026-10-23T09:19:46.467Z'
-updated_at: '2026-10-23T10:22:46.064Z'
+updated_at: '2026-10-23T10:35:40.224Z'
 created_by_session: '01a166d3-36ad-71a3-83a1-a1b8a6e32a7c'
 blast_radius:
   modules:
