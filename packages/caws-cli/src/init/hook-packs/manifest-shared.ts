@@ -602,6 +602,11 @@ import { isAdapterCoveredSurface } from './types';
 // and the kernel turn-log.v2 producer contract adopts the same unified
 // shape, so the shared pack template tree changed again after v96.
 // v98: retain per-invocation handler progress before subsequent handlers run.
+// v99: block-dangerous.sh requires complete arm-time and live agent identity
+// before kill escalation, stamps each latch arm with a distinct generation, and
+// accepts the native executor's explicit containment descriptor.
+// v100: lib/harness_kimi.py defers annotations so the session renderer imports
+// under the stock macOS python3 (3.9).
 // Cooperative renderer entrypoints include the native writer-custody bridge.
 // v101: agent-stop routes the CLI's operational receipt to diagnostics while
 // preserving its lease mutation. Lifecycle text must not displace advice.
@@ -610,6 +615,9 @@ import { isAdapterCoveredSurface } from './types';
 // allowlist and approval policy instead of exiting before either policy runs.
 // v104: heartbeat message provenance reads the canonical sender specId field.
 // v105: refresh captured invocation custody and per-handler stdin stage cleanup.
+// lib/session-render-service-client.sh ships in this tree but is not installed:
+// it is a native-image build input (src/runtime/service-image.ts) carrying
+// builder markers, with no managed header and no dispatcher that sources it.
 export const SHARED_PACK_VERSION = 105;
 
 /**

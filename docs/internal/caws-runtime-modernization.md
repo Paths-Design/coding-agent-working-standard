@@ -29,14 +29,15 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-This working ledger is published on `main` independently of candidate source.
-The integration branch is `native-runtime-modernization`; its source-tree
-checkpoint is `bb3a8b99c978fbde8023b83e366030fc25cbb286`. Later branch commits
-that change only this ledger leave that checkpoint unchanged. Evidence entries
-identify their actual component branch or historical revision. Publishing this
-document does not land those implementations on `main`. Inspect the candidate
-architecture with `git show bb3a8b99:docs/architecture/caws-native-runtime.md`;
-the relative architecture link follows the branch containing this document.
+The matched native runtime source is published on `main` through merge
+`1c39bd3cd708076d54a34bfec10d8992de8f3286`, including reconciled candidate
+`c9b919e64f9149a09e2e9fff62f40cfdf141d1a8`, shared pack v105 and F3 cleanup.
+`native-runtime-modernization` remains the integration branch for owed work.
+Evidence entries identify their actual component branch or historical revision;
+ledger-only commits do not qualify different runtime bytes. The relative
+architecture link follows this document's branch. Source publication, fresh
+package qualification, actual native execution and cutover acceptance remain
+separate obligations; E262 records the landing and its bounded checks.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
@@ -6954,6 +6955,204 @@ Additional bounded evidence and unresolved dependencies:
   its clean help candidate for reserved source integration. No machine install
   or whole-migration acceptance is inferred from these source units.
 
+- E261: Shared pack v105 is integrated at `c5b3b360`, and the installer help
+  merge produces frozen package candidate `7195f14f`. The authorized transfer
+  moves only `manifest-shared.ts` and `tests/init/pack-fingerprints.json` from
+  the archived shell-analysis spec's claims to its supporting scope (event
+  11806); its branch, files and unrelated dirty test remain preserved. The
+  shared-pack child closes with A1/A2 pass in events 11814/11815 and normal
+  merge/teardown in 11816–11818. Fresh normal Node 22 build PID 97390 exits 0;
+  compiled pack-fingerprint PID 11028 exits 0 with all 14 checks, including all
+  eight pack baselines and real-byte, exclusion and coverage controls. These
+  checks qualify the pack metadata against these bytes, not cutover.
+
+  The normal npm tarball is 2,580,764 bytes, SHA256
+  `5c83b318afbcf945e4dee40b546083b714083396bf2e62410939adc31be7667c`. Root
+  independently compares all 1,273 regular tar members and 1,260 captured build
+  members. Actual private installation PID 78216 exits 0; Node 18 and Node 22
+  inspectors exit 0 over the same 5,708-file, 65-package production prefix. The
+  omitted optional `@types/node` peer remains explicit. This is observed
+  package/dependency consistency, not compiler provenance, dependency semantic
+  trust or general Node-version qualification.
+
+  Corrected receipt-selected v2 descriptors retain exactly 71 native notices and
+  one Node notice. The first descriptors duplicated Node's LICENSE; their
+  completed first attempts remain retained and do not qualify the agreed notice
+  layout. Root verifies that the correction removes only that duplicate. Fresh
+  corrected public CLI sequences, negative inputs and tampered recovery complete
+  under both Node versions: 68 actual child commands, including 28 intended
+  exit-1 refusals with empty success output and unchanged target maps. Root
+  reads every terminal/refusal and checks owned-group absence. Both sequences
+  select the same legacy A, release B and debug C digests; B is
+  `fd38244eedb6ef30e782c5be92002dbda2ac5508ab53ce79ce9a2431dc2b4e74`. Retained
+  evidence is under R01's
+  `r01-installed-entry/actual-v2-package/7195f14f736e0784b5f0aca0220a6c76c25d9c9c/`,
+  including `descriptor-attempt-02` and the six `cases-*-attempt02` directories.
+  These are actual installer/state observations; selected stable-entry native
+  dispatch, ordinary guard effects, session rendering and harness adoption
+  remain separate owed checks. The six qualification homes remain unchanged.
+
+  The assertion-only successor `fb1ba781` changes 61 statements in nine Bats
+  suites. Root compares retained source bytes with the commit, reads identical
+  179-test baseline/candidate TAP vectors and all 33 intended predicate-failure
+  controls, and grounds independent review feedback. Child A1–A3 pass records
+  are 11838/11839/11847. The unallocated runs, unpinned live compiled fixture,
+  failed temporary-root attempts and unattributable global process count remain
+  explicit limits; they do not establish exact installed behavior or timing. The
+  separate F1/F2 successor `499ca369` has additional source-review repairs and
+  unexecuted changed tests; the earlier `cb43a2c5` probe does not qualify it.
+
+  Root prepares the matched source landing in its owned `native-source-landing`
+  lane without moving frozen `7195f14f` or taking peer claims. The ten merge
+  conflicts preserve the candidate's coupled native/TS/tooling contracts and
+  main's fixes, including Handlebars 4.7.10 and two existing test repairs.
+  Canonical governance is unchanged by the staged source merge. This merged
+  source needs its own dependency/build/interface checks and committed review;
+  the frozen candidate's package observations cannot qualify different bytes.
+  Root retains both native publication and TS ordinary consumption/release,
+  durable original IDs, both 256-entry capacity traps and actual resident-engine
+  execution through the thirteen-session/four-repository workload. Main landing,
+  the existing guide updates, full observer qualification and machine cutover
+  remain open. Parent evidence 11841 retains the detailed ownership/nonclaims.
+
+- E262: Normal source merge `1c39bd3cd708076d54a34bfec10d8992de8f3286` lands
+  `c9b919e6`, frozen `7195f14f`, shared pack v105 and the F3 cleanup on main.
+  Root verifies ancestry, clean canonical checkout and the merged event's
+  `canonical_checkout_state: in_sync`. Event 11869 leaves the source-landing
+  spec active; 11870 removes the lane; 11871 explicitly binds the remaining work
+  to root through its active bridge. Source A1 passes; A2/A3 and every parent
+  criterion remain unchecked. This is source publication, not machine
+  installation, native callback proof or cutover acceptance.
+
+  Exact-candidate isolated dependency installation PID 31860 exits 0 and selects
+  Handlebars 4.7.10 without changing shared caches. Fresh normal build PID 61189
+  exits 0. Focused PID 90661 exits 1 solely because root supplied the
+  nonexistent plural fingerprint filename: seven executed suites pass all 648
+  assertions. The failed attempt remains retained. Correct singular fingerprint
+  PID 98328 exits 0 with all 14 checks. Full-basis gates evaluate all 261
+  changed files; all five pass, including the run after admitting 26 exact
+  historical support paths whose final bytes equal main. Independent committed
+  source review and raw-check followup find no consequential merge-loss
+  counterexample.
+
+  Normal package PID 94849 exits 0, retaining 1,273 regular members in the
+  2,580,893-byte archive, SHA256
+  `7b69981d6d29a351878d31f30d537da8fb6bd3c68fb1a0ca7bed073b26a7b445`, under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/source-landing-c9b919e6/`.
+  Native source equals frozen `7195f14f`; 1,257 of 1,260 inspected fresh build
+  members match, with only the shared-manifest history comments and two maps
+  differing. The earlier frozen-candidate image proof does not qualify the
+  changed package. Its fresh installed prefix and actual native consumer checks
+  remain owed. The R01 chat is archived; its fixture and six retained homes are
+  preserved. Root retains execution and acceptance, publication/CONSUMED and
+  both capacity boundaries, resident execution, thirteen-session/four-repository
+  qualification, existing guide reconciliation and machine cutover.
+
+- E263: The matched package reaches the actual private installed native entry.
+  The seven loader controls under
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/main-prefix-c9b919e6/`
+  accept the original, copied and restored image and reject missing, extra,
+  changed-engine and receipt-identity variants. The independent 5,786-member
+  prepared-image join establishes the selected package boundary; it does not
+  establish execution. The first real native invocation fails before its first
+  frame because multiline RawValue JSON splits the LF transport. That failure
+  remains retained rather than being counted as a guard refusal.
+
+  Two-file framing repair `85d301ad` lands on main in `c81dcedb`. Its actual
+  fresh release build exits 0; the independent installed-image join covers 5,901
+  files in generation `1da4f1a8…11df0`. Direct installed-entry controls produce
+  benign multiline Read exit 0 (PID 6040), foreign-worktree Bash exit 2 with the
+  specific ownership refusal (75243), CRLF/large-numeral Read exit 0 (74877),
+  malformed UTF-8 exit 2 (50520) and malformed JSON exit 2 (92623). The image
+  and input pins remain unchanged and the recorded groups settle. Raw commands,
+  outputs, terminal observations and joins are retained under
+  `/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-image-invocation/`.
+  Framing A1–A3 have paired spec/event records 12070, 12071 and 12089; the
+  bounded framing spec is closed. The observed guard route is the compatibility
+  dispatcher. Native vendor callbacks, complete handler replacement,
+  publication, no-Python packaging, rollback and machine adoption remain
+  unqualified.
+
+  The user-appointed integration lead is session `01a164bc`. Audited claims
+  transfer the parent, publication boundary, session publication, seal
+  preparation and guard-documentation lanes to that lead. The former lead
+  completes and releases the framing slice. Existing source-landing obligations
+  remain under the new lead's accepted active bridge. The next source unit
+  connects native Git custody to the actual typed engine; separate publication
+  work retains original-ID durability, continuous writer custody,
+  ordinary-reader validation, exact CONSUMED and both 256-live-record limits.
+  Resident engine reuse and the thirteen-session/four-repository workload remain
+  integration obligations. No component checks or ownership transfer lower
+  parent acceptance.
+
+- E264: Explicit license-transport recovery unblocks the normal package build
+  without adopting or deleting retained license leaves. Candidate `4cec500a`
+  lands in `b5853bff`; A1/A2 have paired evidence events 12117/12118 and the
+  bounded recovery spec is closed. The 45-case suite exercises strict ordinary
+  refusal, changed marker identity/bytes, symlinks, locks and retention/close
+  failures. Actual stale marker `44f6240e…56b7d5` is retained byte-for-byte;
+  before/after observations preserve the existing LICENSE identity and bytes.
+  Normal build, cleanup and restaging exit 0. Raw evidence resides under
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/license-transport-recovery/`.
+  This relinquishes obsolete deletion authority; it does not prove reboot
+  causation, concurrent atomic-replacement safety or runtime cutover.
+
+- E265: Request-owned context Git reaches the actual typed one-shot engine. The
+  macOS candidate advertises its capability, performs the two fixed Git queries
+  through native custody before Ready, and preserves the absent- capability
+  legacy path elsewhere. Normal build, six actual-entry controls, 16 native
+  custody/frame-pump controls, seven protocol controls and 17 runner controls
+  execute with retained raw outputs. The initial entry fixture failure names its
+  missing runtime manifest; installing a real private runtime repairs the
+  fixture without changing the Ready/dispatch/handoff requirements.
+
+  `scripts/qualify-context-git.cjs` exercises ordinary and linked checkouts,
+  then four same/cross-repository SIGTERM/SIGKILL controls. The actual guarded
+  command refuses the one staged tracked-file deletion without arming the danger
+  latch. Each cancellation records the original native custodian, Git group and
+  pipe-holding descendant, observes all three processes disappear, and observes
+  B remain live before releasing it to its own guard and journal.
+  `integrated-main-02` exits 0 in 11.913 seconds with unchanged source/image
+  pins and no supervisor-group residue. Its native binary SHA is
+  `bea9e86db359cac4e331fb2bd0ef3beeef3515b9a6eba6f1c89bd410cff8ee9a`. Commands,
+  original failures, input/output bytes, per-client terminals, process
+  observations and journals reside under
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/`;
+  the integrated fixtures are in `ordinary-consumers-main-02/`. This qualifies
+  the bounded project-resolution path, not every classifier Git subprocess,
+  Linux custody, immutable executable launch, resident reuse, vendor callbacks,
+  full guard parity, no-Python packaging or the required
+  thirteen-session/four-repository workload. Source acceptance and landing
+  remain separate from these execution observations.
+
+- E266: Context-Git candidate `7db95f44`, integrated with main at `b18195ea`,
+  retains a normal build exit 0, the combined four-suite exit 0 with 193 checks,
+  and actual native ordinary/linked/cancellation controls in
+  `context-git-custody/{ts-committed-build-01,ts-committed-combined-01,integrated-committed-01}/`.
+  The two lint repairs reconstruct the prior checked test hashes exactly when
+  reversing only `globalThis.AbortController` and the `node:timers` import.
+  These checks preserve the six Ready/dispatch/handoff assertions, including
+  fatal cleanup uncertainty and the absent-capability legacy control.
+
+  `integrated-pending-02` adds a real escaped-group descendant holding both Git
+  pipes beyond the cleanup budget. The actual frontend exits 2 with protective
+  block JSON and the cleanup-pending diagnostic, without a pre-Ready invocation
+  journal.
+  `ordinary-consumers-pending-02/pending-pipe/retained-after-frontend.json`
+  records original Git PID 11428 unreaped, its pipe holder 11540 live, and
+  native custodian 11427 live after frontend 11365 exits. Only the fixture's
+  explicit pipe-release permits all three to disappear in the retained
+  settlement observations. The first probe's empty-output assertion was
+  incorrect: the existing native PreToolUse failure contract emits protective
+  JSON. Its failed output is retained in `integrated-pending-01/`; the repaired
+  oracle requires the exact block/diagnostic relation rather than accepting
+  arbitrary output. Both runs use the E265 native image and compiled ordinary
+  engine, with no production change. Artifact paths are relative to the E265
+  artifact root. This demonstrates retained custody through a concrete
+  unsettled-pipe case; it does not establish killing escaped groups, recovery
+  from kernel failure, immutable executable launch, residency or full cutover
+  acceptance.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7346,7 +7545,7 @@ operational correctness or selected execution.
 | `docs/architecture/caws-native-runtime.md`                                      | Frontend settlement lands in87b70fcc; resident acquisition, cancellation, bounded retention and status contract land with bb3a8b99, E240. | Update publication permit, record release and actual-reader contracts with their implementations and consumer evidence.                                                                                                                            |
 | Existing README, command-surface and hook-pack operating references             | The ordered CLI-package → shared-runtime → native-harness setup contract remains authoritative.                                           | Check native installation, upgrade, operation, registration/trust and rollback instructions against the qualified candidate and isolated runtime before machine cutover. Plans and infrastructure failures do not prove guarded-write enforcement. |
 | `docs/guides/sterling-machine-runtime-migration.md`                             | Qualified main84079dfb and source16981627 match actual SHA1d5041f4, E242.                                                                 | Recheck operations against the eventual combined package and isolated native/harness execution before machine cutover.                                                                                                                             |
-| This tracker and canonical parent acceptance                                    | E231–E257 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
+| This tracker and canonical parent acceptance                                    | E231–E262 retain bounded progress, failed attempts, owners and open consequences.                                                         | Synchronize main/source bytes after durable changes; keep33/37 partial coverage separate from0/8 parent acceptance, complete Python retirement and installed adoption.                                                                             |
 
 ## Landing obligations
 

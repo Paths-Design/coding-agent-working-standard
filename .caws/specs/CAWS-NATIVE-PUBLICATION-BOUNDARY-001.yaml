@@ -1,0 +1,85 @@
+id: CAWS-NATIVE-PUBLICATION-BOUNDARY-001
+title: 'Carry original native session operations through anchored publication and consumption'
+mode: feature
+lifecycle_state: active
+worktree: native-publication-boundary
+created_at: '2026-10-22T07:54:35.268Z'
+updated_at: '2026-10-23T08:22:34.209Z'
+created_by_session: '01a16072-908c-7033-9fd2-fb054ac7024b'
+blast_radius:
+  modules:
+    - 'Native original-bound publication and SessionEnd operation boundary'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/protocol.rs'
+    - 'packages/caws-native/src/render_bridge.rs'
+    - 'packages/caws-native/src/runner.rs'
+    - 'packages/caws-native/src/lib.rs'
+    - 'packages/caws-native/src/render_owner.rs'
+    - 'packages/caws-native/src/render_owner/'
+    - 'packages/caws-native/src/session_publication.rs'
+    - 'packages/caws-native/src/session_publication_wire.rs'
+    - 'packages/caws-native/src/service_journal/custody.rs'
+    - 'packages/caws-native/src/service_journal/'
+    - 'packages/caws-native/tests/'
+    - packages/caws-native/src/render_writer.rs
+    - packages/caws-native/src/service_journal.rs
+    - packages/caws-cli/src/runtime/session-publication-client.ts
+    - packages/caws-cli/src/runtime/session-publication-wire.ts
+    - packages/caws-cli/src/runtime/committed-session-reader.ts
+    - packages/caws-cli/src/runtime/session-log.ts
+    - packages/caws-cli/tests/runtime/session-publication-client.test.js
+    - packages/caws-cli/tests/runtime/committed-session-reader.test.js
+    - packages/caws-cli/tests/runtime/session-log.test.js
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/handler-executor.ts
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/tests/runtime/session-seal-routing.test.js
+    - packages/caws-cli/src/runtime/session-seal-runtime.ts
+    - packages/caws-cli/tests/runtime/session-seal-runtime.test.js
+    - packages/caws-native/src/session_cache.rs
+    - packages/caws-native/src/session_cache/tests.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/session_cache_wire/tests.rs
+    - packages/caws-native/src/agent_pid_cache.rs
+    - packages/caws-native/src/agent_pid_cache/tests.rs
+    - packages/caws-cli/src/runtime/session-cache-client.ts
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/tests/runtime/session-cache-client.test.js
+    - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-cli/src/runtime/json-custody.ts
+    - packages/caws-cli/tests/runtime/json-custody.test.js
+    - packages/caws-cli/scripts/qualify-session-publication.cjs
+    - docs/internal/caws-runtime-modernization.md
+  out: []
+invariants:
+  - 'Native original identity and continuous writer custody govern effects; prepared bytes confer no authority'
+  - 'No publication after stopped or unsettled acquisition; retain publication uncertainty and durable replay rejection after heavy record release'
+  - 'The 256 limit bounds live heavy work, not durable terminal original-ID history; persist the accepted original identity before effects and an exact validated CONSUMED tombstone before releasing heavy records; preserve unknown fences, continuous writer custody and fail-closed finite history exhaustion without ID eviction.'
+acceptance:
+  - id: A1
+    given: 'original native acquisition and SessionEnd captures'
+    when: 'operations execute through the existing frontend and Actor'
+    then: 'independently bound current attempts carry prepared bytes through anchored publication and exact terminal consumption'
+  - id: A2
+    given: 'interrupted or replaced inputs and duplicate identities'
+    when: 'publication or cleanup is attempted'
+    then: 'stale mixed partial and replayed work is refused with truthful retained ownership'
+  - id: A3
+    given: 'the committed native candidate and root ordinary TS consumers'
+    when: 'rooted protocol fixtures and integrated ordinary consumers execute'
+    then: 'exact current generation and seal metadata are consumed before closure and an unused helper cannot satisfy completion'
+observability:
+  - 'Raw current inputs, protocol frames, publication markers, command exits, cleanup and exact terminal consumption'
+rollback:
+  - 'Normal corrective source commit preserving durable claims and uncertain publication records'
+non_functional: {}
+contracts:
+  - name: 'native-session-publication'
+    type: behavior

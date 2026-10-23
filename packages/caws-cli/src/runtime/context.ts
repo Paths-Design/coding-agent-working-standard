@@ -4,6 +4,7 @@ import { dirname, isAbsolute, resolve, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { resolveGitBinaryForEnvironment } from '../store/git-binary';
 import { repoRootFromGitCommonDir } from '../store/repo-root';
+import { isFatalContextGitError } from './context-git-wire';
 
 export interface InvocationCaller {
   readonly cwd: string;
@@ -160,6 +161,7 @@ export async function resolveRuntimeProject(
     checkout = await git.run(['rev-parse', '--show-toplevel'], candidate);
     if (!isAbsolute(checkout)) throw new Error('Git checkout must be absolute');
   } catch (error) {
+    if (isFatalContextGitError(error)) throw error;
     return Object.freeze({
       status: 'inactive',
       reason: 'outside a resolvable Git project',

@@ -1,0 +1,132 @@
+id: CAWS-STORE-BASELINE-CONSUMPTION-001
+title: 'Retain context-bound in-process store baseline consumption evidence'
+mode: feature
+lifecycle_state: active
+worktree: store-baseline-consumption
+created_at: '2026-10-22T09:02:31.084Z'
+updated_at: '2026-10-22T20:04:01.430Z'
+created_by_session: '01a157bd-8bb6-7fc1-9322-6120a73b5a72'
+blast_radius:
+  modules:
+    - 'Ordinary store mutation runner and pinned Jest environment observer'
+    - 'Run-bound baseline evidence validation and hostile-path contract tests'
+    - 'Awaited public Stryker API launcher and explicit terminal outcome custody'
+    - 'Original-parent mutation witness and public-runner job and suite admission'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/mutation-vm-observer.cjs'
+    - 'packages/caws-cli/scripts/mutation-jest-environment.cjs'
+    - 'packages/caws-cli/scripts/mutation-vm-evidence.mjs'
+    - 'packages/caws-cli/scripts/run-mutation.mjs'
+    - 'packages/caws-cli/scripts/stryker-config.cjs'
+    - 'packages/caws-cli/scripts/mutation-input-identity.mjs'
+    - 'packages/caws-cli/scripts/assert-mutation-report.mjs'
+    - 'packages/caws-cli/tests/ci/mutation-vm-observer.test.js'
+    - 'packages/caws-cli/tests/ci/mutation-vm-evidence.test.js'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+    - packages/caws-cli/scripts/run-stryker.mjs
+    - packages/caws-cli/tests/ci/mutation-stryker-launcher.test.js
+    - packages/caws-cli/scripts/mutation-parent-witness.mjs
+    - packages/caws-cli/scripts/mutation-worker-witness.cjs
+    - packages/caws-cli/scripts/mutation-test-runner.mjs
+    - packages/caws-cli/scripts/mutation-jest-runner.cjs
+    - packages/caws-cli/tests/ci/mutation-witness.test.js
+  out: []
+invariants:
+  - 'All six store targets, nine selected suites, perTest coverage, concurrency two, incremental false and per-file mutation floors remain unchanged.'
+  - 'Observer qualification never confers child-process, full-campaign, exported-function semantic, native-adoption or cutover authority.'
+  - 'No child test edits, candidate direct imports, preloads, dependency changes, foreign hooks or shared runtime configuration changes.'
+  - 'The launcher uses the pinned public Stryker API with the same configFile and logLevel; dryRunOnly is omitted when the CLI flag is absent, and successful Promise resolution never resets an existing nonzero process exit code.'
+  - 'Only context-matched code submission to the compiler reference captured at observer module load and invocation of its returned module body can satisfy per-suite positives and the six-target union; missing, stale or unsupported bootstrap evidence fails closed.'
+  - 'The trusted pinned bootstrap is an explicit component boundary, not intrinsic compiler identity or defense against arbitrary earlier code execution. Preserve the transforming pre-capture wrapper counterexample; broader compiler custody, native and child-consumer proof remain parent obligations accepted by lead c5d9aeae-7064-4cbb-a3f3-fc5670c8103b.'
+  - 'Store qualification requires captured original bootstrap tools plus the actual worker startup and normalized constructor topology. Unsupported Node or JEST_JASMINE influence, package Jest configuration and selected-suite environment docblocks refuse before API execution or qualification.'
+  - 'Bootstrap plugins are the existing declared jest-runner and typescript-checker packages plus the captured original scripts/mutation-test-runner.mjs local descriptor for store, delegating the public stock Jest factory; appendPlugins remains empty and unrelated installed siblings cannot enter through wildcard discovery. No dependency, lockfile, shared runtime, global hook or additional production process changes are authorized by this descriptor.'
+  - 'Original-spawn admission, actual TestRunner job identity and preconstructor Jest suite health must reach the original parent private membership, successful-producer close byte pins and sticky refusal through both outer validation branches, report join and publication. A2 remains FAIL until genuine six-target/nine-suite healthy outer qualification and consequential fresh forged-client refusal; component, fixture-retention and socket probes cannot confer acceptance.'
+acceptance:
+  - id: A1
+    given: >-
+      the pinned Node and Jest/Stryker boundary under the audited trusted bootstrap,
+      restricted startup influence and captured dependency closure
+    when: >-
+      baseline and mutant environments submit module code to the compiler reference
+      captured at observer module load and invoke its returned body
+    then: >-
+      exact submitted UTF16 units, parameters,
+      target/test/context/run/phase/generation identity and returned-body invocation
+      outcomes are retained; mutant and unrelated contexts cannot borrow baseline
+      standing; intrinsic compiler identity and arbitrary prior monkeypatch defense
+      are not inferred
+  - id: A2
+    given: >-
+      repeated loads, teardown, reattachment, replacement of the captured VM hook
+      and observation failures within the trusted pinned bootstrap boundary
+    when: 'observer lifetimes transition or artifacts are lost, replaced, malformed or exceed finite caps'
+    then: >-
+      stale or incomplete observations cannot qualify, returned-body return/throw
+      identity and owned restoration are preserved, and replacement after
+      compiler-reference capture refuses new standing; an arbitrary pre-capture
+      wrapper is retained as an unsupported-influence counterexample
+  - id: A3
+    given: 'ordinary store runner inputs and sandbox build receipts'
+    when: 'it completes its initial baseline'
+    then: 'validation requires the actual expected nine-suite target matrix and six-target union bound to current run and sandbox outputs with original observer tool identity, while fixture-only checks remain labeled.'
+  - id: A4
+    given: 'a fresh ordinary pinned store baseline and a separately prepared distinguishing atomic-write source control'
+    when: 'normal build and baseline execute'
+    then: 'retained actual code and named test outcomes distinguish positive consumption from semantic failure without weakening production policy; child-process consumption and full mutation quality remain parent obligations.'
+  - id: A5
+    given: >-
+      captured public Stryker API, original launcher, production configuration and
+      startup influence policy
+    when: >-
+      the ordinary runner invokes resolving, rejecting, cleanup-failing and
+      resolved-nonzero API outcomes including warning-only unhandled rejection mode
+    then: >-
+      the launcher awaits the actual API lifecycle, preserves option omission and
+      nonzero exit semantics, retains current-attempt terminal artifacts and refuses
+      positive qualification without resolved API completion plus actual child exit
+      zero
+observability:
+  - 'Retained current-attempt source/output identities, exact compiled code units, finite environment/test lifecycle records, semantic test event and refusals outside source ledger.'
+rollback:
+  - 'Revert the isolated observer component through normal governed source history; preserve raw failed and successful attempts and parent qualification obligations.'
+non_functional:
+  security:
+    - 'Reject unbound, stale, foreign, missing and inconsistent observations; never install global preloads or overwrite a foreign VM hook.'
+contracts:
+  - name: 'baseline-vm-consumption'
+    type: behavior
+    path: 'packages/caws-cli/scripts/mutation-vm-observer.cjs'
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "UNCHECKED: need current actual admitted installed-environment baseline/mutant0/successive-ID/return-throw/phase/closure and no-borrowing artifacts. Candidate ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5 is committed clean in store-baseline-consumption; exact parent protocol component driver6144f67 ran once allocation9bdc9ab5 actual child0,18 tests/22 scripted TCP probes, test event11791, executionSHAca9926d69faf88d434116e03459687967b7681962254fe643920553643346e9f. Raw sanitized frames show wrong-auth first noACK/zeroMap then sticky authentication after later valid9, private membership loss and producer-pin mismatch refusals. These are parent components with synthetic pins/clients, NOT actual producer, public wrapper, Jest runner/environment, Stryker API or OUTER qualification. No full current mutation campaign, semantic contrast or native cutover verified. Prior f07 positives and b77 actual omission artifacts remain historical evidence; no transfer to ea33. Normal commit hooks and five static gates passed, doctor0E3W4I; independent committed review ongoing. "
+    recorded_at: "2026-10-22T20:45:51.347Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/parent-witness-controls-01/execution.json"
+    commit_sha: ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5
+  - criterion_id: A2
+    status: fail
+    evidence_ref: "A2 FAIL retained. Candidate ea33c0f6 committed clean, five static gates/doctor0 and independent same-provider read-only committed review found no actionable source defect; neither supplies acceptance. Actual allocated parent component run11791: child0,18 tests/22 scripted TCP probes, executionSHAca9926d69faf88d434116e03459687967b7681962254fe643920553643346e9f,176 raw retained files all manifest hashes re-read equal, owned PGID5219 absent. Wrong-auth first noACK/zeroMap followed by9 legitimate baseline generations retains authentication/unexpected-disconnect; coordinated loss and rewritten producer pins refuse in parent component. Synthetic clients/pins only: public factory, custom Jest runner, actual admitted NodeEnv/core producer, genuine six-target/nine-suite outer and full campaign UNVERIFIED. Historical b77 actual copied-core omission still supplies the failed requirement; unchanged launcher test coordinate mutation-stryker-launcher.test.js565-600 needs oracle reconciliation with actual OUTER paired falsifier, not weakening for green. Keep FAIL until fresh genuine full healthy BOTH outer branches/report join/publication, consequential fresh forged-client refusal, and causal parent-validation-only bypass control plus remaining A2 lifecycle checks. Accepted isolated PUBLIC mutantRun fault omits one actual delegate job, explicitly fabricates only that negative result/artifact standing; no production testmode/fake healthy API or incidental constructor-error credit. Kernel11702/retention11730 do not confer admission. Ledger candidate90992ed4 docblob9d02d217 contains bounded proof, unpublished pending lead human two-file claim-transfer decision; do not bypass ownership. Environment driver873f8ec2 queued NOT allocated; no new runtime. No arbitrary VM host-builtin or same-user process isolation, active mutant-arm semantic effect, native adoption, merge or cutover verified."
+    recorded_at: "2026-10-22T21:01:49.509Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/parent-witness-controls-01/execution.json"
+    commit_sha: ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "UNCHECKED: need current genuine six-target/nine-suite ordinary outer baseline with current submitted/emitted/code/tool/parent-byte bindings and all expected suites/union. Candidate ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5 is committed clean in store-baseline-consumption; exact parent protocol component driver6144f67 ran once allocation9bdc9ab5 actual child0,18 tests/22 scripted TCP probes, test event11791, executionSHAca9926d69faf88d434116e03459687967b7681962254fe643920553643346e9f. Raw sanitized frames show wrong-auth first noACK/zeroMap then sticky authentication after later valid9, private membership loss and producer-pin mismatch refusals. These are parent components with synthetic pins/clients, NOT actual producer, public wrapper, Jest runner/environment, Stryker API or OUTER qualification. No full current mutation campaign, semantic contrast or native cutover verified. Prior f07 positives and b77 actual omission artifacts remain historical evidence; no transfer to ea33. Normal commit hooks and five static gates passed, doctor0E3W4I; independent committed review ongoing. "
+    recorded_at: "2026-10-22T20:46:09.037Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/parent-witness-controls-01/execution.json"
+    commit_sha: ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "UNCHECKED: need current ordinary positive, separately prepared exact-byte semantic negative and fresh restored positive without lowering policy, with actual current producer artifacts. Candidate ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5 is committed clean in store-baseline-consumption; exact parent protocol component driver6144f67 ran once allocation9bdc9ab5 actual child0,18 tests/22 scripted TCP probes, test event11791, executionSHAca9926d69faf88d434116e03459687967b7681962254fe643920553643346e9f. Raw sanitized frames show wrong-auth first noACK/zeroMap then sticky authentication after later valid9, private membership loss and producer-pin mismatch refusals. These are parent components with synthetic pins/clients, NOT actual producer, public wrapper, Jest runner/environment, Stryker API or OUTER qualification. No full current mutation campaign, semantic contrast or native cutover verified. Prior f07 positives and b77 actual omission artifacts remain historical evidence; no transfer to ea33. Normal commit hooks and five static gates passed, doctor0E3W4I; independent committed review ongoing. "
+    recorded_at: "2026-10-22T20:46:18.058Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/parent-witness-controls-01/execution.json"
+    commit_sha: ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "UNCHECKED: need current public Stryker resolving/rejecting/cleanup-failing/resolved-nonzero/warn-mode lifecycle and actual child-exit semantics through captured launcher. Candidate ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5 is committed clean in store-baseline-consumption; exact parent protocol component driver6144f67 ran once allocation9bdc9ab5 actual child0,18 tests/22 scripted TCP probes, test event11791, executionSHAca9926d69faf88d434116e03459687967b7681962254fe643920553643346e9f. Raw sanitized frames show wrong-auth first noACK/zeroMap then sticky authentication after later valid9, private membership loss and producer-pin mismatch refusals. These are parent components with synthetic pins/clients, NOT actual producer, public wrapper, Jest runner/environment, Stryker API or OUTER qualification. No full current mutation campaign, semantic contrast or native cutover verified. Prior f07 positives and b77 actual omission artifacts remain historical evidence; no transfer to ea33. Normal commit hooks and five static gates passed, doctor0E3W4I; independent committed review ongoing. "
+    recorded_at: "2026-10-22T20:46:27.069Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-baseline-consumption/attempt-01/parent-witness-controls-01/execution.json"
+    commit_sha: ea33c0f6a5cfd9927a13dce76c6f476dd589c0a5

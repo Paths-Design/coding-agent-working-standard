@@ -4,6 +4,7 @@ import type { AgentSurface } from '../init/hook-packs/types';
 import { MACHINE_EVENTS } from '../init/native-hook-identification';
 import type { HookEvent, NativeResult, NativeTextResult } from './types';
 import { invocationCaller, type InvocationCaller } from './context';
+import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
 import {
   objectMemberSource,
   parseJsonSource,
@@ -41,6 +42,8 @@ export interface RuntimeRequest {
   readonly surface: AgentSurface;
   readonly event: HookEvent;
   readonly configuration: 'system' | 'project';
+  /** Native-owned finite project resolution before Ready; absent on older frontends. */
+  readonly contextGit?: typeof CONTEXT_GIT_CAPABILITY;
   /** Native-owned one-shot cache exchange; older frontends omit this capability. */
   readonly sessionCache?: typeof SESSION_CACHE_CAPABILITY;
   /** Optional finite native query profile; this does not select a stock consumer. */
@@ -148,6 +151,7 @@ export function decodeRuntimeRequest(
       'deadlineEpochMs',
       'inputJson',
       'payload',
+      ...(Object.hasOwn(value, 'contextGit') ? ['contextGit'] : []),
       ...(Object.hasOwn(value, 'sessionCache') ? ['sessionCache'] : []),
       ...(Object.hasOwn(value, 'sessionStore') ? ['sessionStore'] : []),
       ...(Object.hasOwn(value, 'sessionPublication') ? ['sessionPublication'] : []),
@@ -159,6 +163,8 @@ export function decodeRuntimeRequest(
   if (!identifier(value.id) || !digest(value.runtimeDigest)) {
     throw new RuntimeProtocolError('Invalid runtime request identity');
   }
+  if (Object.hasOwn(value, 'contextGit') && value.contextGit !== CONTEXT_GIT_CAPABILITY)
+    throw new RuntimeProtocolError('Unsupported context Git capability');
   if (Object.hasOwn(value, 'sessionCache') && value.sessionCache !== SESSION_CACHE_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported session cache capability');
   if (Object.hasOwn(value, 'sessionStore') && value.sessionStore !== TRANSCRIPT_STORE_CAPABILITY)
@@ -238,6 +244,7 @@ export function decodeRuntimeRequest(
     surface: value.surface as AgentSurface,
     event: value.event as HookEvent,
     configuration: value.configuration as 'system' | 'project',
+    ...(value.contextGit === CONTEXT_GIT_CAPABILITY ? { contextGit: CONTEXT_GIT_CAPABILITY } : {}),
     ...(value.sessionCache === SESSION_CACHE_CAPABILITY
       ? { sessionCache: SESSION_CACHE_CAPABILITY }
       : {}),

@@ -1,0 +1,45 @@
+id: CAWS-STOCK-ROUTE-PARSE-INPUT-DIGEST-001
+title: 'Stock route: record the reviewed digest of parse-input.sh after its comment-only revision'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Reviewed digest b61ca586 for parse-input.sh (comment-only revision of reviewed d1823c39; comment-stripped bytes identical). stock-handlers 79/79 in lane vs 22 failed on main; unreviewed-library negative control passes. F1F2 digest left unreviewed.'
+created_at: '2026-10-23T06:01:02.579Z'
+updated_at: '2026-10-23T06:05:48.966Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'caws-cli runtime stock-handlers reviewed library table'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+  out: []
+invariants:
+  - 'A digest is added only for a parse-input.sh revision whose comment-stripped bytes equal an already reviewed revision; no digest is removed and no gate is relaxed'
+  - 'The stock route still declines any library whose digest is absent from the table'
+acceptance:
+  - id: A1
+    given: 'LIBRARIES[''parse-input.sh''] lists d1823c39 (parse-input.sh at 6bc038d8) and the live file at f4168df9 digests to b61ca586 with a comment-only diff (code-only sha256 equal), so tryExecuteStockHandler declines and stock-handlers.test.js fails 22 of 116'
+    when: 'b61ca586 is appended with its review basis'
+    then: 'npx jest tests/runtime/stock-handlers.test.js passes 116/116 against the rebuilt dist'
+  - id: A2
+    given: 'the table must keep refusing unreviewed sources'
+    when: 'the suite''s ''a rehashed unreviewed library keeps the selected shell route'' case runs at the candidate'
+    then: 'it passes, showing an unknown digest still routes to the shell handler'
+rollback:
+  - 'revert the hotfix merge commit; the stock route then declines parse-input again'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Worktree stock-route-digest at the candidate: turbo build exit 0; npx jest tests/runtime/stock-handlers.test.js --ci exit 0, 79/79 (log ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/stock-digest-wt-jest.log). Baseline canonical main e9073353 (native-suites-canonical.log): 22 failed. Review basis: comment-stripped sha256 of parse-input.sh at 6bc038d8 and f4168df9 both 3d34179400a60d69...; full-file d1823c39 -> b61ca586."
+    recorded_at: "2026-10-23T06:05:10.882Z"
+    commit_sha: "0267c0640c0f5fb352495db1eeee96715f6e3289"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Same run: 'a rehashed unreviewed library keeps the selected shell route instead of inheriting stock trust' passes (1149 ms): an unlisted digest still declines the stock route. No digest removed; F1F2 digest 5495d01a deliberately absent."
+    recorded_at: "2026-10-23T06:05:14.499Z"
+    commit_sha: "0267c0640c0f5fb352495db1eeee96715f6e3289"

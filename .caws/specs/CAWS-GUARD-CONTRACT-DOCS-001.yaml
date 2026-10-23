@@ -1,0 +1,74 @@
+id: CAWS-GUARD-CONTRACT-DOCS-001
+title: 'Align the four guard landing documents with execution and qualification contracts'
+mode: doc
+lifecycle_state: active
+worktree: guard-contract-docs
+created_at: '2026-10-21T21:21:46.923Z'
+updated_at: '2026-10-22T20:13:05.239Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Existing shared guard architecture, setup, README and command-analysis guide'
+    - 'Existing worktree-isolation guide: merge preview, application defaults and automatic teardown'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'README.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - docs/guides/hook-packs.md
+    - docs/guides/command-analysis.md
+    - docs/guides/worktree-isolation.md
+  out: []
+  support: []
+invariants:
+  - 'All four existing documents are landing obligations; no new guide or duplicate progress ledger is created.'
+  - 'Implemented bounded analysis and private package observations remain distinct from proposed execution custody and separately qualified native adoption.'
+  - 'Preserve foreign pinned source and recorded guard ownership; acquire guide path claims through coordinated scope partition before editing.'
+acceptance:
+  - id: A1
+    given: 'the actual guard decoder, dispatcher, analysis policy and retained private package behavior'
+    when: 'all four documents are reconciled'
+    then: 'execution cwd/shell/startup, mandatory write versus optional pin, command-specific exits and complete three-suite/six-file verification match source without native admission claims.'
+  - id: A2
+    given: 'the proposed final-launch execution boundary and reduced Codex producer'
+    when: 'architecture and operational guidance are read'
+    then: 'implemented analysis, proposed executor, unqualified final-launch/native canary/rollback and unchanged deployed runtime remain explicit.'
+  - id: A3
+    given: 'the committed four-file diff and original landing request'
+    when: 'root grounds independent review and existing source-owner feedback'
+    then: 'all four edits are included in coherent source landing with raw scoped checks and no deferred documentation debt.'
+  - id: A4
+    given: 'the shipped worktree merge command, registered options and store writer'
+    when: 'the existing worktree-isolation guide describes experimentation and merging'
+    then: >-
+      the examples leave the target worktree before removal, preview with --dry-run,
+      distinguish default apply and --apply from preview, explain --no-close
+      teardown, and require no redundant destroy after a successful merge
+observability:
+  - 'Retain exact committed diff, source coordinates, formatter/link checks and raw review feedback; no generated review report or native proof is inferred.'
+rollback:
+  - 'Revert the logical document change through the governed lane if actual source refutes its contracts.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Four-document candidate063 plus guide3f6f234c retainedentry append. Root source-grounded bfb548e6 sharedcapture/metadata/installer/observer/selectedtarget verification plus raw34old controls15semanticfail, dangling2red, TEN561pass2legacyfail, Pythonannotation1fail→4pass and correctedSessionStart2pass. Independent committedguide review foundno conflictingclaim at385-399 and exactR01sourcecoordinates. ScopedfivegatesPASS4paths, prettier/diff0. FinalTENbfb rerun/combinedsource/nativeexecution remainopen; guide neitherclaims those nor publisherauth."
+    recorded_at: "2026-10-22T11:25:00.706Z"
+    commit_sha: "3f6f234c"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Existing fourguidecandidate preserves implementedboundedanalysis/proposedexecutor and unqualifiednativeadoption. New guide3f6 explicitly machinehomecustody manifest-boundentryidentity vs fullnativeimageverification; observationstrict0755/no repair vs explicitknownbyte/missingentry repair; unknown/symlink/multilink refusalbeforepointer and no nativefailure fallback sourcegrounded bfb. Independent committedreview/rootdischarge support only authoredsourcecontract. No deployed/global change."
+    recorded_at: "2026-10-22T11:25:02.188Z"
+    commit_sha: "3f6f234c"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Existing four-file documentation candidate3f6f234c remains committed clean in owned lane; two source-grounded narrative criteria PASS remain historical checked candidate, coherent source landing remains open. R01 source bfb was normally integratedaea8dcda and later boundedfourpath255 repair normallymerged2b1325b4 into nativeparent431; root now inspected actual681passed0failed0pending across10suites plus62Node18/22helpercases and40privatepublicCLIcases with actual retained settings/maps. This replaces earlier pending finalTEN source-check statement; it does not qualify native/global consumers. Foreign shell-analysis source lane remains active/owned01a151c0 and has not landed onmain; root will not take it over. Allfourexistingguides must land coherently with corresponding guardedexecution source and retain proposed-executor/unqualifiednative boundaries. Root retains documentation integration and finalA3; no standalone docs merge or nativeadoption claim. Separate existing migrationledger checkpoint is completed main32e608c2/parentf5ad with exactblob54efe69f; that closure does not discharge these four guides."
+    recorded_at: "2026-10-22T17:31:26.662Z"
+    commit_sha: "3f6f234c8f85372f3ca5179416ce4355abf22ff5"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Committed c58d6f8f changes only existing worktree-isolation guide. Root inspected command registration/help and shell worktree.ts789-901: dry-run preview, default applies, --apply runs readiness then real merge, mutually exclusive flags, outside-cwd guard. Writer worktrees-writer.ts2740 and2963-3005: no-close skips spec closure but retains teardown; destroy failure is explicit partial failure. Removed redundant destroy and single-transaction wording. Root source-grounded independent read-only committed review supports the bounded guide contract; no runtime rerun or native/full guarded-source landing claim. git diff --check zero; normal commit formatter succeeded; doctor actual0 with0E3W4I; allfivepolicygatesPASS acrossfive scoped existingdocpaths. A3 coherent guard-source landing remains unchecked."
+    recorded_at: "2026-10-22T20:26:04.182Z"
+    commit_sha: c58d6f8fff9d5f29564fb2b81a1f9d16e8c6c4f9

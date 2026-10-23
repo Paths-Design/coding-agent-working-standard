@@ -62,14 +62,15 @@ async function bounded<T>(promise: Promise<T>, milliseconds: number, label: stri
   }
 }
 function observeClose(started: Started): CloseObserved {
-  let observed: CloseObserved;
+  // The close listener reads `observed` only when the child closes, after this
+  // function has assigned it below.
   const close = new Promise<void>((resolve) => {
     started.child.once('close', () => {
       observed.closeConfirmed = true;
       resolve();
     });
   });
-  observed = {
+  const observed: CloseObserved = {
     started,
     closeConfirmed: false,
     stdinError: null,

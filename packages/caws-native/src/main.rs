@@ -79,14 +79,26 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     let (payload, input_json) = runner::read_payload(deadline).map_err(Failure::configuration)?;
     let request = protocol::Request::new(config, payload, input_json, deadline)
         .map_err(Failure::configuration)?;
-    let mut bytes = serde_json::to_vec(&request)
+    let bytes = request
+        .encode_frame()
         .map_err(|e| Failure::configuration(format!("request encoding: {e}")))?;
-    if bytes.len() > runner::MAX_REQUEST {
+    if bytes.len() - 1 > runner::MAX_REQUEST {
         return Err(Failure::configuration("request exceeds byte limit".into()));
     }
-    bytes.push(b'\n');
     let captured = (config.surface == "codex" && config.event == "pre_tool_use")
         .then(|| process_effect::CapturedAncestors::capture(deadline));
+    let mut context_git =
+        caws_native::context_git::ContextGitOwner::new(caws_native::context_git::Invocation {
+            id: request.id.clone(),
+            runtime_digest: request.runtime_digest.clone(),
+            deadline,
+            environment: request
+                .caller_environment()
+                .iter()
+                .map(|(key, value)| (key.into(), value.into()))
+                .collect(),
+        })
+        .map_err(Failure::configuration)?;
     let mut session =
         runner::Session::start(config, &request.id, deadline).map_err(Failure::configuration)?;
     let mut ready = None;
@@ -105,13 +117,19 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
     };
     let proposal = (|| {
         session.send(&bytes, deadline)?;
-        ready = Some(
+        ready = Some(loop {
             match protocol::validate_frame(&session.frame(deadline)?, &request)? {
-                protocol::EngineFrame::Ready(value) => value,
+                protocol::EngineFrame::ContextGitRequest(frame) => {
+                    session.run_context_git(&mut context_git, &frame, deadline)?;
+                }
+                protocol::EngineFrame::Ready(value) => {
+                    context_git.mark_ready()?;
+                    break value;
+                }
                 protocol::EngineFrame::Failure(message) => return Err(message),
                 _ => return Err("engine proposal before dispatch grant".into()),
-            },
-        );
+            }
+        });
         let service_dispatch = session.admit_render_offer(
             config,
             &request,
@@ -130,6 +148,9 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
         let mut store_attempted = false;
         loop {
             match protocol::validate_frame(&session.frame(deadline)?, &request)? {
+                protocol::EngineFrame::ContextGitRequest(_) => {
+                    return Err("context Git request after Ready".into());
+                }
                 #[cfg(feature = "sqlite-store")]
                 protocol::EngineFrame::TranscriptStoreRequest(frame) => {
                     if store_attempted {
@@ -431,6 +452,30 @@ mod sqlite_build_identity;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args
+        .first()
+        .is_some_and(|arg| arg == "context-git-custodian")
+    {
+        let result = (|| {
+            let fd = args
+                .get(1)
+                .filter(|_| args.len() == 2)
+                .and_then(|value| {
+                    value
+                        .parse::<i32>()
+                        .ok()
+                        .filter(|fd| fd.to_string() == *value)
+                })
+                .filter(|fd| (64..=1_048_576).contains(fd))
+                .ok_or("context-git-custodian requires one inherited control descriptor")?;
+            caws_native::context_git::run_custodian(fd)
+        })();
+        if let Err(error) = result {
+            eprintln!("CAWS context Git custodian refused: {error}");
+            std::process::exit(75);
+        }
+        return;
+    }
     // Identity is a separate tooling command; failures must not reach the
     // invocation fallback, whose no-event infrastructure policy may exit zero.
     if args

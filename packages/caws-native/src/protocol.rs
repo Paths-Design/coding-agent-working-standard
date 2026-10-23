@@ -52,6 +52,8 @@ pub struct Request {
     event: String,
     configuration: String,
     session_cache: &'static str,
+    #[cfg(target_os = "macos")]
+    context_git: &'static str,
     #[cfg(feature = "sqlite-store")]
     session_store: &'static str,
     caller: Caller,
@@ -61,6 +63,34 @@ pub struct Request {
 }
 
 impl Request {
+    /// RawValue retains payload formatting. Compact only JSON whitespace outside
+    /// strings so a payload newline cannot terminate the transport frame early.
+    /// Keep input_json's decoded bytes and every raw number token unchanged.
+    pub fn encode_frame(&self) -> serde_json::Result<Vec<u8>> {
+        let mut bytes = serde_json::to_vec(self)?;
+        let mut quoted = false;
+        let mut escaped = false;
+        bytes.retain(|byte| {
+            if quoted {
+                if escaped {
+                    escaped = false;
+                } else if *byte == b'\\' {
+                    escaped = true;
+                } else if *byte == b'"' {
+                    quoted = false;
+                }
+                true
+            } else if *byte == b'"' {
+                quoted = true;
+                true
+            } else {
+                !matches!(*byte, b' ' | b'\t' | b'\r' | b'\n')
+            }
+        });
+        bytes.push(b'\n');
+        Ok(bytes)
+    }
+
     #[cfg(feature = "sqlite-store")]
     pub fn transcript_store_invocation<'a>(
         &'a self,
@@ -137,6 +167,8 @@ impl Request {
             event: config.event.clone(),
             configuration: config.configuration.clone(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            #[cfg(target_os = "macos")]
+            context_git: caws_native::context_git::CAPABILITY,
             #[cfg(feature = "sqlite-store")]
             session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller::capture()?,
@@ -204,6 +236,7 @@ pub struct Ready {
 
 pub enum EngineFrame {
     Ready(Ready),
+    ContextGitRequest(Vec<u8>),
     SessionCacheRequest(Vec<u8>),
     #[cfg(feature = "sqlite-store")]
     TranscriptStoreRequest(Vec<u8>),
@@ -309,6 +342,14 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    if header.schema == "caws.runtime.context-git.request.v1" {
+        if bytes.len() > caws_native::context_git::MAX_REQUEST {
+            return Err("context Git request exceeds frame budget".into());
+        }
+        // Classification does not grant spawning. The pre-Ready owner checks
+        // every field, sequence and invocation identity before creating custody.
+        return Ok(EngineFrame::ContextGitRequest(bytes.to_vec()));
+    }
     #[cfg(feature = "sqlite-store")]
     if header.schema == caws_native::transcript_store_wire::REQUEST_SCHEMA {
         // Classification is not admission. The single-use store owner must
@@ -494,6 +535,8 @@ mod tests {
             event: "pre_tool_use".into(),
             configuration: "system".into(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            #[cfg(target_os = "macos")]
+            context_git: caws_native::context_git::CAPABILITY,
             #[cfg(feature = "sqlite-store")]
             session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller {
@@ -505,6 +548,85 @@ mod tests {
             payload: RawValue::from_string("{}".into()).unwrap(),
             input_json: "{}".into(),
         }
+    }
+    #[test]
+    fn context_git_capability_and_typed_owner_boundary_are_explicit() {
+        let request = fixture_request();
+        let encoded: serde_json::Value =
+            serde_json::from_slice(&request.encode_frame().unwrap()).unwrap();
+        #[cfg(target_os = "macos")]
+        assert_eq!(encoded["contextGit"], caws_native::context_git::CAPABILITY);
+        #[cfg(not(target_os = "macos"))]
+        assert!(!encoded.as_object().unwrap().contains_key("contextGit"));
+        let bytes = br#"{"schema":"caws.runtime.context-git.request.v1","id":"foreign","ordinal":2,"arbitrary":true}"#;
+        match validate_frame(bytes, &request).unwrap() {
+            EngineFrame::ContextGitRequest(retained) => assert_eq!(retained, bytes),
+            _ => panic!("context request did not reach its typed owner"),
+        }
+        let oversized = serde_json::to_vec(&serde_json::json!({"schema":"caws.runtime.context-git.request.v1", "padding":"x".repeat(caws_native::context_git::MAX_REQUEST)})).unwrap();
+        assert_eq!(
+            validate_frame(&oversized, &request).err(),
+            Some("context Git request exceeds frame budget".into())
+        );
+    }
+
+    #[test]
+    fn request_frame_preserves_raw_payload_and_original_input_across_formatting() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct RetainedRequest {
+            payload: Box<RawValue>,
+            input_json: String,
+        }
+        let cases = [
+            ("{}", "{}"),
+            ("{\n  \"tool\": \"Read\"\n}\n", r#"{"tool":"Read"}"#),
+            (
+                "{\r\n\t\"nested\": [\r\n 1, { \"value\": true }\r\n ]\r\n}\r\n",
+                r#"{"nested":[1,{"value":true}]}"#,
+            ),
+            (
+                r#"{ "quoted": " space \n \r \t \" \\ 雪 " }"#,
+                r#"{"quoted":" space \n \r \t \" \\ 雪 "}"#,
+            ),
+            (
+                "{\n \"large\": 900719925474099312345678901234567890,\n \"exponent\": 1.000e+400,\n \"negativeZero\": -0.00\n}",
+                r#"{"large":900719925474099312345678901234567890,"exponent":1.000e+400,"negativeZero":-0.00}"#,
+            ),
+            (
+                r#"{ "same": -0, "same": 2.000e-09, "slash": "\\", "after": [ 3 ] }"#,
+                r#"{"same":-0,"same":2.000e-09,"slash":"\\","after":[3]}"#,
+            ),
+        ];
+        for (input, expected_payload) in cases {
+            let mut request = fixture_request();
+            request.payload = RawValue::from_string(input.to_owned()).unwrap();
+            request.input_json = input.to_owned();
+            let frame = request.encode_frame().unwrap();
+            assert_eq!(frame.iter().filter(|byte| **byte == b'\n').count(), 1);
+            assert_eq!(frame.last(), Some(&b'\n'));
+            assert!(!frame.contains(&b'\r'));
+            let decoded: RetainedRequest = serde_json::from_slice(&frame).unwrap();
+            assert_eq!(decoded.input_json.as_bytes(), input.as_bytes());
+            assert_eq!(decoded.payload.get(), expected_payload);
+            // The ordinary first-LF reader must receive the entire JSON envelope.
+            let first = frame.split(|byte| *byte == b'\n').next().unwrap();
+            let first_decoded: RetainedRequest = serde_json::from_slice(first).unwrap();
+            assert_eq!(first_decoded.input_json, input);
+        }
+    }
+
+    #[test]
+    fn pretty_raw_payload_is_a_real_negative_control_for_uncompacted_framing() {
+        let mut request = fixture_request();
+        request.input_json = "{\n \"nested\": {\n \"n\": 123\n }\n}".into();
+        request.payload = RawValue::from_string(request.input_json.clone()).unwrap();
+        let unframed = serde_json::to_vec(&request).unwrap();
+        let truncated = unframed.split(|byte| *byte == b'\n').next().unwrap();
+        assert!(truncated.ends_with(b"\"payload\":{"));
+        assert!(serde_json::from_slice::<Box<RawValue>>(truncated).is_err());
+        let repaired = request.encode_frame().unwrap();
+        assert!(serde_json::from_slice::<Box<RawValue>>(&repaired).is_ok());
     }
     #[test]
     #[cfg(feature = "sqlite-store")]

@@ -3,7 +3,8 @@ import { isAbsolute, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import type { AgentSurface } from '../init/hook-packs/types';
 import { settleMessageOffer } from '../store/messages-store';
-import { invocationEnvironment, resolveRuntimeProject } from './context';
+import { invocationEnvironment, resolveRuntimeProject, type ContextGitPort } from './context';
+import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
 import {
   composeHandlers,
   ComposerExecutionError,
@@ -196,8 +197,11 @@ export interface PreparedRuntimeInvocation {
 export async function prepareRuntimeInvocation(
   request: RuntimeRequest,
   signal: AbortSignal,
-  nativeSessionCache?: NativeSessionCachePort
+  nativeSessionCache?: NativeSessionCachePort,
+  contextGit?: ContextGitPort
 ): Promise<PreparedRuntimeInvocation> {
+  if (request.contextGit === CONTEXT_GIT_CAPABILITY && !contextGit)
+    throw new Error('Native context Git capability requires its request-owned port');
   const environment = invocationEnvironment(request.caller);
   clearGuardConfigurationTransport(environment);
   for (const name of [
@@ -217,7 +221,8 @@ export async function prepareRuntimeInvocation(
   const context = await resolveRuntimeProject(
     request.payload,
     request.caller,
-    request.deadlineEpochMs
+    request.deadlineEpochMs,
+    contextGit
   );
   const selection =
     context.status === 'resolved'

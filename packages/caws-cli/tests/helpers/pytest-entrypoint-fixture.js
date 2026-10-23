@@ -395,6 +395,9 @@ async function qualifyEntrypoint({ artifactRoot, label, omitPretest = false }) {
   const fixture = createQualificationFixture({ artifactRoot, label });
   const { fixtureRoot, packageRoot, evidenceRoot, consumerRoot } = fixture;
   copyTree(path.join(SOURCE_ROOT, 'docs'), path.join(fixtureRoot, 'docs'));
+  // The package build stages the repository LICENSE from ../../LICENSE; the
+  // fixture root must carry it for the cold build to reach the entrypoint.
+  fs.copyFileSync(path.join(SOURCE_ROOT, 'LICENSE'), path.join(fixtureRoot, 'LICENSE'));
   for (const name of ['src', 'scripts', 'surfaces', 'templates'])
     copyTree(path.join(PACKAGE_ROOT, name), path.join(packageRoot, name));
   fs.copyFileSync(

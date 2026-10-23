@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: shell-analysis
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-19T14:26:07.682Z'
+updated_at: '2026-10-22T21:20:26.269Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -25,34 +25,42 @@ scope:
     - 'packages/caws-cli/scripts/build-cli.js'
     - 'packages/caws-cli/package.json'
     - 'package-lock.json'
-    - 'docs/guides/command-analysis.md'
-    - 'docs/guides/hook-packs.md'
     - packages/caws-cli/mutation-policy.json
     - packages/caws-cli/stryker.analysis.conf.js
     - packages/caws-cli/tests/ci/mutation-contract.test.js
     - .github/workflows/mutation.yml
-    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-analysis.sh
     - packages/caws-cli/tests/shell/mutation-view.test.js
     - packages/caws-cli/tests/hooks/bash-write-guard-analysis.test.js
-    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/hooks/bats/helpers.bash
     - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
     - packages/caws-cli/tests/hooks/scope-priority-over-allowlist.test.js
     - packages/caws-cli/tests/hooks/guard-allowlist-sync.test.js
     - packages/caws-cli/docs/command-reference.md
-    - packages/caws-cli/tests/init/pack-fingerprints.json
     - packages/caws-cli/tests/hooks/bats/bash-write-guard.bats
     - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
     - packages/caws-cli/templates/hook-packs/shared/quiet-merge.sh
     - packages/caws-cli/tests/hooks/bats/quiet-merge.bats
+    - packages/caws-cli/tests/shell/interpreter-effects.test.js
   out: []
+  support:
+    - docs/guides/command-analysis.md
+    - docs/guides/hook-packs.md
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/caws-state.sh
+    - packages/caws-cli/tests/hooks/bats/guard-realpath-python-absent.bats
+    - README.md
+    - docs/architecture/hook-pack-shared-core.md
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
   - 'Literal data remains data; quotes, branch alternatives, assignment order and finite-loop state are preserved. Existing lifecycle release and foreign work remain preserved.'
   - 'Known incomplete native producer projections never confer command admission or lifecycle rewrite authority; the deployed runtime is retained until a qualified execution contract and isolated native canary exist.'
+  - 'The landing includes the architecture cwd contract, hook setup, README exit semantics and command-analysis verification updates. These four documents distinguish implemented bounded analysis and packaged consumer behavior, the proposed CAWS execution boundary, and native adoption that requires separate final-launch, canary and rollback qualification; they are part of the landing, not deferred follow-up work.'
 acceptance:
   - id: A1
     given: 'a declared supported Bash subset and exact command bytes'
@@ -144,14 +152,16 @@ evidence:
     commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
   - criterion_id: A5
     status: unchecked
-    evidence_ref: "Candidate4bde is committed/clean, not merged/installed/published. Current packaged consumer/parser/loader/docs and9pin cases pass; doctor0E/3inheritedW/4I; gates allpass over46files. Full core mutation all5>=80%,zero timeouts. Independent peer inspected committed83c and4bde delta; load-bearing replay-index provenance repaired and counterexample checked; NUL semantics/fingerprint grounded in source/tests. Entire scoped completion remains unproven: A6 has same-project interpreter-write counterexample; final effective native invocation/full-chain canary and updated whole-machine rollback not demonstrated. Known Codex decoder refuses incomplete producer; routine adoption would block benign calls, so deployed runtime retained. Owner root session01a151c0-4722-76a0-9814-eb680a4be9b2 in owned shell-analysis lane. External prerequisite/resumption trigger: qualified trusted host final-launch integration with complete effective context/routing, then effect profiles/confinement, isolated native canary and rollback. Proposed design docs/guides/command-analysis.md:338; no executor implementation/host fork claimed."
-    recorded_at: "2026-10-19T20:57:10.666Z"
-    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+    evidence_ref: "Continuation of event10612/hash483f8113d35f49e55d4ce868914df1b6663cb53c7a783786169d7343c25b567f; prior exact test/mutation artifacts remain historical bounded evidence, not whole-six. Root clean5ace, no final mutation launched. R19 child39d06b1a repairs actual LF-only/empty-output normalization admission; c4 reports29case red/green sweeps, not yet root accepted. Additional source-derived valid LF-ending root identity defect remains: no setup rejection found; helper successful bytes are stripped by caller substitution, BWG158/160 can test a truncated missing governance root and exit0. Explorer/source checked; downstream guard consequence not yet executed. Legacy parity test is not identity proof. Parent01a15a2a received HOLD and owns c4 repair coordination; root retains child merge, linked-base two-tree synchronization, pack refresh and final fullsix quality. Child must settle before protected shell base update, parent four-doc refresh/exactSHA, normal combined merge and final canonical profile against that combined committed candidate. Earlier aborted preparation captured0d150126 tree with successful build/lint/8suite1950 checks, but failed86scope/174path precommit gate; normal merge-abort succeeded and rootHEAD stayed5ace. Retained prepared-docs-result.json/patch and combined-docs-gates.log under guard-coordination-20261021; generated dist is stale until final build. Four mandatory docs stay required in same main landing; proposed executor is design-only, native adoption/final-launch/canary/whole-machine rollback remain unqualified and deployed408c06a7 is retained. Frozen foreign executable-path refusal of external prepare.cjs reviewed as design input only; not executed/retried/carrier-substituted and not admitted by current bounded interpreter profile. --verify checks commit identity only, not raw test execution or unchecked claims."
+    recorded_at: "2026-10-22T01:20:56.106Z"
+    commit_sha: "5ace5a527b60de757c367846109efabd9f471f6b"
   - criterion_id: A6
-    status: fail
-    evidence_ref: "Benign Node/search data, finite shell write targets, nested/foreign shell writes, cross-repository interpreter hints, missing/malformed backend cases passed installed tarball checks at4bde; raw ignored packages/caws-cli/reports/mutation-analysis/package-4bde1f49.log inspected. However earlier actual packaged probe observed0/admit for Node write source naming another worktree inside the same project, while explicit shell target was refused2. No submitted program executed. Current bash-write-guard.sh:390-396 confirms interpreter literal candidates stop before the ownership oracle; recognizing literals is not an effect profile. Thus real foreign interpreter writes are not generally refused and this criterion fails. Do not redefine foreign to cross-repository to make it pass. Proposed owned boundary must require proven effect profile or enforced confinement before opaque interpreter admission. Source held, native runtime unchanged; no heuristic blanket permission claim."
-    recorded_at: "2026-10-19T20:57:20.906Z"
-    commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
+    status: pass
+    evidence_ref: "Scoped installed-private-package PASS at clean56ec137241f15ea8bc649b0dbc95e8a299b6a753, lineage089cab6f effect contract /cc96f991 option custody /cd1035b7 startup effects /56ec1372 assertion correction. Exact rebuilt8suite command exit0:1889passed,0failed/pending. Actual npm-packed isolated installation fixture exit0, tarballSHA91b4e390fbafc4291777018f0463f434447fa6a459e7f08ab14ac6ddc8564a62; Acorn8.15/unbash6/loader/docs shipped. Benign quoted arrow0,then-read0,quotedsearch0; same-project foreign Nodewrite2,other-repo Nodewrite2,nested shellwrite2; foreignread+ownedwrite0. Rebound initially-exported-empty coverage2,inactive emptycoverage0; trailingstartup/replacementsource/ambiguousprint2; option-boundary data0; malformed/unavailablebackend2. Lifecyclefixedstand-inexit23preserved. No submittedpayloadexecuted/sentinelsabsent. Rawcurrent+failedattempts and21source/976compiled hashes retained at /Users/darianrosebrook/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-coordination-20261021/candidate-56ec1372/inventory.json. Exact projection full-file mutation83.35%,891killed/178survived/0timeouts,report source==HEAD; unchanged classifier607mutants92.59% source==HEAD. Policies full-file mutation stillrunning: no quality completion or freshwhole6-filegate claimed. Doctor0E/3W/4I,gates5pass; independent read-only committed-candidate feedback grounded in predicate/consumer/tests, no peer-verdict authority. --verify selectedtest execution andcommit identity do not establish wholeAC or nativeproof. syntheticExecutionContext=true/nativeProducerVerified=false; deployed408c06a7 unchanged. A5/A7 remainunchecked: final-launch identity/context/routing/custody,full-chain nativecanary andwhole-machine rollback unproved; boundary is design only, no merge/install/cutover. Root retains pending policies quality check in owned shell-analysis; parent01a15a2a owns combined native integration."
+    recorded_at: "2026-10-21T19:04:14.910Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bash-write-guard-analysis.test.js::an exported startup writer cannot hide behind an inactive inherited value"
+    commit_sha: "56ec137241f15ea8bc649b0dbc95e8a299b6a753"
+    test_verified_at: "56ec137241f15ea8bc649b0dbc95e8a299b6a753"
   - criterion_id: A7
     status: unchecked
     evidence_ref: "Source/component assertions establish original-envelope custody, conflicting source/shell/startup holds, decoded physical cwd reaching ownership, project-preserving standalone lifecycle selection, no compound/quoted reroot, and exit23/stdout/stderr preservation. Current packaged log explicitly syntheticExecutionContext=true/nativeProducerVerified=false. Matching published Codex rust-v0.163.0 source83086188ae0614bd882818ff1aa23f3194962012 omits actual shell/login/per-call workdir from hook input and permits later command replacement; installed binary is not byte-verified against that source. Known native projection now held(A8), not qualified. No native final-launch/full-chain canary proves that checked invocation is what executes. Resumption requires trusted complete final-launch host contract and rewrite authorization, not another parser-only rollout. Owner/current blocker/trigger retained inA5; no native activation."

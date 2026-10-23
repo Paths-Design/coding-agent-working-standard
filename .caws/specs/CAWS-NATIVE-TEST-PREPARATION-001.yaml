@@ -1,0 +1,71 @@
+id: CAWS-NATIVE-TEST-PREPARATION-001
+title: 'Prepare native and qualification helper prerequisites for ordinary tests'
+mode: fix
+lifecycle_state: active
+worktree: native-test-preparation
+created_at: '2026-10-23T06:26:43.506Z'
+updated_at: '2026-10-23T09:03:28.806Z'
+created_by_session: '01a166d3-36ad-71a3-83a1-a1b8a6e32a7c'
+blast_radius:
+  modules:
+    - 'CLI test execution, native test builds, and CI preparation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'rust-toolchain.toml'
+    - 'turbo.json'
+    - '.github/workflows/pr-checks.yml'
+    - '.github/workflows/release-qualification.yml'
+    - 'packages/caws-cli/package.json'
+    - 'packages/caws-cli/scripts/run-tests.js'
+    - 'packages/caws-cli/scripts/prepare-test-prerequisites.js'
+    - 'packages/caws-cli/tsconfig.qualification-tests.json'
+    - 'packages/caws-cli/tests/runtime/render-session-evidence.test.js'
+    - 'packages/caws-cli/tests/shell/run-tests-exit-code.test.js'
+    - 'packages/caws-cli/tests/shell/prepare-test-prerequisites.test.js'
+    - 'packages/caws-cli/tests/ci/native-test-preparation.test.js'
+    - packages/caws-cli/scripts/qualify-context-git.cjs
+    - packages/caws-cli/scripts/clean-staged-docs.mjs
+    - packages/caws-cli/tests/docs/package-license-transport.test.js
+  out: []
+invariants:
+  - 'Every ordinary full test route prepares current compiled helpers and a feature-off host native binary before Jest; preparation failure is never a skip or successful verdict.'
+  - 'Generic test preparation never uses SQLite qualification or adopts an existing binary after a failed build; macOS actual custody remains a mandatory separate qualification.'
+acceptance:
+  - id: A1
+    given: 'a checkout without generated qualification helpers or the native test binary'
+    when: 'ordinary package tests prepare their dependencies'
+    then: 'the declared TypeScript helpers and feature-off native binary are built from current source before Jest runs.'
+  - id: A2
+    given: 'prerequisite compilation or spawning fails or is interrupted'
+    when: 'the test runner executes'
+    then: 'it returns failure before running Jest and preserves the original diagnostic.'
+  - id: A3
+    given: 'PR and release qualification start from a clean hosted checkout'
+    when: 'CI prepares tests'
+    then: 'pinned Rust and locked Cargo dependencies precede offline test compilation, native and helper source changes invalidate test caches, and a mandatory macOS job executes actual context custody tests.'
+observability:
+  - 'Retain exact preparation commands, tool versions, selected artifact identities, test output and clean-checkout observations outside source control.'
+rollback:
+  - 'Revert the preparation implementation through a normal corrective commit while retaining failing prerequisite evidence and mandatory test obligations.'
+non_functional: {}
+contracts:
+  - name: 'test-prerequisites'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected fresh-dist/fresh-target ordinary npm test: normal CLI build, both helper outputs, offline feature-off Rust1.90 binary then37 consumer/routing cases. Separate actual custody16 pass. Source pins map to committed candidate except formatter-only run-tests wrapping replayed in committed33. Linked installed dependencies; hosted npm ci unverified. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/testprep-ordinary-01/execution.json; --verify below checks commit existence only, not external artifact or execution."
+    recorded_at: "2026-10-23T08:32:32.391Z"
+    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Committed33 tests inspected and executed: compiler exits23/19, signal termination and ENOENT preserve diagnostics and prevent downstream execution despite stale outputs; missing artifacts and target symlink refuse. Source stable, no timeout or process residue. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/testprep-committed-js-01/execution.json; --verify below checks commit existence only, not external artifact or execution."
+    recorded_at: "2026-10-23T08:32:34.235Z"
+    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Workflow source and executable blocks establish pinned Rust/locked fetch before offline build and unconditional macOS custody job on PR/push main. Full-repo hash inputs and real Turbo Rust-only fixture invalidation inspected; local actual custody16 pass. Hosted clean npm ci/macOS and Ubuntu execution NOT OBSERVED; root retains obligation after landing. No hosted pass or branch-protection claim. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/turbo-rust-invalidation-04/summary.json; --verify below checks commit existence only, not external artifact or execution."
+    recorded_at: "2026-10-23T08:32:35.856Z"
+    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
