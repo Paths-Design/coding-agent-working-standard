@@ -78,7 +78,7 @@ with open(sys.argv[1]) as f:
   local sid="bats_a5_zcode"
   run_envelope_write "zcode" "$sid"
   assert_success
-  [[ -f "$CAWS_TEST_REPO/.caws/sessions/$sid/.session-envelope.json" ]]
+  assert [ -f "$CAWS_TEST_REPO/.caws/sessions/$sid/.session-envelope.json" ]
   [ "$(envelope_platform "$sid")" = "zcode" ]
 
   sid="bats_a5_codex"
@@ -149,7 +149,7 @@ with open(sys.argv[1]) as f:
     HOOK_EVENT_NAME="PreToolUse" \
     bash -c "printf '%s' '$payload' | bash '$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh'"
   assert_success
-  [[ -f "$CAWS_TEST_REPO/.caws/sessions/$sid/.session-envelope.json" ]]
+  assert [ -f "$CAWS_TEST_REPO/.caws/sessions/$sid/.session-envelope.json" ]
   [ "$(envelope_platform "$sid")" = "claude-code" ]
 }
 
@@ -191,7 +191,7 @@ _bats_write_agent_pid_json() {
     _reap_stale_agent_pid_records "$2"
   ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
   assert_success
-  [[ -f "$sdir/agent-pid-999999.json" ]]
+  assert [ -f "$sdir/agent-pid-999999.json" ]
 }
 
 @test "reap: 3-7 day band deletes only when the recorded pid is confirmed dead (kill -0)" {
@@ -225,8 +225,8 @@ _bats_write_agent_pid_json() {
   kill "$live_pid" 2>/dev/null || true
   wait "$live_pid" 2>/dev/null || true
 
-  [[ -f "$sdir/agent-pid-${live_pid}.json" ]]
-  [[ ! -f "$sdir/agent-pid-${dead_pid}.json" ]]
+  assert [ -f "$sdir/agent-pid-${live_pid}.json" ]
+  assert [ ! -f "$sdir/agent-pid-${dead_pid}.json" ]
 }
 
 @test "reap: records past the 7-day hard cutoff are deleted unconditionally, even for a live pid" {
@@ -248,7 +248,7 @@ _bats_write_agent_pid_json() {
   kill "$live_pid" 2>/dev/null || true
   wait "$live_pid" 2>/dev/null || true
 
-  [[ ! -f "$sdir/agent-pid-${live_pid}.json" ]]
+  assert [ ! -f "$sdir/agent-pid-${live_pid}.json" ]
 }
 
 @test "reap: orphaned .tmp atomic-write remnants older than 60 minutes are swept; fresh ones survive" {
@@ -265,8 +265,8 @@ _bats_write_agent_pid_json() {
   ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
   assert_success
 
-  [[ ! -f "$sdir/.agent-pid-11111.tmp.old" ]]
-  [[ -f "$sdir/.agent-pid-22222.tmp.fresh" ]]
+  assert [ ! -f "$sdir/.agent-pid-11111.tmp.old" ]
+  assert [ -f "$sdir/.agent-pid-22222.tmp.fresh" ]
 }
 
 @test "reap: rate-limited to once per hour via the marker file — a second call in the same window is a no-op" {
@@ -281,8 +281,8 @@ _bats_write_agent_pid_json() {
     _reap_stale_agent_pid_records "$2"
   ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
   assert_success
-  [[ ! -f "$sdir/agent-pid-31111.json" ]]
-  [[ -f "$sdir/.agent-pid-reap-marker" ]]
+  assert [ ! -f "$sdir/agent-pid-31111.json" ]
+  assert [ -f "$sdir/.agent-pid-reap-marker" ]
 
   # Second seed, past the hard cutoff too — but the marker is fresh (just
   # written), so this call must be a rate-limited no-op and leave it alone.
@@ -295,6 +295,6 @@ _bats_write_agent_pid_json() {
     _reap_stale_agent_pid_records "$2"
   ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
   assert_success
-  [[ -f "$sdir/agent-pid-32222.json" ]]
+  assert [ -f "$sdir/agent-pid-32222.json" ]
 }
 
