@@ -1,10 +1,11 @@
 id: CAWS-SHARED-PACK-CLIENT-BUILD-INPUT-001
 title: 'Shared pack: the renderer client is a native-image build input, not an installed managed hook'
 mode: fix
-lifecycle_state: active
-worktree: shared-pack-client-input
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Renderer client is a native-image build input: manifest entry removed, SHARED_PACK_VERSION back to 105 (install set unchanged), named non-manifest exception with pin test. 4 suites 193/193 in lane; pin negative control exit 1 against the declaring manifest.'
 created_at: '2026-10-23T06:24:05.867Z'
-updated_at: '2026-10-23T06:24:13.745Z'
+updated_at: '2026-10-23T06:34:19.801Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
