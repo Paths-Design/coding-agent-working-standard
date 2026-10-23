@@ -15,20 +15,16 @@ import {
 import { createSessionLogPublicationConsumer } from './session-log';
 import { MAX_PUBLICATION_ARTIFACT_BYTES } from './session-publication-wire';
 import { RuntimeProtocolError } from './protocol';
-import {
-  STORE_JSON_PROFILE,
-  snapshotStoreJsonProfile,
-  type StoreJsonProfile,
-} from '../transcripts/store-json';
+import { snapshotStoreJsonProfile, type StoreJsonProfile } from '../transcripts/store-json';
 
 export interface SessionStorePublicationOptions {
   readonly port: NativeTranscriptStorePublicationPort;
   readonly canonicalRoot: string;
   readonly sessionId: string;
   readonly limits: StoreProjectionLimits;
-  /** Existing callers default to 4300. Ordinary activation must supply an earned
-   * SQL profile explicitly; this is separate from prepareRender's profile. */
-  readonly sqlProfile?: StoreJsonProfile;
+  /** Caller must explicitly select a supported SQL profile. Selection alone
+   * does not establish production qualification; renderer selection is separate. */
+  readonly sqlProfile: StoreJsonProfile;
   readonly maximumProjectionBytes: number;
   /** Caller must supply admitted renderer context/calendar; no fixture defaults. */
   readonly prepareRender: (
@@ -43,6 +39,8 @@ export interface SessionStorePublicationOptions {
 export async function publishNativeTranscriptStore(
   options: SessionStorePublicationOptions
 ): Promise<SessionPublicationReceipt> {
+  // Refuse absent or unsupported selectors before observing the port or consumer.
+  const sqlProfile = snapshotStoreJsonProfile(options.sqlProfile);
   if (
     !Number.isSafeInteger(options.maximumProjectionBytes) ||
     options.maximumProjectionBytes < 0 ||
@@ -51,10 +49,6 @@ export async function publishNativeTranscriptStore(
     !['opencode', 'zcode'].includes(options.port.surface)
   )
     throw new RuntimeProtocolError('Invalid native store publication adapter input');
-  const suppliedProfile = options.sqlProfile;
-  const sqlProfile = snapshotStoreJsonProfile(
-    suppliedProfile === undefined ? STORE_JSON_PROFILE : suppliedProfile
-  );
   const consume = createSessionLogPublicationConsumer(options.consumer);
   const projection = await reconstructNativeTranscriptStore(
     options.port,
