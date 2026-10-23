@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const yaml = require('js-yaml');
@@ -75,11 +76,101 @@ test('a failed Bats suite retains raw bytes and does not suppress pytest evidenc
   expect(build.run).toBe('npm run build -w @paths.design/caws-cli');
   expect(build.if).toBe("${{ !cancelled() && steps.dependencies.outcome == 'success' }}");
   expect(scopeProbe.env.CAWS_TEST_ARTIFACT_DIR).toBe('${{ github.workspace }}/hook-artifacts');
-  expect(steps.find((step) => step.name === 'Retain hook byte artifacts').if).toBe('always()');
+  const archive = steps.find(
+    (step) => step.name === 'Archive hook byte artifacts without following fixture symlinks'
+  );
+  const upload = steps.find((step) => step.name === 'Retain hook byte artifacts');
+  expect(archive.if).toBe('always()');
+  expect(archive.shell).toBe('bash');
+  expect(upload.if).toBe('always()');
+  expect(upload.uses).toBe('actions/upload-artifact@v4');
+  expect(upload.with.path).toBe('hook-byte-artifacts.tgz');
+  expect(upload.with['if-no-files-found']).toBe('warn');
+  const batsIndex = steps.findIndex(
+    (step) => step.run === 'npm run test:bats -w @paths.design/caws-cli'
+  );
+  const pytestIndex = steps.findIndex(
+    (step) => step.run === 'npm run test:pytest -w @paths.design/caws-cli'
+  );
+  expect(batsIndex).toBeGreaterThan(-1);
+  expect(pytestIndex).toBeGreaterThan(batsIndex);
+  expect(steps.indexOf(archive)).toBeGreaterThan(pytestIndex);
+  expect(steps.indexOf(upload)).toBeGreaterThan(steps.indexOf(archive));
   expect(
     steps.find((step) => step.run?.startsWith('npm test ')).env.CAWS_RELEASE_ARTIFACT_DIR
   ).toBe('${{ github.workspace }}/release-scenarios');
-  expect(steps.find((step) => step.name === 'Retain hook byte artifacts').with.path).toContain(
-    'release-scenarios/'
-  );
+  const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR || os.tmpdir();
+  fs.mkdirSync(artifactRoot, { recursive: true });
+  const fixture = fs.mkdtempSync(path.join(artifactRoot, 'caws-workflow-archive-'));
+  try {
+    const hook = path.join(fixture, 'hook-artifacts/project');
+    const release = path.join(fixture, 'release-scenarios');
+    fs.mkdirSync(path.join(hook, '.caws'), { recursive: true });
+    fs.mkdirSync(release);
+    const receipt = Buffer.from([0, 0xff, 0xfe, 0x80, 0x0a, 0x7f]);
+    const releaseBytes = Buffer.from([0x01, 0, 0xc3, 0x28, 0x0d, 0x0a]);
+    fs.writeFileSync(path.join(hook, '.caws/receipt.bin'), receipt);
+    fs.writeFileSync(path.join(release, 'raw.bin'), releaseBytes);
+    fs.symlinkSync('loop', path.join(hook, 'loop'));
+    const runArchive = () =>
+      spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', archive.run], {
+        cwd: fixture,
+        encoding: 'utf8',
+        timeout: 10000,
+      });
+    const archived = runArchive();
+    expect({ status: archived.status, signal: archived.signal, stderr: archived.stderr }).toEqual({
+      status: 0,
+      signal: null,
+      stderr: '',
+    });
+    const archivePath = path.join(fixture, upload.with.path);
+    expect(fs.lstatSync(archivePath).isFile()).toBe(true);
+    const listing = spawnSync('tar', ['-tzf', archivePath], { encoding: 'utf8', timeout: 10000 });
+    expect({ status: listing.status, stderr: listing.stderr }).toEqual({ status: 0, stderr: '' });
+    expect(listing.stdout.trim().split('\n').sort()).toEqual(
+      [
+        'hook-artifacts/',
+        'hook-artifacts/project/',
+        'hook-artifacts/project/.caws/',
+        'hook-artifacts/project/.caws/receipt.bin',
+        'hook-artifacts/project/loop',
+        'release-scenarios/',
+        'release-scenarios/raw.bin',
+      ].sort()
+    );
+    const extracted = path.join(fixture, 'extracted');
+    fs.mkdirSync(extracted);
+    const extraction = spawnSync('tar', ['-xzf', archivePath, '-C', extracted], {
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    expect({ status: extraction.status, stderr: extraction.stderr }).toEqual({
+      status: 0,
+      stderr: '',
+    });
+    const extractedLoop = path.join(extracted, 'hook-artifacts/project/loop');
+    expect(fs.lstatSync(extractedLoop).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(extractedLoop)).toBe('loop');
+    expect(fs.readlinkSync(path.join(hook, 'loop'))).toBe('loop');
+    expect(
+      fs.readFileSync(path.join(extracted, 'hook-artifacts/project/.caws/receipt.bin'))
+    ).toEqual(receipt);
+    expect(fs.readFileSync(path.join(extracted, 'release-scenarios/raw.bin'))).toEqual(
+      releaseBytes
+    );
+
+    // A real output-path conflict must fail the workflow Bash step; it cannot
+    // turn an absent archive into apparently successful evidence retention.
+    fs.renameSync(archivePath, path.join(fixture, 'retained-success.tgz'));
+    fs.mkdirSync(archivePath);
+    const failed = runArchive();
+    expect(failed.error).toBeUndefined();
+    expect(failed.signal).toBeNull();
+    expect(failed.status).toBeGreaterThan(0);
+    expect(failed.stderr).toContain('hook-byte-artifacts.tgz');
+    expect(fs.lstatSync(archivePath).isDirectory()).toBe(true);
+  } finally {
+    if (!process.env.CAWS_TEST_ARTIFACT_DIR) fs.rmSync(fixture, { recursive: true, force: true });
+  }
 });
