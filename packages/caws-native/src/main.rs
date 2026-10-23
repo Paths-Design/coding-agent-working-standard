@@ -2,10 +2,10 @@
 compile_error!("caws-native currently requires POSIX process groups");
 mod cancellation;
 mod cli;
-mod installed_entry;
-mod native_generation;
 #[cfg(any(target_os = "macos", test))]
 mod engine_custody;
+mod installed_generation;
+mod native_generation;
 mod process_effect;
 mod protocol;
 mod render_bridge;

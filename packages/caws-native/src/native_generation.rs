@@ -7,11 +7,10 @@
 //! No policy decision, project authority, SQL capability, or frame is issued here.
 use crate::{
     cli::Config,
-    installed_entry::{MemberMetadata, Selection, Verification},
+    installed_generation::{MemberMetadata, Selection, Verification},
 };
 use std::{
     collections::BTreeMap,
-    fs,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -231,6 +230,7 @@ impl GenerationReceipt {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     fn expires() -> Instant {
         Instant::now() + Duration::from_secs(10)
     }
