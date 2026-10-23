@@ -72,6 +72,6 @@ evidence:
     commit_sha: "42e2fa5015d32d7d9014a0defba4d2465e2de6ff"
   - criterion_id: A4
     status: unchecked
-    evidence_ref: "Preparation source42e2fa50 landed through normal --no-close mergeabdb0338 into caws/native-session-publication, actual three integrated blobs equal candidate, safe parent index refresh09a->abdb after unchanged old index/worktree checks. Supported teardown/recreate established root-owned session-seal-preparation verification lane atabdb; no force or ignored build reuse. A1/A2/A3 pass records11509/10/11 and exact ac_recorded/spec readback accept pure preparation only. User-authorized original ownership transfer11487 retained; old worker no live lease and directive unavailable, no worker started. Native capture binding, writer barrier, anchored metadata replacement, exact ordinary reader consumption and all hostile publication controls remain unimplemented/unverified. No completed closure or native/cutover claim; root owns remaining integration."
-    recorded_at: "2026-10-22T14:54:08.778Z"
-    commit_sha: abdb033854c79ba506445e9abee7d84dacadd4b9
+    evidence_ref: "Preparation source already landed main6defc8aa. Actual native SessionEnd04 now exercises original binding, anchored metadata, exact seven4300-digit counts/models and lost-ACK/replaced-input controls. Full integrated warm renderer/current-generation/SQL hostile composition remains with root-owned active CAWS-NATIVE-SESSION-PUBLICATION-001 A3-A5. Root accepts this remaining A4 obligation there; retain helper A1-A3 verified string-API results without turning source landing into complete native acceptance."
+    recorded_at: "2026-10-23T09:44:59.082Z"
+    commit_sha: "6defc8aa44d296cda598a97cd7eee2f16a8a54d2"
