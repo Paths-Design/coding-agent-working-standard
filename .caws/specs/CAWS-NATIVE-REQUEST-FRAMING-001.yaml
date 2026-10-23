@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-REQUEST-FRAMING-001
 title: 'Frame multiline native hook JSON without losing source custody'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Multiline framing and exact input/numeral custody repaired, fresh receipt-built private native image passes five actual entry controls; two-file source landed on main with full-basis gates and independent review. Compatibility Python, vendor trust, lifecycle/rendering, rollback, residency and global cutover remain with the accepted lead.'
 created_at: '2026-10-23T03:46:03.360Z'
-updated_at: '2026-10-23T03:46:24.341Z'
+updated_at: '2026-10-23T05:31:57.741Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
