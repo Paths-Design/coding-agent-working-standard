@@ -1,4 +1,4 @@
-/** Fixed-query native port. No discovery, publication, retry, or stock selection. */
+/** Fixed-query native port and exhausted-closure continuation. No discovery, retry, or stock selection. */
 import { randomUUID } from 'node:crypto';
 import { isAbsolute, normalize } from 'node:path';
 import { TextDecoder } from 'node:util';
@@ -12,6 +12,13 @@ import {
 import type { StoreUtcCalendarResult } from '../transcripts/store-timestamp';
 import { parseJsonSource } from './json-custody';
 import { RuntimeProtocolError, TRANSCRIPT_STORE_CAPABILITY, type RuntimeRequest } from './protocol';
+import {
+  continueNativeSessionPublication,
+  type SessionPublicationInput,
+  type SessionPublicationPreparation,
+  type SessionPublicationConsumer,
+  type SessionPublicationReceipt,
+} from './session-publication-client';
 
 export const TRANSCRIPT_STORE_PROFILE = 'cpython-3.11.13-sqlite3.53.4-store-development.v1';
 const PREFIX = 'caws.runtime.transcript-store.';
@@ -30,6 +37,16 @@ export interface NativeTranscriptStorePort {
   calendar(seconds: bigint): Promise<StoreUtcCalendarResult>;
   /** Independently check cleanup after IteratorClose, including a thrown body. */
   assertClosed(): void;
+}
+export interface NativeTranscriptStorePublicationPort extends NativeTranscriptStorePort {
+  readonly surface: 'opencode' | 'zcode';
+  /** Local sequencing only. Native publication selection remains independently required. */
+  continuePublication(options: {
+    readonly canonicalRoot: string;
+    readonly sessionId: string;
+    readonly prepare: (input: SessionPublicationInput) => Promise<SessionPublicationPreparation>;
+    readonly consume: SessionPublicationConsumer;
+  }): Promise<SessionPublicationReceipt>;
 }
 export class NativeStoreAcquisitionError extends Error {
   constructor(readonly diagnostic: string) {
@@ -206,7 +223,7 @@ export function createNativeTranscriptStorePort(
   request: RuntimeRequest,
   transport: TranscriptStoreTransport,
   signal: AbortSignal
-): NativeTranscriptStorePort {
+): NativeTranscriptStorePublicationPort {
   requireProtocol(
     request.sessionStore === TRANSCRIPT_STORE_CAPABILITY &&
       request.configuration === 'system' &&
@@ -223,16 +240,22 @@ export function createNativeTranscriptStorePort(
   let terminalFailure: unknown;
   let confirmedClosed = false;
   let cleanupFailure: unknown;
+  const invocation = Object.freeze({ ...request });
+  const surface = request.surface as 'opencode' | 'zcode';
+  let acquisitionRoot: string | undefined;
+  let publicationEligible = false,
+    publicationAttempted = false;
   const unsettled = (error: unknown): void => {
     if (terminalFailure === undefined) terminalFailure = error;
+    publicationEligible = false;
     phase = 'failed';
   };
   const isClosed = (): boolean => phase === 'closed';
   const token = randomUUID();
   const common = (suffix: string): RecordValue => ({
     schema: PREFIX + suffix + '.v1',
-    id: request.id,
-    runtimeDigest: request.runtimeDigest,
+    id: invocation.id,
+    runtimeDigest: invocation.runtimeDigest,
     token,
   });
   const write = async (frame: RecordValue): Promise<void> => {
@@ -253,8 +276,8 @@ export function createNativeTranscriptStorePort(
     }
     requireProtocol(
       record(value) &&
-        value.id === request.id &&
-        value.runtimeDigest === request.runtimeDigest &&
+        value.id === invocation.id &&
+        value.runtimeDigest === invocation.runtimeDigest &&
         value.token === token,
       'Store frame binding mismatch'
     );
@@ -336,6 +359,9 @@ export function createNativeTranscriptStorePort(
         frame.metrics.cellBytes === totalBytes,
       'Inconsistent store completion'
     );
+    // phase/confirmedClosed also describe stopped or failed closure. Only the
+    // final successful exhaustion predicate permits the publication handoff.
+    publicationEligible = expected === 'exhausted';
   };
   const rows = async function* (canonicalRoot: string): AsyncGenerator<StoreAcquiredRow> {
     requireProtocol(!attempted && phase === 'idle', 'Store acquisition already attempted');
@@ -347,6 +373,7 @@ export function createNativeTranscriptStorePort(
       'Invalid store canonical root'
     );
     phase = 'reading';
+    acquisitionRoot = canonicalRoot;
     try {
       await write({ ...common('request'), canonicalRoot, profile: TRANSCRIPT_STORE_PROFILE });
       for (;;) {
@@ -401,7 +428,34 @@ export function createNativeTranscriptStorePort(
     }
   };
   return Object.freeze({
+    surface,
     rows,
+    async continuePublication(
+      options: Parameters<NativeTranscriptStorePublicationPort['continuePublication']>[0]
+    ) {
+      requireProtocol(
+        publicationEligible &&
+          !publicationAttempted &&
+          phase === 'closed' &&
+          pendingCalendar === null &&
+          terminalFailure === undefined &&
+          cleanupFailure === undefined &&
+          options.canonicalRoot === acquisitionRoot,
+        'Native store publication requires one successful exhausted closure and its original root'
+      );
+      publicationAttempted = true;
+      if (signal.aborted) throw signal.reason;
+      // Do not spread caller options: neither a token nor another request,
+      // transport, phase sequence or signal can replace the acquired identity.
+      return continueNativeSessionPublication(invocation, transport, signal, {
+        token,
+        expectedKinds: ['projection', 'render'],
+        canonicalRoot: options.canonicalRoot,
+        sessionId: options.sessionId,
+        prepare: options.prepare,
+        consume: options.consume,
+      });
+    },
     assertClosed(): void {
       if ((confirmedClosed && cleanupFailure === undefined) || (phase === 'idle' && !attempted))
         return;

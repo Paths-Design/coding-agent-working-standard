@@ -4,7 +4,10 @@ const {
   NativeStoreAcquisitionError,
   reconstructNativeTranscriptStore,
 } = require('../../dist/runtime/transcript-store-client');
-const { TRANSCRIPT_STORE_CAPABILITY } = require('../../dist/runtime/protocol');
+const {
+  TRANSCRIPT_STORE_CAPABILITY,
+  SESSION_PUBLICATION_CAPABILITY,
+} = require('../../dist/runtime/protocol');
 const request = {
   id: 'store-test',
   runtimeDigest: 'a'.repeat(64),
@@ -125,6 +128,100 @@ test('native store row, native UTC and close use one correlated ordered exchange
   ]);
   expect(state.reads).toBe(3);
   expect(() => state.port.assertClosed()).not.toThrow();
+});
+
+function publicationOptions(changes = {}) {
+  return {
+    canonicalRoot: root,
+    sessionId: 'original-session',
+    prepare: jest.fn(async () => ({ disposition: 'aborted', diagnostic: 'controlled refusal' })),
+    consume: jest.fn(async () => {}),
+    ...changes,
+  };
+}
+function publicationState(responses) {
+  return setup(responses, {
+    sessionPublication: SESSION_PUBLICATION_CAPABILITY,
+    deadlineEpochMs: Date.now() + 5000,
+  });
+}
+test('publication before acquisition or while a row is outstanding cannot read or prepare', async () => {
+  const state = publicationState([row(), closed('stopped')]);
+  const options = publicationOptions();
+  await expect(state.port.continuePublication(options)).rejects.toThrow(/exhausted closure/);
+  expect(state.reads).toBe(0);
+  expect(state.writes).toEqual([]);
+  const iterator = state.port.rows(root)[Symbol.asyncIterator]();
+  await iterator.next();
+  await expect(state.port.continuePublication(options)).rejects.toThrow(/exhausted closure/);
+  expect(state.reads).toBe(1);
+  expect(state.writes).toHaveLength(1);
+  expect(options.prepare).not.toHaveBeenCalled();
+  expect(options.consume).not.toHaveBeenCalled();
+  await iterator.return();
+});
+test('successful stopped closure satisfies cleanup but never publication exhaustion', async () => {
+  const state = publicationState([row(), closed('stopped')]);
+  const iterator = state.port.rows(root)[Symbol.asyncIterator]();
+  await iterator.next();
+  await iterator.return();
+  expect(() => state.port.assertClosed()).not.toThrow();
+  const options = publicationOptions();
+  await expect(state.port.continuePublication(options)).rejects.toThrow(/exhausted closure/);
+  expect(state.reads).toBe(2);
+  expect(state.writes.map((frame) => frame.action || 'request')).toEqual(['request', 'stop']);
+  expect(options.prepare).not.toHaveBeenCalled();
+  expect(options.consume).not.toHaveBeenCalled();
+});
+test.each(['failed', 'metrics', 'cleanup', 'unconfirmed', 'token', 'identity', 'lost'])(
+  'invalid %s closure never transfers publication eligibility',
+  async (fault) => {
+    const terminal = closed('exhausted', 0, 0);
+    if (fault === 'failed') {
+      terminal.end = 'failed';
+      terminal.failure = 'actual acquisition failure';
+    }
+    if (fault === 'metrics') terminal.metrics.rowsDelivered = 1;
+    if (fault === 'cleanup') terminal.cleanup.rollback = 'Failed';
+    if (fault === 'unconfirmed') terminal.closed = false;
+    if (fault === 'token') terminal.token = 'foreign-token';
+    if (fault === 'identity') terminal.id = 'another-original';
+    const state = publicationState([fault === 'lost' ? new Error('lost CLOSED') : terminal]);
+    await expect(state.port.rows(root)[Symbol.asyncIterator]().next()).rejects.toThrow();
+    const options = publicationOptions();
+    await expect(state.port.continuePublication(options)).rejects.toThrow(/exhausted closure/);
+    expect(state.reads).toBe(1);
+    expect(state.writes).toHaveLength(1);
+    expect(options.prepare).not.toHaveBeenCalled();
+    expect(options.consume).not.toHaveBeenCalled();
+  }
+);
+test('root mismatch and cancellation prevent any publication reads or output', async () => {
+  const state = publicationState([closed('exhausted', 0, 0)]);
+  await state.port.rows(root)[Symbol.asyncIterator]().next();
+  await expect(
+    state.port.continuePublication(publicationOptions({ canonicalRoot: root + '-other' }))
+  ).rejects.toThrow(/original root/);
+  const reason = new Error('cancelled after CLOSED');
+  state.signal.abort(reason);
+  await expect(state.port.continuePublication(publicationOptions())).rejects.toBe(reason);
+  expect(state.reads).toBe(1);
+  expect(state.writes).toHaveLength(1);
+});
+test('a lost publication response spends the single continuation without replaying acquisition', async () => {
+  const state = publicationState([
+    closed('exhausted', 0, 0),
+    new Error('publication response lost'),
+  ]);
+  await state.port.rows(root)[Symbol.asyncIterator]().next();
+  await expect(state.port.continuePublication(publicationOptions())).rejects.toThrow(
+    'publication response lost'
+  );
+  await expect(state.port.continuePublication(publicationOptions())).rejects.toThrow(
+    /one successful/
+  );
+  expect(state.reads).toBe(2);
+  expect(state.writes).toHaveLength(1);
 });
 test('return closes outstanding row and waits for native stop acknowledgment', async () => {
   const state = setup([row(), closed('stopped')]);
