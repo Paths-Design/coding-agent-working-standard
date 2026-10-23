@@ -259,6 +259,50 @@ test('default fixture retains its original transcript grammar without warm usage
   expect(rows).toHaveLength(10);
   expect(rows.filter((item) => item.type === 'token_usage_record')).toEqual([]);
   expect(rows[5].payload.turn_id).toBe('owner-turn-2');
+  expect(rows.map((item) => item.timestamp)).toEqual([
+    ...Array(5).fill('2026-10-01T12:01:00Z'),
+    ...Array(5).fill('2026-10-01T12:02:00Z'),
+  ]);
+});
+
+test('warm timestamps strictly separate each boundary, user, call, result, assistant and usage', () => {
+  const rows = transcript(2).trimEnd().split('\n').map(JSON.parse);
+  expect(rows.map((item) => item.timestamp)).toEqual([
+    '2026-10-01T12:01:00Z',
+    '2026-10-01T12:01:01Z',
+    '2026-10-01T12:01:02Z',
+    '2026-10-01T12:01:03Z',
+    '2026-10-01T12:01:04Z',
+    '2026-10-01T12:01:05Z',
+    '2026-10-01T12:02:00Z',
+    '2026-10-01T12:02:01Z',
+    '2026-10-01T12:02:02Z',
+    '2026-10-01T12:02:03Z',
+    '2026-10-01T12:02:04Z',
+    '2026-10-01T12:02:05Z',
+  ]);
+  expect(
+    rows.map((item) =>
+      item.type === 'response_item' ? item.payload.role || item.payload.type : item.type
+    )
+  ).toEqual([
+    'turn_context',
+    'user',
+    'function_call',
+    'function_call_output',
+    'assistant',
+    'token_usage_record',
+    'turn_context',
+    'user',
+    'function_call',
+    'function_call_output',
+    'assistant',
+    'token_usage_record',
+  ]);
+  const times = rows.map((item) => Date.parse(item.timestamp));
+  expect(times.slice(1).map((time, index) => time - times[index])).toEqual([
+    1000, 1000, 1000, 1000, 1000, 55000, 1000, 1000, 1000, 1000, 1000,
+  ]);
 });
 
 test('failed before B owes exactly the A birth, cleanup and exit, not an invented B', () => {

@@ -636,15 +636,19 @@ function warmFixtureUsage(turn: number): Record<string, number> {
 function transcript(count: number): string {
   const records: Data[] = [];
   for (let i = 1; i <= count; i++) {
-    const timestamp = `2026-10-01T12:0${i}:00Z`;
+    // Real auxiliary hook records activate chronological merging. Distinguish
+    // the warm fixture's causal events so its order oracle does not assume a
+    // different equal-timestamp tie rule from the reviewed renderer.
+    const timestamp = (second: number): string =>
+      `2026-10-01T12:0${i}:${warmSessionEnd ? String(second).padStart(2, '0') : '00'}Z`;
     records.push(
       {
-        timestamp,
+        timestamp: timestamp(0),
         type: 'turn_context',
         payload: { turn_id: 'owner-turn-' + i, cwd: project, model: 'owner-fixture-model' },
       },
       {
-        timestamp,
+        timestamp: timestamp(1),
         type: 'response_item',
         payload: {
           type: 'message',
@@ -653,7 +657,7 @@ function transcript(count: number): string {
         },
       },
       {
-        timestamp,
+        timestamp: timestamp(2),
         type: 'response_item',
         payload: {
           type: 'function_call',
@@ -663,7 +667,7 @@ function transcript(count: number): string {
         },
       },
       {
-        timestamp,
+        timestamp: timestamp(3),
         type: 'response_item',
         payload: {
           type: 'function_call_output',
@@ -672,7 +676,7 @@ function transcript(count: number): string {
         },
       },
       {
-        timestamp,
+        timestamp: timestamp(4),
         type: 'response_item',
         payload: {
           type: 'message',
@@ -686,7 +690,7 @@ function transcript(count: number): string {
     // than patching a rendered turn to manufacture a summary observation.
     if (warmSessionEnd)
       records.push({
-        timestamp,
+        timestamp: timestamp(5),
         type: 'token_usage_record',
         payload: { usage: warmFixtureUsage(i) },
       });
