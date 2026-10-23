@@ -46,8 +46,12 @@ function main(options = {}) {
   const err = options.err || ((s) => process.stderr.write(s));
   const extraArgs = options.argv || process.argv.slice(2);
 
-  const buildStatus = verdict(run('npm', ['run', 'build']), 'npm run build', err);
-  if (buildStatus !== 0) return buildStatus;
+  const preparationStatus = verdict(
+    run('npm', ['run', 'test:prepare']),
+    'npm run test:prepare',
+    err
+  );
+  if (preparationStatus !== 0) return preparationStatus;
 
   // Capture the jest verdict BEFORE cleanup so a coverageThreshold miss (or any
   // jest failure) always surfaces, even if the post-run temp-scrub itself exits

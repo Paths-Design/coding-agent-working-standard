@@ -27,6 +27,10 @@ jobs:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
         id: dependencies
+      - name: Prepare pinned Rust and locked Cargo dependencies
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal
+          cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
       - run: npm run audit:dependencies --workspaces=false
       - run: npm run build -w @paths.design/caws-cli
         id: build
@@ -67,6 +71,27 @@ jobs:
             hook-artifacts/
             release-scenarios/
           if-no-files-found: warn
+
+  native-context-custody:
+    name: Native context Git custody (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Prepare pinned Rust and locked Cargo dependencies
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal
+          cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
+      - run: npm run test:prepare -w @paths.design/caws-cli
+      - name: Exercise actual native Git custody
+        run: |
+          export CAWS_NATIVE_CUSTODY_NODE_PATH="$(command -v node)"
+          cargo +1.90.0 test --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --test context_git --jobs 2 -- --test-threads=1
 
   package-upgrade:
     name: Packaged upgrade (${{ matrix.os }}, Node ${{ matrix.node }})

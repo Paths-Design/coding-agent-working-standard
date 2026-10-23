@@ -21,12 +21,12 @@
     },
     "test": {
       "dependsOn": ["^build", "lint"],
-      "inputs": ["src/**", "tests/**", ".caws/**"],
+      "inputs": ["src/**", "tests/**", ".caws/**", "scripts/**", "tsconfig*.json", "package.json"],
       "outputs": ["coverage/**"]
     },
     "test:unit": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tests/**"],
+      "inputs": ["src/**", "tests/**", "scripts/**", "tsconfig*.json", "package.json"],
       "outputs": []
     },
     "test:watch": {
@@ -56,6 +56,15 @@
     "package.json",
     "turbo.json",
     "eslint.config.js",
-    ".prettierrc"
+    ".prettierrc",
+    "package-lock.json",
+    "rust-toolchain.toml",
+    "packages/caws-native/Cargo.toml",
+    "packages/caws-native/Cargo.lock",
+    "packages/caws-native/build.rs",
+    "packages/caws-native/src/**",
+    "packages/caws-native/tests/**",
+    "packages/caws-cli/scripts/**",
+    "packages/caws-cli/tsconfig*.json"
   ]
 }
