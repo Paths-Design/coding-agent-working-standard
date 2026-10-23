@@ -7724,8 +7724,30 @@ Additional bounded evidence and unresolved dependencies:
   TypeError from Array.isArray on a revoked Proxy. Scoped repair moves that
   inspection inside the typed error boundary; strict compilation, 23 semantic
   groups, the normal build and 32 direct Jest groups pass. The earlier failure
-  remains retained. Fresh mutation scoring, final source joining, independent
-  review and integration of the repaired calendar are outstanding.
+  remains retained. `renderer-calendar/mutation-02` exits 0 in 264.747s: 1160 of
+  1348 valid mutants are detected (86.05%), above the unchanged 80% floor. Its
+  assertion reports no errors; 170 survived and eighteen lack coverage. A
+  passing floor does not make all survivors equivalent. Final source joining,
+  independent review and integration of the repaired calendar remain open.
+
+- E289: Review of the prefix pin repair distinguishes hash admission from
+  dispatcher execution. `publication-integration/prefix-staging-bats-02`
+  executes twelve Bats cases against the committed dispatcher, exit 0 in 6.962s,
+  with stable source/test/tool pins and no remaining process group. Retained
+  `tmp/bats-run-OWnEBu/test/11/stage-out/` files contain identical 57681-byte
+  handler input and the recorded `23` / `handler-output` result through exec,
+  child-after-unlink-refusal and pipe-after-creation-refusal.
+  `test/12/stage-out/` retains two distinct stage paths, different expected and
+  received 57682-byte payloads for A and B, and both overlap witnesses. Both
+  paths are removed from their shared TMPDIR. Earlier cases retain TERM/KILL,
+  persistent unlink refusal, non-writable-parent and link-replacement
+  observations. Source inspection finds CAWS_TEMP_FILES producers but no cleanup
+  consumer in the shipping hook pack; removing its former stage entry loses no
+  cleanup. Trusted mktemp exclusive creation and invocation-local subshell state
+  separate stage ownership. These observations do not exclude hostile same-UID
+  path replacement between check and removal, prove every signal window, or
+  establish full four-handler multi-project residency. Hosted Linux
+  qualification of the repaired source remains required.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
