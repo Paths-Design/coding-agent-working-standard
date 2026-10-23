@@ -503,9 +503,9 @@ function builderFixture() {
   const toolchain = SERVICE_IMAGE_TOOLS.map((name) => {
     const file =
       name === 'bash'
-        ? '/bin/bash'
+        ? fs.realpathSync('/bin/bash')
         : name === 'sh'
-          ? '/bin/sh'
+          ? fs.realpathSync('/bin/sh')
           : name === 'caws'
             ? cawsEntry
             : fixtureExecutable;
@@ -587,6 +587,46 @@ test.each(declaredToolSets)(
     // This deliberately incomplete foreign-source fixture reaches the profile
     // check only after every declared tool passes name, path and pin validation.
     expectBuilderRefusal(options, 'undeclared project library or incomplete profile');
+  }
+);
+
+test.each(['bash', 'sh'])(
+  'fixed system %s physical target passes interpreter admission before the incomplete source profile refuses',
+  (name) => {
+    const options = builderFixture();
+    const pin = options.toolchain.find((tool) => tool.name === name);
+    expect(pin.path).toBe(fs.realpathSync('/bin/' + name));
+    expectBuilderRefusal(options, 'undeclared project library or incomplete profile');
+  }
+);
+
+test.each(['bash', 'sh'])(
+  '%s cannot be substituted by the same executable bytes at a different physical target',
+  (name) => {
+    const options = builderFixture();
+    const pin = options.toolchain.find((tool) => tool.name === name);
+    const different = path.join(root, 'different-' + name);
+    fs.copyFileSync(pin.path, different);
+    fs.chmodSync(different, 0o700);
+    expect(fs.readFileSync(different)).toEqual(fs.readFileSync(pin.path));
+    expect(fs.realpathSync(different)).not.toBe(pin.path);
+    pin.path = different;
+    // Identical bytes keep the original fingerprint valid; the fixed-system
+    // target check must reject this otherwise executable, physical candidate.
+    expectBuilderRefusal(options, 'unsupported interpreter or CLI entry');
+  }
+);
+
+test.each(['bash', 'sh'])(
+  '%s candidate alias to the correct target is refused by the unchanged component guard',
+  (name) => {
+    const options = builderFixture();
+    const pin = options.toolchain.find((tool) => tool.name === name);
+    const alias = path.join(root, 'alias-' + name);
+    fs.symlinkSync(pin.path, alias);
+    expect(fs.realpathSync(alias)).toBe(pin.path);
+    pin.path = alias;
+    expectBuilderRefusal(options, 'symlink source or image');
   }
 );
 
@@ -804,8 +844,8 @@ function reviewedProfileFixture() {
   const clientDirectory = path.resolve(__dirname, '../../dist/runtime');
   const toolchain = SERVICE_IMAGE_TOOLS.map((name) => {
     let file;
-    if (name === 'bash') file = '/bin/bash';
-    else if (name === 'sh') file = '/bin/sh';
+    if (name === 'bash') file = fs.realpathSync('/bin/bash');
+    else if (name === 'sh') file = fs.realpathSync('/bin/sh');
     else if (name === 'node') file = fs.realpathSync(process.execPath);
     else if (name === 'caws') file = path.resolve(clientDirectory, '../index.js');
     else {

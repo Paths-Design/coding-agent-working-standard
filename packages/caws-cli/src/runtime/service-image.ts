@@ -676,9 +676,13 @@ export function prepareSessionRenderImage(
     const pin = tools.find((candidate) => candidate.name === name);
     return pin ?? fail('missing tool');
   };
+  // Only these fixed OS aliases are resolved as part of the trusted system
+  // dependency boundary. Declared tool paths must already be physical: their
+  // component walks, nofollow reads, hashes and executable checks above remain
+  // mandatory, including when a candidate alias resolves to this same target.
   if (
-    tool('bash').path !== '/bin/bash' ||
-    tool('sh').path !== '/bin/sh' ||
+    tool('bash').path !== fs.realpathSync('/bin/bash') ||
+    tool('sh').path !== fs.realpathSync('/bin/sh') ||
     tool('caws').path !== path.resolve(clientDirectory, '../index.js')
   )
     fail('unsupported interpreter or CLI entry');

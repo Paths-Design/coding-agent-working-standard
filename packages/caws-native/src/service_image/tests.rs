@@ -106,9 +106,17 @@ pub(super) fn binding_fixture() -> (PreparedImageManifest, AdmissionContext) {
             .map(|name| Tool {
                 name: (*name).into(),
                 path: match *name {
-                    "bash" => "/bin/bash".into(),
+                    "bash" => fs::canonicalize("/bin/bash")
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .into(),
                     "caws" => "/index.js".into(),
-                    "sh" => "/bin/sh".into(),
+                    "sh" => fs::canonicalize("/bin/sh")
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .into(),
                     _ => format!("/tools/{name}"),
                 },
                 sha256: "c".repeat(64),
@@ -173,6 +181,98 @@ fn reseal_metadata(manifest: &mut PreparedImageManifest, context: &mut Admission
         .unwrap()
         .into();
     context.expected_image_digest = hash(&json(manifest).unwrap());
+}
+
+#[test]
+fn fixed_system_shell_physical_targets_pass_binding_and_actual_tool_pins() {
+    for name in ["bash", "sh"] {
+        let (mut manifest, mut context) = binding_fixture();
+        let tool = manifest
+            .toolchain_tcb
+            .tools
+            .iter_mut()
+            .find(|tool| tool.name == name)
+            .unwrap();
+        let expected = fs::canonicalize(format!("/bin/{name}")).unwrap();
+        assert_eq!(Path::new(&tool.path), expected, "{name} physical target");
+        tool.sha256 = hash(&fs::read(&expected).unwrap());
+        let tool = tool.clone();
+        reseal_metadata(&mut manifest, &mut context);
+        validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap();
+        let pin = verify_tool(&tool, &context, expires()).unwrap();
+        check_pins(&[pin], expires()).unwrap();
+    }
+}
+
+#[test]
+fn same_byte_shell_at_a_different_physical_target_cannot_satisfy_system_binding() {
+    let scratch = Scratch::new();
+    for name in ["bash", "sh"] {
+        let (mut manifest, mut context) = binding_fixture();
+        let tool = manifest
+            .toolchain_tcb
+            .tools
+            .iter_mut()
+            .find(|tool| tool.name == name)
+            .unwrap();
+        let expected = fs::canonicalize(format!("/bin/{name}")).unwrap();
+        let bytes = fs::read(&expected).unwrap();
+        let different = scratch.0.join(format!("different-{name}"));
+        write_mode(&different, &bytes, 0o700);
+        assert_ne!(different, expected);
+        tool.path = different.to_str().unwrap().into();
+        tool.sha256 = hash(&bytes);
+        // This physical executable passes the generic pin checks. Exact system
+        // target binding must reject it even with identical selected bytes.
+        verify_tool(tool, &context, expires()).unwrap();
+        reseal_metadata(&mut manifest, &mut context);
+        let error =
+            validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::UnsupportedProfile, "{name}");
+        assert_eq!(
+            error.operation(),
+            format!("{name} tool is not canonical system executable")
+        );
+    }
+}
+
+#[test]
+fn shell_alias_to_the_correct_target_fails_binding_and_the_nofollow_tool_walk() {
+    let scratch = Scratch::new();
+    for name in ["bash", "sh"] {
+        let (mut manifest, mut context) = binding_fixture();
+        let tool = manifest
+            .toolchain_tcb
+            .tools
+            .iter_mut()
+            .find(|tool| tool.name == name)
+            .unwrap();
+        let expected = fs::canonicalize(format!("/bin/{name}")).unwrap();
+        let alias = scratch.0.join(format!("alias-{name}"));
+        symlink(&expected, &alias).unwrap();
+        assert_eq!(fs::canonicalize(&alias).unwrap(), expected);
+        tool.path = alias.to_str().unwrap().into();
+        tool.sha256 = hash(&fs::read(&expected).unwrap());
+        let alias_error = verify_tool(tool, &context, expires()).err().unwrap();
+        assert_eq!(alias_error.kind, ErrorKind::Io, "{name}");
+        assert_eq!(alias_error.operation(), "open nofollow component", "{name}");
+        assert_eq!(
+            alias_error
+                .source
+                .as_ref()
+                .and_then(io::Error::raw_os_error),
+            Some(libc::ELOOP),
+            "{name} candidate alias must not bypass the component walk"
+        );
+        reseal_metadata(&mut manifest, &mut context);
+        let error =
+            validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::UnsupportedProfile, "{name}");
+        assert_eq!(
+            error.operation(),
+            format!("{name} tool is not canonical system executable")
+        );
+    }
 }
 
 #[test]

@@ -19,7 +19,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::{CStr, CString},
     fmt,
-    fs::{File, Metadata},
+    fs::{self, File, Metadata},
     io::{self, Read},
     os::{
         fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
@@ -706,15 +706,22 @@ fn validate_binding(
             )?;
         }
         if tool.name == "bash" {
+            // Resolve only the fixed trusted OS alias, independently of the
+            // producer. The candidate itself must name that physical target;
+            // absolute_file/verify_tool still enforce nofollow and all pins.
+            let system_bash = fs::canonicalize("/bin/bash")
+                .map_err(|e| io_error("resolve canonical system bash", e))?;
             require(
-                tool.path == "/bin/bash",
+                Path::new(&tool.path) == system_bash,
                 ErrorKind::UnsupportedProfile,
                 "bash tool is not canonical system executable",
             )?;
         }
         if tool.name == "sh" {
+            let system_sh = fs::canonicalize("/bin/sh")
+                .map_err(|e| io_error("resolve canonical system sh", e))?;
             require(
-                tool.path == "/bin/sh",
+                Path::new(&tool.path) == system_sh,
                 ErrorKind::UnsupportedProfile,
                 "sh tool is not canonical system executable",
             )?;
