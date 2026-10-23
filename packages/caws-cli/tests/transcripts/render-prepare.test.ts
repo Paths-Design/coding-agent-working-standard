@@ -10,9 +10,16 @@ import {
 } from '../../src/transcripts/render-reader';
 import {
   prepareSessionArtifacts,
+  prepareSessionArtifactsWithCalendar,
+  type RendererCalendarCatalog,
+  type RendererCalendarPort,
   type PrepareSessionArtifactsInput,
   type SessionArtifactPreparation,
 } from '../../src/transcripts/render-prepare';
+import {
+  resolveRendererCalendar,
+  RENDERER_CALENDAR_PROFILE,
+} from '../../src/transcripts/renderer-calendar';
 import { renderGet, renderInteger } from '../../src/transcripts/render-values';
 
 const transcriptPath = '/fixture/chats/s.jsonl';
@@ -924,4 +931,360 @@ test('a valid buffer kind is consulted once and the owned snapshot reaches seman
   const turn = prepared.generation.artifacts.find((item) => item.role === 'turn');
   assert.ok(turn);
   assert.equal(JSON.parse(Buffer.from(turn.bytes()).toString()).user, 'single classification');
+});
+
+async function resolvedCalendar(catalog: RendererCalendarCatalog): Promise<RendererCalendarPort> {
+  return resolveRendererCalendar({
+    ...catalog,
+    profile: RENDERER_CALENDAR_PROFILE,
+    id: 'original-calendar-invocation',
+    runtimeDigest: 'a'.repeat(64),
+    token: '52665654-e2a6-470d-bee1-b3e12f83ff59',
+    context: {
+      originalPid: process.pid,
+      tz: { kind: 'present', value: 'UTC' },
+      tzdir: { kind: 'absent' },
+    },
+    maximumTimestampBytes: 100_000,
+    maximumQueries: 512,
+    port: {
+      async observe() {
+        throw new Error('Offset timestamps/duration-only catalog must not request local calendar');
+      },
+    },
+    signal: new AbortController().signal,
+    deadlineEpochMs: Date.now() + 10_000,
+  });
+}
+function turnPayload(prepared: ReturnType<typeof ready>) {
+  const artifact = prepared.generation.artifacts.find((item) => item.role === 'turn');
+  assert.ok(artifact);
+  return JSON.parse(Buffer.from(artifact.bytes()).toString());
+}
+
+test('async missing/empty history retain precedes numeric auxiliary parsing and calendar resolution', async () => {
+  const configured = input('');
+  const poisonedAudit = file(
+    '/fixture/audit.jsonl',
+    `{"session_id":"s","event":"tool_use","unused":${'1'.repeat(4301)}}\n`
+  );
+  let calls = 0;
+  const resolver = async (catalog: RendererCalendarCatalog) => {
+    calls++;
+    return resolvedCalendar(catalog);
+  };
+  for (const transcript of [
+    { path: transcriptPath, disposition: 'absent' as const },
+    file(transcriptPath, ''),
+  ]) {
+    const result = await prepareSessionArtifactsWithCalendar(
+      {
+        ...configured,
+        transcript,
+        audit: poisonedAudit,
+        priorInventory: prior('turn-001.json'),
+      },
+      resolver
+    );
+    assert.equal(result.disposition, 'retain');
+    if (result.disposition !== 'retain') throw new Error('Expected retained history');
+    assert.equal(
+      result.reason,
+      transcript.disposition === 'absent' ? 'missing_source' : 'empty_source'
+    );
+    assert.equal(result.currentness, 'noncurrent');
+  }
+  assert.equal(calls, 0);
+  // With no human history the same malformed auxiliary is actually consulted.
+  const negative = await prepareSessionArtifactsWithCalendar(
+    {
+      ...configured,
+      audit: poisonedAudit,
+    },
+    resolver
+  );
+  if (negative.disposition !== 'failed') throw new Error('Expected auxiliary numeric refusal');
+  assert.equal(negative.failure.phase, 'auxiliary');
+  assert.equal(calls, 0);
+});
+
+test('no-history zero events remain empty without calendar while auxiliary-only events can render', async () => {
+  let calls = 0;
+  const resolver = async (catalog: RendererCalendarCatalog) => {
+    calls++;
+    return resolvedCalendar(catalog);
+  };
+  const configured = input('');
+  for (const transcript of [
+    file(transcriptPath, ''),
+    { path: transcriptPath, disposition: 'absent' as const },
+  ]) {
+    const result = await prepareSessionArtifactsWithCalendar(
+      { ...configured, transcript },
+      resolver
+    );
+    assert.equal(result.disposition, 'empty');
+  }
+  assert.equal(calls, 0);
+  const prepared = ready(
+    await prepareSessionArtifactsWithCalendar(
+      {
+        ...configured,
+        transcript: { path: transcriptPath, disposition: 'absent' },
+        audit: file(
+          '/fixture/audit.jsonl',
+          rows({
+            session_id: 's',
+            event: 'tool_use',
+            timestamp: '2026-01-01T00:00:02Z',
+            tool: 'Bash',
+            command: 'echo auxiliary',
+          })
+        ),
+      },
+      async (catalog) => {
+        calls++;
+        assert.equal(catalog.sortEpochs, true);
+        assert.deepEqual(catalog.timestamps, ['2026-01-01T00:00:02Z']);
+        return resolvedCalendar(catalog);
+      }
+    )
+  );
+  assert.equal(calls, 1);
+  assert.equal(turnPayload(prepared).refs.commands[0].command, 'echo auxiliary');
+});
+
+test('duration-only catalog retains exact normalized endpoints and null without requesting sort epochs', async () => {
+  const first = '2026-01-01T00:00:01Z',
+    last = '2026-01-01T00:00:03.500Z';
+  const configured = input(
+    rows(
+      { type: 'user', message: { content: 'run duration' } },
+      {
+        type: 'assistant',
+        timestamp: first,
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'duration-tool',
+              name: 'Bash',
+              input: { command: 'echo duration' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        timestamp: last,
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'duration-tool', content: 'duration result' },
+          ],
+        },
+      }
+    )
+  );
+  const prepared = ready(
+    await prepareSessionArtifactsWithCalendar(configured, async (catalog) => {
+      assert.equal(catalog.sortEpochs, false);
+      assert.deepEqual(catalog.timestamps, [null, first, last]);
+      assert.equal(Object.isFrozen(catalog), true);
+      assert.equal(Object.isFrozen(catalog.timestamps), true);
+      return resolvedCalendar(catalog);
+    })
+  );
+  assert.equal(turnPayload(prepared).timeline[0].duration_s, 2.5);
+});
+
+test('only actual auxiliary events trigger chronological sorting through the real calendar consumer', async () => {
+  const configured = input(
+    rows(
+      user('ordered'),
+      {
+        type: 'assistant',
+        timestamp: '2026-01-01T00:00:03Z',
+        message: { id: 'later', content: [{ type: 'text', text: 'later' }] },
+      },
+      {
+        type: 'assistant',
+        timestamp: '2026-01-01T00:00:01Z',
+        message: { id: 'earlier', content: [{ type: 'text', text: 'earlier' }] },
+      }
+    )
+  );
+  for (const sessionId of ['other', 's']) {
+    const prepared = ready(
+      await prepareSessionArtifactsWithCalendar(
+        {
+          ...configured,
+          audit: file(
+            '/fixture/audit.jsonl',
+            rows({
+              session_id: sessionId,
+              event: 'tool_use',
+              timestamp: '2026-01-01T00:00:02Z',
+              tool: 'Bash',
+              command: 'echo middle',
+            })
+          ),
+        },
+        async (catalog) => {
+          assert.equal(catalog.sortEpochs, sessionId === 's');
+          assert.equal(catalog.timestamps.includes('2026-01-01T00:00:02Z'), sessionId === 's');
+          return resolvedCalendar(catalog);
+        }
+      )
+    );
+    assert.deepEqual(
+      turnPayload(prepared)
+        .timeline.filter((item: { text?: string }) => item.text !== undefined)
+        .map((item: { text: string }) => item.text),
+      sessionId === 's' ? ['earlier', 'later'] : ['later', 'earlier']
+    );
+  }
+});
+
+test('calendar catalog retains raw empty sort keys alongside normalized null duration values', async () => {
+  const configured = input(rows(user('raw sort key'))),
+    baseRegistry = configured.registry;
+  const timestamp = '2026-01-01T00:00:02Z';
+  const prepared = ready(
+    await prepareSessionArtifactsWithCalendar(
+      {
+        ...configured,
+        registry: {
+          ...baseRegistry,
+          normalize(parsed, checkpoint) {
+            const result = baseRegistry.normalize(parsed, checkpoint);
+            return {
+              ...result,
+              events: Object.freeze(
+                result.events.map((envelope) =>
+                  Object.freeze({
+                    ...envelope,
+                    event: Object.freeze({ ...envelope.event, ts: '' }),
+                  })
+                )
+              ),
+            };
+          },
+        },
+        audit: file(
+          '/fixture/audit.jsonl',
+          rows({
+            session_id: 's',
+            event: 'tool_use',
+            timestamp,
+            tool: 'Bash',
+            command: 'echo raw sort',
+          })
+        ),
+      },
+      async (catalog) => {
+        assert.equal(catalog.sortEpochs, true);
+        assert.deepEqual(catalog.timestamps, ['', null, timestamp]);
+        return resolvedCalendar(catalog);
+      }
+    )
+  );
+  assert.equal(prepared.publication, 'not_attempted');
+});
+
+test('calendar rejection returns its exact failure with no prepared artifacts or publication claim', async () => {
+  const reason = new Error('calendar transport refused original binding');
+  const result = await prepareSessionArtifactsWithCalendar(
+    input(rows(user('retain source'))),
+    async () => {
+      throw reason;
+    }
+  );
+  if (result.disposition !== 'failed') throw new Error('Expected calendar resolution failure');
+  assert.equal(result.failure.phase, 'calendar');
+  assert.equal(result.failure.cause, reason);
+  assert.equal(result.publication, 'not_attempted');
+  assert.equal('generation' in result, false);
+});
+
+test('awaited calendar continues owned parsed state despite mutation of caller bytes context and inventory', async () => {
+  const configured = publicationInput(rows(user('owned async user')));
+  const baseRegistry = configured.registry;
+  let normalized = 0;
+  const context = {
+    ...configured.context,
+    dirtyFiles: { kind: 'number' as const, lexeme: '2', numberKind: 'integer' as const },
+  };
+  const priorInventory = prior('turn-099.json');
+  const originalSha = configured.transcript.source.descriptor.sha256;
+  let resolve!: (calendar: RendererCalendarPort) => void, reject!: (reason: Error) => void;
+  const deferred = new Promise<RendererCalendarPort>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  let catalog: RendererCalendarCatalog | undefined;
+  const pending = prepareSessionArtifactsWithCalendar(
+    {
+      ...configured,
+      context,
+      priorInventory,
+      registry: {
+        ...baseRegistry,
+        normalize(parsed, checkpoint) {
+          normalized++;
+          return baseRegistry.normalize(parsed, checkpoint);
+        },
+      },
+    },
+    async (value) => {
+      catalog = value;
+      return deferred;
+    }
+  );
+  try {
+    assert.ok(catalog, 'the owned parse must reach the resolver before mutation');
+    assert.equal(normalized, 1);
+    configured.transcript.source.bytes.fill(0);
+    configured.transcript.source.binding.token = 'mutated';
+    configured.transcript.source.descriptor.sha256 = 'c'.repeat(64);
+    context.cwd = '/mutated/project';
+    context.branch = 'mutated';
+    context.dirtyFiles.lexeme = '900';
+    priorInventory.artifacts[0]!.name = 'turn-100.json';
+    resolve(await resolvedCalendar(catalog));
+    const prepared = ready(await pending),
+      payload = turnPayload(prepared);
+    assert.equal(
+      normalized,
+      1,
+      'calendar continuation must not decode/normalize the transcript again'
+    );
+    assert.equal(payload.user, 'owned async user');
+    assert.equal(payload.context.cwd, '/repo/project');
+    assert.equal(payload.context.branch, 'feature');
+    assert.equal(payload.context.dirty_files, 2);
+    assert.deepEqual(
+      prepared.generation.proposedRemovals.map((item) => item.name),
+      ['turn-099.json']
+    );
+    assert.equal(
+      renderGet(renderGet(prepared.generation.observations, 'transcript'), 'sha256'),
+      originalSha
+    );
+  } finally {
+    reject(new Error('deferred fixture cleanup'));
+    await pending;
+  }
+});
+
+test('sync explicit calendar validation remains before missing-source retention', () => {
+  const configured = input('');
+  const result = prepareSessionArtifacts({
+    ...configured,
+    transcript: { path: transcriptPath, disposition: 'absent' },
+    priorInventory: prior('turn-001.json'),
+    calendar: { ...configured.calendar, timezone: '' },
+  });
+  if (result.disposition !== 'failed') throw new Error('Expected explicit calendar refusal');
+  assert.equal(result.failure.phase, 'input');
+  assert.match(String(result.failure.cause), /explicit calendar\/timezone/);
 });
