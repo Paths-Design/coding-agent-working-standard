@@ -7714,19 +7714,27 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                     | Next decisive check                                                                                                                                                            |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Coherent source and package delivery, isolated invocation and rollback               | Root lands package, fixture, physical-shell and artifact-retention repairs                                                          | Exact repaired candidate pack/upgrade and hosted Linux native admission, then a fresh installed package/image join and actual native refusal/rollback observations             |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration completed the bounded warm probe; source-progress identified the real Render observation prerequisite | Real Git/context and calendar producers, then actual SQL CLOSED-to-publication with ordinary semantic consumption and matched native/TS activation                             |
-| Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                               | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                | Next decisive check                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns the combined publication/CI landing, package qualification and installed-image join                                                                  | Unchanged full push checks on the combined candidate, hosted Linux admission, then fresh package/image identity and actual native refusal/rollback observations                                             |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Source-progress owns Git-context parity; native-context-git owns native calendar; publication-integration owns typed calendar; root owns carrier and selection | Actual original-process Git/calendar observations consumed by the renderer, then SQL CLOSED-to-publication with ordinary semantic consumption and matched native/TS activation                              |
+| Resident operation with fair, bounded capacity                                       | Root owns concurrent SessionEnd qualification and integration; E282 completes the bounded sequential 258-original probe                                        | Same-session writer contention plus cross-project progress and mandatory guard execution during occupancy, then unchanged thirteen-session/four-repository fairness workload, overload, restart and upgrade |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
 E280 bounded fifth warm probe completes, retaining earlier failed attempts and
-source-grounded oracle/input corrections. The SQL adapter is committed but its
-production observation inputs and selector remain unwired. Existing
-successful-operation compaction and shared-permit release require the sustained
-actual workload before residency acceptance. Package adoption, Python retirement
+source-grounded oracle/input corrections. E282 demonstrates sequential
+reclamation across 258 originals on one owner; it does not establish concurrent
+admission or fairness. The SQL adapter is integrated into the source-landing
+candidate, while its production observation inputs and selector remain unwired.
+Candidate `29555bc8` builds successfully in
+`publication-integration/source-publication-build-01` (exit 0, 6.660s);
+`source-publication-tests-01` executes 113 checks across the publication
+adapter, store client, warm-owner qualifier and CI archive contract (exit 0,
+3.789s). Raw logs and stable before/after source pins are retained;
+`source-publication-inputs-01/execution.json` additionally pins the fresh
+compiled distribution, workflow and archive test. These checks do not qualify a
+combined native image or deployed callbacks. Package adoption, Python retirement
 and machine cutover acceptance remain open.
 
 1. Refresh complete source/build/dependency identities after E188, including
