@@ -167,6 +167,7 @@ if (process.argv[2] === '--agent-child') {
     'Fresh PID refresh and empty-directory reap execution; stale candidate reaping is not qualified',
     'Diagnostic observations alone do not establish durable acceptance or heavy release',
     'One hostile synchronization attempt per case; an ACK race is an unexercised failure, never a pass',
+    'Capacity cleanup covers witnessed births and confirmed request groups; it does not exclude arbitrary detached or reparented descendants',
   ];
   function pin(file) {
     const metadata = fs.lstatSync(file);
@@ -1230,6 +1231,26 @@ if (process.argv[2] === '--agent-child') {
       )
     );
   }
+  function capacityLifecycle(observations, id) {
+    const stages = [
+      'session_original_reserved',
+      'session_writer_retained',
+      'session_consumed_durable',
+      'session_heavy_released',
+    ];
+    const lifecycle = observations
+      .map((row, index) => ({ index, row }))
+      .filter(
+        ({ row }) =>
+          row.event === 'actor_stage' && row.invocationId === id && stages.includes(row.stage)
+      );
+    assert.deepEqual(
+      lifecycle.map(({ row }) => row.stage),
+      stages,
+      'capacity original must occupy its actual reservation and writer before durable consumption and release'
+    );
+    return lifecycle;
+  }
   async function runCapacityCase(overallStarted) {
     assert.equal(originalCount, 258);
     const fixture = createCase('codex-capacity', 'codex', false, false);
@@ -1326,6 +1347,7 @@ if (process.argv[2] === '--agent-child') {
         3000,
         'capacity original heavy-release observation missing'
       );
+      const lifecycle = capacityLifecycle(ownerRows(observations), id);
       assertOriginalOwner();
       const writer = await writerProbe(current, 'released');
       assertOriginalOwner();
@@ -1357,6 +1379,7 @@ if (process.argv[2] === '--agent-child') {
         operation: pin(durable.file),
         marker: pin(path.join(current.session, '.session-publication.json')),
         terminalDigest: consumer.terminal_digest,
+        lifecycle,
         custody,
         cleanup,
         writer,
@@ -1405,7 +1428,6 @@ if (process.argv[2] === '--agent-child') {
       hostPid,
       hostBirth,
       hostTerminal: { pid: hostTerminal.pid, code: hostTerminal.code, signal: hostTerminal.signal },
-      lastAdmissionAfterCompleted: originalCount - 1,
       limits: fixture.owner.limits,
       elapsedMs: Math.round(performance.now() - overallStarted),
     };
