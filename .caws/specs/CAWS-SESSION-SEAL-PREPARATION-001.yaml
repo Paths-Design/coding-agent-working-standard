@@ -1,10 +1,9 @@
 id: CAWS-SESSION-SEAL-PREPARATION-001
 title: 'Prepare exact SessionEnd metadata for native publication'
 mode: feature
-lifecycle_state: active
-worktree: session-seal-preparation
+lifecycle_state: draft
 created_at: '2026-10-22T07:54:07.396Z'
-updated_at: '2026-10-22T07:54:09.268Z'
+updated_at: '2026-10-23T09:45:56.698Z'
 created_by_session: '01a1610b-97e1-7541-a942-31363c3a34f9'
 blast_radius:
   modules:
