@@ -394,6 +394,228 @@ test('ordinary repeat-build dist deletion permits restaging absent owned leaves'
   assertSources();
 });
 
+function custodyDiagnostic(result) {
+  refused(result, /owned record replaced or changed/);
+  const message = JSON.parse(result.stderr).message;
+  const diagnostic = message.slice(message.indexOf('; custody=') + '; custody='.length);
+  expect(Buffer.byteLength(diagnostic)).toBeLessThan(2048);
+  const data = JSON.parse(diagnostic);
+  expect(data.schema).toBe('caws.license-transport.refusal.v1');
+  expect(Object.keys(data).sort()).toEqual(
+    ['schema', 'checkpoint', 'failedPredicate', 'expected', 'observed', 'heldFdIdentity'].sort()
+  );
+  for (const observation of [data.expected, data.observed]) {
+    expect(Object.keys(observation).sort()).toEqual(['identity', 'sha256']);
+    expect(Object.keys(observation.identity).sort()).toEqual(
+      ['dev', 'ino', 'birthtimeNs', 'ctimeNs', 'mtimeNs', 'size', 'mode', 'nlink'].sort()
+    );
+    expect(observation.sha256).toMatch(/^[a-f0-9]{64}$/);
+  }
+  return data;
+}
+
+// The held marker is statted on open, by current(), and around each write.
+// Mutating after the specified real stat leaves its returned observation intact;
+// the next checkpoint must refuse rather than adopt or delete the changed record.
+test.each([
+  ['marker_open', 'append', 1],
+  ['marker_open', 'replacement', 1],
+  ['marker_open', 'timestamps', 1],
+  ['before_write', 'append', 2],
+  ['after_write', 'append', 4],
+  ['before_retire', 'append', 14],
+])(
+  'custody refusal identifies %s (%s) and skips the held FD after a path mismatch',
+  (checkpoint, mutation, mutationStat) => {
+    successful(stage());
+    const marker = path.join(pkg, markerName);
+    const before = observedFile(marker);
+    const prefix = `
+    import fs from 'node:fs';
+    const open = fs.openSync, stat = fs.fstatSync, close = fs.closeSync;
+    const marker = ${JSON.stringify(marker)};
+    let held;
+    let faults = { heldStats: 0, mutations: 0 };
+    fs.openSync = function(file, flags, ...args) {
+      const fd = open.call(fs, file, flags, ...args);
+      if (file === marker && flags === (fs.constants.O_RDWR | fs.constants.O_NOFOLLOW)) held = fd;
+      return fd;
+    };
+    fs.fstatSync = function(fd, ...args) {
+      const observed = stat.call(fs, fd, ...args);
+      if (fd === held && ++faults.heldStats === ${mutationStat}) {
+        if (${JSON.stringify(mutation)} === 'replacement') {
+          const replacement = marker + '.foreign';
+          fs.writeFileSync(replacement, fs.readFileSync(marker), { mode: 0o600 });
+          fs.renameSync(replacement, marker);
+        } else if (${JSON.stringify(mutation)} === 'timestamps') {
+          fs.utimesSync(marker, Number(observed.atimeMs) / 1000, Number(observed.mtimeMs) / 1000 + 60);
+        } else fs.appendFileSync(marker, ' ');
+        faults.mutations++;
+      }
+      return observed;
+    };
+    fs.closeSync = function(fd) {
+      if (fd === held) held = undefined;
+      return close.call(fs, fd);
+    };`;
+    const result = invoke('cleanLicenseTransport', prefix);
+    const data = custodyDiagnostic(result);
+    expect(data.checkpoint).toBe(checkpoint);
+    expect(data.failedPredicate).toBe('path_identity');
+    expect(data.heldFdIdentity).toBe('not_observed');
+    expect(JSON.parse(result.stderr).faults).toEqual({ heldStats: mutationStat, mutations: 1 });
+    const after = observedFile(marker);
+    expect(data.observed).toEqual({ identity: after.identity, sha256: after.sha256 });
+    expect(data.expected.identity).not.toEqual(data.observed.identity);
+    if (mutation === 'replacement') expect(data.observed.sha256).toBe(data.expected.sha256);
+    if (mutation === 'timestamps') {
+      expect(data.observed.sha256).toBe(data.expected.sha256);
+      expect(data.observed.identity.mtimeNs).not.toBe(data.expected.identity.mtimeNs);
+      for (const field of ['dev', 'ino', 'birthtimeNs', 'size', 'mode', 'nlink'])
+        expect(data.observed.identity[field]).toBe(data.expected.identity[field]);
+      expect(fs.readFileSync(marker)).toEqual(Buffer.from(before.bytesBase64, 'base64'));
+    }
+    if (checkpoint === 'marker_open' || checkpoint === 'before_write')
+      expect(data.expected).toEqual({ identity: before.identity, sha256: before.sha256 });
+    expect(after.type).toBe('file');
+    expect(fs.existsSync(path.join(pkg, lockName))).toBe(false);
+    if (checkpoint === 'before_retire') {
+      expect(ledger().entries).toEqual([]);
+      for (const [name] of transports) expect(fs.existsSync(path.join(pkg, name))).toBe(false);
+    } else assertTransports();
+    assertSources();
+  }
+);
+
+test('byte mismatch reports captured hashes and skips the held FD without reopening for diagnostics', () => {
+  successful(stage());
+  const marker = path.join(pkg, markerName);
+  const before = observedFile(marker);
+  const changed = Buffer.from(fs.readFileSync(marker));
+  changed[changed.length - 1] = 32; // Same-length observation fault; filesystem identity is unchanged.
+  const prefix = `
+    import fs from 'node:fs';
+    const open = fs.openSync, read = fs.readFileSync, stat = fs.fstatSync, close = fs.closeSync;
+    const marker = ${JSON.stringify(marker)};
+    let held;
+    const readers = new Set();
+    let faults = { pathReads: 0, heldStats: 0, mutations: 0 };
+    fs.openSync = function(file, flags, ...args) {
+      const fd = open.call(fs, file, flags, ...args);
+      if (file === marker) {
+        if (flags === (fs.constants.O_RDWR | fs.constants.O_NOFOLLOW)) held = fd;
+        else readers.add(fd);
+      }
+      return fd;
+    };
+    fs.readFileSync = function(file, ...args) {
+      const bytes = read.call(fs, file, ...args);
+      if (readers.has(file) && ++faults.pathReads === 2) {
+        const changed = Buffer.from(bytes);
+        changed[changed.length - 1] = 32;
+        faults.mutations++;
+        return changed;
+      }
+      return bytes;
+    };
+    fs.fstatSync = function(fd, ...args) {
+      if (fd === held) faults.heldStats++;
+      return stat.call(fs, fd, ...args);
+    };
+    fs.closeSync = function(fd) {
+      readers.delete(fd);
+      if (fd === held) held = undefined;
+      return close.call(fs, fd);
+    };`;
+  const result = invoke('cleanLicenseTransport', prefix);
+  const data = custodyDiagnostic(result);
+  expect(data.checkpoint).toBe('marker_open');
+  expect(data.failedPredicate).toBe('path_bytes');
+  expect(data.expected).toEqual({ identity: before.identity, sha256: before.sha256 });
+  expect(data.observed).toEqual({
+    identity: before.identity,
+    sha256: createHash('sha256').update(changed).digest('hex'),
+  });
+  expect(data.heldFdIdentity).toBe('not_observed');
+  expect(JSON.parse(result.stderr).faults).toEqual({ pathReads: 2, heldStats: 1, mutations: 1 });
+  expect(observedFile(marker)).toEqual(before);
+  assertTransports();
+  assertSources();
+});
+
+test('held FD mismatch retains the earlier path observation and the actual FD identity', () => {
+  successful(stage());
+  const marker = path.join(pkg, markerName);
+  const before = observedFile(marker);
+  const prefix = `
+    import fs from 'node:fs';
+    const open = fs.openSync, stat = fs.fstatSync, close = fs.closeSync;
+    const marker = ${JSON.stringify(marker)};
+    let held;
+    let faults = { heldStats: 0, mutations: 0 };
+    fs.openSync = function(file, flags, ...args) {
+      const fd = open.call(fs, file, flags, ...args);
+      if (file === marker && flags === (fs.constants.O_RDWR | fs.constants.O_NOFOLLOW)) held = fd;
+      return fd;
+    };
+    fs.fstatSync = function(fd, ...args) {
+      if (fd === held && ++faults.heldStats === 2) {
+        fs.appendFileSync(marker, ' ');
+        faults.mutations++;
+      }
+      return stat.call(fs, fd, ...args);
+    };
+    fs.closeSync = function(fd) {
+      if (fd === held) held = undefined;
+      return close.call(fs, fd);
+    };`;
+  const result = invoke('cleanLicenseTransport', prefix);
+  const data = custodyDiagnostic(result);
+  expect(data.checkpoint).toBe('marker_open');
+  expect(data.failedPredicate).toBe('held_fd_identity');
+  expect(data.expected).toEqual({ identity: before.identity, sha256: before.sha256 });
+  expect(data.observed).toEqual(data.expected);
+  expect(data.heldFdIdentity).toEqual(observedFile(marker).identity);
+  expect(data.heldFdIdentity).not.toEqual(data.expected.identity);
+  expect(JSON.parse(result.stderr).faults).toEqual({ heldStats: 2, mutations: 1 });
+  assertTransports();
+  assertSources();
+});
+
+test('lock cleanup refusal identifies the checkpoint and preserves the changed lock', () => {
+  const lock = path.join(pkg, lockName);
+  const prefix = `
+    import fs from 'node:fs';
+    const open = fs.openSync, stat = fs.fstatSync;
+    let held;
+    let faults = { heldStats: 0, mutations: 0 };
+    fs.openSync = function(file, flags, ...args) {
+      const fd = open.call(fs, file, flags, ...args);
+      if (file === ${JSON.stringify(lock)} && (flags & fs.constants.O_CREAT)) held = fd;
+      return fd;
+    };
+    fs.fstatSync = function(fd, ...args) {
+      const observed = stat.call(fs, fd, ...args);
+      if (fd === held && ++faults.heldStats === 1) {
+        fs.appendFileSync(${JSON.stringify(lock)}, ' ');
+        faults.mutations++;
+      }
+      return observed;
+    };`;
+  const result = invoke('stageLicenseTransport', prefix);
+  const data = custodyDiagnostic(result);
+  expect(data.checkpoint).toBe('lock_cleanup');
+  expect(data.failedPredicate).toBe('path_identity');
+  expect(data.heldFdIdentity).toBe('not_observed');
+  const after = observedFile(lock);
+  expect(data.observed).toEqual({ identity: after.identity, sha256: after.sha256 });
+  expect(JSON.parse(result.stderr).faults).toEqual({ heldStats: 1, mutations: 1 });
+  expect(ledger().phase).toBe('ready');
+  assertTransports();
+  assertSources();
+});
+
 test('real marker write followed by failure retains uncertain ownership and exact created bytes', () => {
   const prefix = `
     import fs from 'node:fs';

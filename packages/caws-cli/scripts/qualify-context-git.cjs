@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const cp = require('node:child_process');
+const { setTimeout, clearTimeout } = require('node:timers');
 const { setTimeout: delay } = require('node:timers/promises');
 const { installMachineRuntime } = require('../dist/init/machine-adapters');
 const { validateSystemPolicy } = require('../dist/init/system-project-policy');
