@@ -83,3 +83,9 @@ non_functional: {}
 contracts:
   - name: 'native-session-publication'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Bounded native SessionEnd path executed in actual-session-publication-04 (exit0, five real Codex/Claude cases plus followups): native original binding, publication, exact semantic consumption, durable consumed tombstone and release. Source29f13361 reconciled toe7936a80 with runtime blobs unchanged. SQL acquisition/CLOSED-to-publication and warm Render integration remain unverified; A1 remains unchecked."
+    recorded_at: "2026-10-23T09:30:20.460Z"
+    commit_sha: e7936a8061654c93a6924b74ef86b2c3f9b1822c
