@@ -7871,6 +7871,62 @@ Additional bounded evidence and unresolved dependencies:
   propagation assigned to the source worker. Native source capture, ordinary
   consumption, concurrent residency and local cutover remain unaccepted.
 
+- E295: Native custody repair `60810d47` commits the E294 classification and
+  process-observation controls. HTML profile propagation commits as `0006f5df`;
+  preparation observation-order and numeric-getter ownership repairs commit as
+  `59d24e6a`. The pre-commit `html-profile-test-02` execution exits 0 with 132
+  cases, including missing/empty history with poisoned noise declarations,
+  one-read numeric getter ownership and simultaneous calendar/noise failures.
+  `html-profile-semantic-02/results.json` retains twenty-four actual registry
+  records: eighteen exact `A` shell-field outputs and six decimal-limit refusals
+  with limit640/digits641. Unlimited decimal4301 and hexadecimal10002 controls
+  distinguish the selected profile from the qualified4300 default. Build03,
+  compile02 and explicit seven-file lint02 exit 0. Normal commit-hook formatting
+  changes six source/test hashes; these pre-commit receipts alone do not qualify
+  the committed bytes. Committed replay build04/compile03/
+  test03/lint03/semantic03 exits 0 at `59d24e6a`, with identical source pins
+  across all five commands, seven source/test blobs matching that commit and
+  fifty-eight stable emitted files. The132 cases and twenty-four semantic
+  records repeat on those bytes; `html-profile-semantic-03/results.json` has
+  SHA256 `4d7bec111c17b6509500293fac14fcee23585f42e3f24666c217123c87d57f44`.
+  Root independently joins the seven committed blobs and retains integration and
+  native admission obligations. These bounded propagation/preparation controls
+  are complete; ordinary publication and local cutover are not.
+
+  Adapter revision names the HTML reference separately from the selected numeric
+  policy. Registry checkpoints compare the full frozen normalization context,
+  including numeric profile id/limit, and private owner identity; renderer
+  prefix reuse additionally requires the same registry object and complete
+  interpretation context. An adapter revision alone is not a reusable
+  interpretation identity. Factory registries freeze their context and capture
+  it in normalization closures. Arbitrary replacement registry callbacks or
+  accessor wrappers are not authenticated by the preparation interface; native
+  integration must construct the trusted factory registry from admitted profile
+  observations rather than accept caller-supplied behavior. Existing context
+  spreading and string-field assumptions precede this candidate; native source
+  admission and ordinary construction remain root-owned, unaccepted work.
+
+- E296: Normal main publication attempt `main-push-10` completes all five
+  unchanged pre-push stages, including350 suites/6835 passed/14 skipped, but Git
+  terminates with signal13 after the remote closes the SSH connection. The
+  supervisor retains exit-13,392.637s, stable source pins, no cleanup signals
+  and no remaining process group. `git ls-remote` observes main at `5a95747f`,
+  so the gate success does not establish publication. Attempt09's license-marker
+  refusal and supported exact-byte recovery remain retained. Root owns a
+  normal-hook retry with SSH keepalives and fresh hosted evidence.
+
+- E297: `NATIVE-SELECTION-READ-IO-001` assigns the selection worker a bound
+  `caws/native-selection-read-io` lane from publication candidate `59d24e6a`. It
+  preserves the existing TypeScript policy interpreter while replacing ambient
+  reads with live or immutable observed reads. The worker owns the ten declared
+  source/test paths; root owns ledger, native receipt, qualified profiles and
+  ordinary consumer integration. Missing-observation discovery must survive the
+  retained-manifest catch-all, and successful runtime verification may be
+  memoized only against a complete immutable runtime sub-snapshot. Positive
+  bytes alone do not cover higher-priority absence, directory inventory or
+  ancestry changes. This assignment grants no native admission or activation;
+  its A1-A8 require executed parity/refusal evidence.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
