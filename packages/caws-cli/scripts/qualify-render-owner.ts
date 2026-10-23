@@ -109,6 +109,11 @@ fs.chmodSync(root, 0o700);
 const sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-render-owner-')));
 const home = path.join(sandbox, 'machine'),
   project = path.join(sandbox, 'project');
+// The reviewed Render closure is a confined handler override, not the global
+// project bootstrap. Keep its original sibling layout without changing the
+// stock SessionEnd prefix selected by the other surface.
+const renderSourceRelative = warmSessionEnd ? '.caws/render-source' : '.caws/hooks';
+const renderSource = path.join(project, renderSourceRelative);
 const owner = path.join(home, 'state/render-service');
 const engine = path.join(cli, 'dist/runtime/engine-entry.js');
 const cliEntry = path.join(cli, 'dist/index.js');
@@ -153,6 +158,7 @@ const manifest: Data = {
   sterling,
   home,
   project,
+  renderSource,
   native,
   observer,
   custodyObserver,
@@ -176,6 +182,7 @@ const manifest: Data = {
 let commandNumber = 0,
   monitor: ReturnType<typeof setInterval> | undefined;
 let fixturePrepared = false;
+let scenarioCompleted = false;
 let lastDaemon: Instance | null = null;
 let lastNativeWorker: { created: Data; birth: Instance } | null = null;
 let warmSealInvocationId: string | null = null;
@@ -187,6 +194,82 @@ function object(value: unknown): value is Data {
 function row(value: unknown, label = 'object'): Data {
   assert(object(value), label);
   return value;
+}
+/** Account only for observed worker births; a failed pre-B scenario owes no B.
+ * This proves receipt membership, not kernel absence or uninterrupted custody.
+ */
+function workerCleanupAccounting(events: readonly Data[], expectedWorkers: number | null) {
+  const spawned = events.filter((event) => event.event === 'worker_spawned');
+  const created = events.filter((event) => event.event === 'worker_created');
+  const receipts = events.filter((event) => event.event === 'worker_cleanup');
+  const exits = events.filter((event) => event.event === 'worker_exit');
+  const key = (event: Data): string => {
+    for (const field of ['nativeWorkerPid', 'backendPid'])
+      assert(
+        Number.isSafeInteger(event[field]) &&
+          Number(event[field]) > 1 &&
+          Number(event[field]) <= 2_147_483_647,
+        'invalid worker tuple ' + field
+      );
+    return JSON.stringify([event.nativeWorkerPid, event.backendPid]);
+  };
+  const createdKeys = created.map(key);
+  assert.equal(new Set(createdKeys).size, created.length, 'duplicate created worker tuple');
+  assert.equal(
+    new Set(created.map((event) => event.nativeWorkerPid)).size,
+    created.length,
+    'one native worker must name one backend'
+  );
+  assert.equal(spawned.length, created.length, 'spawned worker lacks a created worker receipt');
+  const spawnedPids = spawned.map((event) => event.nativeWorkerPid);
+  assert.equal(new Set(spawnedPids).size, spawned.length, 'duplicate spawned native worker');
+  assert(
+    created.every((event) => spawnedPids.includes(event.nativeWorkerPid)),
+    'created worker lacks its exact spawn'
+  );
+  for (const [label, records] of [
+    ['cleanup', receipts],
+    ['exit', exits],
+  ] as const) {
+    assert.equal(records.length, created.length, 'actual worker ' + label + ' receipt missing');
+    const keys = records.map(key);
+    assert.equal(new Set(keys).size, records.length, 'duplicate worker ' + label + ' tuple');
+    assert(
+      keys.every((value) => createdKeys.includes(value)),
+      'worker ' + label + ' names an uncreated tuple'
+    );
+  }
+  for (const worker of created) {
+    const spawn = spawned.find((event) => event.nativeWorkerPid === worker.nativeWorkerPid)!;
+    const cleanup = receipts.find((event) => key(event) === key(worker))!;
+    const exit = exits.find((event) => key(event) === key(worker))!;
+    assert(
+      events.indexOf(spawn) < events.indexOf(worker) &&
+        events.indexOf(worker) < events.indexOf(cleanup) &&
+        events.indexOf(cleanup) < events.indexOf(exit),
+      'worker birth/cleanup/exit order differs'
+    );
+    const receipt = row(cleanup.receipt);
+    assert.equal(receipt.childPid, worker.backendPid, 'cleanup receipt names another backend');
+    assert.equal(receipt.directChildReaped, true);
+    assert.equal(receipt.logsPersisted, true);
+    assert.equal(receipt.deadlineExceeded, false);
+    assert.equal(row(receipt.stdout).eof, true);
+    assert.equal(row(receipt.stderr).eof, true);
+    assert.equal(exit.code, 0, 'native worker exit was not successful');
+    assert.equal(exit.signal, null, 'native worker exit was signalled');
+  }
+  if (expectedWorkers !== null)
+    assert.equal(created.length, expectedWorkers, 'complete scenario worker creation count');
+  return { created, receipts, exits };
+}
+function sessionEndInput(): string {
+  return JSON.stringify({
+    cwd: project,
+    session_id: sessionId,
+    hook_event_name: 'SessionEnd',
+    reason: 'warm renderer qualification',
+  });
 }
 function digest(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
@@ -443,7 +526,7 @@ function sourceCustody(profile: Readonly<Record<string, string>>, copy = false):
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, expected]) => {
       const original = path.join(sterling, '.caws/hooks', name),
-        target = path.join(project, '.caws/hooks', name);
+        target = path.join(renderSource, name);
       const before = fs.lstatSync(original);
       assert(before.isFile() && !before.isSymbolicLink(), 'foreign source is not regular: ' + name);
       const bytes = fs.readFileSync(original);
@@ -913,7 +996,7 @@ function compareForeignRendererBytes(
     python.sha256,
     'pinned Python changed before baseline'
   );
-  const renderer = path.join(project, '.caws/hooks/session_log_renderer.py');
+  const renderer = path.join(renderSource, 'session_log_renderer.py');
   const initialCustody = JSON.parse(
     fs.readFileSync(path.join(root, 'source-custody-initial.json'), 'utf8')
   ) as Data[];
@@ -1039,12 +1122,7 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   assert.equal(turnBytes.length, 1, 'seal must consume the actual A output');
   snapshot(session, path.join(directory, 'before'));
   const before = new Set(list(path.join(session, 'hook-invocations')));
-  const input = JSON.stringify({
-    cwd: project,
-    session_id: sessionId,
-    hook_event_name: 'SessionEnd',
-    reason: 'warm renderer qualification',
-  });
+  const input = sessionEndInput();
   const status = await invoke(
     [
       'invoke',
@@ -1068,17 +1146,6 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   );
   const result: Data = { operation: 'native_claude_session_end', status };
   requests.push(result);
-  success(status);
-  assert.equal(
-    fs.statSync(path.join(status.directory, 'stdout.bin')).size,
-    0,
-    'seal must be silent'
-  );
-  assert.equal(
-    fs.statSync(path.join(status.directory, 'stderr.bin')).size,
-    0,
-    'seal must be silent'
-  );
   const files = list(path.join(session, 'hook-invocations')).filter((name) => !before.has(name));
   assert.equal(files.length, 1, 'one seal original must produce one journal');
   const journalFile = path.join(session, 'hook-invocations', files[0]!);
@@ -1116,13 +1183,6 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     fs.closeSync(fd);
   }
   put(path.join(directory, 'journal.jsonl'), bytes);
-  const originalFrontend = read(path.join(status.directory, 'original-frontend.json'));
-  assert.equal(originalFrontend.state, 'observed');
-  assert.equal(
-    row(originalFrontend.process).parent,
-    process.pid,
-    'native original must descend from real Claude ancestor'
-  );
   // The shared decoder intentionally admits Codex Stop/PreToolUse only.
   // This Claude original uses the same strict journal correlation locally.
   assert.equal(bytes.at(-1), 10, 'seal invocation journal must end with LF');
@@ -1150,6 +1210,34 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     'seal invocation journal identity differs'
   );
   const identity = { invocationId, runtimeDigest };
+  const custody = requestCustodies.get(status.directory),
+    coverage = requestCoverage.get(status.directory);
+  assert(custody && coverage, 'current seal custody/coverage record missing');
+  custody.expected = { ...identity, coverage, node: process.execPath, engine };
+  const nativeCustody = custody.collector.collect(custody.expected);
+  Object.assign(result, { identity, nativeCustody });
+  json(path.join(directory, 'native-custody.json'), nativeCustody);
+  persist();
+  // Retain exact custody before any success, silence or semantic assertion can
+  // fail. Compatibility completion must remain attributable without proving seal.
+  success(status);
+  assert.equal(
+    fs.statSync(path.join(status.directory, 'stdout.bin')).size,
+    0,
+    'seal must be silent'
+  );
+  assert.equal(
+    fs.statSync(path.join(status.directory, 'stderr.bin')).size,
+    0,
+    'seal must be silent'
+  );
+  const originalFrontend = read(path.join(status.directory, 'original-frontend.json'));
+  assert.equal(originalFrontend.state, 'observed');
+  assert.equal(
+    row(originalFrontend.process).parent,
+    process.pid,
+    'native original must descend from real Claude ancestor'
+  );
   warmSealInvocationId = invocationId;
   assert.deepEqual(
     (journal[0]!.selected_handlers as Data[]).map(({ name, kind }) => ({ name, kind })),
@@ -1387,11 +1475,6 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   assert.equal(row(sealOperations[0]!.identity).sourceGeneration, runtimeDigest);
   assert.equal(row(sealOperations[0]!.outcome).terminalDigest, consumer.terminal_digest);
   assert.equal(sealOperations[0]!.verifiedRequestBase64, '', 'consumed heavy request not released');
-  const custody = requestCustodies.get(status.directory),
-    coverage = requestCoverage.get(status.directory);
-  assert(custody && coverage);
-  custody.expected = { ...identity, coverage, node: process.execPath, engine };
-  const nativeCustody = custody.collector.collect(custody.expected);
   const requestCleanup = requestCleanupObservation(coverage, processRows(), observe);
   assert(requestCleanup.coverageComplete);
   assert.equal(combinedRequestCleanup(requestCleanup, nativeCustody), 'confirmed_inactive');
@@ -1540,7 +1623,7 @@ async function main(): Promise<void> {
   const policy = {
     disabled: {},
     extensions: {},
-    handlers: { 'session-log.sh': '.caws/hooks/session-log.sh' },
+    handlers: { 'session-log.sh': renderSourceRelative + '/session-log.sh' },
     libraries: {},
   };
   validateSystemPolicy(project, policy, { files: [...installed.files], defaults });
@@ -1581,6 +1664,74 @@ async function main(): Promise<void> {
       sealSelection.handlers.map(({ entry, kind }) => ({ entry, kind })),
       [{ entry: 'session-log.sh', kind: 'stock' }]
     );
+    const {
+      decodeRuntimeRequest,
+      REQUEST_SCHEMA,
+      SESSION_END_PREFIX_CAPABILITY,
+      SESSION_PUBLICATION_CAPABILITY,
+    } = requireBuilt('./dist/runtime/protocol') as typeof import('../dist/runtime/protocol');
+    const { invocationEnvironment } = requireBuilt(
+      './dist/runtime/context'
+    ) as typeof import('../dist/runtime/context');
+    const { sessionCacheInputSupported } = requireBuilt(
+      './dist/runtime/session-cache-client'
+    ) as typeof import('../dist/runtime/session-cache-client');
+    const { qualifiesForNativeSessionEndPrefix } = requireBuilt(
+      './dist/runtime/session-cache-admission'
+    ) as typeof import('../dist/runtime/session-cache-admission');
+    const input = sessionEndInput();
+    // This planned context checks fixture applicability only. The actual
+    // frontend must independently provide capabilities, capture and Ready.
+    const request = decodeRuntimeRequest(
+      JSON.stringify({
+        schema: REQUEST_SCHEMA,
+        id: 'warm-session-end-preflight',
+        runtimeDigest: installed.digest,
+        surface: 'claude-code',
+        event: 'session_end',
+        configuration: 'system',
+        sessionEndPrefix: SESSION_END_PREFIX_CAPABILITY,
+        sessionPublication: SESSION_PUBLICATION_CAPABILITY,
+        caller: {
+          cwd: project,
+          environment: { ...env, CLAUDE_SESSION_ID: sessionId },
+          processId: process.pid,
+        },
+        deadlineEpochMs: Date.now() + 30_000,
+        inputJson: input,
+        payload: JSON.parse(input),
+      })
+    );
+    const bootstrap = path.join(project, '.caws/hooks/runtime-paths.sh');
+    let bootstrapAbsent = false;
+    try {
+      fs.lstatSync(bootstrap);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      bootstrapAbsent = true;
+    }
+    const supportedInput = sessionCacheInputSupported(input);
+    const admitted = qualifiesForNativeSessionEndPrefix({
+      request,
+      selection: sealSelection,
+      environment: invocationEnvironment(request.caller),
+      sessionId,
+    });
+    manifest.sessionEndPreflight = {
+      boundary:
+        'read-only admission of planned fixture context; not actual native capability, capture, prefix or publication proof',
+      inputSha256: digest(input),
+      renderSource,
+      bootstrap,
+      bootstrapAbsent,
+      supportedInput,
+      admitted,
+    };
+    json(path.join(root, 'session-end-preflight.json'), manifest.sessionEndPreflight);
+    persist();
+    assert(bootstrapAbsent, 'warm fixture must not install a project-wide bootstrap');
+    assert(supportedInput, 'planned seal input requires compatibility parsing');
+    assert(admitted, 'planned warm fixture does not admit the full native SessionEnd prefix');
   }
   const selected = resolveInvocationSelection({
     checkout: project,
@@ -2178,6 +2329,9 @@ async function main(): Promise<void> {
   ];
 }
 void main()
+  .then(() => {
+    scenarioCompleted = true;
+  })
   .catch((error) => {
     failures.push(String(error));
     manifest.failureStack = error instanceof Error ? error.stack : String(error);
@@ -2234,19 +2388,23 @@ void main()
           fs.readFileSync(path.join(owner, 'observations.jsonl'))
         );
       if (requests.length > 0) {
-        const receipts = events.filter((event) => event.event === 'worker_cleanup');
-        assert.equal(
-          receipts.length,
-          warmSessionEnd ? 2 : 1,
-          'actual worker cleanup receipt missing'
+        const accounting = workerCleanupAccounting(
+          events,
+          scenarioCompleted ? (warmSessionEnd ? 2 : 1) : null
         );
-        for (const [receiptIndex, observation] of receipts.entries()) {
-          const receipt = row(observation.receipt);
-          assert.equal(receipt.directChildReaped, true);
-          assert.equal(receipt.logsPersisted, true);
-          assert.equal(receipt.deadlineExceeded, false);
-          assert.equal(row(receipt.stdout).eof, true);
-          assert.equal(row(receipt.stderr).eof, true);
+        manifest.workerCleanupAccounting = {
+          scenarioCompleted,
+          created: accounting.created,
+          cleanupTuples: accounting.receipts.map(({ nativeWorkerPid, backendPid }) => ({
+            nativeWorkerPid,
+            backendPid,
+          })),
+          exitTuples: accounting.exits.map(({ nativeWorkerPid, backendPid }) => ({
+            nativeWorkerPid,
+            backendPid,
+          })),
+        };
+        for (const [receiptIndex, observation] of accounting.receipts.entries()) {
           for (const channel of [
             'stdoutPrefixBase64',
             'stderrPrefixBase64',
@@ -2265,11 +2423,6 @@ void main()
             );
           }
         }
-        assert.equal(
-          events.filter((event) => event.event === 'worker_exit').length,
-          warmSessionEnd ? 2 : 1,
-          'actual native worker wait missing'
-        );
         assert.equal(
           events.filter((event) => event.event === 'host_idle_exit').length,
           1,
