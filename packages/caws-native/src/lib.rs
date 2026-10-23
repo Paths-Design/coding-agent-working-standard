@@ -9,6 +9,7 @@ pub mod process_comm_macos;
 pub mod render_owner;
 pub mod render_writer;
 pub mod renderer_backend;
+pub mod renderer_calendar;
 pub mod service_git_view;
 pub mod service_image;
 pub mod service_journal;
