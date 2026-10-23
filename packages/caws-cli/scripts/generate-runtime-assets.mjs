@@ -93,7 +93,7 @@ try {
       );
     if (process.platform !== 'win32' && (current.mode & 0o111) === 0)
       throw new Error('Runtime asset is not executable: ' + output + '; regenerate it');
-    process.stdout.write('Runtime assets are current.\n');
+    process.stderr.write('Runtime assets are current.\n');
   } else {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     const temporary = target + '.tmp.' + process.pid;
@@ -111,7 +111,7 @@ try {
       if (descriptor !== undefined) fs.closeSync(descriptor);
       if (created) fs.rmSync(temporary, { force: true });
     }
-    process.stdout.write('Generated ' + output + '.\n');
+    process.stderr.write('Generated ' + output + '.\n');
   }
 } catch (error) {
   process.stderr.write(

@@ -20,35 +20,23 @@ const agentSurfaceProfiles = [
   {
     name: 'legacy JSON lookup',
     sha256: 'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
-    revision: 'f7a5af5097f151efa3079935fa2bc235c23ac6ad^',
+    revision: 'fd8554101da556e58899a8fc099fcd0af9bb0f53',
+    fixture: 'fixtures/agent-surface-json-lookup.sh',
   },
   {
     name: 'exact-empty JSON lookup',
     sha256: '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
     revision: null,
+    fixture: null,
   },
 ];
 function useAgentSurfaceProfile(profile) {
   const file = selection.libraries['agent-surface.sh'].path;
-  if (profile.revision) {
-    const bytes = execFileSync(
-      '/usr/bin/git',
-      [
-        'show',
-        profile.revision + ':packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh',
-      ],
-      {
-        cwd: path.resolve(__dirname, '../../../..'),
-        env: {
-          HOME: directory,
-          PATH: '/usr/bin:/bin',
-          GIT_CONFIG_NOSYSTEM: '1',
-          GIT_CONFIG_GLOBAL: '/dev/null',
-        },
-        timeout: 5000,
-        maxBuffer: 1024 * 1024,
-      }
-    );
+  if (profile.fixture) {
+    // Revision is provenance only: shallow checkouts use the committed exact
+    // reviewed bytes, and never need to fetch an unrelated historical object.
+    const bytes = fs.readFileSync(path.join(__dirname, profile.fixture));
+    expect(crypto.createHash('sha256').update(bytes).digest('hex')).toBe(profile.sha256);
     fs.writeFileSync(file, bytes);
   }
   selection.libraries['agent-surface.sh'].sha256 = digest(file);
@@ -685,6 +673,10 @@ test('native entry honors cancellation and an already expired request', () => {
 });
 
 function useHeartbeatCli() {
+  // setup-python exports LD_LIBRARY_PATH in CI. Ordinary admission fixtures
+  // control loader inputs; hostile cases add them explicitly after this setup.
+  for (const key of Object.keys(environment))
+    if (key.startsWith('LD_') || key.startsWith('DYLD_')) delete environment[key];
   const bin = path.join(directory, 'heartbeat-bin');
   fs.mkdirSync(bin);
   fs.symlinkSync(path.resolve(__dirname, '../../dist/index.js'), path.join(bin, 'caws'));
@@ -696,7 +688,11 @@ function useHeartbeatCli() {
 test.each([undefined, '', 'caws'])(
   'exact stock Codex Bash heartbeat selects typed application consumer with CAWS_BIN=%s',
   async (cli) => {
+    environment.LD_LIBRARY_PATH = '/fixture/ambient-python/lib';
+    environment.DYLD_LIBRARY_PATH = '/fixture/ambient-loader/lib';
     useHeartbeatCli();
+    expect(environment.LD_LIBRARY_PATH).toBeUndefined();
+    expect(environment.DYLD_LIBRARY_PATH).toBeUndefined();
     if (cli !== undefined) environment.CAWS_BIN = cli;
     const heartbeat = require('../../dist/runtime/agent-heartbeat');
     const result = { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
@@ -731,6 +727,18 @@ test.each([
     'Darwin loader preload',
     () => {
       environment.DYLD_INSERT_LIBRARIES = '/custom/preload.dylib';
+    },
+  ],
+  [
+    'loader library path',
+    () => {
+      environment.LD_LIBRARY_PATH = '/custom/loader/lib';
+    },
+  ],
+  [
+    'Darwin loader library path',
+    () => {
+      environment.DYLD_LIBRARY_PATH = '/custom/loader/lib';
     },
   ],
   [

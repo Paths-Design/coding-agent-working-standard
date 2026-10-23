@@ -7389,6 +7389,147 @@ Additional bounded evidence and unresolved dependencies:
   SessionEnd publication or Render B. Compatibility dispatch did change
   metadata; silent exit zero is not native publication evidence.
 
+- E275: Normal push `main-push-04` publishes `03997170` to remote `main` with
+  unchanged hooks and source pins, exit 0 in 326.763 seconds and no remaining
+  process group. Typecheck, lint, audit and build pass; the full Jest run passes
+  347 suites with 6685 passing and 13 skipped checks. The retained execution,
+  stdout, stderr and process observations live under `main-push-04`. Remote ref
+  readback matches the pushed revision. This completes that source-delivery
+  attempt, not hosted qualification.
+
+  Hosted Release Qualification run `39946247481` on that exact revision passes
+  native context Git custody but fails candidate tests/contracts and all six
+  packaged-upgrade jobs. Inspected macOS/Node22 and Ubuntu/Node22 logs fail at
+  `runtime-upgrade-smoke.mjs:241`: the freshness generator writes a diagnostic
+  before `npm pack --json` output, so JSON parsing fails. The candidate-test
+  failure is a separate investigation. Neither hosted failure grants adoption.
+
+- E276: A real npm lifecycle fixture reproduces the package JSON failure in
+  `pack-json-baseline-01`, exit 1. The generator's success diagnostics move to
+  stderr. Regenerating the owned projection changes only its generator-source
+  digest; shared pack version 107 and fingerprint
+  `027a5417546af3c7b4056c7f20aeb7d73eec8ef40db95458138c905fb9f49f64` cover all
+  75 tracked files. The initial repair check correctly refuses the stale
+  generated header; `pack-json-repair-01` retains that failure.
+
+  The fresh build exits 0 in 6.029 seconds. The generated-asset, fingerprint and
+  installation-rendering suites exit 0 in 5.563 seconds with 89 checks. These
+  exercise actual npm JSON output, stderr diagnostics, stale/missing/mutated
+  assets, detached binary behavior, pack identity and installed version headers.
+  `pack-json-actual-execution-01` runs the candidate's actual prepack/postpack
+  lifecycle and exits 0 in 3.314 seconds; its stdout parses as one JSON result.
+  `pack-json-actual-01/inspection.json` identifies the 1305-file tarball with
+  SHA `4c41479d4fe41fd12c3afb22767aa8b2f310825c3edc0c0f0418171bad716d7c`. Each
+  execution retains unchanged source pins and no remaining process group. These
+  artifacts live under `publication-integration/`. They establish the repaired
+  output contract, not the full upgrade matrix, package installation, native
+  activation or rollback.
+
+- E277: SQL adapter `2002df5d` connects the original port's actually exhausted
+  CLOSED acquisition to Projection, exact captured projection bytes, supplied
+  Render preparation and the ordinary current-generation consumer before ACK.
+  Review-response tests `09a06eac` require exact failure causes and callback
+  identity, distinguish EOF from the intended rejection, and reject wrong Render
+  names, roles, duplicate outputs and renderer exceptions before PREPARED/ACK.
+  `publication-integration/ts-store-adapter-focused-03` retains exit 0 in 1.671
+  seconds, 65 focused checks, unchanged source/dist pins, empty final process
+  group and a committed-blob comparison. The production route is unselected;
+  real Render context/calendar observations and matched native/TS activation
+  remain required. Mock transport composition does not establish native custody.
+
+  Warm qualifier `cf958215` requires seven positive usage values from recognized
+  Codex input records and exact rendered values, and describes its ancestor as a
+  Claude-named pinned Node fixture. Actual `warm-render-execution-03` exits 1 in
+  18.105 seconds at the seal inventory assertion: the marker includes
+  `session-index.json` in addition to metadata and the retained A turn. B is not
+  attempted. `warm-render-actual-03/manifest.json` retains the failure, both
+  exactly correlated settled native requests, confirmed inactive cleanup and the
+  one actual worker birth/cleanup/exit tuple. Root preserves that failure while
+  the qualifier owner compares the inventory oracle to producer and reader
+  contracts. No completed warm continuation is inferred.
+
+- E278: Hosted candidate job `120389516965` retains 22 Jest failures in
+  `publication-integration/hosted-candidate-03997170/candidate-job-120389516965.log`:
+  17 service-image cases reject Linux `/bin` symlink traversal, two
+  legacy-profile cases depend on an unavailable historical Git object in a
+  shallow checkout, and three heartbeat cases inherit Python setup's
+  `LD_LIBRARY_PATH` and reach the intended production refusal. The job passes
+  build, typecheck and lint; contracts, docs and Bats are skipped after Jest
+  fails. These are separate from E276's package JSON defect. Fixture isolation
+  must preserve the loader refusal controls. Image admission must independently
+  derive the physical target of fixed system shell paths while retaining
+  no-follow candidate checks.
+
+  The hook artifact uploader also encounters an intentional self-referential
+  fixture symlink. The workflow archives the retained roots without following
+  symlinks and uploads the archive, preserving hidden `.caws` evidence too.
+  `publication-integration/ci-artifact-archive-01` executes the exact workflow
+  shell block in a private fixture, exit 0, and inspects the archive: the link
+  remains a link, the hidden failure receipt remains exact and binary output
+  retains NUL and invalid-UTF8 bytes. This local BSD tar observation does not
+  qualify Ubuntu tar or GitHub upload; those remain hosted checks.
+
+  Committed package repair `59c574a8` receives a focused exact-commit replay
+  after hook formatting: eight generated-asset checks pass in 3.710 seconds.
+  `publication-integration/pack-json-committed-source-01.json` joins the earlier
+  build/check/pack working-tree pins to the committed production blobs, and
+  compares the packaged generated asset bytes directly to the committed asset.
+  The tarball's compiled manifest declares shared version 107. The supplied
+  earlier HEAD values identify dirty-checkout bases, not different production
+  candidates; retained byte identities establish the connection. Full package
+  upgrade and selected installation remain unverified.
+
+- E279: Hosted fixture repair `c01450eb` carries the exact reviewed historical
+  agent-surface bytes in a hash-checked fixture; a historical Git object is no
+  longer an execution dependency. Ordinary heartbeat setup removes inherited
+  loader variables while hostile cases explicitly restore them. The whole stock
+  handler file passes 81 checks; an explicit ambient `LD_LIBRARY_PATH` run
+  passes the three positive and four loader-refusal cases. Raw execution and
+  committed byte joins live under
+  `publication-integration/hosted-stock-fixture-*`.
+
+  Image repair `3c4c9fa0` independently resolves fixed `/bin/bash` and `/bin/sh`
+  system aliases in TypeScript and Rust. Candidate paths must equal the physical
+  targets and retain existing no-follow, hash, executable and identity checks;
+  arbitrary aliases and copied binaries remain refused. The ordinary CLI build
+  exits 0; focused image/offer checks pass 143 cases with ten existing reviewed
+  profile skips. Native feature-off image checks pass 31 cases. The initial
+  missing-import compilation failure is retained separately; no tests ran in
+  that failed attempt. `publication-integration/source-shell-target-native-02/`
+  joins the passing raw checks and committed four-file blobs. This is current
+  macOS evidence; the workflow adds the same focused native admission check to
+  its Ubuntu candidate job for decisive Linux execution.
+
+- E280: Warm attempt 04 reaches B but fails the tool/assistant order assertion.
+  Its input gives all events in each turn the same timestamp. SessionEnd's two
+  legitimate hook records activate the reviewed renderer's chronological merge;
+  its equal-time priority places assistant text before tool use. The unchanged
+  raw attempt and additive source-derived diagnosis are retained under
+  `publication-integration/warm-render-actual-04{,-diagnosis-01}`. The qualifier
+  preserves its semantic order assertion and gives warm input distinct monotone
+  timestamps in `f20e85ae`; the default fixture grammar remains unchanged.
+
+  `warm-render-execution-05` runs tools05 against the pinned build02 native
+  image and current compiled CLI, exit 0 in 22.159 seconds, unchanged source
+  pins, no signals and no remaining process group. Under
+  `warm-render-actual-05`, `request-{1,2}/semantic-turns.json` retains actual
+  user text, correlated tool calls/results, assistant text, exact env model and
+  all seven positive usage fields. `session-end/metadata.bin` carries exact
+  counts 100/30/7/5/20/11/130; `marker.bin` binds metadata, retained index and A
+  turn. The ordinary consumer journal and compact durable CONSUMED record share
+  terminal digest
+  `536c5f37987cf1f92bb50e36b3f75b89bd225692629dea38f29ee65f84a2a2d9`. A's
+  worker/backend tuple 19726/19729 is reaped with both EOFs and its birth is
+  absent before B's new tuple 22898/22901. All three original native requests
+  have settled custody; final cleanup is confirmed inactive with two exact
+  worker creation/cleanup/exit tuples, absent socket and free custody.
+
+  This completes the bounded warm continuation probe through the reviewed copied
+  Render profile and sole stock SessionEnd handler. It does not qualify deployed
+  harness callbacks, SQL Render activation, B's current publication marker, a
+  nonempty Codex model union, continuous exclusion under a competing writer,
+  concurrent fairness, legacy Render compaction or machine adoption.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7497,17 +7638,18 @@ complete its parent outcome.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                     | Next decisive check                                                                                                                                                            |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Coherent source and package delivery, isolated invocation and rollback               | Root integrates the repaired merge-hook fixture and quality inventory                                                               | Normal push with unchanged gates, hosted checks on that exact commit, then a fresh installed package/image join and actual native refusal/rollback observations                |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration owns the supported warm fixture and cleanup accounting; source-progress owns the SQL adapter contract | Actual warm Render A → SessionEnd → Render B, followed by SQL CLOSED-to-publication; retain ordinary semantic consumption and exact custody evidence                           |
+| Coherent source and package delivery, isolated invocation and rollback               | Root lands package, fixture, physical-shell and artifact-retention repairs                                                          | Exact repaired candidate pack/upgrade and hosted Linux native admission, then a fresh installed package/image join and actual native refusal/rollback observations             |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration completed the bounded warm probe; source-progress identified the real Render observation prerequisite | Real Git/context and calendar producers, then actual SQL CLOSED-to-publication with ordinary semantic consumption and matched native/TS activation                             |
 | Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                               | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
 
-The E273 image and rejected-replay repairs have finite executed controls. The
-second warm attempt reaches Render A but exposes an incompatible fixture profile
-for native SessionEnd and cleanup-accounting defects in the qualifier. Use the
-same admissible profile for every phase and capture identities before semantic
-assertions. Existing successful-operation compaction and shared-permit release
-require the sustained actual workload before residency acceptance. Package
-adoption, Python retirement and machine cutover acceptance remain open.
+The E273 image and rejected-replay repairs have finite executed controls. E275
+publishes the coherent source slice; E276 repairs a hosted packaging defect. The
+E280 bounded fifth warm probe completes, retaining earlier failed attempts and
+source-grounded oracle/input corrections. The SQL adapter is committed but its
+production observation inputs and selector remain unwired. Existing
+successful-operation compaction and shared-permit release require the sustained
+actual workload before residency acceptance. Package adoption, Python retirement
+and machine cutover acceptance remain open.
 
 1. Refresh complete source/build/dependency identities after E188, including
    both the engine and the selected CLI entry. The CLI entry imports commander

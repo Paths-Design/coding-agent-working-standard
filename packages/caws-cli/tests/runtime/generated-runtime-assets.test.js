@@ -162,3 +162,40 @@ scenario('detached helper preserves binary output and the declared ASCII budget 
     expect(result.stdout).toEqual(Buffer.alloc(0));
   }
 });
+
+scenario(
+  'pack lifecycle preserves npm JSON stdout and retains freshness diagnostics on stderr',
+  () => {
+    const f = fixture(true);
+    fs.writeFileSync(
+      path.join(f.root, 'package.json'),
+      JSON.stringify({
+        name: 'caws-runtime-asset-pack-fixture',
+        version: '1.0.0',
+        files: ['templates/'],
+        scripts: { prepack: 'node scripts/generate-runtime-assets.mjs --check' },
+      })
+    );
+    const output = temporaryRoot();
+    const result = invoke(
+      f.root,
+      'npm',
+      ['pack', '--json', '--pack-destination', output],
+      undefined,
+      {
+        env: {
+          HOME: f.root,
+          PATH: process.env.PATH,
+          npm_config_cache: path.join(f.root, 'npm-cache'),
+        },
+      }
+    );
+    succeeds(result);
+    const packed = JSON.parse(result.stdout.toString('utf8'));
+    expect(packed).toHaveLength(1);
+    expect(packed[0].name).toBe('caws-runtime-asset-pack-fixture');
+    expect(packed[0].files.some((file) => file.path === projection)).toBe(true);
+    expect(fs.statSync(path.join(output, packed[0].filename)).size).toBeGreaterThan(0);
+    expect(result.stderr.toString('utf8')).toContain('Runtime assets are current.');
+  }
+);
