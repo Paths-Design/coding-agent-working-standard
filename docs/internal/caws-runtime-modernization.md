@@ -7641,6 +7641,34 @@ Additional bounded evidence and unresolved dependencies:
   and establish no lint result. Remote publication remains pending a successful
   unchanged full push. No hook floor or runtime timing behavior is changed.
 
+- E285: The unchanged full `git push origin main` at `5bf613cb` exits 0 in
+  350.058s. `main-push-07` retains raw hook output, before/after source pins,
+  process observations and the remote update from `03997170` to `5bf613cb`; an
+  independent `git ls-remote` confirms that exact main revision. The gate
+  reports 6835 passing tests and 14 skipped, with no timeout, cleanup signals or
+  remaining process group. This publishes the SQL publication adapter,
+  Git-context component and timer-import repair. Hosted admission, the combined
+  installed image, ordinary Render activation and rollback remain unverified.
+
+- E286: Calendar review of `9b55f9d1` identifies finite tests to strengthen
+  before component acceptance. Repaired native source initializes libc timezone
+  state during original capture before engine launch; it never changes TZ or
+  TZDIR. This matches the initialization boundary in CPython 3.11.13
+  `Modules/timemodule.c:1626,1824`; `Python/pytime.c:1223` separately
+  establishes unset-errno mapping to EINVAL. Native checks under
+  `publication-integration/` (`calendar-native-integration-05`,
+  `calendar-native-unit-03`, `calendar-native-doc-02`) exit 0 in 3.416s, 2.919s
+  and 0.589s: six integration tests exercise twelve separate-process profiles,
+  six unit tests pin identity refusal and literal errno mapping, and two
+  compiler refusals prevent unbound observation and token rebinding. Source/tool
+  pins are stable with no residue. Named-zone and TZDIR observations are
+  retained; they do not establish Linux behavior or parity with Python for every
+  added profile. Typed calendar mutation, exhaustive decimal-digit comparison
+  and integrated carrier checks remain open. The carrier build succeeds; its
+  first focused Jest run fails on a deferred test promise rejected before the
+  production reader adopts it. The fixture must observe actual read start before
+  testing late rejection.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7747,11 +7775,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                | Next decisive check                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns the combined publication/CI landing, package qualification and installed-image join                                                                  | Unchanged full push checks on the combined candidate, hosted Linux admission, then fresh package/image identity and actual native refusal/rollback observations                                             |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Source-progress owns Git-context parity; native-context-git owns native calendar; publication-integration owns typed calendar; root owns carrier and selection | Actual original-process Git/calendar observations consumed by the renderer, then SQL CLOSED-to-publication with ordinary semantic consumption and matched native/TS activation                              |
-| Resident operation with fair, bounded capacity                                       | Root owns concurrent SessionEnd qualification and integration; E282 completes the bounded sequential 258-original probe                                        | Same-session writer contention plus cross-project progress and mandatory guard execution during occupancy, then unchanged thirteen-session/four-repository fairness workload, overload, restart and upgrade |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                             | Next decisive check                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E285 publishes the adapter and Git context                                                                      | Hosted Linux admission, then fresh combined package/image identity and actual native refusal/rollback observations                                                                                                                                                          |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Source-progress owns the TS carrier and SQL continuation; publication-integration owns calendar falsification; root owns native carrier integration, captured-source contract and selection | Actual original-process Git/calendar observations consumed by SQL Render after exhausted CLOSED, with ordinary semantic consumption; present source descriptors must not fabricate missing auxiliary or subagent observations                                               |
+| Resident operation with fair, bounded capacity                                       | Native-context-git owns the fresh-request permit-refund repair; root owns integration and concurrent qualification; E282 establishes sequential reclamation                                 | Retained uncertain original A plus rejected fresh A2 must preserve A's custody and release only A2's unused capacity, allowing project B and mandatory guards to progress; then unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
