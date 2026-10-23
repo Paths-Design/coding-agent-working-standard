@@ -8205,6 +8205,35 @@ Additional bounded evidence and unresolved dependencies:
   remain root-owned under E309. Commit formatting collapses an import; it does
   not change the exercised statements or emitted implementation.
 
+- E311: Independent Rust inspection of `3612a2cd` identifies a metadata
+  hash/parse gap: shared verification hashes native entry and mode files, then
+  parses later reads without binding those buffers to the manifest. Root applies
+  only the hostile tests first. `metadata-parse-baseline-01` exits101 with18
+  passing and two failing controls. Its retained `native-entry.json.json`
+  observes different first/second-read digests, `admitted:true`, selected
+  timeout1001 instead of1000, and `restoredRevalidationOk:true` after original
+  bytes are restored. `native-modes.json.json` likewise admits engine mode0755
+  instead of0644 and passes restored revalidation. The controls mutate a
+  different member through the existing test-only chunk observer; no timing loop
+  or timestamp spoof supplies the result. Repair `65b1b065` hashes the exact
+  bounded buffers passed to both parsers. `metadata-parse-repaired-01` exits0
+  with20 selected controls in1.757s; both hostile artifacts report
+  `admitted:false` and the member-specific `Runtime member integrity failure`.
+  The unchanged-metadata control retains successful admission/revalidation.
+  `metadata-parse-installed-entry-01` exits0 with10 controls in3.242s. Its
+  runner enables the suite's actual artifact variable; retained per-invocation
+  `result.json`, `stdout.bin` and `stderr.bin` include native exit37 with
+  `NATIVE_DISPATCHED` and no legacy retry, pointer advancement yielding
+  `SELECTED_A`, and engine corruption yielding exit2 with its specific integrity
+  refusal. Earlier installed-entry runs retained process logs but did not enable
+  these per-invocation files. All three runs retain unchanged source/tool pins
+  and empty observed groups. These are shared-verifier and fixture-entry
+  observations, not installed production admission. Metadata immutability,
+  largest-image verification cost, real current-executable path matching and
+  ordinary receipt enforcement remain explicit qualification obligations. Root
+  also carries the same separate-read concern through the actual TypeScript
+  `verifyRuntime`/`verifyNativeLayout` consumer; its repair/evidence is pending.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
