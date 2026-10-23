@@ -89,3 +89,8 @@ evidence:
     evidence_ref: "Bounded native SessionEnd path executed in actual-session-publication-04 (exit0, five real Codex/Claude cases plus followups): native original binding, publication, exact semantic consumption, durable consumed tombstone and release. Source29f13361 reconciled toe7936a80 with runtime blobs unchanged. SQL acquisition/CLOSED-to-publication and warm Render integration remain unverified; A1 remains unchecked."
     recorded_at: "2026-10-23T09:30:20.460Z"
     commit_sha: e7936a8061654c93a6924b74ef86b2c3f9b1822c
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Inspected actual-session-publication-fixture-04 logs, durable operation records, markers and metadata: same-byte input replacement and lost ACK retain writer custody; same-session retry with spare capacity refuses unknown_fence without another consumer or artifact change. Focused native fsync/replacement/replay controls retained. Full store/Render hostile composition remains owed; no general replay/power-loss claim."
+    recorded_at: "2026-10-23T09:30:29.872Z"
+    commit_sha: e7936a8061654c93a6924b74ef86b2c3f9b1822c
