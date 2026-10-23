@@ -33,3 +33,9 @@ rollback:
   - 'revert the hotfix merge commit; installed packs at 105 remain valid'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Worktree prepush-test-stage at the candidate: turbo build exit 0, then npx jest tests/init/hook-install-layout.test.js tests/init/pack-fingerprint.test.js tests/hooks/pytest-entrypoint.test.js --ci exit 0, 3 suites 42/42 (log ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/test-stage-wt-jest.log). Baseline main efabb946 pre-push log push-main-efabb946.log: hook-install-layout A2 undeclared [lib/session-render-service-client.sh]. Fingerprint unchanged b706339e..., recorded version 106 == SHARED_PACK_VERSION."
+    recorded_at: "2026-10-23T05:52:34.873Z"
+    commit_sha: d7bf5de705ea051e3a019ef4fd5e22aeeb6ed914
