@@ -1,7 +1,10 @@
 //! Actual native receive/Actor/relay/filesystem integration. The preparation
 //! peer is controlled here; this is not the ordinary TS consumer qualification.
 use super::*;
-use std::{collections::VecDeque, os::unix::fs::PermissionsExt};
+use std::{
+    collections::VecDeque,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+};
 fn expires() -> Instant {
     Instant::now() + Duration::from_secs(10)
 }
@@ -147,6 +150,38 @@ fn run_metadata(
 ) -> SessionCompletion {
     let acquire = f.acquire(id);
     let bytes = serde_json::to_vec(&acquire).unwrap();
+    run_captured(
+        f,
+        registry,
+        &bytes,
+        missing,
+        wrong_ack,
+        EngineExpectation {
+            metadata: prepared_metadata,
+            frame_length: prepared_frame_length,
+            allowed: true,
+        },
+    )
+}
+struct EngineExpectation<'a> {
+    metadata: &'a [u8],
+    frame_length: usize,
+    allowed: bool,
+}
+fn run_captured(
+    f: &Fixture,
+    registry: Arc<Mutex<SessionRegistry>>,
+    bytes: &[u8],
+    missing: bool,
+    wrong_ack: bool,
+    engine_expectation: EngineExpectation<'_>,
+) -> SessionCompletion {
+    let EngineExpectation {
+        metadata: prepared_metadata,
+        frame_length: prepared_frame_length,
+        allowed: allow_engine_exchange,
+    } = engine_expectation;
+    let bytes = bytes.to_vec();
     let (mut client, mut server) = UnixStream::pair().unwrap();
     client.set_nonblocking(true).unwrap();
     server.set_nonblocking(true).unwrap();
@@ -175,6 +210,10 @@ fn run_metadata(
         match serde_json::from_slice::<Frame<SessionCompletion>>(&incoming).unwrap() {
             Frame::Registered { .. } | Frame::ProjectBound { .. } => {}
             Frame::WriteEngineFrame { sequence, base64 } => {
+                assert!(
+                    allow_engine_exchange,
+                    "rejected original reached engine write"
+                );
                 expected_sequence += 1;
                 assert_eq!(sequence, expected_sequence);
                 let sent: serde_json::Value =
@@ -252,6 +291,10 @@ fn run_metadata(
                 .unwrap();
             }
             Frame::ReadEngineFrame { sequence } => {
+                assert!(
+                    allow_engine_exchange,
+                    "rejected original reached engine read"
+                );
                 expected_sequence += 1;
                 assert_eq!(sequence, expected_sequence);
                 let mut bytes = engine
@@ -280,6 +323,10 @@ fn run_metadata(
                 .unwrap();
             }
             Frame::PublicationCredit { sequence, bytes } => {
+                assert!(
+                    allow_engine_exchange,
+                    "rejected original earned engine credit"
+                );
                 expected_sequence += 1;
                 assert_eq!(sequence, expected_sequence);
                 assert!(bytes > 0 && credited_bytes + bytes <= read_bytes);
@@ -344,6 +391,131 @@ fn actual_receive_actor_seals_or_consumes_missing_metadata_noop_and_restores_sha
             assert_eq!(retained["body"]["verifiedRequestBase64"], "");
         }
     }
+}
+#[test]
+fn consumed_original_replay_preserves_tombstone_and_refunds_transient_shared_slot() {
+    // This observes the actual receive/Actor path, not journal admission alone.
+    // Reuse the exact captured bytes, including timestamp and invocation budget.
+    let f = Fixture::new();
+    let capacity = relay::OperationCapacity::new(1);
+    let registry = Arc::new(Mutex::new(SessionRegistry::new(Arc::clone(&capacity))));
+    fs::create_dir_all(f.session()).unwrap();
+    fs::write(f.session().join(".meta.json"), b"{}").unwrap();
+    let original = serde_json::to_vec(&f.acquire("consumed-original")).unwrap();
+    let metadata = b"{\"ended\":{\"reason\":\"other\"}}";
+    let first = run_captured(
+        &f,
+        Arc::clone(&registry),
+        &original,
+        false,
+        false,
+        EngineExpectation {
+            metadata,
+            frame_length: 0,
+            allowed: true,
+        },
+    );
+    assert!(first.status().is_ok(), "{first:?}");
+    assert!(!first.retained);
+    assert!(registry.lock().unwrap().records.is_empty());
+    assert!(!capacity.retained());
+
+    let key = wire::project_service_key(f.root.to_str().unwrap()).unwrap();
+    let journal = f
+        .root
+        .join("state/render-service/custody/operations/services")
+        .join(key);
+    let tombstone = journal.join(format!(
+        "{}.json",
+        publication::original_request_id("consumed-original")
+    ));
+    let retained: serde_json::Value =
+        serde_json::from_slice(&fs::read(&tombstone).unwrap()).unwrap();
+    assert_eq!(retained["body"]["outcome"]["execution"], "consumed");
+    assert_eq!(retained["body"]["verifiedRequestBase64"], "");
+
+    // Include names, bytes, inode, mode and modification time: a replay must not
+    // rewrite the consumed receipt or touch any published session artifact.
+    fn snapshot(root: &Path) -> BTreeMap<PathBuf, (Vec<u8>, u64, u32, i64, i64)> {
+        fn visit(
+            root: &Path,
+            dir: &Path,
+            files: &mut BTreeMap<PathBuf, (Vec<u8>, u64, u32, i64, i64)>,
+        ) {
+            for entry in fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                let stat = fs::symlink_metadata(&path).unwrap();
+                assert!(!stat.file_type().is_symlink());
+                let bytes = if stat.is_dir() {
+                    Vec::new()
+                } else {
+                    fs::read(&path).unwrap()
+                };
+                files.insert(
+                    path.strip_prefix(root).unwrap().into(),
+                    (
+                        bytes,
+                        stat.ino(),
+                        stat.mode(),
+                        stat.mtime(),
+                        stat.mtime_nsec(),
+                    ),
+                );
+                if stat.is_dir() {
+                    visit(root, &path, files);
+                }
+            }
+        }
+        let mut files = BTreeMap::new();
+        visit(root, root, &mut files);
+        files
+    }
+    let journal_before = snapshot(&journal);
+    let session_before = snapshot(&f.session());
+    let replay = run_captured(
+        &f,
+        Arc::clone(&registry),
+        &original,
+        false,
+        false,
+        EngineExpectation {
+            metadata,
+            frame_length: 0,
+            allowed: false,
+        },
+    );
+    assert!(replay.status().is_err(), "replay executed: {replay:?}");
+    assert!(
+        replay
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("consumed original request ID"),
+        "{replay:?}"
+    );
+    assert!(replay.original_project_bound);
+    assert_eq!(snapshot(&journal), journal_before);
+    assert_eq!(snapshot(&f.session()), session_before);
+
+    // Admission's typed KnownNotExecuted rejection must release only this new
+    // transient registration, so a fresh original can still use capacity one.
+    let fresh = run(&f, Arc::clone(&registry), "fresh-original", false, false);
+    assert!(
+        fresh.status().is_ok(),
+        "fresh original refused after known replay rejection: replay={replay:?}, fresh={fresh:?}"
+    );
+    assert!(!replay.retained);
+    assert!(!fresh.retained);
+    assert!(registry.lock().unwrap().records.is_empty());
+    assert!(!capacity.retained());
+    assert_eq!(
+        fs::read(tombstone).unwrap(),
+        journal_before[&PathBuf::from(format!(
+            "{}.json",
+            publication::original_request_id("consumed-original")
+        ))]
+            .0
+    );
 }
 #[test]
 fn wrong_consumed_keeps_actual_actor_original_and_shared_permit() {

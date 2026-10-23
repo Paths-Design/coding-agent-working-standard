@@ -211,6 +211,7 @@
         "src/transcripts/render-prepare.ts",
         "src/transcripts/render-reader.ts",
         "src/transcripts/render-values.ts",
+        "src/transcripts/session-seal-prepare.ts",
         "src/transcripts/source-occurrence.ts",
         "src/transcripts/store-json.ts",
         "src/transcripts/store-projection.ts",

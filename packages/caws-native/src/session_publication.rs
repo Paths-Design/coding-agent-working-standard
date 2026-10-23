@@ -375,6 +375,8 @@ pub struct Publication {
     published: Option<PublishedSelection>,
     published_marker: Option<Stamp>,
     published_stamps: BTreeMap<String, Stamp>,
+    #[cfg(test)]
+    fail_after_removal: bool,
 }
 impl Publication {
     pub fn capture(
@@ -446,6 +448,8 @@ impl Publication {
             published: None,
             published_marker: None,
             published_stamps: BTreeMap::new(),
+            #[cfg(test)]
+            fail_after_removal: false,
         })
     }
     pub fn writer(&self) -> &Arc<journal::Custody> {
@@ -815,16 +819,10 @@ impl Publication {
         };
         self.uncertain = true;
         let mut expected = self.prior.clone();
-        for (name, (_, bytes)) in &self.prepared {
-            self.revalidate_snapshot(&expected, self.prior_marker.as_ref(), expires)?;
-            self.replace(name, bytes, expires)?;
-            expected.insert(
-                name.clone(),
-                self.directory
-                    .read(name, expires)?
-                    .ok_or("published artifact disappeared")?,
-            );
-        }
+        // Keep every intermediate named inventory within the admitted frontier:
+        // remove obsolete leaves and shrink existing leaves before any growth.
+        // The prior snapshot stays retained for uncertain-outcome custody, while
+        // the old marker remains in place until the complete new inventory syncs.
         for name in &self.removals {
             self.revalidate_snapshot(&expected, self.prior_marker.as_ref(), expires)?;
             let leaf = cstr(name)?;
@@ -834,6 +832,26 @@ impl Publication {
             }
             self.directory.session.sync_all().map_err(err)?;
             expected.remove(name);
+            #[cfg(test)]
+            if self.fail_after_removal {
+                return Err("injected post-removal publication failure".into());
+            }
+        }
+        let mut writes: Vec<_> = self.prepared.iter().collect();
+        writes.sort_by_key(|(name, (_, bytes))| {
+            self.prior
+                .get(*name)
+                .is_none_or(|prior| bytes.len() > prior.bytes.len())
+        });
+        for (name, (_, bytes)) in writes {
+            self.revalidate_snapshot(&expected, self.prior_marker.as_ref(), expires)?;
+            self.replace(name, bytes, expires)?;
+            expected.insert(
+                name.clone(),
+                self.directory
+                    .read(name, expires)?
+                    .ok_or("published artifact disappeared")?,
+            );
         }
         self.revalidate_snapshot(&expected, self.prior_marker.as_ref(), expires)?;
         self.replace(MARKER_NAME, &selected.marker_bytes()?, expires)?;
@@ -1275,6 +1293,185 @@ mod tests {
                 );
             }
         }
+    }
+    // These fixtures isolate the real publisher after preparation. Chunk and
+    // phase admission are exercised by Exchange above; populating its validated
+    // state directly avoids retaining base64 copies of the large boundary files.
+    fn prepare_render_outputs(
+        publication: &mut Publication,
+        outputs: Vec<(&str, Vec<u8>)>,
+        removals: &[&str],
+    ) {
+        for (name, bytes) in outputs {
+            let descriptor = wire::Descriptor {
+                name: name.into(),
+                role: wire::role(name).unwrap().into(),
+                byte_length: bytes.len(),
+                sha256: sha(&bytes),
+            };
+            assert!(wire::target(wire::Kind::Render, &descriptor));
+            publication
+                .prepared
+                .insert(name.into(), (descriptor, bytes));
+        }
+        publication.removals = removals.iter().map(|name| (*name).into()).collect();
+        publication.phases = vec![wire::Kind::Render];
+    }
+    #[test]
+    fn render_new_name_at_artifact_limit_removes_old_before_growth_and_keeps_final_bound() {
+        for remove_old in [false, true] {
+            let f = Fixture::new();
+            fs::write(
+                f.path("turn-001.json"),
+                vec![b'o'; wire::MAX_ARTIFACT_BYTES],
+            )
+            .unwrap();
+            let mut publication = f.capture();
+            let metadata = fs::read(f.path(".meta.json")).unwrap();
+            prepare_render_outputs(
+                &mut publication,
+                vec![("turn-002.json", vec![b'n'; wire::MAX_ARTIFACT_BYTES])],
+                if remove_old { &["turn-001.json"] } else { &[] },
+            );
+            let result = publication.publish(expires());
+            if !remove_old {
+                assert_eq!(result.unwrap_err(), "published inventory frontier exceeded");
+                assert!(!publication.uncertain());
+                assert_eq!(
+                    fs::read(f.path("turn-001.json")).unwrap(),
+                    publication.prior["turn-001.json"].bytes
+                );
+                assert!(!f.path("turn-002.json").exists());
+                assert!(!f.path(MARKER_NAME).exists());
+            } else {
+                let selected = result.unwrap();
+                assert!(!publication.uncertain());
+                assert!(!f.path("turn-001.json").exists());
+                assert_eq!(
+                    fs::read(f.path("turn-002.json")).unwrap(),
+                    publication.prepared["turn-002.json"].1
+                );
+                assert_eq!(
+                    selected
+                        .artifacts
+                        .iter()
+                        .map(|d| d.byte_length)
+                        .sum::<usize>(),
+                    wire::MAX_ARTIFACT_BYTES + metadata.len()
+                );
+                assert_eq!(selected.artifacts.len(), 2);
+                assert_eq!(
+                    fs::read(f.path(MARKER_NAME)).unwrap(),
+                    selected.marker_bytes().unwrap()
+                );
+                assert_eq!(
+                    publication
+                        .exact_consumed(&ack(&publication, &selected.terminal_digest), expires())
+                        .unwrap(),
+                    selected.terminal_digest
+                );
+            }
+            assert_eq!(fs::read(f.path(".meta.json")).unwrap(), metadata);
+            assert!(Arc::ptr_eq(publication.writer(), &f.writer));
+        }
+    }
+    #[test]
+    fn render_shrinks_same_name_before_alphabetically_earlier_growth() {
+        let f = Fixture::new();
+        fs::write(f.path("turn-001.json"), b"a").unwrap();
+        fs::write(
+            f.path("turn-002.json"),
+            vec![b'o'; wire::MAX_ARTIFACT_BYTES],
+        )
+        .unwrap();
+        let retained = vec![b'r'; 1024 * 1024];
+        fs::write(f.path("turn-003.json"), &retained).unwrap();
+        let mut publication = f.capture();
+        let metadata = fs::read(f.path(".meta.json")).unwrap();
+        prepare_render_outputs(
+            &mut publication,
+            vec![
+                ("turn-001.json", vec![b'n'; wire::MAX_ARTIFACT_BYTES]),
+                ("turn-002.json", b"b".to_vec()),
+            ],
+            &[],
+        );
+        // Alphabetical growth first would leave 129MiB plus metadata on disk.
+        let selected = publication.publish(expires()).unwrap();
+        assert!(!publication.uncertain());
+        assert_eq!(
+            fs::read(f.path("turn-001.json")).unwrap(),
+            publication.prepared["turn-001.json"].1
+        );
+        assert_eq!(fs::read(f.path("turn-002.json")).unwrap(), b"b");
+        assert_eq!(fs::read(f.path("turn-003.json")).unwrap(), retained);
+        assert_eq!(fs::read(f.path(".meta.json")).unwrap(), metadata);
+        assert_eq!(selected.artifacts.len(), 4);
+        assert_eq!(
+            publication
+                .exact_consumed(&ack(&publication, &selected.terminal_digest), expires())
+                .unwrap(),
+            selected.terminal_digest
+        );
+        assert!(Arc::ptr_eq(publication.writer(), &f.writer));
+    }
+    #[test]
+    fn failure_after_actual_removal_keeps_prior_marker_inputs_and_writer_uncertain() {
+        let f = Fixture::new();
+        fs::write(f.path("turn-001.json"), b"old turn").unwrap();
+        let previous = f.capture();
+        let artifacts = previous.prior_descriptors();
+        let selected = PublishedSelection {
+            schema: MARKER_SCHEMA.into(),
+            canonical_root: f.root.clone(),
+            session_id: "s".into(),
+            correlation: previous.correlation.clone(),
+            terminal_digest: sha(&serde_json::to_vec(&(
+                &previous.correlation,
+                "published",
+                &artifacts,
+            ))
+            .unwrap()),
+            artifacts,
+        };
+        let prior_marker = selected.marker_bytes().unwrap();
+        fs::write(f.path(MARKER_NAME), &prior_marker).unwrap();
+        drop(previous);
+        let mut publication = f.capture();
+        prepare_render_outputs(
+            &mut publication,
+            vec![("turn-002.json", b"new turn".to_vec())],
+            &["turn-001.json"],
+        );
+        publication.fail_after_removal = true;
+        assert_eq!(
+            publication.publish(expires()).unwrap_err(),
+            "injected post-removal publication failure"
+        );
+        assert!(
+            !f.path("turn-001.json").exists(),
+            "failure must follow the actual unlink and directory sync"
+        );
+        assert!(!f.path("turn-002.json").exists());
+        assert_eq!(fs::read(f.path(MARKER_NAME)).unwrap(), prior_marker);
+        assert_eq!(publication.prior["turn-001.json"].bytes, b"old turn");
+        assert_eq!(
+            fs::read(f.path(".meta.json")).unwrap(),
+            publication.prior[".meta.json"].bytes
+        );
+        assert!(publication.uncertain());
+        assert!(publication.published.is_none());
+        assert!(Arc::ptr_eq(publication.writer(), &f.writer));
+        assert!(
+            publication
+                .exact_consumed(&ack(&publication, &selected.terminal_digest), expires())
+                .is_err()
+        );
+        assert_eq!(
+            publication.publish(expires()).unwrap_err(),
+            "publication is not ready"
+        );
+        assert!(f.journal.has_unknown(expires()).unwrap());
     }
     #[test]
     fn seal_stages_before_effects_and_only_exact_current_generation_can_release_journal() {

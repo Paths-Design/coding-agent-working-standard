@@ -1,5 +1,7 @@
 /** Actual native owner + reviewed copied Sterling profile. Root runs after build.
- * Usage: qualify-render-owner.js <caws-cli-root> <sterling-root> [debug|release] [--prepare-only]
+ * Usage: qualify-render-owner.js <caws-cli-root> <sterling-root> [debug|release] [--prepare-only|--warm-session-end --artifacts <fresh-absolute>]
+ * Warm mode requires the supervising Node child argv0 to be claude, so the
+ * original frontend can independently observe its real Claude ancestor.
  * This installs a runtime only into its retained private sandbox. It never
  * changes selected machine adapters, modifies foreign sources, adopts a PID,
  * signals a service PID, or deletes a sandbox. Preparation alone is not qualification.
@@ -10,6 +12,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { TextDecoder } from 'node:util';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   selectRequestChain,
@@ -47,10 +50,26 @@ const nativeProfile = ['debug', 'release'].includes(optionalArguments[0] ?? '')
   : 'release';
 const prepareOnly = optionalArguments[0] === '--prepare-only';
 if (prepareOnly) optionalArguments.shift();
+const warmSessionEnd = optionalArguments[0] === '--warm-session-end';
+if (warmSessionEnd) optionalArguments.shift();
+assert(!(prepareOnly && warmSessionEnd), 'preparation and warm qualification are separate modes');
+let explicitArtifactRoot: string | undefined;
+if (optionalArguments[0] === '--artifacts') {
+  assert(warmSessionEnd, '--artifacts is reserved for warm qualification');
+  optionalArguments.shift();
+  explicitArtifactRoot = optionalArguments.shift();
+  assert(explicitArtifactRoot, '--artifacts requires a fresh absolute path');
+}
+assert(
+  !warmSessionEnd || explicitArtifactRoot,
+  'warm qualification requires --artifacts <fresh-absolute>'
+);
+if (warmSessionEnd)
+  assert.equal(process.argv0, 'claude', 'launch qualifier with real argv0=claude');
 assert.equal(
   optionalArguments.length,
   0,
-  'expected only optional debug|release followed by optional --prepare-only'
+  'expected optional debug|release followed by --prepare-only or --warm-session-end --artifacts <fresh-absolute>'
 );
 const selectedRequest = process.env.CAWS_NATIVE_BUILD_REQUEST;
 assert(
@@ -66,11 +85,24 @@ assert.equal(nativeBuild.build.profile, nativeProfile, 'native qualification pro
 const native = nativeBuild.build.artifacts.native.path;
 const observer = nativeBuild.build.artifacts.observer.path;
 const custodyObserver = nativeBuild.build.artifacts.custodyObserver.path;
-const root = path.join(
-  crate,
-  'target/qualification/render-owner-' + new Date().toISOString().replace(/[:.]/g, '-')
-);
-fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+const root =
+  explicitArtifactRoot ??
+  path.join(
+    crate,
+    'target/qualification/render-owner-' + new Date().toISOString().replace(/[:.]/g, '-')
+  );
+if (warmSessionEnd) {
+  assert(
+    path.isAbsolute(root) && path.normalize(root) === root,
+    'artifact root must be absolute and normalized'
+  );
+  assert.equal(
+    fs.realpathSync(path.dirname(root)),
+    path.dirname(root),
+    'artifact parent must use its physical path'
+  );
+  fs.mkdirSync(root, { mode: 0o700 });
+} else fs.mkdirSync(root, { recursive: true, mode: 0o700 });
 fs.chmodSync(root, 0o700);
 // An independent repository is required by init's canonical/worktree contract.
 // Evidence stays in the owned ignored artifact root; the sandbox is retained.
@@ -113,7 +145,7 @@ const manifest: Data = {
     adoption: nativeBuild.build.adoption,
   },
   state: 'running',
-  mode: prepareOnly ? 'prepare_only' : 'full_qualification',
+  mode: prepareOnly ? 'prepare_only' : warmSessionEnd ? 'warm_session_end' : 'full_qualification',
   artifactRoot: root,
   sandbox,
   nativeProfile,
@@ -134,6 +166,10 @@ const manifest: Data = {
     'machine installation/adoption',
     'arbitrary same-UID adversary defense',
     'power-cut durability',
+    'legacy Render consumer acknowledgement, compaction, or live-capacity progression',
+    'legacy Render B current-marker validation',
+    'event ordering without a contender does not independently prove uninterrupted writer custody',
+    'concurrent FIFO ordering (warm SessionEnd mode is sequential)',
     'full operating-system dependency hash closure',
   ],
 };
@@ -141,6 +177,8 @@ let commandNumber = 0,
   monitor: ReturnType<typeof setInterval> | undefined;
 let fixturePrepared = false;
 let lastDaemon: Instance | null = null;
+let lastNativeWorker: { created: Data; birth: Instance } | null = null;
+let warmSealInvocationId: string | null = null;
 let cleanup: Data = { state: 'not_observed' };
 const pause = (ms: number): Promise<void> => new Promise((accept) => setTimeout(accept, ms));
 function object(value: unknown): value is Data {
@@ -952,6 +990,429 @@ function compareForeignRendererBytes(
   return result;
 }
 
+/** Public frontend only: retire A, consume its native seal, then permit B. */
+async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): Promise<void> {
+  assert(lastDaemon, 'A must retain its actual warm daemon');
+  const old = lastDaemon;
+  assert(lastNativeWorker, 'A native worker must have an independently observed live birth');
+  const aWorker = lastNativeWorker;
+  assert.equal(aWorker.created.backendPid, old.pid);
+  const beforeNativeWorker = observe(aWorker.birth.pid);
+  assert.equal(beforeNativeWorker.state, 'observed');
+  assert(
+    same(aWorker.birth, instance(beforeNativeWorker.process)),
+    'A native worker birth changed before seal'
+  );
+  const beforeObservation = observe(old.pid);
+  assert.equal(beforeObservation.state, 'observed');
+  assert(same(old, instance(beforeObservation.process)), 'A is no longer the observed warm daemon');
+  const directory = path.join(root, 'session-end');
+  fs.mkdirSync(directory, { mode: 0o700 });
+  const comm = run(
+    'claude-original-comm',
+    '/bin/ps',
+    ['-p', String(process.pid), '-o', 'comm='],
+    project,
+    env
+  );
+  success(comm);
+  assert.equal(fs.readFileSync(path.join(comm.directory, 'stdout.bin'), 'utf8').trim(), 'claude');
+  json(path.join(directory, 'original-ancestor.json'), {
+    pid: process.pid,
+    observation: observe(process.pid),
+    comm,
+  });
+  const { parseJsonSource } = createRequire(path.join(cli, 'package.json'))(
+    './dist/runtime/json-custody.js'
+  ) as typeof import('../dist/runtime/json-custody');
+  const beforeMetadataSource = parseJsonSource(
+    fs.readFileSync(path.join(session, '.meta.json'), 'utf8'),
+    128,
+    100_000,
+    true
+  );
+  assert.equal(beforeMetadataSource.root.kind, 'object');
+  const beforeMetadata = read(path.join(session, '.meta.json'));
+  const turnBytes = list(session)
+    .filter((name) => /^turn-\d+\.json$/.test(name))
+    .map((name) => ({ name, bytes: fs.readFileSync(path.join(session, name)) }));
+  assert.equal(turnBytes.length, 1, 'seal must consume the actual A output');
+  snapshot(session, path.join(directory, 'before'));
+  const before = new Set(list(path.join(session, 'hook-invocations')));
+  const input = JSON.stringify({
+    cwd: project,
+    session_id: sessionId,
+    hook_event_name: 'SessionEnd',
+    reason: 'warm renderer qualification',
+  });
+  const status = await invoke(
+    [
+      'invoke',
+      '--engine',
+      engine,
+      '--node',
+      process.execPath,
+      '--surface',
+      'claude-code',
+      '--event',
+      'session_end',
+      '--runtime-digest',
+      runtimeDigest,
+      '--timeout-ms',
+      '30000',
+      '--configuration',
+      'system',
+    ],
+    { ...env, CLAUDE_SESSION_ID: sessionId },
+    input
+  );
+  const result: Data = { operation: 'native_claude_session_end', status };
+  requests.push(result);
+  success(status);
+  assert.equal(
+    fs.statSync(path.join(status.directory, 'stdout.bin')).size,
+    0,
+    'seal must be silent'
+  );
+  assert.equal(
+    fs.statSync(path.join(status.directory, 'stderr.bin')).size,
+    0,
+    'seal must be silent'
+  );
+  const files = list(path.join(session, 'hook-invocations')).filter((name) => !before.has(name));
+  assert.equal(files.length, 1, 'one seal original must produce one journal');
+  const journalFile = path.join(session, 'hook-invocations', files[0]!);
+  const fd = fs.openSync(
+    journalFile,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+  );
+  let bytes: Buffer;
+  try {
+    const stat = fs.fstatSync(fd);
+    assert(
+      stat.isFile() &&
+        stat.uid === process.getuid?.() &&
+        stat.nlink === 1 &&
+        stat.size > 0 &&
+        stat.size <= MAX_TYPED_JOURNAL,
+      'unsafe seal invocation journal'
+    );
+    bytes = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = fs.readSync(fd, bytes, offset, bytes.length - offset, null);
+      assert(count > 0, 'seal invocation journal truncated');
+      offset += count;
+    }
+    assert.equal(fs.fstatSync(fd).size, stat.size, 'seal journal changed during read');
+    json(path.join(directory, 'journal-source.json'), {
+      path: journalFile,
+      device: stat.dev,
+      inode: stat.ino,
+      bytes: bytes.length,
+      sha256: digest(bytes),
+    });
+  } finally {
+    fs.closeSync(fd);
+  }
+  put(path.join(directory, 'journal.jsonl'), bytes);
+  const originalFrontend = read(path.join(status.directory, 'original-frontend.json'));
+  assert.equal(originalFrontend.state, 'observed');
+  assert.equal(
+    row(originalFrontend.process).parent,
+    process.pid,
+    'native original must descend from real Claude ancestor'
+  );
+  // The shared decoder intentionally admits Codex Stop/PreToolUse only.
+  // This Claude original uses the same strict journal correlation locally.
+  assert.equal(bytes.at(-1), 10, 'seal invocation journal must end with LF');
+  const journalText = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  const journal = journalText
+    .slice(0, -1)
+    .split('\n')
+    .map((line) => {
+      parseJsonSource(line, 32, 10_000, true);
+      return row(JSON.parse(line));
+    });
+  assert.equal(journal[0]!.stage, 'invocation_started');
+  const invocationId = journal[0]!.invocation_id;
+  assert(typeof invocationId === 'string' && invocationId.length > 0 && invocationId.length <= 128);
+  assert(
+    journal.every(
+      (item) =>
+        item.schema === 'caws.hook_invocation.v1' &&
+        item.invocation_id === invocationId &&
+        item.runtime_digest === runtimeDigest &&
+        item.input_sha256 === digest(input) &&
+        item.surface === 'claude-code' &&
+        item.event === 'session_end'
+    ),
+    'seal invocation journal identity differs'
+  );
+  const identity = { invocationId, runtimeDigest };
+  warmSealInvocationId = invocationId;
+  assert.deepEqual(
+    (journal[0]!.selected_handlers as Data[]).map(({ name, kind }) => ({ name, kind })),
+    [{ name: 'session-log.sh', kind: 'stock' }]
+  );
+  const prefix = journal.filter((item) => item.stage === 'session_end_prefix_completed');
+  assert.equal(prefix.length, 1);
+  for (const field of ['prefix_complete', 'envelope_published', 'pointer_published'])
+    assert.equal(prefix[0]![field], true, 'native prefix ' + field);
+  assert.equal(prefix[0]!.status, 'completed');
+  assert.equal(prefix[0]!.agent_pid, 'refreshed');
+  assert(['completed', 'rate_limited'].includes(String(prefix[0]!.reap)));
+  const envelope = read(path.join(session, '.session-envelope.json'));
+  const pointer = read(path.join(project, '.caws/sessions/.caller-session.json'));
+  const pid = read(path.join(project, '.caws/sessions', `agent-pid-${process.pid}.json`));
+  assert.equal(envelope.platform, 'claude-code');
+  assert.equal(envelope.hook_event, 'SessionEnd');
+  for (const value of [envelope, pointer, pid]) {
+    assert.equal(value.session_id, sessionId);
+    assert.equal(value.repo_root, project);
+  }
+  assert.equal(pointer.last_seen_at, envelope.last_seen_at);
+  assert.equal(pid.agent_pid, process.pid, 'cache must name the real original Claude ancestor');
+  assert.equal(pid.surface, 'claude-code');
+  assert.match(String(pid.started_at), /^\d+$/);
+  assert(fs.statSync(path.join(project, '.caws/sessions/.agent-pid-reap-marker')).isFile());
+  json(path.join(directory, 'prefix.json'), {
+    prefix,
+    envelope,
+    pointer,
+    pid,
+    argv0: process.argv0,
+  });
+  const consumers = journal.filter((item) => item.stage === 'session_seal_consumer_completed');
+  assert.equal(consumers.length, 1, 'ordinary semantic reader must run before ACK');
+  const consumer = consumers[0]!;
+  assert(journal.indexOf(prefix[0]!) < journal.indexOf(consumer));
+  assert.equal(consumer.status, 'published');
+  assert(
+    !journal.some((item) =>
+      ['adapter_error', 'compatibility_dispatch_completed'].includes(String(item.stage))
+    ),
+    'seal must use native selection without compatibility execution'
+  );
+  const metadataBytes = fs.readFileSync(path.join(session, '.meta.json'));
+  const metadata = row(JSON.parse(metadataBytes.toString('utf8')));
+  const metadataSource = parseJsonSource(metadataBytes.toString('utf8'), 128, 100_000, true);
+  assert(beforeMetadataSource.root.kind === 'object' && metadataSource.root.kind === 'object');
+  for (const [key, node] of beforeMetadataSource.root.entries) {
+    if (['ended', 'usage', 'models', 'summary_provenance'].includes(key)) continue;
+    const after = metadataSource.root.entries.get(key);
+    assert(after, 'unrelated metadata missing: ' + key);
+    assert.equal(
+      metadataSource.text.slice(after.start, after.end),
+      beforeMetadataSource.text.slice(node.start, node.end),
+      'unrelated metadata bytes changed: ' + key
+    );
+  }
+  assert.equal(digest(metadataBytes), consumer.metadata_sha256);
+  assert.equal(consumer.unrelated_metadata_preserved, true);
+  for (const [key, value] of Object.entries(beforeMetadata))
+    if (!['ended', 'usage', 'models', 'summary_provenance'].includes(key))
+      assert.deepEqual(metadata[key], value, 'unrelated metadata changed: ' + key);
+  assert.equal(row(metadata.ended).reason, 'warm renderer qualification');
+  assert.equal(consumer.reason, row(metadata.ended).reason);
+  assert.equal(consumer.ended_at, row(metadata.ended).ts);
+  assert.match(String(consumer.ended_at), /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+  // Independent oracle from A's real turn bytes; this fixture uses safe integer counts.
+  const fields = [
+    'input_tokens',
+    'output_tokens',
+    'cache_read_input_tokens',
+    'cache_creation_input_tokens',
+    'cached_input_tokens',
+    'reasoning_output_tokens',
+    'total_tokens',
+  ];
+  const sums = new Map<string, bigint>(),
+    models = new Set<string>();
+  for (const turn of turnBytes) {
+    assert(
+      fs.readFileSync(path.join(session, turn.name)).equals(turn.bytes),
+      'seal rewrote A turn'
+    );
+    const parsed = row(JSON.parse(turn.bytes.toString('utf8')));
+    for (const field of fields) {
+      const value = parsed.usage === undefined ? undefined : row(parsed.usage)[field];
+      if (value !== undefined) {
+        assert(
+          typeof value === 'number' && Number.isSafeInteger(value) && value >= 0,
+          'qualifier oracle only admits actual safe integer fixture usage'
+        );
+        sums.set(field, (sums.get(field) ?? 0n) + BigInt(value));
+      }
+    }
+    if (parsed.models !== undefined) {
+      assert(Array.isArray(parsed.models));
+      for (const model of parsed.models) {
+        assert.equal(typeof model, 'string');
+        models.add(String(model));
+      }
+    }
+  }
+  assert.deepEqual(
+    (consumer.counts as Data[]).map((count) => count.field),
+    fields,
+    'ordinary reader must expose every usage field once in contract order'
+  );
+  const recomputed = sums.size > 0 || models.size > 0;
+  const expectedModels = models.size ? [...models] : recomputed ? undefined : beforeMetadata.models;
+  assert.deepEqual(metadata.models, expectedModels);
+  assert.deepEqual(consumer.models, expectedModels ?? null);
+  if (recomputed && !sums.size) assert.equal(metadata.usage, undefined);
+  assert.equal(consumer.summary_mode, recomputed ? 'recomputed' : 'preserved');
+  if (!recomputed) assert.deepEqual(metadata.usage, beforeMetadata.usage);
+  for (const count of consumer.counts as Data[]) {
+    const expected = sums.get(String(count.field));
+    if (expected !== undefined) {
+      assert.equal(row(count.value).lexeme, expected.toString(), 'ordinary consumer exact count');
+      assert.equal(row(metadata.usage)[String(count.field)], Number(expected));
+    } else if (recomputed) assert.equal(count.value, undefined);
+    else {
+      const prior =
+        beforeMetadata.usage === undefined
+          ? undefined
+          : row(beforeMetadata.usage)[String(count.field)];
+      if (prior === undefined) assert.equal(count.value, undefined);
+      else {
+        assert(typeof prior === 'number' && Number.isSafeInteger(prior) && prior >= 0);
+        assert.equal(row(count.value).lexeme, String(prior));
+      }
+    }
+  }
+  assert.equal((consumer.counts as Data[]).length, fields.length);
+  const markerBytes = fs.readFileSync(path.join(session, '.session-publication.json'));
+  const marker = row(JSON.parse(markerBytes.toString('utf8')));
+  assert.equal(marker.canonicalRoot, project);
+  assert.equal(marker.sessionId, sessionId);
+  assert.equal(row(marker.correlation).id, journal[0]!.invocation_id);
+  assert.equal(row(marker.correlation).runtimeDigest, runtimeDigest);
+  assert.equal(marker.terminalDigest, consumer.terminal_digest);
+  assert.equal(
+    marker.terminalDigest,
+    digest(JSON.stringify([marker.correlation, 'published', marker.artifacts]))
+  );
+  assert.deepEqual(
+    (marker.artifacts as Data[]).map((item) => item.name).sort(),
+    ['.meta.json', ...turnBytes.map((item) => item.name)].sort(),
+    'marker must bind the complete retained inventory, including unchanged A turns'
+  );
+  for (const descriptor of marker.artifacts as Data[]) {
+    const artifact = fs.readFileSync(path.join(session, String(descriptor.name)));
+    assert.equal(artifact.length, descriptor.byteLength);
+    assert.equal(digest(artifact), descriptor.sha256);
+  }
+  put(path.join(directory, 'marker.bin'), markerBytes);
+  put(path.join(directory, 'metadata.bin'), metadataBytes);
+  const events = ownerObservations();
+  const position = (stage: string): number => {
+    const matches = events
+      .map((event, index) => ({ event, index }))
+      .filter(
+        ({ event }) => event.stage === stage && event.invocationId === journal[0]!.invocation_id
+      );
+    assert.equal(matches.length, 1, 'one actual Actor stage ' + stage);
+    return matches[0]!.index;
+  };
+  const aCreated = events.filter(
+    (event) =>
+      event.event === 'worker_created' &&
+      event.nativeWorkerPid === aWorker.created.nativeWorkerPid &&
+      event.backendPid === aWorker.created.backendPid
+  );
+  assert.equal(aCreated.length, 1, 'one exact A worker_created tuple required');
+  assert.deepEqual(aCreated[0], aWorker.created, 'retained A worker-created record changed');
+  const cleanups = events
+    .map((event, index) => ({ event, index }))
+    .filter(
+      ({ event }) =>
+        event.event === 'worker_cleanup' &&
+        event.nativeWorkerPid === aWorker.created.nativeWorkerPid &&
+        event.backendPid === aWorker.created.backendPid
+    );
+  assert.equal(cleanups.length, 1, 'one cleanup must name the exact A native-worker/backend tuple');
+  const cleanupIndex = cleanups[0]!.index;
+  const receipt = row(events[cleanupIndex]!.receipt);
+  assert.equal(receipt.directChildReaped, true);
+  assert.equal(row(receipt.stdout).eof, true);
+  assert.equal(row(receipt.stderr).eof, true);
+  assert.equal(receipt.deadlineExceeded, false);
+  assert(position('session_original_reserved') < cleanupIndex);
+  const exits = events
+    .map((event, index) => ({ event, index }))
+    .filter(
+      ({ event }) =>
+        event.event === 'worker_exit' &&
+        event.nativeWorkerPid === aWorker.created.nativeWorkerPid &&
+        event.backendPid === aWorker.created.backendPid
+    );
+  assert.equal(exits.length, 1, 'one exit must name the exact A native-worker/backend tuple');
+  const workerExit = exits[0]!.index;
+  assert(
+    cleanupIndex < workerExit && workerExit < position('session_writer_retained'),
+    'writer use must follow backend reap/both EOFs and original native worker wait'
+  );
+  assert.equal(
+    events.filter((event) => event.event === 'host_started').length,
+    1,
+    'same original owner required'
+  );
+  assert(position('session_writer_retained') < position('session_consumed_durable'));
+  assert(position('session_consumed_durable') < position('session_heavy_released'));
+  const afterObservation = observe(old.pid);
+  assert(
+    afterObservation.state === 'absent' ||
+      (afterObservation.state === 'observed' && !same(old, instance(afterObservation.process))),
+    'old daemon still exists after retirement'
+  );
+  const afterNativeWorker = observe(aWorker.birth.pid);
+  assert(
+    afterNativeWorker.state === 'absent' ||
+      (afterNativeWorker.state === 'observed' &&
+        !same(aWorker.birth, instance(afterNativeWorker.process))),
+    'original A native worker still exists after seal'
+  );
+  assert.equal(backendLease(), null, 'seal must leave no old backend lease');
+  const sealOperations = operationRows()
+    .map((item) => row(item.body))
+    .filter((item) => row(item.outcome).execution === 'consumed');
+  assert.equal(sealOperations.length, 1);
+  assert.equal(
+    row(sealOperations[0]!.identity).requestId,
+    digest(JSON.stringify(['caws.session.original.v1', journal[0]!.invocation_id]))
+  );
+  assert.equal(row(sealOperations[0]!.identity).sourceGeneration, runtimeDigest);
+  assert.equal(row(sealOperations[0]!.outcome).terminalDigest, consumer.terminal_digest);
+  assert.equal(sealOperations[0]!.verifiedRequestBase64, '', 'consumed heavy request not released');
+  const custody = requestCustodies.get(status.directory),
+    coverage = requestCoverage.get(status.directory);
+  assert(custody && coverage);
+  custody.expected = { ...identity, coverage, node: process.execPath, engine };
+  const nativeCustody = custody.collector.collect(custody.expected);
+  const requestCleanup = requestCleanupObservation(coverage, processRows(), observe);
+  assert(requestCleanup.coverageComplete);
+  assert.equal(combinedRequestCleanup(requestCleanup, nativeCustody), 'confirmed_inactive');
+  Object.assign(result, {
+    consumer,
+    events,
+    sealOperations,
+    nativeCustody,
+    requestCleanup,
+    beforeObservation,
+    afterObservation,
+    aWorker,
+    beforeNativeWorker,
+    afterNativeWorker,
+  });
+  json(path.join(directory, 'result.json'), result);
+  snapshot(owner, path.join(directory, 'owner-state-snapshot'));
+  captureWorkers();
+  persist();
+}
+
 async function main(): Promise<void> {
   persist();
   assert.equal(process.platform, 'darwin', 'service-observer supplies Darwin birth identities');
@@ -1084,11 +1545,43 @@ async function main(): Promise<void> {
   };
   validateSystemPolicy(project, policy, { files: [...installed.files], defaults });
   json(path.join(home, 'surfaces/codex/settings.json'), { version: 1, enabled: true });
+  const sealPolicy = {
+    disabled: {
+      session_end: [...new Set(defaults.session_end!.map((entry) => entry.split(' ')[0]!))].filter(
+        (entry) => entry !== 'session-log.sh'
+      ),
+    },
+    extensions: {},
+    handlers: {},
+    libraries: {},
+  };
+  if (warmSessionEnd) {
+    validateSystemPolicy(project, sealPolicy, { files: [...installed.files], defaults });
+    json(path.join(home, 'surfaces/claude-code/settings.json'), { version: 1, enabled: true });
+  }
   json(path.join(home, 'state/projects', digest(project) + '.json'), {
     version: 1,
     root: project,
-    surfaces: { codex: policy },
+    surfaces: { codex: policy, ...(warmSessionEnd ? { 'claude-code': sealPolicy } : {}) },
   });
+  if (warmSessionEnd) {
+    const sealSelection = resolveInvocationSelection({
+      checkout: project,
+      canonical: project,
+      home,
+      runtimeDigest: installed.digest,
+      surface: 'claude-code',
+      event: 'session_end',
+      system: true,
+    });
+    json(path.join(root, 'seal-selection.json'), sealSelection);
+    assert.equal(sealSelection.status, 'active');
+    if (sealSelection.status !== 'active') throw new Error('private seal selection inactive');
+    assert.deepEqual(
+      sealSelection.handlers.map(({ entry, kind }) => ({ entry, kind })),
+      [{ entry: 'session-log.sh', kind: 'stock' }]
+    );
+  }
   const selected = resolveInvocationSelection({
     checkout: project,
     canonical: project,
@@ -1336,7 +1829,9 @@ async function main(): Promise<void> {
     }
   }, 100);
   let previousTranscript = '';
-  for (let ordinal = 1; ordinal <= 3; ordinal++) {
+  for (let ordinal = 1; ordinal <= (warmSessionEnd ? 2 : 3); ordinal++) {
+    if (warmSessionEnd && ordinal === 2) await sealWarmRenderer(env, installed.digest);
+    const servedOrdinal = warmSessionEnd ? 1 : ordinal;
     const directory = path.join(root, 'request-' + ordinal);
     fs.mkdirSync(directory, { mode: 0o700 });
     const count = ordinal === 1 ? 1 : 2;
@@ -1371,6 +1866,20 @@ async function main(): Promise<void> {
     assert.equal(read(leaseFile).status, 'active', 'actual CLI did not register the fixture lease');
     put(path.join(directory, 'lease-before.json'), fs.readFileSync(leaseFile));
     const before = new Set(list(path.join(session, 'hook-invocations')));
+    if (warmSessionEnd && ordinal === 2) {
+      assert(lastNativeWorker);
+      const beforeB = observe(lastNativeWorker.birth.pid);
+      json(path.join(directory, 'A-native-worker-before-B.json'), {
+        witness: lastNativeWorker.birth,
+        observation: beforeB,
+      });
+      assert(
+        beforeB.state === 'absent' ||
+          (beforeB.state === 'observed' &&
+            !same(lastNativeWorker.birth, instance(beforeB.process))),
+        'B must follow original A native worker absence'
+      );
+    }
     const statusPromise = invoke(args, env, input);
     // The service monitor observes kernel identities; it never wraps/replaces
     // the pinned interpreter or alters the copied daemon/renderer bytes.
@@ -1430,6 +1939,7 @@ async function main(): Promise<void> {
     }
     put(path.join(directory, 'invocation-journal.jsonl'), journalBytes);
     const identity = decodeInvocationIdentity(journalBytes, installed.digest, digest(input));
+    requestResult.identity = identity;
     const journal = journalBytes
       .toString('utf8')
       .trim()
@@ -1444,18 +1954,18 @@ async function main(): Promise<void> {
     json(path.join(directory, 'native-custody.json'), requestResult.nativeCustody);
     const until = Date.now() + 1000;
     let backend = backendLease();
-    while ((!backend || backend.lease.served !== ordinal) && Date.now() < until) {
+    while ((!backend || backend.lease.served !== servedOrdinal) && Date.now() < until) {
       await pause(25);
       backend = backendLease();
     }
     assert(backend, 'actual owner did not retain a backend lease');
-    assert.equal(backend.lease.served, ordinal, 'actual daemon served counter');
+    assert.equal(backend.lease.served, servedOrdinal, 'actual daemon served counter');
     const cache = row(backend.lease.cache);
     assert.equal(cache.sessions, 1, 'renderer cache lost selected transcript identity');
     assert.equal(cache.full, 1, 'warm path reparsed the complete transcript');
     assert.equal(
       cache.tail,
-      ordinal === 1 ? 0 : 1,
+      warmSessionEnd || ordinal === 1 ? 0 : 1,
       'appended transcript did not use verified-prefix tail parsing'
     );
     assert.equal(backend.lease.hooks_dir, path.join(prepared.manifest.execution.root, 'hooks'));
@@ -1465,17 +1975,61 @@ async function main(): Promise<void> {
     assert.equal(observed.state, 'observed', 'live daemon birth identity unavailable');
     const daemon = instance(observed.process);
     assert(!daemon.zombie, 'daemon is zombie');
-    if (lastDaemon) assert(same(lastDaemon, daemon), 'warm request used a different actual daemon');
+    if (lastDaemon) {
+      if (warmSessionEnd)
+        assert(!same(lastDaemon, daemon), 'B must use a new daemon birth identity');
+      else assert(same(lastDaemon, daemon), 'warm request used a different actual daemon');
+    }
     lastDaemon = daemon;
     processes.set(pid, daemon);
     requestResult.daemon = { lease: backend.lease, observation: observed };
     const ownerEvents = ownerObservations();
     const created = ownerEvents.filter((event) => event.event === 'worker_created');
-    assert.equal(created.length, 1, 'one actual native worker/backend must serve all requests');
-    assert.equal(created[0]!.backendPid, pid);
+    assert.equal(created.length, warmSessionEnd ? ordinal : 1, 'actual worker creation count');
+    const currentCreated = created[created.length - 1]!;
+    assert.equal(currentCreated.backendPid, pid);
+    if (warmSessionEnd) {
+      const nativeWorkerPid = Number(currentCreated.nativeWorkerPid);
+      assert(Number.isSafeInteger(nativeWorkerPid) && nativeWorkerPid > 1);
+      const nativeWorkerObservation = observe(nativeWorkerPid);
+      assert.equal(
+        nativeWorkerObservation.state,
+        'observed',
+        'actual native worker live birth unavailable'
+      );
+      const birth = instance(nativeWorkerObservation.process);
+      assert.equal(birth.pid, nativeWorkerPid);
+      assert(!birth.zombie);
+      assert.equal(
+        daemon.parent,
+        nativeWorkerPid,
+        'actual backend must descend from the exact created native worker'
+      );
+      if (lastNativeWorker)
+        assert(!same(lastNativeWorker.birth, birth), 'B must use a new native worker birth');
+      lastNativeWorker = { created: { ...currentCreated }, birth };
+      processes.set(nativeWorkerPid, birth);
+      requestResult.nativeWorker = {
+        created: currentCreated,
+        observation: nativeWorkerObservation,
+      };
+    }
+    if (warmSessionEnd && ordinal === 2) {
+      assert(warmSealInvocationId);
+      const releases = ownerEvents.filter(
+        (event) =>
+          event.stage === 'session_heavy_released' && event.invocationId === warmSealInvocationId
+      );
+      assert.equal(releases.length, 1, 'one release for the exact seal original required');
+      const released = ownerEvents.indexOf(releases[0]!);
+      assert(
+        released >= 0 && released < ownerEvents.indexOf(created[1]!),
+        'B worker must start after seal consumption and heavy release'
+      );
+    }
     assert.equal(
       ownerEvents.filter((event) => event.event === 'backend_reused').length,
-      ordinal - 1
+      warmSessionEnd ? 0 : ordinal - 1
     );
     assert.equal(
       ownerEvents.filter((event) => event.event === 'journal_dispatch').length,
@@ -1485,11 +2039,11 @@ async function main(): Promise<void> {
     const returned = ownerEvents.filter((event) => event.event === 'render_outcome');
     assert.deepEqual(
       returned.map((event) => event.served),
-      Array.from({ length: ordinal }, (_, i) => i + 1)
+      Array.from({ length: ordinal }, (_, i) => (warmSessionEnd ? 1 : i + 1))
     );
     assert.deepEqual(
       returned.map((event) => event.cached),
-      [false, false, true].slice(0, ordinal),
+      (warmSessionEnd ? [false, false] : [false, false, true]).slice(0, ordinal),
       'unchanged request did not use the renderer shortcut'
     );
     assert(returned.every((event) => event.execution === 'daemon_response'));
@@ -1500,12 +2054,27 @@ async function main(): Promise<void> {
     );
     const preparedEvents = ownerEvents.filter((event) => event.event === 'prepared');
     assert.equal(preparedEvents.length, ordinal);
-    assert(
-      preparedEvents.every(
-        (event) =>
-          event.selectedIndex === 2 && event.backendPid === pid && event.sessionId === sessionId
-      )
+    const preparedForOriginal = preparedEvents.filter(
+      (event) => event.invocationId === identity.invocationId
     );
+    assert.equal(
+      preparedForOriginal.length,
+      1,
+      'each decoded original must have exactly one Prepared'
+    );
+    const currentPrepared = preparedForOriginal[0]!;
+    assert.equal(
+      currentPrepared.backendPid,
+      pid,
+      'this original Prepared must name its actual current backend'
+    );
+    assert.equal(currentPrepared.sessionId, sessionId);
+    assert.equal(currentPrepared.selectedIndex, selectedIndex);
+    requestResult.preparedBinding = {
+      invocationId: identity.invocationId,
+      prepared: currentPrepared,
+      created: currentCreated,
+    };
     requestResult.ownerObservations = ownerEvents;
     const processInventory = processRows();
     const requestCleanup = requestCleanupObservation(coverage, processInventory, observe);
@@ -1552,19 +2121,31 @@ async function main(): Promise<void> {
       'adapter recorded incomplete execution'
     );
     const operations = operationRows().map((envelope) => row(envelope.body));
-    assert.equal(operations.length, ordinal, 'duplicate or missing durable owner operation');
-    for (const operation of operations)
+    assert.equal(
+      operations.length,
+      ordinal + (warmSessionEnd && ordinal === 2 ? 1 : 0),
+      'duplicate or missing durable owner operation'
+    );
+    const renderOperations = operations.filter(
+      (operation) => row(operation.outcome).execution !== 'consumed'
+    );
+    assert.equal(
+      renderOperations.length,
+      ordinal,
+      'legacy Render remains returned without consumer ACK'
+    );
+    for (const operation of renderOperations)
       assert.equal(
         row(operation.outcome).execution,
         'returned',
         'owner journal retained unknown/running/cancelled work'
       );
-    const served = operations
+    const served = renderOperations
       .map((operation) => Number(row(row(operation.outcome).result).served))
       .sort((a, b) => a - b);
     assert.deepEqual(
       served,
-      Array.from({ length: ordinal }, (_, i) => i + 1)
+      Array.from({ length: ordinal }, (_, i) => (warmSessionEnd ? 1 : i + 1))
     );
     requestResult.ownerOperations = operations;
     requestResult.semanticTurns = turns(directory, count);
@@ -1575,6 +2156,16 @@ async function main(): Promise<void> {
     snapshot(owner, path.join(directory, 'owner-state-snapshot'));
     json(path.join(directory, 'result.json'), requestResult);
     persist();
+  }
+  if (warmSessionEnd) {
+    manifest.established = [
+      'actual reviewed Codex Render A, native stock Claude SessionEnd, actual Codex Render B',
+      'exact A native-worker/backend tuple reaped with both EOFs and original native-worker birth absent before B',
+      'native prefix and ordinary semantic consumer before exact durable CONSUMED and heavy release',
+      'A turn bytes preserved by seal; B exposes exact two-turn user/tool/assistant output',
+      'B uses a new daemon birth identity after seal release; legacy Render records remain returned',
+    ];
+    return;
   }
   compareForeignRendererBytes(prepared.manifest.execution.root, prepared.imageDigest, tools, env);
   manifest.established = [
@@ -1644,28 +2235,39 @@ void main()
         );
       if (requests.length > 0) {
         const receipts = events.filter((event) => event.event === 'worker_cleanup');
-        assert.equal(receipts.length, 1, 'actual worker cleanup receipt missing');
-        const receipt = row(receipts[0]!.receipt);
-        assert.equal(receipt.directChildReaped, true);
-        assert.equal(receipt.logsPersisted, true);
-        assert.equal(receipt.deadlineExceeded, false);
-        for (const channel of [
-          'stdoutPrefixBase64',
-          'stderrPrefixBase64',
-          'workerStderrPrefixBase64',
-        ]) {
-          assert.equal(
-            typeof receipts[0]![channel],
-            'string',
-            'bounded retained backend log prefix missing'
-          );
-          const prefix = Buffer.from(String(receipts[0]![channel]), 'base64');
-          assert(prefix.length <= 512, 'backend diagnostic prefix exceeds contract');
-          put(path.join(root, channel + '.bin'), prefix);
+        assert.equal(
+          receipts.length,
+          warmSessionEnd ? 2 : 1,
+          'actual worker cleanup receipt missing'
+        );
+        for (const [receiptIndex, observation] of receipts.entries()) {
+          const receipt = row(observation.receipt);
+          assert.equal(receipt.directChildReaped, true);
+          assert.equal(receipt.logsPersisted, true);
+          assert.equal(receipt.deadlineExceeded, false);
+          assert.equal(row(receipt.stdout).eof, true);
+          assert.equal(row(receipt.stderr).eof, true);
+          for (const channel of [
+            'stdoutPrefixBase64',
+            'stderrPrefixBase64',
+            'workerStderrPrefixBase64',
+          ]) {
+            assert.equal(
+              typeof observation[channel],
+              'string',
+              'bounded retained backend log prefix missing'
+            );
+            const prefix = Buffer.from(String(observation[channel]), 'base64');
+            assert(prefix.length <= 512, 'backend diagnostic prefix exceeds contract');
+            put(
+              path.join(root, (warmSessionEnd ? receiptIndex + '-' : '') + channel + '.bin'),
+              prefix
+            );
+          }
         }
         assert.equal(
           events.filter((event) => event.event === 'worker_exit').length,
-          1,
+          warmSessionEnd ? 2 : 1,
           'actual native worker wait missing'
         );
         assert.equal(
