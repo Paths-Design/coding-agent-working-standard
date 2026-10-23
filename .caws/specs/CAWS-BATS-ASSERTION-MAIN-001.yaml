@@ -1,0 +1,41 @@
+id: CAWS-BATS-ASSERTION-MAIN-001
+title: 'Land the verified Bash 3.2 assertion repair on main'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-23T03:29:13.497Z'
+updated_at: '2026-10-23T03:29:13.497Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Nine hook Bats suites and their source landing'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous.bats'
+    - 'packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats'
+    - 'packages/caws-cli/tests/hooks/bats/kimi-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/parse-input.bats'
+    - 'packages/caws-cli/tests/hooks/bats/quiet-merge.bats'
+    - 'packages/caws-cli/tests/hooks/bats/qwen-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/reset-strikes.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scan-secrets.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scope-guard.bats'
+  out: []
+invariants:
+  - 'Preserve all 61 predicates and current main; runtime templates, pack metadata and machine configuration are outside this slice'
+acceptance:
+  - id: A1
+    given: 'committed repair fb1ba781 and current main'
+    when: 'the owned lane merges the actual integration branch'
+    then: 'the exact nine-file predicate-preserving repair is retained without additional source changes, supported by the inspected 179-test vectors and 33 negative controls'
+  - id: A2
+    given: 'the exact committed merged candidate'
+    when: 'full-basis gates, doctor and independent committed review run and normal merge lands on main'
+    then: 'main contains the verified source slice with concrete retained checks and explicit cutover nonclaims'
+observability:
+  - 'Exact before/after commits, nine-file diff, raw Bash32 vectors/negative controls and gate outputs'
+rollback:
+  - 'Normal corrective or revert commit; no machine runtime change'
+non_functional: {}
+contracts: []
