@@ -8012,6 +8012,64 @@ Additional bounded evidence and unresolved dependencies:
   higher-priority adapter or queued policy change must refuse or reselect before
   publication. The separate SessionEnd qualifier cannot establish this route.
 
+- E302: Selection component `a0d30c27` completes its bounded acceptance through
+  `caws specs evidence`, with A1-A8 and matching events read back. Governed
+  merge `10613615` integrates it into the publication lane and closes
+  `NATIVE-SELECTION-READ-IO-001`; it does not land the combined candidate on
+  main. `selection-native-image-v2-01` executes30 checks, exit0/66.196s, and
+  `selection-native-image-legacy-01` executes50 checks, exit0/70.232s. Their
+  complementary filters cover all80 cases against unchanged source/emitted pins.
+  The preceding full-suite120s timeout remains a failed execution, not a passing
+  batch. `selection-scenario-03/result.json` retains65/66 observations, changed
+  stock-to-user adapter paths/hashes, original-snapshot replay and fresh
+  runtime-mutation refusal. This completes the selection read abstraction only;
+  ordered observations confer no atomic capture, execution-time freshness,
+  native admission or production publication authority.
+
+- E303: The governed native build at publication source `4db63982` produces
+  `publication-integration/warm-render-native-build-03/native-completed.json`,
+  status `completed`, adoption `NOT_ADOPTED`. The loader verifies the request
+  and returns nativeSHA
+  `716d8b1473e0ed7f53357da856138c35a015f662eae0999705c2a004d4c4be46`,
+  observerSHA `105dcd51ded223ad8bde6e68dca1a9fca9ecf3542c05217194de11ee452d6933`
+  and stable-entrySHA
+  `f3adbdbcd3122c129e463d02802c8233cf5b196745c22b5232b9de8c1a78206b`.
+  Qualifier-only commits preserve that native source. Actual uncertain-progress
+  attempts01/02 exit1 before mutation because A is already consumed. Attempt03,
+  at `b98e507d`, applies the correlated same-byte/different-inode mutation and
+  retains A, but exits1 because its assertion reads forwarded stderr before
+  ancestor pipe settlement. Its retained stderr contains the exact native
+  generation-change refusal. Commit `e27421ab` waits for original ancestor and
+  pipe settlement, then compares stderr with the native terminal digest. No
+  native delay, fabricated result or repeated hostile action is introduced.
+
+- E304: `run-capacity-qualification.py --scenario uncertain-project-progress` at
+  clean `e27421ab`, exact E303 native image and pinned Node22.22.2 exits0 in
+  8.760s. Artifacts remain under
+  `publication-integration/uncertain-progress-actual-04/`: `execution.json`,
+  `fixture/result.json`, original invocation journals, `hostile-action.json`,
+  operation records, metadata/marker bytes, owner observations, writer probes,
+  retained-file identity witnesses and per-request custody/cleanup receipts. The
+  one owner has `maxRetainedRecords:2`. A's inode changes776637831→776637937
+  while SHA remains
+  `769204465ad96be1f4148c204362570a797562593f8b66f3783c336b7c755932`; native
+  exits2 with `published generation bytes or inventory changed`, its durable
+  operation remains `returned`, and its writer remains unavailable. A2 exits2
+  with `unknown_fence`, reaches `session_rejected_before_effects`, creates no
+  durable operation and never reserves an original. B exits0 in a distinct
+  project under the same owner, reaches durable `consumed`, then
+  `session_heavy_released`, and permits its writer probe. A's retained
+  operation, metadata, publication marker, policy and settings identities remain
+  unchanged after A2, B and writer probes. All three original requests have
+  `confirmed_settled` custody and `confirmed_inactive` cleanup with complete
+  witnessed coverage; the supervisor observes no remaining original processes.
+  This completes the bounded uncertain-project progress probe. It does not
+  establish arbitrary descendant cleanup, direct permit-count telemetry, general
+  fairness, mandatory-guard capacity, the thirteen-session/four-repository
+  workload, ordinary SQL Stop publication or installed adoption. Parent A3/A8
+  remain open. The independent qualifier review and combined landing remain
+  root-owned obligations.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -8118,11 +8176,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                      | Next decisive check                                                                                                                                                                                          |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                         | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                                         |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns integration and acceptance; admission-contract supplies selection and route investigation; custody-finish supplies the command-transport proposal          | E301 ordinary SQL Stop proof, with native-owned selection freshness and bounded runtime digest custody before activation; reconcile foreign parser ownership before command-transport writes                 |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile supplies the uncertain-project qualifier proposal; permit-refund implementation is present in the publication lane | Fresh binary: uncertain A plus rejected/refunded A2 preserves A and permits project B and mandatory guards; then unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                             | Next decisive check                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                         |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns integration and acceptance; admission-contract supplies selection and route investigation; custody-finish supplies the command-transport proposal | E301 ordinary SQL Stop proof, with native-owned selection freshness and bounded runtime digest custody before activation; reconcile foreign parser ownership before command-transport writes |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane  | Complete qualifier review and exact combined-image landing; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload    |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
