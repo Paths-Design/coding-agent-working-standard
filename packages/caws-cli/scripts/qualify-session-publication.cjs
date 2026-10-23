@@ -32,11 +32,20 @@ if (process.argv[2] === '--agent-child') {
     if (!spec.hostileControl || hostileResult) return;
     clearInterval(hostileTimer);
     hostileResult = { ...result, observedAt: Date.now(), nativePid: child.pid };
-    fs.writeFileSync(spec.hostileControl.receipt, JSON.stringify(hostileResult, null, 2) + '\n', {
-      flag: 'wx',
-      mode: 0o600,
-    });
-    process.send?.({ type: 'hostile-result', result: hostileResult });
+    try {
+      fs.writeFileSync(spec.hostileControl.receipt, JSON.stringify(hostileResult, null, 2) + '\n', {
+        flag: 'wx',
+        mode: 0o600,
+      });
+    } catch (error) {
+      hostileResult = {
+        ...hostileResult,
+        actionStatus: hostileResult.status,
+        status: 'failed',
+        error: 'hostile action receipt failed: ' + String(error),
+      };
+    }
+    if (process.connected) process.send?.({ type: 'hostile-result', result: hostileResult });
   };
   const armHostile = () => {
     if (!spec.hostileControl) return;
@@ -1435,6 +1444,8 @@ if (process.argv[2] === '--agent-child') {
     // Settle the original ancestor and its pipes before inspecting those bytes.
     const proofA = await settle(a, originalA, idA, false);
     assert.equal(hash(originalA.agent.output().stderr), terminalA.stderrSha256);
+    assert.equal(fs.statSync(target).ino, action.afterInode);
+    assert.equal(hash(fs.readFileSync(target)), action.sameBytesSha256);
     checkPrefix(a, originalA, recordA);
     const consumerA = checkConsumer(a, recordA);
     assert.match(
@@ -1442,10 +1453,7 @@ if (process.argv[2] === '--agent-child') {
       /published generation bytes or inventory changed/
     );
     assert.equal(terminalA.signal, null);
-    assert(
-      Number.isInteger(terminalA.code) && terminalA.code !== 0,
-      'A acknowledged changed input'
-    );
+    assert.equal(terminalA.code, 2, 'A did not preserve the native infrastructure refusal');
     await waitFor(
       () =>
         ownerRows(observations).some(
