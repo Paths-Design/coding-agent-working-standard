@@ -2,7 +2,6 @@ id: CAWS-NATIVE-SOURCE-LANDING-001
 title: 'Reconcile matched native runtime source and package contracts onto main'
 mode: refactor
 lifecycle_state: active
-worktree: native-source-landing
 created_at: '2026-10-22T22:51:57.793Z'
 updated_at: '2026-10-22T23:36:09.003Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
