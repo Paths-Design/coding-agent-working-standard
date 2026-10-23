@@ -524,8 +524,21 @@ describe('mutation policy topology contract', () => {
     // mutation target must reconcile policy AND this pin in the same change
     // (6abff54f reconciled the policy for agents-conjoining.ts but not the
     // pin — the pin is the forcing function, so bump it consciously).
-    expect(result.stdout).toMatch(/^PASS: 192 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 193 source files accounted for exactly once$/m);
     expect(result.stdout).toMatch(/^PASS: 21 mutation targets across 3 surfaces$/m);
+  });
+
+  test('session seal preparation is classified as behavioral parsing and rendering', () => {
+    const policy = loadPolicy();
+    const source = 'src/transcripts/session-seal-prepare.ts';
+    // Ordinary Jest reaches the pure preparer through session-seal-runtime's
+    // lossless count/model/metadata and refusal controls. Classification does
+    // not establish mutation coverage or grant native publication authority.
+    expect(
+      policy.proofGroups
+        .filter((group) => group.files.includes(source))
+        .map(({ id, strategy, command }) => ({ id, strategy, command }))
+    ).toEqual([{ id: 'behavioral', strategy: 'behavioral', command: 'npm test' }]);
   });
 
   test('an unclassified production source is a hard failure', () => {
