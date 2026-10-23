@@ -7915,17 +7915,102 @@ Additional bounded evidence and unresolved dependencies:
   refusal and supported exact-byte recovery remain retained. Root owns a
   normal-hook retry with SSH keepalives and fresh hosted evidence.
 
-- E297: `NATIVE-SELECTION-READ-IO-001` assigns the selection worker a bound
-  `caws/native-selection-read-io` lane from publication candidate `59d24e6a`. It
-  preserves the existing TypeScript policy interpreter while replacing ambient
-  reads with live or immutable observed reads. The worker owns the ten declared
-  source/test paths; root owns ledger, native receipt, qualified profiles and
-  ordinary consumer integration. Missing-observation discovery must survive the
-  retained-manifest catch-all, and successful runtime verification may be
-  memoized only against a complete immutable runtime sub-snapshot. Positive
-  bytes alone do not cover higher-priority absence, directory inventory or
-  ancestry changes. This assignment grants no native admission or activation;
-  its A1-A8 require executed parity/refusal evidence.
+- E297: `NATIVE-SELECTION-READ-IO-001` is bound to root-owned
+  `caws/native-selection-observations` from publication candidate `59d24e6a`.
+  The worker's CLI identity and inherited hook identity disagreed; supported
+  untracking released its clean original lane before root created the
+  replacement binding. The untracked original checkout retains no unique
+  authored changes. The slice preserves the existing TypeScript policy
+  interpreter while replacing ambient reads with live or immutable observed
+  reads. Root owns the ten declared source/test paths and integrates worker
+  proposals, ledger, native receipt, qualified profiles and ordinary consumer
+  integration. Missing-observation discovery must survive the retained-manifest
+  catch-all, and successful runtime verification may be memoized only against a
+  complete immutable runtime sub-snapshot. Positive bytes alone do not cover
+  higher-priority absence, directory inventory or ancestry changes. This
+  assignment grants no native admission or activation; its A1-A8 require
+  executed parity/refusal evidence.
+
+- E298: `main-push-11` publishes canonical `c62f5491` with the unchanged
+  pre-push hook and per-command SSH keepalives. The command exits 0 in 377.972
+  seconds; all five pre-push stages pass, including 350 suites, 6835 passing
+  checks and 14 skips. Before/after source pins agree and no process-group
+  residue remains. `git ls-remote origin refs/heads/main` returns the same full
+  revision. Hosted Release Qualification run `40018975364` completes
+  successfully on that SHA: candidate tests/contracts, six macOS/Linux
+  Node18/20/22 packaged-upgrade jobs, and macOS native Git custody. The raw
+  status is retained at
+  `~/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/hosted-main-c62f5491/status.json`.
+  The separate publication and selection branch commits are not qualified by
+  this hosted result; combined-image and installed-consumer proofs remain open.
+
+- E299: `publication-integration/command-environment-probe-01` confirms that
+  file payload transport leaves an unbounded command in the child environment. A
+  2000000-byte command parses in file mode with empty inline JSON, but the
+  subsequent `/usr/bin/true` exits126 with `Argument list too long`. Removing
+  only its export attribute in the isolated diagnostic permits exit0 while
+  preserving all command bytes, SHA256
+  `f95661673d1732b528bf6cc6575f3d25d37518d3ef15368ffd7239c0b9273ac4`. The
+  equally large response/short-command control launches successfully. Shared
+  parser238, Codex parser264 and native handler-executor208 retain the offending
+  export/construction on `c62f5491`. This is isolated launch evidence, not an
+  ordinary native guard/audit result. Root accepts the complete repair: exact
+  local materialization, inherited preloads, protective lost-carrier refusal,
+  streamed command-derived serialization and late-tail guard/audit controls. The
+  external13-file proposal has syntax checks only. Both parser paths overlap the
+  foreign `f1f2-ingress-custody` lane; the attempted owner message was
+  explicitly not sent because its heartbeat was stale. No ownership transfer or
+  write authority is inferred; root retains coordination and repair.
+
+- E300: Selection candidate `3c92f891` preserves the existing policy owner and
+  introduces live/captured reads with immutable observation records. The first
+  run retains22 failures caused by cross-realm filesystem errors escaping an
+  `instanceof Error` check; `util.types.isNativeError` restores error capture.
+  Two additional executed falsifiers expose writable snapshot IO/identity and
+  unrelated-verifier memo poisoning: the latter accepts a modified stock file.
+  JavaScript-private state, a frozen public snapshot and verifier-identity cache
+  ownership repair those mechanisms. `selection-committed-test-01` executes56
+  checks against clean `3c92f891`, exit0, with source and emitted-file pins and
+  no residue. Normal build, strict compilation and explicit ten-file lint pass.
+  The commit-hook ignored-file warnings do not supply that lint evidence.
+  `selection-scenario-02` retains65 before/66 after observations, seventeen
+  recorded absence errors, the changed user-adapter selection, original sealed
+  replay and exact `Machine runtime file modified: first.sh` refusal. Its first
+  attempt lacked fixture executable mode and correctly refused EACCES; retain
+  that failed attempt. The broader four-suite consumer batch reached its120s
+  aggregate deadline and was killed without residue. The native-image partition
+  executes three installer mode/refusal controls, exit0, retaining fixtures;
+  its77 filtered cases are not passing evidence. Independent committed review
+  exposes another cache defect: a verifier can swallow a missing-read signal and
+  return a partial result. The executed `selection-swallowed-falsifier-01` fails
+  for that reason. Commit `a0d30c27` tracks requested dependencies before
+  discovery and refuses incomplete verification. `selection-committed-test-02`
+  executes59 checks against that clean commit, exit0 in2.863s. Explicit scoped
+  lint exits0; `selection-scenario-03` exits0 in0.162s and retains the same
+  65/66-observation, adapter-selection, sealed-replay and fresh-refusal behavior
+  with source/emitted-file pins. This computation grants no atomic snapshot,
+  native admission or publication authority. `selection-consumer-partition-02`
+  executes all338 registration, session-origin and machine-recovery checks,
+  exit0 in17.229s, with unchanged source/emitted pins and no process residue.
+  Final five policy gates pass against all ten changed paths. The full80-case
+  native-image suite and component acceptance recording remain open. No
+  installed activation follows. Whole-file base64 observations would encode the
+  qualification Node binary as150652248 bytes before JSON overhead; native
+  capture must retain binary custody and supply authenticated bounded digests
+  without moving manifest interpretation out of TypeScript.
+
+- E301: Source inspection of publication candidate `59d24e6a` finds the ordinary
+  SQL Stop join disconnected: `engine-entry.ts:65-120` constructs no transcript
+  store port; `engine.ts:136-137` retains OpenCode/Zcode Stop compatibility;
+  `main.rs:185` calls `StoreAcquire::capture`, which sets `publication:false`.
+  `capture_publication` and `publishNativeTranscriptStore` have no production
+  callers. Enabling publication requires effective adapter/profile admission at
+  the native owner, not only changing that boolean. The next proof is one
+  packaged ordinary Stop invocation joining original identity, admitted profile,
+  exhausted SQL and confirmed CLOSED, committed projection/render generation,
+  expected ordinary-reader content and durable consumed acknowledgement. A
+  higher-priority adapter or queued policy change must refuse or reselect before
+  publication. The separate SessionEnd qualifier cannot establish this route.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -8033,11 +8118,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                             | Next decisive check                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E285 publishes the adapter and Git context                                                                      | Hosted Linux admission, then fresh combined package/image identity and actual native refusal/rollback observations                                                                                                                                                          |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Source-progress owns the TS carrier and SQL continuation; publication-integration owns calendar falsification; root owns native carrier integration, captured-source contract and selection | Actual original-process Git/calendar observations consumed by SQL Render after exhausted CLOSED, with ordinary semantic consumption; present source descriptors must not fabricate missing auxiliary or subagent observations                                               |
-| Resident operation with fair, bounded capacity                                       | Native-context-git owns the fresh-request permit-refund repair; root owns integration and concurrent qualification; E282 establishes sequential reclamation                                 | Retained uncertain original A plus rejected fresh A2 must preserve A's custody and release only A2's unused capacity, allowing project B and mandatory guards to progress; then unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                      | Next decisive check                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                         | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                                         |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns integration and acceptance; admission-contract supplies selection and route investigation; custody-finish supplies the command-transport proposal          | E301 ordinary SQL Stop proof, with native-owned selection freshness and bounded runtime digest custody before activation; reconcile foreign parser ownership before command-transport writes                 |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile supplies the uncertain-project qualifier proposal; permit-refund implementation is present in the publication lane | Fresh binary: uncertain A plus rejected/refunded A2 preserves A and permits project B and mandatory guards; then unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
