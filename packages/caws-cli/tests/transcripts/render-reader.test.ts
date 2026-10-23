@@ -7,6 +7,7 @@ import { renderGet } from '../../src/transcripts/render-values';
 import { isCodepointText } from '../../src/transcripts/codepoint-text';
 import {
   readRendererSource,
+  snapshotRendererSource,
   RENDER_JSON_4300,
   RENDER_JSON_UNLIMITED,
   parseRendererAuxiliary,
@@ -128,6 +129,139 @@ test('publication buffer owns exact original binding and bytes without claiming 
   assert.equal(
     result.events[0]!.envelope.source.rawBase64,
     Buffer.from(raw.slice(0, -1)).toString('base64')
+  );
+});
+
+test('source snapshots read physical identity and buffer discriminator references exactly once', () => {
+  for (const field of ['sourceId', 'sourceGeneration', 'inode'] as const) {
+    const observed = source('data'),
+      expected = observed[field];
+    let reads = 0;
+    Object.defineProperty(observed, field, {
+      enumerable: true,
+      get() {
+        reads++;
+        return reads === 1 ? expected : 0;
+      },
+    });
+    const captured = snapshotRendererSource(observed);
+    if (captured.kind === 'publication-buffer') throw new Error('Expected physical snapshot');
+    assert.equal(captured[field], expected, field);
+    assert.equal(reads, 1, field);
+  }
+  const observed = bufferSource(user('single read') + '\n');
+  for (const field of ['kind', 'binding', 'descriptor', 'bytes', 'size'] as const) {
+    const value = observed[field];
+    let reads = 0;
+    Object.defineProperty(observed, field, {
+      enumerable: true,
+      get() {
+        reads++;
+        if (reads !== 1) throw new Error(`repeated ${field}`);
+        return value;
+      },
+    });
+  }
+  const captured = snapshotRendererSource(observed);
+  assert.equal(captured.kind, 'publication-buffer');
+  assert.equal(captured.size, BigInt(captured.bytes.byteLength));
+});
+
+test('resizing live source storage during metadata acquisition cannot contradict copied lengths', () => {
+  type Resizable = ArrayBuffer & { resize(byteLength: number): void };
+  const ResizableBuffer = ArrayBuffer as unknown as {
+    new (byteLength: number, options: { maxByteLength: number }): Resizable;
+  };
+  const physicalBacking = new ResizableBuffer(4, { maxByteLength: 4 });
+  assert.equal(typeof physicalBacking.resize, 'function');
+  const physical = {
+    bytes: new Uint8Array(physicalBacking),
+    size: 4n,
+    sourceGeneration: 'g',
+    inode: '7',
+    get sourceId() {
+      physicalBacking.resize(0);
+      return 'physical';
+    },
+  };
+  assert.throws(() => snapshotRendererSource(physical), /Physical source copied length differs/);
+  assert.equal(physicalBacking.byteLength, 0, 'the physical mutation actually occurred');
+
+  const bufferBacking = new ResizableBuffer(4, { maxByteLength: 4 });
+  const buffered = bufferSource('data');
+  const descriptor = { ...buffered.descriptor };
+  Object.defineProperty(descriptor, 'sha256', {
+    enumerable: true,
+    get() {
+      bufferBacking.resize(0);
+      return createHash('sha256').update('').digest('hex');
+    },
+  });
+  assert.throws(
+    () =>
+      snapshotRendererSource({
+        ...buffered,
+        bytes: new Uint8Array(bufferBacking),
+        descriptor,
+      }),
+    /Publication buffer copied length differs/
+  );
+  assert.equal(bufferBacking.byteLength, 0, 'the buffer mutation actually occurred');
+});
+
+test('physical labels matching buffer coordinates cannot transfer private registry state', () => {
+  const turn = JSON.stringify({ type: 'turn_context', payload: { turn_id: 'turn' } }) + '\n';
+  const developer =
+    JSON.stringify({
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'developer',
+        content: [{ type: 'input_text', text: '[fixture] retained context' }],
+      },
+    }) + '\n';
+  const reg = registry(),
+    buffered = ready(read(turn, { registry: reg, source: bufferSource(turn) }));
+  assert.equal(buffered.events[0]!.envelope.event.ev, 'turn_boundary');
+  const physicalLabels = {
+    sourceId: buffered.checkpoint.sourceId,
+    sourceGeneration: buffered.checkpoint.sourceGeneration,
+  };
+  const same = ready(
+    read(turn, {
+      registry: reg,
+      source: { ...source(turn), ...physicalLabels },
+      priorCheckpoint: buffered.checkpoint,
+    })
+  );
+  assert.equal(same.reusedPrefix, false);
+  assert.notEqual(same.checkpoint.kind, 'publication-buffer');
+  // Occurrence coordinates are explicitly caller assertions, not a globally
+  // reserved custody namespace. The private state and tagged snapshot differ.
+  assert.deepEqual(same.events[0]!.envelope.source, buffered.events[0]!.envelope.source);
+  assert.equal(same.events[0]!.envelope.source.coordinateAuthority, 'caller_asserted');
+  const fresh = ready(
+    read(developer, {
+      registry: reg,
+      source: { ...source(developer), ...physicalLabels },
+      priorCheckpoint: buffered.checkpoint,
+    })
+  );
+  assert.deepEqual(
+    fresh.events,
+    [],
+    'turnSeen from the buffer must not leak into the physical read'
+  );
+  const positive = ready(
+    read(turn + developer, {
+      registry: reg,
+      source: { ...source(turn + developer), ...physicalLabels },
+    })
+  );
+  assert.equal(
+    positive.events.filter(({ envelope }) => envelope.event.ev === 'hook_context').length,
+    1,
+    'the developer row must expose leaked turnSeen state if a state transfer occurs'
   );
 });
 

@@ -233,14 +233,9 @@ function lineage(file: ObservedRendererFile, numericProfile: RenderNumericProfil
 export function prepareSessionArtifacts(
   input: PrepareSessionArtifactsInput
 ): SessionArtifactPreparation {
-  // A complete publication snapshot cannot inherit a partial transaction from
-  // another acquisition, including when input admission fails before parsing.
-  let checkpoint: RenderReaderCheckpoint | null =
-    (input.transcript.disposition === 'read' &&
-      input.transcript.source.kind === 'publication-buffer') ||
-    input.priorCheckpoint?.kind === 'publication-buffer'
-      ? null
-      : (input.priorCheckpoint ?? null);
+  // Adopt a prior physical transaction only after acquiring an owned source.
+  // Admission errors cannot expose a checkpoint selected by a live getter.
+  let checkpoint: RenderReaderCheckpoint | null = null;
   let phase = 'input';
   let diagnostics: PreparationBase['diagnostics'] = Object.freeze([]);
   const base = (): PreparationBase => ({ checkpoint, publication: 'not_attempted', diagnostics });
@@ -274,6 +269,12 @@ export function prepareSessionArtifacts(
       claudeCandidate: snapshotDirectory(input.subagents.claudeCandidate),
       qwenCandidate: snapshotDirectory(input.subagents.qwenCandidate),
     });
+    const priorCheckpoint = input.priorCheckpoint;
+    if (
+      !(transcript.disposition === 'read' && transcript.source.kind === 'publication-buffer') &&
+      priorCheckpoint?.kind !== 'publication-buffer'
+    )
+      checkpoint = priorCheckpoint ?? null;
     const registry = input.registry,
       numericProfile = snapshotTranscriptJsonProfile(input.numericProfile);
     const priorObservationId = input.priorInventory.observationId;

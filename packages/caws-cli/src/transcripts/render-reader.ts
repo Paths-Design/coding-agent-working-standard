@@ -169,22 +169,23 @@ export function snapshotRendererSource(
 ): RendererSourceObservation {
   if (!observed)
     throw new TypeError('Source observation requires exact owned bytes, size and identity');
-  const { bytes: observedBytes, size } = observed;
+  const { kind, bytes: observedBytes, size } = observed;
   if (
     !(observedBytes instanceof Uint8Array) ||
     typeof size !== 'bigint' ||
     size !== BigInt(observedBytes.byteLength)
   )
     throw new TypeError('Source observation requires exact owned bytes, size and identity');
-  if (observed.kind === 'publication-buffer') {
+  if (kind === 'publication-buffer') {
+    const { binding: observedBinding, descriptor: observedDescriptor } = observed;
     if (
       !exactObservation(observed, ['kind', 'binding', 'descriptor', 'size', 'bytes']) ||
-      !observationObject(observed.binding) ||
-      !observationObject(observed.descriptor)
+      !observationObject(observedBinding) ||
+      !observationObject(observedDescriptor)
     )
       throw new TypeError('Publication buffer requires exact binding and descriptor fields');
-    const binding = Object.freeze({ ...observed.binding });
-    const descriptor = Object.freeze({ ...observed.descriptor });
+    const binding = Object.freeze({ ...observedBinding });
+    const descriptor = Object.freeze({ ...observedDescriptor });
     if (
       !exactObservation(binding, [
         'id',
@@ -216,6 +217,8 @@ export function snapshotRendererSource(
     )
       throw new TypeError('Invalid publication buffer descriptor');
     const bytes = Buffer.from(observedBytes);
+    if (BigInt(bytes.byteLength) !== size || bytes.byteLength !== descriptor.byteLength)
+      throw new TypeError('Publication buffer copied length differs from observed size');
     if (hash(bytes) !== descriptor.sha256)
       throw new TypeError('Publication buffer descriptor hash differs from owned bytes');
     return Object.freeze({
@@ -226,20 +229,22 @@ export function snapshotRendererSource(
       bytes,
     });
   }
+  const { sourceId, sourceGeneration, inode } = observed;
   if (
-    (observed.kind !== undefined && observed.kind !== 'file') ||
-    [observed.sourceId, observed.sourceGeneration, observed.inode].some(
-      (value) => typeof value !== 'string' || !value
-    )
+    (kind !== undefined && kind !== 'file') ||
+    [sourceId, sourceGeneration, inode].some((value) => typeof value !== 'string' || !value)
   )
     throw new TypeError('Source observation requires exact owned bytes, size and identity');
+  const bytes = Buffer.from(observedBytes);
+  if (BigInt(bytes.byteLength) !== size)
+    throw new TypeError('Physical source copied length differs from observed size');
   return Object.freeze({
-    ...(observed.kind === 'file' ? { kind: 'file' as const } : {}),
-    sourceId: observed.sourceId,
-    sourceGeneration: observed.sourceGeneration,
-    inode: observed.inode,
+    ...(kind === 'file' ? { kind: 'file' as const } : {}),
+    sourceId,
+    sourceGeneration,
+    inode,
     size,
-    bytes: Buffer.from(observedBytes),
+    bytes,
   });
 }
 function sourceIdentity(source: RendererSourceObservation): RendererSourceIdentity {

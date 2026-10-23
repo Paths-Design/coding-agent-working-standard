@@ -864,3 +864,64 @@ test('rebound buffer preparation changes generation and refuses corrupted bytes 
   assert.equal(failed.publication, 'not_attempted');
   assert.equal('generation' in failed, false);
 });
+
+test('throwing source classification is a bounded admission failure without an earlier physical checkpoint', () => {
+  const physical = ready(prepareSessionArtifacts(input(rows(user('prior physical')))));
+  const configured = publicationInput(rows(user('new buffer')));
+  let reads = 0;
+  Object.defineProperty(configured.transcript.source, 'kind', {
+    enumerable: true,
+    get() {
+      reads++;
+      throw new Error('source-kind-sentinel');
+    },
+  });
+  const failed = prepareSessionArtifacts({ ...configured, priorCheckpoint: physical.checkpoint! });
+  if (failed.disposition !== 'failed') throw new Error('Expected classification failure');
+  assert.equal(failed.failure.phase, 'input');
+  assert.match(String(failed.failure.cause), /source-kind-sentinel/);
+  assert.equal(failed.checkpoint, null);
+  assert.equal(reads, 1);
+  assert.equal(failed.publication, 'not_attempted');
+  assert.equal('generation' in failed, false);
+});
+
+test('changing live source kind cannot echo a checkpoint selected before snapshot admission', () => {
+  const physical = ready(prepareSessionArtifacts(input(rows(user('prior physical')))));
+  const configured = publicationInput(rows(user('new buffer')));
+  configured.transcript.source.descriptor.sha256 = 'c'.repeat(64);
+  let reads = 0;
+  Object.defineProperty(configured.transcript.source, 'kind', {
+    enumerable: true,
+    get() {
+      reads++;
+      return reads === 1 ? 'file' : 'publication-buffer';
+    },
+  });
+  const failed = prepareSessionArtifacts({ ...configured, priorCheckpoint: physical.checkpoint! });
+  if (failed.disposition !== 'failed')
+    throw new Error('Expected inconsistent source admission failure');
+  assert.equal(failed.failure.phase, 'input');
+  assert.equal(failed.checkpoint, null);
+  assert.equal(reads, 1);
+  assert.equal('generation' in failed, false);
+});
+
+test('a valid buffer kind is consulted once and the owned snapshot reaches semantic preparation', () => {
+  const configured = publicationInput(rows(user('single classification')));
+  let reads = 0;
+  Object.defineProperty(configured.transcript.source, 'kind', {
+    enumerable: true,
+    get() {
+      reads++;
+      if (reads !== 1) throw new Error('repeated-source-kind');
+      return 'publication-buffer';
+    },
+  });
+  const prepared = ready(prepareSessionArtifacts(configured));
+  assert.equal(reads, 1);
+  assert.equal(prepared.checkpoint!.kind, 'publication-buffer');
+  const turn = prepared.generation.artifacts.find((item) => item.role === 'turn');
+  assert.ok(turn);
+  assert.equal(JSON.parse(Buffer.from(turn.bytes()).toString()).user, 'single classification');
+});
