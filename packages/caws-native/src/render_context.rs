@@ -73,6 +73,14 @@ impl Observation {
 }
 /// First failure, completed raw observations and the failed query's admitted
 /// partial bytes remain separate. `cause` owns any uncertain Child until retry.
+///
+/// The invocation owner MUST retain this value until `cleanup_settled()` is
+/// true. `retry_cleanup()` is one bounded attempt, not a guarantee that a refusal
+/// will become transient. Exhausting the owner's cleanup allowance requires
+/// retaining/transferring this exact value as uncertain custody; it never
+/// authorizes replay, success, or destruction as a substitute for settlement.
+/// This dormant component supplies no durable owner after this value is dropped.
+#[must_use = "retain Render context failure custody until cleanup_settled()"]
 #[derive(Debug)]
 pub struct Failure {
     pub category: &'static str,
@@ -97,6 +105,11 @@ impl Failure {
         self.cause
             .as_mut()
             .map_or(Ok(()), ProjectFailure::retry_cleanup)
+    }
+    pub fn cleanup_settled(&self) -> bool {
+        self.cause
+            .as_ref()
+            .is_none_or(|failure| !failure.retained_uncertain())
     }
 }
 fn digest(value: &str) -> bool {

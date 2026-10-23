@@ -82,7 +82,6 @@ function utf8(value: Buffer): string {
 interface Query {
   readonly code: number;
   readonly stdout: Buffer;
-  readonly text: string;
 }
 
 /** `expected` must originate from the native-admitted original, not this record.
@@ -206,10 +205,9 @@ export function deriveRenderGitContext(
       'protocol',
       'Render Git combined output exceeds byte bound'
     );
-    const text = utf8(stdout);
-    utf8(stderr);
-    requireValue(!text.includes('\0'), 'utf8', 'Render Git output contains unsupported NUL bytes');
-    return { code: entry.exitCode, stdout, text };
+    // The shell redirects every stderr and the probe stdout to /dev/null.
+    // Porcelain output only reaches wc -l; it is not a text projection.
+    return { code: entry.exitCode, stdout };
   });
   const inside = queries[0]!;
   if (inside.code !== 0) {
@@ -236,10 +234,15 @@ export function deriveRenderGitContext(
   requireValue(status.code === 0, 'git_exit', 'Render Git porcelain query failed');
   // Shell command substitution removes every trailing LF, and nothing else.
   const stripLf = (text: string): string => text.replace(/\n+$/, '');
-  const branchValue = branch.code === 0 ? stripLf(branch.text) : 'detached';
+  const projectedText = (output: Buffer): string => {
+    const text = utf8(output);
+    requireValue(!text.includes('\0'), 'utf8', 'Render Git output contains unsupported NUL bytes');
+    return text;
+  };
+  const branchValue = branch.code === 0 ? stripLf(projectedText(branch.stdout)) : 'detached';
   // `git ... || echo unknown` preserves partial failing stdout. It does not
   // insert a separator before echo; command substitution then strips final LF.
-  const headValue = stripLf(head.text + (head.code === 0 ? '' : 'unknown\n'));
+  const headValue = stripLf(projectedText(head.stdout) + (head.code === 0 ? '' : 'unknown\n'));
   const dirty = status.stdout.reduce((count, byte) => count + (byte === 10 ? 1 : 0), 0);
   return Object.freeze({
     cwd: expected.cwd,

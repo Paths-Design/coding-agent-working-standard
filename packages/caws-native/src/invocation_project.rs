@@ -1637,6 +1637,100 @@ mod tests {
     }
 
     #[test]
+    fn persistent_stop_refusal_preserves_render_failure_custody_after_retry_allowance() {
+        let scratch = Scratch::new();
+        let path = scratch.executable("git", "/bin/sleep 30");
+        let mut command = Command::new(&path);
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setpgid(0, 0) == 0 {
+                    Ok(())
+                } else {
+                    Err(io::Error::last_os_error())
+                }
+            });
+        }
+        let mut owner = RetainedQuery::new(command.spawn().unwrap());
+        let pid = owner.child.as_ref().unwrap().id();
+        let started = Instant::now();
+        let mut observations = Vec::new();
+        // A finite caller allowance is exhausted with the same refusal on every
+        // attempt. Nothing here assumes EPERM will resolve or permits a reap.
+        for _ in 0..3 {
+            observations.push(owner.retry_cleanup_with(|_| {
+                Err(crate::owned_group::StopError {
+                    stage: crate::owned_group::StopStage::Signal,
+                    raw_errno: Some(libc::EPERM),
+                    signal_errno: Some(libc::EPERM),
+                    observed_pid: Some(pid as i32),
+                    observed_code: None,
+                    group: None,
+                })
+            }));
+        }
+        let same_child = owner.child.as_ref().map(Child::id);
+        let allowance_elapsed = started.elapsed();
+        let mut failure = crate::render_context::Failure {
+            category: "query",
+            diagnostic: "persistent-refusal-sentinel".into(),
+            completed: Vec::new(),
+            stdout: b"retained-partial".to_vec(),
+            stderr: Vec::new(),
+            cause: Some(ProjectFailure {
+                first_phase: ProjectPhase::Cancelled,
+                first_message: "persistent-refusal-sentinel".into(),
+                cleanup: Box::new(owner.state().clone()),
+                retained: Some(Box::new(owner)),
+            }),
+        };
+        let unsettled_after_allowance = !failure.cleanup_settled();
+        // Independent real cleanup is test teardown, not evidence that a
+        // production refusal must be transient. Keep the exact owner until it
+        // settles, before assertions can unwind and destroy its authority.
+        let teardown_until = Instant::now() + Duration::from_secs(2);
+        while !failure.cleanup_settled() && Instant::now() < teardown_until {
+            let _ = failure.retry_cleanup();
+            if !failure.cleanup_settled() {
+                thread::sleep(Duration::from_millis(2));
+            }
+        }
+        assert!(
+            failure.cleanup_settled(),
+            "actual teardown custody unresolved: {failure:?}"
+        );
+        assert!(unsettled_after_allowance);
+        assert_eq!(same_child, Some(pid));
+        assert!(allowance_elapsed < Duration::from_secs(1));
+        for (index, observation) in observations.iter().enumerate() {
+            assert_eq!(observation.pid, Some(pid));
+            assert_eq!(observation.attempts.len(), index + 1);
+            assert!(observation.ownership_retained);
+            assert!(!observation.settled());
+            assert!(observation.reaped.is_none());
+            assert!(observation.attempts.iter().all(|attempt| matches!(
+                attempt.stop,
+                StopAttempt::Refused(_)
+            ) && matches!(
+                attempt.reap,
+                ReapAttempt::NotAttempted
+            )));
+        }
+        assert_eq!(failure.stdout, b"retained-partial");
+        assert_eq!(failure.diagnostic, "persistent-refusal-sentinel");
+        assert_eq!(
+            failure.cause.as_ref().unwrap().first_phase,
+            ProjectPhase::Cancelled
+        );
+        println!(
+            "persistent refusal observations={observations:?}; independently settled={failure:?}"
+        );
+    }
+
+    #[test]
     fn early_pipe_eof_does_not_kill_a_still_running_successful_query() {
         let scratch = Scratch::new();
         let path = scratch.executable("git", "exec 1>&- 2>&-\n/bin/sleep 0.1\nexit 0");

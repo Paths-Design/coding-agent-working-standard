@@ -138,7 +138,8 @@ fn capture(invocation: Invocation) -> (Value, String) {
     );
     for row in &observed.queries {
         assert!(
-            row.cleanup.group_settled
+            row.cleanup.exit_observed
+                && row.cleanup.group_settled
                 && row.cleanup.stdout_eof
                 && row.cleanup.stderr_eof
                 && row.cleanup.reaped
@@ -325,6 +326,87 @@ fn raw_partial_nonzero_and_invalid_utf8_survive_native_observation() {
     let (observed, wire) = capture(invocation);
     assert_eq!(observed["queries"][3]["exitCode"], 9);
     rows.push(json!({"name":"failed-status","observation":observed,"wire":wire,"errorCategory":"git_exit","identity":original,"shellOutcome":shell_outcome}));
+
+    // These bytes never become shell variables: every stderr and probe stdout
+    // is redirected away, while porcelain goes directly through wc -l.
+    let ignored = format!(
+        "printf '\\377\\000' >&2\n{}",
+        PARTIAL
+            .replace(r"printf 'true\n'", r"printf '\377\000'")
+            .replace(
+                r"printf ' M one\n?? two\nunterminated'",
+                r"printf '\377\000\n\376\n\375'"
+            )
+    );
+    let invocation = fixture.wrapper(&ignored);
+    let expected = oracle(&invocation);
+    let original = identity(&invocation);
+    let (observed, wire) = capture(invocation);
+    compare_shell(&observed, &expected);
+    for row in observed["queries"].as_array().unwrap() {
+        assert!(
+            STANDARD
+                .decode(row["stderr"].as_str().unwrap())
+                .unwrap()
+                .starts_with(&[255, 0]),
+            "the actual ignored-stderr fixture must retain non-UTF8 bytes"
+        );
+    }
+    assert_eq!(
+        STANDARD
+            .decode(observed["queries"][0]["stdout"].as_str().unwrap())
+            .unwrap(),
+        [255, 0]
+    );
+    assert_eq!(
+        STANDARD
+            .decode(observed["queries"][3]["stdout"].as_str().unwrap())
+            .unwrap(),
+        [255, 0, 10, 254, 10, 253]
+    );
+    assert_eq!(expected["dirtyFiles"], "2");
+    rows.push(json!({"name":"ignored-raw-bytes","observation":observed,"wire":wire,"expected":expected,"identity":original}));
+
+    let discarded = PARTIAL.replace(r"printf ' \tbranch \t\n\n'", r"printf '\377'; exit 1");
+    assert_ne!(discarded, PARTIAL);
+    let invocation = fixture.wrapper(&discarded);
+    let expected = oracle(&invocation);
+    let original = identity(&invocation);
+    let (observed, wire) = capture(invocation);
+    compare_shell(&observed, &expected);
+    assert_eq!(
+        STANDARD
+            .decode(observed["queries"][1]["stdout"].as_str().unwrap())
+            .unwrap(),
+        [255]
+    );
+    assert_eq!(expected["branch"], "detached");
+    rows.push(json!({"name":"discarded-branch-bytes","observation":observed,"wire":wire,"expected":expected,"identity":original}));
+
+    // A successful probe printing "false" still enters the shell's then arm.
+    // Bare Git subsequently refuses status; pipeline failure yields no context.
+    let bare = fixture.root.join("bare.git");
+    git(
+        &fixture.root,
+        &["init", "--bare", "-q", bare.to_str().unwrap()],
+    );
+    let invocation = fixture.invocation(&bare);
+    let shell = oracle_output(&invocation);
+    assert_eq!(shell.status.code(), Some(128));
+    assert!(shell.stdout.is_empty());
+    let shell_outcome = json!({"exitCode":shell.status.code(),"stdout":STANDARD.encode(&shell.stdout),"stderr":STANDARD.encode(&shell.stderr)});
+    let original = identity(&invocation);
+    let (observed, wire) = capture(invocation);
+    assert_eq!(observed["queries"].as_array().unwrap().len(), 4);
+    assert_eq!(observed["queries"][0]["exitCode"], 0);
+    assert_eq!(
+        STANDARD
+            .decode(observed["queries"][0]["stdout"].as_str().unwrap())
+            .unwrap(),
+        b"false\n"
+    );
+    assert_eq!(observed["queries"][3]["exitCode"], 128);
+    rows.push(json!({"name":"bare-repository","observation":observed,"wire":wire,"errorCategory":"git_exit","identity":original,"shellOutcome":shell_outcome}));
     retain("render-context-hostile-captures.json", &rows);
 }
 

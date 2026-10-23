@@ -143,14 +143,27 @@ test.each(['ordinal', 'operation', 'extra', 'count', 'early', 'continued'])(
     refused(encoded(raw), 'protocol');
   }
 );
-test.each(['stdout', 'stderr'])(
-  'invalid UTF-8 %s remains unsupported rather than replaced',
-  (stream) => {
+test.each([1, 2])(
+  'invalid consumed UTF-8 query %i remains unsupported rather than replaced',
+  (index) => {
     const raw = observation();
-    raw.queries[1][stream] = base64(Buffer.from([255]));
+    raw.queries[index].stdout = base64(Buffer.from([255]));
     refused(encoded(raw), 'utf8', 'Render Git output is outside the UTF-8 consumer profile');
   }
 );
+test('ignored streams remain raw bytes and porcelain counts LF without UTF-8 decoding', () => {
+  const raw = observation();
+  raw.queries[0].stdout = base64(Buffer.from([255, 0]));
+  raw.queries[3].stdout = base64(Buffer.from([255, 0, 10, 254, 10, 253]));
+  for (const query of raw.queries) query.stderr = base64(Buffer.from([255, 0, 254]));
+  expect(deriveRenderGitContext(encoded(raw), expected).dirtyFiles.lexeme).toBe('2');
+});
+test('failed branch discards undecodable stdout before applying detached fallback', () => {
+  const raw = observation();
+  raw.queries[1].exitCode = 1;
+  raw.queries[1].stdout = base64(Buffer.from([255, 0]));
+  expect(deriveRenderGitContext(encoded(raw), expected).branch).toBe('detached');
+});
 test('BOM and CR are data, not generic whitespace to trim', () => {
   const raw = observation();
   raw.queries[1].stdout = base64('\ufeff branch\r\n');
@@ -236,8 +249,11 @@ const captureRoot = process.env.CAWS_RENDER_CONTEXT_CAPTURE_ROOT;
         const bytes = Buffer.from(row.wire, 'utf8');
         expect(JSON.parse(row.wire)).toEqual(row.observation);
         if (row.errorCategory) {
-          if (row.name === 'failed-status')
-            expect(row.shellOutcome).toMatchObject({ exitCode: 9, stdout: '' });
+          if (row.name === 'failed-status' || row.name === 'bare-repository')
+            expect(row.shellOutcome).toMatchObject({
+              exitCode: row.name === 'failed-status' ? 9 : 128,
+              stdout: '',
+            });
           let error;
           try {
             deriveRenderGitContext(bytes, row.identity);
@@ -253,7 +269,7 @@ const captureRoot = process.env.CAWS_RENDER_CONTEXT_CAPTURE_ROOT;
         observed++;
       }
     }
-    expect(observed).toBe(11);
+    expect(observed).toBe(14);
   }
 );
 
