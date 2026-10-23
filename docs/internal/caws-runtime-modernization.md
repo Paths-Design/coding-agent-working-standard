@@ -8231,8 +8231,56 @@ Additional bounded evidence and unresolved dependencies:
   observations, not installed production admission. Metadata immutability,
   largest-image verification cost, real current-executable path matching and
   ordinary receipt enforcement remain explicit qualification obligations. Root
-  also carries the same separate-read concern through the actual TypeScript
-  `verifyRuntime`/`verifyNativeLayout` consumer; its repair/evidence is pending.
+  carries the same separate-read concern through the actual TypeScript
+  `verifyRuntime`/`verifyNativeLayout` consumer in E312.
+
+- E312: TypeScript repair `78b5475c`, integrated into source candidate
+  `95a15927`, binds the exact parsed metadata buffers to the manifest and
+  rejects undeclared directory trees before descent. The tests-only
+  `ts-metadata-baseline-01` exits1: both changed captures receive active
+  selections, and restoring the original bytes makes later verification pass.
+  `ts-directory-baseline-01` exits1 with an admitted three-level undeclared
+  tree. `ts-metadata-committed-selection-01` executes the emitted candidate at
+  `78b5475c`, exits0 in1.560s and retains26 controls. Its `fixtures/`
+  observation JSON records member-specific modification refusals, unchanged
+  live/snapshot admission, and `admitted:false, descended:[]` for the undeclared
+  tree. `ts-metadata-final-build-01` and `ts-metadata-final-lint-01` exit0.
+  Direct comparison against the committed candidate finds no mismatches among422
+  build source pins,1049 committed-selection source/dist pins or111 retained
+  native repair source pins. These establish candidate identity and bounded
+  behavior, not ordinary native admission. The combined three-suite attempt
+  times out after120s with empty output; a60s image-only attempt and30s
+  diagnostic attempt also time out. Their groups are killed and observed empty.
+  The diagnostic's `test-events.jsonl` shows completed rollback cases taking
+  several seconds. At the committed candidate,
+  `ts-metadata-registration-suite-01` exits0 with262 controls in7.440s. Three
+  disjoint image partitions (`ts-metadata-image-rollback-01`,
+  `ts-metadata-image-install-01`, `ts-metadata-image-remainder-01`) exit0 in
+  64.883s,1.683s and61.238s. Their event records account for all80 distinct
+  cases with no duplicated case names; the retained partition observation
+  records those exact selections. Fixture images retain pointers, manifests,
+  modes and per-case observations, including rollback to the legacy digest while
+  retaining a corrupt unused native generation. Their native executable is a
+  shell fixture; no real installed engine execution is inferred. Independent
+  feedback on the committed repair raises candidate/check identity and the
+  timeout; source-pin comparison, committed selector/registration runs and the
+  complete image partitions ground those questions. The peer's source inspection
+  is limited and supplies no acceptance verdict. No parent criterion changes.
+
+- E313: Reinspection of the combined source identifies absent production joins,
+  rather than merely missing tests: `engine-entry.ts:113` supplies no store
+  port; `engine.ts:245` uses live selection and its compatibility branch handles
+  ordinary SQL Stop; `publishNativeTranscriptStore` has no production caller.
+  `GenerationReceipt` has test callers only, and `capture_publication` accepts
+  no receipt. The actor's journal reservation and writer acquisition precede
+  SQL. Its receiver reconstructs expiry from receipt time plus remaining
+  milliseconds. Root owns the next coherent production slice: one ordinary
+  finite Stop through observed selection/profile qualification, native admission
+  and the original deadline, queue revalidation before effects, SQL exhaustion
+  and CLOSED, publication, actual consumer readback and release. Root retains
+  exact-image qualification and the dependent residency workload. Component
+  landings remain incremental; none authorizes machine adoption or legacy
+  retirement before that combined result.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -8340,11 +8388,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                           | Next decisive check                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                              | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                                                                              |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns integration and acceptance; admission-contract supplies the original-deadline primitive; custody-finish repairs metadata hash/parse binding; html-profile supplies explicit SQL-profile refusal | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                               | Next decisive check                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                  | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                                                                              |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; admission-contract's deadline proposal remains unintegrated | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                    | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
