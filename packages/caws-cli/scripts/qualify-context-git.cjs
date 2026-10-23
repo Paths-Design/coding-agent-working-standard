@@ -147,6 +147,7 @@ put(path.join(root, 'inputs.json'), {
 
 const active = new Map();
 const observedCustody = [];
+const fixtureReleases = [];
 function launch(name, cwd, session, overrides = {}, command = 'git commit -m unrelated') {
   const directory = path.join(root, name);
   fs.mkdirSync(directory);
@@ -351,6 +352,82 @@ async function settled(pids, directory) {
     'original Git/custodian processes remain live; preserved fixture, no next scenario'
   );
 }
+async function uncertainCleanup() {
+  const name = 'pending-pipe';
+  const observation = path.join(root, name + '-pids');
+  const leaderRelease = path.join(root, name + '-leader-release');
+  const pipeRelease = path.join(root, name + '-pipe-release');
+  const holder = path.join(root, name + '-holder.cjs');
+  const script = path.join(root, name + '-git.cjs');
+  const wrapper = path.join(root, name + '-git');
+  fixtureReleases.push(leaderRelease, pipeRelease);
+  // A deliberately escaped descendant holds both pipes after the original
+  // leader exits. It has a bounded self-exit and an explicit fixture release;
+  // production must retain custody, not claim it killed this other group.
+  put(
+    holder,
+    `const fs = require('node:fs');
+const until = Date.now() + 15000;
+setInterval(() => { if (fs.existsSync(${JSON.stringify(pipeRelease)}) || Date.now() >= until) process.exit(0); }, 10);
+`
+  );
+  put(
+    script,
+    `const fs = require('node:fs');
+const cp = require('node:child_process');
+const child = cp.spawn(${JSON.stringify(node)}, [${JSON.stringify(holder)}], { detached: true, stdio: ['ignore', 1, 2] });
+child.on('error', error => { throw error; });
+fs.writeFileSync(${JSON.stringify(observation)}, [process.pid, child.pid, process.ppid].join(' '));
+const until = Date.now() + 15000;
+setInterval(() => { if (fs.existsSync(${JSON.stringify(leaderRelease)}) || Date.now() >= until) process.exit(11); }, 10);
+`
+  );
+  put(wrapper, '#!/bin/sh\nexec ' + quote(node) + ' ' + quote(script) + '\n');
+  fs.chmodSync(wrapper, 0o700);
+  const invocation = launch(name, first, name, { CAWS_GIT_BINARY: wrapper }, 'echo harmless');
+  const pids = await waitPids(observation);
+  observedCustody.push({ pids, directory: invocation.directory });
+  const before = pids.map((pid) => ({ pid, row: processRow(pid) }));
+  const parsed = before.map(({ row }) => row.split(/\s+/));
+  assert(parsed.every((row) => row.length === 4 && !row[3].startsWith('Z')));
+  assert.equal(Number(parsed[0][1]), pids[2]);
+  assert.equal(Number(parsed[0][2]), pids[0]);
+  assert.equal(Number(parsed[1][1]), pids[0]);
+  assert.equal(Number(parsed[1][2]), pids[1], 'pipe holder must have escaped the Git group');
+  assert.equal(Number(parsed[2][1]), invocation.child.pid);
+  put(path.join(invocation.directory, 'live-processes.json'), before);
+  put(leaderRelease, 'exit original leader\n');
+  const result = await bounded(
+    invocation.terminal,
+    8000,
+    'unsettled Git did not fail the frontend'
+  );
+  assert.equal(result.code, 2, result.stderr);
+  assert.deepEqual(
+    JSON.parse(result.stdout),
+    {
+      decision: 'block',
+      reason: result.stderr.trim(),
+    },
+    'uncertain cleanup must preserve the native protective failure contract'
+  );
+  assert.match(result.stderr, /cleanup (?:pending|remains uncertain)/);
+  assert(!fs.existsSync(path.join(first, '.caws/sessions', name, 'hook-invocations')));
+  const retained = pids.map((pid) => ({ pid, row: processRow(pid) }));
+  assert.match(
+    retained[0].row,
+    /\sZ\S*$/,
+    'original leader must remain unreaped while pipes are open'
+  );
+  assert(
+    retained.slice(1).every(({ row }) => row && !/\sZ\S*$/.test(row)),
+    'pipe holder and original custodian must survive the failed frontend'
+  );
+  put(path.join(invocation.directory, 'retained-after-frontend.json'), retained);
+  put(pipeRelease, 'close both held pipes\n');
+  await settled(pids, invocation.directory);
+  return { result, originalGitPids: pids, retained, release: pipeRelease };
+}
 async function main() {
   const ordinary = await refused(launch('ordinary', first, 'ordinary'), first, 'ordinary', first);
   const linkedResult = await refused(launch('linked', linked, 'linked'), first, 'linked', linked);
@@ -418,6 +495,7 @@ async function main() {
       );
       results.push({ name, a: aResult, b: bJournal, originalGitPids: pids });
     }
+  const pendingCleanup = await uncertainCleanup();
   assert.deepEqual(
     {
       native: hash(fs.readFileSync(native)),
@@ -431,6 +509,7 @@ async function main() {
     ordinary,
     linked: linkedResult,
     cases: results,
+    pendingCleanup,
     pins,
   });
   process.stdout.write(
@@ -438,6 +517,8 @@ async function main() {
   );
 }
 main().catch(async (error) => {
+  for (const file of fixtureReleases)
+    if (!fs.existsSync(file)) put(file, 'release fixture after failure\n');
   // Signal only original live Child handles. Custodians retain private Git
   // groups after frontend loss; never kill a PID learned from a fixture file.
   const pending = [...active];

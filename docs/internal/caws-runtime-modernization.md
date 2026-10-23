@@ -7125,6 +7125,34 @@ Additional bounded evidence and unresolved dependencies:
   thirteen-session/four-repository workload. Source acceptance and landing
   remain separate from these execution observations.
 
+- E266: Context-Git candidate `7db95f44`, integrated with main at `b18195ea`,
+  retains a normal build exit 0, the combined four-suite exit 0 with 193 checks,
+  and actual native ordinary/linked/cancellation controls in
+  `context-git-custody/{ts-committed-build-01,ts-committed-combined-01,integrated-committed-01}/`.
+  The two lint repairs reconstruct the prior checked test hashes exactly when
+  reversing only `globalThis.AbortController` and the `node:timers` import.
+  These checks preserve the six Ready/dispatch/handoff assertions, including
+  fatal cleanup uncertainty and the absent-capability legacy control.
+
+  `integrated-pending-02` adds a real escaped-group descendant holding both Git
+  pipes beyond the cleanup budget. The actual frontend exits 2 with protective
+  block JSON and the cleanup-pending diagnostic, without a pre-Ready invocation
+  journal.
+  `ordinary-consumers-pending-02/pending-pipe/retained-after-frontend.json`
+  records original Git PID 11428 unreaped, its pipe holder 11540 live, and
+  native custodian 11427 live after frontend 11365 exits. Only the fixture's
+  explicit pipe-release permits all three to disappear in the retained
+  settlement observations. The first probe's empty-output assertion was
+  incorrect: the existing native PreToolUse failure contract emits protective
+  JSON. Its failed output is retained in `integrated-pending-01/`; the repaired
+  oracle requires the exact block/diagnostic relation rather than accepting
+  arbitrary output. Both runs use the E265 native image and compiled ordinary
+  engine, with no production change. Artifact paths are relative to the E265
+  artifact root. This demonstrates retained custody through a concrete
+  unsettled-pipe case; it does not establish killing escaped groups, recovery
+  from kernel failure, immutable executable launch, residency or full cutover
+  acceptance.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
