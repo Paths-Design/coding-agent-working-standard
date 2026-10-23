@@ -1,6 +1,7 @@
 //! Native transport support components. These modules do not confer project authority.
 
 pub mod agent_pid_cache;
+pub mod context_git;
 pub mod invocation_project;
 pub mod owned_group;
 pub mod plan_snapshots;

@@ -38,13 +38,22 @@ fn poll_with_cancellation(
     deadline: Instant,
     observe_cancellation: bool,
 ) -> Result<(), String> {
+    poll_with_max_wait(fds, deadline, observe_cancellation, 100)
+}
+
+fn poll_with_max_wait(
+    fds: &mut [libc::pollfd],
+    deadline: Instant,
+    observe_cancellation: bool,
+    max_wait_ms: i32,
+) -> Result<(), String> {
     if observe_cancellation {
         crate::cancellation::check()?;
     }
     let remaining = deadline
         .checked_duration_since(Instant::now())
         .ok_or("request deadline expired")?;
-    let timeout = remaining.as_millis().clamp(1, 100) as i32;
+    let timeout = (remaining.as_millis().clamp(1, 100) as i32).min(max_wait_ms);
     // SAFETY: fds points at an initialized writable array for its stated length.
     if unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, timeout) } < 0 {
         let error = io::Error::last_os_error();
@@ -324,6 +333,7 @@ pub struct Session {
     stdout_bytes: usize,
     cache_control_credit: usize,
     publication_control_credit: usize,
+    context_git_control_credit: usize,
     #[cfg(feature = "sqlite-store")]
     store_control_credit: usize,
     out_done: bool,
@@ -491,6 +501,7 @@ impl Session {
             stdout_bytes: 0,
             cache_control_credit: 0,
             publication_control_credit: 0,
+            context_git_control_credit: 0,
             #[cfg(feature = "sqlite-store")]
             store_control_credit: 0,
             out_done: false,
@@ -568,6 +579,16 @@ impl Session {
     // Every write also drains bounded engine output, so neither side can deadlock
     // by filling the opposite pipe. Request stdin remains open through handoff.
     fn pump(&mut self, write: Option<&[u8]>, deadline: Instant) -> Result<usize, String> {
+        self.pump_with_interests(write, deadline, &[], 100)
+    }
+
+    fn pump_with_interests(
+        &mut self,
+        write: Option<&[u8]>,
+        deadline: Instant,
+        extra: &[libc::pollfd],
+        max_wait_ms: i32,
+    ) -> Result<usize, String> {
         if let Some(bridge) = &mut self.render_bridge {
             bridge.tick();
         }
@@ -603,7 +624,13 @@ impl Session {
         if let Some(bridge) = &self.render_bridge {
             descriptors.extend(bridge.interests());
         }
-        poll_with_cancellation(&mut descriptors, deadline, !self.terminal_containment)?;
+        descriptors.extend_from_slice(extra);
+        poll_with_max_wait(
+            &mut descriptors,
+            deadline,
+            !self.terminal_containment,
+            max_wait_ms,
+        )?;
         let mut written = 0;
         if let Some(bytes) = write
             && descriptors[0].revents != 0
@@ -655,6 +682,81 @@ impl Session {
         Ok(())
     }
 
+    /// Only one pre-Ready exchange is live. While Git runs, Node stderr is
+    /// drained and cancellation remains observable. Node stdout must remain
+    /// silent until the result: even a well-formed Failure is an overlapping
+    /// frame at this point. EOF is transport loss, not successful Git cleanup.
+    /// After result delivery the ordinary frame reader admits Failure normally.
+    pub fn run_context_git(
+        &mut self,
+        owner: &mut caws_native::context_git::ContextGitOwner,
+        frame: &[u8],
+        deadline: Instant,
+    ) -> Result<(), String> {
+        let mut pending = owner.begin(frame)?;
+        let exchange: Result<(), String> = (|| {
+            let credit = self
+                .context_git_control_credit
+                .checked_add(frame.len() + 1)
+                .ok_or("context Git control credit overflow")?;
+            if credit > caws_native::context_git::MAX_EXTRA_ENGINE_STDOUT_BYTES {
+                return Err("context Git control credit exceeds two requests".into());
+            }
+            self.context_git_control_credit = credit;
+            loop {
+                crate::cancellation::check()?;
+                // Check an already-buffered second frame/partial frame before
+                // advancing the new operation, including coalesced requests.
+                if !self.buffered.is_empty() {
+                    return Err("engine output overlapped pending context Git request".into());
+                }
+                let result = pending.advance()?;
+                self.pump_with_interests(
+                    None,
+                    deadline,
+                    &pending.interests(),
+                    if result.is_some() { 0 } else { 100 },
+                )?;
+                if !self.buffered.is_empty() {
+                    return Err("engine output overlapped pending context Git request".into());
+                }
+                if self.out_done {
+                    return Err(
+                        "engine stream closed during pending context Git request; cleanup required"
+                            .into(),
+                    );
+                }
+                if let Some(mut bytes) = result {
+                    bytes.push(b'\n');
+                    let mut offset = 0;
+                    while offset < bytes.len() {
+                        offset += self.pump(Some(&bytes[offset..]), deadline)?;
+                        if offset < bytes.len() && (!self.buffered.is_empty() || self.out_done) {
+                            return Err(
+                                "engine output overlapped partial context Git result".into()
+                            );
+                        }
+                    }
+                    // The final write can wake a legitimate second request or
+                    // Ready. Preserve those buffered bytes for the phase loop;
+                    // a post-final probe cannot establish an earlier overlap.
+                    return Ok(());
+                }
+            }
+        })();
+        match exchange {
+            Ok(()) => Ok(()),
+            Err(mut error) => {
+                if let Err(cleanup) = pending.cancel_and_settle(Instant::now() + CLEANUP_BUDGET) {
+                    error.push_str(&format!("; context Git cleanup: {cleanup}"));
+                }
+                // Dropping closes sole frontend control even on an uncertain
+                // attempt. The separate custodian retains the actual Git Child.
+                Err(error)
+            }
+        }
+    }
+
     /// Credit only exact, already validated one-shot cache control bytes.
     /// The ordinary proposal frame and unclassified output budgets do not grow.
     pub fn credit_session_cache_control(&mut self, bytes: usize) -> Result<(), String> {
@@ -672,11 +774,16 @@ impl Session {
     fn control_credit(&self) -> usize {
         #[cfg(feature = "sqlite-store")]
         {
-            self.cache_control_credit + self.publication_control_credit + self.store_control_credit
+            self.cache_control_credit
+                + self.context_git_control_credit
+                + self.publication_control_credit
+                + self.store_control_credit
         }
         #[cfg(not(feature = "sqlite-store"))]
         {
-            self.cache_control_credit + self.publication_control_credit
+            self.cache_control_credit
+                + self.context_git_control_credit
+                + self.publication_control_credit
         }
     }
 

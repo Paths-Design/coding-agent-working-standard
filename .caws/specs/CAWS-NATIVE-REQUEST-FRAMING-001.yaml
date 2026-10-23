@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-REQUEST-FRAMING-001
 title: 'Frame multiline native hook JSON without losing source custody'
 mode: fix
-lifecycle_state: active
-worktree: native-request-framing
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Multiline framing and exact input/numeral custody repaired, fresh receipt-built private native image passes five actual entry controls; two-file source landed on main with full-basis gates and independent review. Compatibility Python, vendor trust, lifecycle/rendering, rollback, residency and global cutover remain with the accepted lead.'
 created_at: '2026-10-23T03:46:03.360Z'
-updated_at: '2026-10-23T03:46:24.341Z'
+updated_at: '2026-10-23T05:31:57.741Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -38,3 +39,19 @@ rollback:
   - 'Normal corrective or revert commit while preserving prior immutable image generations and raw failed attempts'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed85d301ad adds lexical JSON-whitespace compaction outside quoted strings and one terminatingLF; mainusesencoder and preserves pre-LF requestsize limit. Original bug independently source-grounded RawValue/rawserializer+firstLFreader; actual oldinstalled benign2 beforefirstframe and diagnostic frame3654B ends payload opening, validUTF8/JSONerrorposition3654. Unit baseline4pass atoriginalsource; candidate6pass before rustfmt (format-only85commit), exact rawpayload expected hugeintegers/exponents/-0/duplicatekeys/escapedquote/backslash/Unicode and byte-exactinputJson assertions plus legacyuncompactednegativecontrol. Raw framing-unit-{baseline,candidate}-01 under /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-image-invocation. Actual freshproduction85consumer originalmultiline0 and CRLF701B+hugeint1e400/-0/escapes0 reach actual stricttypeddecoder and10compatibilityhandlers with inputSHA journaljoin; this discharges productioncallsite beyondhelpertests. No numericValue roundtrip, no allruntime/retirement claim."
+    recorded_at: "2026-10-23T05:26:32.006Z"
+    commit_sha: "85d301ad21b9a795f5c33451111baa6692f8f028"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Fresh actual v2release request b84872006bed1f96518447a336add5adc90eaa6ce632d896c145ec34aa06fc21 snapshots committed85d301ad79native+11embedded sources; actualcoordinatorPID15311 exit0/104.974s, own groups empty/sourcepins unchanged, completedNOT_ADOPTED receipt53175a4209f5d810762e7c7768de8af20fb8009680f432788b3994e52d9488f6. Actual normalprivateCLI plan21 PID3617 exit0/3.505s/fullreceiptload and6430member machinehomemap unchanged; apply22 PID80262 exit0 publishes image1da4f1a8efb9745c5c7681d4f20b8ab1f7030d3c30b28e500a52282a83e11df0. Independent installedimagejoin0 all5901files exact; onlynative1273f9ef,stablefb64571c,provenancechange fromold964c, selectedbinary/pointer/modes exact. Actualstableentry5controls: originalmultilineReadPID6040 native0/outer0/8.836s; foreignBashPID75243 native2/outer0/6.796s specificdifferent-sessionstderr and targetSHA48f035unchanged; CRLF/numeralsReadPID74877 native0/outer0/5.456s; invalidUTF8PID50520 native2/outer0/1.026s correctinputfailure; malformedJSONPID92623 native2/outer0/.796s correctgrammarfailure. Everyimage/input map unchanged, no timeout/residualgroup. Journals join exact inputSHA/runtime1da4, actualcompatibilitydispatch10handlers0 forReads, first7 endingbashwriteguard2 forforeign; delivery remainsnot_observed. Compatibility/Python remains, no nativehandler-only retirement/harnesscallback/lifecycle/render/publication/rollback/residency/adoption acceptance. Raw native-image-invocation/{framing-release-build-01,framing-installed-image-join-01.json,owned-read-03-framing,foreign-bash-01-framing,owned-read-crlf-numerals-01,invalid-utf8-01-framing,invalid-json-01-framing}; fixture records21/22. Oldnativefailures, preconfiguremistake, diagnosticwrappers and double-base64 inspector failure retained, notcountedaspassingruntime. Currentlead01a164bc explicitlyaccepts parent/integration/publication/residency/docs; rootretainsboundedframing."
+    recorded_at: "2026-10-23T05:26:42.858Z"
+    commit_sha: "85d301ad21b9a795f5c33451111baa6692f8f028"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Normal mainmerge c81dcedb780f2a04442af71bbbe85d607b09d0f4 contains85d301ad; root directly confirmed ancestry and exact unchangedprotocol.rs/main.rs blobs onmain. Sourceunitteardown done/branchdeleted, immediateownbridge acquired for landedverification. Fresh2filefullbasis5gatesPASS at85, doctor0E4W5I, independentcommittedreadOnlyreview groundedencoder quote/backslash/token/maxsize andrawchecks with no actionabledefect; no reviewer verdict used asacceptance. Existing architecture/consumercontract already requires validJSON framing/originalbytecustody; no newdocneededforbugfix. Owncanonical A1/A2 evidence preserves oldfailures and all5actualstableentry rawcontrols; parentA2 remainsunaccepted and lead01a164bc explicitlyaccepted/acquired5lanes+parentledger/publication/residency/docs and newmarkerdefect, preserving sourceE263batch and lifecycle/render/vendortrust/rollback/13x4/Pythonretirement obligations. Rootnormalreleasedoldsource/Batsbridges, doesnotwriteleadscopes. Postteardown normalprivateCLIplan23 actual0 reloads completev2receipt fromretained stagednative+embedded snapshots, digest1da4 unchanged/changedfalse, noownedprocessgroup remains; originalworktreeremoval doesnotinvalidate downstreamloaderinputs. Raw framing-{doctor,gates}.log and fixture records23 alongside A2artifacts. This accepts only two-file framingrepair and qualifiedsource landing; no globalinstall/adoption or fullcutover accepted."
+    recorded_at: "2026-10-23T05:31:54.742Z"
+    commit_sha: c81dcedb780f2a04442af71bbbe85d607b09d0f4

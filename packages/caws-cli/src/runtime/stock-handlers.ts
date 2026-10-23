@@ -33,6 +33,9 @@ const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
   'parse-input.sh': [
     'd1823c3913094d20059823b1215ea5b173515912545eea09f8dfbcbb9c03ca30',
     '04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61',
+    // Comment-only revision of d1823c39: the comment-stripped bytes are identical,
+    // so parsed payload bytes, refusal exits and stage lifetime are unchanged.
+    'b61ca58672ec23722042fa55b4ba65b8c95ebc67a28dbcdc4f335770fe32d5de',
   ],
   'emit.sh': [
     '32bd200bf9160dffc5d349a7e13341bbcf6644ab9c47ad3f491f68d3ba77bcf4',

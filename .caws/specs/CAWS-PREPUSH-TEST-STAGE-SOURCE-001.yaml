@@ -1,0 +1,47 @@
+id: CAWS-PREPUSH-TEST-STAGE-SOURCE-001
+title: 'Pre-push test stage: declare session-render-service-client in the shared pack; pytest fixture copies the repo-root LICENSE'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Shared pack 106 declares lib/session-render-service-client.sh (template tree unchanged, fingerprint retained); pytest-entrypoint fixture copies the repo-root LICENSE so the cold pretest build reaches the entrypoint. 3 suites 42/42 in the lane; baselines on main failed both.'
+created_at: '2026-10-23T05:47:26.834Z'
+updated_at: '2026-10-23T05:53:04.077Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'shared hook-pack manifest + pytest entrypoint fixture'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/helpers/pytest-entrypoint-fixture.js'
+  out: []
+invariants:
+  - 'The shared template tree is not modified; the fingerprint stays b706339e... and only the recorded version moves with SHARED_PACK_VERSION 105->106'
+  - 'No test is loosened, skipped, or allowlisted; the drift guard still fails on a new undeclared file'
+acceptance:
+  - id: A1
+    given: 'templates/hook-packs/shared/lib/session-render-service-client.sh exists on disk but no shared manifest entry declares it, so hook-install-layout A2 fails'
+    when: 'the entry is added as a managed non-executable lib (dest .caws/hooks/lib/session-render-service-client.sh) and SHARED_PACK_VERSION is 106 with pack-fingerprints.json version 106'
+    then: 'npx jest tests/init/hook-install-layout.test.js tests/init/pack-fingerprint.test.js passes with zero undeclared files and the live fingerprint equal to the recorded one'
+  - id: A2
+    given: 'the pytest-entrypoint fixture copies packages/caws-cli but not the repo-root LICENSE, so its pretest build dies in stage-consumer-docs with ENOENT lstat <fixture>/LICENSE'
+    when: 'the fixture copies SOURCE_ROOT/LICENSE to <fixtureRoot>/LICENSE'
+    then: 'npx jest tests/hooks/pytest-entrypoint.test.js passes the cold installed-scenario case with exit_code 0'
+rollback:
+  - 'revert the hotfix merge commit; installed packs at 105 remain valid'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Worktree prepush-test-stage at the candidate: turbo build exit 0, then npx jest tests/init/hook-install-layout.test.js tests/init/pack-fingerprint.test.js tests/hooks/pytest-entrypoint.test.js --ci exit 0, 3 suites 42/42 (log ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/test-stage-wt-jest.log). Baseline main efabb946 pre-push log push-main-efabb946.log: hook-install-layout A2 undeclared [lib/session-render-service-client.sh]. Fingerprint unchanged b706339e..., recorded version 106 == SHARED_PACK_VERSION."
+    recorded_at: "2026-10-23T05:52:34.873Z"
+    commit_sha: d7bf5de705ea051e3a019ef4fd5e22aeeb6ed914
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Same jest run: pytest-entrypoint 'cold npm pytest entrypoint builds before a real installed read-only selection and marker invocation' passes (exit_code 0). Baseline under env -i on main (pytest-entrypoint-cleanenv.log): exit_code 2, fixture stderr 'stage-consumer-docs: ENOENT lstat <fixture>/LICENSE'."
+    recorded_at: "2026-10-23T05:52:36.340Z"
+    commit_sha: d7bf5de705ea051e3a019ef4fd5e22aeeb6ed914

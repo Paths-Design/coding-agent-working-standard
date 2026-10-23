@@ -615,6 +615,9 @@ import { isAdapterCoveredSurface } from './types';
 // allowlist and approval policy instead of exiting before either policy runs.
 // v104: heartbeat message provenance reads the canonical sender specId field.
 // v105: refresh captured invocation custody and per-handler stdin stage cleanup.
+// lib/session-render-service-client.sh ships in this tree but is not installed:
+// it is a native-image build input (src/runtime/service-image.ts) carrying
+// builder markers, with no managed header and no dispatcher that sources it.
 export const SHARED_PACK_VERSION = 105;
 
 /**
