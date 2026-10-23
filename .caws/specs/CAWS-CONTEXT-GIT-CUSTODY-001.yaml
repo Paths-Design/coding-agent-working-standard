@@ -78,3 +78,8 @@ evidence:
     evidence_ref: "Actual same/crossrepository SIGTERM/SIGKILL A/B controls execute in /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/ordinary-consumers-pending-02/: four named cases in result.json, each A live-processes and settlement-observations record all originalpids absent, B before-a-cancellation/after-a-settlement show same liveGit/custodian before release, B exactguardblock and distinctjournal. integrated-pending-02 command exit0, retained pins match88a3108c. No residency or13session acceptance."
     recorded_at: "2026-10-23T07:22:53.712Z"
     commit_sha: "88a3108c5581a5610f2d24398ad7be0d2efb3b38"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Finite identity/token/ordinal/fixedargv and phase restrictions exercised by native-integration-04 (16 controls inclmalformed/overlap/earlyReady/earlyFailure/afterReady/partialresponse) and native-protocol-02/native-runner-01 exit0. /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/ts-committed-combined-01 exit0/193 controls includes exactcorrelation, canonicalnumeric/base64, UTF8, unsupportedcapability, output/deadline, cleanupfatal and nofallback. executable metadata checked aroundrun, not immutable launch authority. Commitverification establishes trackedbytesexistence only; raw execution and code inspected independently."
+    recorded_at: "2026-10-23T07:22:55.290Z"
+    commit_sha: "88a3108c5581a5610f2d24398ad7be0d2efb3b38"
