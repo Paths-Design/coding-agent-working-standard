@@ -1,0 +1,37 @@
+id: CAWS-LICENSE-TRANSPORT-RECOVERY-001
+title: 'Relinquish stale generated license ownership without deleting retained files'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-23T05:27:15.334Z'
+updated_at: '2026-10-23T05:27:15.334Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Package build license transport custody and explicit recovery'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/clean-staged-docs.mjs'
+    - 'packages/caws-cli/tests/docs/package-license-transport.test.js'
+  out: []
+invariants:
+  - 'Ordinary stage and cleanup retain strict device and file identity checks; recovery never adopts or deletes retained license leaves.'
+  - 'Explicit recovery requires exact expected marker bytes hash under existing exclusive lock, stable descriptor/path observations, and retained original bytes before marker retirement.'
+acceptance:
+  - id: A1
+    given: 'a stale ownership marker with changed device identity'
+    when: 'ordinary build cleanup runs'
+    then: 'it refuses without changing retained license files, and explicit reviewed recovery preserves every leaf and permits subsequent normal stage and cleanup as unowned.'
+  - id: A2
+    given: 'changed marker identity or bytes, symlink ancestors or leaves, an existing lock, or failure during retention or descriptor close'
+    when: 'explicit recovery is requested'
+    then: 'it refuses or reports uncertainty without granting deletion authority and retains evidence.'
+observability:
+  - 'Retained original refusal, marker bytes and identity, exact recovery command and generated-license before-after identities; hostile tests and normal package build.'
+rollback:
+  - 'Normal corrective source commit; retained marker evidence is never treated as current deletion authority.'
+non_functional: {}
+contracts:
+  - name: 'license-ownership-recovery'
+    type: behavior
