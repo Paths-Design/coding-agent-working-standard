@@ -66,6 +66,6 @@ evidence:
     commit_sha: "38691bc25be1dfe3ad74f216baf224576c936cee"
   - criterion_id: A4
     status: pass
-    evidence_ref: "Actual legacy15.5.2 --no-stash versus new runner probes both preserve exact whole-file partial-stage index bytes, including already formatted doc.md and .md. Suffix repair preserves legacy dot basename; unusual newline/tab/Unicode/dash/colon/glob names, unselected control and root prettier fences tested. Root read source/config/probe outputs. Independent review questions grounded; no floor changes. Evidence root /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/sparse-staged-runner/committed-node-01 and review-probes-01."
-    recorded_at: "2026-10-23T10:05:05.345Z"
-    commit_sha: "38691bc25be1dfe3ad74f216baf224576c936cee"
+    evidence_ref: "Retains original38691 runner17 and actual legacy/new partial-stage parity. Push02 exposed missing fixture dependency;703bb30 installs real .husky runner, actual installed formatter/config chain and valid JS fixture, preserves every Guard2 assertion and asserts changed working/index/HEAD bytes. Focused actual Jest5 and hooks57 exit0, checked source SHA matches703 despite precommit receipt HEAD85b, unchanged source and emptygroups. Root inspected complete hook/runner/config/fulltest: checkout-root cwd and nonsymlink staged inputs constrain formatter targets, Guard2 precedes runner, no missing sourced hook dependency. Independent diff-only review limitations retained; concerns grounded directly. Receipts sparse-staged-runner/merge-fixture-jest-01 and merge-fixture-hooks-01; full normal push remains separate."
+    recorded_at: "2026-10-23T10:35:00.712Z"
+    commit_sha: "703bb30a20754b826cc82d83c08cf9152d02d401"
