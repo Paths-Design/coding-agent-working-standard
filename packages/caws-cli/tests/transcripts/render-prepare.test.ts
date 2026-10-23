@@ -1288,3 +1288,187 @@ test('sync explicit calendar validation remains before missing-source retention'
   assert.equal(result.failure.phase, 'input');
   assert.match(String(result.failure.cause), /explicit calendar\/timezone/);
 });
+
+test('history retention does not consult poisoned accumulation noise prefixes', async () => {
+  for (const poison of ['getter', 'noniterable'] as const) {
+    for (const absent of [true, false]) {
+      for (const asynchronous of [true, false]) {
+        const configured = input('');
+        let reads = 0,
+          calendarCalls = 0;
+        const resultInput = {
+          ...configured,
+          transcript: absent
+            ? { path: transcriptPath, disposition: 'absent' as const }
+            : file(transcriptPath, ''),
+          priorInventory: prior('turn-001.json'),
+          registry: {
+            ...configured.registry,
+            get noisePrefixes(): readonly string[] {
+              reads++;
+              if (poison === 'getter') throw new Error('unused noise getter');
+              return null as unknown as readonly string[];
+            },
+          },
+        };
+        const result = asynchronous
+          ? await prepareSessionArtifactsWithCalendar(resultInput, async (catalog) => {
+              calendarCalls++;
+              return resolvedCalendar(catalog);
+            })
+          : prepareSessionArtifacts(resultInput);
+        assert.equal(result.disposition, 'retain');
+        if (result.disposition !== 'retain') throw new Error('Expected retained history');
+        assert.equal(result.reason, absent ? 'missing_source' : 'empty_source');
+        assert.equal(result.currentness, 'noncurrent');
+        assert.equal(reads, 0);
+        assert.equal(calendarCalls, 0);
+      }
+    }
+  }
+});
+
+test('consulted noise prefix failures retain their accumulation phase', async () => {
+  const reason = new Error('consulted noise getter');
+  for (const asynchronous of [true, false]) {
+    const configured = input(rows(user('actual accumulation')));
+    let calendarCalls = 0;
+    const resultInput = {
+      ...configured,
+      registry: {
+        ...configured.registry,
+        get noisePrefixes(): readonly string[] {
+          throw reason;
+        },
+      },
+    };
+    const result = asynchronous
+      ? await prepareSessionArtifactsWithCalendar(resultInput, async (catalog) => {
+          calendarCalls++;
+          return resolvedCalendar(catalog);
+        })
+      : prepareSessionArtifacts(resultInput);
+    if (result.disposition !== 'failed') throw new Error('Expected noise refusal');
+    assert.equal(result.failure.phase, 'accumulation');
+    assert.equal(result.failure.cause, reason);
+    assert.equal(calendarCalls, 0);
+    assert.equal(result.publication, 'not_attempted');
+  }
+});
+
+test('context integer ownership observes each original numeric property once', async () => {
+  const configured = input(rows(user('owned numeric context')));
+  const reads = { kind: 0, lexeme: 0, numberKind: 0 };
+  const prepared = ready(
+    await prepareSessionArtifactsWithCalendar(
+      {
+        ...configured,
+        context: {
+          ...configured.context,
+          dirtyFiles: {
+            get kind(): 'number' {
+              reads.kind++;
+              return 'number';
+            },
+            get lexeme(): string {
+              return ++reads.lexeme <= 3 ? '2' : '3.5';
+            },
+            get numberKind(): 'integer' {
+              reads.numberKind++;
+              return 'integer';
+            },
+          },
+        },
+      },
+      resolvedCalendar
+    )
+  );
+  assert.deepEqual(reads, { kind: 1, lexeme: 1, numberKind: 1 });
+  assert.deepEqual(renderGet(prepared.generation.context, 'dirty_files'), jsonNumber('2'));
+  assert.equal(turnPayload(prepared).context.dirty_files, 2);
+});
+
+test('context integer ownership preserves exact negative zero and large lexemes', async () => {
+  for (const lexeme of ['-0', '-7', '9'.repeat(100)]) {
+    const configured = input(rows(user('exact numeric context')));
+    const prepared = ready(
+      await prepareSessionArtifactsWithCalendar(
+        {
+          ...configured,
+          context: { ...configured.context, dirtyFiles: jsonNumber(lexeme) },
+        },
+        resolvedCalendar
+      )
+    );
+    assert.deepEqual(renderGet(prepared.generation.context, 'dirty_files'), jsonNumber(lexeme));
+    const artifact = prepared.generation.artifacts.find((item) => item.role === 'turn');
+    assert.ok(artifact);
+    const encoded = Buffer.from(artifact.bytes()).toString();
+    assert.ok(encoded.includes(`"dirty_files": ${lexeme === '-0' ? '0' : lexeme}`));
+  }
+});
+
+test('resolved calendar getters and nonfunction ports fail in the calendar phase', async () => {
+  const reason = new Error('resolved timezone getter');
+  for (const poison of ['getter', 'epochSeconds', 'secondsBetween'] as const) {
+    const configured = input(rows(user('calendar admission')));
+    const calendar =
+      poison === 'getter'
+        ? {
+            ...configured.calendar,
+            get timezone(): string {
+              throw reason;
+            },
+          }
+        : ({ ...configured.calendar, [poison]: null } as unknown as RendererCalendarPort);
+    const result = await prepareSessionArtifactsWithCalendar(configured, async () => calendar);
+    if (result.disposition !== 'failed') throw new Error('Expected calendar refusal');
+    assert.equal(result.failure.phase, 'calendar');
+    if (poison === 'getter') assert.equal(result.failure.cause, reason);
+    else assert.ok(result.failure.cause instanceof TypeError);
+    assert.equal(result.publication, 'not_attempted');
+    assert.equal('generation' in result, false);
+  }
+});
+
+test('sync chronological failure precedes accumulation noise observation', () => {
+  const configured = input(rows(user('chronological ordering')));
+  const calendarReason = new Error('chronological calendar failed');
+  const noiseReason = new Error('noise must remain unobserved');
+  let epochCalls = 0,
+    noiseReads = 0;
+  const result = prepareSessionArtifacts({
+    ...configured,
+    audit: file(
+      '/fixture/audit.jsonl',
+      rows({
+        session_id: 's',
+        event: 'tool_use',
+        timestamp: '2026-01-01T00:00:02Z',
+        tool: 'Bash',
+        command: 'echo chronological ordering',
+      })
+    ),
+    calendar: {
+      ...configured.calendar,
+      epochSeconds() {
+        epochCalls++;
+        throw calendarReason;
+      },
+    },
+    registry: {
+      ...configured.registry,
+      get noisePrefixes(): readonly string[] {
+        noiseReads++;
+        throw noiseReason;
+      },
+    },
+  });
+  if (result.disposition !== 'failed') throw new Error('Expected chronological failure');
+  assert.equal(result.failure.phase, 'accumulation');
+  assert.equal(result.failure.cause, calendarReason);
+  assert.equal(epochCalls, 1);
+  assert.equal(noiseReads, 0);
+  assert.equal(result.publication, 'not_attempted');
+  assert.equal('generation' in result, false);
+});

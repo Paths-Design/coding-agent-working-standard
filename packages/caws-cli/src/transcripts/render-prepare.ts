@@ -326,22 +326,30 @@ function* preparationStages(
       checkpoint = priorCheckpoint ?? null;
     const registry = input.registry,
       numericProfile = snapshotTranscriptJsonProfile(input.numericProfile);
-    const noisePrefixes = Object.freeze([...registry.noisePrefixes]);
     const priorObservationId = input.priorInventory.observationId;
     // Preserve synchronous calendar acquisition/validation ordering. The async
     // path does not consult its resolver until the retained read stage is ready.
     const selectedCalendar = suppliedCalendar ? snapshotCalendar(suppliedCalendar()) : null;
     const observedContext = { ...input.context };
+    const observedDirty = observedContext.dirtyFiles;
+    const dirtySnapshot =
+      observedDirty !== null && typeof observedDirty === 'object' && !Array.isArray(observedDirty)
+        ? {
+            kind: observedDirty.kind,
+            lexeme: observedDirty.lexeme,
+            numberKind: observedDirty.numberKind,
+          }
+        : observedDirty;
     if (
       !observedContext.sessionId ||
       !observedContext.cwd ||
-      !isJsonNumber(observedContext.dirtyFiles) ||
-      observedContext.dirtyFiles.numberKind !== 'integer'
+      !isJsonNumber(dirtySnapshot) ||
+      dirtySnapshot.numberKind !== 'integer'
     )
       throw new TypeError('Session context is incomplete');
     const contextInput = Object.freeze({
       ...observedContext,
-      dirtyFiles: jsonNumber(observedContext.dirtyFiles.lexeme),
+      dirtyFiles: jsonNumber(dirtySnapshot.lexeme),
     });
     if (selectedCalendar) requireCalendar(selectedCalendar);
     if (input.selectedAdapterOverride !== undefined)
@@ -426,6 +434,13 @@ function* preparationStages(
       });
     if (!selectedCalendar && !events.length && !auxiliary.events.length)
       return Object.freeze({ ...base(), disposition: 'empty' });
+    // The asynchronous path owns accumulation inputs before suspension.
+    // Synchronous callers retain merge-before-noise observation ordering.
+    let noisePrefixes: readonly string[] | undefined;
+    if (!selectedCalendar) {
+      phase = 'accumulation';
+      noisePrefixes = Object.freeze([...registry.noisePrefixes]);
+    }
     phase = 'calendar';
     const calendar =
       selectedCalendar ?? snapshotCalendar(yield calendarCatalog(events, auxiliary.events));
@@ -433,7 +448,7 @@ function* preparationStages(
     phase = 'accumulation';
     const merged = mergeRendererChronologicalEvents(events, auxiliary.events, calendar);
     const accumulated = accumulateRendererEvents(merged, contextInput.cwd, {
-      noisePrefixes,
+      noisePrefixes: noisePrefixes ?? Object.freeze([...registry.noisePrefixes]),
       duration: calendar,
       numericProfile,
     });
