@@ -1,9 +1,11 @@
 id: CAWS-BATS-BASH32-VACUOUS-ASSERTIONS-001
 title: 'Make standalone [[ assertions in hook bats suites fail under bash 3.2'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'All 61 standalone [[ statements in nine hook bats suites rewritten so a false assertion fails under bash 3.2 regardless of position; predicates preserved; 33 of 33 mutants red, 179 tests identical baseline vs rewritten, inventory 0 rows; merged as 9c31e931 into native-runtime-modernization. Evidence re-recorded with commit citations after the close advisory.'
 created_at: '2026-10-22T21:39:10.320Z'
-updated_at: '2026-10-23T03:23:20.230Z'
+updated_at: '2026-10-23T03:23:31.597Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
