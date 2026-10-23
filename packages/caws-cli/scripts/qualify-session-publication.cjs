@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const cp = require('node:child_process');
-const { setTimeout, clearTimeout } = require('node:timers');
+const { setTimeout, clearTimeout, setInterval, clearInterval } = require('node:timers');
 const { setTimeout: delay } = require('node:timers/promises');
 const { performance } = require('node:perf_hooks');
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -82,32 +82,41 @@ if (process.argv[2] === '--agent-child') {
         '--node',
         '--artifacts',
         '--original-count',
+        '--scenario',
         '--custody-tools',
         '--process-observer',
       ].includes(key) &&
         value &&
         !options.has(key),
-      'usage: qualify-session-publication.cjs --native <absolute> --node <absolute> --artifacts <fresh absolute> [--original-count 258 --custody-tools <physical emitted root> --process-observer <physical binary>]'
+      'usage: qualify-session-publication.cjs --native <absolute> --node <absolute> --artifacts <fresh absolute> [--original-count 258 | --scenario uncertain-project-progress] [--custody-tools <physical emitted root> --process-observer <physical binary>]'
     );
     if (key === '--original-count')
       assert.equal(value, '258', 'capacity qualification requires exactly 258 originals');
+    else if (key === '--scenario') assert.equal(value, 'uncertain-project-progress');
     else assert(path.isAbsolute(value));
     options.set(key, value);
   }
   for (const key of ['--native', '--node', '--artifacts'])
     assert(options.has(key), 'missing ' + key);
   const originalCount = options.has('--original-count') ? 258 : 0;
+  const uncertainProgress = options.get('--scenario') === 'uncertain-project-progress';
+  assert(
+    !(originalCount && uncertainProgress),
+    'Select the original workload or the bounded progress scenario'
+  );
+  const requestProofRequired = Boolean(originalCount || uncertainProgress);
   for (const key of ['--custody-tools', '--process-observer'])
     assert.equal(
       options.has(key),
-      Boolean(originalCount),
-      'capacity-only dependency required with --original-count: ' + key
+      requestProofRequired,
+      'custody dependency requires --original-count or --scenario uncertain-project-progress: ' +
+        key
     );
-  const custodyTools = originalCount ? options.get('--custody-tools') : null;
-  const observer = originalCount ? options.get('--process-observer') : null;
+  const custodyTools = requestProofRequired ? options.get('--custody-tools') : null;
+  const observer = requestProofRequired ? options.get('--process-observer') : null;
   for (const file of [custodyTools, observer].filter(Boolean))
     assert.equal(fs.realpathSync(file), file, 'capacity dependency must use its physical path');
-  const strictCustody = originalCount
+  const strictCustody = requestProofRequired
     ? {
         ...require(path.join(custodyTools, 'scripts/render-request-topology.js')),
         ...require(path.join(custodyTools, 'scripts/render-request-custody.js')),
@@ -209,7 +218,7 @@ if (process.argv[2] === '--agent-child') {
     ]
       .map(pin)
       .concat(
-        ...(originalCount
+        ...(requestProofRequired
           ? [
               observer,
               path.join(cli, 'scripts/render-request-custody.ts'),
@@ -237,6 +246,7 @@ if (process.argv[2] === '--agent-child') {
     beforePins,
     limits,
     originalCount,
+    scenario: uncertainProgress ? 'uncertain-project-progress' : null,
     custodyTools,
     observer,
   });
@@ -415,12 +425,12 @@ if (process.argv[2] === '--agent-child') {
     expectedCount = '1' + '0'.repeat(4299) + '1';
   const usage = (value) =>
     '{' + fields.map((key) => JSON.stringify(key) + ':' + value).join(',') + '}';
-  function createCase(name, surface, missing, large) {
+  function createCase(name, surface, missing, large, shared = null) {
     const directory = path.join(root, name);
     fs.mkdirSync(directory, { mode: 0o700 });
     const environment = {
-      HOME: path.join(directory, 'user'),
-      CAWS_HOME: path.join(directory, 'machine'),
+      HOME: shared ? shared.environment.HOME : path.join(directory, 'user'),
+      CAWS_HOME: shared ? shared.environment.CAWS_HOME : path.join(directory, 'machine'),
       PATH: path.dirname(node) + ':/usr/bin:/bin',
       TMPDIR: directory,
       LANG: 'C',
@@ -428,18 +438,19 @@ if (process.argv[2] === '--agent-child') {
       TZ: 'UTC',
       CAWS_TRAP_KILL: '0',
     };
-    fs.mkdirSync(environment.HOME, { mode: 0o700 });
-    const installed = installMachineRuntime({
-      home: environment.CAWS_HOME,
-      templatesRoot: templates,
-    });
+    if (!shared) fs.mkdirSync(environment.HOME, { mode: 0o700 });
+    const installed = shared
+      ? shared.installed
+      : installMachineRuntime({
+          home: environment.CAWS_HOME,
+          templatesRoot: templates,
+        });
     const defaults = read(
       path.join(environment.CAWS_HOME, 'lib/runtimes', installed.digest, 'system-policy.json')
     ).events;
-    put(path.join(environment.CAWS_HOME, 'surfaces', surface, 'settings.json'), {
-      version: 1,
-      enabled: true,
-    });
+    const settings = path.join(environment.CAWS_HOME, 'surfaces', surface, 'settings.json');
+    if (shared) assert.deepEqual(read(settings), { version: 1, enabled: true });
+    else put(settings, { version: 1, enabled: true });
     const policy = {
       disabled: {
         session_end: [...new Set(defaults.session_end.map((entry) => entry.split(' ')[0]))].filter(
@@ -514,36 +525,38 @@ if (process.argv[2] === '--agent-child') {
           JSON.stringify({ schema_version: 2, retained: 'r'.repeat(900 * 1024) }),
         ]);
     if (!missing) for (const [file, bytes] of turns) put(path.join(session, file), bytes);
-    const owner = {
-      schema: 'caws.render.owner.config.v1',
-      home: environment.CAWS_HOME,
-      clientRoot: path.dirname(engine),
-      templateRoot: path.join(templates, 'runtime/service-image'),
-      clientShellSource: path.join(templates, 'shared/lib/session-render-service-client.sh'),
-      nativeExecutable: native,
-      limits: {
-        maxConnections: 8,
-        maxProjects: 4,
-        maxBackends: 1,
-        maxQueuePerProject: 4,
-        maxFrameBytes: 2097152,
-        maxRetainedRecords: large ? 2 : 1,
-        firstFrameMs: 3000,
-        requestMs: 20000,
-        startupMs: 3000,
-        idleMs: 300000,
-        backendIdleSeconds: 30,
-        cacheMegabytes: 1,
-        worker: {
-          startupMs: 3000,
-          connectMs: 3000,
-          writeMs: 3000,
-          renderMs: 20000,
-          readMs: 3000,
-          cleanupMs: 3000,
-        },
-      },
-    };
+    const owner = shared
+      ? shared.owner
+      : {
+          schema: 'caws.render.owner.config.v1',
+          home: environment.CAWS_HOME,
+          clientRoot: path.dirname(engine),
+          templateRoot: path.join(templates, 'runtime/service-image'),
+          clientShellSource: path.join(templates, 'shared/lib/session-render-service-client.sh'),
+          nativeExecutable: native,
+          limits: {
+            maxConnections: 8,
+            maxProjects: 4,
+            maxBackends: 1,
+            maxQueuePerProject: 4,
+            maxFrameBytes: 2097152,
+            maxRetainedRecords: large ? 2 : 1,
+            firstFrameMs: 3000,
+            requestMs: 20000,
+            startupMs: 3000,
+            idleMs: 300000,
+            backendIdleSeconds: 30,
+            cacheMegabytes: 1,
+            worker: {
+              startupMs: 3000,
+              connectMs: 3000,
+              writeMs: 3000,
+              renderMs: 20000,
+              readMs: 3000,
+              cleanupMs: 3000,
+            },
+          },
+        };
     put(path.join(directory, 'owner-input.json'), owner);
     put(path.join(directory, 'fixture.json'), {
       name,
@@ -1206,6 +1219,261 @@ if (process.argv[2] === '--agent-child') {
       action: action ?? null,
     };
   }
+  async function runUncertainProjectProgress() {
+    const a = createCase('codex-uncertain-A', 'codex', false, true);
+    const b = createCase('codex-progress-B', 'codex', false, false, a);
+    a.capacityObservation = true;
+    b.capacityObservation = true;
+    assert.equal(a.owner.limits.maxRetainedRecords, 2);
+    assert.notEqual(a.project, b.project);
+    assert.equal(a.environment.CAWS_HOME, b.environment.CAWS_HOME);
+    assert.equal(a.installed.digest, b.installed.digest);
+    const { host, observations } = await provision(a);
+    const hostBirth = observeInstance(host.child.pid);
+    const assertOwner = (label) => {
+      assert.equal(host.child.exitCode, null);
+      assert.equal(host.child.signalCode, null);
+      const observed = observeInstance(host.child.pid);
+      assert(sameOwnerBirth(hostBirth, observed), 'original owner birth changed');
+      assert.deepEqual(
+        read(path.join(a.environment.CAWS_HOME, 'state/render-service/config.json')),
+        a.owner
+      );
+      put(path.join(a.directory, label + '-owner.json'), observed);
+    };
+    const identity = (file) => {
+      const stat = fs.lstatSync(file, { bigint: true });
+      assert(stat.isFile() && !stat.isSymbolicLink());
+      return {
+        ...pin(file),
+        ...Object.fromEntries(
+          ['dev', 'ino', 'birthtimeNs', 'ctimeNs', 'mtimeNs', 'nlink'].map((key) => [
+            key,
+            String(stat[key]),
+          ])
+        ),
+      };
+    };
+    const settle = async (fixture, invocation, id, success) => {
+      const ancestor = await release(invocation);
+      assert.deepEqual(invocation.observationErrors, []);
+      const custody = invocation.collector.collect({
+        coverage: invocation.coverage,
+        invocationId: id,
+        runtimeDigest: fixture.installed.digest,
+        node,
+        engine,
+      });
+      put(path.join(fixture.directory, 'custody-observed.json'), custody);
+      assert.equal(custody.state, 'confirmed_settled', custody.error);
+      assert(Number.isSafeInteger(custody.terminal.child_exit_raw));
+      if (success) assert.equal(custody.terminal.child_exit_raw, 0);
+      let cleanup;
+      await waitFor(
+        () => {
+          cleanup = strictCustody.requestCleanupObservation(
+            invocation.coverage,
+            topologyRows(),
+            observeInstance
+          );
+          return cleanup.state === 'confirmed_inactive';
+        },
+        2000,
+        'original request birth/group cleanup remains unknown'
+      );
+      assert.equal(strictCustody.combinedRequestCleanup(cleanup, custody), 'confirmed_inactive');
+      put(path.join(fixture.directory, 'cleanup-observed.json'), cleanup);
+      return {
+        ancestor: { pid: ancestor.pid, code: ancestor.code, signal: ancestor.signal },
+        custody,
+        cleanup,
+      };
+    };
+    assertOwner('before-A');
+    const originalA = await invoke(a);
+    const recordA = await waitFor(
+      () => {
+        const record = journal(a.session);
+        return record?.rows.some((row) => row.stage === 'session_seal_consumer_completed')
+          ? record
+          : null;
+      },
+      15000,
+      'A never reached the actual ordinary consumer'
+    );
+    checkPrefix(a, originalA, recordA);
+    const idA = recordA.rows[0].invocation_id;
+    const consumerA = checkConsumer(a, recordA);
+    const beforeAction = operation(a, idA);
+    assert.equal(beforeAction.row?.body.outcome.execution, 'returned');
+    put(path.join(a.directory, 'pre-action-operation.json'), beforeAction);
+    const target = path.join(a.session, a.turns[0][0]);
+    const replacement = path.join(a.directory, 'replacement-turn.json');
+    const beforeInode = fs.statSync(target).ino;
+    put(replacement, fs.readFileSync(target));
+    fs.renameSync(replacement, target);
+    assert.notEqual(fs.statSync(target).ino, beforeInode);
+    put(path.join(a.directory, 'hostile-action.json'), {
+      type: 'changed-input',
+      at: Date.now(),
+      journal: recordA.file,
+      beforeInode,
+      afterInode: fs.statSync(target).ino,
+      sameBytesSha256: hash(fs.readFileSync(target)),
+    });
+    const terminalA = await bounded(originalA.nativeTerminal, 25000, 'A did not settle');
+    assert.equal(terminalA.signal, null);
+    assert(
+      Number.isInteger(terminalA.code) && terminalA.code !== 0,
+      'A acknowledged changed input'
+    );
+    await waitFor(
+      () =>
+        ownerRows(observations).some(
+          (row) => row.stage === 'session_retained' && row.invocationId === idA
+        ),
+      5000,
+      'A was not retained; hostile window missed'
+    );
+    const durableA = operation(a, idA);
+    assert.equal(durableA.row.body.outcome.execution, 'returned');
+    assert.equal(durableA.row.body.outcome.result.terminalDigest, consumerA.terminal_digest);
+    assert(durableA.row.body.verifiedRequestBase64.length > 0);
+    assert(
+      !ownerRows(observations).some(
+        (row) => row.stage === 'session_consumed_durable' && row.invocationId === idA
+      )
+    );
+    const guardedFiles = [
+      durableA.file,
+      path.join(a.session, '.meta.json'),
+      path.join(a.session, '.session-publication.json'),
+    ];
+    const retainedBefore = guardedFiles.map(identity);
+    const assertA = (label) => {
+      const observed = guardedFiles.map(identity);
+      assert.deepEqual(observed, retainedBefore, 'A custody changed during other admission');
+      put(path.join(a.directory, label + '-retained-A.json'), observed);
+    };
+    const proofA = await settle(a, originalA, idA, false);
+    await writerProbe(a, 'retained');
+    assertOwner('after-A');
+
+    const a2 = { ...a, name: 'codex-refused-A2', directory: path.join(a.directory, 'a2') };
+    fs.mkdirSync(a2.directory, { mode: 0o700 });
+    const priorJournals = fs.readdirSync(path.join(a.session, 'hook-invocations'));
+    const originalA2 = await invoke(a2);
+    const terminalA2 = await bounded(originalA2.nativeTerminal, 25000, 'A2 did not settle');
+    const recordA2 = journal(a2.session, priorJournals);
+    assert(recordA2, 'A2 did not execute the ordinary engine');
+    checkPrefix(a2, originalA2, recordA2, false);
+    const idA2 = recordA2.rows[0].invocation_id;
+    assert.notEqual(idA2, idA);
+    assert.equal(terminalA2.signal, null);
+    assert(Number.isInteger(terminalA2.code) && terminalA2.code !== 0);
+    assert(!recordA2.rows.some((row) => row.stage === 'session_seal_consumer_completed'));
+    await waitFor(
+      () => {
+        const observed = ownerRows(observations);
+        return (
+          observed.some(
+            (row) =>
+              row.event === 'admission_denied' &&
+              row.reason === 'unknown_fence' &&
+              row.invocationId === idA2
+          ) &&
+          observed.some(
+            (row) => row.stage === 'session_rejected_before_effects' && row.invocationId === idA2
+          )
+        );
+      },
+      3000,
+      'A2 did not reach the proven non-execution refund'
+    );
+    assert(
+      !ownerRows(observations).some(
+        (row) => row.stage === 'session_original_reserved' && row.invocationId === idA2
+      )
+    );
+    const durableA2 = operation(a2, idA2);
+    assert.equal(durableA2.row, null);
+    put(path.join(a2.directory, 'operation-observed.json'), durableA2);
+    const proofA2 = await settle(a2, originalA2, idA2, false);
+    assertA('after-A2');
+    assertOwner('after-A2');
+
+    const originalB = await invoke(b);
+    const terminalB = await bounded(originalB.nativeTerminal, 25000, 'B did not progress');
+    assert.equal(terminalB.code, 0, originalB.agent.output().stderr.toString());
+    assert.equal(terminalB.signal, null);
+    assert.equal(originalB.agent.output().stdout.length, 0);
+    assert.equal(originalB.agent.output().stderr.length, 0);
+    const recordB = journal(b.session);
+    assert(recordB, 'B did not execute the ordinary engine');
+    checkPrefix(b, originalB, recordB);
+    const idB = recordB.rows[0].invocation_id;
+    assert.notEqual(idB, idA);
+    assert.notEqual(idB, idA2);
+    const consumerB = checkConsumer(b, recordB);
+    const durableB = operation(b, idB);
+    assert.equal(durableB.row.body.outcome.execution, 'consumed');
+    assert.equal(durableB.row.body.outcome.terminalDigest, consumerB.terminal_digest);
+    assert.equal(durableB.row.body.verifiedRequestBase64, '');
+    await waitFor(
+      () =>
+        ownerRows(observations).some(
+          (row) => row.stage === 'session_heavy_released' && row.invocationId === idB
+        ),
+      3000,
+      'B did not release its heavy record'
+    );
+    const lifecycleB = capacityLifecycle(ownerRows(observations), idB);
+    const proofB = await settle(b, originalB, idB, true);
+    assertA('after-B');
+    assertOwner('after-B');
+    await writerProbe({ ...a, name: a.name + '-after-B' }, 'retained');
+    await writerProbe(b, 'released');
+    assertA('after-writer-probes');
+    assertOwner('before-shutdown');
+    put(path.join(a.directory, 'owner-observations.json'), ownerRows(observations));
+    const hostTerminal = await stopHost(host);
+    return {
+      name: 'uncertain-project-progress',
+      hostPid: host.child.pid,
+      hostBirth,
+      limits: a.owner.limits,
+      hostTerminal: { code: hostTerminal.code, signal: hostTerminal.signal },
+      A: {
+        id: idA,
+        terminal: terminalA,
+        journal: recordA.file,
+        operation: durableA.file,
+        retainedBefore,
+        proof: proofA,
+      },
+      A2: {
+        id: idA2,
+        terminal: terminalA2,
+        journal: recordA2.file,
+        operation: durableA2.file,
+        proof: proofA2,
+      },
+      B: {
+        id: idB,
+        terminal: terminalB,
+        journal: recordB.file,
+        operation: durableB.file,
+        terminalDigest: consumerB.terminal_digest,
+        lifecycle: lifecycleB,
+        proof: proofB,
+      },
+      nonclaims: [
+        'Bounded cross-project SessionEnd progress only; no general scheduling fairness',
+        'A remained retained through B consumption; owner shutdown is explicit fixture teardown',
+      ],
+    };
+  }
+
   function engineCustody(fixture, invocation, id) {
     assert.deepEqual(invocation.observationErrors, [], 'request birth/topology observation failed');
     const custody = invocation.collector.collect({
@@ -1446,12 +1714,15 @@ if (process.argv[2] === '--agent-child') {
   async function main() {
     const overallStarted = performance.now();
     const results = [];
-    results.push(await runCase('codex-normal', 'codex', false));
-    results.push(await runCase('claude-normal', 'claude-code', false));
-    results.push(await runCase('codex-missing-metadata', 'codex', true));
-    results.push(await runCase('codex-changed-input', 'codex', false, 'changed-input'));
-    results.push(await runCase('codex-lost-ack', 'codex', false, 'lost-ack'));
-    if (originalCount) results.push(await runCapacityCase(overallStarted));
+    if (uncertainProgress) results.push(await runUncertainProjectProgress());
+    else {
+      results.push(await runCase('codex-normal', 'codex', false));
+      results.push(await runCase('claude-normal', 'claude-code', false));
+      results.push(await runCase('codex-missing-metadata', 'codex', true));
+      results.push(await runCase('codex-changed-input', 'codex', false, 'changed-input'));
+      results.push(await runCase('codex-lost-ack', 'codex', false, 'lost-ack'));
+      if (originalCount) results.push(await runCapacityCase(overallStarted));
+    }
     await settleTracked();
     const afterPins = pinInputs();
     assert.deepEqual(afterPins, beforePins, 'source/tool input changed during qualification');
