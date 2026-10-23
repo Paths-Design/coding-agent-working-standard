@@ -187,7 +187,7 @@ function validIdentity(value, fields) {
   );
 }
 
-function markerData(bytes, stat) {
+function markerRecord(bytes) {
   if (bytes.length > 16384) fail('ownership marker exceeds its finite profile');
   let data;
   try {
@@ -201,8 +201,7 @@ function markerData(bytes, stat) {
     !['staging', 'ready', 'cleaning'].includes(data.phase) ||
     !Array.isArray(data.entries) ||
     data.entries.length > LICENSES.length ||
-    !validIdentity(data.markerIdentity, STABLE_FIELDS) ||
-    !same(data.markerIdentity, identity(stat, STABLE_FIELDS))
+    !validIdentity(data.markerIdentity, STABLE_FIELDS)
   )
     fail('ownership marker identity or schema is invalid');
   const names = new Set();
@@ -221,6 +220,13 @@ function markerData(bytes, stat) {
   }
   if (data.phase !== 'ready' || data.entries.some((entry) => entry.status !== 'owned'))
     fail('ownership marker is interrupted; ownership is uncertain');
+  return data;
+}
+
+function markerData(bytes, stat) {
+  const data = markerRecord(bytes);
+  if (!same(data.markerIdentity, identity(stat, STABLE_FIELDS)))
+    fail('ownership marker identity or schema is invalid');
   return data;
 }
 
@@ -402,7 +408,149 @@ export function cleanLicenseTransport(packageRoot = PKG_ROOT) {
   });
 }
 
-function main() {
+function syncDirectory(directory) {
+  parents(path.join(directory, '.identity-check'));
+  const stat = fs.lstatSync(directory, { bigint: true });
+  const before = identity(stat);
+  const fd = fs.openSync(directory, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  closeAfter(fd, () => {
+    if (!stat.isDirectory() || !same(before, identity(fs.fstatSync(fd, { bigint: true }))))
+      fail(`retention directory changed while opening: ${directory}`);
+    fs.fsyncSync(fd);
+    if (
+      !same(before, identity(fs.fstatSync(fd, { bigint: true }))) ||
+      !same(before, identity(fs.lstatSync(directory, { bigint: true })))
+    )
+      fail(`retention directory changed while syncing: ${directory}`);
+  });
+}
+
+/** Relinquishment only: retained bytes never authorize deletion of license leaves.
+ * A changed device identifier is tolerated only here, while retiring the exact
+ * reviewed marker. Inode/birthtime/mode/link identity and current fd/path checks
+ * still exclude same-byte foreign marker replacement. Ordinary cleanup is strict.
+ */
+export function recoverLicenseTransport(
+  expectedSha256,
+  retentionDestination,
+  packageRoot = PKG_ROOT
+) {
+  if (typeof expectedSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(expectedSha256))
+    fail('recovery requires an exact lowercase SHA-256');
+  if (
+    typeof retentionDestination !== 'string' ||
+    !path.isAbsolute(retentionDestination) ||
+    typeof packageRoot !== 'string' ||
+    !path.isAbsolute(packageRoot)
+  )
+    fail('recovery requires absolute package and retention paths');
+  const retention = path.resolve(retentionDestination);
+  let retirementAttempted = false;
+  try {
+    return withLock(packageRoot, (root) => {
+      const relative = path.relative(root, retention);
+      if (
+        relative === '' ||
+        (!relative.startsWith(`..${path.sep}`) &&
+          !path.isAbsolute(relative) &&
+          relative !== '..') ||
+        LICENSES.some((item) => path.resolve(root, item.source) === retention)
+      )
+        fail('recovery retention must be outside the package and its license sources');
+      if (!parents(retention)) fail('recovery retention parent is absent');
+      if (regular(retention, true)) fail('recovery retention already exists');
+      for (const item of LICENSES) regular(path.join(root, item.name), true);
+      const file = path.join(root, MARKER);
+      const observed = read(file);
+      if (hash(observed.bytes) !== expectedSha256) fail('recovery marker SHA-256 mismatch');
+      const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      return closeAfter(fd, () => {
+        const marker = { file, fd, ...observed };
+        current(marker);
+        const data = markerRecord(observed.bytes);
+        // Do not infer a persistent filesystem identity from a device-number change.
+        // Recovery abandons all old deletion authority instead of rebinding it.
+        const preservedFields = STABLE_FIELDS.filter((key) => key !== 'dev');
+        if (
+          !same(
+            Object.fromEntries(preservedFields.map((key) => [key, data.markerIdentity[key]])),
+            identity(fs.fstatSync(fd, { bigint: true }), preservedFields)
+          )
+        )
+          fail('recovery marker was replaced or its identity changed');
+        const retainedFd = fs.openSync(
+          retention,
+          fs.constants.O_WRONLY |
+            fs.constants.O_CREAT |
+            fs.constants.O_EXCL |
+            fs.constants.O_NOFOLLOW,
+          0o600
+        );
+        let retainedIdentity;
+        closeAfter(retainedFd, () => {
+          fs.writeFileSync(retainedFd, observed.bytes);
+          fs.fsyncSync(retainedFd);
+          retainedIdentity = identity(fs.fstatSync(retainedFd, { bigint: true }));
+        });
+        const verifyRetention = () => {
+          const retained = read(retention);
+          if (!same(retained.identity, retainedIdentity) || !retained.bytes.equals(observed.bytes))
+            fail('recovery retained evidence was replaced or changed');
+        };
+        verifyRetention();
+        syncDirectory(path.dirname(retention));
+        verifyRetention();
+        current(marker);
+        retirementAttempted = true;
+        fs.unlinkSync(file);
+        syncDirectory(root);
+        return {
+          retired: MARKER,
+          sha256: expectedSha256,
+          retainedAt: retention,
+          markerIdentity: observed.identity,
+          retainedIdentity,
+          licenses: 'preserved-unowned',
+        };
+      });
+    });
+  } catch (error) {
+    if (retirementAttempted)
+      throw new Error(
+        `License transport: recovery marker retirement attempted; completion uncertain; inspect ${retention}: ${error.message}`,
+        { cause: error }
+      );
+    throw error;
+  }
+}
+
+const USAGE = `Usage:
+  node clean-staged-docs.mjs
+  node clean-staged-docs.mjs --recover-license-ownership --expected-sha256 HEX --retain-original ABSOLUTE_FILE --package-root ABSOLUTE_DIRECTORY
+
+Recovery requires a reviewed SHA-256 and a fresh evidence file outside the package.
+Its parent must exist without symlinks. Original marker bytes are fsynced before
+only that marker is retired; license leaves and staged docs remain untouched.
+Retained evidence grants no cleanup authority. An error after retirement reports
+uncertainty; inspect the marker and retained evidence before any subsequent action.
+`;
+
+function main(args = process.argv.slice(2)) {
+  if (args.length === 1 && args[0] === '--help') {
+    process.stdout.write(USAGE);
+    return 0;
+  }
+  if (
+    args.length === 7 &&
+    args[0] === '--recover-license-ownership' &&
+    args[1] === '--expected-sha256' &&
+    args[3] === '--retain-original' &&
+    args[5] === '--package-root'
+  ) {
+    process.stdout.write(JSON.stringify(recoverLicenseTransport(args[2], args[4], args[6])) + '\n');
+    return 0;
+  }
+  if (args.length) fail(USAGE);
   cleanLicenseTransport();
   if (fs.existsSync(STAGED_DOCS)) {
     fs.rmSync(STAGED_DOCS, { recursive: true, force: true });

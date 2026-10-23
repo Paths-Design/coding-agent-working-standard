@@ -72,16 +72,20 @@ function write(file, bytes) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, bytes);
 }
-function invoke(operation, prefix = '', cli = false) {
+function invoke(operation, prefix = '', cli = false, argumentsList = [pkg]) {
   const source = `${prefix}
     const transport = await import(${JSON.stringify(pathToFileURL(script).href)});
     try {
-      console.log(JSON.stringify(transport.${operation}(${JSON.stringify(pkg)})));
+      console.log(JSON.stringify(transport.${operation}(...${JSON.stringify(argumentsList)})));
     } catch (error) {
       console.error(JSON.stringify({ message: error.message, faults: typeof faults === 'undefined' ? null : faults }));
       process.exitCode = 1;
     }`;
-  const argv = cli ? [script] : ['--input-type=module', '-e', source];
+  const argv = Array.isArray(cli)
+    ? [script, ...cli]
+    : cli
+      ? [script]
+      : ['--input-type=module', '-e', source];
   const before = artifactRoot ? observedState() : undefined;
   const result = spawnSync(process.execPath, argv, {
     cwd: root,
@@ -494,3 +498,289 @@ test('partial cleanup failure retains an interrupted marker and preserves remain
   refused(stage(), /interrupted/);
   assertSources();
 });
+
+function staleOwnership() {
+  successful(stage());
+  const record = ledger();
+  record.markerIdentity.dev = String(BigInt(record.markerIdentity.dev) + 1n);
+  for (const entry of record.entries) entry.identity.dev = record.markerIdentity.dev;
+  write(path.join(pkg, markerName), JSON.stringify(record) + '\n');
+  const bytes = fs.readFileSync(path.join(pkg, markerName));
+  return { bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
+}
+function licenseState() {
+  return Object.fromEntries(transports.map(([name]) => [name, observedFile(path.join(pkg, name))]));
+}
+function recovery(record, retention = path.join(root, 'retained-marker.json'), prefix = '') {
+  return invoke('recoverLicenseTransport', prefix, false, [record.sha256, retention, pkg]);
+}
+
+test('device mismatch stays refused; explicit recovery retains exact evidence and leaves licenses unowned', () => {
+  const record = staleOwnership();
+  const before = licenseState();
+  refused(clean(), /marker identity or schema/);
+  expect(licenseState()).toEqual(before);
+  const retainedAt = path.join(root, 'retained-marker.json');
+  expect(successful(recovery(record, retainedAt))).toMatchObject({
+    retired: markerName,
+    sha256: record.sha256,
+    retainedAt,
+    licenses: 'preserved-unowned',
+  });
+  expect(fs.readFileSync(retainedAt)).toEqual(record.bytes);
+  expect(fs.statSync(retainedAt).mode & 0o777).toBe(0o600);
+  expect(fs.existsSync(path.join(pkg, markerName))).toBe(false);
+  expect(fs.existsSync(path.join(pkg, lockName))).toBe(false);
+  expect(licenseState()).toEqual(before);
+  expect(successful(stage())).toEqual({ created: [], preserved: transports.map(([name]) => name) });
+  expect(successful(clean())).toEqual({ removed: [] });
+  expect(licenseState()).toEqual(before);
+  expect(fs.readFileSync(retainedAt)).toEqual(record.bytes);
+  assertSources();
+});
+
+test('recovery CLI requires explicit reviewed arguments and never cleans staged docs', () => {
+  const record = staleOwnership();
+  const before = licenseState();
+  const document = path.join(pkg, 'docs/keep.txt');
+  write(document, 'staged docs retained');
+  const retainedAt = path.join(root, 'cli-retained.json');
+  const args = [
+    '--recover-license-ownership',
+    '--expected-sha256',
+    record.sha256,
+    '--retain-original',
+    retainedAt,
+    '--package-root',
+    pkg,
+  ];
+  expect(successful(invoke('recoverLicenseTransport', '', args))).toMatchObject({ retainedAt });
+  expect(fs.readFileSync(document, 'utf8')).toBe('staged docs retained');
+  expect(licenseState()).toEqual(before);
+  expect(fs.readFileSync(retainedAt)).toEqual(record.bytes);
+  const help = invoke('recoverLicenseTransport', '', ['--help']);
+  expect(help.status).toBe(0);
+  expect(help.stdout).toContain('--expected-sha256');
+  expect(help.stdout).toContain('no cleanup authority');
+});
+
+test('wrong reviewed SHA and an existing retention file cannot retire ownership', () => {
+  const record = staleOwnership();
+  const before = licenseState();
+  const changed = {
+    ...record,
+    sha256: (record.sha256[0] === '0' ? '1' : '0') + record.sha256.slice(1),
+  };
+  refused(recovery(changed), /SHA-256 mismatch/);
+  expect(fs.existsSync(path.join(root, 'retained-marker.json'))).toBe(false);
+  write(path.join(root, 'retained-marker.json'), 'foreign evidence');
+  refused(recovery(record), /retention already exists/);
+  expect(fs.readFileSync(path.join(root, 'retained-marker.json'), 'utf8')).toBe('foreign evidence');
+  expect(fs.readFileSync(path.join(pkg, markerName))).toEqual(record.bytes);
+  expect(licenseState()).toEqual(before);
+});
+
+test('same-byte foreign marker replacement refuses recovery despite the matching reviewed hash', () => {
+  const record = staleOwnership();
+  const before = licenseState();
+  const replacement = path.join(root, 'foreign-marker');
+  write(replacement, record.bytes);
+  const original = fs.statSync(path.join(pkg, markerName), { bigint: true }).ino;
+  fs.renameSync(replacement, path.join(pkg, markerName));
+  expect(fs.statSync(path.join(pkg, markerName), { bigint: true }).ino).not.toBe(original);
+  refused(recovery(record), /marker was replaced/);
+  expect(fs.existsSync(path.join(root, 'retained-marker.json'))).toBe(false);
+  expect(fs.readFileSync(path.join(pkg, markerName))).toEqual(record.bytes);
+  expect(licenseState()).toEqual(before);
+});
+
+test('relinquishment preserves a same-byte foreign license without adopting or later deleting it', () => {
+  const record = staleOwnership();
+  const replacement = path.join(root, 'foreign-license');
+  write(replacement, sources[0][1]);
+  fs.renameSync(replacement, path.join(pkg, 'LICENSE'));
+  const before = licenseState();
+  successful(recovery(record));
+  expect(successful(stage()).created).toEqual([]);
+  expect(successful(clean()).removed).toEqual([]);
+  expect(licenseState()).toEqual(before);
+  assertSources();
+});
+
+test.each(['retention-leaf', 'retention-parent', 'marker', 'license', 'package-parent'])(
+  'recovery refuses %s symlink without touching its target',
+  (kind) => {
+    const record = staleOwnership();
+    let retention = path.join(root, 'retained-marker.json'),
+      packageArgument = pkg;
+    const outside = path.join(root, 'outside');
+    fs.mkdirSync(outside);
+    const target = path.join(outside, 'foreign');
+    write(target, 'foreign target');
+    if (kind === 'retention-leaf') fs.symlinkSync(target, retention);
+    if (kind === 'retention-parent') {
+      fs.symlinkSync(outside, path.join(root, 'redirect'));
+      retention = path.join(root, 'redirect/evidence');
+    }
+    if (kind === 'marker' || kind === 'license') {
+      const leaf = path.join(pkg, kind === 'marker' ? markerName : 'LICENSE');
+      fs.unlinkSync(leaf);
+      fs.symlinkSync(target, leaf);
+    }
+    if (kind === 'package-parent') {
+      fs.symlinkSync(path.dirname(pkg), path.join(root, 'redirect'));
+      packageArgument = path.join(root, 'redirect/caws-cli');
+    }
+    const before = licenseState();
+    refused(
+      invoke('recoverLicenseTransport', '', false, [record.sha256, retention, packageArgument]),
+      /symlink/
+    );
+    expect(licenseState()).toEqual(before);
+    expect(fs.readFileSync(target, 'utf8')).toBe('foreign target');
+    assertSources();
+  }
+);
+
+test('existing operation lock and interrupted marker grant no recovery authority', () => {
+  const record = staleOwnership();
+  const before = licenseState();
+  write(path.join(pkg, lockName), 'foreign lock');
+  refused(recovery(record), /operation lock exists/);
+  expect(fs.readFileSync(path.join(pkg, lockName), 'utf8')).toBe('foreign lock');
+  fs.unlinkSync(path.join(pkg, lockName));
+  const interrupted = ledger();
+  interrupted.phase = 'cleaning';
+  write(path.join(pkg, markerName), JSON.stringify(interrupted));
+  const reviewed = {
+    sha256: createHash('sha256')
+      .update(fs.readFileSync(path.join(pkg, markerName)))
+      .digest('hex'),
+  };
+  refused(recovery(reviewed), /interrupted/);
+  expect(fs.existsSync(path.join(root, 'retained-marker.json'))).toBe(false);
+  expect(licenseState()).toEqual(before);
+});
+
+test.each(['bytes', 'replacement'])(
+  'marker %s change after durable retention is not retired',
+  (change) => {
+    const record = staleOwnership();
+    const before = licenseState();
+    const retention = path.join(root, 'retained-marker.json');
+    const prefix = `
+    import fs from 'node:fs';
+    const sync = fs.fsyncSync;
+    let faults = 0;
+    fs.fsyncSync = function(fd) {
+      sync.call(fs, fd);
+      if (faults === 0 && fs.fstatSync(fd).isDirectory()) {
+        faults++;
+        const marker = ${JSON.stringify(path.join(pkg, markerName))};
+        if (${JSON.stringify(change)} === 'bytes') fs.appendFileSync(marker, ' ');
+        else {
+          const replacement = ${JSON.stringify(path.join(pkg, 'late-foreign-marker'))};
+          fs.writeFileSync(replacement, fs.readFileSync(marker), { mode: 0o600 });
+          fs.renameSync(replacement, marker);
+        }
+      }
+    };`;
+    const result = recovery(record, retention, prefix);
+    refused(result, /replaced or changed/);
+    expect(JSON.parse(result.stderr).faults).toBe(1);
+    expect(fs.existsSync(path.join(pkg, markerName))).toBe(true);
+    expect(fs.readFileSync(retention)).toEqual(record.bytes);
+    expect(fs.readFileSync(path.join(pkg, markerName))).toEqual(
+      change === 'bytes' ? Buffer.concat([record.bytes, Buffer.from(' ')]) : record.bytes
+    );
+    expect(licenseState()).toEqual(before);
+  }
+);
+
+test.each(['open', 'write', 'sync', 'close', 'directory-sync'])(
+  'retention %s failure preserves marker authority and all licenses',
+  (fault) => {
+    const record = staleOwnership();
+    const before = licenseState();
+    const retention = path.join(root, 'retained-marker.json');
+    const prefix = `
+      import fs from 'node:fs';
+      const open = fs.openSync, write = fs.writeFileSync, sync = fs.fsyncSync, close = fs.closeSync;
+      let evidenceFd;
+      let faults = 0;
+      const fault = ${JSON.stringify(fault)};
+      const injected = () => { faults++; throw new Error('injected retention ' + fault + ' failure'); };
+      fs.openSync = function(file, ...args) {
+        if (file === ${JSON.stringify(retention)} && fault === 'open') injected();
+        const fd = open.call(fs, file, ...args);
+        if (file === ${JSON.stringify(retention)}) evidenceFd = fd;
+        return fd;
+      };
+      fs.writeFileSync = function(file, ...args) {
+        if (file === evidenceFd && fault === 'write') injected();
+        return write.call(fs, file, ...args);
+      };
+      fs.fsyncSync = function(fd) {
+        if ((fd === evidenceFd && fault === 'sync') ||
+            (fault === 'directory-sync' && fs.fstatSync(fd).isDirectory())) injected();
+        return sync.call(fs, fd);
+      };
+      fs.closeSync = function(fd) {
+        close.call(fs, fd);
+        if (fd === evidenceFd && fault === 'close') injected();
+      };`;
+    const result = recovery(record, retention, prefix);
+    refused(result, /injected retention/);
+    expect(JSON.parse(result.stderr).faults).toBe(1);
+    expect(fs.readFileSync(path.join(pkg, markerName))).toEqual(record.bytes);
+    expect(licenseState()).toEqual(before);
+    if (fault === 'open') expect(fs.existsSync(retention)).toBe(false);
+    else if (fault === 'write') expect(fs.readFileSync(retention)).toEqual(Buffer.alloc(0));
+    else expect(fs.readFileSync(retention)).toEqual(record.bytes);
+    refused(clean(), /marker identity or schema/);
+    assertSources();
+  }
+);
+
+test.each(['unlink', 'package-sync', 'marker-close'])(
+  'marker retirement %s failure reports uncertainty while retaining original evidence',
+  (fault) => {
+    const record = staleOwnership();
+    const before = licenseState();
+    const retention = path.join(root, 'retained-marker.json');
+    const prefix = `
+      import fs from 'node:fs';
+      const open = fs.openSync, unlink = fs.unlinkSync, sync = fs.fsyncSync, close = fs.closeSync;
+      const markerFds = new Set();
+      let packageFd;
+      let faults = 0;
+      const fault = ${JSON.stringify(fault)};
+      const injected = () => { faults++; throw new Error('injected retirement ' + fault + ' failure'); };
+      fs.openSync = function(file, ...args) {
+        const fd = open.call(fs, file, ...args);
+        if (file === ${JSON.stringify(path.join(pkg, markerName))}) markerFds.add(fd);
+        if (file === ${JSON.stringify(pkg)}) packageFd = fd;
+        return fd;
+      };
+      fs.unlinkSync = function(file) {
+        if (file === ${JSON.stringify(path.join(pkg, markerName))} && fault === 'unlink') injected();
+        return unlink.call(fs, file);
+      };
+      fs.fsyncSync = function(fd) {
+        if (fd === packageFd && fault === 'package-sync') injected();
+        return sync.call(fs, fd);
+      };
+      fs.closeSync = function(fd) {
+        const wasMarker = markerFds.delete(fd);
+        close.call(fs, fd);
+        if (wasMarker && fault === 'marker-close' && !fs.existsSync(${JSON.stringify(path.join(pkg, markerName))})) injected();
+      };`;
+    const result = recovery(record, retention, prefix);
+    refused(result, /completion uncertain/);
+    expect(JSON.parse(result.stderr).faults).toBe(1);
+    expect(fs.readFileSync(retention)).toEqual(record.bytes);
+    expect(fs.existsSync(path.join(pkg, markerName))).toBe(fault === 'unlink');
+    expect(licenseState()).toEqual(before);
+    assertSources();
+  }
+);
