@@ -62,14 +62,25 @@ jobs:
           CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
       - run: npm run test:pytest -w @paths.design/caws-cli
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+      - name: Archive hook byte artifacts without following fixture symlinks
+        if: always()
+        shell: bash
+        run: |
+          paths=()
+          for directory in hook-artifacts release-scenarios; do
+            if [[ -d "$directory" ]]; then
+              paths+=("$directory")
+            fi
+          done
+          if (( ${#paths[@]} )); then
+            tar -czf hook-byte-artifacts.tgz -- "${paths[@]}"
+          fi
       - name: Retain hook byte artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: hook-bytes-${{ github.sha }}
-          path: |
-            hook-artifacts/
-            release-scenarios/
+          path: hook-byte-artifacts.tgz
           if-no-files-found: warn
 
   native-context-custody:

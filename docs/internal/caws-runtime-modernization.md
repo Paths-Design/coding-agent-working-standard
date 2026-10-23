@@ -7449,6 +7449,37 @@ Additional bounded evidence and unresolved dependencies:
   the qualifier owner compares the inventory oracle to producer and reader
   contracts. No completed warm continuation is inferred.
 
+- E278: Hosted candidate job `120389516965` retains 22 Jest failures in
+  `publication-integration/hosted-candidate-03997170/candidate-job-120389516965.log`:
+  17 service-image cases reject Linux `/bin` symlink traversal, two
+  legacy-profile cases depend on an unavailable historical Git object in a
+  shallow checkout, and three heartbeat cases inherit Python setup's
+  `LD_LIBRARY_PATH` and reach the intended production refusal. The job passes
+  build, typecheck and lint; contracts, docs and Bats are skipped after Jest
+  fails. These are separate from E276's package JSON defect. Fixture isolation
+  must preserve the loader refusal controls. Image admission must independently
+  derive the physical target of fixed system shell paths while retaining
+  no-follow candidate checks.
+
+  The hook artifact uploader also encounters an intentional self-referential
+  fixture symlink. The workflow archives the retained roots without following
+  symlinks and uploads the archive, preserving hidden `.caws` evidence too.
+  `publication-integration/ci-artifact-archive-01` executes the exact workflow
+  shell block in a private fixture, exit 0, and inspects the archive: the link
+  remains a link, the hidden failure receipt remains exact and binary output
+  retains NUL and invalid-UTF8 bytes. This local BSD tar observation does not
+  qualify Ubuntu tar or GitHub upload; those remain hosted checks.
+
+  Committed package repair `59c574a8` receives a focused exact-commit replay
+  after hook formatting: eight generated-asset checks pass in 3.710 seconds.
+  `publication-integration/pack-json-committed-source-01.json` joins the earlier
+  build/check/pack working-tree pins to the committed production blobs, and
+  compares the packaged generated asset bytes directly to the committed asset.
+  The tarball's compiled manifest declares shared version 107. The supplied
+  earlier HEAD values identify dirty-checkout bases, not different production
+  candidates; retained byte identities establish the connection. Full package
+  upgrade and selected installation remain unverified.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
