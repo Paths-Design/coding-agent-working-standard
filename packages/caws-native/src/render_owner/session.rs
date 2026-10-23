@@ -514,6 +514,7 @@ impl Actor {
         );
         let expires = job.transport.expires;
         let mut dispatch = None;
+        let mut rejected_execution = None;
         let result = (|| -> Result<()> {
             let request = original.request()?;
             self.check_unknown_fence(&original.id, expires)?;
@@ -541,7 +542,13 @@ impl Actor {
                 journal::Admission::Accepted { .. } => {
                     return Err("session original already reserved; no replay".into());
                 }
-                journal::Admission::Rejected(outcome) => return Err(outcome.reason),
+                journal::Admission::Rejected(outcome) => {
+                    // Only the journal's typed non-execution receipt can refund
+                    // this transient registration. An admission I/O error or an
+                    // accepted duplicate still has uncertain prior effects.
+                    rejected_execution = Some(outcome.execution);
+                    return Err(outcome.reason);
+                }
             }
             let reserved = self
                 .journal
@@ -624,6 +631,19 @@ impl Actor {
                     .remove(&original.id);
                 self.writer_custody.take();
                 self.stage("session_heavy_released", &original.id);
+            }
+            Err(reason) if matches!(rejected_execution, Some(journal::KnownNotExecuted::Value)) => {
+                {
+                    let mut record = job.record.lock().unwrap_or_else(|e| e.into_inner());
+                    record.completion.error = Some(reason);
+                    record.completion.retained = false;
+                }
+                job.registry
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .records
+                    .remove(&original.id);
+                self.stage("session_rejected_before_effects", &original.id);
             }
             Err(reason) => {
                 if let Some(dispatch) = &dispatch {

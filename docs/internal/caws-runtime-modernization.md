@@ -29,9 +29,12 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-The matched native runtime source is published on `main` through merge
-`1c39bd3cd708076d54a34bfec10d8992de8f3286`, including reconciled candidate
+The matched native runtime source includes main merge
+`1c39bd3cd708076d54a34bfec10d8992de8f3286`, reconciled candidate
 `c9b919e64f9149a09e2e9fff62f40cfdf141d1a8`, shared pack v105 and F3 cleanup.
+Local main merge `6defc8aa44d296cda598a97cd7eee2f16a8a54d2` adds the native
+SessionEnd publication chain. E270/E271 distinguish that source landing from
+remote publication, package qualification and runtime acceptance.
 `native-runtime-modernization` remains the integration branch for owed work.
 Evidence entries identify their actual component branch or historical revision;
 ledger-only commits do not qualify different runtime bytes. The relative
@@ -49,7 +52,10 @@ qualification and selected-machine adoption are separate states.
 ## Ownership and execution
 
 - Bound lane owner and cutover coordinator: Codex chat
-  `01a15a2a-5057-75d0-a7e5-69d676673add`.
+  `01a164bc-7a2b-75e2-be81-5da9d0a29252`, following the user's lead transfer.
+- Prior coordinator: Codex chat `01a15a2a-5057-75d0-a7e5-69d676673add`. The live
+  worktree registry and `caws claim` identify the current owner; this tracker
+  grants no authority.
 - Original coordinator: Codex chat `01a15107-5fd0-7872-8f9a-0bb7eb5f26ce`. The
   clean `2489f014` checkpoint and all remaining obligations transfer through the
   user-authorized claim takeover, event9542. The registry records both the
@@ -7276,6 +7282,78 @@ Additional bounded evidence and unresolved dependencies:
   `publication-integration/ts-prefix-observation-*` and
   `publication-integration/actual-session-publication-fixture-04`.
 
+- E271: The native publication source lands on local `main` at `6defc8aa`
+  through child merge `1e88c3c9` and publication-parent merge `65a9c686`. The
+  final gates evaluate 50 changed paths and pass after admitting the exact typed
+  SessionEnd preparation and its tests. Runtime source blobs match the actual
+  frontend 04 candidate; inherited test-preparation package scripts and one test
+  configuration are the only changed pins in that check's TS inventory. Child
+  evidence 12189–12191 remains unchecked, and its superseded disposition
+  transfers the unfinished integration to the active publication parent rather
+  than claiming completion. Parent records 12200 and 12225 retain root
+  ownership.
+
+  The next decisive runtime scenario is actual warm Render A → native SessionEnd
+  → Render B, with each original request bound to its exact Prepared/backend and
+  the original native worker's observed kernel birth. Event order without a
+  synchronized contender cannot independently prove uninterrupted writer
+  custody; B's ordinary current-generation publication remains a separate check.
+  SQL CLOSED-to-publication, more than 256 real original operations, the full
+  residency workload, package adoption and rollback remain required. The landed
+  slice does not change the selected machine runtime.
+
+- E272: Normal push `main-push-02` at `51411cbf` exits 1 in 342.002 seconds,
+  with source pins unchanged, no cleanup signals and no remaining process group.
+  Typecheck, lint, audit and build pass. The complete test run exposes missing
+  quality-inventory classification for `session-seal-prepare.ts` and two
+  positive merge-hook fixtures without the staged runner dependency. The sparse
+  runner spec is reopened for its fixture repair; classification must preserve
+  existing mutation targets and floors. The earlier license-marker failure
+  remains unexplained despite this successful build.
+
+  Publication candidate `42fbeb0c` passes both 64-MiB inventory-order controls
+  from a fresh committed-source export. An isolated mutant restores alphabetical
+  writes before removals and removes the shrink-first ordering; both unchanged
+  tests then fail specifically at `session inventory byte bound`. Control and
+  mutant retain separate targets, identical tests and constants, unchanged input
+  pins and empty final process groups. Evidence is under
+  `publication-integration/inventory-order-mutation-01/{control-01,mutant-01}`.
+  This establishes sensitivity to intermediate named-inventory growth, not a
+  total disk-space quota. Source inspection finds missing selected leaves
+  refused by the ordinary reader and Running→Unknown recovery before fresh host
+  admission. Composed crash-after-unlink → host restart → frontend refusal and
+  actual directory-sync/Nth-removal fault injection remain unexercised.
+
+- E273: Candidate `0699c408` contains the strict TypeScript/Rust staged-image
+  transformation repair and typed known-not-executed replay-capacity refund. The
+  image checks execute file, pipe, large-input staging and staging-failure paths
+  with exact arguments, stdin, exit status and selected-only descriptors; the
+  TypeScript suite passes 73 checks with ten existing profile skips and Rust
+  passes three focused controls. The replay control first fails with
+  `retained: true` and exhausted fresh-original capacity, then passes after the
+  repair while preserving the durable consumed tombstone and session files. Nine
+  focused session controls retain wrong-ACK and uncertain-effect records.
+  Evidence is under `publication-integration/runner-transform-*` and
+  `publication-integration/session-consumed-replay-*`. Strict compilation,
+  normal CLI build, the pinned release-native build, scoped doctor and five
+  ten-path gates exit 0; independent committed feedback is source-grounded.
+  These finite checks do not establish sustained capacity or machine adoption.
+
+  `warm-render-execution-02` exits 1 in 28.079 seconds with unchanged source
+  pins and no remaining supervisor process group. Actual Render A traverses the
+  repaired image successfully. SessionEnd exits 0 through compatibility dispatch
+  without a native-prefix completion record, so Render B is not attempted. The
+  fixture's project `runtime-paths.sh` makes native SessionEnd admission
+  ineligible; a selected stock handler alone is insufficient. The original
+  failed manifest also records unknown cleanup because identity assignment
+  followed the failed semantic assertion, and expects two worker cleanups
+  despite creating only A. Preserve that manifest and reconcile custody from
+  request 009's retained original identity and terminal witness separately. The
+  next fixture uses one supported alternate Render-source root throughout A,
+  SessionEnd and B, with the native-prefix admission predicate checked before
+  execution. No production admission relaxation or between-phase source change
+  is authorized. Warm continuation and continuous publication remain unchecked.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7377,6 +7455,24 @@ Only `caws specs evidence` records authoritative verdicts. This ledger explains
 progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
+
+The lead integrates three outcomes. The immediate assignments below precede the
+detailed retained dependency list; completing a bounded assignment does not
+complete its parent outcome.
+
+| Integrated outcome                                                                   | Execution owner                                                                                                                     | Next decisive check                                                                                                                                                            |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coherent source and package delivery, isolated invocation and rollback               | Root integrates the repaired merge-hook fixture and quality inventory                                                               | Normal push with unchanged gates, hosted checks on that exact commit, then a fresh installed package/image join and actual native refusal/rollback observations                |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration owns the supported warm fixture and cleanup accounting; source-progress owns the SQL adapter contract | Actual warm Render A → SessionEnd → Render B, followed by SQL CLOSED-to-publication; retain ordinary semantic consumption and exact custody evidence                           |
+| Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                               | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
+
+The E273 image and rejected-replay repairs have finite executed controls. The
+second warm attempt reaches Render A but exposes an incompatible fixture profile
+for native SessionEnd and cleanup-accounting defects in the qualifier. Use the
+same admissible profile for every phase and capture identities before semantic
+assertions. Existing successful-operation compaction and shared-permit release
+require the sustained actual workload before residency acceptance. Package
+adoption, Python retirement and machine cutover acceptance remain open.
 
 1. Refresh complete source/build/dependency identities after E188, including
    both the engine and the selected CLI entry. The CLI entry imports commander

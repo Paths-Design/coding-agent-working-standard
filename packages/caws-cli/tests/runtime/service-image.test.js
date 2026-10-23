@@ -13,6 +13,7 @@ const {
   claimNativeRenderAdmission,
   disposeNativeRenderAdmission,
   prepareSessionRenderImage,
+  transformServiceImageRunner,
   verifyPublishedServiceImage,
   STERLING_SESSION_SOURCE_PROFILE,
 } = require('../../dist/runtime/service-image');
@@ -190,6 +191,229 @@ test.each([
     } finally {
       for (const fd of descriptors) fs.closeSync(fd);
     }
+  }
+);
+
+const currentRunnerSource = () =>
+  fs.readFileSync(path.resolve(templates, '../../shared/lib/run-handlers.sh'), 'utf8');
+function directRunnerSource() {
+  // The older supported layout has only the file and pipe calls. Keep the
+  // remaining real runner code so both layouts execute the same dispatch checks.
+  return currentRunnerSource()
+    .replace(/^_rh_exec_staged\(\) \{[\s\S]*?\n}\n/m, '')
+    .replace(
+      '    elif (( stage_inline )); then\n      stdout_buf=$(_rh_exec_staged "$handler_path" "$stderr_file" "$@")\n',
+      ''
+    );
+}
+function runnerTransform(runner, selectedIndex = 0, handlerRoutes = '') {
+  return transformServiceImageRunner({
+    runner,
+    selectedIndex,
+    handlerRoutes,
+    parseInput: readTemplate('parse-input.sh'),
+    executeHandler: expandServiceImageTemplate(readTemplate('execute-handler.sh'), {
+      __CAWS_IMAGE_SELECTED_INDEX__: String(selectedIndex),
+    }),
+  });
+}
+
+test.each(['direct', 'staged'])('recognized %s runner is complete Bash syntax', (layout) => {
+  const source = layout === 'direct' ? directRunnerSource() : currentRunnerSource();
+  const child = spawnSync('/bin/bash', ['-n'], {
+    input: runnerTransform(source),
+    encoding: 'utf8',
+    timeout: 2000,
+  });
+  expect(child.error).toBeUndefined();
+  expect(child.status).toBe(0);
+});
+
+test.each([
+  [
+    'file call',
+    (source) =>
+      source.replace('stdout_buf=$("$handler_path" "$@" <', 'stdout_buf=$("$handler_path"  "$@" <'),
+  ],
+  [
+    'pipe call',
+    (source) => source.replace('| "$handler_path" "$@" 2>', '| "$handler_path"  "$@" 2>'),
+  ],
+  [
+    'staged call',
+    (source) =>
+      source.replace(
+        'stdout_buf=$(_rh_exec_staged "$handler_path"',
+        'stdout_buf=$(_rh_exec_staged  "$handler_path"'
+      ),
+  ],
+  [
+    'staged exec',
+    (source) => source.replace('exec "$handler_path" "$@"', 'exec "$handler_path"  "$@"'),
+  ],
+  [
+    'duplicate file call',
+    (source) =>
+      source.replace(
+        '      stdout_buf=$("$handler_path" "$@" < "$stdin_file" 2>"$stderr_file")\n',
+        '      stdout_buf=$("$handler_path" "$@" < "$stdin_file" 2>"$stderr_file")\n'.repeat(2)
+      ),
+  ],
+  [
+    'missing parser',
+    (source) =>
+      source.replace('    source "${HOOKS_DIR}/lib/parse-input.sh" 2>/dev/null || return 0\n', ''),
+  ],
+  [
+    'duplicate routes anchor',
+    (source) =>
+      source.replace(
+        '    if [[ ! -x "$handler_path" ]]; then\n',
+        '    if [[ ! -x "$handler_path" ]]; then\n'.repeat(2)
+      ),
+  ],
+])('runner refuses unsupported %s before execution', (_label, mutate) => {
+  expect(() => runnerTransform(mutate(currentRunnerSource()))).toThrow('runtime transform anchor');
+});
+test.each([-1, 0.5, 65536, NaN])('runner refuses invalid selected index %s', (index) => {
+  expect(() => runnerTransform(currentRunnerSource(), index)).toThrow('selected handler index');
+});
+
+test.each([
+  ['direct', 'file'],
+  ['direct', 'pipe'],
+  ['staged', 'file'],
+  ['staged', 'pipe'],
+  ['staged', 'inline'],
+  ['staged', 'fallback'],
+])(
+  'actual %s runner preserves %s dispatch, staged cleanup and selected capability',
+  (layout, mode) => {
+    const logical = path.join(root, 'logical'),
+      mapped = path.join(root, 'mapped'),
+      temporary = path.join(root, 'tmp');
+    for (const directory of [logical, mapped, temporary]) fs.mkdirSync(directory);
+    const poison = path.join(root, 'logical-path-executed');
+    const entries = ['selected.sh alpha literal;value', 'adjacent.sh beta'];
+    const cases = [];
+    for (const [index, entry] of entries.entries()) {
+      const name = entry.split(' ')[0];
+      const original = path.join(logical, name),
+        sealed = path.join(mapped, name);
+      const trace = path.join(root, name);
+      fs.writeFileSync(
+        original,
+        '#!/bin/bash\nprintf poison > ' + quoteServiceImageLiteral(poison) + '\nexit 99\n',
+        { mode: 0o700 }
+      );
+      fs.writeFileSync(
+        sealed,
+        '#!/bin/bash\n' +
+          'cat > ' +
+          quoteServiceImageLiteral(trace + '.stdin') +
+          '\n' +
+          'printf "%s\\n" "$@" > ' +
+          quoteServiceImageLiteral(trace + '.args') +
+          '\n' +
+          'printf "%s\\n" "$PPID" > ' +
+          quoteServiceImageLiteral(trace + '.parent') +
+          '\n' +
+          'for fd in 3 4 5; do [[ ! -e /dev/fd/$fd ]] || printf "%s " "$fd"; done > ' +
+          quoteServiceImageLiteral(trace + '.fds') +
+          '\n' +
+          'printf "diagnostic\\n" >&2\nexit ' +
+          (index === 0 ? '7' : '0') +
+          '\n',
+        { mode: 0o700 }
+      );
+      cases.push(
+        '      ' +
+          index +
+          ') [[ "$entry" == ' +
+          quoteServiceImageLiteral(entry) +
+          ' && "$handler_path" == ' +
+          quoteServiceImageLiteral(original) +
+          ' ]] || return 2; handler_execution_path=' +
+          quoteServiceImageLiteral(sealed) +
+          ' ;;'
+      );
+    }
+    const routes = expandServiceImageTemplate(readTemplate('handler-routes.sh'), {
+      __CAWS_IMAGE_HANDLER_CASES__: cases.join('\n'),
+    });
+    const output = runnerTransform(
+      layout === 'direct' ? directRunnerSource() : currentRunnerSource(),
+      0,
+      routes
+    );
+    const payload = JSON.stringify({
+      data:
+        mode === 'inline' || mode === 'fallback' ? 'x'.repeat(40000) : 'literal $(touch injected)',
+    });
+    const inputFile = path.join(root, 'payload');
+    fs.writeFileSync(inputFile, payload);
+    let searchPath = '/usr/bin:/bin';
+    if (mode === 'fallback') {
+      const bin = path.join(root, 'bin');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(
+        path.join(bin, 'mktemp'),
+        '#!/bin/bash\n[[ "${1:-}" != -d ]] || exit 1\nexec /usr/bin/mktemp "$@"\n',
+        { mode: 0o700 }
+      );
+      searchPath = bin + ':' + searchPath;
+    }
+    const descriptor = path.join(root, 'descriptor');
+    fs.writeFileSync(descriptor, '');
+    const descriptors = [0, 1, 2].map(() => fs.openSync(descriptor, 'r+'));
+    let child;
+    try {
+      const program =
+        'set -uo pipefail\n' +
+        output +
+        '\nprintf "%s\\n" "$$" > ' +
+        quoteServiceImageLiteral(path.join(root, 'dispatcher.pid')) +
+        '\nrun_handlers ' +
+        entries.map(quoteServiceImageLiteral).join(' ') +
+        '\n';
+      child = spawnSync('/bin/bash', ['-c', program], {
+        cwd: root,
+        env: {
+          PATH: searchPath,
+          HOOKS_DIR: logical,
+          HOOK_INPUT_JSON: payload,
+          ...(mode === 'file' ? { HOOK_PAYLOAD_FILE: inputFile } : {}),
+          TMPDIR: temporary,
+          CAWS_HOOK_ADVISORY_DEDUP: '0',
+        },
+        encoding: 'utf8',
+        timeout: 3000,
+        stdio: ['ignore', 'pipe', 'pipe', ...descriptors],
+      });
+    } finally {
+      for (const fd of descriptors) fs.closeSync(fd);
+    }
+    expect(child.error).toBeUndefined();
+    expect(child.signal).toBeNull();
+    expect(child.status).toBe(7);
+    expect(child.stdout).toBe('');
+    expect(child.stderr).toBe('[selected.sh] diagnostic\n[adjacent.sh] diagnostic\n');
+    expect(fs.existsSync(poison)).toBe(false);
+    expect(fs.existsSync(path.join(root, 'injected'))).toBe(false);
+    for (const [index, name] of ['selected.sh', 'adjacent.sh'].entries()) {
+      expect(fs.readFileSync(path.join(root, name + '.stdin'), 'utf8')).toBe(payload);
+      expect(fs.readFileSync(path.join(root, name + '.args'), 'utf8')).toBe(
+        index === 0 ? 'alpha\nliteral;value\n' : 'beta\n'
+      );
+      expect(fs.readFileSync(path.join(root, name + '.fds'), 'utf8')).toBe(
+        index === 0 ? '3 4 5 ' : ''
+      );
+      if (mode === 'inline')
+        expect(fs.readFileSync(path.join(root, name + '.parent'), 'utf8')).toBe(
+          fs.readFileSync(path.join(root, 'dispatcher.pid'), 'utf8')
+        );
+    }
+    expect(fs.readdirSync(temporary)).toEqual([]);
   }
 );
 
