@@ -2,7 +2,6 @@ id: CAWS-BATS-ASSERTION-MAIN-001
 title: 'Land the verified Bash 3.2 assertion repair on main'
 mode: fix
 lifecycle_state: active
-worktree: bats-assertion-main
 created_at: '2026-10-23T03:29:13.497Z'
 updated_at: '2026-10-23T03:29:30.627Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
