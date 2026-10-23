@@ -113,3 +113,9 @@ evidence:
     recorded_at: "2026-10-23T03:21:51.608Z"
     artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/receipts/phase-c-20261023T020442Z/phase-c-dispatch-ingress.stdout"
     commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "jest 105/105: read from stdin on the dispatcher fast path rows unchanged, a directly invoked heartbeat with HOOK_TOOL_NAME preset and subagent bytes withholds, and with a forged descriptor 8 plus capture report still withholds (agreement rule); capture report without descriptor, failed or unknown never delivers main-thread stdin. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated."
+    recorded_at: "2026-10-23T03:21:53.933Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/receipts/stage-b-full-20261023T024905Z/stage-b-custody-jest-full.stderr"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
