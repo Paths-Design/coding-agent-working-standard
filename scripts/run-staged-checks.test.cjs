@@ -204,6 +204,41 @@ test('spec validation uses staged bytes, preserving different materialized worki
   f.noBackup();
 });
 
+for (const sparse of [false, true]) {
+  test(`absent ${sparse ? 'sparse-excluded' : 'ordinary'} source refuses without restoring or silently skipping it`, () => {
+    const f = fixture();
+    const name = sparse ? 'doc.md' : 'nested/doc.md';
+    if (sparse) {
+      f.git('sparse-checkout', 'init', '--no-cone');
+      f.git('sparse-checkout', 'set', '--no-cone', '/*', '!/doc.md');
+      const oid = execFileSync(REAL_GIT, ['hash-object', '-w', '--stdin'], {
+        cwd: f.root,
+        env: f.env,
+        input: UNFORMATTED,
+      })
+        .toString()
+        .trim();
+      f.git('update-index', '--cacheinfo', `100644,${oid},${name}`);
+      f.git('update-index', '--skip-worktree', name);
+      assert.equal(f.git('ls-files', '-t', '--', name).toString(), `S ${name}\n`);
+    } else {
+      f.write(name, UNFORMATTED);
+      f.git('add', name);
+      fs.rmSync(path.join(f.root, 'nested'), { recursive: true });
+    }
+    const result = f.run();
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Eligible staged path is absent; materialize it before validation/);
+    assert.equal(f.index(name), UNFORMATTED);
+    assert.equal(fs.existsSync(path.join(f.root, name)), false);
+    assert.equal(
+      f.calls().some(args => args.includes('add')),
+      false
+    );
+    f.noBackup();
+  });
+}
+
 test('real git-add lock failure returns its status and leaves formatted work unstaged', () => {
   const f = fixture();
   f.write('doc.md', UNFORMATTED);
@@ -249,6 +284,21 @@ test('ordinary partial staging retains whole-file restage without hidden backup'
   assert.equal(fs.readFileSync(path.join(f.root, 'doc.md'), 'utf8'), f.index('doc.md'));
   f.noBackup();
 });
+
+for (const name of ['doc.md', '.md']) {
+  test(`already-formatted partial staging still stages the whole matching file ${name}`, () => {
+    const f = fixture();
+    f.write(name, '# Staged\n');
+    f.git('add', '--', name);
+    const working = '# Staged\n\nUnstaged paragraph.\n';
+    f.write(name, working);
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(f.index(name), working);
+    assert.equal(fs.readFileSync(path.join(f.root, name), 'utf8'), working);
+    f.noBackup();
+  });
+}
 
 test('literal filenames with whitespace, Unicode, dash, colon and glob syntax do not expand', () => {
   const f = fixture();

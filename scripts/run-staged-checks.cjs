@@ -11,10 +11,10 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { TextDecoder } = require('node:util');
 
-const SOURCE = new Set(['.js', '.jsx', '.ts', '.tsx']);
-const DOCUMENT = new Set(['.json', '.md', '.yaml', '.yml']);
-const isSpec = name =>
-  name.startsWith('.caws/specs/') && ['.yaml', '.yml'].includes(path.extname(name));
+const SOURCE = ['.js', '.jsx', '.ts', '.tsx'];
+const DOCUMENT = ['.json', '.md', '.yaml', '.yml'];
+const hasExtension = (name, extensions) => extensions.some(extension => name.endsWith(extension));
+const isSpec = name => name.startsWith('.caws/specs/') && hasExtension(name, ['.yaml', '.yml']);
 
 class Failure extends Error {
   constructor(message, status = 1) {
@@ -114,25 +114,34 @@ function main(options = {}) {
         }
       }
       if (name.startsWith('.caws/')) continue;
-      if (!SOURCE.has(path.extname(name)) && !DOCUMENT.has(path.extname(name))) continue;
+      if (!hasExtension(name, SOURCE) && !hasExtension(name, DOCUMENT)) continue;
       if (!['100644', '100755'].includes(entry.mode)) {
         throw new Failure(`Eligible staged path is not a regular file: ${JSON.stringify(name)}`);
       }
-      let parent = root;
-      for (const segment of name.split('/').slice(0, -1)) {
-        parent = path.join(parent, segment);
-        const directory = fs.lstatSync(parent);
-        if (!directory.isDirectory() || directory.isSymbolicLink()) {
+      try {
+        let parent = root;
+        for (const segment of name.split('/').slice(0, -1)) {
+          parent = path.join(parent, segment);
+          const directory = fs.lstatSync(parent);
+          if (!directory.isDirectory() || directory.isSymbolicLink()) {
+            throw new Failure(
+              `Staged path has a non-directory or symlink parent: ${JSON.stringify(name)}`
+            );
+          }
+        }
+        const observed = fs.lstatSync(path.join(root, name));
+        if (!observed.isFile()) {
           throw new Failure(
-            `Staged path has a non-directory or symlink parent: ${JSON.stringify(name)}`
+            `Materialized staged path is not a regular file: ${JSON.stringify(name)}`
           );
         }
-      }
-      const observed = fs.lstatSync(path.join(root, name));
-      if (!observed.isFile()) {
-        throw new Failure(
-          `Materialized staged path is not a regular file: ${JSON.stringify(name)}`
-        );
+      } catch (failure) {
+        if (failure.code === 'ENOENT') {
+          throw new Failure(
+            `Eligible staged path is absent; materialize it before validation: ${JSON.stringify(name)}`
+          );
+        }
+        throw failure;
       }
       materialized.push(`./${name}`);
     }
@@ -144,7 +153,7 @@ function main(options = {}) {
       if (!relative) throw new Failure(`Installed ${name} has no executable`);
       return path.resolve(path.dirname(manifestPath), relative);
     };
-    const source = materialized.filter(name => SOURCE.has(path.extname(name)));
+    const source = materialized.filter(name => hasExtension(name, SOURCE));
     if (source.length) {
       const eslint = binary('eslint');
       for (const batch of chunks(source))
