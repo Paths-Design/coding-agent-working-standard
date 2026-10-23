@@ -202,6 +202,28 @@ function verifyRuntimeUncached(
   return files;
 }
 
+/** Parse only the exact captured metadata bytes bound by this manifest.
+ * A prior pathname hash or an optional IO digest memo cannot vouch for a later
+ * live capture. Snapshot IO still returns its same owned immutable observation.
+ */
+function readManifestMetadata(
+  root: string,
+  relative: string,
+  files: Record<string, string>,
+  io: SelectionReadIo
+): Buffer {
+  validateRuntimeRelative(relative);
+  const file = path.join(root, relative);
+  assertMachinePath(root, file, io);
+  const bytes = readRuntimeFile(file, io);
+  assertMachinePath(root, file, io);
+  if (!validDigest(files[relative]) || sha(bytes) !== files[relative])
+    throw new Error(
+      `Machine runtime file modified: ${relative}; preserve and reconcile local growth before updating`
+    );
+  return bytes;
+}
+
 /** Native generations add full inventory and mode closure to the v1 raw manifest. */
 function verifyNativeLayout(
   root: string,
@@ -211,21 +233,36 @@ function verifyNativeLayout(
   if (!files['native-modes.json'] || !files['native/caws-hook-native'])
     throw new Error('Native generation lacks mode/entry identity');
   const modes: unknown = JSON.parse(
-    readRuntimeFile(path.join(root, 'native-modes.json'), io).toString('utf8')
+    readManifestMetadata(root, 'native-modes.json', files, io).toString('utf8')
   );
   if (!modes || typeof modes !== 'object' || Array.isArray(modes))
     throw new Error('Malformed native mode inventory');
   const expected = Object.keys(files).sort();
   if (Object.keys(modes).sort().join('\n') !== expected.join('\n'))
     throw new Error('Native mode inventory differs from manifest');
+  // Exact file membership also determines every permissible ancestor.
+  // Refuse an undeclared empty tree before descending into it, matching the
+  // native verifier and the file-map installer's emitted directory closure.
+  const directories = new Set<string>();
+  for (const relative of expected) {
+    for (
+      let parent = path.posix.dirname(relative);
+      parent !== '.';
+      parent = path.posix.dirname(parent)
+    )
+      directories.add(parent);
+  }
   const actual: string[] = [];
   const visit = (directory: string, prefix: string): void => {
     for (const entry of [...io.readDirectory(directory)].sort()) {
       const relative = prefix + entry;
       const file = path.join(directory, entry);
       const stat = io.lstat(file);
-      if (stat.kind === 'directory') visit(file, relative + '/');
-      else {
+      if (stat.kind === 'directory') {
+        if (!directories.has(relative))
+          throw new Error(`Undeclared native runtime directory: ${relative}`);
+        visit(file, relative + '/');
+      } else {
         if (stat.kind !== 'file' || stat.nlink !== 1)
           throw new Error(`Unsupported native runtime member: ${relative}`);
         if (relative === 'manifest.json') {
@@ -243,7 +280,7 @@ function verifyNativeLayout(
   if (actual.sort().join('\n') !== expected.join('\n'))
     throw new Error('Native runtime inventory differs from manifest');
   const entry = parseNativeEntryMetadata(
-    readRuntimeFile(path.join(root, 'native-entry.json'), io),
+    readManifestMetadata(root, 'native-entry.json', files, io),
     files
   );
   for (const key of ['nativeExecutable', 'nodeExecutable', 'engineEntry', 'describeEntry']) {
