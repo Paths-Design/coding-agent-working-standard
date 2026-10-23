@@ -615,7 +615,9 @@ import { isAdapterCoveredSurface } from './types';
 // allowlist and approval policy instead of exiting before either policy runs.
 // v104: heartbeat message provenance reads the canonical sender specId field.
 // v105: refresh captured invocation custody and per-handler stdin stage cleanup.
-export const SHARED_PACK_VERSION = 105;
+// v106: declare lib/session-render-service-client.sh, the descriptor-bound
+// renderer client the native runtime seals from this tree.
+export const SHARED_PACK_VERSION = 106;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -859,6 +861,12 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/session-render-writer.sh',
       sourcePath: 'lib/session-render-writer.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/session-render-service-client.sh',
+      sourcePath: 'lib/session-render-service-client.sh',
       executable: false,
       managed: true,
     },
