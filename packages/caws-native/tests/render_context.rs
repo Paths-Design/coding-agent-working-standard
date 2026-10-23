@@ -3,7 +3,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use caws_native::{
     invocation_project::ProjectPhase,
-    render_context::{Invocation, RenderContextOwner},
+    render_context::{CapturedRenderContext, Invocation, OriginalInvocation, RenderContextOwner},
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -604,4 +604,77 @@ fn proposal_token_profile_accepts_uuid_and_bound_but_refuses_malformed_before_qu
             .is_ok()
     );
     assert!(!fixture.root.join("query-ran").exists());
+}
+
+#[test]
+fn tokenless_selection_reports_original_executable_before_bind_or_query() {
+    let fixture = Fixture::new();
+    let invocation = fixture.wrapper("printf invoked > query-ran; printf false; exit 128");
+    let expected_path = fixture.root.join("bin/git");
+    let expected_hash = format!("{:x}", Sha256::digest(fs::read(&expected_path).unwrap()));
+    let expires = Instant::now() + Duration::from_secs(3);
+    let captured = CapturedRenderContext::capture(
+        OriginalInvocation {
+            id: invocation.id.clone(),
+            runtime_digest: invocation.runtime_digest.clone(),
+            caller_cwd: invocation.caller_cwd,
+            cwd: invocation.cwd,
+            environment: invocation.environment,
+        },
+        expires,
+        &|| false,
+    )
+    .unwrap();
+    assert_eq!(captured.id(), invocation.id);
+    assert_eq!(captured.runtime_digest(), invocation.runtime_digest);
+    assert_eq!(captured.cwd(), fixture.root.to_str().unwrap());
+    let executable = captured.executable();
+    assert_eq!(executable.path, expected_path.to_str().unwrap());
+    assert_eq!(executable.physical_path, expected_path.to_str().unwrap());
+    assert_eq!(executable.sha256, expected_hash);
+    assert!(!fixture.root.join("query-ran").exists());
+    let mut bound = captured.bind(invocation.token).unwrap();
+    assert!(!fixture.root.join("query-ran").exists());
+    let result = bound.observe(expires, &|| false).unwrap();
+    assert_eq!(result.executable.sha256, executable.sha256);
+    assert_eq!(result.queries.len(), 1);
+    assert_eq!(result.queries[0].exit_code, Some(128));
+    assert_eq!(
+        fs::read(fixture.root.join("query-ran")).unwrap(),
+        b"invoked"
+    );
+}
+
+#[test]
+fn delayed_binding_rejects_expiration_and_invalid_token_without_query() {
+    for expired in [false, true] {
+        let fixture = Fixture::new();
+        let invocation = fixture.wrapper("printf invoked > query-ran; exit 0");
+        let expires = Instant::now() + Duration::from_millis(if expired { 100 } else { 3000 });
+        let captured = CapturedRenderContext::capture(
+            OriginalInvocation {
+                id: invocation.id,
+                runtime_digest: invocation.runtime_digest,
+                caller_cwd: invocation.caller_cwd,
+                cwd: invocation.cwd,
+                environment: invocation.environment,
+            },
+            expires,
+            &|| false,
+        )
+        .unwrap();
+        if expired {
+            std::thread::sleep(Duration::from_millis(110));
+        }
+        let failure = captured
+            .bind(if expired { "actual-token" } else { "bad/token" }.into())
+            .err()
+            .unwrap();
+        assert_eq!(
+            failure.category,
+            if expired { "binding" } else { "unsupported" }
+        );
+        assert!(failure.cause.is_none());
+        assert!(!fixture.root.join("query-ran").exists());
+    }
 }

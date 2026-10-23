@@ -44,6 +44,8 @@ export interface NativeTranscriptStorePublicationPort extends NativeTranscriptSt
   continuePublication(options: {
     readonly canonicalRoot: string;
     readonly sessionId: string;
+    /** Explicit selected-carrier opt-in; absence preserves the existing continuation. */
+    readonly renderObservations?: true;
     readonly prepare: (input: SessionPublicationInput) => Promise<SessionPublicationPreparation>;
     readonly consume: SessionPublicationConsumer;
   }): Promise<SessionPublicationReceipt>;
@@ -434,6 +436,10 @@ export function createNativeTranscriptStorePort(
       options: Parameters<NativeTranscriptStorePublicationPort['continuePublication']>[0]
     ) {
       requireProtocol(
+        options.renderObservations === undefined || options.renderObservations === true,
+        'Invalid native store render observation option'
+      );
+      requireProtocol(
         publicationEligible &&
           !publicationAttempted &&
           phase === 'closed' &&
@@ -454,6 +460,7 @@ export function createNativeTranscriptStorePort(
         sessionId: options.sessionId,
         prepare: options.prepare,
         consume: options.consume,
+        ...(options.renderObservations === true ? { renderObservations: true } : {}),
       });
     },
     assertClosed(): void {

@@ -209,6 +209,14 @@ impl CapturedCalendar {
         &self.context
     }
 
+    pub fn id(&self) -> &str {
+        &self.invocation.id
+    }
+
+    pub fn runtime_digest(&self) -> &str {
+        &self.invocation.runtime_digest
+    }
+
     /// Bind exactly once to the existing native-validated publication token.
     /// Consuming ownership also makes a refused binding unavailable for replay.
     pub fn bind(self, token: String) -> Result<OriginalCalendar, CalendarFailure> {

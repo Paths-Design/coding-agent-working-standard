@@ -3,7 +3,7 @@
 use crate::invocation_project::{self as project, ProjectFailure, RenderQuery, SelectedExecutable};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Serialize;
-use std::{collections::BTreeMap, path::Path, time::Instant};
+use std::{collections::BTreeMap, marker::PhantomData, path::Path, rc::Rc, time::Instant};
 
 pub const SCHEMA: &str = "caws.render.context.observation.v1";
 pub const MAX_BYTES: usize = 6 * 1024 * 1024;
@@ -15,6 +15,14 @@ pub struct Invocation {
     pub id: String,
     pub runtime_digest: String,
     pub token: String,
+    pub caller_cwd: String,
+    pub cwd: String,
+    pub environment: BTreeMap<String, String>,
+}
+/// Captured before the engine exists; the publication token is bound later.
+pub struct OriginalInvocation {
+    pub id: String,
+    pub runtime_digest: String,
     pub caller_cwd: String,
     pub cwd: String,
     pub environment: BTreeMap<String, String>,
@@ -130,15 +138,17 @@ fn token(value: &str) -> bool {
 fn native_path(value: &str) -> bool {
     value.len() <= 4096 && value.starts_with('/') && !value.contains(['\0', '\r', '\n'])
 }
-pub struct RenderContextOwner {
-    invocation: Invocation,
+/// A process-local capability. Selection does not execute a Git query.
+pub struct CapturedRenderContext {
+    invocation: OriginalInvocation,
     selected: SelectedExecutable,
-    used: bool,
     expires: Instant,
+    original_pid: u32,
+    _original_thread: PhantomData<Rc<()>>,
 }
-impl RenderContextOwner {
+impl CapturedRenderContext {
     pub fn capture(
-        invocation: Invocation,
+        invocation: OriginalInvocation,
         expires: Instant,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, Failure> {
@@ -146,7 +156,6 @@ impl RenderContextOwner {
             || invocation.id.len() > 128
             || invocation.id.contains('\0')
             || !digest(&invocation.runtime_digest)
-            || !token(&invocation.token)
             || !native_path(&invocation.cwd)
             || !native_path(&invocation.caller_cwd)
         {
@@ -206,9 +215,96 @@ impl RenderContextOwner {
         Ok(Self {
             invocation,
             selected,
-            used: false,
             expires,
+            original_pid: std::process::id(),
+            _original_thread: PhantomData,
         })
+    }
+    pub fn id(&self) -> &str {
+        &self.invocation.id
+    }
+    pub fn runtime_digest(&self) -> &str {
+        &self.invocation.runtime_digest
+    }
+    pub fn cwd(&self) -> &str {
+        &self.invocation.cwd
+    }
+    /// Identity from selection, independent of a query's returned bytes.
+    pub fn executable(&self) -> Executable {
+        Executable {
+            path: self
+                .selected
+                .path
+                .to_str()
+                .expect("validated native path")
+                .into(),
+            physical_path: self
+                .selected
+                .physical_path
+                .to_str()
+                .expect("validated native path")
+                .into(),
+            sha256: self.selected.sha256.clone(),
+        }
+    }
+    pub fn bind(self, token_value: String) -> Result<RenderContextOwner, Failure> {
+        if !token(&token_value) {
+            return Err(Failure::plain(
+                "unsupported",
+                "Invalid original Render token",
+            ));
+        }
+        if self.original_pid != std::process::id() || Instant::now() >= self.expires {
+            return Err(Failure::plain(
+                "binding",
+                "Original Render process or deadline changed",
+            ));
+        }
+        Ok(RenderContextOwner {
+            captured: self,
+            token: token_value,
+            used: false,
+        })
+    }
+}
+pub struct RenderContextOwner {
+    captured: CapturedRenderContext,
+    token: String,
+    used: bool,
+}
+impl RenderContextOwner {
+    pub fn capture(
+        invocation: Invocation,
+        expires: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, Failure> {
+        let Invocation {
+            id,
+            runtime_digest,
+            token: token_value,
+            caller_cwd,
+            cwd,
+            environment,
+        } = invocation;
+        // Preserve rejection before selection for malformed bound callers.
+        if !token(&token_value) {
+            return Err(Failure::plain(
+                "unsupported",
+                "Invalid original Render token",
+            ));
+        }
+        CapturedRenderContext::capture(
+            OriginalInvocation {
+                id,
+                runtime_digest,
+                caller_cwd,
+                cwd,
+                environment,
+            },
+            expires,
+            cancelled,
+        )?
+        .bind(token_value)
     }
     pub fn observe(
         &mut self,
@@ -222,10 +318,14 @@ impl RenderContextOwner {
             ));
         }
         self.used = true;
-        let expires = expires.min(self.expires);
+        let expires = expires.min(self.captured.expires);
+        if self.captured.original_pid != std::process::id() {
+            return Err(Failure::plain("binding", "Original Render process changed"));
+        }
         // Match the direct runtime's inherited routing removal. No process-wide
         // environment or PATH cache can enter this observation.
         let environment = self
+            .captured
             .invocation
             .environment
             .iter()
@@ -240,8 +340,8 @@ impl RenderContextOwner {
             (RenderQuery::Status, "status"),
         ] {
             let output = project::query_render_context(
-                &self.selected,
-                Path::new(&self.invocation.cwd),
+                &self.captured.selected,
+                Path::new(&self.captured.invocation.cwd),
                 &environment,
                 operation,
                 expires,
@@ -285,15 +385,11 @@ impl RenderContextOwner {
         }
         Ok(Observation {
             schema: SCHEMA,
-            id: self.invocation.id.clone(),
-            runtime_digest: self.invocation.runtime_digest.clone(),
-            token: self.invocation.token.clone(),
-            cwd: self.invocation.cwd.clone(),
-            executable: Executable {
-                path: self.selected.path.to_str().unwrap().into(),
-                physical_path: self.selected.physical_path.to_str().unwrap().into(),
-                sha256: self.selected.sha256.clone(),
-            },
+            id: self.captured.invocation.id.clone(),
+            runtime_digest: self.captured.invocation.runtime_digest.clone(),
+            token: self.token.clone(),
+            cwd: self.captured.invocation.cwd.clone(),
+            executable: self.captured.executable(),
             queries,
         })
     }
