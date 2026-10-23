@@ -36,7 +36,11 @@ acceptance:
   - id: A2
     given: 'original native invocations with absent empty and explicit TZ and hostile seconds or binding inputs'
     when: 'bounded local-calendar observation executes'
-    then: 'exact calendar fields or typed errors are retained under original environment without process-global mutation or subprocess fanout'
+    then: >-
+      Exact calendar fields or typed errors are retained under captured unchanged
+      original TZ and TZDIR, with one explicit original-frontend libc timezone
+      initialization before engine launch, no environment mutation, no shared-owner
+      calendar execution and no helper subprocess
   - id: A3
     given: 'committed leaf source and exact retained checks'
     when: 'cross-language observations and independent review challenge the boundary'
