@@ -29,14 +29,15 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-This working ledger is published on `main` independently of candidate source.
-The integration branch is `native-runtime-modernization`; its source-tree
-checkpoint is `bb3a8b99c978fbde8023b83e366030fc25cbb286`. Later branch commits
-that change only this ledger leave that checkpoint unchanged. Evidence entries
-identify their actual component branch or historical revision. Publishing this
-document does not land those implementations on `main`. Inspect the candidate
-architecture with `git show bb3a8b99:docs/architecture/caws-native-runtime.md`;
-the relative architecture link follows the branch containing this document.
+The matched native runtime source is published on `main` through merge
+`1c39bd3cd708076d54a34bfec10d8992de8f3286`, including reconciled candidate
+`c9b919e64f9149a09e2e9fff62f40cfdf141d1a8`, shared pack v105 and F3 cleanup.
+`native-runtime-modernization` remains the integration branch for owed work.
+Evidence entries identify their actual component branch or historical revision;
+ledger-only commits do not qualify different runtime bytes. The relative
+architecture link follows this document's branch. Source publication, fresh
+package qualification, actual native execution and cutover acceptance remain
+separate obligations; E262 records the landing and its bounded checks.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
