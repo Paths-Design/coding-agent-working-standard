@@ -29,9 +29,12 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-The matched native runtime source is published on `main` through merge
-`1c39bd3cd708076d54a34bfec10d8992de8f3286`, including reconciled candidate
+The matched native runtime source includes main merge
+`1c39bd3cd708076d54a34bfec10d8992de8f3286`, reconciled candidate
 `c9b919e64f9149a09e2e9fff62f40cfdf141d1a8`, shared pack v105 and F3 cleanup.
+Local main merge `6defc8aa44d296cda598a97cd7eee2f16a8a54d2` adds the native
+SessionEnd publication chain. E270/E271 distinguish that source landing from
+remote publication, package qualification and runtime acceptance.
 `native-runtime-modernization` remains the integration branch for owed work.
 Evidence entries identify their actual component branch or historical revision;
 ledger-only commits do not qualify different runtime bytes. The relative
@@ -49,7 +52,10 @@ qualification and selected-machine adoption are separate states.
 ## Ownership and execution
 
 - Bound lane owner and cutover coordinator: Codex chat
-  `01a15a2a-5057-75d0-a7e5-69d676673add`.
+  `01a164bc-7a2b-75e2-be81-5da9d0a29252`, following the user's lead transfer.
+- Prior coordinator: Codex chat `01a15a2a-5057-75d0-a7e5-69d676673add`. The live
+  worktree registry and `caws claim` identify the current owner; this tracker
+  grants no authority.
 - Original coordinator: Codex chat `01a15107-5fd0-7872-8f9a-0bb7eb5f26ce`. The
   clean `2489f014` checkpoint and all remaining obligations transfer through the
   user-authorized claim takeover, event9542. The registry records both the
@@ -7296,6 +7302,28 @@ Additional bounded evidence and unresolved dependencies:
   residency workload, package adoption and rollback remain required. The landed
   slice does not change the selected machine runtime.
 
+- E272: Normal push `main-push-02` at `51411cbf` exits 1 in 342.002 seconds,
+  with source pins unchanged, no cleanup signals and no remaining process group.
+  Typecheck, lint, audit and build pass. The complete test run exposes missing
+  quality-inventory classification for `session-seal-prepare.ts` and two
+  positive merge-hook fixtures without the staged runner dependency. The sparse
+  runner spec is reopened for its fixture repair; classification must preserve
+  existing mutation targets and floors. The earlier license-marker failure
+  remains unexplained despite this successful build.
+
+  Publication candidate `42fbeb0c` passes both 64-MiB inventory-order controls
+  from a fresh committed-source export. An isolated mutant restores alphabetical
+  writes before removals and removes the shrink-first ordering; both unchanged
+  tests then fail specifically at `session inventory byte bound`. Control and
+  mutant retain separate targets, identical tests and constants, unchanged input
+  pins and empty final process groups. Evidence is under
+  `publication-integration/inventory-order-mutation-01/{control-01,mutant-01}`.
+  This establishes sensitivity to intermediate named-inventory growth, not a
+  total disk-space quota. Source inspection finds missing selected leaves
+  refused by the ordinary reader and Running→Unknown recovery before fresh host
+  admission. Composed crash-after-unlink → host restart → frontend refusal and
+  actual directory-sync/Nth-removal fault injection remain unexercised.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7397,6 +7425,25 @@ Only `caws specs evidence` records authoritative verdicts. This ledger explains
 progress and does not replace that transaction or its event readback.
 
 ## Ordered next work
+
+The lead integrates three outcomes. The immediate assignments below precede the
+detailed retained dependency list; completing a bounded assignment does not
+complete its parent outcome.
+
+| Integrated outcome                                                                   | Execution owner                                                                                                                      | Next decisive check                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root; native-context-git repairs the merge-hook fixture; source-progress reconciles the seal-preparation quality inventory           | Normal push with unchanged gates, hosted checks on that exact commit, then a fresh installed package/image join and actual native refusal/rollback observations                              |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration repairs both independent image transformers; native-context-git follows with the capacity/replay probe | Actual warm Render A → SessionEnd → Render B, followed by SQL CLOSED-to-publication; rejected consumed-ID replay must preserve the durable tombstone and leave capacity for a fresh original |
+| Resident operation with fair, bounded capacity                                       | Root retains integration; bounded worker probes feed the same owner/engine contract                                                  | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence               |
+
+The actual warm attempt refuses before requests because the selected runtime's
+staged handler launches do not match the image transformers' earlier direct-call
+anchors. Repair TypeScript generation and Rust independent re-derivation
+together; retain strict source admission and handler descriptor isolation.
+Existing successful-operation compaction and shared-permit release are
+implemented. Their source and finite tests do not establish the larger actual
+workload or refund of a rejected replay's newly reserved permit. Package
+adoption, Python retirement and machine cutover acceptance remain open.
 
 1. Refresh complete source/build/dependency identities after E188, including
    both the engine and the selected CLI entry. The CLI entry imports commander
