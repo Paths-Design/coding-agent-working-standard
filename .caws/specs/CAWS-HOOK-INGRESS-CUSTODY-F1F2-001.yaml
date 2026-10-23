@@ -101,3 +101,9 @@ evidence:
     recorded_at: "2026-10-23T03:21:46.876Z"
     artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt"
     commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "c1 c2 c10 c11 c12 c13 c16 c17 unchanged from 7195f14f in exit, custody, HOOK_COMMAND and per-slot stdin sha (distinct=1 in every case), tmp residue 0 except the known c17 KILL spill boundary; stage-d2 full bats 584/584 at e05c9c0b under env -i. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated."
+    recorded_at: "2026-10-23T03:21:49.154Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt"
+    commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
