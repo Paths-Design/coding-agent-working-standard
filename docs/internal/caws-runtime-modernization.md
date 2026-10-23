@@ -8019,7 +8019,10 @@ Additional bounded evidence and unresolved dependencies:
   main. `selection-native-image-v2-01` executes30 checks, exit0/66.196s, and
   `selection-native-image-legacy-01` executes50 checks, exit0/70.232s. Their
   complementary filters cover all80 cases against unchanged source/emitted pins.
-  The preceding full-suite120s timeout remains a failed execution, not a passing
+  These are component tests with synthetic executables and mocked receipt
+  loading: `native-runtime-entry.test.js:53-78` writes shell executables that
+  exit0. They do not qualify actual installed native-image execution. The
+  preceding full-suite120s timeout remains a failed execution, not a passing
   batch. `selection-scenario-03/result.json` retains65/66 observations, changed
   stock-to-user adapter paths/hashes, original-snapshot replay and fresh
   runtime-mutation refusal. This completes the selection read abstraction only;
@@ -8067,8 +8070,54 @@ Additional bounded evidence and unresolved dependencies:
   establish arbitrary descendant cleanup, direct permit-count telemetry, general
   fairness, mandatory-guard capacity, the thirteen-session/four-repository
   workload, ordinary SQL Stop publication or installed adoption. Parent A3/A8
-  remain open. The independent qualifier review and combined landing remain
-  root-owned obligations.
+  remain open. E305 records the qualifier review discharge; combined landing
+  remains a root-owned obligation.
+
+- E305: Qualifier candidate `d3e994f7` reports receipt-write failures through
+  IPC, independently checks the changed inode and unchanged bytes, and requires
+  native exit2 for the uncertain publication. Independent feedback on the
+  committed predecessor exposed the receipt-write gap; source inspection and the
+  following executions discharge that bounded finding. The E304 command, using
+  the unchanged E303 native image, exits0 in9.297s under
+  `publication-integration/uncertain-progress-actual-05/`. `execution.json`
+  retains exact argv; `fixture/result.json` identifies A=41449, A2=43900 and
+  B=44031, native exits2/2/0, and custody/cleanup receipts. Direct inspection of
+  their durable operations gives `returned`/absent/`consumed`. The retained
+  `hostile-action.json` records inode776650809→776650918 with identical E304
+  SHA; native stderr reports `published generation bytes or inventory changed`.
+  All three retained-A identity snapshots equal the before snapshot, including
+  the snapshot after B and writer probes. This supports the bounded E304 claim,
+  with the same nonclaims; it is not ordinary SQL Stop or installed-harness
+  proof. `hostile-watcher-controls-run-03` exits0 in1.301s: six synthetic
+  controls exercise one-shot mutation, consumed and mismatched-input refusal,
+  preexisting receipt failure delivery, early native exit and parent disconnect.
+  Its `fixtures/result.json` retains original-child exit, output EOF, pipe
+  closure, IPC disconnection and process absence. Failed runs01/02 remain
+  retained: their driver incorrectly required Node's `close` event after a
+  parent-initiated IPC disconnect. `node-disconnect-settlement-01` compares
+  parent/child disconnect on pinned Node22.22.2 and retains its embedded child
+  process source; parent disconnect produces exit/EOF/disconnection without
+  `close`. Only that synthetic control uses the explicit settlement
+  observations; production qualifier custody is unchanged. Synthetic executables
+  and fabricated journal rows establish watcher behavior only, not native
+  publication or fairness.
+
+- E306: SQL numeric-profile parity remains an activation dependency. In the
+  publication candidate, `store-json.ts:6,346-347` declares and enforces a
+  4300-digit integer limit; `store-projection.ts:231-234` always supplies that
+  profile. Stock `shared/session-log.sh:91-95` invokes ambient `python3` for SQL
+  projection, independently of its renderer invocation or optional writer
+  interpreter. `shared/lib/transcript-store.py:56-57` parses entire message and
+  part JSON, so oversized integers in otherwise ignored members can affect the
+  old result. The effective installed hook interpreter and startup numeric limit
+  have not been qualified. Renderer profile support alone cannot establish SQL
+  equivalence. Root owns capturing each stage's executable/source identity,
+  startup arguments and effective limit, then carrying the qualified SQL profile
+  through admission and projection. Boundary, signed-integer, ignored-member,
+  string and float controls must retain projection bytes or failure stage and
+  actual renderer artifacts; changed-profile controls must reject or select a
+  qualified alternative. No global relaxation or ambient-interpreter assumption
+  discharges this requirement.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -8176,11 +8225,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                             | Next decisive check                                                                                                                                                                          |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                         |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns integration and acceptance; admission-contract supplies selection and route investigation; custody-finish supplies the command-transport proposal | E301 ordinary SQL Stop proof, with native-owned selection freshness and bounded runtime digest custody before activation; reconcile foreign parser ownership before command-transport writes |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane  | Complete qualifier review and exact combined-image landing; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload    |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                             | Next decisive check                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                | Qualify the combined candidate's exact package/image and native refusal/rollback; hosted main does not qualify unmerged branch bytes                                                                               |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns integration and acceptance; admission-contract supplies selection and route investigation; custody-finish supplies the command-transport proposal | E301 ordinary SQL Stop proof, with native-owned selection freshness and bounded runtime digest custody before activation; reconcile foreign parser ownership before command-transport writes                       |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane  | Qualify and land the exact combined image; E305 discharges bounded qualifier review; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
