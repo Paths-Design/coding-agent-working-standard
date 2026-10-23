@@ -1,0 +1,33 @@
+id: CAWS-PREPUSH-LINT-HOTFIX-001
+title: 'Pre-push lint mirror: prefer-const and deferred require in native-runtime tooling'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-23T05:10:55.701Z'
+updated_at: '2026-10-23T05:10:55.701Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'caws-cli tooling scripts (lint-only)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/qualify-render-plan-snapshots.ts'
+    - 'packages/caws-cli/src/tooling/transcript-runtime-floor-entry.ts'
+  out: []
+invariants:
+  - 'transcript-runtime-floor-entry.ts loads ./transcript-runtime-floor only after the Node 18.0.0 guard; no hoisted import replaces the deferred require'
+  - 'No runtime behavior change: both edits are lint-shape only'
+acceptance:
+  - id: A1
+    given: 'main refuses pre-push at lint stage with prefer-const at qualify-render-plan-snapshots.ts:65 and no-require-imports at transcript-runtime-floor-entry.ts:8'
+    when: 'npx eslint is run on both files at the candidate revision'
+    then: 'it exits 0 with 0 problems'
+  - id: A2
+    given: 'the floor entry must throw before loading the qualifier on a non-18.0.0 node'
+    when: 'the candidate source is read'
+    then: 'the version guard precedes the require call and the require is suppressed by a justified eslint-disable comment, not rewritten as a static import'
+rollback:
+  - 'revert the hotfix merge commit'
+non_functional: {}
+contracts: []
