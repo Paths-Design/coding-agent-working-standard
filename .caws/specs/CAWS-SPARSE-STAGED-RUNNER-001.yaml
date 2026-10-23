@@ -58,3 +58,8 @@ evidence:
     evidence_ref: "Actual CLI validates staged blob bytes through fixed private path, invalid sparse and materialized staged specs refuse before formatting even when working bytes differ. Kernel sourcePath is diagnostics only; actual valid/invalid fixed-vs-ID-basename controls agree. Governance blobs never formatted/restaged/materialized."
     recorded_at: "2026-10-23T10:04:46.918Z"
     commit_sha: "38691bc25be1dfe3ad74f216baf224576c936cee"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Inspected committed17 hostile tests: actual index.lock makes Git add return128 after formatting, retained working bytes remain unstaged and no stash/rollback; formatter syntax failure, signal, spawn failure and Git read failure all refuse. Final Node execution0 with unchanged pins/residueempty. Five focusedJest cases and57 hook fixtures also passed on candidate byte pins; original swallowed Git failure retained."
+    recorded_at: "2026-10-23T10:04:56.047Z"
+    commit_sha: "38691bc25be1dfe3ad74f216baf224576c936cee"
