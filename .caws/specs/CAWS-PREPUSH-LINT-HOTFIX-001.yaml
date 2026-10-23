@@ -38,3 +38,8 @@ evidence:
     evidence_ref: "At a18e8b27 in worktree prepush-lint-hotfix: npx eslint scripts/qualify-render-plan-snapshots.ts src/tooling/transcript-runtime-floor-entry.ts exit 0, 0 problems (baseline main d604ffba: 2 errors, prefer-const 65:7 and no-require-imports 8:66). prettier --check and npm run typecheck also clean."
     recorded_at: "2026-10-23T05:13:36.339Z"
     commit_sha: a18e8b279b0e480596f80a6993219de365e380d6
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Source read at a18e8b27: transcript-runtime-floor-entry.ts throws on process.versions.node !== '18.0.0' before the require('./transcript-runtime-floor') call; the require remains a runtime call, suppressed by eslint-disable-next-line with the hoisting reason; no static import added (git diff shows +3 comment lines only)."
+    recorded_at: "2026-10-23T05:13:39.448Z"
+    commit_sha: a18e8b279b0e480596f80a6993219de365e380d6
