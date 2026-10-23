@@ -31,3 +31,9 @@ rollback:
   - 'revert the hotfix merge commit'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bash packages/caws-cli/scripts/lint-shell.sh at the candidate in worktree prepush-lint-shell: exit 0, 'bash -n OK for 81 template script(s) (2 render fragment(s) parsed with token lines elided)', fragments named: runtime/service-image/handler-routes.sh and libraries.sh, zero 'syntax error in' lines (log: ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/lint-shell-gate-worktree.log). Baseline main ca021e51: same two files fail bash -n."
+    recorded_at: "2026-10-23T05:29:46.554Z"
+    commit_sha: b9a0354f284a2e5a3e0135c42cf441ef1cacea71
