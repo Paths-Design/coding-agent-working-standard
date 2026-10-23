@@ -615,10 +615,12 @@ import { isAdapterCoveredSurface } from './types';
 // allowlist and approval policy instead of exiting before either policy runs.
 // v104: heartbeat message provenance reads the canonical sender specId field.
 // v105: refresh captured invocation custody and per-handler stdin stage cleanup.
+// v106: session-log.schema.json carries exact recomputed counts and explicitly
+// preserved historical summaries, including independent top-level models.
 // lib/session-render-service-client.sh ships in this tree but is not installed:
 // it is a native-image build input (src/runtime/service-image.ts) carrying
 // builder markers, with no managed header and no dispatcher that sources it.
-export const SHARED_PACK_VERSION = 105;
+export const SHARED_PACK_VERSION = 106;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
