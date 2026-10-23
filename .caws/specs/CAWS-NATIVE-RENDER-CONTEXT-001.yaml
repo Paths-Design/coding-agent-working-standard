@@ -41,3 +41,9 @@ rollback:
   - 'Leave the new producer and consumer unselected; revert the coherent source unit through ordinary governed history if its contracts fail'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Bounded dormant component at848056e9; root inspected source and retained external publication-integration/render-context-* artifacts. Committed-source join rehashes all6 blobs against build03, project regression02, native05 and JS03. Normal build0/6.432s;15 project regressions0/5.298s;6 native integration cases0/6.568s;57 JS tests0/0.964s including14 actual native captures, no skips. Source/tool pins stable, no final supervisor residue. Independent committed67462 review C1-C5 grounded and repaired at848056: final regression rerun; ignored raw byte semantics; explicit retained Failure contract with persistent-refusal actual Child; guaranteed group settlement before reap; actual bare repo false-probe semantics. Doctor0E/4W/5I and5 full-six-file gates pass. Commit verification establishes existence only; external artifacts manually inspected. Actual normal, linked, subdirectory, lexical CWD, detached, dirty, unborn and outside captures match separately executed stock Bash commands. Partial failing HEAD preserves bytes plus unknown; LF-only strip and raw status LF counts preserved. Ignored nonUTF8/NUL stderr/probe/status and discarded failed-branch bytes match stock. Bare repo probe exit0/stdoutfalse continues and actual Bash status128 produces no context; typed consumer refuses git_exit. Consumed branch/HEAD invalidUTF8 or NUL remain explicit unsupported profile, not claimed universal byte parity."
+    recorded_at: "2026-10-23T13:48:30.002Z"
+    commit_sha: "848056e9a63f9d85d59b67e367c0059c27ee70ae"
