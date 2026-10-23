@@ -4,6 +4,11 @@ import { isAbsolute, normalize } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { parseJsonSource } from './json-custody';
 import {
+  awaitSessionPublicationCallback,
+  consumeCommittedSession,
+  type CommittedSession,
+} from './committed-session-reader';
+import {
   RuntimeProtocolError,
   SESSION_PUBLICATION_CAPABILITY,
   type RuntimeRequest,
@@ -22,6 +27,8 @@ import {
   MAX_PUBLICATION_TOTAL_BYTES,
   MAX_PUBLICATION_ARTIFACTS,
   MAX_PUBLICATION_SNAPSHOT_BYTES,
+  sessionPublicationTerminalDigest,
+  type SessionOperationCorrelation,
   type SessionPublicationKind,
   type SessionPublicationDescriptor,
 } from './session-publication-wire';
@@ -64,6 +71,23 @@ export interface SessionPublicationTransport {
   read(signal: AbortSignal): Promise<Uint8Array>;
   write(frame: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<void>;
 }
+export type SessionPublicationConsumption =
+  | Readonly<{
+      status: 'published';
+      correlation: SessionOperationCorrelation;
+      receipt: SessionPublicationReceipt & { readonly status: 'published' };
+      session: CommittedSession;
+    }>
+  | Readonly<{
+      status: 'not_published';
+      correlation: SessionOperationCorrelation;
+      receipt: SessionPublicationReceipt & { readonly status: 'not_published' };
+    }>;
+/** Complete the selected consumer's use of owned bytes, or record an explicit
+ * non-publication outcome. Throwing never sends CONSUMED or enables fallback. */
+export type SessionPublicationConsumer = (
+  outcome: SessionPublicationConsumption
+) => void | Promise<void>;
 type Row = Record<string, unknown>;
 type Prepare = (input: SessionPublicationInput) => Promise<SessionPublicationPreparation>;
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
@@ -167,13 +191,27 @@ export async function continueNativeSessionPublication(
     readonly token: string;
     readonly expectedKinds: readonly SessionPublicationKind[];
     readonly prepare: Prepare;
+    /** Original admitted context. A snapshot or on-disk marker cannot select these. */
+    readonly canonicalRoot: string;
+    readonly sessionId: string;
+    readonly consume: SessionPublicationConsumer;
   }
 ): Promise<SessionPublicationReceipt> {
   requireValue(
     request.sessionPublication === SESSION_PUBLICATION_CAPABILITY &&
       text(options.token, 128) &&
       options.token.length > 0 &&
-      ((options.expectedKinds.length === 1 && options.expectedKinds[0] === 'seal') ||
+      text(options.canonicalRoot, 4096) &&
+      isAbsolute(options.canonicalRoot) &&
+      normalize(options.canonicalRoot) === options.canonicalRoot &&
+      !options.canonicalRoot.includes('\0') &&
+      text(options.sessionId, 128) &&
+      /^[A-Za-z0-9_.@:-]+$/.test(options.sessionId) &&
+      !['.', '..'].includes(options.sessionId) &&
+      typeof options.prepare === 'function' &&
+      typeof options.consume === 'function' &&
+      ((options.expectedKinds.length === 1 &&
+        ['seal', 'render'].includes(options.expectedKinds[0]!)) ||
         (options.expectedKinds.length === 2 &&
           options.expectedKinds[0] === 'projection' &&
           options.expectedKinds[1] === 'render')),
@@ -186,6 +224,7 @@ export async function continueNativeSessionPublication(
   const expectedOutputs = new Map<string, SessionPublicationDescriptor>();
   const cancelled = (): void => {
     if (signal.aborted) throw signal.reason;
+    requireValue(Date.now() < request.deadlineEpochMs, 'Publication deadline expired');
   };
   const read = async (): Promise<Row> => {
     cancelled();
@@ -252,8 +291,60 @@ export async function continueNativeSessionPublication(
         artifacts,
         ...(frame.error === undefined ? {} : { error: frame.error as string }),
       });
-      // Failed delivery must throw: the native owner retains terminal truth and
-      // heavy records instead of treating local receipt parsing as consumption.
+      requireValue(
+        receipt.status !== 'publication_uncertain',
+        'Publication is uncertain; no consumption acknowledgement'
+      );
+      const correlation = Object.freeze({
+        id: request.id,
+        runtimeDigest: request.runtimeDigest,
+        token: options.token,
+        attempt: attempt!,
+      });
+      requireValue(
+        receipt.terminalDigest ===
+          sessionPublicationTerminalDigest(correlation, receipt.status, artifacts),
+        'Publication terminal digest differs from original correlation and inventory'
+      );
+      if (receipt.status === 'published') {
+        await consumeCommittedSession(
+          {
+            canonicalRoot: options.canonicalRoot,
+            sessionId: options.sessionId,
+            correlation,
+            terminalDigest: receipt.terminalDigest,
+            artifacts,
+          },
+          { signal, deadlineEpochMs: request.deadlineEpochMs },
+          async (session) => {
+            await options.consume(
+              Object.freeze({
+                status: 'published',
+                correlation,
+                session,
+                receipt: receipt as SessionPublicationReceipt & { readonly status: 'published' },
+              })
+            );
+          }
+        );
+      } else {
+        requireValue(artifacts.length === 0, 'Non-publication result contains artifacts');
+        await awaitSessionPublicationCallback(
+          { signal, deadlineEpochMs: request.deadlineEpochMs },
+          () =>
+            options.consume(
+              Object.freeze({
+                status: 'not_published',
+                correlation,
+                receipt: receipt as SessionPublicationReceipt & {
+                  readonly status: 'not_published';
+                },
+              })
+            )
+        );
+      }
+      // Only actual ordinary consumption and current-generation revalidation
+      // precede this local flush. Native still independently validates the ack.
       await write(SESSION_PUBLICATION_CONSUMED_SCHEMA, { terminalDigest: receipt.terminalDigest });
       return receipt;
     }
@@ -282,7 +373,7 @@ export async function continueNativeSessionPublication(
         snapshot.observationId.length > 0 &&
         digest(snapshot.inputDigest) &&
         text(snapshot.sessionId, 128) &&
-        snapshot.sessionId.length > 0 &&
+        snapshot.sessionId === options.sessionId &&
         text(snapshot.reason, 4096) &&
         text(snapshot.endedAt, 128),
       'Invalid native publication snapshot'
@@ -361,7 +452,10 @@ export async function continueNativeSessionPublication(
       },
     });
     cancelled();
-    const preparation = await options.prepare(input);
+    const preparation = await awaitSessionPublicationCallback(
+      { signal, deadlineEpochMs: request.deadlineEpochMs },
+      () => options.prepare(input)
+    );
     cancelled();
     requireValue(
       preparation !== null &&
@@ -469,12 +563,21 @@ export async function continueNativeSessionPublication(
   }
 }
 
+export interface NativeSessionSealPort {
+  seal(
+    canonicalRoot: string,
+    sessionId: string,
+    prepare: Prepare,
+    consume: SessionPublicationConsumer
+  ): Promise<SessionPublicationReceipt>;
+}
+
 /** Independent original SessionEnd capture is performed by the native frontend. */
 export function createNativeSessionSealPort(
   request: RuntimeRequest,
   transport: SessionPublicationTransport,
   signal: AbortSignal
-): { seal(canonicalRoot: string, prepare: Prepare): Promise<SessionPublicationReceipt> } {
+): NativeSessionSealPort {
   requireValue(
     request.sessionPublication === SESSION_PUBLICATION_CAPABILITY &&
       request.configuration === 'system' &&
@@ -483,12 +586,22 @@ export function createNativeSessionSealPort(
   );
   let attempted = false;
   return Object.freeze({
-    async seal(canonicalRoot: string, prepare: Prepare) {
+    async seal(
+      canonicalRoot: string,
+      sessionId: string,
+      prepare: Prepare,
+      consume: SessionPublicationConsumer
+    ) {
       requireValue(
         !attempted &&
           isAbsolute(canonicalRoot) &&
           normalize(canonicalRoot) === canonicalRoot &&
-          !canonicalRoot.includes('\0'),
+          !canonicalRoot.includes('\0') &&
+          text(sessionId, 128) &&
+          /^[A-Za-z0-9_.@:-]+$/.test(sessionId) &&
+          !['.', '..'].includes(sessionId) &&
+          typeof prepare === 'function' &&
+          typeof consume === 'function',
         'Invalid or repeated SessionEnd publication'
       );
       attempted = true;
@@ -508,6 +621,9 @@ export function createNativeSessionSealPort(
         token,
         expectedKinds: ['seal'],
         prepare,
+        canonicalRoot,
+        sessionId,
+        consume,
       });
     },
   });

@@ -17,6 +17,7 @@ import { createGuardUtilityPorts, runGuardUtilities } from './guard-utilities';
 import type { HandlerResult } from './composer';
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
+import { qualifiesForNativeSessionEndPrefix } from './session-cache-admission';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
@@ -52,11 +53,16 @@ const DIRECT = {
   classifier: '97c50613224a981d73469883bbf8371b036a33ef9777618ff23e82e9f91ff018',
   utilities: 'dd9362ce74a7a2f524c9eebff3cc62d63f14805a436e665d97ca88e47fb2c362',
 };
+export interface NativeSessionSealExecution {
+  readonly sessionId: string;
+  execute(): Promise<HandlerResult>;
+}
 export interface StockHandlerContext {
   readonly request: RuntimeRequest;
   readonly selection: ActiveInvocationSelection;
   readonly environment: Readonly<Record<string, string>>;
   readonly signal: AbortSignal;
+  readonly nativeSessionSeal?: NativeSessionSealExecution;
 }
 const empty = (): HandlerResult => ({
   exitCode: 0,
@@ -247,6 +253,19 @@ export function tryExecuteStockHandler(
 ): HandlerResult | Promise<HandlerResult> | null {
   if (context.signal.aborted) throw new Error('Handler invocation cancelled');
   if (Date.now() >= context.request.deadlineEpochMs) throw new Error('Handler deadline expired');
+  if (context.nativeSessionSeal) {
+    // Prefix effects have happened. A source change is an invocation failure,
+    // never permission to replay a shell parser or fall through to runChild.
+    if (
+      handler.name !== 'session-log.sh' ||
+      !qualifiesForNativeSessionEndPrefix({
+        ...context,
+        sessionId: context.nativeSessionSeal.sessionId,
+      })
+    )
+      throw new Error('Native SessionEnd source profile changed after prefix completion');
+    return context.nativeSessionSeal.execute();
+  }
   if (!compatible(handler, context)) return null;
   const { request, selection, environment } = context;
   const payload = request.payload;

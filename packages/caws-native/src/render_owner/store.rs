@@ -2,7 +2,10 @@
 //! Records are finite, unreleased, and never replayed or evicted. Registry weak
 //! references make status depend on the actual surviving actor/quarantine owner.
 use super::*;
-use crate::{transcript_store as sql, transcript_store_wire as store};
+use crate::{
+    session_publication as publication, session_publication_wire as publication_wire,
+    transcript_store as sql, transcript_store_wire as store,
+};
 use serde_json::value::RawValue;
 use std::sync::{Weak, atomic::AtomicBool};
 
@@ -10,7 +13,30 @@ const ACQUIRE_SCHEMA: &str = "caws.render.owner.store-acquire.v1";
 const STATUS_SCHEMA: &str = "caws.render.owner.store-status.v1";
 const REPLY_SCHEMA: &str = "caws.render.owner.store-relay-reply.v1";
 const STATUS_MAX: usize = 8192;
-const REPLY_MAX: usize = 4096;
+const REPLY_MAX: usize = publication_wire::MAX_RELAY_FRAME_BYTES;
+
+fn captured_utc() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|time| libc::time_t::try_from(time.as_secs()).ok());
+    let Some(seconds) = seconds else {
+        return String::new();
+    };
+    let mut calendar: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::gmtime_r(&seconds, &mut calendar) }.is_null() {
+        return String::new();
+    }
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        calendar.tm_year + 1900,
+        calendar.tm_mon + 1,
+        calendar.tm_mday,
+        calendar.tm_hour,
+        calendar.tm_min,
+        calendar.tm_sec
+    )
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -31,6 +57,10 @@ pub struct StoreAcquire {
     caller_environment: BTreeMap<String, String>,
     request_base64: String,
     remaining_budget_ms: u64,
+    #[serde(default)]
+    publication: bool,
+    #[serde(default)]
+    captured_at: String,
 }
 impl StoreAcquire {
     pub fn capture(bytes: &[u8], i: store::Invocation<'_>, expires: Instant) -> Self {
@@ -54,7 +84,16 @@ impl StoreAcquire {
                 .saturating_duration_since(Instant::now())
                 .as_millis()
                 .min(120_000) as u64,
+            publication: false,
+            captured_at: captured_utc(),
         }
+    }
+    /// Root calls this only for the newly selected native session-log path.
+    /// It must not also dispatch the legacy renderer service for this original.
+    pub fn capture_publication(bytes: &[u8], i: store::Invocation<'_>, expires: Instant) -> Self {
+        let mut captured = Self::capture(bytes, i, expires);
+        captured.publication = true;
+        captured
     }
     fn invocation(&self) -> store::Invocation<'_> {
         store::Invocation {
@@ -206,6 +245,11 @@ pub(super) struct StoreRecord {
     phase: &'static str,
     original_project_bound: bool,
     result: Option<Settlement>,
+    writer: Option<Arc<journal::Custody>>,
+    publication: Option<publication::Publication>,
+    publication_error: Option<String>,
+    consumed: bool,
+    _operation: relay::OperationPermit,
 }
 impl StoreRecord {
     fn completion(&self) -> StoreCompletion {
@@ -221,7 +265,7 @@ impl StoreRecord {
             runtime_digest: self.original.runtime_digest.clone(),
             registration: Some(self.registration.clone()),
             original_project_bound: self.original_project_bound,
-            retained: true,
+            retained: !self.consumed,
             acquisition,
             project_cleanup: match &self.result {
                 Some(Err(store::ServeError::ProjectObservation(error))) => {
@@ -237,10 +281,13 @@ impl StoreRecord {
                 }
                 _ => None,
             },
-            error: match &self.result {
-                Some(Err(e)) => Some(error_kind(e)),
-                _ => None,
-            },
+            error: self
+                .publication_error
+                .clone()
+                .or_else(|| match &self.result {
+                    Some(Err(e)) => Some(error_kind(e)),
+                    _ => None,
+                }),
         }
     }
     fn settle(&mut self, result: Settlement) {
@@ -256,13 +303,18 @@ pub(super) struct StoreRegistry {
     maximum: usize,
     records: BTreeMap<String, (String, String, Weak<Mutex<StoreRecord>>)>,
     quarantine: Vec<Arc<Mutex<StoreRecord>>>,
+    capacity: Arc<relay::OperationCapacity>,
 }
 impl StoreRegistry {
     pub(super) fn new(maximum: usize) -> Self {
+        Self::with_capacity(maximum, relay::OperationCapacity::new(maximum))
+    }
+    pub(super) fn with_capacity(maximum: usize, capacity: Arc<relay::OperationCapacity>) -> Self {
         Self {
             maximum,
             records: BTreeMap::new(),
             quarantine: Vec::new(),
+            capacity,
         }
     }
     pub(super) fn is_empty(&self) -> bool {
@@ -276,6 +328,7 @@ impl StoreRegistry {
             return Err("resident store retention capacity exhausted before SQL".into());
         }
         let registration = random()?;
+        let operation = self.capacity.acquire()?;
         let key = original.id.clone();
         let runtime = original.runtime_digest.clone();
         let record = Arc::new(Mutex::new(StoreRecord {
@@ -284,10 +337,31 @@ impl StoreRegistry {
             phase: "registered",
             original_project_bound: false,
             result: None,
+            writer: None,
+            publication: None,
+            publication_error: None,
+            consumed: false,
+            _operation: operation,
         }));
         self.records
             .insert(key, (runtime, registration, Arc::downgrade(&record)));
         Ok(record)
+    }
+    fn release_consumed(&mut self, record: &Arc<Mutex<StoreRecord>>) -> Result<()> {
+        let record = record.lock().unwrap_or_else(|e| e.into_inner());
+        if !record.consumed {
+            return Err("store record has no durable exact consumption".into());
+        }
+        match self.records.get(&record.original.id) {
+            Some((runtime, registration, _))
+                if *runtime == record.original.runtime_digest
+                    && *registration == record.registration => {}
+            _ => return Err("store consumed registration changed".into()),
+        }
+        // Replay history lives in the durable Journal tombstone, not this
+        // process-local heavy-record index. Removing this entry evicts no ID.
+        self.records.remove(&record.original.id);
+        Ok(())
     }
     fn status(&self, query: &StoreStatusQuery) -> StoreStatus {
         let record = self
@@ -376,9 +450,35 @@ enum OwnerFrame {
         sequence: u64,
         bytes: usize,
     },
+    PublicationWriteEngineFrame {
+        sequence: u64,
+        base64: String,
+    },
+    PublicationReadEngineFrame {
+        sequence: u64,
+    },
+    PublicationCredit {
+        sequence: u64,
+        bytes: usize,
+    },
     Complete {
         completion: StoreCompletion,
     },
+}
+fn decode_owner_frame(bytes: &[u8], generic_limit: usize) -> Result<OwnerFrame> {
+    if bytes.len() > generic_limit.max(publication_wire::MAX_RELAY_FRAME_BYTES) {
+        return Err("store relay envelope bound".into());
+    }
+    let frame = serde_json::from_slice(bytes).map_err(err)?;
+    let limit = if matches!(&frame, OwnerFrame::PublicationWriteEngineFrame { .. }) {
+        publication_wire::MAX_RELAY_FRAME_BYTES
+    } else {
+        generic_limit
+    };
+    if bytes.len() > limit {
+        return Err("store relay variant envelope bound".into());
+    }
+    Ok(frame)
 }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -402,7 +502,7 @@ pub fn acquire_store(
     acquire: StoreAcquire,
     expires: Instant,
     is_cancelled: impl Fn() -> bool,
-    transport: &mut impl store::Transport,
+    transport: &mut (impl store::Transport + publication::Transport),
 ) -> StoreCompletion {
     let mut completion = StoreCompletion::unavailable(
         &acquire.id,
@@ -418,11 +518,12 @@ pub fn acquire_store(
         )?;
         let mut pending = Vec::new();
         let mut sequence = 0u64;
+        let mut publication_credit = publication_wire::CreditBudget::default();
         loop {
             let bytes = frame_while(
                 &mut stream,
                 &mut pending,
-                c.limits.max_frame_bytes as usize,
+                (c.limits.max_frame_bytes as usize).max(publication_wire::MAX_RELAY_FRAME_BYTES),
                 expires,
                 || {
                     if is_cancelled() {
@@ -432,7 +533,7 @@ pub fn acquire_store(
                     }
                 },
             )?;
-            match serde_json::from_slice::<OwnerFrame>(&bytes).map_err(err)? {
+            match decode_owner_frame(&bytes, c.limits.max_frame_bytes as usize)? {
                 OwnerFrame::Registered {
                     id,
                     runtime_digest,
@@ -467,9 +568,7 @@ pub fn acquire_store(
                             && result.registration != completion.registration)
                         || (completion.original_project_bound && !result.original_project_bound)
                         || (result.error.is_none()
-                            && (completion.registration.is_none()
-                                || !result.retained
-                                || result.acquisition.is_none()))
+                            && (completion.registration.is_none() || result.acquisition.is_none()))
                     {
                         return Err("resident store completion correlation mismatch".into());
                     }
@@ -480,7 +579,10 @@ pub fn acquire_store(
                     let received = match &command {
                         OwnerFrame::WriteEngineFrame { sequence, .. }
                         | OwnerFrame::ReadEngineFrame { sequence }
-                        | OwnerFrame::Credit { sequence, .. } => *sequence,
+                        | OwnerFrame::Credit { sequence, .. }
+                        | OwnerFrame::PublicationWriteEngineFrame { sequence, .. }
+                        | OwnerFrame::PublicationReadEngineFrame { sequence }
+                        | OwnerFrame::PublicationCredit { sequence, .. } => *sequence,
                         _ => unreachable!(),
                     };
                     if received != sequence + 1
@@ -495,12 +597,14 @@ pub fn acquire_store(
                             STANDARD
                                 .decode(base64)
                                 .map_err(err)
-                                .and_then(|bytes| transport.write(&bytes, expires))
+                                .and_then(|bytes| {
+                                    store::Transport::write(transport, &bytes, expires)
+                                })
                                 .map(|()| ReplyValue::Written),
                         ),
                         OwnerFrame::ReadEngineFrame { sequence } => (
                             sequence,
-                            transport.read(expires).and_then(|bytes| {
+                            store::Transport::read(transport, expires).and_then(|bytes| {
                                 if bytes.len() > store::MAX_CONTROL_BYTES {
                                     Err("resident store control exceeds bound".into())
                                 } else {
@@ -512,7 +616,43 @@ pub fn acquire_store(
                         ),
                         OwnerFrame::Credit { sequence, bytes } => (
                             sequence,
-                            transport.credit(bytes).map(|()| ReplyValue::Credited),
+                            store::Transport::credit(transport, bytes)
+                                .map(|()| ReplyValue::Credited),
+                        ),
+                        OwnerFrame::PublicationWriteEngineFrame { sequence, base64 } => (
+                            sequence,
+                            STANDARD
+                                .decode(&base64)
+                                .map_err(err)
+                                .and_then(|bytes| {
+                                    if bytes.len() > publication_wire::MAX_FRAME_BYTES
+                                        || STANDARD.encode(&bytes) != base64
+                                    {
+                                        Err("resident publication write bound or encoding".into())
+                                    } else {
+                                        publication::Transport::write(transport, &bytes, expires)
+                                    }
+                                })
+                                .map(|()| ReplyValue::Written),
+                        ),
+                        OwnerFrame::PublicationReadEngineFrame { sequence } => (
+                            sequence,
+                            publication::Transport::read(transport, expires).and_then(|bytes| {
+                                if bytes.len() > publication_wire::MAX_FRAME_BYTES {
+                                    Err("resident publication frame exceeds bound".into())
+                                } else {
+                                    Ok(ReplyValue::Read {
+                                        base64: STANDARD.encode(bytes),
+                                    })
+                                }
+                            }),
+                        ),
+                        OwnerFrame::PublicationCredit { sequence, bytes } => (
+                            sequence,
+                            publication_credit
+                                .accept(bytes)
+                                .and_then(|()| publication::Transport::credit(transport, bytes))
+                                .map(|()| ReplyValue::Credited),
                         ),
                         _ => unreachable!(),
                     };
@@ -566,7 +706,12 @@ impl RelayTransport {
         if self.cancelled.load(Ordering::Acquire) {
             return Err("resident store frontend disconnected".into());
         }
-        write_all(&self.stream, &encoded(&command, self.limit)?, self.expires)?;
+        let limit = if matches!(&command, OwnerFrame::PublicationWriteEngineFrame { .. }) {
+            publication_wire::MAX_RELAY_FRAME_BYTES
+        } else {
+            self.limit
+        };
+        write_all(&self.stream, &encoded(&command, limit)?, self.expires)?;
         loop {
             match self.replies.recv_timeout(TICK) {
                 Ok(reply) => {
@@ -622,7 +767,11 @@ impl store::Transport for RelayTransport {
             ReplyValue::Read { base64 }
                 if base64.len() <= store::MAX_CONTROL_BYTES.div_ceil(3) * 4 =>
             {
-                STANDARD.decode(base64).map_err(err)
+                let bytes = STANDARD.decode(&base64).map_err(err)?;
+                if bytes.len() > store::MAX_CONTROL_BYTES || STANDARD.encode(&bytes) != base64 {
+                    return Err("resident store control exceeds bound or encoding".into());
+                }
+                Ok(bytes)
             }
             _ => Err("resident store control exceeds bound".into()),
         }
@@ -637,6 +786,63 @@ impl store::Transport for RelayTransport {
             "credit",
         )
         .map(|_| ())
+    }
+}
+impl publication::Transport for RelayTransport {
+    fn credit(&mut self, bytes: usize) -> Result<()> {
+        self.sequence = self
+            .sequence
+            .checked_add(1)
+            .ok_or("publication relay sequence exhausted")?;
+        self.exchange(
+            OwnerFrame::PublicationCredit {
+                sequence: self.sequence,
+                bytes,
+            },
+            "credit",
+        )
+        .map(|_| ())
+    }
+
+    fn write(&mut self, bytes: &[u8], deadline: Instant) -> Result<()> {
+        if bytes.len() > publication_wire::MAX_FRAME_BYTES {
+            return Err("publication relay write bound".into());
+        }
+        check(deadline)?;
+        self.sequence = self
+            .sequence
+            .checked_add(1)
+            .ok_or("publication relay sequence exhausted")?;
+        self.exchange(
+            OwnerFrame::PublicationWriteEngineFrame {
+                sequence: self.sequence,
+                base64: STANDARD.encode(bytes),
+            },
+            "write",
+        )
+        .map(|_| ())
+    }
+    fn read(&mut self, _: Instant) -> Result<Vec<u8>> {
+        self.sequence += 1;
+        match self.exchange(
+            OwnerFrame::PublicationReadEngineFrame {
+                sequence: self.sequence,
+            },
+            "read",
+        )? {
+            ReplyValue::Read { base64 }
+                if base64.len() <= publication_wire::MAX_FRAME_BYTES.div_ceil(3) * 4 =>
+            {
+                let bytes = STANDARD.decode(&base64).map_err(err)?;
+                if bytes.len() > publication_wire::MAX_FRAME_BYTES
+                    || STANDARD.encode(&bytes) != base64
+                {
+                    return Err("invalid publication relay bytes".into());
+                }
+                Ok(bytes)
+            }
+            _ => Err("publication relay frame bound".into()),
+        }
     }
 }
 
@@ -716,6 +922,10 @@ impl Actor {
             record.phase = "acquiring";
             Arc::clone(&record.original)
         };
+        if original.publication {
+            self.acquire_publication_job(job, original);
+            return;
+        }
         self.stage("store_acquisition_start", &original.id);
         let result = match self.check_unknown_fence(&original.id, job.transport.expires) {
             Err(reason) => Err(store::ServeError::AfterProjectBinding(reason)),
@@ -738,6 +948,238 @@ impl Actor {
             .unwrap_or_else(|e| e.into_inner())
             .settle(result);
         self.stage("store_settlement_retained", &original.id);
+        job.complete();
+    }
+
+    fn reserve_original(
+        &mut self,
+        original: &StoreAcquire,
+        expires: Instant,
+    ) -> Result<journal::Dispatch> {
+        self.check_unknown_fence(&original.id, expires)?;
+        let original_bytes = serde_json::to_vec(original).map_err(err)?;
+        let verified = sha(&original_bytes);
+        let key =
+            store::correlation_root(&original.request()?, &original.invocation()).map_err(err)?;
+        let service_key = wire::project_service_key(&key).map_err(err)?;
+        let request_id = publication::original_request_id(&original.id);
+        match self
+            .journal
+            .admit(
+                journal::Identity {
+                    request_id: request_id.clone(),
+                    argument_digest: verified.clone(),
+                    project_service_key: service_key,
+                    source_generation: original.runtime_digest.clone(),
+                    execution_image_digest: original.runtime_digest.clone(),
+                },
+                verified.as_bytes(),
+                expires,
+            )
+            .map_err(err)?
+        {
+            journal::Admission::Accepted {
+                duplicate: false, ..
+            } => {}
+            journal::Admission::Accepted { .. } => {
+                return Err("original invocation already reserved; no replay".into());
+            }
+            journal::Admission::Rejected(outcome) => return Err(outcome.reason),
+        }
+        let dispatch = self
+            .journal
+            .begin_next(&original.runtime_digest, &original.runtime_digest, expires)
+            .map_err(err)?
+            .ok_or("original dispatch unavailable")?;
+        if dispatch.operation().identity().request_id != request_id {
+            self.unknown = true;
+            return Err("another queued operation precedes original publication".into());
+        }
+        Ok(dispatch)
+    }
+    fn acquire_publication_job(&mut self, mut job: StoreJob, original: Arc<StoreAcquire>) {
+        let expires = job.transport.expires;
+        let mut dispatch = None;
+        let outcome = (|| -> Result<()> {
+            let request = original.request()?;
+            let root = store::correlation_root(&request, &original.invocation()).map_err(err)?;
+            let reserved = self.reserve_original(&original, expires)?;
+            self.stage("publication_original_reserved", &original.id);
+            dispatch = Some(reserved);
+            let writer = self.publication_writer(Path::new(&root), expires)?;
+            job.record.lock().unwrap_or_else(|e| e.into_inner()).writer = Some(Arc::clone(&writer));
+            self.stage("publication_writer_retained", &original.id);
+            let cancelled = Arc::clone(&job.transport.cancelled);
+            let acquired = store::serve(
+                &request,
+                original.invocation(),
+                expires,
+                move || cancelled.load(Ordering::Acquire),
+                &mut job.transport,
+            );
+            let exhausted_closed = acquired.as_ref().is_ok_and(|a| {
+                matches!(a.end, sql::End::Exhausted)
+                    && a.first_failure.is_none()
+                    && a.cleanup.progress_unregistered
+                    && matches!(a.cleanup.busy_unregistered, sql::CleanupCall::Succeeded)
+                    && matches!(a.cleanup.finalized, sql::CleanupCall::Succeeded)
+                    && matches!(a.cleanup.rollback, sql::CleanupCall::Succeeded)
+                    && matches!(a.cleanup.close, sql::CleanupCall::Succeeded)
+                    && !a.cleanup.retained_uncertain
+                    && a.retained.is_none()
+            });
+            job.record
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .settle(acquired);
+            if !exhausted_closed {
+                return Err(
+                    "publication requires actual exhausted acquisition and confirmed CLOSED".into(),
+                );
+            }
+            self.stage("publication_store_closed", &original.id);
+            let token = serde_json::from_slice::<serde_json::Value>(&request)
+                .map_err(err)?
+                .get("token")
+                .and_then(|v| v.as_str())
+                .ok_or("original store token unavailable")?
+                .to_owned();
+            let sid = original
+                .ready_session_id
+                .as_deref()
+                .ok_or("original store session unavailable")?;
+            let directory = Path::new(&root).join(".caws/sessions").join(sid);
+            let mut sources = Vec::new();
+            let vendor = match original.surface.as_str() {
+                "opencode" => ".opencode",
+                "zcode" => ".zcode",
+                _ => return Err("unsupported original store publication surface".into()),
+            };
+            let audit_root = original
+                .caller_environment
+                .get("CAWS_LOG_DIR")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+                .unwrap_or_else(|| Path::new(&root).join(vendor).join("logs"));
+            for (name, role, path) in [
+                ("audit.log", "audit", audit_root.join("audit.log")),
+                (
+                    "hook-events.jsonl",
+                    "hook_outcomes",
+                    directory.join("hook-events.jsonl"),
+                ),
+            ] {
+                match fs::symlink_metadata(&path) {
+                    Ok(_) => sources.push(publication::SourceInput::capture(
+                        name, role, &path, expires,
+                    )?),
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(err(e)),
+                }
+            }
+            let mut publication = publication::Publication::capture(
+                publication::OriginalBinding {
+                    project: PathBuf::from(root),
+                    id: original.id.clone(),
+                    runtime_digest: original.runtime_digest.clone(),
+                    token,
+                    session_id: sid.into(),
+                    reason: String::new(),
+                    ended_at: original.captured_at.clone(),
+                },
+                writer,
+                dispatch.as_ref().expect("original reserved"),
+                sources,
+                expires,
+            )?;
+            let result = (|| -> Result<()> {
+                publication.exchange_phase(
+                    publication_wire::Kind::Projection,
+                    &mut job.transport,
+                    expires,
+                )?;
+                if !publication.aborted() {
+                    publication.exchange_phase(
+                        publication_wire::Kind::Render,
+                        &mut job.transport,
+                        expires,
+                    )?;
+                }
+                if !publication.aborted() {
+                    publication.publish(expires)?;
+                }
+                let terminal = publication.terminal_digest()?;
+                let returned = self
+                    .journal
+                    .returned(
+                        dispatch.as_ref().expect("original reserved"),
+                        journal::ReturnedResult::SessionPublication {
+                            terminal_digest: terminal.clone(),
+                        },
+                        Some(terminal),
+                        expires,
+                    )
+                    .map_err(err)?;
+                self.stage("publication_marker_committed", &original.id);
+                publication.write_result(&mut job.transport, expires)?;
+                let consumed = publication::Transport::read(&mut job.transport, expires)?;
+                let terminal =
+                    publication.consume_receipt(&consumed, &mut job.transport, expires)?;
+                self.journal
+                    .consume(&returned, &terminal, expires)
+                    .map_err(err)?;
+                self.stage("publication_consumed_durable", &original.id);
+                Ok(())
+            })();
+            job.record
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .publication = Some(publication);
+            result
+        })();
+        match outcome {
+            Ok(()) => {
+                {
+                    let mut record = job.record.lock().unwrap_or_else(|e| e.into_inner());
+                    record.consumed = true;
+                    record.phase = "consumed";
+                    record.publication.take();
+                    record.writer.take();
+                }
+                let release = job
+                    .registry
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .release_consumed(&job.record);
+                if let Err(reason) = release {
+                    self.unknown = true;
+                    job.record
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .publication_error = Some(reason);
+                } else {
+                    self.store_records
+                        .retain(|record| !Arc::ptr_eq(record, &job.record));
+                    self.writer_custody.take();
+                    self.stage("publication_heavy_released", &original.id);
+                }
+            }
+            Err(reason) => {
+                // Durable Running or returned publication keeps the restart
+                // fence. The record/actor retain every live ownership handle.
+                if let Some(dispatch) = &dispatch {
+                    self.unknown = true;
+                    let expires = Instant::now()
+                        + Duration::from_millis(self.config.limits.request_ms as u64);
+                    let _ = self.journal.unknown(dispatch, expires);
+                }
+                job.record
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .publication_error = Some(reason);
+                self.stage("publication_retained", &original.id);
+            }
+        }
         job.complete();
     }
 }
@@ -849,11 +1291,19 @@ pub(super) fn receive_first(
         }
     };
     let reader_cancelled = Arc::clone(&cancelled);
+    let reply_generic_limit = c.limits.max_frame_bytes as usize;
     let reader_join = thread::spawn(move || {
         let mut pending = Vec::new();
         loop {
-            let result = frame(&mut reader, &mut pending, REPLY_MAX, expires)
-                .and_then(|bytes| serde_json::from_slice::<RelayReply>(&bytes).map_err(err));
+            let result = frame(&mut reader, &mut pending, REPLY_MAX, expires).and_then(|bytes| {
+                let reply: RelayReply = serde_json::from_slice(&bytes).map_err(err)?;
+                if bytes.len() > reply_generic_limit
+                    && !matches!(&reply.result, Ok(ReplyValue::Read { .. }))
+                {
+                    return Err("relay reply variant envelope bound".into());
+                }
+                Ok(reply)
+            });
             match result {
                 Ok(reply) => {
                     if reply_tx.try_send(reply).is_err() {

@@ -232,8 +232,7 @@ pub struct Preparation {
 }
 /// Bind a distinct owner operation to native code roots and captured home.
 /// This check grants no renderer eligibility or publication authority.
-#[cfg(feature = "sqlite-store")]
-pub fn captured_store_owner_config(
+pub fn captured_publication_owner_config(
     config: &Config,
     request: &Request,
     ready: &Ready,

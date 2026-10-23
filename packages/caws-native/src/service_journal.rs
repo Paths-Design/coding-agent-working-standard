@@ -23,10 +23,12 @@
 //! nor inline fallback. Its caller independently verifies retirement/withdrawal
 //! and revalidates authority before dispatch; this journal evaluates no policy.
 //!
-//! maxRetainedRecords is explicit and persisted, with no production default or
-//! retention policy. Full capacity rejects admission without evicting any ID.
-//! The journal creates at most that many 256-KiB records, a 1-KiB config, an empty
-//! lock, and one 256-KiB temporary. This is not production retention parity.
+//! maxRetainedRecords is the explicit persisted live-payload frontier. Exact
+//! terminal consumption atomically replaces a payload with a compact original-ID
+//! tombstone. Consumed history has independent count/byte frontiers; either full
+//! frontier refuses further consumption without evicting an ID. The journal owns
+//! at most 256 full 256-KiB records, 16 MiB of compact records, a 1-KiB config, an
+//! empty lock and one 256-KiB temporary. This is not unbounded retention parity.
 //!
 //! Checksums detect changed/corrupt persisted bytes, not malicious same-UID
 //! writers. The private filesystem and cooperative lifetime lock are the write
@@ -59,6 +61,10 @@ mod custody;
 pub use custody::Custody;
 
 pub const MAX_RETAINED_RECORDS: u16 = 256;
+/// Terminal IDs have a separate finite frontier. Exhaustion preserves the heavy
+/// operation and its custody; history is never evicted to admit another ID.
+pub const MAX_CONSUMED_RECORDS: usize = 65_536;
+pub const MAX_CONSUMED_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_VERIFIED_REQUEST_BYTES: usize = 131_072;
 pub const MAX_RECORD_BYTES: usize = 256 * 1024;
 const MAX_CONFIG_BYTES: usize = 1024;
@@ -203,6 +209,15 @@ pub enum NotStartedStage {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ReturnedResult {
+    /// The native owner settled a publication operation (a committed generation
+    /// or explicit no-publication terminal). This keeps its fence until the
+    /// exact ordinary consumer acknowledges it. Emitting a receipt alone
+    /// cannot release that fence.
+    #[serde(rename = "session_publication")]
+    SessionPublication {
+        #[serde(rename = "terminalDigest")]
+        terminal_digest: String,
+    },
     /// Internal owner result only, never a public renderer response. The owner
     /// observed that no execution child/program was started at this stage.
     #[serde(rename = "not_started")]
@@ -230,6 +245,7 @@ pub enum ReturnedResult {
 impl ReturnedResult {
     fn valid(&self) -> bool {
         match self {
+            Self::SessionPublication { terminal_digest } => digest(terminal_digest),
             Self::NotStarted { errno, .. } => errno.is_none_or(|value| (1..=4095).contains(&value)),
             Self::ProcessExit { code, signal } => {
                 code.is_some() != signal.is_some()
@@ -247,6 +263,49 @@ pub enum CancelReason {
     SourceRetired,
     #[serde(rename = "grant_withdrawn")]
     GrantWithdrawn,
+}
+
+/// A compact typed observation survives payload release. Keeping the exact
+/// result distinguishes a known failed spawn from an executed child result;
+/// terminal hashes alone cannot supply that diagnostic/provenance contract.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "execution", deny_unknown_fields)]
+pub enum ConsumedTerminal {
+    #[serde(rename = "returned")]
+    Returned {
+        result: ReturnedResult,
+        #[serde(
+            rename = "artifactManifestDigest",
+            deserialize_with = "required_nullable"
+        )]
+        artifact_manifest_digest: Option<String>,
+    },
+    #[serde(rename = "cancelled_before_dispatch")]
+    CancelledBeforeDispatch { reason: CancelReason },
+}
+impl ConsumedTerminal {
+    fn valid(&self, terminal_digest: &str, returned_digest: &str) -> bool {
+        match self {
+            Self::Returned {
+                result,
+                artifact_manifest_digest,
+            } => {
+                result.valid()
+                    && artifact_manifest_digest.as_deref().is_none_or(digest)
+                    && artifact_manifest_digest
+                        .as_deref()
+                        .unwrap_or(returned_digest)
+                        == terminal_digest
+                    && match result {
+                        ReturnedResult::SessionPublication {
+                            terminal_digest: result_digest,
+                        } => artifact_manifest_digest.as_ref() == Some(result_digest),
+                        _ => true,
+                    }
+            }
+            Self::CancelledBeforeDispatch { .. } => terminal_digest == returned_digest,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -273,6 +332,15 @@ pub enum AcceptedOutcome {
         )]
         artifact_manifest_digest: Option<String>,
     },
+    #[serde(rename = "consumed")]
+    Consumed {
+        admission: Accepted,
+        #[serde(rename = "terminalDigest")]
+        terminal_digest: String,
+        #[serde(rename = "returnedDigest")]
+        returned_digest: String,
+        terminal: ConsumedTerminal,
+    },
 }
 impl AcceptedOutcome {
     fn queued() -> Self {
@@ -291,7 +359,15 @@ impl AcceptedOutcome {
         }
     }
     fn fenced(&self) -> bool {
-        matches!(self, Self::Running { .. } | Self::Unknown { .. })
+        matches!(
+            self,
+            Self::Running { .. }
+                | Self::Unknown { .. }
+                | Self::Returned {
+                    result: ReturnedResult::SessionPublication { .. },
+                    ..
+                }
+        )
     }
     fn valid(&self) -> bool {
         match self {
@@ -299,7 +375,26 @@ impl AcceptedOutcome {
                 result,
                 artifact_manifest_digest,
                 ..
-            } => result.valid() && artifact_manifest_digest.as_deref().is_none_or(digest),
+            } => {
+                result.valid()
+                    && artifact_manifest_digest.as_deref().is_none_or(digest)
+                    && match result {
+                        ReturnedResult::SessionPublication { terminal_digest } => {
+                            artifact_manifest_digest.as_ref() == Some(terminal_digest)
+                        }
+                        _ => true,
+                    }
+            }
+            Self::Consumed {
+                terminal_digest,
+                returned_digest,
+                terminal,
+                ..
+            } => {
+                digest(terminal_digest)
+                    && digest(returned_digest)
+                    && terminal.valid(terminal_digest, returned_digest)
+            }
             _ => true,
         }
     }
@@ -341,9 +436,35 @@ impl Operation {
         &self.outcome
     }
     pub fn verified_request(&self) -> Result<Vec<u8>> {
+        if matches!(self.outcome, AcceptedOutcome::Consumed { .. }) {
+            return Err(JournalError::new(
+                ErrorKind::Invalid,
+                "consumed payload was released",
+            ));
+        }
         STANDARD
             .decode(&self.verified_request_base64)
             .map_err(|_| JournalError::new(ErrorKind::Corrupt, "invalid payload encoding"))
+    }
+    /// The exact terminal acknowledged by the caller's ordinary consumer. A
+    /// publication binds its own terminal digest; other observed outcomes bind
+    /// the complete returned operation. This value grants no consumption right.
+    pub fn consumption_digest(&self) -> Result<String> {
+        match &self.outcome {
+            AcceptedOutcome::Returned {
+                artifact_manifest_digest: Some(value),
+                ..
+            } => Ok(value.clone()),
+            AcceptedOutcome::Returned { .. } | AcceptedOutcome::CancelledBeforeDispatch { .. } => {
+                serde_json::to_vec(self)
+                    .map(|bytes| hash(&bytes))
+                    .map_err(|_| JournalError::new(ErrorKind::Corrupt, "encode terminal operation"))
+            }
+            _ => Err(JournalError::new(
+                ErrorKind::Invalid,
+                "operation has no consumable terminal",
+            )),
+        }
     }
     fn validate(&self, key: &str, file_id: &str) -> Result<()> {
         if !self.identity.valid()
@@ -358,6 +479,15 @@ impl Operation {
                 ErrorKind::Corrupt,
                 "invalid operation fields",
             ));
+        }
+        if matches!(self.outcome, AcceptedOutcome::Consumed { .. }) {
+            if !self.verified_request_base64.is_empty() {
+                return Err(JournalError::new(
+                    ErrorKind::Corrupt,
+                    "consumed record retains payload",
+                ));
+            }
+            return Ok(());
         }
         let bytes = self.verified_request()?;
         if bytes.len() > MAX_VERIFIED_REQUEST_BYTES
@@ -897,7 +1027,7 @@ impl Journal {
         journal.remove_abandoned_temporary(expires)?;
         let files = names(
             journal.directory.as_raw_fd(),
-            usize::from(max_retained_records) + 2,
+            usize::from(max_retained_records) + MAX_CONSUMED_RECORDS + 2,
             expires,
         )?;
         if files.contains(CONFIG.to_str().expect("ASCII config")) {
@@ -962,12 +1092,13 @@ impl Journal {
             }
             journal.entries.push(entry);
         }
-        if journal.entries.len() > usize::from(journal.capacity) {
+        if journal.live_count() > usize::from(journal.capacity) {
             return Err(JournalError::new(
                 ErrorKind::Corrupt,
                 "accepted capacity exceeded",
             ));
         }
+        journal.history_size()?;
         journal
             .entries
             .sort_by_key(|entry| entry.operation.sequence);
@@ -1043,7 +1174,7 @@ impl Journal {
         self.anchor(expires)?;
         let actual = names(
             self.directory.as_raw_fd(),
-            usize::from(self.capacity) + 2,
+            usize::from(self.capacity) + MAX_CONSUMED_RECORDS + 2,
             expires,
         )?;
         let mut expected = BTreeSet::from([
@@ -1363,6 +1494,11 @@ impl Journal {
         {
             self.selected(index, expires)?;
             let previous = &self.entries[index].operation;
+            if matches!(previous.outcome, AcceptedOutcome::Consumed { .. }) {
+                return Ok(Admission::Rejected(RejectedOutcome::new(
+                    "consumed original request ID; no replay across generations",
+                )));
+            }
             if previous.identity != identity || previous.verified_request()? != verified_request {
                 return Ok(Admission::Rejected(RejectedOutcome::new(
                     "request ID collision; this identity was not accepted; the prior operation may have executed",
@@ -1373,7 +1509,7 @@ impl Journal {
                 duplicate: true,
             });
         }
-        if self.entries.len() >= usize::from(self.capacity) {
+        if self.live_count() >= usize::from(self.capacity) {
             return Ok(Admission::Rejected(RejectedOutcome::new(
                 "retained accepted-operation capacity exhausted; no operation was evicted",
             )));
@@ -1541,6 +1677,8 @@ impl Journal {
             || artifact_manifest_digest
                 .as_deref()
                 .is_some_and(|value| !digest(value))
+            || matches!(&result, ReturnedResult::SessionPublication { terminal_digest }
+                if artifact_manifest_digest.as_ref() != Some(terminal_digest))
         {
             return Err(JournalError::new(
                 ErrorKind::Invalid,
@@ -1562,6 +1700,102 @@ impl Journal {
         operation.outcome = AcceptedOutcome::unknown();
         self.replace(index, operation.clone(), expires)?;
         Ok(operation)
+    }
+    fn live_count(&self) -> usize {
+        self.entries
+            .iter()
+            .filter(|entry| !matches!(entry.operation.outcome, AcceptedOutcome::Consumed { .. }))
+            .count()
+    }
+    fn history_size(&self) -> Result<(usize, usize)> {
+        let mut count = 0usize;
+        let mut bytes = 0usize;
+        for entry in &self.entries {
+            if matches!(entry.operation.outcome, AcceptedOutcome::Consumed { .. }) {
+                count += 1;
+                bytes = bytes
+                    .checked_add(encode(&entry.operation)?.len())
+                    .ok_or_else(|| {
+                        JournalError::new(ErrorKind::Corrupt, "consumed history size overflow")
+                    })?;
+            }
+        }
+        if count > MAX_CONSUMED_RECORDS || bytes > MAX_CONSUMED_BYTES {
+            return Err(JournalError::new(
+                ErrorKind::Corrupt,
+                "consumed history exceeds finite frontier",
+            ));
+        }
+        Ok((count, bytes))
+    }
+    /// Compact only the exact durable terminal the owner actually observed and
+    /// its ordinary consumer acknowledged. Callers independently establish that
+    /// observation and retain all custody on error. No running/unknown record is
+    /// eligible, and a changed terminal cannot release the retained payload.
+    pub fn consume(
+        &mut self,
+        returned: &Operation,
+        terminal_digest: &str,
+        expires: Instant,
+    ) -> Result<Operation> {
+        self.current(expires)?;
+        if !digest(terminal_digest) || returned.consumption_digest()? != terminal_digest {
+            return Err(JournalError::new(
+                ErrorKind::Invalid,
+                "consumed terminal digest mismatch",
+            ));
+        }
+        let index = self
+            .entries
+            .iter()
+            .position(|entry| entry.operation == *returned)
+            .ok_or_else(|| {
+                JournalError::new(
+                    ErrorKind::Invalid,
+                    "exact returned operation was not retained",
+                )
+            })?;
+        self.selected(index, expires)?;
+        let returned_digest = hash(
+            &serde_json::to_vec(returned)
+                .map_err(|_| JournalError::new(ErrorKind::Corrupt, "encode returned operation"))?,
+        );
+        let mut consumed = returned.clone();
+        consumed.verified_request_base64.clear();
+        consumed.outcome = AcceptedOutcome::Consumed {
+            admission: Accepted::Value,
+            terminal_digest: terminal_digest.into(),
+            returned_digest,
+            terminal: match &returned.outcome {
+                AcceptedOutcome::Returned {
+                    result,
+                    artifact_manifest_digest,
+                    ..
+                } => ConsumedTerminal::Returned {
+                    result: result.clone(),
+                    artifact_manifest_digest: artifact_manifest_digest.clone(),
+                },
+                AcceptedOutcome::CancelledBeforeDispatch { reason, .. } => {
+                    ConsumedTerminal::CancelledBeforeDispatch { reason: *reason }
+                }
+                _ => {
+                    return Err(JournalError::new(
+                        ErrorKind::Invalid,
+                        "consumed operation has no terminal observation",
+                    ));
+                }
+            },
+        };
+        let (count, bytes) = self.history_size()?;
+        let consumed_bytes = encode(&consumed)?.len();
+        if count >= MAX_CONSUMED_RECORDS || consumed_bytes > MAX_CONSUMED_BYTES - bytes {
+            return Err(JournalError::new(
+                ErrorKind::Invalid,
+                "consumed history exhausted; heavy operation retained",
+            ));
+        }
+        self.replace(index, consumed.clone(), expires)?;
+        Ok(consumed)
     }
 }
 fn encode(operation: &Operation) -> Result<Vec<u8>> {

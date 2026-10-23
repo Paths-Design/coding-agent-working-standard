@@ -5,10 +5,8 @@ impl Actor {
     pub(super) fn run(mut self, rx: mpsc::Receiver<Mailbox>) {
         let mut pending: VecDeque<PendingJob> = VecDeque::new();
         let mut waiting: Option<Job> = None;
-        #[cfg(feature = "sqlite-store")]
-        let mut store_waiting: Option<store::StoreJob> = None;
-        #[cfg(feature = "sqlite-store")]
-        let mut store_waiting_observed = false;
+        let mut exclusive_waiting: Option<ExclusiveJob> = None;
+        let mut exclusive_waiting_observed = false;
         let mut barrier = false;
         loop {
             if let Some(arrival) = bridge_head(pending.iter().map(|entry| &entry.job)) {
@@ -45,20 +43,27 @@ impl Actor {
                 }
                 continue;
             }
-            #[cfg(feature = "sqlite-store")]
-            if store_waiting.is_some() {
-                if let Some(job) = store::take_after_cohort(&mut store_waiting, pending.len()) {
-                    self.acquire_store_job(job);
-                    store_waiting_observed = false;
+            if exclusive_waiting.is_some() {
+                if pending.is_empty() {
+                    match exclusive_waiting.take().expect("exclusive waiting job") {
+                        ExclusiveJob::Session(job) => self.acquire_session_job(job),
+                        #[cfg(feature = "sqlite-store")]
+                        ExclusiveJob::Store(job) => self.acquire_store_job(job),
+                    }
+                    exclusive_waiting_observed = false;
                     barrier = false;
                 } else {
-                    if !store_waiting_observed {
-                        let invocation = store_waiting
-                            .as_ref()
-                            .expect("waiting store job")
-                            .invocation_id();
-                        self.stage("store_cohort_waiting", &invocation);
-                        store_waiting_observed = true;
+                    if !exclusive_waiting_observed {
+                        match exclusive_waiting.as_ref().expect("exclusive waiting job") {
+                            ExclusiveJob::Session(job) => {
+                                self.stage("session_cohort_waiting", &job.invocation_id())
+                            }
+                            #[cfg(feature = "sqlite-store")]
+                            ExclusiveJob::Store(job) => {
+                                self.stage("store_cohort_waiting", &job.invocation_id())
+                            }
+                        }
+                        exclusive_waiting_observed = true;
                     }
                     thread::sleep(TICK);
                 }
@@ -72,10 +77,16 @@ impl Actor {
                 };
                 match rx.recv_timeout(timeout) {
                     Ok(Mailbox::Render(job)) => waiting = Some(job),
+                    Ok(Mailbox::Session(job)) => {
+                        exclusive_waiting = Some(ExclusiveJob::Session(job));
+                        exclusive_waiting_observed = false;
+                        barrier = true;
+                        continue;
+                    }
                     #[cfg(feature = "sqlite-store")]
                     Ok(Mailbox::Store(job)) => {
-                        store_waiting = Some(job);
-                        store_waiting_observed = false;
+                        exclusive_waiting = Some(ExclusiveJob::Store(job));
+                        exclusive_waiting_observed = false;
                         barrier = true;
                         continue;
                     }
@@ -167,6 +178,7 @@ impl Actor {
                     invocation_id: &job.offer.invocation_id,
                     reason: "unknown_fence",
                 }),
+                Mailbox::Session(job) => job.refuse("renderer unknown fence"),
                 #[cfg(feature = "sqlite-store")]
                 Mailbox::Store(job) => job.refuse("renderer unknown fence"),
             }
@@ -206,8 +218,14 @@ impl Drop for ProjectPermit {
         self.0.used.fetch_sub(1, Ordering::AcqRel);
     }
 }
+enum ExclusiveJob {
+    Session(session::SessionJob),
+    #[cfg(feature = "sqlite-store")]
+    Store(store::StoreJob),
+}
 pub(super) enum Mailbox {
     Render(Job),
+    Session(session::SessionJob),
     #[cfg(feature = "sqlite-store")]
     Store(store::StoreJob),
 }

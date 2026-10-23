@@ -4,6 +4,12 @@ const {
   decideSessionCacheCreation,
   createNativeSessionCachePort,
   sessionCacheInputSupported,
+  SESSION_END_PREFIX_CAPABILITY,
+  SESSION_END_PREFIX_REQUEST_SCHEMA,
+  SESSION_END_PREFIX_PREVIOUS_SCHEMA,
+  SESSION_END_PREFIX_DECISION_SCHEMA,
+  SESSION_END_PREFIX_RESULT_SCHEMA,
+  createNativeSessionEndPrefixPort,
 } = require('../../dist/runtime/session-cache-client');
 
 const request = {
@@ -240,5 +246,260 @@ test('cancellation consumes operation without dispatching it', async () => {
   const cancelled = new Error('cancelled');
   f.controller.abort(cancelled);
   await expect(f.port.capture('/physical/project')).rejects.toBe(cancelled);
+  expect(f.writes).toHaveLength(0);
+});
+
+const prefixRequest = {
+  ...request,
+  event: 'session_end',
+  sessionEndPrefix: SESSION_END_PREFIX_CAPABILITY,
+};
+const prefixPrevious = (first, text = null) => ({
+  ...previous(first, text),
+  schema: SESSION_END_PREFIX_PREVIOUS_SCHEMA,
+});
+const prefixTerminal = (first, changes = {}) => ({
+  schema: SESSION_END_PREFIX_RESULT_SCHEMA,
+  ...identity(first),
+  status: 'completed',
+  prefixComplete: true,
+  envelopePublished: true,
+  pointerPublished: true,
+  agentPid: 'refreshed',
+  reap: 'completed',
+  diagnostic: null,
+  ...changes,
+});
+const decline = {
+  status: 'declined',
+  prefixComplete: false,
+  envelopePublished: false,
+  pointerPublished: false,
+  agentPid: 'not_run',
+  reap: 'not_run',
+  diagnostic: 'unsupported old profile',
+};
+function prefixFixture(replies, changes = {}) {
+  const writes = [],
+    controller = new AbortController();
+  let reads = 0;
+  const transport = {
+    async write(frame, signal) {
+      expect(signal).toBe(controller.signal);
+      writes.push(frame);
+    },
+    async read(signal) {
+      expect(signal).toBe(controller.signal);
+      const reply = replies[reads++];
+      if (reply instanceof Error) throw reply;
+      const value = reply(writes[0], controller);
+      return Buffer.isBuffer(value)
+        ? value
+        : bytes(typeof value === 'string' ? value : JSON.stringify(value));
+    },
+  };
+  return {
+    writes,
+    controller,
+    port: createNativeSessionEndPrefixPort(
+      { ...prefixRequest, ...changes },
+      transport,
+      controller.signal
+    ),
+    reads: () => reads,
+  };
+}
+
+test.each(['codex', 'claude-code'])(
+  'distinct full SessionEnd prefix uses sole framed transport for %s',
+  async (surface) => {
+    const f = prefixFixture(
+      [
+        (first) => prefixPrevious(first, '{"session_id":"supplied","created_at":"original"}'),
+        (first) => prefixTerminal(first, { agentPid: 'not_found', reap: 'not_run' }),
+      ],
+      { surface }
+    );
+    expect(await f.port.capture('/physical/project')).toEqual({
+      status: 'completed',
+      prefixComplete: true,
+      envelopePublished: true,
+      pointerPublished: true,
+      agentPid: 'not_found',
+      reap: 'not_run',
+      diagnostic: null,
+    });
+    expect(f.writes).toEqual([
+      {
+        schema: SESSION_END_PREFIX_REQUEST_SCHEMA,
+        ...identity(f.writes[0]),
+        canonicalRoot: '/physical/project',
+      },
+      {
+        schema: SESSION_END_PREFIX_DECISION_SCHEMA,
+        ...identity(f.writes[0]),
+        action: 'capture',
+        createdUnits: [...'original'].map((char) => char.charCodeAt(0)),
+      },
+    ]);
+    expect(f.writes[0]).not.toHaveProperty('processId');
+    await expect(f.port.capture('/physical/project')).rejects.toThrow(/single-use/);
+  }
+);
+
+test('explicit no-effect decline alone permits caller compatibility', async () => {
+  const f = prefixFixture([(first) => prefixTerminal(first, decline)]);
+  expect(await f.port.capture('/physical/project')).toEqual(decline);
+  expect(f.writes).toHaveLength(1);
+  const old = prefixFixture([
+    (first) => prefixPrevious(first, '{"unsupported":1}'),
+    (first) => prefixTerminal(first, decline),
+  ]);
+  expect((await old.port.capture('/physical/project')).status).toBe('declined');
+  expect(old.writes[1].action).toBe('decline');
+});
+
+test('unreadable envelope can truthfully report completed sibling PID best-effort attempts before decision', async () => {
+  const f = prefixFixture([
+    (first) =>
+      prefixTerminal(first, {
+        status: 'unavailable',
+        prefixComplete: true,
+        envelopePublished: false,
+        pointerPublished: false,
+        agentPid: 'refreshed',
+        reap: 'rate_limited',
+        diagnostic: 'old envelope unavailable; sibling PID attempted',
+      }),
+  ]);
+  expect(await f.port.capture('/physical/project')).toMatchObject({
+    status: 'unavailable',
+    prefixComplete: true,
+    envelopePublished: false,
+    pointerPublished: false,
+    agentPid: 'refreshed',
+    reap: 'rate_limited',
+  });
+  expect(f.writes).toHaveLength(1);
+});
+
+test.each([
+  { envelopePublished: false, pointerPublished: false, agentPid: 'not_found', reap: 'not_run' },
+  { agentPid: 'unavailable', reap: 'not_run' },
+  { reap: 'unavailable' },
+])('complete best-effort unavailability remains distinct from completed %#', async (effects) => {
+  const f = prefixFixture([
+    (first) => prefixPrevious(first),
+    (first) =>
+      prefixTerminal(first, {
+        ...effects,
+        status: 'unavailable',
+        diagnostic: 'best-effort stage unavailable',
+      }),
+  ]);
+  const result = await f.port.capture('/physical/project');
+  expect(result.status).toBe('unavailable');
+  expect(result.prefixComplete).toBe(true);
+  expect(result).toMatchObject(effects);
+});
+
+test.each([
+  { pointerPublished: true, envelopePublished: false },
+  { prefixComplete: false },
+  { agentPid: 'not_run' },
+  { agentPid: 'not_found', reap: 'completed' },
+  { reap: 'not_run' },
+  { reap: 'unavailable' },
+  { diagnostic: 'completed cannot hide a failed stage' },
+  { ...decline, envelopePublished: true },
+  { ...decline, prefixComplete: true },
+  { status: 'unavailable', diagnostic: '' },
+  { status: 'unavailable', diagnostic: 'x'.repeat(4097) },
+  { extra: true },
+  { agentPid: 'guessed' },
+])('incoherent prefix effects cannot earn seal eligibility %#', async (changes) => {
+  const f = prefixFixture([
+    (first) => prefixPrevious(first),
+    (first) => prefixTerminal(first, changes),
+  ]);
+  await expect(f.port.capture('/physical/project')).rejects.toThrow(/prefix result/);
+  expect(f.writes).toHaveLength(2);
+  await expect(f.port.capture('/physical/project')).rejects.toThrow(/single-use/);
+});
+
+test.each(['id', 'runtimeDigest', 'token', 'schema'])(
+  'foreign prefix %s is fatal without replay',
+  async (key) => {
+    const f = prefixFixture([
+      (first) => prefixPrevious(first),
+      (first) => prefixTerminal(first, { [key]: 'foreign' }),
+    ]);
+    await expect(f.port.capture('/physical/project')).rejects.toThrow();
+    expect(f.writes).toHaveLength(2);
+  }
+);
+
+test('duplicate terminal identity and effect members cannot hide earlier values', async () => {
+  for (const key of ['id', 'prefixComplete', 'agentPid']) {
+    const f = prefixFixture([
+      (first) => prefixPrevious(first),
+      (first) =>
+        JSON.stringify(prefixTerminal(first)).replace('{', '{' + JSON.stringify(key) + ':null,'),
+    ]);
+    await expect(f.port.capture('/physical/project')).rejects.toThrow();
+  }
+});
+
+test('effectful first result, invalid previous encoding and old-schema terminal refuse', async () => {
+  for (const reply of [
+    (first) => prefixTerminal(first),
+    (first) => ({ ...prefixPrevious(first), existingBase64: 'e30' }),
+    (first) => terminal(first),
+    () => Buffer.from([0xff]),
+    () => Buffer.alloc(90_113, 32),
+  ]) {
+    const f = prefixFixture([reply]);
+    await expect(f.port.capture('/physical/project')).rejects.toThrow();
+    expect(f.writes).toHaveLength(1);
+  }
+});
+
+test('partial unavailable, lost reply and cancellation never repeat a prefix', async () => {
+  const f = prefixFixture([
+    (first) =>
+      prefixTerminal(first, {
+        ...decline,
+        status: 'unavailable',
+        diagnostic: 'deadline before complete prefix',
+      }),
+  ]);
+  expect(await f.port.capture('/physical/project')).toMatchObject({
+    status: 'unavailable',
+    prefixComplete: false,
+  });
+  const lost = new Error('transport lost after native effects');
+  const missing = prefixFixture([(first) => prefixPrevious(first), lost]);
+  await expect(missing.port.capture('/physical/project')).rejects.toBe(lost);
+  await expect(missing.port.capture('/physical/project')).rejects.toThrow(/single-use/);
+  const cancelled = prefixFixture([
+    (first, controller) => {
+      controller.abort(lost);
+      return prefixTerminal(first, decline);
+    },
+  ]);
+  await expect(cancelled.port.capture('/physical/project')).rejects.toBe(lost);
+});
+
+test.each([
+  { sessionEndPrefix: undefined },
+  { sessionEndPrefix: SESSION_CACHE_CAPABILITY },
+  { event: 'pre_tool_use' },
+  { surface: 'opencode' },
+  { configuration: 'project-policy' },
+  { payload: { session_id: '../escape' } },
+  { payload: { session_id: 'unknown' } },
+])('unsupported full prefix profile makes no request %#', async (changes) => {
+  const f = prefixFixture([], changes);
+  await expect(f.port.capture('/physical/project')).rejects.toThrow();
   expect(f.writes).toHaveLength(0);
 });

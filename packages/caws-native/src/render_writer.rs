@@ -273,9 +273,14 @@ pub fn settle(
     result: ReturnedResult,
     expires: Instant,
 ) -> Result<(), String> {
-    intent
+    let returned = intent
         .journal
         .returned(&intent.dispatch, result, None, expires)
+        .map_err(|e| e.to_string())?;
+    let digest = returned.consumption_digest().map_err(|e| e.to_string())?;
+    intent
+        .journal
+        .consume(&returned, &digest, expires)
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -1428,15 +1433,17 @@ mod tests {
         );
         let not_started: Vec<_> = values
             .iter()
-            .filter(|row| row["body"]["outcome"]["result"]["kind"] == "not_started")
+            .filter(|row| row["body"]["outcome"]["terminal"]["result"]["kind"] == "not_started")
             .collect();
         assert_eq!(not_started.len(), 1);
+        assert_eq!(not_started[0]["body"]["outcome"]["execution"], "consumed");
+        assert_eq!(not_started[0]["body"]["verifiedRequestBase64"], "");
         assert_eq!(
-            not_started[0]["body"]["outcome"]["result"]["stage"],
+            not_started[0]["body"]["outcome"]["terminal"]["result"]["stage"],
             "spawn"
         );
         assert_eq!(
-            not_started[0]["body"]["outcome"]["result"]["errno"],
+            not_started[0]["body"]["outcome"]["terminal"]["result"]["errno"],
             libc::ENOENT
         );
         assert_eq!(run(&fixture.args()).unwrap(), 0);

@@ -19,6 +19,24 @@ use std::{
 };
 
 pub const CAPABILITY: &str = "caws.runtime.session-cache.v1";
+pub const PREFIX_CAPABILITY: &str = "caws.runtime.session-end-prefix.v1";
+pub const PREFIX_REQUEST_SCHEMA: &str = "caws.runtime.session-end-prefix.request.v1";
+pub const PREFIX_PREVIOUS_SCHEMA: &str = "caws.runtime.session-end-prefix.previous.v1";
+pub const PREFIX_DECISION_SCHEMA: &str = "caws.runtime.session-end-prefix.decision.v1";
+pub const PREFIX_RESULT_SCHEMA: &str = "caws.runtime.session-end-prefix.result.v1";
+pub const PREFIX_RESULT_KEYS: &[&str] = &[
+    "schema",
+    "id",
+    "runtimeDigest",
+    "token",
+    "status",
+    "prefixComplete",
+    "envelopePublished",
+    "pointerPublished",
+    "agentPid",
+    "reap",
+    "diagnostic",
+];
 pub const REQUEST_SCHEMA: &str = "caws.runtime.session-cache.request.v1";
 pub const PREVIOUS_SCHEMA: &str = "caws.runtime.session-cache.previous.v1";
 pub const DECISION_SCHEMA: &str = "caws.runtime.session-cache.decision.v1";
@@ -537,5 +555,449 @@ fn raw_sid(payload: &RawValue) -> RawSid {
     }
 }
 
+/// Separate admission keeps the original PreToolUse v1 invocation API intact.
+pub struct PrefixInvocation<'a> {
+    pub invocation: Invocation<'a>,
+    pub original_ancestry: &'a crate::agent_pid_cache::OriginalAncestry,
+}
+pub struct PrefixOwner<'a> {
+    invocation: Invocation<'a>,
+    original: &'a crate::agent_pid_cache::OriginalAncestry,
+    attempted: bool,
+}
+impl<'a> PrefixOwner<'a> {
+    pub fn new(input: PrefixInvocation<'a>) -> Result<Self> {
+        let invocation = input.invocation;
+        if !cfg!(target_os = "macos")
+            || !invocation.ready_active
+            || !invocation.dispatched
+            || !matches!(invocation.surface, "codex" | "claude-code")
+            || invocation.event != "session_end"
+            || invocation.configuration != "system"
+            || invocation.advertised_capability != Some(PREFIX_CAPABILITY)
+            || invocation.id.is_empty()
+            || invocation.id.len() > 128
+            || invocation.id.contains('\0')
+            || !digest(invocation.runtime_digest)
+            || !invocation.ready_project_digest.is_some_and(digest)
+        {
+            return Err(WireError(
+                "prefix operation outside native active dispatched system SessionEnd",
+            ));
+        }
+        Ok(Self {
+            invocation,
+            original: input.original_ancestry,
+            attempted: false,
+        })
+    }
+    pub fn admit(&mut self, frame: &[u8]) -> Result<PrefixAdmitted> {
+        if self.attempted {
+            return Err(WireError("prefix request already attempted"));
+        }
+        self.attempted = true;
+        let wire: RequestFrame = decode(frame, MAX_REQUEST_BYTES)?;
+        if wire.schema != PREFIX_REQUEST_SCHEMA
+            || wire.id != self.invocation.id
+            || wire.runtime_digest != self.invocation.runtime_digest
+            || !uuid_v4(&wire.token)
+            || !root_path(&wire.canonical_root)
+            || sha(wire.canonical_root.as_bytes()) != self.invocation.ready_project_digest.unwrap()
+        {
+            return Err(WireError("prefix request binding mismatch"));
+        }
+        Ok(PrefixAdmitted {
+            correlation: Correlation {
+                id: wire.id,
+                runtime_digest: wire.runtime_digest,
+                token: wire.token,
+            },
+            canonical_root: wire.canonical_root,
+            sid: raw_sid(self.invocation.original_payload),
+            surface: self.invocation.surface.into(),
+            original: self.original.clone(),
+        })
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PrefixStatus {
+    Completed,
+    Declined,
+    Unavailable,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrefixResultFrame {
+    schema: &'static str,
+    id: String,
+    runtime_digest: String,
+    token: String,
+    status: PrefixStatus,
+    prefix_complete: bool,
+    envelope_published: bool,
+    pointer_published: bool,
+    agent_pid: crate::agent_pid_cache::AgentPidOutcome,
+    reap: crate::agent_pid_cache::ReapOutcome,
+    diagnostic: Option<String>,
+}
+impl PrefixResultFrame {
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        encode(self, MAX_RESULT_BYTES)
+    }
+    pub fn prefix_complete(&self) -> bool {
+        self.prefix_complete
+    }
+    pub fn status(&self) -> PrefixStatus {
+        self.status
+    }
+    pub fn fallback_safe(&self) -> bool {
+        self.status == PrefixStatus::Declined
+            && !self.prefix_complete
+            && !self.envelope_published
+            && !self.pointer_published
+    }
+}
+pub struct PrefixAdmitted {
+    correlation: Correlation,
+    canonical_root: String,
+    sid: RawSid,
+    surface: String,
+    original: crate::agent_pid_cache::OriginalAncestry,
+}
+pub struct PrefixExecution {
+    pub result: PrefixResultFrame,
+    pub exchange_error: Option<WireError>,
+    pub cancellation_error: Option<String>,
+}
+fn prefix_result(
+    c: &Correlation,
+    status: PrefixStatus,
+    complete: bool,
+    envelope: bool,
+    pointer: bool,
+    agent_pid: crate::agent_pid_cache::AgentPidOutcome,
+    reap: crate::agent_pid_cache::ReapOutcome,
+    diagnostic: Option<String>,
+) -> PrefixResultFrame {
+    // Reuse the bounded UTF-8 diagnostic normalization, not the v1 status schema.
+    let diagnostic = make_result(c, Status::Unavailable, envelope, diagnostic).diagnostic;
+    PrefixResultFrame {
+        schema: PREFIX_RESULT_SCHEMA,
+        id: c.id.clone(),
+        runtime_digest: c.runtime_digest.clone(),
+        token: c.token.clone(),
+        status,
+        prefix_complete: complete,
+        envelope_published: envelope,
+        pointer_published: pointer,
+        agent_pid,
+        reap,
+        diagnostic,
+    }
+}
+fn prefix_checkpoint(
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> std::result::Result<(), String>,
+) -> std::result::Result<(), session_cache::FailureKind> {
+    checkpoint().map_err(session_cache::FailureKind::Cancelled)?;
+    if Instant::now() >= expires {
+        Err(session_cache::FailureKind::Deadline)
+    } else {
+        Ok(())
+    }
+}
+impl PrefixAdmitted {
+    pub fn execute_checked(
+        self,
+        expires: Instant,
+        mut checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
+    ) -> PrefixExecution {
+        use crate::agent_pid_cache::{
+            self, AgentPidOutcome as Pid, PrepareError, ReapOutcome as Reap,
+        };
+        use session_cache::{FailureKind, PrefixPreparation};
+        let terminal =
+            |status, complete, envelope, pointer, pid, reap, diagnostic| PrefixExecution {
+                result: prefix_result(
+                    &self.correlation,
+                    status,
+                    complete,
+                    envelope,
+                    pointer,
+                    pid,
+                    reap,
+                    diagnostic,
+                ),
+                exchange_error: None,
+                cancellation_error: None,
+            };
+        let fatal = |failure: FailureKind, envelope, pointer, pid, reap| {
+            let diagnostic = format!("SessionEnd prefix interrupted: {failure:?}");
+            let mut execution = terminal(
+                PrefixStatus::Unavailable,
+                false,
+                envelope,
+                pointer,
+                pid,
+                reap,
+                Some(diagnostic),
+            );
+            if let FailureKind::Cancelled(error) = failure {
+                execution.cancellation_error = Some(error);
+            }
+            execution
+        };
+        if let Err(failure) = prefix_checkpoint(expires, &mut checkpoint) {
+            return fatal(failure, false, false, Pid::NotRun, Reap::NotRun);
+        }
+        if !self.original.supports(&self.surface) {
+            return terminal(
+                PrefixStatus::Declined,
+                false,
+                false,
+                false,
+                Pid::NotRun,
+                Reap::NotRun,
+                Some("original native process/PID profile unsupported".into()),
+            );
+        }
+        let sid = match &self.sid {
+            RawSid::Safe(sid) => sid,
+            _ => {
+                return terminal(
+                    PrefixStatus::Declined,
+                    false,
+                    false,
+                    false,
+                    Pid::NotRun,
+                    Reap::NotRun,
+                    Some("original SessionEnd session-id profile unsupported".into()),
+                );
+            }
+        };
+        let input = CaptureInput {
+            canonical_root: Path::new(&self.canonical_root),
+            supplied_session_id: Some(sid),
+            supplied_hook_event: Some("SessionEnd"),
+        };
+        let mut diagnostics = Vec::new();
+        let mut envelope_unavailable = false;
+        let mut prepared = match session_cache::prepare_prefix(&input, expires, &mut checkpoint) {
+            Ok(PrefixPreparation::Ready(prepared)) => prepared,
+            Ok(PrefixPreparation::Declined(_)) => {
+                return terminal(
+                    PrefixStatus::Declined,
+                    false,
+                    false,
+                    false,
+                    Pid::NotRun,
+                    Reap::NotRun,
+                    Some("old envelope file profile unsupported".into()),
+                );
+            }
+            Err(error) => {
+                if matches!(
+                    error.kind,
+                    FailureKind::Cancelled(_) | FailureKind::Deadline
+                ) {
+                    return fatal(error.kind, false, false, Pid::NotRun, Reap::NotRun);
+                }
+                envelope_unavailable = true;
+                diagnostics.push(error.to_string());
+                match session_cache::prepare_pid_prefix(&input, expires, &mut checkpoint) {
+                    Ok(prepared) => prepared,
+                    Err(error) => {
+                        if matches!(
+                            error.kind,
+                            FailureKind::Cancelled(_) | FailureKind::Deadline
+                        ) {
+                            return fatal(error.kind, false, false, Pid::NotRun, Reap::NotRun);
+                        }
+                        diagnostics.push(error.to_string());
+                        if let Err(failure) = prefix_checkpoint(expires, &mut checkpoint) {
+                            return fatal(failure, false, false, Pid::NotRun, Reap::NotRun);
+                        }
+                        return terminal(
+                            PrefixStatus::Unavailable,
+                            true,
+                            false,
+                            false,
+                            Pid::Unavailable,
+                            Reap::NotRun,
+                            Some(diagnostics.join("; ")),
+                        );
+                    }
+                }
+            }
+        };
+        if let Some(error) = prepared.take_preflight_failure() {
+            envelope_unavailable = true;
+            diagnostics.push(error.to_string());
+        }
+        let pid = match agent_pid_cache::prepare(
+            prepared.sessions(),
+            &self.original,
+            expires,
+            &mut checkpoint,
+        ) {
+            Ok(prepared) => Some(prepared),
+            Err(PrepareError::Unsupported(reason)) => {
+                return terminal(
+                    PrefixStatus::Declined,
+                    false,
+                    false,
+                    false,
+                    Pid::NotRun,
+                    Reap::NotRun,
+                    Some(reason.into()),
+                );
+            }
+            Err(PrepareError::Failure(failure)) => {
+                if matches!(failure, FailureKind::Cancelled(_) | FailureKind::Deadline) {
+                    return fatal(failure, false, false, Pid::NotRun, Reap::NotRun);
+                }
+                diagnostics.push(format!("PID preflight unavailable: {failure:?}"));
+                None
+            }
+        };
+        let decided = if envelope_unavailable {
+            Ok(CaptureDecision::Capture(None))
+        } else {
+            (|| {
+                let existing_base64 = match prepared.existing() {
+                    ExistingEnvelope::Missing => None,
+                    ExistingEnvelope::Bytes(bytes) => Some(STANDARD.encode(bytes)),
+                };
+                let frame = encode(
+                    &PreviousFrame {
+                        schema: PREFIX_PREVIOUS_SCHEMA,
+                        id: &self.correlation.id,
+                        runtime_digest: &self.correlation.runtime_digest,
+                        token: &self.correlation.token,
+                        existing_base64,
+                    },
+                    MAX_PREVIOUS_BYTES,
+                )?;
+                let response = exchange(&frame)?;
+                let decision: DecisionFrame = decode(&response, MAX_DECISION_BYTES)?;
+                if decision.schema != PREFIX_DECISION_SCHEMA
+                    || decision.id != self.correlation.id
+                    || decision.runtime_digest != self.correlation.runtime_digest
+                    || decision.token != self.correlation.token
+                {
+                    return Err(WireError("prefix decision binding mismatch"));
+                }
+                match decision.action {
+                    Action::Capture => Ok(CaptureDecision::Capture(decision.created_units)),
+                    Action::Decline if decision.created_units.is_none() => {
+                        Ok(CaptureDecision::Decline)
+                    }
+                    _ => Err(WireError("prefix decline carries creation units")),
+                }
+            })()
+        };
+        if let Err(failure) = prefix_checkpoint(expires, &mut checkpoint) {
+            return fatal(failure, false, false, Pid::NotRun, Reap::NotRun);
+        }
+        let created = match decided {
+            Ok(CaptureDecision::Capture(created)) => created,
+            Ok(CaptureDecision::Decline) => {
+                return terminal(
+                    PrefixStatus::Declined,
+                    false,
+                    false,
+                    false,
+                    Pid::NotRun,
+                    Reap::NotRun,
+                    Some("engine decoder explicitly declined".into()),
+                );
+            }
+            Err(error) => {
+                let mut execution = terminal(
+                    PrefixStatus::Unavailable,
+                    false,
+                    false,
+                    false,
+                    Pid::NotRun,
+                    Reap::NotRun,
+                    Some(error.to_string()),
+                );
+                execution.exchange_error = Some(error);
+                return execution;
+            }
+        };
+        let (envelope, pointer) = if envelope_unavailable {
+            (false, false)
+        } else {
+            match session_cache::commit_prefix(
+                &mut prepared,
+                &self.surface,
+                created,
+                expires,
+                &mut checkpoint,
+            ) {
+                Ok(()) => (true, true),
+                Err(error) => {
+                    let envelope = error.envelope_published;
+                    if matches!(
+                        error.kind,
+                        FailureKind::Cancelled(_) | FailureKind::Deadline
+                    ) {
+                        return fatal(error.kind, envelope, false, Pid::NotRun, Reap::NotRun);
+                    }
+                    diagnostics.push(error.to_string());
+                    (envelope, false)
+                }
+            }
+        };
+        if let Err(failure) = prefix_checkpoint(expires, &mut checkpoint) {
+            return fatal(failure, envelope, pointer, Pid::NotRun, Reap::NotRun);
+        }
+        let (agent_pid, reap) = match pid {
+            Some(pid) => {
+                let outcome = pid.commit(
+                    &mut prepared,
+                    sid,
+                    &self.canonical_root,
+                    expires,
+                    &mut checkpoint,
+                );
+                if let Some(failure) = outcome.failure {
+                    if matches!(failure, FailureKind::Cancelled(_) | FailureKind::Deadline) {
+                        return fatal(failure, envelope, pointer, outcome.agent_pid, outcome.reap);
+                    }
+                    diagnostics.push(format!("PID prefix unavailable: {failure:?}"));
+                }
+                (outcome.agent_pid, outcome.reap)
+            }
+            None => (Pid::Unavailable, Reap::NotRun),
+        };
+        if let Err(failure) = prefix_checkpoint(expires, &mut checkpoint) {
+            return fatal(failure, envelope, pointer, agent_pid, reap);
+        }
+        let status = if diagnostics.is_empty() {
+            PrefixStatus::Completed
+        } else {
+            PrefixStatus::Unavailable
+        };
+        terminal(
+            status,
+            true,
+            envelope,
+            pointer,
+            agent_pid,
+            reap,
+            if diagnostics.is_empty() {
+                None
+            } else {
+                Some(diagnostics.join("; "))
+            },
+        )
+    }
+}
+
 #[cfg(test)]
+#[path = "session_cache_wire/tests.rs"]
 mod tests;
