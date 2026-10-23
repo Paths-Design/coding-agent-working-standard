@@ -1431,6 +1431,10 @@ if (process.argv[2] === '--agent-child') {
     assert.equal(action.journal, recordA.file);
     put(path.join(a.directory, 'pre-action-operation.json'), action.beforeAction);
     const terminalA = await bounded(originalA.nativeTerminal, 25000, 'A did not settle');
+    // Native terminal IPC can arrive before the ancestor's forwarded stderr.
+    // Settle the original ancestor and its pipes before inspecting those bytes.
+    const proofA = await settle(a, originalA, idA, false);
+    assert.equal(hash(originalA.agent.output().stderr), terminalA.stderrSha256);
     checkPrefix(a, originalA, recordA);
     const consumerA = checkConsumer(a, recordA);
     assert.match(
@@ -1484,7 +1488,6 @@ if (process.argv[2] === '--agent-child') {
       assert.deepEqual(observed, retainedBefore, 'A custody changed during other admission');
       put(path.join(a.directory, label + '-retained-A.json'), observed);
     };
-    const proofA = await settle(a, originalA, idA, false);
     await writerProbe(a, 'retained');
     assertOwner('after-A');
 
