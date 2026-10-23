@@ -7276,6 +7276,26 @@ Additional bounded evidence and unresolved dependencies:
   `publication-integration/ts-prefix-observation-*` and
   `publication-integration/actual-session-publication-fixture-04`.
 
+- E271: The native publication source lands on local `main` at `6defc8aa`
+  through child merge `1e88c3c9` and publication-parent merge `65a9c686`. The
+  final gates evaluate 50 changed paths and pass after admitting the exact typed
+  SessionEnd preparation and its tests. Runtime source blobs match the actual
+  frontend 04 candidate; inherited test-preparation package scripts and one test
+  configuration are the only changed pins in that check's TS inventory. Child
+  evidence 12189–12191 remains unchecked, and its superseded disposition
+  transfers the unfinished integration to the active publication parent rather
+  than claiming completion. Parent records 12200 and 12225 retain root
+  ownership.
+
+  The next decisive runtime scenario is actual warm Render A → native SessionEnd
+  → Render B, with each original request bound to its exact Prepared/backend and
+  the original native worker's observed kernel birth. Event order without a
+  synchronized contender cannot independently prove uninterrupted writer
+  custody; B's ordinary current-generation publication remains a separate check.
+  SQL CLOSED-to-publication, more than 256 real original operations, the full
+  residency workload, package adoption and rollback remain required. The landed
+  slice does not change the selected machine runtime.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
