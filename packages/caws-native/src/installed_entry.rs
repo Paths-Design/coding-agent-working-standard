@@ -5,13 +5,14 @@
 //! the executed legacy generation. A failed native invocation never takes that route.
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 const SCHEMA: &str = "caws.runtime.native-entry.v1";
 const METADATA: &str = "native-entry.json";
@@ -100,15 +101,100 @@ pub struct Selection {
     pub inspected_digest: String,
     manifest: BTreeMap<String, String>,
     route: Route,
+    expires: Instant,
 }
 
+/// One caller-owned expiry and cancellation callback for the complete operation.
+/// Checkpoints bracket bounded I/O; they cannot interrupt a stalled kernel syscall.
+pub(crate) struct Verification<'a> {
+    expires: Instant,
+    cancel: &'a mut dyn FnMut() -> Result<(), String>,
+    #[cfg(test)]
+    pub(crate) on_chunk: Option<Box<dyn FnMut(&Path, u64) + 'a>>,
+}
+impl<'a> Verification<'a> {
+    pub(crate) fn new(expires: Instant, cancel: &'a mut dyn FnMut() -> Result<(), String>) -> Self {
+        Self {
+            expires,
+            cancel,
+            #[cfg(test)]
+            on_chunk: None,
+        }
+    }
+    pub(crate) fn expires(&self) -> Instant {
+        self.expires
+    }
+    pub(crate) fn checkpoint(&mut self) -> Result<(), String> {
+        (self.cancel)()?;
+        if Instant::now() >= self.expires {
+            return Err("Runtime verification deadline expired".into());
+        }
+        Ok(())
+    }
+}
+
+/// Exact native metadata; never project nanosecond stamps through a JS number.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct MemberMetadata {
+    pub dev: u64,
+    pub ino: u64,
+    pub size: u64,
+    pub mode: u32,
+    pub nlink: u64,
+    pub uid: u32,
+    pub gid: u32,
+    pub mtime: i64,
+    pub mtime_nsec: i64,
+    pub ctime: i64,
+    pub ctime_nsec: i64,
+}
+impl MemberMetadata {
+    fn of(m: &fs::Metadata) -> Self {
+        Self {
+            dev: m.dev(),
+            ino: m.ino(),
+            size: m.size(),
+            mode: m.mode(),
+            nlink: m.nlink(),
+            uid: m.uid(),
+            gid: m.gid(),
+            mtime: m.mtime(),
+            mtime_nsec: m.mtime_nsec(),
+            ctime: m.ctime(),
+            ctime_nsec: m.ctime_nsec(),
+        }
+    }
+    pub(crate) fn read(
+        path: &Path,
+        directory: bool,
+        verify: &mut Verification<'_>,
+    ) -> Result<Self, String> {
+        let m = path_metadata(path, verify)?;
+        if if directory { !m.is_dir() } else { !m.is_file() } {
+            return Err("Admitted generation path type changed".into());
+        }
+        Ok(Self::of(&m))
+    }
+}
+fn path_metadata(path: &Path, verify: &mut Verification<'_>) -> Result<fs::Metadata, String> {
+    verify.checkpoint()?;
+    let result = fs::symlink_metadata(path);
+    verify.checkpoint()?;
+    result.map_err(|e| format!("Generation path unavailable {}: {e}", path.display()))
+}
+fn file_metadata(file: &File, verify: &mut Verification<'_>) -> Result<fs::Metadata, String> {
+    verify.checkpoint()?;
+    let result = file.metadata();
+    verify.checkpoint()?;
+    result.map_err(|e| e.to_string())
+}
 fn valid_digest(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
-fn confined(root: &Path, relative: &str) -> Result<PathBuf, String> {
+fn relative_path(relative: &str) -> Result<&Path, String> {
     if relative.is_empty()
         || relative.contains(['\0', '\\'])
         || relative
@@ -124,155 +210,248 @@ fn confined(root: &Path, relative: &str) -> Result<PathBuf, String> {
     {
         return Err(format!("Path escapes generation: {relative:?}"));
     }
+    Ok(suffix)
+}
+fn confined(root: &Path, relative: &str, verify: &mut Verification<'_>) -> Result<PathBuf, String> {
+    verify.checkpoint()?;
+    let suffix = relative_path(relative)?;
     let mut cursor = root.to_path_buf();
     for part in std::iter::once(None).chain(suffix.components().map(Some)) {
         if let Some(part) = part {
             cursor.push(part.as_os_str());
         }
-        let metadata = fs::symlink_metadata(&cursor)
-            .map_err(|e| format!("Generation path unavailable {}: {e}", cursor.display()))?;
-        if metadata.file_type().is_symlink() {
+        if path_metadata(&cursor, verify)?.file_type().is_symlink() {
             return Err(format!("Refusing symlink: {}", cursor.display()));
         }
     }
     Ok(cursor)
 }
-fn open_regular(path: &Path) -> Result<File, String> {
-    let file = OpenOptions::new()
+fn open_regular(
+    path: &Path,
+    verify: &mut Verification<'_>,
+) -> Result<(File, MemberMetadata), String> {
+    let before = MemberMetadata::read(path, false, verify)?;
+    verify.checkpoint()?;
+    let result = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
-        .open(path)
-        .map_err(|e| format!("Cannot open {}: {e}", path.display()))?;
-    if !file.metadata().map_err(|e| e.to_string())?.is_file() {
-        return Err(format!("Not a regular file: {}", path.display()));
+        .open(path);
+    verify.checkpoint()?;
+    let file = result.map_err(|e| format!("Cannot open {}: {e}", path.display()))?;
+    let opened = file_metadata(&file, verify)?;
+    if !opened.is_file() || MemberMetadata::of(&opened) != before {
+        return Err(format!("Runtime file identity changed: {}", path.display()));
     }
-    Ok(file)
+    Ok((file, before))
 }
-fn read_bounded(path: &Path, maximum: u64) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    open_regular(path)?
-        .take(maximum + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
-    if bytes.len() as u64 > maximum {
+/// Read no more than the observed initial size. Growth is detected by post-read
+/// fd/path metadata, never by following a growing EOF. Payload retention has a
+/// separate reviewed maximum; hashing keeps only one 64KiB chunk.
+fn read_regular(
+    path: &Path,
+    maximum: Option<u64>,
+    verify: &mut Verification<'_>,
+    mut consume: impl FnMut(&[u8]),
+) -> Result<(), String> {
+    let (mut file, before) = open_regular(path, verify)?;
+    if maximum.is_some_and(|maximum| before.size > maximum) {
         return Err(format!("File exceeds bound: {}", path.display()));
     }
+    let mut count = 0u64;
+    let mut buffer = [0u8; 65536];
+    while count < before.size {
+        verify.checkpoint()?;
+        let remaining = (before.size - count).min(buffer.len() as u64) as usize;
+        let result = file.read(&mut buffer[..remaining]);
+        verify.checkpoint()?;
+        let length = result.map_err(|e| e.to_string())?;
+        if length == 0 {
+            return Err(format!("Runtime file truncated: {}", path.display()));
+        }
+        count += length as u64; // length <= before.size - count
+        #[cfg(test)]
+        if let Some(hook) = verify.on_chunk.as_mut() {
+            hook(path, count);
+        }
+        verify.checkpoint()?;
+        consume(&buffer[..length]);
+        verify.checkpoint()?;
+    }
+    let after = file_metadata(&file, verify)?;
+    let named = MemberMetadata::read(path, false, verify)?;
+    if MemberMetadata::of(&after) != before || named != before {
+        return Err(format!("Runtime file identity changed: {}", path.display()));
+    }
+    verify.checkpoint()
+}
+fn read_bounded(
+    path: &Path,
+    maximum: u64,
+    verify: &mut Verification<'_>,
+) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    read_regular(path, Some(maximum), verify, |chunk| {
+        bytes.extend_from_slice(chunk)
+    })?;
     Ok(bytes)
 }
-fn file_digest(path: &Path) -> Result<String, String> {
-    let mut input = open_regular(path)?;
+fn file_digest(path: &Path, verify: &mut Verification<'_>) -> Result<String, String> {
     let mut hash = Sha256::new();
-    let mut buffer = [0u8; 65536];
-    loop {
-        let length = input.read(&mut buffer).map_err(|e| e.to_string())?;
-        if length == 0 {
-            break;
-        }
-        hash.update(&buffer[..length]);
-    }
+    read_regular(path, None, verify, |chunk| hash.update(chunk))?;
     Ok(format!("{:x}", hash.finalize()))
 }
-fn verify_files(root: &Path, manifest: &BTreeMap<String, String>) -> Result<(), String> {
+fn verify_files(
+    root: &Path,
+    manifest: &BTreeMap<String, String>,
+    verify: &mut Verification<'_>,
+) -> Result<(), String> {
+    // The already byte-bounded manifest determines every permitted directory.
+    // Do not recurse into undeclared empty trees or invent a full-image byte cap.
+    let mut directories = BTreeSet::new();
+    for relative in manifest.keys() {
+        verify.checkpoint()?;
+        let mut parent = relative_path(relative)?.parent();
+        while let Some(path) = parent {
+            verify.checkpoint()?;
+            if path.as_os_str().is_empty() {
+                break;
+            }
+            directories.insert(path.to_path_buf());
+            parent = path.parent();
+        }
+    }
     for (relative, expected) in manifest {
+        verify.checkpoint()?;
         if !valid_digest(expected) {
             return Err(format!("Invalid member digest: {relative}"));
         }
-        let file = confined(root, relative)?;
-        if file_digest(&file)? != *expected {
+        let file = confined(root, relative, verify)?;
+        if file_digest(&file, verify)? != *expected {
             return Err(format!("Runtime member integrity failure: {relative}"));
         }
     }
     if manifest.contains_key(METADATA) {
-        let modes: BTreeMap<String, u32> = serde_json::from_slice(&read_bounded(
-            &confined(root, "native-modes.json")?,
-            MAX_MANIFEST,
-        )?)
-        .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
+        let mode_file = confined(root, "native-modes.json", verify)?;
+        let modes: BTreeMap<String, u32> =
+            serde_json::from_slice(&read_bounded(&mode_file, MAX_MANIFEST, verify)?)
+                .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
+        verify.checkpoint()?;
         if modes.keys().ne(manifest.keys()) || !manifest.contains_key("native/caws-hook-native") {
             return Err(
                 "Native mode inventory differs from manifest or lacks entry identity".into(),
             );
         }
-        fn visit(
-            root: &Path,
-            current: &Path,
-            actual: &mut Vec<String>,
-            modes: &BTreeMap<String, u32>,
-        ) -> Result<(), String> {
-            for entry in fs::read_dir(current).map_err(|e| e.to_string())? {
+        let mut pending = vec![root.to_path_buf()];
+        let mut actual = BTreeSet::new();
+        while let Some(current) = pending.pop() {
+            verify.checkpoint()?;
+            let result = fs::read_dir(&current);
+            verify.checkpoint()?;
+            let mut entries = result.map_err(|e| e.to_string())?;
+            loop {
+                verify.checkpoint()?;
+                let next = entries.next();
+                verify.checkpoint()?;
+                let Some(entry) = next else {
+                    break;
+                };
                 let path = entry.map_err(|e| e.to_string())?.path();
-                let stat = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+                let relative = path
+                    .strip_prefix(root)
+                    .map_err(|e| e.to_string())?
+                    .to_str()
+                    .ok_or("Native image paths must be UTF-8")?
+                    .to_owned();
+                let stat = path_metadata(&path, verify)?;
                 if stat.is_dir() {
-                    visit(root, &path, actual, modes)?;
-                } else {
-                    let relative = path
-                        .strip_prefix(root)
-                        .map_err(|e| e.to_string())?
-                        .to_str()
-                        .ok_or("Native image paths must be UTF-8")?
-                        .to_owned();
-                    if !stat.is_file() || stat.nlink() != 1 {
-                        return Err(format!("Unsupported native runtime member: {relative}"));
+                    if !directories.contains(Path::new(&relative)) {
+                        return Err(format!("Undeclared native runtime directory: {relative}"));
                     }
-                    if relative == "manifest.json" {
-                        if stat.permissions().mode() & 0o7777 != 0o644 {
-                            return Err("Native manifest mode mismatch".into());
-                        }
-                        continue;
-                    }
-                    let expected = modes
-                        .get(&relative)
-                        .ok_or_else(|| format!("Undeclared native runtime member: {relative}"))?;
-                    if ![0o644, 0o755].contains(expected)
-                        || stat.permissions().mode() & 0o7777 != *expected
-                    {
-                        return Err(format!("Native runtime mode mismatch: {relative}"));
-                    }
-                    actual.push(relative);
+                    pending.push(path);
+                    continue;
                 }
+                if !stat.is_file() || stat.nlink() != 1 {
+                    return Err(format!("Unsupported native runtime member: {relative}"));
+                }
+                if relative == "manifest.json" {
+                    if stat.permissions().mode() & 0o7777 != 0o644 {
+                        return Err("Native manifest mode mismatch".into());
+                    }
+                    continue;
+                }
+                let expected = modes
+                    .get(&relative)
+                    .ok_or_else(|| format!("Undeclared native runtime member: {relative}"))?;
+                if ![0o644, 0o755].contains(expected)
+                    || stat.permissions().mode() & 0o7777 != *expected
+                {
+                    return Err(format!("Native runtime mode mismatch: {relative}"));
+                }
+                actual.insert(relative);
             }
-            Ok(())
         }
-        let mut actual = Vec::new();
-        visit(root, root, &mut actual, &modes)?;
-        actual.sort();
         if actual.iter().ne(manifest.keys()) {
             return Err("Native runtime inventory differs from manifest".into());
         }
     }
-    Ok(())
+    verify.checkpoint()
 }
 
 impl Selection {
     pub fn read(home: &Path) -> Result<Self, String> {
+        // The installed entry precedes Config. Reuse its existing maximum
+        // native timeout; command revalidation retains this original expiry.
+        let expires = Instant::now() + Duration::from_millis(120_000);
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires, &mut cancel);
+        verify.checkpoint()?;
         if !home.is_absolute() {
             return Err("CAWS_HOME must be absolute".into());
         }
-        let pointer_file = confined(home, "state/adapter-runtime.json")?;
-        let pointer: Pointer = serde_json::from_slice(&read_bounded(&pointer_file, MAX_METADATA)?)
-            .map_err(|e| format!("Malformed runtime pointer: {e}"))?;
+        let pointer_file = confined(home, "state/adapter-runtime.json", &mut verify)?;
+        let pointer: Pointer =
+            serde_json::from_slice(&read_bounded(&pointer_file, MAX_METADATA, &mut verify)?)
+                .map_err(|e| format!("Malformed runtime pointer: {e}"))?;
         if pointer.version != 1 || !valid_digest(&pointer.digest) {
             return Err("Malformed runtime pointer".into());
         }
-        let root = confined(home, &format!("lib/runtimes/{}", pointer.digest))?;
-        let manifest_file = confined(&root, "manifest.json")?;
-        let bytes = read_bounded(&manifest_file, MAX_MANIFEST)?;
-        if format!("{:x}", Sha256::digest(&bytes)) != pointer.digest {
+        Self::read_generation(home, &pointer.digest, &mut verify)
+    }
+
+    /// Verify this exact generation. This path never reads the runtime pointer.
+    pub(crate) fn read_generation(
+        home: &Path,
+        digest: &str,
+        verify: &mut Verification<'_>,
+    ) -> Result<Self, String> {
+        verify.checkpoint()?;
+        if !home.is_absolute() || !valid_digest(digest) {
+            return Err("Invalid exact runtime generation".into());
+        }
+        let root = confined(home, &format!("lib/runtimes/{digest}"), verify)?;
+        let manifest_file = confined(&root, "manifest.json", verify)?;
+        let bytes = read_bounded(&manifest_file, MAX_MANIFEST, verify)?;
+        if format!("{:x}", Sha256::digest(&bytes)) != digest {
             return Err("Runtime manifest integrity failure".into());
         }
         let manifest: BTreeMap<String, String> = serde_json::from_slice(&bytes)
             .map_err(|e| format!("Malformed runtime manifest: {e}"))?;
+        verify.checkpoint()?;
         if !manifest
             .get("launcher.py")
             .is_some_and(|value| valid_digest(value))
         {
             return Err("Version-1 manifest lacks the legacy driver identity".into());
         }
-        verify_files(&root, &manifest)?;
+        verify_files(&root, &manifest, verify)?;
         let route = if manifest.contains_key(METADATA) {
-            let entry: NativeEntry =
-                serde_json::from_slice(&read_bounded(&confined(&root, METADATA)?, MAX_METADATA)?)
-                    .map_err(|e| format!("Malformed native entry: {e}"))?;
+            let entry: NativeEntry = serde_json::from_slice(&read_bounded(
+                &confined(&root, METADATA, verify)?,
+                MAX_METADATA,
+                verify,
+            )?)
+            .map_err(|e| format!("Malformed native entry: {e}"))?;
+            verify.checkpoint()?;
             if entry.schema != SCHEMA || !(1..=120_000).contains(&entry.timeout_ms) {
                 return Err("Unsupported native entry schema or timeout".into());
             }
@@ -285,11 +464,10 @@ impl Selection {
                 if !manifest.contains_key(name) {
                     return Err(format!("Native entry asset is not in manifest: {name}"));
                 }
-                confined(&root, name)?;
+                confined(&root, name, verify)?;
             }
             for name in [&entry.native_executable, &entry.node_executable] {
-                if fs::metadata(confined(&root, name)?)
-                    .map_err(|e| e.to_string())?
+                if path_metadata(&confined(&root, name, verify)?, verify)?
                     .permissions()
                     .mode()
                     & 0o111
@@ -300,7 +478,10 @@ impl Selection {
             }
             Route::Native(entry)
         } else {
-            if fs::symlink_metadata(root.join(METADATA)).is_ok() {
+            verify.checkpoint()?;
+            let metadata_exists = fs::symlink_metadata(root.join(METADATA));
+            verify.checkpoint()?;
+            if metadata_exists.is_ok() {
                 return Err(
                     "Untracked native entry metadata cannot select legacy compatibility".into(),
                 );
@@ -309,24 +490,70 @@ impl Selection {
                 return Err("Unrecognized legacy generation: no verified bootstrap".into());
             }
             Route::Legacy {
-                bootstrap: confined(&root, "bootstrap.py")?,
+                bootstrap: confined(&root, "bootstrap.py", verify)?,
             }
         };
+        verify.checkpoint()?;
         Ok(Self {
             root,
-            inspected_digest: pointer.digest,
+            inspected_digest: digest.to_owned(),
             manifest,
             route,
+            expires: verify.expires,
         })
+    }
+
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub(crate) fn members(&self) -> &BTreeMap<String, String> {
+        &self.manifest
+    }
+
+    pub(crate) fn member_path(
+        &self,
+        relative: &str,
+        verify: &mut Verification<'_>,
+    ) -> Result<PathBuf, String> {
+        verify.checkpoint()?;
+        if !self.manifest.contains_key(relative) {
+            return Err("Runtime member was not admitted".into());
+        }
+        confined(&self.root, relative, verify)
+    }
+
+    pub(crate) fn native_paths(
+        &self,
+        verify: &mut Verification<'_>,
+    ) -> Result<(PathBuf, PathBuf, PathBuf), String> {
+        verify.checkpoint()?;
+        let Route::Native(entry) = &self.route else {
+            return Err("Exact generation has no native entry".into());
+        };
+        Ok((
+            self.member_path(&entry.native_executable, verify)?,
+            self.member_path(&entry.node_executable, verify)?,
+            self.member_path(&entry.engine_entry, verify)?,
+        ))
+    }
+
+    pub(crate) fn revalidate(&self, verify: &mut Verification<'_>) -> Result<(), String> {
+        verify.checkpoint()?;
+        if file_digest(&confined(&self.root, "manifest.json", verify)?, verify)?
+            != self.inspected_digest
+        {
+            return Err("Selected manifest changed before launch".into());
+        }
+        verify_files(&self.root, &self.manifest, verify)
     }
 
     pub(crate) fn command(&self, invocation: &Invocation) -> Result<Command, String> {
         // Recheck the selected generation, never the pointer. This detects changes
         // before this launch attempt; it does not claim custody of future imports.
-        if file_digest(&confined(&self.root, "manifest.json")?)? != self.inspected_digest {
-            return Err("Selected manifest changed before launch".into());
-        }
-        verify_files(&self.root, &self.manifest)?;
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(self.expires, &mut cancel);
+        self.revalidate(&mut verify)?;
         match &self.route {
             Route::Legacy { bootstrap } => {
                 let mut command = Command::new("python3");
@@ -340,8 +567,9 @@ impl Selection {
                     "project"
                 };
                 let mut command = if invocation.describe {
-                    let mut command = Command::new(confined(&self.root, &entry.node_executable)?);
-                    command.arg(confined(&self.root, &entry.describe_entry)?);
+                    let mut command =
+                        Command::new(confined(&self.root, &entry.node_executable, &mut verify)?);
+                    command.arg(confined(&self.root, &entry.describe_entry, &mut verify)?);
                     // Transport original context as inert data before removing loader inputs.
                     // The entry overwrites any caller-supplied value of this private channel.
                     let environment = std::env::vars_os()
@@ -375,13 +603,14 @@ impl Selection {
                     command.env("CAWS_NATIVE_DESCRIBE_CONTEXT", context);
                     command
                 } else {
-                    let mut command = Command::new(confined(&self.root, &entry.native_executable)?);
+                    let mut command =
+                        Command::new(confined(&self.root, &entry.native_executable, &mut verify)?);
                     command
                         .arg("invoke")
                         .arg("--engine")
-                        .arg(confined(&self.root, &entry.engine_entry)?)
+                        .arg(confined(&self.root, &entry.engine_entry, &mut verify)?)
                         .arg("--node")
-                        .arg(confined(&self.root, &entry.node_executable)?)
+                        .arg(confined(&self.root, &entry.node_executable, &mut verify)?)
                         .arg("--timeout-ms")
                         .arg(entry.timeout_ms.to_string());
                     command
