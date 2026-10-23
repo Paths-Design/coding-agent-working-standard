@@ -2,7 +2,6 @@ id: CAWS-NATIVE-TEST-PREPARATION-001
 title: 'Prepare native and qualification helper prerequisites for ordinary tests'
 mode: fix
 lifecycle_state: active
-worktree: native-test-preparation
 created_at: '2026-10-23T06:26:43.506Z'
 updated_at: '2026-10-23T09:03:28.806Z'
 created_by_session: '01a166d3-36ad-71a3-83a1-a1b8a6e32a7c'
