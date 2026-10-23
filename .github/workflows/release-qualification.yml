@@ -31,6 +31,8 @@ jobs:
         run: |
           rustup toolchain install 1.90.0 --profile minimal
           cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
+      - name: Exercise native image admission on Linux system paths
+        run: cargo +1.90.0 test --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --lib service_image --jobs 2 -- --test-threads=1
       - run: npm run audit:dependencies --workspaces=false
       - run: npm run build -w @paths.design/caws-cli
         id: build

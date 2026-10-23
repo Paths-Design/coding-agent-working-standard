@@ -7393,10 +7393,9 @@ Additional bounded evidence and unresolved dependencies:
   unchanged hooks and source pins, exit 0 in 326.763 seconds and no remaining
   process group. Typecheck, lint, audit and build pass; the full Jest run passes
   347 suites with 6685 passing and 13 skipped checks. The retained execution,
-  stdout, stderr and process observations live under
-  `publication-integration/main-push-04`. Remote ref readback matches the pushed
-  revision. This completes that source-delivery attempt, not hosted
-  qualification.
+  stdout, stderr and process observations live under `main-push-04`. Remote ref
+  readback matches the pushed revision. This completes that source-delivery
+  attempt, not hosted qualification.
 
   Hosted Release Qualification run `39946247481` on that exact revision passes
   native context Git custody but fails candidate tests/contracts and all six
@@ -7479,6 +7478,57 @@ Additional bounded evidence and unresolved dependencies:
   earlier HEAD values identify dirty-checkout bases, not different production
   candidates; retained byte identities establish the connection. Full package
   upgrade and selected installation remain unverified.
+
+- E279: Hosted fixture repair `c01450eb` carries the exact reviewed historical
+  agent-surface bytes in a hash-checked fixture; a historical Git object is no
+  longer an execution dependency. Ordinary heartbeat setup removes inherited
+  loader variables while hostile cases explicitly restore them. The whole stock
+  handler file passes 81 checks; an explicit ambient `LD_LIBRARY_PATH` run
+  passes the three positive and four loader-refusal cases. Raw execution and
+  committed byte joins live under
+  `publication-integration/hosted-stock-fixture-*`.
+
+  Image repair `3c4c9fa0` independently resolves fixed `/bin/bash` and `/bin/sh`
+  system aliases in TypeScript and Rust. Candidate paths must equal the physical
+  targets and retain existing no-follow, hash, executable and identity checks;
+  arbitrary aliases and copied binaries remain refused. The ordinary CLI build
+  exits 0; focused image/offer checks pass 143 cases with ten existing reviewed
+  profile skips. Native feature-off image checks pass 31 cases. The initial
+  missing-import compilation failure is retained separately; no tests ran in
+  that failed attempt. `publication-integration/source-shell-target-native-02/`
+  joins the passing raw checks and committed four-file blobs. This is current
+  macOS evidence; the workflow adds the same focused native admission check to
+  its Ubuntu candidate job for decisive Linux execution.
+
+- E280: Warm attempt 04 reaches B but fails the tool/assistant order assertion.
+  Its input gives all events in each turn the same timestamp. SessionEnd's two
+  legitimate hook records activate the reviewed renderer's chronological merge;
+  its equal-time priority places assistant text before tool use. The unchanged
+  raw attempt and additive source-derived diagnosis are retained under
+  `publication-integration/warm-render-actual-04{,-diagnosis-01}`. The qualifier
+  preserves its semantic order assertion and gives warm input distinct monotone
+  timestamps in `f20e85ae`; the default fixture grammar remains unchanged.
+
+  `warm-render-execution-05` runs tools05 against the pinned build02 native
+  image and current compiled CLI, exit 0 in 22.159 seconds, unchanged source
+  pins, no signals and no remaining process group. Under
+  `warm-render-actual-05`, `request-{1,2}/semantic-turns.json` retains actual
+  user text, correlated tool calls/results, assistant text, exact env model and
+  all seven positive usage fields. `session-end/metadata.bin` carries exact
+  counts 100/30/7/5/20/11/130; `marker.bin` binds metadata, retained index and A
+  turn. The ordinary consumer journal and compact durable CONSUMED record share
+  terminal digest
+  `536c5f37987cf1f92bb50e36b3f75b89bd225692629dea38f29ee65f84a2a2d9`. A's
+  worker/backend tuple 19726/19729 is reaped with both EOFs and its birth is
+  absent before B's new tuple 22898/22901. All three original native requests
+  have settled custody; final cleanup is confirmed inactive with two exact
+  worker creation/cleanup/exit tuples, absent socket and free custody.
+
+  This completes the bounded warm continuation probe through the reviewed copied
+  Render profile and sole stock SessionEnd handler. It does not qualify deployed
+  harness callbacks, SQL Render activation, B's current publication marker, a
+  nonempty Codex model union, continuous exclusion under a competing writer,
+  concurrent fairness, legacy Render compaction or machine adoption.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -7586,21 +7636,20 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                      | Next decisive check                                                                                                                                                            |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns package JSON repair and landing; native-context-git investigates the separate hosted candidate failure                     | Exact repaired candidate pack/upgrade and unchanged hosted checks, then a fresh installed package/image join and actual native refusal/rollback observations                   |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration owns warm inventory qualification; source-progress identifies the real Render observation prerequisite | Complete actual warm Render A → SessionEnd → Render B, then actual SQL CLOSED-to-publication with real context/calendar inputs and ordinary semantic consumption               |
-| Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                                | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
+| Integrated outcome                                                                   | Execution owner                                                                                                                     | Next decisive check                                                                                                                                                            |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coherent source and package delivery, isolated invocation and rollback               | Root lands package, fixture, physical-shell and artifact-retention repairs                                                          | Exact repaired candidate pack/upgrade and hosted Linux native admission, then a fresh installed package/image join and actual native refusal/rollback observations             |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration completed the bounded warm probe; source-progress identified the real Render observation prerequisite | Real Git/context and calendar producers, then actual SQL CLOSED-to-publication with ordinary semantic consumption and matched native/TS activation                             |
+| Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                               | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
-third warm attempt retains settled custody but stops at the complete-marker
-inventory oracle before B. Derive the expected retained index and turn inventory
-from the producer and ordinary reader before the next actual probe. The SQL
-adapter is committed but its production observation inputs and selector remain
-unwired. Existing successful-operation compaction and shared-permit release
-require the sustained actual workload before residency acceptance. Package
-adoption, Python retirement and machine cutover acceptance remain open.
+E280 bounded fifth warm probe completes, retaining earlier failed attempts and
+source-grounded oracle/input corrections. The SQL adapter is committed but its
+production observation inputs and selector remain unwired. Existing
+successful-operation compaction and shared-permit release require the sustained
+actual workload before residency acceptance. Package adoption, Python retirement
+and machine cutover acceptance remain open.
 
 1. Refresh complete source/build/dependency identities after E188, including
    both the engine and the selected CLI entry. The CLI entry imports commander
