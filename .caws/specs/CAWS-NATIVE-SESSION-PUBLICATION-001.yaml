@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-publication
 created_at: '2026-10-22T07:45:38.932Z'
-updated_at: '2026-10-23T11:05:46.670Z'
+updated_at: '2026-10-23T13:51:15.675Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -64,6 +64,10 @@ scope:
     - packages/caws-cli/tests/ci/mutation-contract.test.js
     - packages/caws-native/src/service_image.rs
     - packages/caws-cli/src/runtime/session-store-publication.ts
+    - packages/caws-cli/src/runtime/render-observation-client.ts
+    - packages/caws-cli/src/runtime/render-observation-wire.ts
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/render_context.rs
   out: []
 invariants:
   - 'Only independently captured original invocation and native custody authorize destination effects; prepared bytes and correlation grant none'
