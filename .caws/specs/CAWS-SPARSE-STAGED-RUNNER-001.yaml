@@ -47,3 +47,9 @@ non_functional: {}
 contracts:
   - name: 'staged-commit-checks'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Clean committed Node17 at38691bc2: valid staged-only sparse spec remains absent, skip-worktree and index bytes unchanged; real source formatting/restaging succeeds. Read exact test assertions and retained fixture/log receipt. Normal candidate commit uses unchanged hook. No absent ordinary source is silently skipped; explicit refusal covered."
+    recorded_at: "2026-10-23T10:04:37.526Z"
+    commit_sha: "38691bc25be1dfe3ad74f216baf224576c936cee"
