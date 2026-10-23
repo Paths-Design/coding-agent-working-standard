@@ -36,3 +36,9 @@ non_functional: {}
 contracts:
   - name: 'license-ownership-recovery'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed4cec500a exact tested bytes: 45cases exit0 at /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/license-transport-recovery/tests-02. Same artifact root actual-marker-before.json, actual-marker-after.json, context-git-original-marker.json and actual-normal-lifecycle.json inspected: exact SHA44f6240e retained, LICENSE identity and bytes unchanged, ordinary cleanup and restage exit0; ../context-git-custody/ts-injection-build-02 normal npm run build exit0. Independent review grounded. Commit existence is rederived here; behavioral verdict derives from inspected execution and assertions, not --verify. No adversarial atomic rename or reboot-cause claim."
+    recorded_at: "2026-10-23T06:10:38.152Z"
+    commit_sha: "4cec500a54e7910f15a3fcf10b1d54722d32ba06"
