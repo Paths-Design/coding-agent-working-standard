@@ -1,0 +1,133 @@
+id: NATIVE-SELECTION-READ-IO-001
+title: 'Run invocation selection through bounded immutable read observations'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded selection read abstraction accepted from committed a0d30c27 and retained source/emitted-pinned checks. All eight component criteria recorded and read back. Default live semantics preserved; captured observations grant no native admission, freshness, publication or cutover authority. Parent modernization continues in native-session-publication.'
+created_at: '2026-10-23T20:11:12.480Z'
+updated_at: '2026-10-23T21:24:47.474Z'
+created_by_session: '01a16a40-3acd-7cd0-a124-4dfaf35c69f8'
+blast_radius:
+  modules:
+    - 'Invocation selection and existing machine read owners'
+    - 'Immutable observation driver without native capability activation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/selection-read-io.ts'
+    - 'packages/caws-cli/src/init/machine-paths.ts'
+    - 'packages/caws-cli/src/init/machine-runtime-state.ts'
+    - 'packages/caws-cli/src/init/system-surface-settings.ts'
+    - 'packages/caws-cli/src/init/system-project-policy.ts'
+    - 'packages/caws-cli/src/runtime/selection.ts'
+    - 'packages/caws-cli/src/runtime/selection-observation.ts'
+    - 'packages/caws-cli/tests/init/selection-read-io.test.js'
+    - 'packages/caws-cli/tests/runtime/selection.test.js'
+    - 'packages/caws-cli/tests/runtime/selection-observation.test.js'
+  out: []
+invariants:
+  - 'Existing TypeScript owners exclusively interpret policy and default live reads preserve selection results and refusals.'
+  - 'Snapshot selection reads only immutable observations, retains negative and ancestry observations, and rejects replacement under the same identity.'
+  - 'Only successful complete runtime verification is memoized within one immutable observation snapshot; live and subsequent snapshots cannot borrow results.'
+  - 'Observation results confer no native admission, profile qualification, publication or machine adoption authority.'
+acceptance:
+  - id: A1
+    given: 'stock, machine, repository, legacy and inactive fixtures'
+    when: 'selection uses live reads and captured immutable observations'
+    then: 'complete selections or corresponding error types and messages agree'
+  - id: A2
+    given: 'valid captured observations'
+    when: 'snapshot selection runs with ambient filesystem reads poisoned'
+    then: 'selection uses only owned captured bytes metadata listings and recorded errors'
+  - id: A3
+    given: 'uncaptured operations or malformed replies'
+    when: 'the asynchronous observation driver executes'
+    then: 'only the private sentinel retries and bounded correlation no-progress and exhaustion checks terminate deterministically'
+  - id: A4
+    given: 'retained launcher discovery needs an uncaptured manifest'
+    when: 'verifiedProjectMachineEntry handles inspection errors'
+    then: 'the private sentinel reaches the driver while ordinary malformed-manifest handling is preserved'
+  - id: A5
+    given: 'complete runtime verification in an immutable snapshot'
+    when: 'discovery retries or another snapshot changes runtime bytes modes or inventory'
+    then: 'successful verification reuses only that snapshot and partial failures are never cached'
+  - id: A6
+    given: 'surface adapter selection and absent higher priority targets'
+    when: 'a fresh observation source adds a user adapter or an old observation is replaced'
+    then: 'fresh selection and readsets show changed absence inventory and ancestry while replacement under old identity is refused'
+  - id: A7
+    given: 'redirected paths special files changed read identity invalid link count or executable access refusal'
+    when: 'live and snapshot read contracts execute'
+    then: 'applicable refusals preserve file capture and access semantics without fabricated Stats'
+  - id: A8
+    given: 'the committed bounded IO slice'
+    when: 'build focused checks doctor gates and independent review are inspected'
+    then: 'evidence supports this read abstraction only and no engine capability or publication activation is introduced'
+observability:
+  - 'Returned observation readset identifies exact positive negative directory and ancestry inputs without authority claims.'
+rollback:
+  - 'Revert this isolated source commit through a normal forward revert; existing live adapter remains the default.'
+non_functional:
+  security:
+    - 'No ambient read fallback on a missing snapshot observation; no cache across snapshot identities.'
+contracts:
+  - name: 'selection-read-parity'
+    type: behavior
+  - name: 'immutable-observation-driver'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected live/snapshot parameterization of existing selection suite and EACCES/ENOTDIR semantic error comparisons; 59 executed checks. No native admission claim. Raw executed proof: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-committed-test-02/execution.json and stderr.log; source assertions inspected. Commit --verify checks citation existence, not these executions."
+    recorded_at: "2026-10-23T21:21:38.858Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/init/selection-read-io.test.js tests/runtime/selection.test.js tests/runtime/selection-observation.test.js"
+    exit_code: 0
+    commit_sha: a0d30c271132f76aa9b3a825f70687c623b16765
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected poisoned ambient filesystem replay, owned-byte mutation isolation, frozen public identity/private storage tests; captured selection equals live selection. Raw executed proof: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-committed-test-02/execution.json and stderr.log; source assertions inspected. Commit --verify checks citation existence, not these executions."
+    recorded_at: "2026-10-23T21:21:39.914Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/init/selection-read-io.test.js tests/runtime/selection.test.js tests/runtime/selection-observation.test.js"
+    exit_code: 0
+    commit_sha: a0d30c271132f76aa9b3a825f70687c623b16765
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Inspected private sentinel identity, request/correlation/replacement/count/byte exhaustion and cancelled pending capture assertions. Capture port retains deadline responsibility. Raw executed proof: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-committed-test-02/execution.json and stderr.log; source assertions inspected. Commit --verify checks citation existence, not these executions."
+    recorded_at: "2026-10-23T21:21:41.026Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/init/selection-read-io.test.js tests/runtime/selection.test.js tests/runtime/selection-observation.test.js"
+    exit_code: 0
+    commit_sha: a0d30c271132f76aa9b3a825f70687c623b16765
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Inspected retained-launcher manifest discovery test: recorded manifest observation and exact legacy-registration inactive result; private sentinel escapes catch. Raw executed proof: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-committed-test-02/execution.json and stderr.log; source assertions inspected. Commit --verify checks citation existence, not these executions."
+    recorded_at: "2026-10-23T21:21:42.196Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/init/selection-read-io.test.js tests/runtime/selection.test.js tests/runtime/selection-observation.test.js"
+    exit_code: 0
+    commit_sha: a0d30c271132f76aa9b3a825f70687c623b16765
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Inspected changed bytes/modes/inventory, once-per-observation hash, failed/incomplete memo, unrelated-verifier poisoning and swallowed-read tests. Prior swallowed-read falsifier exited1; repaired committed candidate passes. No cross-snapshot freshness authority. Raw executed proof: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-committed-test-02/execution.json and stderr.log; source assertions inspected. Commit --verify checks citation existence, not these executions."
+    recorded_at: "2026-10-23T21:21:43.316Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/init/selection-read-io.test.js tests/runtime/selection.test.js tests/runtime/selection-observation.test.js"
+    exit_code: 0
+    commit_sha: a0d30c271132f76aa9b3a825f70687c623b16765
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Inspected missing higher-priority target and ancestry/listing transition, exact user adapter hash, old identity replacement refusal. selection-scenario-03 exit0 retains 65/66 readsets and original replay. Raw executed proof: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-committed-test-02/execution.json and stderr.log; source assertions inspected. Commit --verify checks citation existence, not these executions."
+    recorded_at: "2026-10-23T21:21:44.434Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/init/selection-read-io.test.js tests/runtime/selection.test.js tests/runtime/selection-observation.test.js"
+    exit_code: 0
+    commit_sha: a0d30c271132f76aa9b3a825f70687c623b16765
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Inspected real symlink/directory/single-link and executable EACCES controls, pathname/open replacement and final-fd mutation controls with close assertions. Plain identity metadata and owned bytes replace Stats; existing live refusal semantics retained. Raw executed proof: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-committed-test-02/execution.json and stderr.log; source assertions inspected. Commit --verify checks citation existence, not these executions."
+    recorded_at: "2026-10-23T21:21:45.685Z"
+    command: "/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --selectProjects caws-cli --runInBand --runTestsByPath tests/init/selection-read-io.test.js tests/runtime/selection.test.js tests/runtime/selection-observation.test.js"
+    exit_code: 0
+    commit_sha: a0d30c271132f76aa9b3a825f70687c623b16765
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Committed a0d30c27 changes only ten read/policy/test paths; no engine capability or publication activation. Retained publication-integration artifacts: selection-build-02 exit0 and final selection-compile-03 exit0; selection-lint-03 exit0; selection-committed-test-02 59pass; selection-consumer-partition-02 338pass; selection-native-image-v2-01 30pass and selection-native-image-legacy-01 50pass cover all80 cases in complementary partitions with source/dist pins and no residue. Earlier full runs retain120s timeouts, not passes. Doctor0E4W5I; five gates pass all10changed paths. Independent committed review inspected new modules, not all tests/owners; root reproduced and repaired its swallowed-read finding, checked refusal consumers, and retained ordered-observation/non-atomic/freshness limits. No cutover, native admission, or full mutation claim. Raw receipts under /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/. Commit citation verification does not execute tests."
+    recorded_at: "2026-10-23T21:24:21.036Z"
+    commit_sha: a0d30c271132f76aa9b3a825f70687c623b16765
