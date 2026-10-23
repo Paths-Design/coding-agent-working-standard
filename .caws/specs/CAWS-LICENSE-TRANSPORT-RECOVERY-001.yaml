@@ -1,9 +1,10 @@
 id: CAWS-LICENSE-TRANSPORT-RECOVERY-001
 title: 'Relinquish stale generated license ownership without deleting retained files'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: license-transport-recovery
 created_at: '2026-10-23T05:27:15.334Z'
-updated_at: '2026-10-23T05:27:15.334Z'
+updated_at: '2026-10-23T05:27:25.008Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
