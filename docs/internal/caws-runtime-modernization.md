@@ -7669,6 +7669,64 @@ Additional bounded evidence and unresolved dependencies:
   production reader adopts it. The fixture must observe actual read start before
   testing late rejection.
 
+- E287: Hosted Release Qualification run `39969630432` on `5bf613cb` fails
+  native image admission: 38 checks pass and two prefix-eligibility checks fail.
+  Raw logs are retained in
+  `main-push-07/hosted-release-qualification-failed.log`. Direct comparison with
+  reviewed source `39c76f51` identifies two relevant stale pins: the advisory
+  helper changes only its generated provenance comment; the dispatcher uses
+  private per-handler stdin stages instead of a shared dispatch stage. Its
+  subshell-local paths, unlink-before-exec and link-refusal behavior preserve
+  the prefix mutation domains. Root owns the two-pin repair and fresh
+  local/hosted checks; unrelated profile entries are not refreshed. The local
+  full push exercises the staged/direct service-image transformation and hostile
+  call-shape controls. That does not establish native prefix eligibility or
+  hosted success. The two-pin repair's
+  `publication-integration/source-prefix-image-01` executes all forty native
+  `service_image` checks with locked, offline Rust 1.90 and two workers: exit 0
+  in 13.303s, stable source/tool pins and no remaining process group. The checks
+  include both previously failing positive cases and changed-source refusals.
+  This macOS observation does not replace a fresh hosted Linux run.
+
+  Calendar's first actual per-file mutation run detects 1000 of 1344 valid
+  mutants (74.40%), below its unchanged 80% floor. Publication-integration owns
+  semantic test repairs and a fresh score; passing parser comparisons do not
+  discharge that gap. Root also retains the activation blocker found during
+  carrier integration: Render Git children need launch-time custodian ownership
+  through frontend death. Native-context-git owns the bounded existing-custodian
+  extension after the carrier/permit-repair checkpoint; retaining a local
+  failure value or relying on Drop cannot establish durable process custody.
+
+- E288: Publication candidate `bb07099a` adds the original-bound Git/calendar
+  observation carrier; `9f10102a` separately refunds a fresh request's transient
+  permit at an established unknown fence only after durable lookup proves its
+  identity absent. `publication-integration/render-observation-js-03` exits 0 in
+  2.701s across 205 selected checks. The retained committed-source join maps all
+  six TypeScript/JavaScript files to the exact Jest and scoped-lint inputs, and
+  the four production TypeScript files to the normal build. Native
+  `native-render-observation-01` and `native-session-fence-02` exit 0 in 3.584s
+  and 13.371s, exercising eight carrier and nine actual Actor checks. Their
+  fixture teardown removes generated runtime directories; retained logs and
+  source pins do not establish installed execution or the complete native/TS
+  consumer chain. The carrier remains dormant pending launch-time Git custody,
+  native source acquisition and the actual renderer callback.
+
+  Inspection of the retained E280 warm scenario distinguishes rendering from
+  current publication admission: its final marker describes the seal's
+  generation, while Render B leaves `session-index.json` at 546 bytes instead of
+  the marker's 544 and adds an unlisted `turn-002.json`. The actual marker and
+  files remain under `publication-integration/warm-render-execution-05/tmp/`.
+  This is not evidence of B's current-generation ordinary consumption. Root owns
+  that integrated qualifier, including retained output inventory, semantic
+  consumer receipt and continuous writer custody through overlapping requests.
+
+  The calendar worker's stronger malformed-record control exposes a raw
+  TypeError from Array.isArray on a revoked Proxy. Scoped repair moves that
+  inspection inside the typed error boundary; strict compilation, 23 semantic
+  groups, the normal build and 32 direct Jest groups pass. The earlier failure
+  remains retained. Fresh mutation scoring, final source joining, independent
+  review and integration of the repaired calendar are outstanding.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
