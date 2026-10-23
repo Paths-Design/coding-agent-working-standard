@@ -7530,6 +7530,84 @@ Additional bounded evidence and unresolved dependencies:
   nonempty Codex model union, continuous exclusion under a competing writer,
   concurrent fairness, legacy Render compaction or machine adoption.
 
+- E281: Normal no-close merge `990e9b5a` lands the E276-E280 source, fixture,
+  physical-shell and archive repairs. The unchanged-hook normal push at
+  `4c5a894d` fails in 340.644 seconds: 6,693 Jest tests pass, thirteen remain
+  skipped and one CI contract test fails. That test expects the former raw
+  `release-scenarios/` upload path, while the workflow uploads
+  `hook-byte-artifacts.tgz`. Root retains the failed raw output, stable tracked
+  source pins and empty final process group under `main-push-05/`; remote main
+  has not received this candidate. The replacement oracle must execute the
+  archive step and inspect hostile symlink, hidden receipt and binary bytes,
+  preserving failure propagation and independent pytest execution.
+
+  Test repair `db48421f` executes the extracted workflow Bash block and real tar
+  listing/extraction. `publication-integration/release-workflow-tests-01/` exits
+  0 in 2.734 seconds with all four focused tests passing. The retained fixture
+  keeps `loop -> loop`, hidden receipt bytes `00fffe800a7f`, release bytes
+  `0100c3280d0a` and the successful archive. An output-directory conflict makes
+  the unchanged archive command fail nonzero. Supplemental input and commit
+  records bind the tested file, workflow and imported scripts; the physically
+  copied ignored CLI build matches canonical push05 sources and is explicitly
+  borrowed, not a new build. Hosted GNU tar/upload and the next full push remain
+  unverified.
+
+  Independent review identifies missing one-directory/empty-input coverage.
+  `release-workflow-tests-02` adds real hook-only, release-only and neither
+  cases; all four focused tests pass, exit 0 in 2.767 seconds, with unchanged
+  source/dependency pins and no remaining group. Directory-only cases retain
+  exact bytes; the empty case creates no archive. Listing checks permit benign
+  tar metadata while exact extracted bytes and symlink targets remain required.
+  The output-conflict refusal does not depend on platform-specific error text.
+  Retained fixtures deliberately remain in a distinct test directory for
+  inspection, including their archive and extracted hostile link.
+
+  Capacity qualifier `f31e8401` removes the derived admission-count field and
+  requires each original's actual owner observations in order: reservation,
+  writer retention, durable consumption and heavy release. The reservation
+  follows actual capacity acquisition; consumption precedes record removal and
+  writer release. `publication-integration/capacity-lifecycle-controls-01/`
+  retains 22 actual-source pure controls, including rejection of missing,
+  reordered, duplicate, wrong-original and spoofed lifecycle events. The
+  selected typed SessionEnd path spawns no shell helper; cleanup observations do
+  not claim arbitrary detached-descendant coverage. All 28 inspected prior
+  invocation directories retain terminal cleanup receipts, including killed
+  frontend cases. These observations do not establish the new sampler's timing
+  or 258-original completion. The first actual run retains the original
+  per-request and aggregate budgets, and partial completion cannot pass.
+
+- E282: `publication-integration/capacity-actual-01/` executes the reviewed
+  `f31e8401` qualifier with pinned native build02, current compiled CLI, tools05
+  and the native process observer. The supervisor exits 0 in 209.873 seconds;
+  source pins remain unchanged, all 258 originals complete, every strict
+  request-custody/cleanup result is settled/inactive, and the final observed
+  census is empty. No supervisor cleanup signal is needed. The qualifier
+  intentionally stops its original owner Child after the workload.
+
+  `fixture/result.json`, SHA
+  `172380268f12f80cafeac339525ddaa613cdd56e1798c5f32b6a321f1fce80da`, retains
+  258 distinct originals on owner PID 98305, with original birth
+  seconds/microseconds `1792759602/231522` and `maxRetainedRecords: 1`. Every
+  original has the four ordered lifecycle observations; root inspection confirms
+  each release precedes the next reservation. There are 268 discovered native
+  invocation directories, including the five default cases and their followups.
+  Every capacity ID joins a terminal cleanup receipt. Original 258,
+  `52826-1792759792120534000`, has exact ordinary-consumer counts/models,
+  terminal digest
+  `4cd3bae1a6eb298c6f49c7a5bf32601fe835730f5062ef9912c81437d48552d7`, an empty
+  heavy request in its durable consumed record, a current marker and a
+  successful writer-release probe. Earlier marker/tombstone bytes remain
+  unchanged after the last admission.
+
+  This establishes sequential successful-operation capacity reuse beyond 256
+  originals. It does not establish concurrent fairness, thirteen-session/four-
+  repository load, uninterrupted warm-writer exclusion under a contender,
+  restart/upgrade behavior at this scale, SQL Render activation, the eventual
+  combined package or machine adoption. Scanner observations cost 83.327 seconds
+  in aggregate, with a maximum sample of 0.337 seconds; this instrumented run is
+  not a production latency benchmark. A5 remains unchecked with this bounded
+  evidence recorded through the authoritative CLI.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7636,19 +7714,27 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                     | Next decisive check                                                                                                                                                            |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Coherent source and package delivery, isolated invocation and rollback               | Root lands package, fixture, physical-shell and artifact-retention repairs                                                          | Exact repaired candidate pack/upgrade and hosted Linux native admission, then a fresh installed package/image join and actual native refusal/rollback observations             |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root; publication-integration completed the bounded warm probe; source-progress identified the real Render observation prerequisite | Real Git/context and calendar producers, then actual SQL CLOSED-to-publication with ordinary semantic consumption and matched native/TS activation                             |
-| Resident operation with fair, bounded capacity                                       | Root; native-context-git owns the repeated-original qualifier and terminal accounting                                               | More than 256 real originals on one live owner, then thirteen sessions across four repositories with independent enforcement, fairness, overload, restart and upgrade evidence |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                | Next decisive check                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns the combined publication/CI landing, package qualification and installed-image join                                                                  | Unchanged full push checks on the combined candidate, hosted Linux admission, then fresh package/image identity and actual native refusal/rollback observations                                             |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Source-progress owns Git-context parity; native-context-git owns native calendar; publication-integration owns typed calendar; root owns carrier and selection | Actual original-process Git/calendar observations consumed by the renderer, then SQL CLOSED-to-publication with ordinary semantic consumption and matched native/TS activation                              |
+| Resident operation with fair, bounded capacity                                       | Root owns concurrent SessionEnd qualification and integration; E282 completes the bounded sequential 258-original probe                                        | Same-session writer contention plus cross-project progress and mandatory guard execution during occupancy, then unchanged thirteen-session/four-repository fairness workload, overload, restart and upgrade |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
 E280 bounded fifth warm probe completes, retaining earlier failed attempts and
-source-grounded oracle/input corrections. The SQL adapter is committed but its
-production observation inputs and selector remain unwired. Existing
-successful-operation compaction and shared-permit release require the sustained
-actual workload before residency acceptance. Package adoption, Python retirement
+source-grounded oracle/input corrections. E282 demonstrates sequential
+reclamation across 258 originals on one owner; it does not establish concurrent
+admission or fairness. The SQL adapter is integrated into the source-landing
+candidate, while its production observation inputs and selector remain unwired.
+Candidate `29555bc8` builds successfully in
+`publication-integration/source-publication-build-01` (exit 0, 6.660s);
+`source-publication-tests-01` executes 113 checks across the publication
+adapter, store client, warm-owner qualifier and CI archive contract (exit 0,
+3.789s). Raw logs and stable before/after source pins are retained;
+`source-publication-inputs-01/execution.json` additionally pins the fresh
+compiled distribution, workflow and archive test. These checks do not qualify a
+combined native image or deployed callbacks. Package adoption, Python retirement
 and machine cutover acceptance remain open.
 
 1. Refresh complete source/build/dependency identities after E188, including

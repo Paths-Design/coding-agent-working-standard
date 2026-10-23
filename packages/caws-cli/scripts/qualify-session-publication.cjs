@@ -10,6 +10,7 @@ const crypto = require('node:crypto');
 const cp = require('node:child_process');
 const { setTimeout, clearTimeout } = require('node:timers');
 const { setTimeout: delay } = require('node:timers/promises');
+const { performance } = require('node:perf_hooks');
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 
 // A real argv[0]-recognized ancestor owns the original native Child. Keep this
@@ -71,20 +72,49 @@ if (process.argv[2] === '--agent-child') {
   });
   child.stdin.end(spec.input);
 } else {
-  const { installMachineRuntime } = require('../dist/init/machine-adapters');
-  const { validateSystemPolicy } = require('../dist/init/system-project-policy');
   const options = new Map();
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i],
       value = process.argv[i + 1];
     assert(
-      ['--native', '--node', '--artifacts'].includes(key) && value && !options.has(key),
-      'usage: qualify-session-publication.cjs --native <absolute> --node <absolute> --artifacts <fresh absolute>'
+      [
+        '--native',
+        '--node',
+        '--artifacts',
+        '--original-count',
+        '--custody-tools',
+        '--process-observer',
+      ].includes(key) &&
+        value &&
+        !options.has(key),
+      'usage: qualify-session-publication.cjs --native <absolute> --node <absolute> --artifacts <fresh absolute> [--original-count 258 --custody-tools <physical emitted root> --process-observer <physical binary>]'
     );
-    assert(path.isAbsolute(value));
+    if (key === '--original-count')
+      assert.equal(value, '258', 'capacity qualification requires exactly 258 originals');
+    else assert(path.isAbsolute(value));
     options.set(key, value);
   }
-  assert.equal(options.size, 3);
+  for (const key of ['--native', '--node', '--artifacts'])
+    assert(options.has(key), 'missing ' + key);
+  const originalCount = options.has('--original-count') ? 258 : 0;
+  for (const key of ['--custody-tools', '--process-observer'])
+    assert.equal(
+      options.has(key),
+      Boolean(originalCount),
+      'capacity-only dependency required with --original-count: ' + key
+    );
+  const custodyTools = originalCount ? options.get('--custody-tools') : null;
+  const observer = originalCount ? options.get('--process-observer') : null;
+  for (const file of [custodyTools, observer].filter(Boolean))
+    assert.equal(fs.realpathSync(file), file, 'capacity dependency must use its physical path');
+  const strictCustody = originalCount
+    ? {
+        ...require(path.join(custodyTools, 'scripts/render-request-topology.js')),
+        ...require(path.join(custodyTools, 'scripts/render-request-custody.js')),
+      }
+    : null;
+  const { installMachineRuntime } = require('../dist/init/machine-adapters');
+  const { validateSystemPolicy } = require('../dist/init/system-project-policy');
   assert.equal(process.platform, 'darwin', 'native original ancestry profile is Darwin-specific');
   const native = fs.realpathSync(options.get('--native'));
   const node = fs.realpathSync(options.get('--node'));
@@ -128,12 +158,16 @@ if (process.argv[2] === '--agent-child') {
   const active = new Map(),
     trackedPids = new Set(),
     snapshots = [];
+  let capacityProgress = originalCount
+    ? { requestedOriginals: originalCount, completedOriginals: 0, hostPid: null, completed: [] }
+    : null;
   const limits = [
     'Direct native invoke, not installed harness or vendor callback qualification',
     'SessionEnd only; no Render discovery, SQL publication, calendar or subagent parity',
     'Fresh PID refresh and empty-directory reap execution; stale candidate reaping is not qualified',
     'Diagnostic observations alone do not establish durable acceptance or heavy release',
     'One hostile synchronization attempt per case; an ACK race is an unexercised failure, never a pass',
+    'Capacity cleanup covers witnessed births and confirmed request groups; it does not exclude arbitrary detached or reparented descendants',
   ];
   function pin(file) {
     const metadata = fs.lstatSync(file);
@@ -175,6 +209,16 @@ if (process.argv[2] === '--agent-child') {
     ]
       .map(pin)
       .concat(
+        ...(originalCount
+          ? [
+              observer,
+              path.join(cli, 'scripts/render-request-custody.ts'),
+              path.join(cli, 'scripts/render-request-topology.ts'),
+              path.join(custodyTools, 'scripts/render-request-custody.js'),
+              path.join(custodyTools, 'scripts/render-request-topology.js'),
+              path.join(custodyTools, 'src/runtime/json-custody.js'),
+            ].map(pin)
+          : []),
         ...[
           'src/runtime',
           'src/transcripts',
@@ -186,7 +230,16 @@ if (process.argv[2] === '--agent-child') {
         tree(path.join(nativeSource, 'src'))
       );
   const beforePins = pinInputs();
-  put(path.join(root, 'inputs.json'), { native, node, engine, beforePins, limits });
+  put(path.join(root, 'inputs.json'), {
+    native,
+    node,
+    engine,
+    beforePins,
+    limits,
+    originalCount,
+    custodyTools,
+    observer,
+  });
   async function bounded(promise, milliseconds, message) {
     let timer;
     try {
@@ -236,6 +289,42 @@ if (process.argv[2] === '--agent-child') {
     snapshots.push({ label, at: Date.now(), rows: selected });
     return selected;
   }
+  function observeInstance(pid) {
+    const result = cp.spawnSync(observer, ['--observe', String(pid)], {
+      env: { PATH: '/usr/bin:/bin' },
+      encoding: 'utf8',
+      timeout: 1000,
+      maxBuffer: 16384,
+    });
+    assert.equal(result.status, 0, 'native birth observation unavailable: ' + result.stderr);
+    assert.equal(result.stderr, '', 'native birth observation diagnostic');
+    const observation = JSON.parse(result.stdout);
+    assert(
+      ['observed', 'absent'].includes(observation.state),
+      'native birth observation uncertain'
+    );
+    if (observation.state === 'observed') {
+      const instance = observation.process;
+      assert.equal(instance.pid, pid);
+      for (const key of ['pid', 'parent', 'group'])
+        assert(Number.isSafeInteger(instance[key]) && instance[key] > 0, 'native process ' + key);
+      for (const key of ['startSeconds', 'startMicros'])
+        assert(
+          typeof instance[key] === 'string' && /^[0-9]+$/.test(instance[key]),
+          'native process birth ' + key
+        );
+      assert.equal(typeof instance.zombie, 'boolean');
+    }
+    return observation;
+  }
+  const topologyRows = () =>
+    processes().map((row) => ({
+      pid: row.pid,
+      parent: row.ppid,
+      group: row.pgid,
+      state: row.stat,
+      command: row.command,
+    }));
   function launch(name, executable, argv, cwd, environment, input, extra = {}) {
     const directory = path.join(root, name);
     fs.mkdirSync(directory, { mode: 0o700 });
@@ -269,19 +358,24 @@ if (process.argv[2] === '--agent-child') {
     const terminal = new Promise((resolve, reject) => {
       child.once('error', reject);
       child.once('close', (code, signal) => {
-        active.delete(child);
-        put(path.join(directory, 'stdout.bin'), stdout);
-        put(path.join(directory, 'stderr.bin'), stderr);
-        const result = {
-          pid: child.pid,
-          code,
-          signal,
-          elapsedMs: Date.now() - started,
-          stdoutSha256: hash(stdout),
-          stderrSha256: hash(stderr),
-        };
-        put(path.join(directory, 'terminal.json'), result);
-        resolve({ ...result, stdout, stderr });
+        try {
+          put(path.join(directory, 'stdout.bin'), stdout);
+          put(path.join(directory, 'stderr.bin'), stderr);
+          const result = {
+            pid: child.pid,
+            code,
+            signal,
+            elapsedMs: Date.now() - started,
+            stdoutSha256: hash(stdout),
+            stderrSha256: hash(stderr),
+          };
+          put(path.join(directory, 'terminal.json'), result);
+          resolve({ ...result, stdout, stderr });
+        } catch (error) {
+          reject(error);
+        } finally {
+          active.delete(child);
+        }
       });
     });
     active.set(child, terminal);
@@ -541,8 +635,13 @@ if (process.argv[2] === '--agent-child') {
       '--configuration',
       'system',
     ];
+    const temporary = fixture.capacityObservation
+      ? path.join(fixture.directory, 'request-temporary')
+      : fixture.environment.TMPDIR;
+    if (fixture.capacityObservation) fs.mkdirSync(temporary, { mode: 0o700 });
     const environment = {
       ...fixture.environment,
+      TMPDIR: temporary,
       [fixture.surface === 'codex' ? 'CODEX_THREAD_ID' : 'CLAUDE_SESSION_ID']: fixture.sid,
     };
     const spec = path.join(fixture.directory, 'agent-input.json');
@@ -559,26 +658,99 @@ if (process.argv[2] === '--agent-child') {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
       }
     );
-    let nativePid, signalResult, terminal;
+    let nativePid, signalResult, terminal, monitor;
+    const coverage = fixture.capacityObservation
+      ? { expected: null, originalFrontend: null, confirmedChains: [], witnesses: [] }
+      : null;
+    const observationErrors = [];
+    const collector = coverage
+      ? new strictCustody.RequestCustodyCollector(
+          temporary,
+          path.join(fixture.directory, 'native-custody')
+        )
+      : null;
+    let samples = 0;
+    const sample = () => {
+      if (!coverage?.expected) return;
+      try {
+        assert(++samples <= 512, 'request topology observation bound exhausted');
+        const inventory = topologyRows();
+        const chain = strictCustody.selectRequestChain(inventory, coverage.expected);
+        const before = chain?.map((row) => observeInstance(row.pid)) ?? [];
+        const after = chain?.map((row) => observeInstance(row.pid)) ?? [];
+        const confirmed = chain
+          ? strictCustody.confirmRequestChain(chain, coverage.originalFrontend, before, after)
+          : null;
+        if (confirmed) {
+          coverage.confirmedChains.push(confirmed);
+          for (const instance of confirmed) {
+            strictCustody.retainRequestInstance(coverage, instance);
+            trackedPids.add(instance.pid);
+          }
+        }
+        fs.appendFileSync(
+          path.join(fixture.directory, 'request-topology.jsonl'),
+          JSON.stringify({ at: Date.now(), inventory, chain, before, after, confirmed }) + '\n',
+          { mode: 0o600 }
+        );
+      } catch (error) {
+        observationErrors.push(String(error));
+        clearInterval(monitor);
+      }
+    };
     const nativeTerminal = new Promise((resolve, reject) => {
       agent.child.on('message', (message) => {
         if (message.type === 'native-started') {
           nativePid = message.pid;
           trackedPids.add(nativePid);
           put(path.join(fixture.directory, 'native-started.json'), message);
+          if (coverage) {
+            try {
+              coverage.expected = {
+                platform: process.platform,
+                frontendPid: nativePid,
+                frontendCommand: [native, ...argv].join(' '),
+                native,
+                node,
+                engine,
+              };
+              coverage.originalFrontend = observeInstance(nativePid);
+              assert.equal(
+                coverage.originalFrontend.state,
+                'observed',
+                'original frontend birth unavailable'
+              );
+              strictCustody.retainRequestInstance(coverage, coverage.originalFrontend.process);
+              sample();
+              if (!observationErrors.length) monitor = setInterval(sample, 50);
+            } catch (error) {
+              observationErrors.push(String(error));
+            }
+          }
         }
         if (message.type === 'signal-result') {
           signalResult = message;
           put(path.join(fixture.directory, 'signal-result.json'), message);
         }
         if (message.type === 'native-terminal') {
+          clearInterval(monitor);
           terminal = message;
           put(path.join(fixture.directory, 'native-terminal.json'), message);
           resolve(message);
         }
-        if (message.type === 'spawn-error') reject(new Error(message.error));
+        if (message.type === 'spawn-error') {
+          clearInterval(monitor);
+          reject(new Error(message.error));
+        }
       });
+      agent.terminal.then(() => {
+        clearInterval(monitor);
+        if (!terminal) reject(new Error('recognized ancestor exited before native terminal'));
+      }, reject);
     });
+    // Defer propagation to the actual awaited boundary, including failures
+    // during the recognized-ancestor startup observation.
+    nativeTerminal.catch(() => {});
     await waitFor(() => nativePid, 3000, 'recognized ancestor did not launch native child');
     snapshot(fixture.name + '-native-live');
     const ps = processes();
@@ -602,6 +774,9 @@ if (process.argv[2] === '--agent-child') {
       reason,
       signalResult: () => signalResult,
       terminal: () => terminal,
+      coverage,
+      collector,
+      observationErrors,
     };
   }
   function checkPrefix(fixture, invocation, record, fresh = true) {
@@ -724,6 +899,12 @@ if (process.argv[2] === '--agent-child') {
     return consumer;
   }
   async function writerProbe(fixture, expected) {
+    const receipts = path.join(
+      fixture.environment.CAWS_HOME,
+      'state/render-writer-receipts',
+      hash(JSON.stringify(['caws-render-writer-project-v1', fixture.project]))
+    );
+    const priorReceipts = new Set(fs.existsSync(receipts) ? fs.readdirSync(receipts) : []);
     const probe = launch(
       fixture.name + '-writer-probe',
       native,
@@ -750,13 +931,26 @@ if (process.argv[2] === '--agent-child') {
     const result = await bounded(probe.terminal, 5000, 'writer custody probe did not settle');
     if (expected === 'released') {
       assert.equal(result.code, 0, result.stderr.toString());
-      const receipts = path.join(
-        fixture.environment.CAWS_HOME,
-        'state/render-writer-receipts',
-        hash(JSON.stringify(['caws-render-writer-project-v1', fixture.project]))
+      assert.equal(result.signal, null);
+      const values = fs
+        .readdirSync(receipts)
+        .filter((file) => !priorReceipts.has(file))
+        .map((file) => read(path.join(receipts, file)));
+      assert(
+        values.some(
+          (row) =>
+            row.state === 'reaped_and_output_eof' &&
+            row.exitCode === 0 &&
+            row.timedOut === false &&
+            row.identity.schema === 'caws.render.writer.receipt.v1' &&
+            row.identity.canonicalProject === fixture.project &&
+            row.identity.outputDirectory === fixture.session &&
+            row.identity.sessionId === fixture.sid &&
+            row.identity.sourceGeneration === fixture.installed.digest &&
+            row.identity.program === '/usr/bin/true'
+        ),
+        'current writer must release its actual Child and both output pipes'
       );
-      const values = fs.readdirSync(receipts).map((file) => read(path.join(receipts, file)));
-      assert(values.some((row) => row.state === 'reaped_and_output_eof' && row.exitCode === 0));
       put(path.join(fixture.directory, 'writer-receipts.json'), values);
     } else {
       assert.equal(result.code, 75);
@@ -776,15 +970,26 @@ if (process.argv[2] === '--agent-child') {
   }
   async function release(invocation) {
     if (invocation.agent.child.connected) invocation.agent.child.send({ type: 'release' });
-    await bounded(
+    const result = await bounded(
       invocation.agent.terminal,
       5000,
       'original recognized ancestor did not reap/exit'
     );
+    assert.equal(result.code, 0, 'recognized ancestor failed during release');
+    assert.equal(result.signal, null);
+    return result;
   }
   async function stopHost(host) {
-    if (host.child.exitCode === null && host.child.signalCode === null) host.child.kill('SIGTERM');
-    await bounded(host.terminal, 5000, 'original renderer-host did not terminate');
+    assert.equal(host.child.exitCode, null, 'owner exited before intentional shutdown');
+    assert.equal(host.child.signalCode, null);
+    assert(host.child.kill('SIGTERM'), 'original owner did not accept shutdown');
+    const result = await bounded(host.terminal, 5000, 'original renderer-host did not terminate');
+    assert(
+      (result.code === 0 && result.signal === null) ||
+        (result.code === null && result.signal === 'SIGTERM'),
+      'unexpected owner terminal: ' + JSON.stringify(result)
+    );
+    return result;
   }
   async function followup(fixture, admitted) {
     const next = {
@@ -1001,6 +1206,234 @@ if (process.argv[2] === '--agent-child') {
       action: action ?? null,
     };
   }
+  function engineCustody(fixture, invocation, id) {
+    assert.deepEqual(invocation.observationErrors, [], 'request birth/topology observation failed');
+    const custody = invocation.collector.collect({
+      coverage: invocation.coverage,
+      invocationId: id,
+      runtimeDigest: fixture.installed.digest,
+      node,
+      engine,
+    });
+    put(path.join(fixture.directory, 'custody-observed.json'), custody);
+    assert.equal(custody.state, 'confirmed_settled', custody.error);
+    assert.equal(custody.terminal.child_exit_raw, 0);
+    return custody;
+  }
+  function sameOwnerBirth(original, current) {
+    return (
+      original?.state === 'observed' &&
+      current?.state === 'observed' &&
+      original.process?.zombie === false &&
+      current.process?.zombie === false &&
+      ['pid', 'parent', 'group', 'startSeconds', 'startMicros'].every(
+        (key) => original.process[key] === current.process[key]
+      )
+    );
+  }
+  function capacityLifecycle(observations, id) {
+    const stages = [
+      'session_original_reserved',
+      'session_writer_retained',
+      'session_consumed_durable',
+      'session_heavy_released',
+    ];
+    const lifecycle = observations
+      .map((row, index) => ({ index, row }))
+      .filter(
+        ({ row }) =>
+          row.event === 'actor_stage' && row.invocationId === id && stages.includes(row.stage)
+      );
+    assert.deepEqual(
+      lifecycle.map(({ row }) => row.stage),
+      stages,
+      'capacity original must occupy its actual reservation and writer before durable consumption and release'
+    );
+    return lifecycle;
+  }
+  async function runCapacityCase(overallStarted) {
+    assert.equal(originalCount, 258);
+    const fixture = createCase('codex-capacity', 'codex', false, false);
+    fixture.capacityObservation = true;
+    assert.equal(fixture.owner.limits.maxRetainedRecords, 1);
+    assert.equal(fixture.owner.limits.requestMs, 20000);
+    const metadata = fs.readFileSync(path.join(fixture.session, '.meta.json'));
+    const { host, observations } = await provision(fixture);
+    const hostPid = host.child.pid;
+    const hostBirth = observeInstance(hostPid);
+    assert.equal(hostBirth.state, 'observed');
+    assert.equal(hostBirth.process.zombie, false);
+    capacityProgress.hostPid = hostPid;
+    const identities = new Set();
+    const assertOriginalOwner = () => {
+      assert.equal(host.child.pid, hostPid);
+      assert.equal(host.child.exitCode, null, 'capacity test lost its original live owner');
+      assert.equal(host.child.signalCode, null);
+      const current = observeInstance(hostPid);
+      assert.equal(current.state, 'observed', 'original owner birth is unavailable');
+      assert(sameOwnerBirth(hostBirth, current), 'original owner birth/ancestry changed or zombie');
+      const starts = ownerRows(observations).filter((row) => row.event === 'host_started');
+      assert.equal(starts.length, 1, 'capacity test must not restart or replace its owner');
+      assert.equal(starts[0].hostPid, hostPid);
+    };
+    // Overall allowance is separate from the unchanged 20s request deadline.
+    // Do not race the loop against a timer that could leave it launching work
+    // after rejection. Reserve an existing step's full outer waits before spawn.
+    const workloadExpires = overallStarted + 600000;
+    for (let index = 1; index <= originalCount; index++) {
+      assert(
+        performance.now() + 45000 <= workloadExpires,
+        'capacity workload budget exhausted before complete original count'
+      );
+      assertOriginalOwner();
+      const label = String(index).padStart(3, '0');
+      const current =
+        index === 1
+          ? fixture
+          : {
+              ...fixture,
+              name: fixture.name + '-' + label,
+              sid: fixture.sid + '-' + label,
+              directory: path.join(fixture.directory, 'original-' + label),
+            };
+      if (index !== 1) {
+        current.session = path.join(fixture.project, '.caws/sessions', current.sid);
+        fs.mkdirSync(current.directory, { mode: 0o700 });
+        fs.mkdirSync(current.session, { mode: 0o700 });
+        put(path.join(current.session, '.meta.json'), metadata);
+        for (const [file, bytes] of fixture.turns) put(path.join(current.session, file), bytes);
+      }
+      const invocation = await invoke(current);
+      const terminal = await bounded(
+        invocation.nativeTerminal,
+        25000,
+        'capacity original did not settle'
+      );
+      assert.equal(terminal.code, 0, invocation.agent.output().stderr.toString());
+      assert.equal(terminal.signal, null);
+      assert.equal(
+        invocation.agent.output().stdout.length,
+        0,
+        'capacity SessionEnd must be silent'
+      );
+      assert.equal(
+        invocation.agent.output().stderr.length,
+        0,
+        'capacity SessionEnd must be silent'
+      );
+      const record = journal(current.session);
+      assert(record, 'capacity original did not execute the ordinary engine');
+      const id = record.rows[0].invocation_id;
+      assert.match(
+        id,
+        new RegExp('^' + invocation.nativePid + '-[0-9]+$'),
+        'identity must come from the actual native original'
+      );
+      assert(!identities.has(id), 'capacity test reused an original invocation ID');
+      identities.add(id);
+      checkPrefix(current, invocation, record, index === 1);
+      const envelope = read(path.join(current.session, '.session-envelope.json'));
+      assert.equal(envelope.created_at, envelope.last_seen_at, 'fresh session envelope required');
+      const consumer = checkConsumer(current, record);
+      const durable = operation(current, id);
+      assert.equal(durable.row?.body.outcome.execution, 'consumed');
+      assert.equal(durable.row.body.outcome.terminalDigest, consumer.terminal_digest);
+      assert.equal(durable.row.body.verifiedRequestBase64, '');
+      await waitFor(
+        () =>
+          ownerRows(observations).some(
+            (row) => row.stage === 'session_heavy_released' && row.invocationId === id
+          ),
+        3000,
+        'capacity original heavy-release observation missing'
+      );
+      const lifecycle = capacityLifecycle(ownerRows(observations), id);
+      assertOriginalOwner();
+      const writer = await writerProbe(current, 'released');
+      assertOriginalOwner();
+      const custody = engineCustody(current, invocation, id);
+      const ancestor = await release(invocation);
+      let cleanup;
+      await waitFor(
+        () => {
+          cleanup = strictCustody.requestCleanupObservation(
+            invocation.coverage,
+            topologyRows(),
+            observeInstance
+          );
+          return cleanup.state === 'confirmed_inactive';
+        },
+        2000,
+        'completed capacity original birth/group cleanup remains unknown'
+      );
+      assert.equal(strictCustody.combinedRequestCleanup(cleanup, custody), 'confirmed_inactive');
+      assertOriginalOwner();
+      const completed = {
+        index,
+        id,
+        nativePid: invocation.nativePid,
+        hostPid,
+        terminal,
+        ancestor: { pid: ancestor.pid, code: ancestor.code, signal: ancestor.signal },
+        journal: record.file,
+        operation: pin(durable.file),
+        marker: pin(path.join(current.session, '.session-publication.json')),
+        terminalDigest: consumer.terminal_digest,
+        lifecycle,
+        custody,
+        cleanup,
+        writer,
+      };
+      capacityProgress.completed.push(completed);
+      capacityProgress.completedOriginals = capacityProgress.completed.length;
+      put(path.join(fixture.directory, 'completed-' + label + '.json'), completed);
+      snapshot('capacity-completed-' + label);
+    }
+    assert.equal(
+      capacityProgress.completedOriginals,
+      originalCount,
+      'partial capacity run cannot pass'
+    );
+    assert.equal(identities.size, originalCount);
+    assertOriginalOwner();
+    // Rescan every durable receipt and publication after the final admission:
+    // subsequent originals may not replace or expand an earlier tombstone.
+    for (const completed of capacityProgress.completed) {
+      assert.deepEqual(pin(completed.operation.path), completed.operation);
+      assert.deepEqual(pin(completed.marker.path), completed.marker);
+      const durable = read(completed.operation.path);
+      assert.equal(durable.body.outcome.execution, 'consumed');
+      assert.equal(durable.body.verifiedRequestBase64, '');
+      assert.equal(durable.body.outcome.terminalDigest, completed.terminalDigest);
+    }
+    const operations = fs
+      .readdirSync(path.dirname(capacityProgress.completed[0].operation.path))
+      .filter((name) => /^[0-9a-f]{64}\.json$/.test(name));
+    assert.equal(
+      operations.length,
+      originalCount,
+      'every successful actual original must retain its own compact tombstone'
+    );
+    assert(
+      performance.now() <= workloadExpires,
+      'capacity workload exceeded its overall allowance'
+    );
+    const hostTerminal = await stopHost(host);
+    put(path.join(fixture.directory, 'owner-observations.json'), ownerRows(observations));
+    const result = {
+      name: fixture.name,
+      requestedOriginals: originalCount,
+      completedOriginals: capacityProgress.completedOriginals,
+      uniqueOriginals: identities.size,
+      hostPid,
+      hostBirth,
+      hostTerminal: { pid: hostTerminal.pid, code: hostTerminal.code, signal: hostTerminal.signal },
+      limits: fixture.owner.limits,
+      elapsedMs: Math.round(performance.now() - overallStarted),
+    };
+    put(path.join(fixture.directory, 'capacity-result.json'), result);
+    return result;
+  }
   async function settleTracked() {
     for (let i = 0; i < 100; i++) {
       if (snapshot('settlement-' + i).length === 0) return;
@@ -1011,12 +1444,14 @@ if (process.argv[2] === '--agent-child') {
     );
   }
   async function main() {
+    const overallStarted = performance.now();
     const results = [];
     results.push(await runCase('codex-normal', 'codex', false));
     results.push(await runCase('claude-normal', 'claude-code', false));
     results.push(await runCase('codex-missing-metadata', 'codex', true));
     results.push(await runCase('codex-changed-input', 'codex', false, 'changed-input'));
     results.push(await runCase('codex-lost-ack', 'codex', false, 'lost-ack'));
+    if (originalCount) results.push(await runCapacityCase(overallStarted));
     await settleTracked();
     const afterPins = pinInputs();
     assert.deepEqual(afterPins, beforePins, 'source/tool input changed during qualification');
@@ -1027,6 +1462,7 @@ if (process.argv[2] === '--agent-child') {
       beforePins,
       afterPins,
       limits,
+      capacity: capacityProgress,
     });
     process.stdout.write(
       JSON.stringify({ status: 'passed', artifacts: root, cases: results.length }) + '\n'
@@ -1060,6 +1496,7 @@ if (process.argv[2] === '--agent-child') {
       message: String(error),
       stack: error.stack,
       cleanup,
+      capacity: capacityProgress,
       afterPins: pinInputs(),
       limits,
     });

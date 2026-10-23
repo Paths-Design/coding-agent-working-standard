@@ -1,7 +1,8 @@
 /** Actual native owner + reviewed copied Sterling profile. Root runs after build.
  * Usage: qualify-render-owner.js <caws-cli-root> <sterling-root> [debug|release] [--prepare-only|--warm-session-end --artifacts <fresh-absolute>]
- * Warm mode requires the supervising Node child argv0 to be claude, so the
- * original frontend can independently observe its real Claude ancestor.
+ * Warm mode gives the pinned Node fixture ancestor argv0=claude so the native
+ * frontend can independently observe its process name, parent and birth.
+ * This does not exercise a deployed Claude application or its hook registration.
  * This installs a runtime only into its retained private sandbox. It never
  * changes selected machine adapters, modifies foreign sources, adopts a PID,
  * signals a service PID, or deletes a sandbox. Preparation alone is not qualification.
@@ -65,7 +66,7 @@ assert(
   'warm qualification requires --artifacts <fresh-absolute>'
 );
 if (warmSessionEnd)
-  assert.equal(process.argv0, 'claude', 'launch qualifier with real argv0=claude');
+  assert.equal(process.argv0, 'claude', 'launch fixture qualifier with argv0=claude');
 assert.equal(
   optionalArguments.length,
   0,
@@ -109,6 +110,11 @@ fs.chmodSync(root, 0o700);
 const sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-render-owner-')));
 const home = path.join(sandbox, 'machine'),
   project = path.join(sandbox, 'project');
+// The reviewed Render closure is a confined handler override, not the global
+// project bootstrap. Keep its original sibling layout without changing the
+// stock SessionEnd prefix selected by the other surface.
+const renderSourceRelative = warmSessionEnd ? '.caws/render-source' : '.caws/hooks';
+const renderSource = path.join(project, renderSourceRelative);
 const owner = path.join(home, 'state/render-service');
 const engine = path.join(cli, 'dist/runtime/engine-entry.js');
 const cliEntry = path.join(cli, 'dist/index.js');
@@ -153,6 +159,7 @@ const manifest: Data = {
   sterling,
   home,
   project,
+  renderSource,
   native,
   observer,
   custodyObserver,
@@ -171,11 +178,21 @@ const manifest: Data = {
     'event ordering without a contender does not independently prove uninterrupted writer custody',
     'concurrent FIFO ordering (warm SessionEnd mode is sequential)',
     'full operating-system dependency hash closure',
+    ...(warmSessionEnd
+      ? [
+          'SessionEnd replacement beyond the sole reviewed stock session-log handler',
+          'deployed Claude/Codex applications and their installed harness hook registration',
+          'fairness under concurrent or cancelled operation queues',
+          'continuous writer exclusion under an independently observed competing writer',
+          'nonempty seal model-union from Codex turns: this reviewed adapter carries model through env.model only',
+        ]
+      : []),
   ],
 };
 let commandNumber = 0,
   monitor: ReturnType<typeof setInterval> | undefined;
 let fixturePrepared = false;
+let scenarioCompleted = false;
 let lastDaemon: Instance | null = null;
 let lastNativeWorker: { created: Data; birth: Instance } | null = null;
 let warmSealInvocationId: string | null = null;
@@ -188,8 +205,139 @@ function row(value: unknown, label = 'object'): Data {
   assert(object(value), label);
   return value;
 }
+/** Account only for observed worker births; a failed pre-B scenario owes no B.
+ * This proves receipt membership, not kernel absence or uninterrupted custody.
+ */
+function workerCleanupAccounting(events: readonly Data[], expectedWorkers: number | null) {
+  const spawned = events.filter((event) => event.event === 'worker_spawned');
+  const created = events.filter((event) => event.event === 'worker_created');
+  const receipts = events.filter((event) => event.event === 'worker_cleanup');
+  const exits = events.filter((event) => event.event === 'worker_exit');
+  const key = (event: Data): string => {
+    for (const field of ['nativeWorkerPid', 'backendPid'])
+      assert(
+        Number.isSafeInteger(event[field]) &&
+          Number(event[field]) > 1 &&
+          Number(event[field]) <= 2_147_483_647,
+        'invalid worker tuple ' + field
+      );
+    return JSON.stringify([event.nativeWorkerPid, event.backendPid]);
+  };
+  const createdKeys = created.map(key);
+  assert.equal(new Set(createdKeys).size, created.length, 'duplicate created worker tuple');
+  assert.equal(
+    new Set(created.map((event) => event.nativeWorkerPid)).size,
+    created.length,
+    'one native worker must name one backend'
+  );
+  assert.equal(spawned.length, created.length, 'spawned worker lacks a created worker receipt');
+  const spawnedPids = spawned.map((event) => event.nativeWorkerPid);
+  assert.equal(new Set(spawnedPids).size, spawned.length, 'duplicate spawned native worker');
+  assert(
+    created.every((event) => spawnedPids.includes(event.nativeWorkerPid)),
+    'created worker lacks its exact spawn'
+  );
+  for (const [label, records] of [
+    ['cleanup', receipts],
+    ['exit', exits],
+  ] as const) {
+    assert.equal(records.length, created.length, 'actual worker ' + label + ' receipt missing');
+    const keys = records.map(key);
+    assert.equal(new Set(keys).size, records.length, 'duplicate worker ' + label + ' tuple');
+    assert(
+      keys.every((value) => createdKeys.includes(value)),
+      'worker ' + label + ' names an uncreated tuple'
+    );
+  }
+  for (const worker of created) {
+    const spawn = spawned.find((event) => event.nativeWorkerPid === worker.nativeWorkerPid)!;
+    const cleanup = receipts.find((event) => key(event) === key(worker))!;
+    const exit = exits.find((event) => key(event) === key(worker))!;
+    assert(
+      events.indexOf(spawn) < events.indexOf(worker) &&
+        events.indexOf(worker) < events.indexOf(cleanup) &&
+        events.indexOf(cleanup) < events.indexOf(exit),
+      'worker birth/cleanup/exit order differs'
+    );
+    const receipt = row(cleanup.receipt);
+    assert.equal(receipt.childPid, worker.backendPid, 'cleanup receipt names another backend');
+    assert.equal(receipt.directChildReaped, true);
+    assert.equal(receipt.logsPersisted, true);
+    assert.equal(receipt.deadlineExceeded, false);
+    assert.equal(row(receipt.stdout).eof, true);
+    assert.equal(row(receipt.stderr).eof, true);
+    assert.equal(exit.code, 0, 'native worker exit was not successful');
+    assert.equal(exit.signal, null, 'native worker exit was signalled');
+  }
+  if (expectedWorkers !== null)
+    assert.equal(created.length, expectedWorkers, 'complete scenario worker creation count');
+  return { created, receipts, exits };
+}
+function sessionEndInput(): string {
+  return JSON.stringify({
+    cwd: project,
+    session_id: sessionId,
+    hook_event_name: 'SessionEnd',
+    reason: 'warm renderer qualification',
+  });
+}
 function digest(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
+}
+/** Independent qualifier oracle for the finite published artifact namespace. */
+function publicationArtifactRole(name: string): string | undefined {
+  if (name === '.meta.json') return 'metadata';
+  if (name === 'session-index.json') return 'index';
+  if (name === 'store-projection.jsonl') return 'projection';
+  if (/^turn-[0-9]+\.payloads\.json$/.test(name)) return 'spill';
+  if (/^turn-[0-9]+\.json$/.test(name)) return 'turn';
+  return undefined;
+}
+/** Seal replaces metadata while retaining every other captured published leaf.
+ * Operational journals/envelopes are outside this artifact namespace.
+ */
+function verifySealInventory(
+  before: readonly { name: string; bytes: Uint8Array }[],
+  current: readonly { name: string; bytes: Uint8Array }[],
+  descriptors: readonly Data[]
+): readonly string[] {
+  const selected = (files: readonly { name: string; bytes: Uint8Array }[]) => {
+    const artifacts = files.filter((file) => publicationArtifactRole(file.name) !== undefined);
+    assert.equal(
+      new Set(artifacts.map((file) => file.name)).size,
+      artifacts.length,
+      'duplicate observed publication artifact'
+    );
+    return new Map(artifacts.map((file) => [file.name, file.bytes]));
+  };
+  const prior = selected(before),
+    after = selected(current);
+  assert(prior.has('.meta.json'), 'actual A metadata missing before seal');
+  assert(prior.has('session-index.json'), 'actual A session index missing before seal');
+  assert(
+    [...prior.keys()].some((name) => publicationArtifactRole(name) === 'turn'),
+    'actual A rendered turn missing before seal'
+  );
+  const names = [...prior.keys()].sort();
+  assert.deepEqual([...after.keys()].sort(), names, 'seal current publication inventory differs');
+  assert.deepEqual(
+    descriptors.map((item) => item.name),
+    names,
+    'marker must bind the complete captured publication inventory'
+  );
+  for (const [index, name] of names.entries()) {
+    const descriptor = descriptors[index]!;
+    const bytes = after.get(name)!;
+    assert.equal(descriptor.role, publicationArtifactRole(name), 'marker artifact role differs');
+    assert.equal(descriptor.byteLength, bytes.length, 'marker artifact byte length differs');
+    assert.equal(descriptor.sha256, digest(bytes), 'marker artifact digest differs');
+    if (name !== '.meta.json')
+      assert(
+        Buffer.from(prior.get(name)!).equals(Buffer.from(bytes)),
+        'seal changed retained publication artifact: ' + name
+      );
+  }
+  return names;
 }
 function put(file: string, bytes: string | Uint8Array): void {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -443,7 +591,7 @@ function sourceCustody(profile: Readonly<Record<string, string>>, copy = false):
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, expected]) => {
       const original = path.join(sterling, '.caws/hooks', name),
-        target = path.join(project, '.caws/hooks', name);
+        target = path.join(renderSource, name);
       const before = fs.lstatSync(original);
       assert(before.isFile() && !before.isSymbolicLink(), 'foreign source is not regular: ' + name);
       const bytes = fs.readFileSync(original);
@@ -474,18 +622,33 @@ function sourceCustody(profile: Readonly<Record<string, string>>, copy = false):
       };
     });
 }
+function warmFixtureUsage(turn: number): Record<string, number> {
+  return {
+    input_tokens: 100 * turn,
+    output_tokens: 30 * turn,
+    cache_read_input_tokens: 7 * turn,
+    cache_creation_input_tokens: 5 * turn,
+    cached_input_tokens: 20 * turn,
+    reasoning_output_tokens: 11 * turn,
+    total_tokens: 130 * turn,
+  };
+}
 function transcript(count: number): string {
   const records: Data[] = [];
   for (let i = 1; i <= count; i++) {
-    const timestamp = `2026-10-01T12:0${i}:00Z`;
+    // Real auxiliary hook records activate chronological merging. Distinguish
+    // the warm fixture's causal events so its order oracle does not assume a
+    // different equal-timestamp tie rule from the reviewed renderer.
+    const timestamp = (second: number): string =>
+      `2026-10-01T12:0${i}:${warmSessionEnd ? String(second).padStart(2, '0') : '00'}Z`;
     records.push(
       {
-        timestamp,
+        timestamp: timestamp(0),
         type: 'turn_context',
         payload: { turn_id: 'owner-turn-' + i, cwd: project, model: 'owner-fixture-model' },
       },
       {
-        timestamp,
+        timestamp: timestamp(1),
         type: 'response_item',
         payload: {
           type: 'message',
@@ -494,7 +657,7 @@ function transcript(count: number): string {
         },
       },
       {
-        timestamp,
+        timestamp: timestamp(2),
         type: 'response_item',
         payload: {
           type: 'function_call',
@@ -504,7 +667,7 @@ function transcript(count: number): string {
         },
       },
       {
-        timestamp,
+        timestamp: timestamp(3),
         type: 'response_item',
         payload: {
           type: 'function_call_output',
@@ -513,7 +676,7 @@ function transcript(count: number): string {
         },
       },
       {
-        timestamp,
+        timestamp: timestamp(4),
         type: 'response_item',
         payload: {
           type: 'message',
@@ -522,6 +685,15 @@ function transcript(count: number): string {
         },
       }
     );
+    // The reviewed Codex adapter recognizes token_usage_record; event_msg
+    // token_count is explicitly ignored. Supply actual input grammar rather
+    // than patching a rendered turn to manufacture a summary observation.
+    if (warmSessionEnd)
+      records.push({
+        timestamp: timestamp(5),
+        type: 'token_usage_record',
+        payload: { usage: warmFixtureUsage(i) },
+      });
   }
   return records.map((record) => JSON.stringify(record)).join('\n') + '\n';
 }
@@ -547,6 +719,10 @@ function turns(directory: string, count: number): Data[] {
       'tool result not correlated'
     );
     assert.equal(turn.status, 'ok');
+    if (warmSessionEnd) {
+      assert.deepEqual(turn.usage, warmFixtureUsage(index + 1), 'actual rendered usage differs');
+      assert.equal(row(turn.env).model, 'owner-fixture-model', 'actual Codex model anchor differs');
+    }
   });
   snapshot(session, path.join(directory, 'session-snapshot'));
   json(path.join(directory, 'semantic-turns.json'), values);
@@ -913,7 +1089,7 @@ function compareForeignRendererBytes(
     python.sha256,
     'pinned Python changed before baseline'
   );
-  const renderer = path.join(project, '.caws/hooks/session_log_renderer.py');
+  const renderer = path.join(renderSource, 'session_log_renderer.py');
   const initialCustody = JSON.parse(
     fs.readFileSync(path.join(root, 'source-custody-initial.json'), 'utf8')
   ) as Data[];
@@ -1021,6 +1197,9 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     pid: process.pid,
     observation: observe(process.pid),
     comm,
+    boundary: 'Claude-named pinned Node fixture ancestor, not a deployed Claude application',
+    executable: process.execPath,
+    executableSha256: digest(fs.readFileSync(process.execPath)),
   });
   const { parseJsonSource } = createRequire(path.join(cli, 'package.json'))(
     './dist/runtime/json-custody.js'
@@ -1033,18 +1212,14 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   );
   assert.equal(beforeMetadataSource.root.kind, 'object');
   const beforeMetadata = read(path.join(session, '.meta.json'));
-  const turnBytes = list(session)
-    .filter((name) => /^turn-\d+\.json$/.test(name))
+  const priorArtifacts = list(session)
+    .filter((name) => publicationArtifactRole(name) !== undefined)
     .map((name) => ({ name, bytes: fs.readFileSync(path.join(session, name)) }));
+  const turnBytes = priorArtifacts.filter((item) => publicationArtifactRole(item.name) === 'turn');
   assert.equal(turnBytes.length, 1, 'seal must consume the actual A output');
   snapshot(session, path.join(directory, 'before'));
   const before = new Set(list(path.join(session, 'hook-invocations')));
-  const input = JSON.stringify({
-    cwd: project,
-    session_id: sessionId,
-    hook_event_name: 'SessionEnd',
-    reason: 'warm renderer qualification',
-  });
+  const input = sessionEndInput();
   const status = await invoke(
     [
       'invoke',
@@ -1068,17 +1243,6 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   );
   const result: Data = { operation: 'native_claude_session_end', status };
   requests.push(result);
-  success(status);
-  assert.equal(
-    fs.statSync(path.join(status.directory, 'stdout.bin')).size,
-    0,
-    'seal must be silent'
-  );
-  assert.equal(
-    fs.statSync(path.join(status.directory, 'stderr.bin')).size,
-    0,
-    'seal must be silent'
-  );
   const files = list(path.join(session, 'hook-invocations')).filter((name) => !before.has(name));
   assert.equal(files.length, 1, 'one seal original must produce one journal');
   const journalFile = path.join(session, 'hook-invocations', files[0]!);
@@ -1116,13 +1280,6 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     fs.closeSync(fd);
   }
   put(path.join(directory, 'journal.jsonl'), bytes);
-  const originalFrontend = read(path.join(status.directory, 'original-frontend.json'));
-  assert.equal(originalFrontend.state, 'observed');
-  assert.equal(
-    row(originalFrontend.process).parent,
-    process.pid,
-    'native original must descend from real Claude ancestor'
-  );
   // The shared decoder intentionally admits Codex Stop/PreToolUse only.
   // This Claude original uses the same strict journal correlation locally.
   assert.equal(bytes.at(-1), 10, 'seal invocation journal must end with LF');
@@ -1150,6 +1307,35 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     'seal invocation journal identity differs'
   );
   const identity = { invocationId, runtimeDigest };
+  const custody = requestCustodies.get(status.directory),
+    coverage = requestCoverage.get(status.directory);
+  assert(custody && coverage, 'current seal custody/coverage record missing');
+  custody.expected = { ...identity, coverage, node: process.execPath, engine };
+  const nativeCustody = custody.collector.collect(custody.expected);
+  Object.assign(result, { identity, nativeCustody });
+  json(path.join(directory, 'native-custody.json'), nativeCustody);
+  persist();
+  // Only a structurally valid, exactly correlated journal supplies identity.
+  // A missing/malformed/uncorrelated journal retains unknown custody. After
+  // that boundary, semantic failure must not discard the validated identity.
+  success(status);
+  assert.equal(
+    fs.statSync(path.join(status.directory, 'stdout.bin')).size,
+    0,
+    'seal must be silent'
+  );
+  assert.equal(
+    fs.statSync(path.join(status.directory, 'stderr.bin')).size,
+    0,
+    'seal must be silent'
+  );
+  const originalFrontend = read(path.join(status.directory, 'original-frontend.json'));
+  assert.equal(originalFrontend.state, 'observed');
+  assert.equal(
+    row(originalFrontend.process).parent,
+    process.pid,
+    'native original must descend from the observed Claude-named Node fixture ancestor'
+  );
   warmSealInvocationId = invocationId;
   assert.deepEqual(
     (journal[0]!.selected_handlers as Data[]).map(({ name, kind }) => ({ name, kind })),
@@ -1172,7 +1358,11 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     assert.equal(value.repo_root, project);
   }
   assert.equal(pointer.last_seen_at, envelope.last_seen_at);
-  assert.equal(pid.agent_pid, process.pid, 'cache must name the real original Claude ancestor');
+  assert.equal(
+    pid.agent_pid,
+    process.pid,
+    'cache must name the independently observed Claude-named Node fixture ancestor'
+  );
   assert.equal(pid.surface, 'claude-code');
   assert.match(String(pid.started_at), /^\d+$/);
   assert(fs.statSync(path.join(project, '.caws/sessions/.agent-pid-reap-marker')).isFile());
@@ -1235,6 +1425,12 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
       'seal rewrote A turn'
     );
     const parsed = row(JSON.parse(turn.bytes.toString('utf8')));
+    assert.deepEqual(
+      parsed.usage,
+      warmFixtureUsage(1),
+      'seal must consume A nonzero rendered usage'
+    );
+    assert.equal(row(parsed.env).model, 'owner-fixture-model');
     for (const field of fields) {
       const value = parsed.usage === undefined ? undefined : row(parsed.usage)[field];
       if (value !== undefined) {
@@ -1257,6 +1453,11 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     (consumer.counts as Data[]).map((count) => count.field),
     fields,
     'ordinary reader must expose every usage field once in contract order'
+  );
+  assert.equal(sums.size, fields.length, 'warm seal must exercise every usage field');
+  assert(
+    fields.every((field) => (sums.get(field) ?? 0n) > 0n),
+    'warm seal must consume positive usage in every field'
   );
   const recomputed = sums.size > 0 || models.size > 0;
   const expectedModels = models.size ? [...models] : recomputed ? undefined : beforeMetadata.models;
@@ -1295,16 +1496,14 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     marker.terminalDigest,
     digest(JSON.stringify([marker.correlation, 'published', marker.artifacts]))
   );
-  assert.deepEqual(
-    (marker.artifacts as Data[]).map((item) => item.name).sort(),
-    ['.meta.json', ...turnBytes.map((item) => item.name)].sort(),
-    'marker must bind the complete retained inventory, including unchanged A turns'
+  const currentArtifacts = list(session)
+    .filter((name) => publicationArtifactRole(name) !== undefined)
+    .map((name) => ({ name, bytes: fs.readFileSync(path.join(session, name)) }));
+  const sealedInventory = verifySealInventory(
+    priorArtifacts,
+    currentArtifacts,
+    marker.artifacts as Data[]
   );
-  for (const descriptor of marker.artifacts as Data[]) {
-    const artifact = fs.readFileSync(path.join(session, String(descriptor.name)));
-    assert.equal(artifact.length, descriptor.byteLength);
-    assert.equal(digest(artifact), descriptor.sha256);
-  }
   put(path.join(directory, 'marker.bin'), markerBytes);
   put(path.join(directory, 'metadata.bin'), metadataBytes);
   const events = ownerObservations();
@@ -1387,11 +1586,6 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   assert.equal(row(sealOperations[0]!.identity).sourceGeneration, runtimeDigest);
   assert.equal(row(sealOperations[0]!.outcome).terminalDigest, consumer.terminal_digest);
   assert.equal(sealOperations[0]!.verifiedRequestBase64, '', 'consumed heavy request not released');
-  const custody = requestCustodies.get(status.directory),
-    coverage = requestCoverage.get(status.directory);
-  assert(custody && coverage);
-  custody.expected = { ...identity, coverage, node: process.execPath, engine };
-  const nativeCustody = custody.collector.collect(custody.expected);
   const requestCleanup = requestCleanupObservation(coverage, processRows(), observe);
   assert(requestCleanup.coverageComplete);
   assert.equal(combinedRequestCleanup(requestCleanup, nativeCustody), 'confirmed_inactive');
@@ -1399,6 +1593,7 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     consumer,
     events,
     sealOperations,
+    sealedInventory,
     nativeCustody,
     requestCleanup,
     beforeObservation,
@@ -1540,7 +1735,7 @@ async function main(): Promise<void> {
   const policy = {
     disabled: {},
     extensions: {},
-    handlers: { 'session-log.sh': '.caws/hooks/session-log.sh' },
+    handlers: { 'session-log.sh': renderSourceRelative + '/session-log.sh' },
     libraries: {},
   };
   validateSystemPolicy(project, policy, { files: [...installed.files], defaults });
@@ -1581,6 +1776,74 @@ async function main(): Promise<void> {
       sealSelection.handlers.map(({ entry, kind }) => ({ entry, kind })),
       [{ entry: 'session-log.sh', kind: 'stock' }]
     );
+    const {
+      decodeRuntimeRequest,
+      REQUEST_SCHEMA,
+      SESSION_END_PREFIX_CAPABILITY,
+      SESSION_PUBLICATION_CAPABILITY,
+    } = requireBuilt('./dist/runtime/protocol') as typeof import('../dist/runtime/protocol');
+    const { invocationEnvironment } = requireBuilt(
+      './dist/runtime/context'
+    ) as typeof import('../dist/runtime/context');
+    const { sessionCacheInputSupported } = requireBuilt(
+      './dist/runtime/session-cache-client'
+    ) as typeof import('../dist/runtime/session-cache-client');
+    const { qualifiesForNativeSessionEndPrefix } = requireBuilt(
+      './dist/runtime/session-cache-admission'
+    ) as typeof import('../dist/runtime/session-cache-admission');
+    const input = sessionEndInput();
+    // This planned context checks fixture applicability only. The actual
+    // frontend must independently provide capabilities, capture and Ready.
+    const request = decodeRuntimeRequest(
+      JSON.stringify({
+        schema: REQUEST_SCHEMA,
+        id: 'warm-session-end-preflight',
+        runtimeDigest: installed.digest,
+        surface: 'claude-code',
+        event: 'session_end',
+        configuration: 'system',
+        sessionEndPrefix: SESSION_END_PREFIX_CAPABILITY,
+        sessionPublication: SESSION_PUBLICATION_CAPABILITY,
+        caller: {
+          cwd: project,
+          environment: { ...env, CLAUDE_SESSION_ID: sessionId },
+          processId: process.pid,
+        },
+        deadlineEpochMs: Date.now() + 30_000,
+        inputJson: input,
+        payload: JSON.parse(input),
+      })
+    );
+    const bootstrap = path.join(project, '.caws/hooks/runtime-paths.sh');
+    let bootstrapAbsent = false;
+    try {
+      fs.lstatSync(bootstrap);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      bootstrapAbsent = true;
+    }
+    const supportedInput = sessionCacheInputSupported(input);
+    const admitted = qualifiesForNativeSessionEndPrefix({
+      request,
+      selection: sealSelection,
+      environment: invocationEnvironment(request.caller),
+      sessionId,
+    });
+    manifest.sessionEndPreflight = {
+      boundary:
+        'read-only admission of planned fixture context; not actual native capability, capture, prefix or publication proof',
+      inputSha256: digest(input),
+      renderSource,
+      bootstrap,
+      bootstrapAbsent,
+      supportedInput,
+      admitted,
+    };
+    json(path.join(root, 'session-end-preflight.json'), manifest.sessionEndPreflight);
+    persist();
+    assert(bootstrapAbsent, 'warm fixture must not install a project-wide bootstrap');
+    assert(supportedInput, 'planned seal input requires compatibility parsing');
+    assert(admitted, 'planned warm fixture does not admit the full native SessionEnd prefix');
   }
   const selected = resolveInvocationSelection({
     checkout: project,
@@ -2159,7 +2422,8 @@ async function main(): Promise<void> {
   }
   if (warmSessionEnd) {
     manifest.established = [
-      'actual reviewed Codex Render A, native stock Claude SessionEnd, actual Codex Render B',
+      'reviewed Codex Render A, stock SessionEnd from a Claude-named Node fixture ancestor, Codex Render B through native frontends',
+      'actual A and B turns carry seven positive usage counts and the exact Codex env.model',
       'exact A native-worker/backend tuple reaped with both EOFs and original native-worker birth absent before B',
       'native prefix and ordinary semantic consumer before exact durable CONSUMED and heavy release',
       'A turn bytes preserved by seal; B exposes exact two-turn user/tool/assistant output',
@@ -2178,6 +2442,9 @@ async function main(): Promise<void> {
   ];
 }
 void main()
+  .then(() => {
+    scenarioCompleted = true;
+  })
   .catch((error) => {
     failures.push(String(error));
     manifest.failureStack = error instanceof Error ? error.stack : String(error);
@@ -2234,19 +2501,23 @@ void main()
           fs.readFileSync(path.join(owner, 'observations.jsonl'))
         );
       if (requests.length > 0) {
-        const receipts = events.filter((event) => event.event === 'worker_cleanup');
-        assert.equal(
-          receipts.length,
-          warmSessionEnd ? 2 : 1,
-          'actual worker cleanup receipt missing'
+        const accounting = workerCleanupAccounting(
+          events,
+          scenarioCompleted ? (warmSessionEnd ? 2 : 1) : null
         );
-        for (const [receiptIndex, observation] of receipts.entries()) {
-          const receipt = row(observation.receipt);
-          assert.equal(receipt.directChildReaped, true);
-          assert.equal(receipt.logsPersisted, true);
-          assert.equal(receipt.deadlineExceeded, false);
-          assert.equal(row(receipt.stdout).eof, true);
-          assert.equal(row(receipt.stderr).eof, true);
+        manifest.workerCleanupAccounting = {
+          scenarioCompleted,
+          created: accounting.created,
+          cleanupTuples: accounting.receipts.map(({ nativeWorkerPid, backendPid }) => ({
+            nativeWorkerPid,
+            backendPid,
+          })),
+          exitTuples: accounting.exits.map(({ nativeWorkerPid, backendPid }) => ({
+            nativeWorkerPid,
+            backendPid,
+          })),
+        };
+        for (const [receiptIndex, observation] of accounting.receipts.entries()) {
           for (const channel of [
             'stdoutPrefixBase64',
             'stderrPrefixBase64',
@@ -2265,11 +2536,6 @@ void main()
             );
           }
         }
-        assert.equal(
-          events.filter((event) => event.event === 'worker_exit').length,
-          warmSessionEnd ? 2 : 1,
-          'actual native worker wait missing'
-        );
         assert.equal(
           events.filter((event) => event.event === 'host_idle_exit').length,
           1,
