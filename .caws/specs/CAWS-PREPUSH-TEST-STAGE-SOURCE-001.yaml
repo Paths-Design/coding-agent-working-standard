@@ -39,3 +39,8 @@ evidence:
     evidence_ref: "Worktree prepush-test-stage at the candidate: turbo build exit 0, then npx jest tests/init/hook-install-layout.test.js tests/init/pack-fingerprint.test.js tests/hooks/pytest-entrypoint.test.js --ci exit 0, 3 suites 42/42 (log ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/test-stage-wt-jest.log). Baseline main efabb946 pre-push log push-main-efabb946.log: hook-install-layout A2 undeclared [lib/session-render-service-client.sh]. Fingerprint unchanged b706339e..., recorded version 106 == SHARED_PACK_VERSION."
     recorded_at: "2026-10-23T05:52:34.873Z"
     commit_sha: d7bf5de705ea051e3a019ef4fd5e22aeeb6ed914
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Same jest run: pytest-entrypoint 'cold npm pytest entrypoint builds before a real installed read-only selection and marker invocation' passes (exit_code 0). Baseline under env -i on main (pytest-entrypoint-cleanenv.log): exit_code 2, fixture stderr 'stage-consumer-docs: ENOENT lstat <fixture>/LICENSE'."
+    recorded_at: "2026-10-23T05:52:36.340Z"
+    commit_sha: d7bf5de705ea051e3a019ef4fd5e22aeeb6ed914
