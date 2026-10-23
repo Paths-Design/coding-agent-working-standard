@@ -132,12 +132,12 @@ case "$EVENT_TYPE" in
     LOG_ENTRY=$(printf '%s\0' "$TIMESTAMP" "$SESSION_ID" "$TOOL_NAME" \
       "$TOOL_USE_ID" "$TOOL_INPUT" "$TOOL_RESPONSE" "$FILE_PATH" \
       "$COMMAND" "$CWD" "$PERMISSION_MODE" | jq -Rsc '
-      split("\u0000") |
+      split("\u0000") | (.[4] | fromjson) as $tool_input |
+      (.[5] | fromjson) as $tool_response |
       {timestamp: .[0], session_id: .[1], event: "tool_use", tool: .[2],
-       tool_use_id: .[3], tool_input: (.[4] | fromjson),
-       tool_response: (.[5] | fromjson), file: .[6], command: .[7],
-       cwd: .[8], permission_mode: .[9]} |
-      . + {is_error: ((.tool_response.exit_code // 0) != 0)}')
+       tool_use_id: .[3], tool_input: $tool_input,
+       tool_response: $tool_response, is_error: (($tool_response.exit_code // 0) != 0),
+       file: .[6], command: .[7], cwd: .[8], permission_mode: .[9]}')
     ;;
 
   *)

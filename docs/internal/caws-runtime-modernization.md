@@ -7821,6 +7821,56 @@ Additional bounded evidence and unresolved dependencies:
   observations do not replace fresh hosted Linux qualification or machine
   adoption. Root owns committed review and the next coherent source landing.
 
+- E293: Source review repairs retain the audit record's field order and make the
+  inherited-file and hostile-TMPDIR controls discriminating. The inherited JSON
+  file differs from the inline value and exceeds Linux's per-entry exec limit;
+  the handler must deliver its exact bytes. The TMPDIR control inventories every
+  regular file and exempts only the exact dispatcher stderr path recorded by the
+  observed zero-argument mktemp call, rather than excluding files by name.
+  Shared pack v108 fingerprint is
+  `ad0c921961b509f93a09109b478eae4c5b1a523b393a1489006bce17a9d558c9`.
+
+  `publication-integration/hosted-bats-review-cases-01` retains a 120-second
+  timeout after three cases; it is not a passing run. Attempt02 exits 0 in
+  24.581s with all 47 cases, unchanged source pins and no remaining group. Its
+  test42 expected, observed and remaining file inventories contain exactly the
+  same dispatcher capture; its expected and delivered payloads match.
+  `hosted-bats-review-fingerprint-01` exits 0 in 1.160s with fourteen checks. A
+  follow-up preserves the inherited reader output before the inline subcase:
+  `hosted-bats-review-retained-file-01` exits 0 in 1.555s, and its retained
+  `tmp/bats-run-EUAzMG/test/1/foreign-payload.json` and
+  `stage-out/inherited-reader.bytes` each contain 172882 bytes with SHA256
+  `f69f95ad41653b0770ba725d1fb63bebe6e9ca928e14cd1edfadae40dffb0dd2`. These
+  complete the bounded review controls. Exported oversized scalar fields such as
+  HOOK_COMMAND, fresh hosted Linux qualification and installed hook adoption
+  remain root-owned obligations; large object content does not prove those
+  launch boundaries.
+
+- E294: Native custody review control04 exits 0 in 24.742s with fourteen cases,
+  stable source/tool pins and no remaining process group. Its retained
+  `native-render-custody-review-context-04/fixtures/custodied-retained-test-pipe.json`
+  captures live Git82198 under custodian82128 before acknowledgment, then the
+  same PID/parent/group as a zombie while a test-owned stdout descriptor is
+  held. The initial receipt is absent and cleanup unsettled. After descriptor
+  release, the final receipt joins PID82198 to exit7, deadline status, both
+  EOFs, reap and group settlement; both processes are absent. The separate
+  `local-admission-before-deadline.json` retains exactly eight admitted bytes
+  (`admitted`) before the original deadline. Earlier control02/03 failures
+  remain evidence of inadequate observation/oracles, not successful
+  qualification. This establishes those component controls, not
+  escaped-descendant termination or ordinary publication. The root retains
+  committed integration and acceptance.
+
+  Publication admission follows the architecture's existing authority split:
+  Rust captures and revalidates policy/candidate observations; the trusted,
+  pinned TypeScript engine performs policy selection. A second Rust policy
+  interpreter would violate that split. Adapter absence must include higher
+  priority candidate observations; numeric policy requires qualified provenance,
+  not an inferred 4300-digit default. The selected profile must also reach HTML
+  decimal-entity decoding. Root owns this integration, with bounded HTML profile
+  propagation assigned to the source worker. Native source capture, ordinary
+  consumption, concurrent residency and local cutover remain unaccepted.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
