@@ -1,7 +1,7 @@
 //! Native transport support components. These modules do not confer project authority.
 
+pub mod agent_pid_cache;
 pub mod context_git;
-#[cfg(feature = "sqlite-store")]
 pub mod invocation_project;
 pub mod owned_group;
 pub mod plan_snapshots;
@@ -15,6 +15,8 @@ pub mod service_journal;
 pub mod service_protocol;
 pub mod session_cache;
 pub mod session_cache_wire;
+pub mod session_publication;
+pub mod session_publication_wire;
 pub mod stop_budget;
 #[cfg(feature = "sqlite-store")]
 pub mod transcript_store;

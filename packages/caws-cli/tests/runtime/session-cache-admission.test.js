@@ -6,7 +6,10 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const childProcess = require('node:child_process');
-const { qualifiesForNativeSessionCache } = require('../../dist/runtime/session-cache-admission');
+const {
+  qualifiesForNativeSessionCache,
+  qualifiesForNativeSessionEndPrefix,
+} = require('../../dist/runtime/session-cache-admission');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const libraryKinds = {
@@ -167,6 +170,142 @@ afterEach(() => {
   jest.restoreAllMocks();
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+function sessionEnd(surface = 'codex') {
+  selection.surface = request.surface = surface;
+  selection.event = request.event = 'session_end';
+  payload({ session_id: 'original', cwd: checkout, reason: 'clear' });
+  for (const name of [
+    'agent-pid.sh',
+    'parse-input.sh',
+    'emit.sh',
+    'run-handlers.sh',
+    'reprieve.sh',
+    'guard-config.sh',
+  ]) {
+    const kind =
+      surface === 'codex' && ['parse-input.sh', 'emit.sh', 'run-handlers.sh'].includes(name)
+        ? 'surface'
+        : 'shared';
+    const file = path.join(runtime, kind === 'shared' ? 'lib' : 'surfaces/codex/lib', name);
+    selection.libraries[name] = { path: file, sha256: sha(fs.readFileSync(file)), kind };
+  }
+  const file = path.join(runtime, 'session-log.sh');
+  selection.handlers = [
+    {
+      name: 'session-log.sh',
+      entry: 'session-log.sh',
+      args: [],
+      path: file,
+      sha256: sha(fs.readFileSync(file)),
+      tier: 'stock',
+      kind: 'stock',
+    },
+  ];
+}
+const qualifyEnd = (sessionId = 'original') =>
+  qualifiesForNativeSessionEndPrefix({
+    request,
+    selection,
+    environment,
+    sessionId,
+  });
+
+test.each(['codex', 'claude-code'])(
+  'complete reviewed SessionEnd source profile qualifies for %s',
+  (surface) => {
+    sessionEnd(surface);
+    const before = snapshot(root);
+    expect(qualifyEnd()).toBe(true);
+    expect(snapshot(root)).toEqual(before);
+    expect(fs.existsSync(path.join(checkout, '.caws/sessions'))).toBe(false);
+  }
+);
+
+test.each([
+  'session-log.sh',
+  'dispatch.sh',
+  'handler-env.sh',
+  'runtime-paths.sh',
+  'lib/parse-input.sh',
+  'lib/agent-surface.sh',
+  'lib/session-cache.sh',
+  'lib/agent-pid.sh',
+  'lib/run-handlers.sh',
+  'lib/reprieve.sh',
+  'lib/guard-config.sh',
+  'lib/session-id.sh',
+  'surfaces/codex/lib/parse-input.sh',
+  'surfaces/codex/lib/emit.sh',
+  'surfaces/codex/lib/run-handlers.sh',
+])('SessionEnd source mutation declines before effects: %s', (relative) => {
+  sessionEnd();
+  expect(qualifyEnd()).toBe(true);
+  fs.appendFileSync(path.join(runtime, relative), '\n# unreviewed source\n');
+  expect(qualifyEnd()).toBe(false);
+});
+
+test.each(['foreign', null, '', 'unknown', '../escape'])(
+  'independent SessionEnd identity must match original %#',
+  (sid) => {
+    sessionEnd();
+    expect(qualifyEnd(sid)).toBe(false);
+  }
+);
+
+test('SessionEnd finite profile refuses extensions, argument variants, overrides and custom startup', () => {
+  sessionEnd();
+  const selected = selection.handlers[0];
+  for (const change of [
+    { args: ['ignored'] },
+    { kind: 'project-override' },
+    { sha256: 'b'.repeat(64) },
+    { path: path.join(runtime, 'elsewhere') },
+    { entry: 'session-log.sh x' },
+  ]) {
+    selection.handlers = [{ ...selected, ...change }];
+    expect(qualifyEnd()).toBe(false);
+  }
+  selection.handlers = [selected, selected];
+  expect(qualifyEnd()).toBe(false);
+  selection.handlers = [];
+  expect(qualifyEnd()).toBe(false);
+  selection.handlers = [selected];
+  selection.overrides = { 'session-log.sh': selected.path };
+  expect(qualifyEnd()).toBe(false);
+  selection.overrides = {};
+  selection.libraryOverrides = { unused: '/unreviewed' };
+  expect(qualifyEnd()).toBe(false);
+  selection.libraryOverrides = {};
+  environment.BASH_ENV = '/custom/startup';
+  expect(qualifyEnd()).toBe(false);
+  delete environment.BASH_ENV;
+  environment.CAWS_PRIOR_BASH_ENV = '/custom/startup';
+  expect(qualifyEnd()).toBe(false);
+});
+
+test.each(['codex', 'claude-code'])(
+  'new higher-priority library, direct-source symlink or path routing mismatch refuses %s',
+  (surface) => {
+    sessionEnd(surface);
+    const dir = path.join(home, 'surfaces', surface, 'lib');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-pid.sh'), '# unreviewed');
+    expect(qualifyEnd()).toBe(false);
+    fs.rmSync(path.join(dir, 'agent-pid.sh'));
+    expect(qualifyEnd()).toBe(true);
+    const file = path.join(runtime, 'lib/parse-input.sh'),
+      retained = fs.readFileSync(file);
+    fs.rmSync(file);
+    fs.symlinkSync(path.join(runtime, 'lib/session-cache.sh'), file);
+    expect(qualifyEnd()).toBe(false);
+    fs.rmSync(file);
+    fs.writeFileSync(file, retained);
+    expect(qualifyEnd()).toBe(true);
+    environment.CAWS_AGENT_SURFACE = 'other';
+    expect(qualifyEnd()).toBe(false);
+  }
+);
 
 test('actual stock prefix qualifies with an empty chain and no session identity', () => {
   expect(qualify()).toBe(true);

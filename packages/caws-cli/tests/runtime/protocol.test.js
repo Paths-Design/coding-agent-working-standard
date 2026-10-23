@@ -33,6 +33,72 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('full SessionEnd prefix capability is distinct from cache and publication authority', () => {
+    expect(decode().sessionEndPrefix).toBeUndefined();
+    const result = decode({ sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' });
+    expect(result.sessionEndPrefix).toBe('caws.runtime.session-end-prefix.v1');
+    expect(result.sessionCache).toBeUndefined();
+    expect(result.sessionPublication).toBeUndefined();
+    for (const sessionEndPrefix of [
+      null,
+      false,
+      true,
+      '',
+      [],
+      {},
+      'caws.runtime.session-cache.v1',
+      'caws.runtime.session-end-prefix.v2',
+    ])
+      expect(() => decode({ sessionEndPrefix })).toThrow(/SessionEnd prefix capability/);
+    const frame = JSON.stringify(
+      request({ sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' })
+    );
+    expect(() =>
+      decodeRuntimeRequest(
+        frame.replace('{', '{"sessionEndPrefix":"caws.runtime.session-end-prefix.v2",'),
+        now
+      )
+    ).toThrow();
+  });
+  test('preserves the exact publication capability independently of cache and store', () => {
+    expect(decode().sessionPublication).toBeUndefined();
+    const decoded = decode({ sessionPublication: 'caws.runtime.session-publication.v1' });
+    expect(decoded.sessionPublication).toBe('caws.runtime.session-publication.v1');
+    expect(decoded.sessionCache).toBeUndefined();
+    expect(decoded.sessionStore).toBeUndefined();
+    for (const sessionPublication of [
+      null,
+      false,
+      true,
+      '',
+      [],
+      {},
+      'caws.runtime.session-publication.v2',
+    ])
+      expect(() => decode({ sessionPublication })).toThrow(/session publication capability/);
+  });
+  test('escaped top-level capability and identity duplicates refuse without changing opaque payload semantics', () => {
+    const frame = JSON.stringify(
+      request({ sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' })
+    );
+    for (const duplicate of [
+      String.raw`"\u0073essionEndPrefix":"caws.runtime.session-end-prefix.v2",`,
+      String.raw`"\u0069d":"foreign",`,
+      '"runtimeDigest":"' + 'b'.repeat(64) + '",',
+    ])
+      expect(() => decodeRuntimeRequest(frame.replace('{', '{' + duplicate), now)).toThrow(
+        /Duplicate/
+      );
+    const inputJson =
+      '{"unused":9007199254740993,"unused":18446744073709551617,"nested":{"value":1e400,"value":1e401},"text":"sessionEndPrefix"}';
+    const opaque = JSON.stringify(
+      request({ inputJson, payload: {}, sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' })
+    ).replace('"payload":{}', '"payload":' + inputJson);
+    const decoded = decodeRuntimeRequest(opaque, now);
+    expect(decoded.inputJson).toBe(inputJson);
+    expect(decoded.sessionEndPrefix).toBe('caws.runtime.session-end-prefix.v1');
+    expect(decoded.payload).toEqual(JSON.parse(inputJson));
+  });
   test('context Git capability is optional, exact, and independent of other capabilities', () => {
     expect(Object.hasOwn(decode(), 'contextGit')).toBe(false);
     const decoded = decode({ contextGit: 'caws.runtime.context-git.v1' });

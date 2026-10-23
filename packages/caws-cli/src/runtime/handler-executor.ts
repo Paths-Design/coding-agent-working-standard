@@ -20,7 +20,7 @@ import { assertMachinePath } from '../init/machine-paths';
 import type { ComposerDependencies, HandlerResult, OfferReference } from './composer';
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
-import { tryExecuteStockHandler } from './stock-handlers';
+import { tryExecuteStockHandler, type NativeSessionSealExecution } from './stock-handlers';
 import { CONTAINMENT_ENV, createContainmentCapability } from './containment';
 import {
   claimNativeRenderAdmission,
@@ -45,6 +45,8 @@ export interface HandlerExecutorOptions {
   readonly signal: AbortSignal;
   /** Internal native-issued capability; never populated from caller environment. */
   readonly nativeRenderAdmission?: NativeRenderAdmission;
+  /** Supplied only after the actual native full-prefix terminal was accepted. */
+  readonly nativeSessionSeal?: NativeSessionSealExecution;
 }
 export interface CompatibilityDispatchResult extends HandlerResult {
   readonly offerReceipts: Uint8Array;
