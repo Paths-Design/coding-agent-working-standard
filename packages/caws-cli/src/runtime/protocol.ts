@@ -15,7 +15,9 @@ import {
 export const REQUEST_SCHEMA = 'caws.runtime.request.v1';
 export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
 export const SESSION_CACHE_CAPABILITY = 'caws.runtime.session-cache.v1';
+export const SESSION_END_PREFIX_CAPABILITY = 'caws.runtime.session-end-prefix.v1';
 export const TRANSCRIPT_STORE_CAPABILITY = 'caws.runtime.transcript-store.v1';
+export const SESSION_PUBLICATION_CAPABILITY = 'caws.runtime.session-publication.v1';
 export const MAX_INPUT_BYTES = 1024 * 1024;
 export const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -45,8 +47,12 @@ export interface RuntimeRequest {
   readonly contextGit?: typeof CONTEXT_GIT_CAPABILITY;
   /** Native-owned one-shot cache exchange; older frontends omit this capability. */
   readonly sessionCache?: typeof SESSION_CACHE_CAPABILITY;
+  /** Complete native SessionEnd prefix; the older cache capability is insufficient. */
+  readonly sessionEndPrefix?: typeof SESSION_END_PREFIX_CAPABILITY;
   /** Optional finite native query profile; this does not select a stock consumer. */
   readonly sessionStore?: typeof TRANSCRIPT_STORE_CAPABILITY;
+  /** Native-owned publication exchange; prepared bytes confer no path authority. */
+  readonly sessionPublication?: typeof SESSION_PUBLICATION_CAPABILITY;
   /** Ephemeral native caller snapshot: never include in durable request journals. */
   readonly caller: InvocationCaller & { readonly processId: number };
   readonly deadlineEpochMs: number;
@@ -116,9 +122,14 @@ function digest(value: unknown): value is string {
   return typeof value === 'string' && value.length === 64 && /^[a-f0-9]{64}$/.test(value);
 }
 
-function protocolSource(text: string, maxDepth: number, maxNodes: number): JsonSource {
+function protocolSource(
+  text: string,
+  maxDepth: number,
+  maxNodes: number,
+  rejectDuplicates: boolean | 'root' = false
+): JsonSource {
   try {
-    return parseJsonSource(text, maxDepth, maxNodes);
+    return parseJsonSource(text, maxDepth, maxNodes, rejectDuplicates);
   } catch (error) {
     throw new RuntimeProtocolError(error instanceof Error ? error.message : 'Invalid JSON source');
   }
@@ -150,7 +161,9 @@ export function decodeRuntimeRequest(
       'payload',
       ...(Object.hasOwn(value, 'contextGit') ? ['contextGit'] : []),
       ...(Object.hasOwn(value, 'sessionCache') ? ['sessionCache'] : []),
+      ...(Object.hasOwn(value, 'sessionEndPrefix') ? ['sessionEndPrefix'] : []),
       ...(Object.hasOwn(value, 'sessionStore') ? ['sessionStore'] : []),
+      ...(Object.hasOwn(value, 'sessionPublication') ? ['sessionPublication'] : []),
     ]) ||
     value.schema !== REQUEST_SCHEMA
   ) {
@@ -163,12 +176,24 @@ export function decodeRuntimeRequest(
     throw new RuntimeProtocolError('Unsupported context Git capability');
   if (Object.hasOwn(value, 'sessionCache') && value.sessionCache !== SESSION_CACHE_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported session cache capability');
+  if (
+    Object.hasOwn(value, 'sessionEndPrefix') &&
+    value.sessionEndPrefix !== SESSION_END_PREFIX_CAPABILITY
+  )
+    throw new RuntimeProtocolError('Unsupported SessionEnd prefix capability');
   if (Object.hasOwn(value, 'sessionStore') && value.sessionStore !== TRANSCRIPT_STORE_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported transcript store capability');
+  if (
+    Object.hasOwn(value, 'sessionPublication') &&
+    value.sessionPublication !== SESSION_PUBLICATION_CAPABILITY
+  )
+    throw new RuntimeProtocolError('Unsupported session publication capability');
   const wireText = new TextDecoder('utf-8', { fatal: true }).decode(
     typeof frame === 'string' ? Buffer.from(frame, 'utf8') : frame
   );
-  const wireSource = protocolSource(wireText, MAX_JSON_DEPTH + 2, MAX_JSON_NODES * 2);
+  // Control envelope identity/capabilities cannot be hidden by last-key wins.
+  // Opaque hook payloads retain their independent nested duplicate-key profile.
+  const wireSource = protocolSource(wireText, MAX_JSON_DEPTH + 2, MAX_JSON_NODES * 2, 'root');
   const callerSource = objectMemberSource(wireSource, 'caller');
   const processSource = callerSource ? objectMemberSource(callerSource, 'processId') : undefined;
   if (
@@ -239,8 +264,14 @@ export function decodeRuntimeRequest(
     ...(value.sessionCache === SESSION_CACHE_CAPABILITY
       ? { sessionCache: SESSION_CACHE_CAPABILITY }
       : {}),
+    ...(value.sessionEndPrefix === SESSION_END_PREFIX_CAPABILITY
+      ? { sessionEndPrefix: SESSION_END_PREFIX_CAPABILITY }
+      : {}),
     ...(value.sessionStore === TRANSCRIPT_STORE_CAPABILITY
       ? { sessionStore: TRANSCRIPT_STORE_CAPABILITY }
+      : {}),
+    ...(value.sessionPublication === SESSION_PUBLICATION_CAPABILITY
+      ? { sessionPublication: SESSION_PUBLICATION_CAPABILITY }
       : {}),
     caller: Object.freeze({ ...caller, processId: value.caller.processId as number }),
     deadlineEpochMs: value.deadlineEpochMs,

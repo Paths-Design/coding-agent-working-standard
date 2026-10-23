@@ -15,7 +15,7 @@ export function parseJsonSource(
   text: string,
   maxDepth = 128,
   maxNodes = 100_000,
-  rejectDuplicates = false
+  rejectDuplicates: boolean | 'root' = false
 ): JsonSource {
   JSON.parse(text);
   let cursor = 0;
@@ -47,7 +47,11 @@ export function parseJsonSource(
         const key = JSON.parse(text.slice(keyStart, cursor)) as string;
         space();
         cursor++; // Colon: the complete source has already passed JSON grammar validation.
-        if (rejectDuplicates && entries.has(key)) throw new Error('Duplicate JSON object member');
+        if (
+          (rejectDuplicates === true || (rejectDuplicates === 'root' && depth === 0)) &&
+          entries.has(key)
+        )
+          throw new Error('Duplicate JSON object member');
         entries.set(key, read(depth + 1)); // Ordinary extension readers retain last-key semantics.
         space();
         if (text[cursor] !== ',') break;
