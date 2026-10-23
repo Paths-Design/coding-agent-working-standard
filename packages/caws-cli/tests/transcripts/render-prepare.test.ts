@@ -734,3 +734,133 @@ test('retained ordinary store event bytes reach the Claude adapter under OpenCod
     assert.equal(payload.turn, 1);
   }
 });
+
+function publicationInput(raw: string) {
+  const configured = input(raw),
+    bytes = Buffer.from(raw);
+  const source = {
+    kind: 'publication-buffer' as const,
+    binding: {
+      id: 'original-store-invocation',
+      runtimeDigest: 'a'.repeat(64),
+      token: '52665654-e2a6-470d-bee1-b3e12f83ff59',
+      attempt: 'attempt-1',
+      observationId: 'native-render-snapshot',
+      inputDigest: 'b'.repeat(64),
+    },
+    descriptor: {
+      name: 'store-projection.jsonl',
+      role: 'projection',
+      byteLength: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    },
+    size: BigInt(bytes.length),
+    bytes,
+  };
+  const logicalPath = '/fixture/sessions/s/.transcript-projection.jsonl';
+  return {
+    ...configured,
+    transcript: { path: logicalPath, disposition: 'read' as const, source },
+    subagents: {
+      claudeCandidate: { path: '/fixture/sessions/s/s/subagents', kind: 'absent' as const },
+      qwenCandidate: { path: '/fixture/sessions/subagents/s', kind: 'absent' as const },
+    },
+  };
+}
+
+test('publication-buffer projection prepares semantic artifacts at the stock logical transcript path', () => {
+  const configured = publicationInput(
+    rows(user('SQL buffer user'), {
+      type: 'assistant',
+      timestamp: '2026-01-01T00:00:01Z',
+      message: {
+        id: 'buffer-m1',
+        model: 'buffer-model',
+        usage: { input_tokens: 7 },
+        content: [{ type: 'text', text: 'SQL buffer assistant' }],
+      },
+    })
+  );
+  const prepared = ready(prepareSessionArtifacts(configured));
+  const turn = prepared.generation.artifacts.find((item) => item.role === 'turn');
+  assert.ok(turn);
+  const payload = JSON.parse(Buffer.from(turn.bytes()).toString());
+  assert.equal(payload.user, 'SQL buffer user');
+  assert.equal(payload.timeline[0].text, 'SQL buffer assistant');
+  assert.equal(payload.usage.input_tokens, 7);
+  assert.equal(payload.context.model, 'buffer-model');
+  assert.equal(prepared.publication, 'not_attempted');
+  assert.equal(prepared.checkpoint!.kind, 'publication-buffer');
+  assert.equal(Object.hasOwn(prepared.checkpoint!, 'inode'), false);
+  const observed = renderGet(prepared.generation.observations, 'transcript');
+  assert.equal(renderGet(observed, 'kind'), 'publication-buffer');
+  assert.equal(renderGet(observed, 'path'), configured.transcript.path);
+  assert.equal(renderGet(observed, 'inode'), undefined);
+  assert.equal(
+    renderGet(renderGet(observed, 'binding'), 'token'),
+    configured.transcript.source.binding.token
+  );
+  assert.equal(renderGet(renderGet(observed, 'descriptor'), 'name'), 'store-projection.jsonl');
+  const auxiliary = renderGet(prepared.generation.observations, 'auxiliary');
+  assert.equal(renderGet(renderGet(auxiliary, 'audit'), 'disposition'), 'absent');
+});
+
+test('preparation owns publication binding descriptor and bytes before consulting a calendar provider', () => {
+  const configured = publicationInput(rows(user('snapshot retained')));
+  const originalBinding = { ...configured.transcript.source.binding };
+  const originalDescriptor = { ...configured.transcript.source.descriptor };
+  let consulted = false;
+  const prepared = ready(
+    prepareSessionArtifacts({
+      ...configured,
+      calendar: {
+        ...configured.calendar,
+        get timezone() {
+          consulted = true;
+          configured.transcript.source.binding.token = 'changed-at-calendar';
+          configured.transcript.source.descriptor.sha256 = 'c'.repeat(64);
+          configured.transcript.source.bytes.fill(0);
+          return 'UTC';
+        },
+      },
+    })
+  );
+  assert.equal(consulted, true);
+  const checkpoint = prepared.checkpoint!;
+  if (checkpoint.kind !== 'publication-buffer') throw new Error('Expected buffer checkpoint');
+  assert.deepEqual(checkpoint.binding, originalBinding);
+  assert.deepEqual(checkpoint.descriptor, originalDescriptor);
+  const turn = prepared.generation.artifacts.find((item) => item.role === 'turn');
+  assert.ok(turn);
+  assert.equal(JSON.parse(Buffer.from(turn.bytes()).toString()).user, 'snapshot retained');
+  assert.equal(
+    renderGet(
+      renderGet(renderGet(prepared.generation.observations, 'transcript'), 'binding'),
+      'token'
+    ),
+    originalBinding.token
+  );
+});
+
+test('rebound buffer preparation changes generation and refuses corrupted bytes without an old checkpoint', () => {
+  const raw = rows(user('same immutable content'));
+  const original = ready(prepareSessionArtifacts(publicationInput(raw)));
+  const rebound = publicationInput(raw);
+  rebound.transcript.source.binding.observationId = 'next-native-snapshot';
+  const next = ready(
+    prepareSessionArtifacts({ ...rebound, priorCheckpoint: original.checkpoint! })
+  );
+  assert.notEqual(next.generation.identity, original.generation.identity);
+  assert.notEqual(next.checkpoint!.sourceGeneration, original.checkpoint!.sourceGeneration);
+  assert.notEqual(next.checkpoint, original.checkpoint);
+  assert.equal(next.checkpoint!.events.length, 1);
+  const corrupt = publicationInput(raw);
+  corrupt.transcript.source.bytes.fill(0);
+  const failed = prepareSessionArtifacts({ ...corrupt, priorCheckpoint: original.checkpoint! });
+  if (failed.disposition !== 'failed') throw new Error('Expected byte identity refusal');
+  assert.equal(failed.failure.phase, 'input');
+  assert.match(String(failed.failure.cause), /Publication buffer descriptor hash differs/);
+  assert.equal(failed.checkpoint, null);
+  assert.equal(failed.publication, 'not_attempted');
+  assert.equal('generation' in failed, false);
+});

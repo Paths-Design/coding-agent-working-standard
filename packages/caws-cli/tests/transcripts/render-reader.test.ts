@@ -16,6 +16,7 @@ import {
   type RenderReaderCheckpoint,
   type ObservedRendererFile,
   type ObservedRendererDirectory,
+  type RendererPublicationBufferSource,
 } from '../../src/transcripts/render-reader';
 
 function registry(surface?: string, numericProfile = RENDER_JSON_4300) {
@@ -30,6 +31,28 @@ function source(raw: string | Uint8Array) {
     sourceId: '/caller/source',
     sourceGeneration: 'generation',
     inode: '7',
+    size: BigInt(bytes.length),
+    bytes,
+  };
+}
+function bufferSource(raw: string | Uint8Array) {
+  const bytes = typeof raw === 'string' ? Buffer.from(raw) : Buffer.from(raw);
+  return {
+    kind: 'publication-buffer' as const,
+    binding: {
+      id: 'original-invocation',
+      runtimeDigest: 'a'.repeat(64),
+      token: '52665654-e2a6-470d-bee1-b3e12f83ff59',
+      attempt: 'attempt-1',
+      observationId: 'observation-1',
+      inputDigest: 'b'.repeat(64),
+    },
+    descriptor: {
+      name: 'store-projection.jsonl',
+      role: 'projection',
+      byteLength: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    },
     size: BigInt(bytes.length),
     bytes,
   };
@@ -79,6 +102,168 @@ function embeddedRow(adapter: (typeof embeddedAdapters)[number], payload: string
           };
   return JSON.stringify(row);
 }
+
+test('publication buffer owns exact original binding and bytes without claiming a physical inode', () => {
+  const raw = user('buffer semantic text') + '\n',
+    observed = bufferSource(raw);
+  const result = ready(read(raw, { source: observed }));
+  assert.deepEqual(texts(result), ['buffer semantic text']);
+  const checkpoint = result.checkpoint;
+  assert.equal(checkpoint.kind, 'publication-buffer');
+  if (checkpoint.kind !== 'publication-buffer') throw new Error('Expected buffer identity');
+  assert.equal(Object.hasOwn(checkpoint, 'inode'), false);
+  assert.equal(Object.isFrozen(checkpoint.binding), true);
+  assert.equal(Object.isFrozen(checkpoint.descriptor), true);
+  assert.notEqual(checkpoint.binding, observed.binding);
+  assert.notEqual(checkpoint.descriptor, observed.descriptor);
+  assert.match(checkpoint.sourceId, /^publication-buffer:[a-f0-9]{64}$/);
+  assert.match(checkpoint.sourceGeneration, /^[a-f0-9]{64}$/);
+  const binding = { ...checkpoint.binding },
+    descriptor = { ...checkpoint.descriptor };
+  observed.binding.token = 'changed-after-read';
+  observed.descriptor.sha256 = 'c'.repeat(64);
+  observed.bytes.fill(0);
+  assert.deepEqual(checkpoint.binding, binding);
+  assert.deepEqual(checkpoint.descriptor, descriptor);
+  assert.equal(
+    result.events[0]!.envelope.source.rawBase64,
+    Buffer.from(raw.slice(0, -1)).toString('base64')
+  );
+});
+
+test('publication buffers never reuse a prefix, including identical or independently rebound snapshots', () => {
+  const raw = line124('A'),
+    reg = registry(),
+    observed = bufferSource(raw);
+  const first = ready(read(raw, { registry: reg, source: observed }));
+  const same = ready(
+    read(raw, { registry: reg, source: observed, priorCheckpoint: first.checkpoint })
+  );
+  assert.equal(same.reusedPrefix, false);
+  assert.notEqual(same.checkpoint, first.checkpoint);
+  assert.deepEqual(texts(same), ['A']);
+  assert.equal(same.checkpoint.sourceGeneration, first.checkpoint.sourceGeneration);
+  for (const key of [
+    'id',
+    'runtimeDigest',
+    'token',
+    'attempt',
+    'observationId',
+    'inputDigest',
+  ] as const) {
+    const changed = bufferSource(raw);
+    changed.binding[key] =
+      key === 'runtimeDigest' || key === 'inputDigest' ? 'c'.repeat(64) : 'other';
+    const next = ready(
+      read(raw, { registry: reg, source: changed, priorCheckpoint: first.checkpoint })
+    );
+    assert.equal(next.reusedPrefix, false, key);
+    assert.notEqual(next.checkpoint.sourceGeneration, first.checkpoint.sourceGeneration, key);
+    assert.deepEqual(texts(next), ['A'], key);
+  }
+  const renamed = bufferSource(raw);
+  renamed.descriptor.name = 'other-projection.jsonl';
+  const next = ready(
+    read(raw, { registry: reg, source: renamed, priorCheckpoint: first.checkpoint })
+  );
+  assert.notEqual(next.checkpoint.sourceId, first.checkpoint.sourceId);
+  const file = ready(read(raw, { registry: reg }));
+  assert.equal(
+    ready(read(raw, { registry: reg, source: observed, priorCheckpoint: file.checkpoint }))
+      .reusedPrefix,
+    false
+  );
+  assert.equal(
+    ready(read(raw, { registry: reg, priorCheckpoint: first.checkpoint })).reusedPrefix,
+    false
+  );
+  assert.equal(
+    ready(read(raw, { registry: reg, priorCheckpoint: file.checkpoint })).reusedPrefix,
+    true
+  );
+});
+
+test('buffer tails and failed new generations cannot import earlier committed events', () => {
+  const a = line124('A'),
+    b = user('B'),
+    reg = registry();
+  const first = ready(read(a + b, { registry: reg, source: bufferSource(a + b) }));
+  assert.equal(first.tentative, true);
+  const nextSource = bufferSource(a + b + '\n');
+  nextSource.binding.observationId = 'new-observation';
+  const next = ready(
+    read(a + b + '\n', { registry: reg, source: nextSource, priorCheckpoint: first.checkpoint })
+  );
+  assert.deepEqual(texts(next), ['A', 'B']);
+  assert.equal(next.reusedPrefix, false);
+  const invalid = bufferSource(`{"overflow":${over}}\n`);
+  invalid.binding.observationId = 'failed-observation';
+  const failed = read('', { registry: reg, source: invalid, priorCheckpoint: next.checkpoint });
+  if (failed.disposition !== 'failed') throw new Error('Expected numeric refusal');
+  assert.equal(failed.failure.phase, 'numeric');
+  assert.equal(failed.reusedPrefix, false);
+  assert.equal(failed.checkpoint!.offset, 0n);
+  assert.notEqual(failed.checkpoint, next.checkpoint);
+  assert.deepEqual(failed.events, []);
+});
+
+test('malformed publication identities and changed bytes refuse before events or checkpoint reuse', () => {
+  const raw = line124('must not leak'),
+    first = ready(read(raw));
+  const cases: readonly [string, (value: ReturnType<typeof bufferSource>) => unknown][] = [
+    [
+      'hash',
+      (value) => ({ ...value, descriptor: { ...value.descriptor, sha256: 'c'.repeat(64) } }),
+    ],
+    ['size', (value) => ({ ...value, size: value.size + 1n })],
+    [
+      'length',
+      (value) => ({
+        ...value,
+        descriptor: { ...value.descriptor, byteLength: value.bytes.length + 1 },
+      }),
+    ],
+    [
+      'fractional length',
+      (value) => ({ ...value, descriptor: { ...value.descriptor, byteLength: 0.5 } }),
+    ],
+    ['changed bytes', (value) => ({ ...value, bytes: Buffer.alloc(value.bytes.length) })],
+    ['empty token', (value) => ({ ...value, binding: { ...value.binding, token: '' } })],
+    [
+      'overlong token',
+      (value) => ({ ...value, binding: { ...value.binding, token: 'é'.repeat(65) } }),
+    ],
+    ['NUL token', (value) => ({ ...value, binding: { ...value.binding, token: 'bad\0token' } })],
+    [
+      'runtime digest',
+      (value) => ({ ...value, binding: { ...value.binding, runtimeDigest: 'not-a-digest' } }),
+    ],
+    ['missing binding', (value) => ({ ...value, binding: undefined })],
+    ['extra binding', (value) => ({ ...value, binding: { ...value.binding, extra: true } })],
+    [
+      'extra descriptor',
+      (value) => ({ ...value, descriptor: { ...value.descriptor, extra: true } }),
+    ],
+    [
+      'unsafe alias',
+      (value) => ({ ...value, descriptor: { ...value.descriptor, name: '../projection' } }),
+    ],
+    ['inode', (value) => ({ ...value, inode: 'fabricated' })],
+    ['sourceId', (value) => ({ ...value, sourceId: 'fabricated' })],
+    ['unknown kind', (value) => ({ ...value, kind: 'memory' })],
+  ];
+  for (const [name, alter] of cases) {
+    const result = read(raw, {
+      source: alter(bufferSource(raw)) as RendererPublicationBufferSource,
+      priorCheckpoint: first.checkpoint,
+    });
+    if (result.disposition !== 'failed') throw new Error(`Expected input refusal: ${name}`);
+    assert.equal(result.failure.phase, 'input', name);
+    assert.equal(result.checkpoint, null, name);
+    assert.deepEqual(result.events, [], name);
+    assert.equal(result.reusedPrefix, false, name);
+  }
+});
 
 test('actual source registry skips malformed syntax and nonobjects and honors first matched empty owner', () => {
   const raw =
@@ -501,6 +686,30 @@ const auxiliary = (
     sessionId: 'sid',
     numericProfile: RENDER_JSON_4300,
   });
+
+test('auxiliary byte ownership retains buffer identity and refuses descriptor tampering', () => {
+  const raw = '{"session_id":"sid","event":"tool_use","tool":"Bash","command":"echo retained"}\n';
+  const source = bufferSource(raw);
+  source.descriptor.name = 'audit.log';
+  source.descriptor.role = 'audit';
+  const observed: ObservedRendererFile = { path: '/audit', disposition: 'read', source };
+  const result = auxiliary(observed);
+  assert.equal(result.disposition, 'ready');
+  assert.equal(result.events.length, 1);
+  const identity = result.observations.audit;
+  if (identity.disposition !== 'read' || identity.kind !== 'publication-buffer')
+    throw new Error('Expected owned buffer auxiliary identity');
+  assert.equal(Object.hasOwn(identity, 'inode'), false);
+  assert.equal(identity.rawBase64, Buffer.from(raw).toString('base64'));
+  assert.equal(identity.sha256, source.descriptor.sha256);
+  assert.equal(Object.isFrozen(identity.binding), true);
+  const originalToken = identity.binding.token;
+  source.binding.token = 'mutated';
+  source.bytes.fill(0);
+  assert.equal(identity.binding.token, originalToken);
+  assert.equal(identity.rawBase64, Buffer.from(raw).toString('base64'));
+  assert.throws(() => auxiliary(observed), /Publication buffer descriptor hash differs/);
+});
 
 test('actual auxiliary acquisition replaces UTF8, uses Python splitlines, retains raw bytes and syntax diagnostics', () => {
   const auditRow =

@@ -16,6 +16,7 @@ import {
 import { prepareRendererArtifacts, type PreparedSessionArtifact } from './render-artifacts';
 import {
   readRendererSource,
+  snapshotRendererSource,
   parseRendererAuxiliary,
   parseRendererSubagents,
   type ObservedRendererFile,
@@ -141,13 +142,7 @@ function snapshotFile(file: ObservedRendererFile): ObservedRendererFile {
     ? Object.freeze({
         path: file.path,
         disposition: 'read',
-        source: Object.freeze({
-          sourceId: file.source.sourceId,
-          sourceGeneration: file.source.sourceGeneration,
-          inode: file.source.inode,
-          size: file.source.size,
-          bytes: Uint8Array.from(file.source.bytes),
-        }),
+        source: snapshotRendererSource(file.source),
       })
     : Object.freeze({ ...file });
 }
@@ -238,7 +233,14 @@ function lineage(file: ObservedRendererFile, numericProfile: RenderNumericProfil
 export function prepareSessionArtifacts(
   input: PrepareSessionArtifactsInput
 ): SessionArtifactPreparation {
-  let checkpoint: RenderReaderCheckpoint | null = input.priorCheckpoint ?? null;
+  // A complete publication snapshot cannot inherit a partial transaction from
+  // another acquisition, including when input admission fails before parsing.
+  let checkpoint: RenderReaderCheckpoint | null =
+    (input.transcript.disposition === 'read' &&
+      input.transcript.source.kind === 'publication-buffer') ||
+    input.priorCheckpoint?.kind === 'publication-buffer'
+      ? null
+      : (input.priorCheckpoint ?? null);
   let phase = 'input';
   let diagnostics: PreparationBase['diagnostics'] = Object.freeze([]);
   const base = (): PreparationBase => ({ checkpoint, publication: 'not_attempted', diagnostics });
@@ -459,9 +461,17 @@ export function prepareSessionArtifacts(
             ? {
                 path: transcript.path,
                 disposition: transcript.disposition,
-                sourceId: transcript.source.sourceId,
-                sourceGeneration: transcript.source.sourceGeneration,
-                inode: transcript.source.inode,
+                ...(transcript.source.kind === 'publication-buffer'
+                  ? {
+                      kind: transcript.source.kind,
+                      binding: transcript.source.binding,
+                      descriptor: transcript.source.descriptor,
+                    }
+                  : {
+                      sourceId: transcript.source.sourceId,
+                      sourceGeneration: transcript.source.sourceGeneration,
+                      inode: transcript.source.inode,
+                    }),
                 size: transcript.source.size,
                 sha256: createHash('sha256').update(transcript.source.bytes).digest('hex'),
               }
