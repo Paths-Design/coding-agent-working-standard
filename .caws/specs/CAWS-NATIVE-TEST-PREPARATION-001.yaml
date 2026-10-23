@@ -56,3 +56,8 @@ evidence:
     evidence_ref: "Inspected fresh-dist/fresh-target ordinary npm test: normal CLI build, both helper outputs, offline feature-off Rust1.90 binary then37 consumer/routing cases. Separate actual custody16 pass. Source pins map to committed candidate except formatter-only run-tests wrapping replayed in committed33. Linked installed dependencies; hosted npm ci unverified. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/testprep-ordinary-01/execution.json; --verify below checks commit existence only, not external artifact or execution."
     recorded_at: "2026-10-23T08:32:32.391Z"
     commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Committed33 tests inspected and executed: compiler exits23/19, signal termination and ENOENT preserve diagnostics and prevent downstream execution despite stale outputs; missing artifacts and target symlink refuse. Source stable, no timeout or process residue. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/testprep-committed-js-01/execution.json; --verify below checks commit existence only, not external artifact or execution."
+    recorded_at: "2026-10-23T08:32:34.235Z"
+    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
