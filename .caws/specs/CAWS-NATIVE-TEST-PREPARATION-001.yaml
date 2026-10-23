@@ -50,3 +50,9 @@ non_functional: {}
 contracts:
   - name: 'test-prerequisites'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected fresh-dist/fresh-target ordinary npm test: normal CLI build, both helper outputs, offline feature-off Rust1.90 binary then37 consumer/routing cases. Separate actual custody16 pass. Source pins map to committed candidate except formatter-only run-tests wrapping replayed in committed33. Linked installed dependencies; hosted npm ci unverified. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/testprep-ordinary-01/execution.json; --verify below checks commit existence only, not external artifact or execution."
+    recorded_at: "2026-10-23T08:32:32.391Z"
+    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
