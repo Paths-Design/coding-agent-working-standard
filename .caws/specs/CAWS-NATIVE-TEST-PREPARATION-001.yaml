@@ -61,3 +61,8 @@ evidence:
     evidence_ref: "Committed33 tests inspected and executed: compiler exits23/19, signal termination and ENOENT preserve diagnostics and prevent downstream execution despite stale outputs; missing artifacts and target symlink refuse. Source stable, no timeout or process residue. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/testprep-committed-js-01/execution.json; --verify below checks commit existence only, not external artifact or execution."
     recorded_at: "2026-10-23T08:32:34.235Z"
     commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Workflow source and executable blocks establish pinned Rust/locked fetch before offline build and unconditional macOS custody job on PR/push main. Full-repo hash inputs and real Turbo Rust-only fixture invalidation inspected; local actual custody16 pass. Hosted clean npm ci/macOS and Ubuntu execution NOT OBSERVED; root retains obligation after landing. No hosted pass or branch-protection claim. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/turbo-rust-invalidation-04/summary.json; --verify below checks commit existence only, not external artifact or execution."
+    recorded_at: "2026-10-23T08:32:35.856Z"
+    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
