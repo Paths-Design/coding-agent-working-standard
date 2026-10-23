@@ -76,10 +76,10 @@ setup() {
 
   run_reset
   [ "$status" -eq 0 ]
-  [[ "$output" == *"$SID_LIVE"* ]]
+  assert_output --partial "$SID_LIVE"
   # The real store lives under the invoking user's home, never under the
   # fixture home. If this substring shows up, isolation has broken.
-  [[ "$output" != *"$HOME/.caws/state/sessions"* ]]
+  refute_output --partial "$HOME/.caws/state/sessions"
 }
 
 @test "A1: --session resets the LIVE session-global store" {
@@ -121,9 +121,9 @@ setup() {
 
   run_reset
   [ "$status" -eq 0 ]
-  [[ "$output" == *"session=$SID_LIVE"* ]]
+  assert_output --partial "session=$SID_LIVE"
   # The filename-derived bug printed the literal basename instead.
-  [[ "$output" != *"session=strikes"* ]]
+  refute_output --partial "session=strikes"
 }
 
 @test "A4: an unknown session still fails, and names the sessions that DO have strikes" {
@@ -132,15 +132,15 @@ setup() {
   run_reset --session "deadbeef-0000-0000-0000-000000000000"
   [ "$status" -ne 0 ]
   # Still a refusal — the fix must not turn a typo into a silent no-op success.
-  [[ "$output" == *"No strike file found"* ]]
+  assert_output --partial "No strike file found"
   # But the operator should not have to guess what to type instead.
-  [[ "$output" == *"$SID_LIVE"* ]]
+  assert_output --partial "$SID_LIVE"
 }
 
 @test "A4b: with no strike files at all, --session says so without inventing candidates" {
   run_reset --session "$SID_LIVE"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"No strike file found"* ]]
+  assert_output --partial "No strike file found"
 }
 
 @test "--guard restricts the reset to one guard key in the live store" {

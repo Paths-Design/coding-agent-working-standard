@@ -31,9 +31,9 @@ teardown_file() {
   assert_success
   event="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.hookEventName')"
   context="$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')"
-  [[ "$event" == "PreToolUse" ]]
-  [[ "$context" == *"possible AWS access key"* ]]
-  [[ "$context" != *"$synthetic_key"* ]]
+  assert_equal "$event" "PreToolUse"
+  [[ "$context" == *"possible AWS access key"* ]] || return 1
+  [[ "$context" != *"$synthetic_key"* ]] || return 1
 }
 
 @test "scan-secrets: a synthetic AWS access key triggers the advisory" {
