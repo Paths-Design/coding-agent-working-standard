@@ -63,10 +63,12 @@ fi
 #     filtering it out let `git rm .caws/policy.yaml` bypass Guard 2 entirely,
 #     and a deletion-only commit skipped every guard below via the empty-set
 #     early exit.
-#   LINTABLE — ACM only, because lint-staged cannot lint a path that is gone.
-GUARDED=$(git diff --cached --name-only --diff-filter=ACMRD 2>/dev/null || echo "")
-LINTABLE=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || echo "")
-if [ -z "$GUARDED" ] && [ -z "$LINTABLE" ]; then
+# Formatting uses a separate NUL-delimited index read in the staged runner.
+if ! GUARDED=$(git diff --cached --name-only --diff-filter=ACMRD); then
+  echo "BLOCKED: cannot read staged paths." >&2
+  exit 1
+fi
+if [ -z "$GUARDED" ]; then
   exit 0
 fi
 
@@ -160,52 +162,26 @@ if [ -n "$STAGED_SPECS" ]; then
     fi
   done <<< "$STAGED_SPECS"
 
-  # Validate staged spec YAML through the CLI's own parser. `caws specs validate`
-  # is path-shaped and read-only: it resolves nothing from .caws/ and mutates
-  # nothing, which is why it is safe to call from a hook. A spec that is being
-  # DELETED, or one not materialised in a sparse lane checkout, has no file to
-  # validate and is skipped.
-  if command -v caws >/dev/null 2>&1; then
-    while IFS= read -r spec; do
-      [ -n "$spec" ] || continue
-      [ -f "$spec" ] || continue
-      if ! caws specs validate "$spec" >/dev/null 2>&1; then
-        echo "BLOCKED: $spec fails spec validation." >&2
-        echo "  See the diagnostic with: caws specs validate $spec" >&2
-        exit 1
-      fi
-    done <<< "$STAGED_SPECS"
-  fi
 fi
 
-# ── lint-staged: eslint --fix + prettier --write per .lintstagedrc.json ───
+# ── Staged checks: validate index specs, format materialized source ──────
 #
-# --no-stash is load-bearing, not a preference. lint-staged's default backup
-# takes a git stash, and refs/stash lives in the COMMON git dir — it is shared
-# by every linked worktree (it is not one of git's per-worktree refs: HEAD,
-# refs/bisect, refs/worktree, refs/rewritten). lint-staged then resolves that
-# backup by INDEX (`git stash list` -> findIndex -> `git stash drop <n>`), so a
-# sibling worktree pushing a stash between those two calls shifts every index
-# and lint-staged drops — or on its rollback path APPLIES — the wrong entry.
-# With concurrent agents committing constantly, that is cross-agent work loss.
-# This repo's own doctrine forbids touching the shared stash stack for exactly
-# this reason.
+# Preserve the --no-stash contract: no shared refs/stash or hidden patch/backup,
+# and materialized source is formatted/restaged whole, including unstaged hunks.
+# Governance is validated from staged blobs and never formatted or restaged.
 #
-# --workspaces=false is load-bearing too. The root .npmrc sets workspaces=true,
-# which makes npx run lint-staged — and so prettier — from the workspace
-# directory instead of the repo root. Prettier reads .prettierignore from its
-# cwd, so the root fence was never consulted and every file fenced there (the
-# populate-doc-markers targets, the managed hook-pack templates) was
-# reformatted on commit, breaking the generated marker regions the fence
-# exists to protect.
-if [ -n "$LINTABLE" ] && [ -f "$CAWS_ROOT/package.json" ] && command -v npx >/dev/null 2>&1; then
-  if ! npx --no-install --workspaces=false lint-staged --no-stash; then
-    echo "BLOCKED: lint-staged failed." >&2
-    echo "  Fix the reported lint/format errors, then re-stage." >&2
-    echo "  Note: --no-stash means there is no automatic backup; your working tree" >&2
-    echo "  is left exactly as the tasks left it." >&2
-    exit 1
-  fi
+# Direct Node execution retains checkout-root cwd for .prettierignore; npx can
+# relocate into a workspace. Missing runtime/runner is a refusal, never a skip.
+STAGED_RUNNER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/run-staged-checks.cjs"
+if ! command -v node >/dev/null 2>&1 || [ ! -f "$STAGED_RUNNER" ]; then
+  echo "BLOCKED: staged-check runner or Node runtime is unavailable." >&2
+  exit 1
+fi
+node "$STAGED_RUNNER"
+STAGED_EXIT=$?
+if [ "$STAGED_EXIT" -ne 0 ]; then
+  echo "BLOCKED: staged checks failed; fix the diagnostic and re-stage." >&2
+  exit "$STAGED_EXIT"
 fi
 
 exit 0

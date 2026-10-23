@@ -9,9 +9,8 @@
 // the workspace directory, so the commit hook's lint-staged never consulted
 // the fence and reformatted the fenced templates on every commit.
 //
-// These tests replay the exact npx + lint-staged invocation .husky/pre-commit
-// uses, in a scratch npm-workspaces repo holding one fenced and one unfenced
-// markdown file.
+// These tests run the hook's staged runner in a scratch npm-workspaces root
+// holding one fenced and one unfenced markdown file.
 
 const fs = require('fs');
 const path = require('path');
@@ -24,19 +23,35 @@ const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   cwd: PKG_ROOT,
   encoding: 'utf8',
 }).trim();
-const NPX = path.join(path.dirname(process.execPath), 'npx');
+const RUNNER = path.join(REPO_ROOT, 'scripts/run-staged-checks.cjs');
 
 const UNFORMATTED = '|a|bb|\n|-|-|\n|ccc|d|\n';
 const FORMATTED = '| a   | bb  |\n| --- | --- |\n| ccc | d   |\n';
 
 afterAll(() => cleanupAll());
 
-/** The hook's `npx <npx flags> lint-staged <lint-staged flags>` invocation. */
-function hookInvocation() {
+test('the staged runner rejects sparse, formatter, Git and filename counterexamples', () => {
+  const result = spawnSync(
+    process.execPath,
+    ['--test', path.join(REPO_ROOT, 'scripts/run-staged-checks.test.cjs')],
+    {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      timeout: 55000,
+    }
+  );
+  if (result.status !== 0) process.stderr.write(`${result.stdout || ''}\n${result.stderr || ''}`);
+  expect({ status: result.status, signal: result.signal, error: result.error?.message }).toEqual({
+    status: 0,
+    signal: null,
+    error: undefined,
+  });
+}, 60000);
+
+function assertHookInvocation() {
   const hook = fs.readFileSync(path.join(REPO_ROOT, '.husky', 'pre-commit'), 'utf8');
-  const m = /npx ([^;\n]*?)\s*lint-staged ([^;\n]*?);\s*then/.exec(hook);
-  if (m === null) throw new Error('no npx lint-staged invocation found in .husky/pre-commit');
-  return { npxArgs: m[1].trim().split(/\s+/), lintStagedArgs: m[2].trim().split(/\s+/) };
+  expect(hook).toContain('node "$STAGED_RUNNER"');
+  expect(hook).toContain('scripts/run-staged-checks.cjs');
 }
 
 // The scratch repo mirrors the shape that matters: an npm workspaces root with
@@ -46,7 +61,7 @@ function hookInvocation() {
 const FENCED = 'packages/pkg/docs/fenced.md';
 const LOOSE = 'packages/pkg/docs/loose.md';
 
-function runHookLintStaged(npxArgs, lintStagedArgs, explicitConfig = false) {
+function runHookStagedChecks(workspaceCwd = false) {
   const repo = makeTempRepo();
   const write = (rel, body) => {
     fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true });
@@ -73,14 +88,9 @@ function runHookLintStaged(npxArgs, lintStagedArgs, explicitConfig = false) {
       ([key]) => !key.startsWith('GIT_') && !key.toLowerCase().startsWith('npm_config_')
     )
   );
-  const argv = [
-    ...npxArgs,
-    'lint-staged',
-    ...lintStagedArgs,
-    ...(explicitConfig ? ['--config', path.join(repo, '.lintstagedrc.json')] : []),
-  ];
-  const result = spawnSync(NPX, argv, {
-    cwd: repo,
+  const argv = [RUNNER];
+  const result = spawnSync(process.execPath, argv, {
+    cwd: workspaceCwd ? path.join(repo, 'packages/pkg') : repo,
     encoding: 'utf8',
     env: {
       ...inherited,
@@ -95,11 +105,11 @@ function runHookLintStaged(npxArgs, lintStagedArgs, explicitConfig = false) {
     fs.writeFileSync(
       path.join(
         process.env.CAWS_RELEASE_ARTIFACT_DIR,
-        explicitConfig ? 'formatting-unsafe-control.json' : 'formatting-root-hook.json'
+        workspaceCwd ? 'formatting-workspace-refusal.json' : 'formatting-root-hook.json'
       ),
       JSON.stringify(
         {
-          command: [NPX, ...argv],
+          command: [process.execPath, ...argv],
           exit_status: result.status,
           stdout: result.stdout,
           stderr: result.stderr,
@@ -112,8 +122,6 @@ function runHookLintStaged(npxArgs, lintStagedArgs, explicitConfig = false) {
       ) + '\n'
     );
   }
-  if (result.status !== 0)
-    throw new Error(`lint-staged exit ${result.status}\n${result.stdout}\n${result.stderr}`);
   return { result, read };
 }
 
@@ -144,6 +152,7 @@ function runCompleteHook(label, relativePath, changedBytes, unignoreJson = false
   git(repo, ['add', '-f', '--', relativePath]);
   git(repo, ['commit', '-q', '-m', 'chore: establish hook fixture']);
   write('.husky/pre-commit', fs.readFileSync(path.join(REPO_ROOT, '.husky/pre-commit'), 'utf8'));
+  write('scripts/run-staged-checks.cjs', fs.readFileSync(RUNNER, 'utf8'));
   if (unignoreJson) {
     // The real fence ignores *.json. Admit this explicit negative control so
     // a successful skip cannot masquerade as formatter-error handling.
@@ -185,19 +194,13 @@ function runCompleteHook(label, relativePath, changedBytes, unignoreJson = false
   const before = snapshot();
   const result = run('bash', ['.husky/pre-commit']);
   const after = snapshot();
-  const lintStagedPackage = fs.realpathSync(
-    path.join(repo, 'node_modules/lint-staged/package.json')
-  );
   const report = {
     cwd: repo,
     relative_path: relativePath,
     runtime: {
       node: process.execPath,
       node_version: process.version,
-      npx: NPX,
-      lint_staged_binary: fs.realpathSync(path.join(repo, 'node_modules/.bin/lint-staged')),
-      lint_staged_package: lintStagedPackage,
-      lint_staged_version: JSON.parse(fs.readFileSync(lintStagedPackage, 'utf8')).version,
+      staged_runner: RUNNER,
     },
     fixture_json_fence_exception: unignoreJson,
     before,
@@ -247,40 +250,31 @@ describe('the complete pre-commit hook admits the tracked internal tracker', () 
     );
     expect(before.index.exit_status).toBe(0);
     expect(before.index.stdout).toBe(BROKEN_JSON);
-    expect(result.exit_status).toBe(1);
+    expect(result.exit_status).toBe(2);
     expect(result.signal).toBeNull();
     expect(`${result.stdout}\n${result.stderr}`).toContain('SyntaxError');
-    expect(result.stderr).toContain('BLOCKED: lint-staged failed.');
+    expect(result.stderr).toContain('BLOCKED: staged checks failed;');
     expect(after.worktree).toBe(BROKEN_JSON);
     expect(after.index.exit_status).toBe(0);
     expect(after.index.stdout).toBe(BROKEN_JSON);
   }, 60000);
 });
 
-describe('the pre-commit lint-staged run honors the root .prettierignore', () => {
+describe('the pre-commit staged run honors the root .prettierignore', () => {
   test('the hook invocation leaves a fenced file byte-identical and formats an unfenced one', () => {
-    const { npxArgs, lintStagedArgs } = hookInvocation();
-    const { result, read } = runHookLintStaged(npxArgs, lintStagedArgs);
+    assertHookInvocation();
+    const { result, read } = runHookStagedChecks();
     expect([result.status, result.stderr]).toEqual([0, expect.any(String)]);
     expect(read(FENCED)).toBe(UNFORMATTED);
     expect(read(LOOSE)).toBe(FORMATTED);
   }, 60000);
 
-  // The control proves the scratch repo reproduces the defect, so the case
-  // above can fail for the right reason: npx runs lint-staged from the
-  // workspace, where no .prettierignore exists. Modern lint-staged refuses
-  // implicit config discovery there, so supply the SAME config explicitly
-  // to ensure this control reaches the formatter instead of failing earlier.
-  test('the workspace-cwd sensitivity control reformats the fenced file', () => {
-    const { npxArgs, lintStagedArgs } = hookInvocation();
-    expect(npxArgs).toContain('--workspaces=false');
-    const bare = npxArgs.filter((arg) => arg !== '--workspaces=false');
-    const { result, read } = runHookLintStaged(bare, lintStagedArgs, true);
-    expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toMatchObject({
-      status: 0,
-    });
-    // Both formatted: prettier ran, and it ran without the fence.
-    expect(read(LOOSE)).toBe(FORMATTED);
-    expect(read(FENCED)).toBe(FORMATTED);
+  test('workspace cwd is refused before it can lose the root formatting fence', () => {
+    assertHookInvocation();
+    const { result, read } = runHookStagedChecks(true);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('checkout root');
+    expect(read(LOOSE)).toBe(UNFORMATTED);
+    expect(read(FENCED)).toBe(UNFORMATTED);
   }, 60000);
 });
