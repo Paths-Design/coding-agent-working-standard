@@ -308,12 +308,15 @@ gates:
 
 # ── bash 3.2 (what macOS actually ships) ───────────────────────────────────
 
-@test "the accessors work under /bin/bash 3.2, not merely under a modern bash" {
+@test "the accessors work under system /bin/bash (3.2 on macOS)" {
   # The suite normally runs under whatever `bash` is on PATH (often Homebrew
   # bash 5). The guards do not: on macOS they run under /bin/bash 3.2, which
   # has no associative arrays and no `${var^^}`. Asserting only under bash 5
   # would prove the wrong thing about the shipping environment.
   [ -x /bin/bash ]
+  local system_major
+  system_major=$(/bin/bash -c 'printf "%s" "${BASH_VERSION%%.*}"')
+  if [ "$(uname -s)" = Darwin ]; then [ "$system_major" = 3 ]; fi
   write_policy '{"version":1,"surfaces":{},"guards":{"scope-guard.sh":{"additional_allow_prefixes":[{"prefix":"native/","reason":"'"$REASON"'"}]},"god-object-check.sh":{"thresholds":{"loc":2500}}}}'
   write_yaml_policy 'non_governed_zones:
   - vendor/**
@@ -329,5 +332,5 @@ gates:
     printf "%s" "$(caws_guard_zones)"
   ' _ "$(GUARD_CONFIG_PY)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
   [ "$status" -eq 0 ]
-  [ "$output" = "3|SCOPE_GUARD_SH|native/|2500|vendor/" ]
+  [ "$output" = "$system_major|SCOPE_GUARD_SH|native/|2500|vendor/" ]
 }
