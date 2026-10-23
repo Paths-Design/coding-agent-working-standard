@@ -32,3 +32,9 @@ rollback:
   - 'revert the hotfix merge commit'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At a18e8b27 in worktree prepush-lint-hotfix: npx eslint scripts/qualify-render-plan-snapshots.ts src/tooling/transcript-runtime-floor-entry.ts exit 0, 0 problems (baseline main d604ffba: 2 errors, prefer-const 65:7 and no-require-imports 8:66). prettier --check and npm run typecheck also clean."
+    recorded_at: "2026-10-23T05:13:36.339Z"
+    commit_sha: a18e8b279b0e480596f80a6993219de365e380d6
