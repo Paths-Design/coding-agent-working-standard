@@ -1,4 +1,4 @@
-import * as fs from 'node:fs';
+import { liveSelectionReadIo, type SelectionReadIo } from './selection-read-io';
 import * as path from 'node:path';
 import { MACHINE_EVENTS } from './native-hook-identification';
 import { assertMachinePath } from './machine-paths';
@@ -12,7 +12,8 @@ export interface SystemSurfacePolicy {
 export function validateSystemPolicy(
   repo: string,
   policy: SystemSurfacePolicy,
-  runtime?: { files: string[]; defaults: Record<Event, string[]> }
+  runtime?: { files: string[]; defaults: Record<Event, string[]> },
+  io: SelectionReadIo = liveSelectionReadIo
 ): void {
   if (
     !policy ||
@@ -58,9 +59,9 @@ export function validateSystemPolicy(
       if (kind === 'libraries' && ['agent-surface.sh', 'runtime-paths.sh'].includes(name))
         throw new Error(`Bootstrap library cannot be overridden: ${name}`);
       const target = path.join(repo, relative);
-      assertMachinePath(repo, target);
-      if (!fs.statSync(target).isFile()) throw new Error(`Extension is not a file: ${relative}`);
-      if (kind === 'handlers') fs.accessSync(target, fs.constants.X_OK);
+      assertMachinePath(repo, target, io);
+      if (io.stat(target).kind !== 'file') throw new Error(`Extension is not a file: ${relative}`);
+      if (kind === 'handlers') io.requireExecutable(target);
     }
   }
   if (runtime) {
