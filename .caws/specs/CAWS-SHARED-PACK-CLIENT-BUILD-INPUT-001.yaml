@@ -1,10 +1,11 @@
 id: CAWS-SHARED-PACK-CLIENT-BUILD-INPUT-001
 title: 'Shared pack: the renderer client is a native-image build input, not an installed managed hook'
 mode: fix
-lifecycle_state: active
-worktree: shared-pack-client-input
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Renderer client is a native-image build input: manifest entry removed, SHARED_PACK_VERSION back to 105 (install set unchanged), named non-manifest exception with pin test. 4 suites 193/193 in lane; pin negative control exit 1 against the declaring manifest.'
 created_at: '2026-10-23T06:24:05.867Z'
-updated_at: '2026-10-23T06:24:13.745Z'
+updated_at: '2026-10-23T06:34:19.801Z'
 created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
 blast_radius:
   modules:
@@ -33,3 +34,14 @@ rollback:
   - 'revert the merge commit'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Worktree shared-pack-client-input at the candidate: turbo build exit 0; npx jest tests/init/hook-install-layout.test.js tests/init/pack-fingerprint.test.js tests/init/init-hook-pack-render.test.js tests/adapter/machine-adoption.test.js --ci exit 0, 4 suites 193/193 (log ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/client-input-wt-jest.log). Baseline main 21a60fc9 pre-push log push-main-21a60fc9.log: init-hook-pack-render 5 failed, machine-adoption init exit 1."
+    recorded_at: "2026-10-23T06:33:35.397Z"
+    commit_sha: bd4a2c75c546c5d4cf40048f024f5f529895f328
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "pin-negative-control.js (artifacts dir) against canonical dist manifest at 21a60fc9 (version 106, client declared): declaresClient true, exit 1 (pin's manifest arm fails); against the lane dist: version 105, declaresClient false, exit 0. The no-managed-header arm is asserted directly in the pin test and holds on the live file."
+    recorded_at: "2026-10-23T06:33:40.712Z"
+    commit_sha: bd4a2c75c546c5d4cf40048f024f5f529895f328
