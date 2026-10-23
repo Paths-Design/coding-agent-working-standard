@@ -7530,6 +7530,42 @@ Additional bounded evidence and unresolved dependencies:
   nonempty Codex model union, continuous exclusion under a competing writer,
   concurrent fairness, legacy Render compaction or machine adoption.
 
+- E281: Normal no-close merge `990e9b5a` lands the E276-E280 source, fixture,
+  physical-shell and archive repairs. The unchanged-hook normal push at
+  `4c5a894d` fails in 340.644 seconds: 6,693 Jest tests pass, thirteen remain
+  skipped and one CI contract test fails. That test expects the former raw
+  `release-scenarios/` upload path, while the workflow uploads
+  `hook-byte-artifacts.tgz`. Root retains the failed raw output, stable tracked
+  source pins and empty final process group under `main-push-05/`; remote main
+  has not received this candidate. The replacement oracle must execute the
+  archive step and inspect hostile symlink, hidden receipt and binary bytes,
+  preserving failure propagation and independent pytest execution.
+
+  Test repair `db48421f` executes the extracted workflow Bash block and real tar
+  listing/extraction. `publication-integration/release-workflow-tests-01/` exits
+  0 in 2.734 seconds with all four focused tests passing. The retained fixture
+  keeps `loop -> loop`, hidden receipt bytes `00fffe800a7f`, release bytes
+  `0100c3280d0a` and the successful archive. An output-directory conflict makes
+  the unchanged archive command fail nonzero. Supplemental input and commit
+  records bind the tested file, workflow and imported scripts; the physically
+  copied ignored CLI build matches canonical push05 sources and is explicitly
+  borrowed, not a new build. Hosted GNU tar/upload and the next full push remain
+  unverified.
+
+  Capacity qualifier `f31e8401` removes the derived admission-count field and
+  requires each original's actual owner observations in order: reservation,
+  writer retention, durable consumption and heavy release. The reservation
+  follows actual capacity acquisition; consumption precedes record removal and
+  writer release. `publication-integration/capacity-lifecycle-controls-01/`
+  retains 22 actual-source pure controls, including rejection of missing,
+  reordered, duplicate, wrong-original and spoofed lifecycle events. The
+  selected typed SessionEnd path spawns no shell helper; cleanup observations do
+  not claim arbitrary detached-descendant coverage. All 28 inspected prior
+  invocation directories retain terminal cleanup receipts, including killed
+  frontend cases. These observations do not establish the new sampler's timing
+  or 258-original completion. The first actual run retains the original
+  per-request and aggregate budgets, and partial completion cannot pass.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
