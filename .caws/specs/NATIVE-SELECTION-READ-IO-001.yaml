@@ -1,9 +1,10 @@
 id: NATIVE-SELECTION-READ-IO-001
 title: 'Run invocation selection through bounded immutable read observations'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-selection-read-io
 created_at: '2026-10-23T20:11:12.480Z'
-updated_at: '2026-10-23T20:11:12.480Z'
+updated_at: '2026-10-23T20:11:13.735Z'
 created_by_session: '01a16a40-3acd-7cd0-a124-4dfaf35c69f8'
 blast_radius:
   modules:
