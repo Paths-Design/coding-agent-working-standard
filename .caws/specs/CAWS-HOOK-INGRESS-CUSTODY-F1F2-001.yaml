@@ -85,9 +85,8 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "20-case recorder control at e05c9c0b: c3 raw NUL key and c5 0xFF classify uncertain (were main at 7195f14f), c4 c6 c7 uncertain; jest stage-b-full 105/105 includes raw NUL and undecodable byte withheld through the project dispatcher. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated."
-    recorded_at: "2026-10-23T03:21:43.311Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt"
+    evidence_ref: "20-case recorder control at e05c9c0b: c3 raw NUL key and c5 0xFF classify uncertain (were main at 7195f14f), c4 c6 c7 uncertain; jest stage-b-full 105/105 includes raw NUL and undecodable byte withheld through the project dispatcher. Runs 02:40 to 03:20Z on the shared machine under user direction after root was notified, through allocated-run.sh with PID, verified PGID, deadline and residual receipts; macOS /bin/bash 3.2 only; the project dispatcher was driven directly under env -i, no live qwen, kimi, opencode or zcode harness; machine launcher and typed route not exercised; installed runtime not updated. Artifact (outside the repo, retained): /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f1f2-impl/attempts/20261023T031826Z-e05c9c0b/compare.txt . Re-recorded with the commit as the re-derivable citation; the prior record with the absolute artifact path stays in history."
+    recorded_at: "2026-10-23T03:22:38.196Z"
     commit_sha: e05c9c0bfae437927c2d591ba89ef23b54712e09
   - criterion_id: A2
     status: pass
