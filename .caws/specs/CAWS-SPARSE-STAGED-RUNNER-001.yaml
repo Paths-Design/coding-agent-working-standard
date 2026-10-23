@@ -1,0 +1,48 @@
+id: CAWS-SPARSE-STAGED-RUNNER-001
+title: 'Preserve sparse staged governance and commit failure fidelity'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-23T09:19:46.467Z'
+updated_at: '2026-10-23T09:19:46.467Z'
+created_by_session: '01a166d3-36ad-71a3-83a1-a1b8a6e32a7c'
+blast_radius:
+  modules:
+    - 'Repository pre-commit staged formatting and spec validation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/pre-commit'
+    - 'scripts/run-staged-checks.cjs'
+    - 'scripts/run-staged-checks.test.cjs'
+    - 'packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js'
+    - '.husky/tests/run.sh'
+    - 'package.json'
+  out: []
+invariants:
+  - 'No stash or hidden backup is created and absent governance blobs are never materialized or rewritten.'
+  - 'Formatter and Git failures or signals produce a nonzero hook verdict.'
+  - 'Only staged eligible materialized paths are formatted and restaged with literal filename handling.'
+acceptance:
+  - id: A1
+    given: 'a sparse checkout with a valid staged-only spec and eligible source'
+    when: 'the staged runner executes'
+    then: 'staged spec bytes and absence are preserved while eligible formatting is restaged successfully'
+  - id: A2
+    given: 'invalid staged spec bytes even when working bytes differ or are absent'
+    when: 'the staged runner validates'
+    then: 'the hook refuses before formatting without rewriting the spec'
+  - id: A3
+    given: 'formatter or Git restaging failure or termination'
+    when: 'the staged runner executes'
+    then: 'the original nonzero verdict is surfaced and commit is refused without stash or rollback'
+  - id: A4
+    given: 'ordinary and partially staged eligible files plus unusual filenames and formatting fences'
+    when: 'the runner executes'
+    then: 'formatting preserves the existing whole-file restage semantics and fences with literal paths'
+rollback:
+  - 'Revert the owned source commit through a new reviewed commit; preserve staged data and sparse governance.'
+non_functional: {}
+contracts:
+  - name: 'staged-commit-checks'
+    type: behavior
