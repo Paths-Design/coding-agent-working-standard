@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const { AbortController } = globalThis;
 const { sha, verifyRuntime } = require('../../dist/init/machine-runtime-state');
 const { MACHINE_EVENTS, machineCommand } = require('../../dist/init/native-hook-identification');
-const { captureSelectionRead } = require('../../dist/init/selection-read-io');
+const { captureSelectionRead, liveSelectionReadIo } = require('../../dist/init/selection-read-io');
 const { resolveInvocationSelection } = require('../../dist/runtime/selection');
 const {
   SelectionObservationSnapshot,
@@ -538,4 +538,219 @@ test('cancellation rejects a pending capture without retaining another observati
   });
   await expect(result).rejects.toBe(reason);
   expect(pending.observations).toHaveLength(0);
+});
+
+function retainMetadataParseBinding(label, observation) {
+  const parent = process.env.CAWS_TEST_ARTIFACT_DIR;
+  if (!parent) return;
+  if (!path.isAbsolute(parent)) throw new Error('Metadata artifact root must be absolute');
+  fs.mkdirSync(parent, { recursive: true });
+  const directory = fs.mkdtempSync(path.join(parent, 'metadata-parse-binding-'));
+  fs.writeFileSync(
+    path.join(directory, 'observation.json'),
+    JSON.stringify(
+      {
+        schema: 'caws.ts.metadata_hash_to_parse.observation.v1',
+        synthetic: true,
+        component: 'resolveInvocationSelection -> verifyRuntime -> verifyNativeLayout',
+        label,
+        ...observation,
+      },
+      null,
+      2
+    ) + '\n'
+  );
+}
+
+test.each(['native-entry.json', 'native-modes.json'])(
+  'native metadata parse binding: altered %s read cannot borrow its earlier hash',
+  (name) => {
+    const f = fixture({}, true),
+      target = path.join(f.runtime, name);
+    const original = fs.readFileSync(target),
+      value = JSON.parse(original);
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.runtime, 'manifest.json')));
+    const engine = path.join(f.runtime, 'client/engine.js');
+    const originalMode = fs.statSync(engine).mode & 0o7777;
+    if (name === 'native-entry.json') value.timeoutMs = 1001;
+    else value['client/engine.js'] = 0o755;
+    const altered = Buffer.from(JSON.stringify(value));
+    const reads = [],
+      inventoryModes = [];
+    let changed = false,
+      restoredAtInventory = false,
+      pendingMode = false;
+    function restore() {
+      fs.writeFileSync(target, original);
+      fs.chmodSync(engine, originalMode);
+      pendingMode = false;
+    }
+    const io = {
+      ...liveSelectionReadIo,
+      readRuntimeFile(file, singleLink = false) {
+        if (file !== target) return liveSelectionReadIo.readRuntimeFile(file, singleLink);
+        const read = reads.length + 1;
+        if (read === 2) {
+          fs.writeFileSync(target, altered);
+          if (name === 'native-modes.json') {
+            fs.chmodSync(engine, 0o755);
+            pendingMode = true;
+          }
+          changed = true;
+        }
+        const captured = liveSelectionReadIo.readRuntimeFile(file, singleLink);
+        reads.push({
+          phase: read === 1 ? 'manifest_member_hash' : 'metadata_parse_capture',
+          read,
+          payloadSha256: sha(captured.bytes),
+          namedPayloadSha256: sha(fs.readFileSync(target)),
+          capturedCandidateMetadata: JSON.parse(captured.bytes),
+          capturedStat: captured.stat,
+        });
+        // The returned capture owns its buffer. Restoring the pathname does
+        // not rewrite the actual later bytes supplied to the metadata parser.
+        if (name === 'native-entry.json' && read === 2) restore();
+        return captured;
+      },
+      lstat(file) {
+        const info = liveSelectionReadIo.lstat(file);
+        if (file === engine && pendingMode) {
+          inventoryModes.push(info.mode & 0o7777);
+          restore();
+          restoredAtInventory = true;
+        }
+        return info;
+      },
+    };
+    let selected = null,
+      failure = null;
+    try {
+      selected = resolveInvocationSelection({ ...f.options, io });
+    } catch (error) {
+      failure = { name: error.name, message: error.message };
+    } finally {
+      restore();
+    }
+    let restoredVerification = null,
+      restoredError = null;
+    try {
+      restoredVerification = verifyRuntime(f.options.home, f.options.runtimeDigest);
+    } catch (error) {
+      restoredError = { name: error.name, message: error.message };
+    }
+    const restored = {
+      payloadSha256: sha(fs.readFileSync(target)),
+      engineMode: fs.statSync(engine).mode & 0o7777,
+      verificationOk: restoredVerification !== null,
+      verificationError: restoredError,
+    };
+    // Persist observed old admission or repaired refusal BEFORE assertions.
+    retainMetadataParseBinding(name, {
+      runtimeDigest: f.options.runtimeDigest,
+      target: name,
+      expectedPayloadSha256: manifest[name],
+      originalPayloadSha256: sha(original),
+      alteredPayloadSha256: sha(altered),
+      changed,
+      reads,
+      inventoryModes,
+      restoredAtInventory,
+      originalEngineMode: originalMode,
+      admitted: selected?.status === 'active',
+      actualSelection: selected,
+      error: failure,
+      restored,
+      boundary:
+        'Real private file captures through existing IO; fixture executables are not launched. Metadata fields in reads are the actual delivered capture, not an independently exposed parser result.',
+    });
+    expect(changed).toBe(true);
+    expect(reads).toHaveLength(2);
+    expect(reads[0].payloadSha256).toBe(manifest[name]);
+    expect(reads[1].payloadSha256).toBe(sha(altered));
+    expect(sha(altered)).not.toBe(manifest[name]);
+    expect(restored).toMatchObject({
+      payloadSha256: manifest[name],
+      engineMode: originalMode,
+      verificationOk: true,
+      verificationError: null,
+    });
+    expect(failure?.message).toBe(
+      `Machine runtime file modified: ${name}; preserve and reconcile local growth before updating`
+    );
+    expect(selected).toBeNull();
+  }
+);
+
+test('native metadata parse binding: unchanged live and immutable snapshot reads retain selection', async () => {
+  const f = fixture({}, true),
+    counts = {};
+  const io = {
+    ...liveSelectionReadIo,
+    readRuntimeFile(file, singleLink = false) {
+      if (
+        ['native-entry.json', 'native-modes.json'].some(
+          (name) => file === path.join(f.runtime, name)
+        )
+      )
+        counts[file] = (counts[file] ?? 0) + 1;
+      return liveSelectionReadIo.readRuntimeFile(file, singleLink);
+    },
+  };
+  const selected = resolveInvocationSelection({ ...f.options, io });
+  const observed = await observe(f.options, snapshot('unchanged-metadata-binding'));
+  const metadataRows = observed.snapshot.observations.filter(
+    (row) =>
+      row.operation.kind === 'runtime-file' &&
+      ['native-entry.json', 'native-modes.json'].some(
+        (name) => row.operation.path === path.join(f.runtime, name)
+      )
+  );
+  retainMetadataParseBinding('unchanged', {
+    runtimeDigest: f.options.runtimeDigest,
+    admitted: selected.status === 'active',
+    actualSelection: selected,
+    snapshotSelection: observed.selection,
+    liveReadCounts: counts,
+    metadataObservations: metadataRows,
+  });
+  expect(selected.status).toBe('active');
+  expect(observed.selection).toEqual(selected);
+  expect(metadataRows).toHaveLength(2);
+  for (const name of ['native-entry.json', 'native-modes.json'])
+    expect(counts[path.join(f.runtime, name)]).toBe(2);
+});
+
+test('native directory closure: undeclared empty tree refuses before descent', () => {
+  const f = fixture({}, true),
+    unadmitted = path.join(f.runtime, 'undeclared');
+  fs.mkdirSync(path.join(unadmitted, 'deeper/deepest'), { recursive: true });
+  const descended = [];
+  const io = {
+    ...liveSelectionReadIo,
+    readDirectory(directory) {
+      if (directory === unadmitted || directory.startsWith(unadmitted + path.sep))
+        descended.push(directory);
+      return liveSelectionReadIo.readDirectory(directory);
+    },
+  };
+  let selected = null,
+    failure = null;
+  try {
+    selected = resolveInvocationSelection({ ...f.options, io });
+  } catch (error) {
+    failure = { name: error.name, message: error.message };
+  }
+  retainMetadataParseBinding('undeclared-empty-directory', {
+    runtimeDigest: f.options.runtimeDigest,
+    firstUndeclaredComponent: 'undeclared',
+    descendantDepth: 3,
+    descended,
+    admitted: selected?.status === 'active',
+    actualSelection: selected,
+    error: failure,
+    boundary: 'Existing real directory reads and synthetic component fixture; no engine executed.',
+  });
+  expect(failure?.message).toBe('Undeclared native runtime directory: undeclared');
+  expect(descended).toEqual([]);
+  expect(selected).toBeNull();
 });
