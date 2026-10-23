@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-publication-boundary
 created_at: '2026-10-22T07:54:35.268Z'
-updated_at: '2026-10-23T06:30:53.047Z'
+updated_at: '2026-10-23T06:59:15.871Z'
 created_by_session: '01a16072-908c-7033-9fd2-fb054ac7024b'
 blast_radius:
   modules:
@@ -41,6 +41,16 @@ scope:
     - packages/caws-cli/tests/runtime/session-seal-routing.test.js
     - packages/caws-cli/src/runtime/session-seal-runtime.ts
     - packages/caws-cli/tests/runtime/session-seal-runtime.test.js
+    - packages/caws-native/src/session_cache.rs
+    - packages/caws-native/src/session_cache/tests.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/session_cache_wire/tests.rs
+    - packages/caws-native/src/agent_pid_cache.rs
+    - packages/caws-native/src/agent_pid_cache/tests.rs
+    - packages/caws-cli/src/runtime/session-cache-client.ts
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/tests/runtime/session-cache-client.test.js
+    - packages/caws-cli/tests/runtime/session-cache-admission.test.js
   out: []
 invariants:
   - 'Native original identity and continuous writer custody govern effects; prepared bytes confer no authority'
