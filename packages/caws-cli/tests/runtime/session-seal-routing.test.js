@@ -242,32 +242,66 @@ test('only explicit coherent no-effect prefix decline returns to full compatibil
   await prepared.acknowledgeHandoff(true);
 });
 
-test.each(['incomplete', 'lost', 'effectful-decline', 'changed-source', 'cancelled'])(
-  'prefix %s cannot replay compatibility or reach seal',
-  async (kind) => {
-    let controller;
-    const owned = ports(async () => {
-      if (kind === 'lost') throw new Error('lost prefix result after effects');
-      if (kind === 'cancelled') {
-        controller.abort(new Error('prefix cancelled'));
-        return completedPrefix;
-      }
-      if (kind === 'effectful-decline') return { ...declinedPrefix, envelopePublished: true };
-      if (kind === 'changed-source') {
-        fs.appendFileSync(path.join(runtime, 'lib/run-handlers.sh'), '\n# replaced after prefix\n');
-        return completedPrefix;
-      }
-      return { ...declinedPrefix, status: 'unavailable' };
+test.each([
+  'incomplete',
+  'lost',
+  'effectful-decline',
+  'changed-source',
+  'cancelled',
+  'cancelled-unavailable',
+])('prefix %s cannot replay compatibility or reach seal', async (kind) => {
+  let controller;
+  const owned = ports(async () => {
+    if (kind === 'lost') throw new Error('lost prefix result after effects');
+    if (kind.startsWith('cancelled')) {
+      controller.abort(new Error('prefix cancelled'));
+      return kind === 'cancelled'
+        ? completedPrefix
+        : {
+            ...completedPrefix,
+            status: 'unavailable',
+            diagnostic: 'PID refresh unavailable; prefix completed',
+            agentPid: 'unavailable',
+          };
+    }
+    if (kind === 'effectful-decline') return { ...declinedPrefix, envelopePublished: true };
+    if (kind === 'changed-source') {
+      fs.appendFileSync(path.join(runtime, 'lib/run-handlers.sh'), '\n# replaced after prefix\n');
+      return completedPrefix;
+    }
+    return { ...declinedPrefix, status: 'unavailable' };
+  });
+  const fallback = compatibilitySpy();
+  const state = await prepare(request(), owned);
+  controller = state.controller;
+  await expect(state.prepared.dispatch()).rejects.toThrow();
+  expect(fallback).not.toHaveBeenCalled();
+  expect(owned.calls).toEqual([['prefix', project]]);
+  if (kind.startsWith('cancelled')) {
+    const rows = fs
+      .readFileSync(
+        path.join(project, '.caws/sessions/original/hook-invocations/seal-routing.jsonl'),
+        'utf8'
+      )
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    const observed = rows.filter((row) => row.stage === 'session_end_prefix_completed');
+    expect(observed).toHaveLength(1);
+    expect(observed[0]).toMatchObject({
+      status: kind === 'cancelled' ? 'completed' : 'unavailable',
+      prefix_complete: true,
+      envelope_published: true,
+      pointer_published: true,
+      agent_pid: kind === 'cancelled' ? 'not_found' : 'unavailable',
+      reap: 'not_run',
     });
-    const fallback = compatibilitySpy();
-    const state = await prepare(request(), owned);
-    controller = state.controller;
-    await expect(state.prepared.dispatch()).rejects.toThrow();
-    expect(fallback).not.toHaveBeenCalled();
-    expect(owned.calls).toEqual([['prefix', project]]);
-    await state.prepared.acknowledgeHandoff(false);
+    expect(rows.findIndex((row) => row.stage === 'session_end_prefix_completed')).toBeLessThan(
+      rows.findIndex((row) => row.stage === 'adapter_error')
+    );
   }
-);
+  await state.prepared.acknowledgeHandoff(false);
+});
 
 test('complete best-effort prefix failure still runs logger with diagnostic and explicit no-publication', async () => {
   const owned = ports(async () => ({

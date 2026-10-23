@@ -297,10 +297,12 @@ if (process.argv[2] === '--agent-child') {
     } while (Date.now() < end);
     throw new Error(message);
   }
-  function journal(session) {
+  function journal(session, excluded = []) {
     const directory = path.join(session, 'hook-invocations');
     if (!fs.existsSync(directory)) return null;
-    const files = fs.readdirSync(directory).filter((name) => name.endsWith('.jsonl'));
+    const files = fs
+      .readdirSync(directory)
+      .filter((name) => name.endsWith('.jsonl') && !excluded.includes(name));
     assert(files.length <= 1, 'one original invocation per case');
     return files.length
       ? { file: path.join(directory, files[0]), rows: rows(path.join(directory, files[0])) }
@@ -431,7 +433,7 @@ if (process.argv[2] === '--agent-child') {
         maxBackends: 1,
         maxQueuePerProject: 4,
         maxFrameBytes: 2097152,
-        maxRetainedRecords: 1,
+        maxRetainedRecords: large ? 2 : 1,
         firstFrameMs: 3000,
         requestMs: 20000,
         startupMs: 3000,
@@ -617,7 +619,8 @@ if (process.argv[2] === '--agent-child') {
     assert.equal(envelope.repo_root, fixture.project);
     assert.equal(envelope.hook_event, 'SessionEnd');
     assert.equal(envelope.platform, fixture.surface);
-    assert.equal(envelope.created_at, envelope.last_seen_at);
+    if (fresh) assert.equal(envelope.created_at, envelope.last_seen_at);
+    else assert(Date.parse(envelope.created_at) <= Date.parse(envelope.last_seen_at));
     assert.match(envelope.last_seen_at, /^\d{4}-\d\d-/);
     const pointer = read(path.join(fixture.project, '.caws/sessions/.caller-session.json'));
     assert.equal(pointer.session_id, fixture.sid);
@@ -787,7 +790,7 @@ if (process.argv[2] === '--agent-child') {
     const next = {
       ...fixture,
       name: fixture.name + '-next',
-      sid: fixture.sid + '-next',
+      sid: admitted ? fixture.sid + '-next' : fixture.sid,
       directory: path.join(fixture.directory, 'followup'),
       missing: true,
       large: false,
@@ -795,13 +798,25 @@ if (process.argv[2] === '--agent-child') {
     };
     next.session = path.join(fixture.project, '.caws/sessions', next.sid);
     fs.mkdirSync(next.directory, { mode: 0o700 });
+    const priorJournals = admitted
+      ? []
+      : fs.readdirSync(path.join(next.session, 'hook-invocations'));
+    const retainedBefore = admitted
+      ? null
+      : ['.meta.json', '.session-publication.json'].map((name) => ({
+          name,
+          sha256: hash(fs.readFileSync(path.join(next.session, name))),
+        }));
+    const originalCreated = admitted
+      ? null
+      : read(path.join(next.session, '.session-envelope.json')).created_at;
     const invocation = await invoke(next);
     const terminal = await bounded(
       invocation.nativeTerminal,
       25000,
       'follow-up original did not settle'
     );
-    const record = journal(next.session);
+    const record = journal(next.session, priorJournals);
     assert(record, 'follow-up did not execute ordinary engine');
     checkPrefix(next, invocation, record, false);
     const durable = operation(next, record.rows[0].invocation_id);
@@ -815,8 +830,30 @@ if (process.argv[2] === '--agent-child') {
     } else {
       assert.notEqual(terminal.code, 0, 'retained original did not fence later frontend');
       assert(!record.rows.some((row) => row.stage === 'session_seal_consumer_completed'));
-      assert.equal(durable.row, null, 'full shared frontier admitted another original');
-      assert(!fs.existsSync(path.join(next.session, '.session-publication.json')));
+      assert.equal(durable.row, null, 'uncertain owner reserved another original');
+      assert.deepEqual(
+        ['.meta.json', '.session-publication.json'].map((name) => ({
+          name,
+          sha256: hash(fs.readFileSync(path.join(next.session, name))),
+        })),
+        retainedBefore,
+        'same-session retry changed the retained publication'
+      );
+      assert.equal(
+        read(path.join(next.session, '.session-envelope.json')).created_at,
+        originalCreated
+      );
+      assert(
+        ownerRows(
+          path.join(next.environment.CAWS_HOME, 'state/render-service/observations.jsonl')
+        ).some(
+          (row) =>
+            row.event === 'admission_denied' &&
+            row.reason === 'unknown_fence' &&
+            row.invocationId === record.rows[0].invocation_id
+        ),
+        'same-session retry must reach the unknown-effect fence with spare live capacity'
+      );
     }
     await release(invocation);
     return { terminal, journal: record.file, operation: durable.file, admitted };

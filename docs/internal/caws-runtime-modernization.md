@@ -7240,6 +7240,42 @@ Additional bounded evidence and unresolved dependencies:
   insufficient: the compiled engine also needs the selected store port,
   Projection/Render preparation and complete native renderer observations.
 
+- E270: Review of committed integration `fbfdc316` identified a received-prefix
+  observation lost when cancellation arrives before journal append. The engine
+  records the received fields before refusing cancellation; this diagnostic
+  record does not grant publication authority. Completed and unavailable-prefix
+  cancellation controls assert recorded effects, no seal and no compatibility
+  replay. The missing-session concern is excluded by the separate SessionEnd
+  admission's exact nonempty original/resolved identity comparison; the
+  identity-free test cited by review exercises the other cache profile.
+
+  A normal build and 339 checks across four suites exit 0. Actual frontend
+  `actual-session-publication-04` exits 0 in 21.074 seconds, with source/tool
+  pins unchanged and no process residue. Its hostile cases retry the same
+  session with two live-record slots. Native admission records `unknown_fence`
+  while one slot remains available, and retained metadata/marker hashes remain
+  unchanged with no second ordinary-consumer completion. This distinguishes
+  truthful unknown-effect refusal from the earlier full-capacity refusal. The
+  failed wire exchange in probe 01 is explained by the E269 native schema
+  repair; probe 02's diagnostic-oracle correction changes no production code.
+  The earlier 95-test machine-readable Jest result was overwritten by reuse of
+  its output argument during the later 339-test run. Its original raw logs and
+  execution receipt remain intact; `result-overwrite-observation.json` records
+  the mistake and the later result's relocation. No lost JSON is reconstructed.
+
+  The normal main push at `d4f2be80` exits 1: typecheck, dependency audit and
+  6,454 tests pass, but qualifier timer imports fail lint and the first build
+  refuses changed license-marker custody. A later sequential preparation build
+  passes; it does not erase the earlier failure. Remote main remains `da876692`.
+  Twenty private stage/dist-removal/restage/cleanup cycles across Node 22.19 and
+  22.22.2 do not reproduce the custody failure. Root retains its cause as
+  unresolved and owns precise refusal diagnostics and one observed normal build
+  before retrying publication. No deletion-authority checks are weakened.
+  Evidence resides beside E269 under `main-push-01` and
+  `license-staging-probe-01`, with publication checks under
+  `publication-integration/ts-prefix-observation-*` and
+  `publication-integration/actual-session-publication-fixture-04`.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

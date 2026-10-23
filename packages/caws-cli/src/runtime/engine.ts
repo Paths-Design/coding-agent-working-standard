@@ -361,7 +361,8 @@ export async function prepareRuntimeInvocation(
           // including a reprieved logger. Only its explicit no-effect decline can
           // return to full compatibility; no uncertain operation is replayed.
           const prefix = await nativeSessionEndPrefix.capture(selection.canonical);
-          if (signal.aborted) throw signal.reason;
+          // Preserve a received effects observation even if cancellation won
+          // after capture. This journal is diagnostic, not publication authority.
           journal.append('session_end_prefix_completed', {
             status: prefix.status,
             prefix_complete: prefix.prefixComplete,
@@ -370,6 +371,7 @@ export async function prepareRuntimeInvocation(
             agent_pid: prefix.agentPid,
             reap: prefix.reap,
           });
+          if (signal.aborted) throw signal.reason;
           if (prefix.status === 'declined') {
             if (
               prefix.prefixComplete ||
