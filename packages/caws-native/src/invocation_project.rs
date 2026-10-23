@@ -356,7 +356,7 @@ pub struct ProjectFailure {
     pub retained: Option<Box<RetainedQuery>>,
 }
 impl ProjectFailure {
-    fn new(phase: ProjectPhase, message: impl Into<String>) -> Self {
+    pub(crate) fn new(phase: ProjectPhase, message: impl Into<String>) -> Self {
         Self {
             first_phase: phase,
             first_message: message.into(),
@@ -891,6 +891,87 @@ struct QueryOutput {
     stderr: Vec<u8>,
     cleanup: QueryCleanup,
 }
+/// Raw terminal observations for the finite Render-context producer. Unlike
+/// project discovery, a settled nonzero exit and non-UTF8 bytes remain data.
+pub(crate) struct ObservedQueryOutput {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub cleanup: QueryCleanup,
+}
+pub(crate) struct ObservedQueryFailure {
+    pub failure: ProjectFailure,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+impl From<ProjectFailure> for ObservedQueryFailure {
+    fn from(failure: ProjectFailure) -> Self {
+        Self {
+            failure,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }
+    }
+}
+
+pub(crate) fn select_render_executable(
+    cwd: &str,
+    environment: &BTreeMap<String, String>,
+    expires: Instant,
+    is_cancelled: &dyn Fn() -> bool,
+) -> Result<SelectedExecutable, ProjectFailure> {
+    let mut literal = environment.clone();
+    literal.remove("CAWS_GIT_BINARY");
+    let path = select_executable(cwd, &literal)?;
+    if environment
+        .get("CAWS_GIT_BINARY")
+        .is_some_and(|v| !v.is_empty())
+        && select_executable(cwd, environment)? != path
+    {
+        return Err(ProjectFailure::new(
+            ProjectPhase::SelectExecutable,
+            "Render Git override differs from literal PATH git",
+        ));
+    }
+    pin_executable(&path, expires, is_cancelled)
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum RenderQuery {
+    Inside,
+    Branch,
+    Head,
+    Status,
+}
+pub(crate) fn query_render_context(
+    selected: &SelectedExecutable,
+    cwd: &Path,
+    environment: &BTreeMap<String, String>,
+    operation: RenderQuery,
+    expires: Instant,
+    is_cancelled: &dyn Fn() -> bool,
+) -> Result<ObservedQueryOutput, ObservedQueryFailure> {
+    let execution_expires = expires.checked_sub(CLEANUP_BUDGET).ok_or_else(|| {
+        ProjectFailure::new(
+            ProjectPhase::QueryDeadline,
+            "Render Git cleanup reserve unavailable",
+        )
+    })?;
+    let args: &[&str] = match operation {
+        RenderQuery::Inside => &["rev-parse", "--is-inside-work-tree"],
+        RenderQuery::Branch => &["symbolic-ref", "--quiet", "--short", "HEAD"],
+        RenderQuery::Head => &["rev-parse", "--short", "HEAD"],
+        RenderQuery::Status => &["status", "--porcelain"],
+    };
+    query_observed(
+        selected,
+        cwd,
+        environment,
+        args,
+        execution_expires,
+        is_cancelled,
+    )
+}
+
 fn query(
     selected: &SelectedExecutable,
     cwd: &Path,
@@ -899,6 +980,45 @@ fn query(
     expires: Instant,
     is_cancelled: &dyn Fn() -> bool,
 ) -> Result<QueryOutput, ProjectFailure> {
+    let output = query_observed(selected, cwd, environment, args, expires, is_cancelled)
+        .map_err(|error| error.failure)?;
+    let mut failure = if !output.cleanup.reaped.is_some_and(|status| status.success) {
+        Some(ProjectFailure::new(
+            ProjectPhase::QueryStatus,
+            format!(
+                "Git query failed ({:?}; stderr bytes {})",
+                output.cleanup.reaped,
+                output.stderr.len()
+            ),
+        ))
+    } else {
+        None
+    };
+    if failure.is_none() && std::str::from_utf8(&output.stderr).is_err() {
+        failure = Some(ProjectFailure::new(
+            ProjectPhase::QueryStatus,
+            "Git stderr is not UTF-8",
+        ));
+    }
+    if let Some(mut failure) = failure {
+        failure.cleanup = Box::new(output.cleanup);
+        return Err(failure);
+    }
+    Ok(QueryOutput {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        cleanup: output.cleanup,
+    })
+}
+
+fn query_observed(
+    selected: &SelectedExecutable,
+    cwd: &Path,
+    environment: &BTreeMap<String, String>,
+    args: &[&str],
+    expires: Instant,
+    is_cancelled: &dyn Fn() -> bool,
+) -> Result<ObservedQueryOutput, ObservedQueryFailure> {
     let until = std::cmp::min(expires, Instant::now() + QUERY_BUDGET);
     verify_executable(selected, ProjectPhase::BeforeLaunch, until, is_cancelled)?;
     checkpoint(until, is_cancelled)?;
@@ -924,7 +1044,9 @@ fn query(
         .spawn()
         .map_err(|e| ProjectFailure::new(ProjectPhase::Spawn, format!("Git query spawn: {e}")))?;
     let mut owner = RetainedQuery::new(child);
-    let operation = (|| -> Result<(Vec<u8>, Vec<u8>), ProjectFailure> {
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let operation = (|| -> Result<(), ProjectFailure> {
         let stdout = owner.stdout.as_ref().ok_or_else(|| {
             ProjectFailure::new(ProjectPhase::Pipes, "Git stdout pipe unavailable")
         })?;
@@ -936,8 +1058,6 @@ fn query(
             .map_err(|e| {
                 ProjectFailure::new(ProjectPhase::Pipes, format!("Git pipe configuration: {e}"))
             })?;
-        let mut out = Vec::new();
-        let mut err = Vec::new();
         let mut total = 0usize;
         loop {
             checkpoint(until, is_cancelled)?;
@@ -984,57 +1104,44 @@ fn query(
                 && owner.state.exit_observed
             {
                 checkpoint(until, is_cancelled)?;
-                return Ok((out, err));
+                return Ok(());
             }
             thread::sleep(Duration::from_millis(2));
         }
     })();
-    let (stdout, stderr) = match operation {
-        Ok(value) => value,
-        Err(failure) => {
-            return Err(ProjectFailure::query(
-                failure.first_phase,
-                failure.first_message,
-                owner,
-            ));
-        }
-    };
-    let cleanup = owner.retry_cleanup();
-    if !cleanup.settled() {
-        return Err(ProjectFailure {
-            first_phase: ProjectPhase::Cleanup,
-            first_message: "Git query completed but private-group cleanup is uncertain".into(),
-            cleanup: Box::new(cleanup),
-            retained: Some(Box::new(owner)),
+    if let Err(failure) = operation {
+        return Err(ObservedQueryFailure {
+            failure: ProjectFailure::query(failure.first_phase, failure.first_message, owner),
+            stdout: out,
+            stderr: err,
         });
     }
-    let mut final_failure =
-        verify_executable(selected, ProjectPhase::AfterLaunch, until, is_cancelled).err();
-    if final_failure.is_none() && !cleanup.reaped.is_some_and(|status| status.success) {
-        final_failure = Some(ProjectFailure::new(
-            ProjectPhase::QueryStatus,
-            format!(
-                "Git query failed ({:?}; stderr bytes {})",
-                cleanup.reaped,
-                stderr.len()
-            ),
-        ));
+    let cleanup = owner.retry_cleanup();
+    if !cleanup.settled() {
+        return Err(ObservedQueryFailure {
+            failure: ProjectFailure {
+                first_phase: ProjectPhase::Cleanup,
+                first_message: "Git query completed but private-group cleanup is uncertain".into(),
+                cleanup: Box::new(cleanup),
+                retained: Some(Box::new(owner)),
+            },
+            stdout: out,
+            stderr: err,
+        });
     }
-    // TS decodes both streams even on successful exit. Stderr text is allowed;
-    // invalid UTF-8 is unavailable, not a lossy replacement.
-    if final_failure.is_none() && std::str::from_utf8(&stderr).is_err() {
-        final_failure = Some(ProjectFailure::new(
-            ProjectPhase::QueryStatus,
-            "Git stderr is not UTF-8",
-        ));
-    }
-    if let Some(mut failure) = final_failure {
+    if let Err(mut failure) =
+        verify_executable(selected, ProjectPhase::AfterLaunch, until, is_cancelled)
+    {
         failure.cleanup = Box::new(cleanup);
-        return Err(failure);
+        return Err(ObservedQueryFailure {
+            failure,
+            stdout: out,
+            stderr: err,
+        });
     }
-    Ok(QueryOutput {
-        stdout,
-        stderr,
+    Ok(ObservedQueryOutput {
+        stdout: out,
+        stderr: err,
         cleanup,
     })
 }
@@ -1375,6 +1482,57 @@ mod tests {
             output.cleanup.attempts[0].stop,
             StopAttempt::Accepted(_)
         ));
+    }
+
+    #[test]
+    fn observed_render_status_does_not_relax_existing_project_query_policy() {
+        let scratch = Scratch::new();
+        for (name, body, message, code, stderr) in [
+            (
+                "nonzero",
+                "printf partial; exit 7",
+                "Git query failed",
+                7,
+                &b""[..],
+            ),
+            (
+                "stderr",
+                "printf partial; printf '\\377' >&2",
+                "Git stderr is not UTF-8",
+                0,
+                &b"\xff"[..],
+            ),
+        ] {
+            let path = scratch.executable(name, body);
+            let expires = Instant::now() + Duration::from_secs(3);
+            let selected = pin_executable(&path, expires, &|| false).unwrap();
+            let failure = query(
+                &selected,
+                &scratch.0,
+                &BTreeMap::new(),
+                &[],
+                expires,
+                &|| false,
+            )
+            .err()
+            .unwrap();
+            assert_eq!(failure.first_phase, ProjectPhase::QueryStatus);
+            assert!(failure.first_message.starts_with(message));
+            assert!(failure.cleanup.settled());
+            let output = query_render_context(
+                &selected,
+                &scratch.0,
+                &BTreeMap::new(),
+                RenderQuery::Head,
+                expires,
+                &|| false,
+            )
+            .unwrap_or_else(|e| panic!("observed query: {:?}", e.failure));
+            assert_eq!(output.stdout, b"partial");
+            assert_eq!(output.stderr, stderr);
+            assert_eq!(output.cleanup.reaped.unwrap().code, Some(code));
+            assert!(output.cleanup.settled());
+        }
     }
 
     #[test]
