@@ -7,6 +7,7 @@ const {
 const {
   TRANSCRIPT_STORE_CAPABILITY,
   SESSION_PUBLICATION_CAPABILITY,
+  RuntimeProtocolError,
 } = require('../../dist/runtime/protocol');
 const request = {
   id: 'store-test',
@@ -187,7 +188,29 @@ test.each(['failed', 'metrics', 'cleanup', 'unconfirmed', 'token', 'identity', '
     if (fault === 'token') terminal.token = 'foreign-token';
     if (fault === 'identity') terminal.id = 'another-original';
     const state = publicationState([fault === 'lost' ? new Error('lost CLOSED') : terminal]);
-    await expect(state.port.rows(root)[Symbol.asyncIterator]().next()).rejects.toThrow();
+    const iterator = state.port.rows(root)[Symbol.asyncIterator]();
+    const error = await iterator.next().then(
+      () => undefined,
+      (error) => error
+    );
+    const messages = {
+      failed: 'actual acquisition failure',
+      metrics: 'Invalid store completion metrics',
+      cleanup: 'Inconsistent store completion',
+      unconfirmed: 'Store cleanup remains unconfirmed',
+      token: 'Store frame binding mismatch',
+      identity: 'Store frame binding mismatch',
+      lost: 'lost CLOSED',
+    };
+    expect(error).toBeInstanceOf(
+      fault === 'failed'
+        ? NativeStoreAcquisitionError
+        : fault === 'lost'
+          ? Error
+          : RuntimeProtocolError
+    );
+    expect(error.message).toBe(messages[fault]);
+    if (fault === 'lost') expect(error.constructor).toBe(Error);
     const options = publicationOptions();
     await expect(state.port.continuePublication(options)).rejects.toThrow(/exhausted closure/);
     expect(state.reads).toBe(1);

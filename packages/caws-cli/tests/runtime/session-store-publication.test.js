@@ -6,9 +6,11 @@ const { AbortController } = globalThis;
 const { createNativeTranscriptStorePort } = require('../../dist/runtime/transcript-store-client');
 const { publishNativeTranscriptStore } = require('../../dist/runtime/session-store-publication');
 const { getMember } = require('../../dist/transcripts/lossless-json');
+const { StoreProjectionContractError } = require('../../dist/transcripts/store-projection');
 const {
   TRANSCRIPT_STORE_CAPABILITY,
   SESSION_PUBLICATION_CAPABILITY,
+  RuntimeProtocolError,
 } = require('../../dist/runtime/protocol');
 
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -42,6 +44,34 @@ beforeEach(() => {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 });
 afterEach(() => fs.rmSync(canonicalRoot, { recursive: true, force: true }));
+
+async function refusal(promise, ErrorType, message) {
+  const error = await promise.then(
+    () => undefined,
+    (error) => error
+  );
+  expect(error).toBeInstanceOf(ErrorType);
+  expect(error.message).toBe(message);
+  return error;
+}
+
+async function unsettledAcquisition(promise, ErrorType, message) {
+  const error = await refusal(
+    promise,
+    AggregateError,
+    'Store reconstruction and native cleanup both failed'
+  );
+  expect(error.errors).toHaveLength(2);
+  expect(error.errors[0]).toBeInstanceOf(ErrorType);
+  expect(error.errors[0].message).toBe(message);
+  expect(error.errors[1]).toBeInstanceOf(RuntimeProtocolError);
+  expect(error.errors[1]).toMatchObject({
+    message: 'Native transcript store cleanup remains unsettled',
+    sourceClosed: false,
+    cause: error.errors[0],
+  });
+  return error;
+}
 
 // This transport emits the native wire shapes but does not execute SQLite or
 // the native publisher. Its actual files exercise the independent ordinary
@@ -133,6 +163,7 @@ function setup(options = {}) {
         const frame = queue.shift();
         if (!frame) throw new Error('controlled EOF');
         if (frame instanceof Error) throw frame;
+        if (options.eofBefore && options.eofBefore(frame)) throw new Error('controlled EOF');
         let value = frame.schema.startsWith(prefix)
           ? bind(frame)
           : {
@@ -236,9 +267,10 @@ function setup(options = {}) {
     expect(event.type).toBe('user');
     expect(event.message.content[0].text).toBe('hello');
     expect(writes.some((item) => item.schema === prefix + 'consumed.v1')).toBe(false);
+    if (options.renderFailure) throw options.renderFailure;
     if (options.abortRender)
       return { disposition: 'aborted', diagnostic: 'explicit renderer refusal' };
-    return {
+    const result = {
       disposition: 'ready',
       removals: [],
       artifacts: [
@@ -258,6 +290,7 @@ function setup(options = {}) {
         },
       ],
     };
+    return options.renderPreparation ? options.renderPreparation(result) : result;
   });
   const published = jest.fn(async (log) => {
     expect(log.canonicalRoot).toBe(canonicalRoot);
@@ -321,17 +354,33 @@ test.each(['opencode', 'zcode'])(
 );
 
 test.each([
-  'lost',
-  { end: 'stopped' },
-  { closed: false },
-  { metrics: { rowsCopied: 1, rowsDelivered: 1, cellBytes: 0 } },
-])('unusable CLOSED %j prevents projection/render/publication', async (closure) => {
-  const state = setup({ closure });
-  await expect(state.run()).rejects.toThrow();
-  expect(state.render).not.toHaveBeenCalled();
-  expect(state.published).not.toHaveBeenCalled();
-  expect(state.writes.every((item) => item.schema.startsWith(storePrefix))).toBe(true);
-});
+  ['lost', 'lost', Error, 'lost CLOSED', true],
+  ['stopped', { end: 'stopped' }, RuntimeProtocolError, 'Inconsistent store completion', false],
+  [
+    'unconfirmed',
+    { closed: false },
+    RuntimeProtocolError,
+    'Store cleanup remains unconfirmed',
+    true,
+  ],
+  [
+    'metrics',
+    { metrics: { rowsCopied: 1, rowsDelivered: 1, cellBytes: 0 } },
+    RuntimeProtocolError,
+    'Invalid store completion metrics',
+    true,
+  ],
+])(
+  'unusable CLOSED %s prevents projection/render/publication',
+  async (_label, closure, ErrorType, message, unsettled) => {
+    const state = setup({ closure });
+    if (unsettled) await unsettledAcquisition(state.run(), ErrorType, message);
+    else await refusal(state.run(), ErrorType, message);
+    expect(state.render).not.toHaveBeenCalled();
+    expect(state.published).not.toHaveBeenCalled();
+    expect(state.writes.every((item) => item.schema.startsWith(storePrefix))).toBe(true);
+  }
+);
 
 test.each(['token', 'id', 'attempt', 'session', 'order', 'chunk'])(
   'hostile publication %s cannot reach render or acknowledgement',
@@ -351,7 +400,15 @@ test.each(['token', 'id', 'attempt', 'session', 'order', 'chunk'])(
         return frame;
       },
     });
-    await expect(state.run()).rejects.toThrow();
+    const message = {
+      token: 'Mismatched publication correlation',
+      id: 'Mismatched publication correlation',
+      attempt: 'Publication attempt changed',
+      session: 'Invalid native publication snapshot',
+      order: 'Unexpected publication preparation phase',
+      chunk: 'Invalid native publication chunk',
+    }[kind];
+    await refusal(state.run(), RuntimeProtocolError, message);
     expect(state.render).not.toHaveBeenCalled();
     expect(state.published).not.toHaveBeenCalled();
     expect(state.writes.some((item) => item.schema === prefix + 'consumed.v1')).toBe(false);
@@ -360,12 +417,65 @@ test.each(['token', 'id', 'attempt', 'session', 'order', 'chunk'])(
 
 test('self-consistent but stale Render projection is refused before explicit renderer', async () => {
   const state = setup({ staleProjection: true });
-  await expect(state.run()).rejects.toThrow('differs from the exhausted store projection');
+  await refusal(
+    state.run(),
+    RuntimeProtocolError,
+    'Native render input differs from the exhausted store projection'
+  );
   expect(state.render).not.toHaveBeenCalled();
   expect(state.published).not.toHaveBeenCalled();
   expect(
     state.writes.filter((item) => item.schema === prefix + 'prepared.v1').map((item) => item.kind)
   ).toEqual(['projection']);
+});
+
+test('transport EOF is distinct from the malformed-frame refusal and emits no prepared output', async () => {
+  const state = setup({
+    eofBefore: (frame) => frame.schema === prefix + 'ready.v1' && frame.kind === 'projection',
+  });
+  const error = await refusal(state.run(), Error, 'controlled EOF');
+  expect(error.constructor).toBe(Error);
+  expect(error).not.toBeInstanceOf(RuntimeProtocolError);
+  expect(state.render).not.toHaveBeenCalled();
+  expect(state.published).not.toHaveBeenCalled();
+  expect(state.writes.every((item) => item.schema.startsWith(storePrefix))).toBe(true);
+});
+
+test.each(['wrong-name', 'wrong-role', 'duplicate'])(
+  'renderer %s output is refused before Render PREPARED or ACK',
+  async (fault) => {
+    const state = setup({
+      renderPreparation(result) {
+        if (fault === 'wrong-name') result.artifacts[0].name = '.meta.json';
+        if (fault === 'wrong-role') result.artifacts[0].role = 'projection';
+        if (fault === 'duplicate') result.artifacts.push(result.artifacts[0]);
+        return result;
+      },
+    });
+    await refusal(
+      state.run(),
+      RuntimeProtocolError,
+      fault === 'duplicate' ? 'Duplicate publication name' : 'Invalid prepared publication targets'
+    );
+    expect(state.render).toHaveBeenCalledTimes(1);
+    expect(state.published).not.toHaveBeenCalled();
+    expect(
+      state.writes.filter((item) => item.schema === prefix + 'prepared.v1').map((item) => item.kind)
+    ).toEqual(['projection']);
+    expect(state.writes.some((item) => item.schema === prefix + 'consumed.v1')).toBe(false);
+  }
+);
+
+test('renderer exception retains the original failure and emits no Render PREPARED or ACK', async () => {
+  const failure = new Error('selected renderer failed');
+  const state = setup({ renderFailure: failure });
+  await expect(state.run()).rejects.toBe(failure);
+  expect(state.render).toHaveBeenCalledTimes(1);
+  expect(state.published).not.toHaveBeenCalled();
+  expect(
+    state.writes.filter((item) => item.schema === prefix + 'prepared.v1').map((item) => item.kind)
+  ).toEqual(['projection']);
+  expect(state.writes.some((item) => item.schema === prefix + 'consumed.v1')).toBe(false);
 });
 
 test.each(['missing', 'changed', 'marker', 'extra'])(
@@ -386,7 +496,13 @@ test.each(['missing', 'changed', 'marker', 'extra'])(
         }
       },
     });
-    await expect(state.run()).rejects.toThrow();
+    const message =
+      fault === 'marker'
+        ? 'Committed session marker differs from admitted current selection'
+        : fault === 'changed'
+          ? 'Committed session artifact bytes differ'
+          : 'Committed session current inventory differs';
+    await refusal(state.run(), RuntimeProtocolError, message);
     expect(state.render).toHaveBeenCalledTimes(1);
     expect(state.published).not.toHaveBeenCalled();
     expect(state.writes.some((item) => item.schema === prefix + 'consumed.v1')).toBe(false);
@@ -400,11 +516,22 @@ test.each(['failure', 'changed', 'cancelled'])(
     const state = setup({
       async consume(_log, controller) {
         if (fault === 'failure') throw failure;
-        if (fault === 'changed') fs.appendFileSync(path.join(directory, 'turn-001.json'), ' ');
+        if (fault === 'changed') {
+          const turn = path.join(directory, 'turn-001.json');
+          const original = fs.readFileSync(turn, 'utf8');
+          fs.writeFileSync(turn, original.replace('hello', 'jello'));
+          expect(fs.statSync(turn).size).toBe(Buffer.byteLength(original));
+        }
         if (fault === 'cancelled') controller.abort(failure);
       },
     });
-    await expect(state.run()).rejects.toThrow();
+    if (fault === 'changed')
+      await refusal(
+        state.run(),
+        RuntimeProtocolError,
+        'Committed session artifact replaced or changed'
+      );
+    else await expect(state.run()).rejects.toBe(failure);
     expect(state.published).toHaveBeenCalledTimes(1);
     expect(state.notPublished).not.toHaveBeenCalled();
     expect(state.writes.some((item) => item.schema === prefix + 'consumed.v1')).toBe(false);
@@ -415,7 +542,8 @@ test('cancelled acquisition never emits publication preparation', async () => {
   const state = setup();
   const reason = new Error('original cancelled');
   state.controller.abort(reason);
-  await expect(state.run()).rejects.toThrow();
+  const error = await unsettledAcquisition(state.run(), Error, 'original cancelled');
+  expect(error.errors[0]).toBe(reason);
   expect(state.writes).toEqual([]);
   expect(state.render).not.toHaveBeenCalled();
   expect(state.published).not.toHaveBeenCalled();
@@ -435,7 +563,12 @@ test('explicit renderer refusal consumes only definitive non-publication without
 
 test('projection serialization failure after exhausted closure emits no publication bytes', async () => {
   const state = setup();
-  await expect(state.run({ maximumProjectionBytes: 0 })).rejects.toThrow();
+  const error = await refusal(
+    state.run({ maximumProjectionBytes: 0 }),
+    StoreProjectionContractError,
+    'resource:output_bytes'
+  );
+  expect(error).toMatchObject({ category: 'resource', code: 'output_bytes' });
   expect(() => state.port.assertClosed()).not.toThrow();
   expect(state.writes.map((item) => item.schema)).toEqual([
     storePrefix + 'request.v1',
