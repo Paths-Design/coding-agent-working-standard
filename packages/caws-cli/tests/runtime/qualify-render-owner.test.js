@@ -11,10 +11,10 @@ const source = fs.readFileSync(
   path.resolve(__dirname, '../../scripts/qualify-render-owner.ts'),
   'utf8'
 );
-function loadAccounting(text = source) {
+function loadAccounting(text = source, warmSessionEnd = true) {
   const tree = ts.createSourceFile('qualify-render-owner.ts', text, ts.ScriptTarget.ES2022, true);
   assert.equal(tree.parseDiagnostics.length, 0, 'qualifier source must parse');
-  const names = ['object', 'row', 'workerCleanupAccounting'];
+  const names = ['object', 'row', 'workerCleanupAccounting', 'warmFixtureUsage', 'transcript'];
   const declarations = tree.statements.filter(
     (node) => ts.isFunctionDeclaration(node) && names.includes(node.name?.text)
   );
@@ -33,13 +33,20 @@ function loadAccounting(text = source) {
     reportDiagnostics: true,
   });
   assert.deepEqual(compiled.diagnostics, [], 'accounting declarations must transpile');
-  const context = { assert, module: { exports: {} } };
-  vm.runInNewContext(compiled.outputText + '\nmodule.exports = workerCleanupAccounting;', context, {
-    timeout: 1000,
-  });
+  const context = {
+    assert,
+    module: { exports: {} },
+    warmSessionEnd,
+    project: '/private/qualifier-fixture/project',
+  };
+  vm.runInNewContext(
+    compiled.outputText + '\nmodule.exports = { account: workerCleanupAccounting, transcript };',
+    context,
+    { timeout: 1000 }
+  );
   return context.module.exports;
 }
-const account = loadAccounting();
+const { account, transcript } = loadAccounting();
 function worker(nativeWorkerPid, backendPid) {
   const identity = { nativeWorkerPid, backendPid };
   return [
@@ -60,6 +67,45 @@ function worker(nativeWorkerPid, backendPid) {
     { event: 'worker_exit', ...identity, code: 0, signal: null },
   ];
 }
+
+test('warm input supplies recognized per-turn Codex usage before the next turn boundary', () => {
+  const rows = transcript(2).trimEnd().split('\n').map(JSON.parse);
+  const usage = rows.filter((item) => item.type === 'token_usage_record');
+  expect(usage.map((item) => item.payload.usage)).toEqual([
+    {
+      input_tokens: 100,
+      output_tokens: 30,
+      cache_read_input_tokens: 7,
+      cache_creation_input_tokens: 5,
+      cached_input_tokens: 20,
+      reasoning_output_tokens: 11,
+      total_tokens: 130,
+    },
+    {
+      input_tokens: 200,
+      output_tokens: 60,
+      cache_read_input_tokens: 14,
+      cache_creation_input_tokens: 10,
+      cached_input_tokens: 40,
+      reasoning_output_tokens: 22,
+      total_tokens: 260,
+    },
+  ]);
+  expect(rows.indexOf(usage[0])).toBe(5);
+  expect(rows[6].type).toBe('turn_context');
+  expect(rows[11]).toBe(usage[1]);
+  expect(
+    rows.filter((item) => item.type === 'turn_context').map((item) => item.payload.model)
+  ).toEqual(['owner-fixture-model', 'owner-fixture-model']);
+});
+
+test('default fixture retains its original transcript grammar without warm usage additions', () => {
+  const { transcript: originalTranscript } = loadAccounting(source, false);
+  const rows = originalTranscript(2).trimEnd().split('\n').map(JSON.parse);
+  expect(rows).toHaveLength(10);
+  expect(rows.filter((item) => item.type === 'token_usage_record')).toEqual([]);
+  expect(rows[5].payload.turn_id).toBe('owner-turn-2');
+});
 
 test('failed before B owes exactly the A birth, cleanup and exit, not an invented B', () => {
   const a = worker(100, 101);

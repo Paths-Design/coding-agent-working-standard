@@ -1,7 +1,8 @@
 /** Actual native owner + reviewed copied Sterling profile. Root runs after build.
  * Usage: qualify-render-owner.js <caws-cli-root> <sterling-root> [debug|release] [--prepare-only|--warm-session-end --artifacts <fresh-absolute>]
- * Warm mode requires the supervising Node child argv0 to be claude, so the
- * original frontend can independently observe its real Claude ancestor.
+ * Warm mode gives the pinned Node fixture ancestor argv0=claude so the native
+ * frontend can independently observe its process name, parent and birth.
+ * This does not exercise a deployed Claude application or its hook registration.
  * This installs a runtime only into its retained private sandbox. It never
  * changes selected machine adapters, modifies foreign sources, adopts a PID,
  * signals a service PID, or deletes a sandbox. Preparation alone is not qualification.
@@ -65,7 +66,7 @@ assert(
   'warm qualification requires --artifacts <fresh-absolute>'
 );
 if (warmSessionEnd)
-  assert.equal(process.argv0, 'claude', 'launch qualifier with real argv0=claude');
+  assert.equal(process.argv0, 'claude', 'launch fixture qualifier with argv0=claude');
 assert.equal(
   optionalArguments.length,
   0,
@@ -177,6 +178,15 @@ const manifest: Data = {
     'event ordering without a contender does not independently prove uninterrupted writer custody',
     'concurrent FIFO ordering (warm SessionEnd mode is sequential)',
     'full operating-system dependency hash closure',
+    ...(warmSessionEnd
+      ? [
+          'SessionEnd replacement beyond the sole reviewed stock session-log handler',
+          'deployed Claude/Codex applications and their installed harness hook registration',
+          'fairness under concurrent or cancelled operation queues',
+          'continuous writer exclusion under an independently observed competing writer',
+          'nonempty seal model-union from Codex turns: this reviewed adapter carries model through env.model only',
+        ]
+      : []),
   ],
 };
 let commandNumber = 0,
@@ -557,6 +567,17 @@ function sourceCustody(profile: Readonly<Record<string, string>>, copy = false):
       };
     });
 }
+function warmFixtureUsage(turn: number): Record<string, number> {
+  return {
+    input_tokens: 100 * turn,
+    output_tokens: 30 * turn,
+    cache_read_input_tokens: 7 * turn,
+    cache_creation_input_tokens: 5 * turn,
+    cached_input_tokens: 20 * turn,
+    reasoning_output_tokens: 11 * turn,
+    total_tokens: 130 * turn,
+  };
+}
 function transcript(count: number): string {
   const records: Data[] = [];
   for (let i = 1; i <= count; i++) {
@@ -605,6 +626,15 @@ function transcript(count: number): string {
         },
       }
     );
+    // The reviewed Codex adapter recognizes token_usage_record; event_msg
+    // token_count is explicitly ignored. Supply actual input grammar rather
+    // than patching a rendered turn to manufacture a summary observation.
+    if (warmSessionEnd)
+      records.push({
+        timestamp,
+        type: 'token_usage_record',
+        payload: { usage: warmFixtureUsage(i) },
+      });
   }
   return records.map((record) => JSON.stringify(record)).join('\n') + '\n';
 }
@@ -630,6 +660,10 @@ function turns(directory: string, count: number): Data[] {
       'tool result not correlated'
     );
     assert.equal(turn.status, 'ok');
+    if (warmSessionEnd) {
+      assert.deepEqual(turn.usage, warmFixtureUsage(index + 1), 'actual rendered usage differs');
+      assert.equal(row(turn.env).model, 'owner-fixture-model', 'actual Codex model anchor differs');
+    }
   });
   snapshot(session, path.join(directory, 'session-snapshot'));
   json(path.join(directory, 'semantic-turns.json'), values);
@@ -1104,6 +1138,9 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     pid: process.pid,
     observation: observe(process.pid),
     comm,
+    boundary: 'Claude-named pinned Node fixture ancestor, not a deployed Claude application',
+    executable: process.execPath,
+    executableSha256: digest(fs.readFileSync(process.execPath)),
   });
   const { parseJsonSource } = createRequire(path.join(cli, 'package.json'))(
     './dist/runtime/json-custody.js'
@@ -1218,8 +1255,9 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   Object.assign(result, { identity, nativeCustody });
   json(path.join(directory, 'native-custody.json'), nativeCustody);
   persist();
-  // Retain exact custody before any success, silence or semantic assertion can
-  // fail. Compatibility completion must remain attributable without proving seal.
+  // Only a structurally valid, exactly correlated journal supplies identity.
+  // A missing/malformed/uncorrelated journal retains unknown custody. After
+  // that boundary, semantic failure must not discard the validated identity.
   success(status);
   assert.equal(
     fs.statSync(path.join(status.directory, 'stdout.bin')).size,
@@ -1236,7 +1274,7 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
   assert.equal(
     row(originalFrontend.process).parent,
     process.pid,
-    'native original must descend from real Claude ancestor'
+    'native original must descend from the observed Claude-named Node fixture ancestor'
   );
   warmSealInvocationId = invocationId;
   assert.deepEqual(
@@ -1260,7 +1298,11 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     assert.equal(value.repo_root, project);
   }
   assert.equal(pointer.last_seen_at, envelope.last_seen_at);
-  assert.equal(pid.agent_pid, process.pid, 'cache must name the real original Claude ancestor');
+  assert.equal(
+    pid.agent_pid,
+    process.pid,
+    'cache must name the independently observed Claude-named Node fixture ancestor'
+  );
   assert.equal(pid.surface, 'claude-code');
   assert.match(String(pid.started_at), /^\d+$/);
   assert(fs.statSync(path.join(project, '.caws/sessions/.agent-pid-reap-marker')).isFile());
@@ -1323,6 +1365,12 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
       'seal rewrote A turn'
     );
     const parsed = row(JSON.parse(turn.bytes.toString('utf8')));
+    assert.deepEqual(
+      parsed.usage,
+      warmFixtureUsage(1),
+      'seal must consume A nonzero rendered usage'
+    );
+    assert.equal(row(parsed.env).model, 'owner-fixture-model');
     for (const field of fields) {
       const value = parsed.usage === undefined ? undefined : row(parsed.usage)[field];
       if (value !== undefined) {
@@ -1345,6 +1393,11 @@ async function sealWarmRenderer(env: NodeJS.ProcessEnv, runtimeDigest: string): 
     (consumer.counts as Data[]).map((count) => count.field),
     fields,
     'ordinary reader must expose every usage field once in contract order'
+  );
+  assert.equal(sums.size, fields.length, 'warm seal must exercise every usage field');
+  assert(
+    fields.every((field) => (sums.get(field) ?? 0n) > 0n),
+    'warm seal must consume positive usage in every field'
   );
   const recomputed = sums.size > 0 || models.size > 0;
   const expectedModels = models.size ? [...models] : recomputed ? undefined : beforeMetadata.models;
@@ -2310,7 +2363,8 @@ async function main(): Promise<void> {
   }
   if (warmSessionEnd) {
     manifest.established = [
-      'actual reviewed Codex Render A, native stock Claude SessionEnd, actual Codex Render B',
+      'reviewed Codex Render A, stock SessionEnd from a Claude-named Node fixture ancestor, Codex Render B through native frontends',
+      'actual A and B turns carry seven positive usage counts and the exact Codex env.model',
       'exact A native-worker/backend tuple reaped with both EOFs and original native-worker birth absent before B',
       'native prefix and ordinary semantic consumer before exact durable CONSUMED and heavy release',
       'A turn bytes preserved by seal; B exposes exact two-turn user/tool/assistant output',
