@@ -502,6 +502,85 @@ function once(source: string, needle: string, replacement: string, count = 1): s
   if (source.split(needle).length !== count + 1) fail('runtime transform anchor');
   return source.split(needle).join(replacement);
 }
+const STAGED_RUNNER_HELPER = [
+  '_rh_exec_staged() {',
+  '  local handler_path="$1" stderr_file="$2"',
+  '  shift 2',
+  '  _rh_stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || _rh_stage_dir=""',
+  '  if [[ -n "$_rh_stage_dir" ]]; then',
+  '    _rh_stage="$_rh_stage_dir/payload"',
+  "    trap '_rh_remove_stage' EXIT",
+  '    if printf \'%s\' "${HOOK_INPUT_JSON-}" > "$_rh_stage" 2>/dev/null \\',
+  '      && exec 0<"$_rh_stage"; then',
+  '      _rh_remove_stage',
+  '      if [[ -e "$_rh_stage" ]]; then',
+  '        "$handler_path" "$@" 2>"$stderr_file"',
+  '        exit $?',
+  '      fi',
+  '      trap - EXIT',
+  '      exec "$handler_path" "$@" 2>"$stderr_file"',
+  '    fi',
+  '    _rh_remove_stage',
+  '    trap - EXIT',
+  '  fi',
+  '  printf \'%s\' "${HOOK_INPUT_JSON-}" | "$handler_path" "$@" 2>"$stderr_file"',
+  '}',
+  '',
+].join('\n');
+
+/** Transform recognized direct and staged layouts without granting image authority. */
+export function transformServiceImageRunner(
+  input: Readonly<{
+    runner: string;
+    selectedIndex: number;
+    handlerRoutes: string;
+    parseInput: string;
+    executeHandler: string;
+  }>
+): string {
+  if (
+    !Number.isSafeInteger(input.selectedIndex) ||
+    input.selectedIndex < 0 ||
+    input.selectedIndex > 65535
+  )
+    fail('selected handler index');
+  let runner = input.runner;
+  const fileCall = '      stdout_buf=$("$handler_path" "$@" < "$stdin_file" 2>"$stderr_file")\n';
+  const pipeCall = '                    | "$handler_path" "$@" 2>"$stderr_file")\n';
+  runner = once(runner, fileCall, fileCall.replace('"$handler_path"', '_caws_service_image_exec'));
+  runner = once(runner, pipeCall, pipeCall.replace('"$handler_path"', '_caws_service_image_exec'));
+  const stagedCall =
+    '    elif (( stage_inline )); then\n      stdout_buf=$(_rh_exec_staged "$handler_path" "$stderr_file" "$@")\n';
+  let recognizedHelper = '';
+  if (runner.includes('_rh_exec_staged() {') || runner.includes('stdout_buf=$(_rh_exec_staged ')) {
+    const guard =
+      '  shift 2\n  if [[ "$_rh_handler_index" -ne ' +
+      input.selectedIndex +
+      ' ]]; then\n' +
+      '    exec 3>&- 4<&- 5>&-\n  fi\n';
+    recognizedHelper = once(STAGED_RUNNER_HELPER, '  shift 2\n', guard);
+    runner = once(runner, STAGED_RUNNER_HELPER, recognizedHelper);
+    runner = once(
+      runner,
+      stagedCall,
+      stagedCall.replace('"$handler_path"', '"$handler_execution_path"')
+    );
+  }
+  // Only the exact helper may retain logical call syntax: its argument is sealed.
+  const outsideHelper = recognizedHelper ? once(runner, recognizedHelper, '') : runner;
+  if (outsideHelper.includes('"$handler_path" "$@"')) fail('runtime transform anchor');
+  runner = once(
+    runner,
+    '    if [[ ! -x "$handler_path" ]]; then\n',
+    input.handlerRoutes + '    if [[ ! -x "$handler_path" ]]; then\n'
+  );
+  runner = once(
+    runner,
+    '    source "${HOOKS_DIR}/lib/parse-input.sh" 2>/dev/null || return 0\n',
+    input.parseInput
+  );
+  return input.executeHandler + runner;
+}
 const CODEX_BOOTSTRAP = [
   '_codex_pi_shared="${CAWS_PROJECT_DIR:-.}/.caws/hooks/runtime-paths.sh"',
   'if [[ -f "$_codex_pi_shared" ]]; then',
@@ -765,24 +844,17 @@ export function prepareSessionRenderImage(
       )
       .join('\n'),
   });
-  let runner = text(captured.get('runtime:lib/run-handlers.sh') ?? fail('missing runner'));
-  runner = once(runner, '"$handler_path" "$@"', '_caws_service_image_exec "$@"', 2);
-  runner = once(
-    runner,
-    '    if [[ ! -x "$handler_path" ]]; then\n',
-    text(routeBytes) + '    if [[ ! -x "$handler_path" ]]; then\n'
-  );
-  runner = once(
-    runner,
-    '    source "${HOOKS_DIR}/lib/parse-input.sh" 2>/dev/null || return 0\n',
-    template('parse-input.sh')
-  );
-  runner =
-    text(
+  const runner = transformServiceImageRunner({
+    runner: text(captured.get('runtime:lib/run-handlers.sh') ?? fail('missing runner')),
+    selectedIndex: selection.selectedIndex,
+    handlerRoutes: text(routeBytes),
+    parseInput: template('parse-input.sh'),
+    executeHandler: text(
       render('execute-handler.sh', {
         __CAWS_IMAGE_SELECTED_INDEX__: String(selection.selectedIndex),
       })
-    ) + runner;
+    ),
+  });
   files.set('runtime/lib/run-handlers.sh', Buffer.from(runner));
   const planNative = tools.find((pin) => pin.name === SERVICE_IMAGE_PLAN_TOOL);
   if (planNative) {

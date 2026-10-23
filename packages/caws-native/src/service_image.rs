@@ -1871,18 +1871,81 @@ fn replace_exact(source: &str, needle: &str, replacement: &str, count: usize) ->
     )?;
     Ok(source.replace(needle, replacement))
 }
+const STAGED_RUNNER_HELPER: &str = r#"_rh_exec_staged() {
+  local handler_path="$1" stderr_file="$2"
+  shift 2
+  _rh_stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || _rh_stage_dir=""
+  if [[ -n "$_rh_stage_dir" ]]; then
+    _rh_stage="$_rh_stage_dir/payload"
+    trap '_rh_remove_stage' EXIT
+    if printf '%s' "${HOOK_INPUT_JSON-}" > "$_rh_stage" 2>/dev/null \
+      && exec 0<"$_rh_stage"; then
+      _rh_remove_stage
+      if [[ -e "$_rh_stage" ]]; then
+        "$handler_path" "$@" 2>"$stderr_file"
+        exit $?
+      fi
+      trap - EXIT
+      exec "$handler_path" "$@" 2>"$stderr_file"
+    fi
+    _rh_remove_stage
+    trap - EXIT
+  fi
+  printf '%s' "${HOOK_INPUT_JSON-}" | "$handler_path" "$@" 2>"$stderr_file"
+}
+"#;
+
+fn adapted_run_handler_calls(original: &str, selected_index: u16) -> Result<String> {
+    let file_call =
+        "      stdout_buf=$(\"$handler_path\" \"$@\" < \"$stdin_file\" 2>\"$stderr_file\")\n";
+    let pipe_call = "                    | \"$handler_path\" \"$@\" 2>\"$stderr_file\")\n";
+    let mut source = replace_exact(
+        original,
+        file_call,
+        &file_call.replace("\"$handler_path\"", "_caws_service_image_exec"),
+        1,
+    )?;
+    source = replace_exact(
+        &source,
+        pipe_call,
+        &pipe_call.replace("\"$handler_path\"", "_caws_service_image_exec"),
+        1,
+    )?;
+    let staged_call = "    elif (( stage_inline )); then\n      stdout_buf=$(_rh_exec_staged \"$handler_path\" \"$stderr_file\" \"$@\")\n";
+    let mut recognized_helper = None;
+    if source.contains("_rh_exec_staged() {") || source.contains("stdout_buf=$(_rh_exec_staged ") {
+        let guard = format!(
+            "  shift 2\n  if [[ \"$_rh_handler_index\" -ne {selected_index} ]]; then\n    exec 3>&- 4<&- 5>&-\n  fi\n"
+        );
+        let helper = replace_exact(STAGED_RUNNER_HELPER, "  shift 2\n", &guard, 1)?;
+        source = replace_exact(&source, STAGED_RUNNER_HELPER, &helper, 1)?;
+        source = replace_exact(
+            &source,
+            staged_call,
+            &staged_call.replace("\"$handler_path\"", "\"$handler_execution_path\""),
+            1,
+        )?;
+        recognized_helper = Some(helper);
+    }
+    let outside_helper = match recognized_helper {
+        Some(helper) => replace_exact(&source, &helper, "", 1)?,
+        None => source.clone(),
+    };
+    require(
+        !outside_helper.contains("\"$handler_path\" \"$@\""),
+        ErrorKind::UnsupportedProfile,
+        "runtime adaptation contains extra logical invocation",
+    )?;
+    Ok(source)
+}
+
 fn transformed_run_handlers(original: &[u8], manifest: &PreparedImageManifest) -> Result<Vec<u8>> {
     let routes=manifest.execution.handler_routes.iter().map(|route|format!("      {}) [[ \"$entry\" == {} && \"$handler_path\" == {} ]] || return 2; handler_execution_path={} ;;",route.selected_index,quoted(&route.entry),quoted(&route.original_path),quoted(&format!("{}/{}",manifest.execution.root,route.execution_relative)))).collect::<Vec<_>>().join("\n");
     let route_fragment = expand(
         template("handler-routes.sh")?,
         &[("__CAWS_IMAGE_HANDLER_CASES__", routes)],
     )?;
-    let mut source = replace_exact(
-        text(original)?,
-        "\"$handler_path\" \"$@\"",
-        "_caws_service_image_exec \"$@\"",
-        2,
-    )?;
+    let mut source = adapted_run_handler_calls(text(original)?, manifest.selection.selected_index)?;
     let anchor = "    if [[ ! -x \"$handler_path\" ]]; then\n";
     source = replace_exact(
         &source,
@@ -2539,3 +2602,77 @@ fn publication_rename(
 #[cfg(test)]
 #[path = "service_image/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod runner_transform_tests {
+    use super::*;
+
+    const FILE_CALL: &str =
+        "      stdout_buf=$(\"$handler_path\" \"$@\" < \"$stdin_file\" 2>\"$stderr_file\")\n";
+    const PIPE_CALL: &str = "                    | \"$handler_path\" \"$@\" 2>\"$stderr_file\")\n";
+    const STAGED_CALL: &str = "    elif (( stage_inline )); then\n      stdout_buf=$(_rh_exec_staged \"$handler_path\" \"$stderr_file\" \"$@\")\n";
+
+    fn staged_source() -> String {
+        format!("{STAGED_RUNNER_HELPER}{FILE_CALL}{STAGED_CALL}{PIPE_CALL}")
+    }
+
+    #[test]
+    fn legacy_direct_layout_has_exact_sealed_invocations() {
+        let source = format!("{FILE_CALL}{PIPE_CALL}");
+        assert_eq!(
+            adapted_run_handler_calls(&source, 2).unwrap(),
+            "      stdout_buf=$(_caws_service_image_exec \"$@\" < \"$stdin_file\" 2>\"$stderr_file\")\n                    | _caws_service_image_exec \"$@\" 2>\"$stderr_file\")\n"
+        );
+    }
+
+    #[test]
+    fn staged_layout_preserves_exec_and_closes_only_adjacent_capabilities() {
+        for index in [0, 2, u16::MAX] {
+            let adapted = adapted_run_handler_calls(&staged_source(), index).unwrap();
+            let guard = format!(
+                "  if [[ \"$_rh_handler_index\" -ne {index} ]]; then\n    exec 3>&- 4<&- 5>&-\n  fi\n"
+            );
+            assert_eq!(adapted.matches(&guard).count(), 1);
+            assert!(adapted.contains("      exec \"$handler_path\" \"$@\" 2>\"$stderr_file\"\n"));
+            assert!(adapted.contains(
+                "stdout_buf=$(_rh_exec_staged \"$handler_execution_path\" \"$stderr_file\" \"$@\")"
+            ));
+            assert_eq!(
+                adapted.matches("_caws_service_image_exec \"$@\"").count(),
+                2
+            );
+            let helper_end = adapted.find("\n}\n").unwrap() + 3;
+            assert_eq!(
+                adapted[..helper_end].replace(&guard, ""),
+                STAGED_RUNNER_HELPER
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_missing_duplicate_or_near_match_invocations_refuse() {
+        let source = staged_source();
+        let cases = [
+            source.replace(FILE_CALL, ""),
+            source.replace(FILE_CALL, &FILE_CALL.repeat(2)),
+            source.replace(PIPE_CALL, ""),
+            source.replace(PIPE_CALL, &PIPE_CALL.repeat(2)),
+            source.replace(STAGED_CALL, ""),
+            source.replace(STAGED_CALL, &STAGED_CALL.repeat(2)),
+            source.replace(
+                "stdout_buf=$(_rh_exec_staged \"$handler_path\"",
+                "stdout_buf=$(_rh_exec_staged  \"$handler_path\"",
+            ),
+            source.replace(
+                "exec \"$handler_path\" \"$@\"",
+                "exec \"$handler_path\"  \"$@\"",
+            ),
+            source.replace(STAGED_RUNNER_HELPER, &STAGED_RUNNER_HELPER.repeat(2)),
+            format!("{source}\"$handler_path\" \"$@\"\n"),
+        ];
+        for (case, source) in cases.iter().enumerate() {
+            let failure = adapted_run_handler_calls(source, 2).expect_err(&format!("case {case}"));
+            assert_eq!(failure.kind, ErrorKind::UnsupportedProfile, "case {case}");
+        }
+    }
+}
