@@ -48,3 +48,9 @@ evidence:
     recorded_at: "2026-10-24T22:58:36.145Z"
     exit_code: 0
     commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected selection-copy-mutable-02 execution.json/stdout.log/stderr.log under /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration:102tests0, unchanged source/dist pins, no timeout, empty final group. Source verifiedRuntime retains exact observation identity, nested collection, verifier/home/digest/snapshot separation; changed-file and malformed native controls pass. Commit existence verification is distinct from inspected execution."
+    recorded_at: "2026-10-24T22:58:37.366Z"
+    exit_code: 0
+    commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
