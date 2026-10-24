@@ -1,9 +1,10 @@
 id: CAWS-OPENCODE-STOP-IDENTITY-001
 title: 'Bind OpenCode Stop to the current event and plugin instance'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: opencode-stop-identity
 created_at: '2026-10-24T00:46:11.835Z'
-updated_at: '2026-10-24T00:46:11.835Z'
+updated_at: '2026-10-24T00:46:26.485Z'
 created_by_session: '01a16a3f-e8d9-7b70-8f20-542c4bfa34f2'
 blast_radius:
   modules:
