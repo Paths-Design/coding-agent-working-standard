@@ -8488,6 +8488,51 @@ Additional bounded evidence and unresolved dependencies:
   admission and the ordinary producer/prefix/profile/SQL/render/consumer join
   before any parity verdict.
 
+- E321: Linked SQLite identity has a typed exact matcher and receipt borrowing
+  the original native generation and MonotonicDeadline. Expected identity data
+  construction grants no production qualification; no default policy is
+  supplied. sqlite-identity-candidate-01 exits0 with three observation/mismatch
+  controls; sqlite-identity-receipt-01 exits0 with seven controls including
+  actual generation verification over explicitly synthetic fixture members. The
+  retained linked identity is SQLite3.53.4, source
+  bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b33e4e09459bcc,
+  threading1,39 exact sorted options and compiled
+  prefix2034ab7b8e7d48457c74ba4482292d82221270965e813e0e2dc8e9c5c58666c9. Actual
+  manifests, changed engine bytes, retained/replaced directories and original
+  deadline envelopes accompany refusal diagnostics. Corrupted members, replaced
+  original directories and original expiry refuse receipt capture or reuse; an
+  unrelated fresh deadline cannot renew the receipt. The actual binary
+  --sqlite-build-identity invocation in sqlite-identity-diagnostic-01 exits0 and
+  emits the same diagnostic identity. Two sqlite-identity-negative-\*-01
+  controls bypass exact matching or the post-introspection checkpoint: both
+  execute one test and exit101 for falsely successful results, with exact byte
+  restoration and empty owned process groups. All99 source pins match the
+  receipt execution. This is identity evidence, not admitted SQL/renderer
+  semantics or production activation. Ordinary Stop must not execute Python to
+  select a profile. Retained qualification proves explicit CPython3.11.13
+  int4300/int0 baselines; the old installed hook's effective ambient interpreter
+  remains unknown. Root owns the authenticated generation policy and native
+  selection/profile join.
+
+- E322: Original Stop integration retains a binary-private qualification owner
+  alongside GenerationReceipt and a library-owned original capture bridge. The
+  native request supplies original cwd/environment/raw payload before Node;
+  capture must produce project and ancestry observations itself, not accept an
+  asserted project or a TS permission flag. Source inspection identifies two
+  later Git observations in render_owner/store.rs ingress and
+  transcript_store_wire.rs serve. Both qualified branches must consume the same
+  original native observation; changing only ingress leaves recomputation.
+  ProjectFailure retains an uncertain Git Child; converting it to a string or
+  dropping it at frontend exit loses custody. Root owns retained cleanup or the
+  native custodian integration before activation. Exact OpenCode host probe
+  opencode-installed-identity-01 exits0 with1.18.27 and executable SHA
+  f35111b79296714194653fc8e74f28f6732589bacf0fbf59504c592ef6a727b6. Producer
+  qualification must use that loader version, preserve nested caller directory
+  discovery, and account for remote/managed producers; matching local plugin
+  bytes alone cannot establish the effective loaded producer set. The producer
+  worker owns configure/migrate/init and observed local registration; root
+  retains actual harness and consumer verification. No parent AC changes.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
