@@ -8514,19 +8514,19 @@ Additional bounded evidence and unresolved dependencies:
   remains unknown. Root owns the authenticated generation policy and native
   selection/profile join.
 
-- E322: Original Stop integration retains a binary-private qualification owner
-  alongside GenerationReceipt and a library-owned original capture bridge. The
-  native request supplies original cwd/environment/raw payload before Node;
-  capture must produce project and ancestry observations itself, not accept an
-  asserted project or a TS permission flag. Source inspection identifies two
-  later Git observations in render_owner/store.rs ingress and
-  transcript_store_wire.rs serve. Both qualified branches must consume the same
-  original native observation; changing only ingress leaves recomputation.
-  ProjectFailure retains an uncertain Git Child; converting it to a string or
-  dropping it at frontend exit loses custody. Root owns retained cleanup or the
-  native custodian integration before activation. Exact OpenCode host probe
-  opencode-installed-identity-01 exits0 with1.18.27 and executable SHA
-  f35111b79296714194653fc8e74f28f6732589bacf0fbf59504c592ef6a727b6. Producer
+- E322: Root owns the unimplemented original Stop join: a binary-private
+  qualification owner alongside GenerationReceipt and a library-owned original
+  capture bridge. The native request supplies original cwd/environment/raw
+  payload before Node; capture must produce project and ancestry observations
+  itself, not accept an asserted project or a TS permission flag. Source
+  inspection identifies two later Git observations in render_owner/store.rs
+  ingress and transcript_store_wire.rs serve. Both qualified branches must
+  consume the same original native observation; changing only ingress leaves
+  recomputation. ProjectFailure retains an uncertain Git Child; converting it to
+  a string or dropping it at frontend exit loses custody. Root owns retained
+  cleanup or the native custodian integration before activation. Exact OpenCode
+  host probe opencode-installed-identity-01 exits0 with1.18.27 and executable
+  SHA f35111b79296714194653fc8e74f28f6732589bacf0fbf59504c592ef6a727b6. Producer
   qualification must use that loader version, preserve nested caller directory
   discovery, and account for remote/managed producers; matching local plugin
   bytes alone cannot establish the effective loaded producer set. The producer
