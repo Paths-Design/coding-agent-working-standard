@@ -1,10 +1,11 @@
 id: CAWS-SQLITE-TEST-READINESS-001
 title: 'Publish completed SQLite abort fixture readiness atomically'
 mode: fix
-lifecycle_state: active
-worktree: sqlite-test-readiness
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Atomic temporary-marker rename repairs the observed empty-file readiness race. Independent committed review grounded one-line fixture-only change; full55-case suite and cited abort/reap case passed, gates passed, and spec/event evidence was read back. Existing3s readiness and exact outcome assertions unchanged. No production or universal stdout-drain claim; normal integrated push remains parent work.'
 created_at: '2026-10-24T22:38:03.165Z'
-updated_at: '2026-10-24T22:38:17.596Z'
+updated_at: '2026-10-24T22:55:14.734Z'
 created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
 blast_radius:
   modules:
