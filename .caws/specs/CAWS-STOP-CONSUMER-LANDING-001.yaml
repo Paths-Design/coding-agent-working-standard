@@ -59,3 +59,8 @@ evidence:
     command: pinned-node node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/runtime/ordinary-stop-publication.test.js tests/runtime/session-store-publication.test.js tests/tooling/qualify-stop-profile.test.js
     exit_code: 0
     commit_sha: c8b1263084626734d630e18300ed77d7da708161
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Governed main landing c6b2a0a6e6a0c7a88d7b7a2e30d91fc4f13325ec contains reviewed c8b12630. Retained stop-consumer-landing-01/landed-state.json: git merge-base --is-ancestor exits0; git diff c8b12630 main -- packages docs/internal/caws-runtime-modernization.md exits0 empty. Selected runtime bytes unchanged SHA256 f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e; parent spec bytes unchanged SHA256 0c11d997c2dfbc9187a21c19d85267525b7632dc344d77269e6ecf7cb51f719f. Temporary landing worktree removed. Full-basis publication gates121paths and landing gates5paths each fivePASS; doctor0E4W5I. Independent review at c8b12630 grounded oracle and coherent-forgery repairs. No native admission, installation or cutover acceptance claimed. Verification checks commit existence, behavioral evidence separately inspected."
+    recorded_at: "2026-10-24T05:10:11.886Z"
+    commit_sha: c6b2a0a6e6a0c7a88d7b7a2e30d91fc4f13325ec
