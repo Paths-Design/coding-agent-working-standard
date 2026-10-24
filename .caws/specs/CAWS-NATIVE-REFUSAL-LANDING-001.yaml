@@ -1,0 +1,46 @@
+id: CAWS-NATIVE-REFUSAL-LANDING-001
+title: 'Land bounded durable native refusal and reclamation repair'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-24T18:33:33.805Z'
+updated_at: '2026-10-24T18:33:33.805Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native pre-reservation refusal history and resource reclamation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/render_owner/store.rs'
+    - 'packages/caws-native/src/render_owner/store/refusal.rs'
+    - 'packages/caws-native/src/render_owner/store/tests.rs'
+    - 'packages/caws-native/src/render_owner/store/tests/refusal.rs'
+    - 'packages/caws-native/src/service_journal.rs'
+    - 'packages/caws-native/src/service_journal/refusal.rs'
+    - 'packages/caws-native/src/service_journal/tests.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Land reviewed source with no fabricated consumption, no partial reservation conversion, no parent acceptance or machine-selection change, and preserve dependent lanes.'
+acceptance:
+  - id: A1
+    given: 'Reviewed clean candidate5f3f09e2'
+    when: 'The coherent source is integrated through a main-based lane'
+    then: 'Main contains the exact eight reviewed source and tracker blobs with admitted provenance.'
+  - id: A2
+    given: 'Retained exact-source positive and hostile checks'
+    when: 'Bounded source acceptance is adjudicated'
+    then: 'Durable refusal and release evidence is retained with native paired execution, authenticated restart, rollback and full cutover gaps explicit.'
+  - id: A3
+    given: 'Existing bound lanes, parent specs and selected runtime'
+    when: 'The disposable source landing completes'
+    then: 'Existing branch tips, physical lanes, parent acceptance and selected runtime bytes remain unchanged.'
+observability:
+  - 'Git ancestry/blob equality, exact raw test/source pins, preserved lane/spec/runtime snapshots and CAWS evidence.'
+rollback:
+  - 'Use ordinary governed corrective or revert commits; preserve all terminal history and selected machine runtime.'
+non_functional: {}
+contracts:
+  - name: 'native-refusal-source'
+    type: behavior
