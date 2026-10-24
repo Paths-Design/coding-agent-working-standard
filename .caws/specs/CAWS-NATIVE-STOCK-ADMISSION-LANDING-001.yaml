@@ -41,3 +41,11 @@ rollback:
   - 'Use a governed source revert if needed; the selected machine generation is not changed by this landing.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Actual original capture plus native custodian/Git: sparse Unsupported, changed sealed read Invalidated, cancellation Invalidated with callback once; no sessions created. Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/stock-admission-direct-fresh-01 execution.json and generation-artifacts/caws-generation-receipt-34604-0/direct-stock-admit.json, exit0; removing initial revalidation fails exact assertion with cargo101 in stock-admission-mutant-01. Original shared-target failed restoration retained; fresh independent target rebuilt and passed. Source main.rs retains receipt through Unsupported and predispatch revalidates. Main postseal Invalidated routing is source-inspected, not dynamically exercised."
+    recorded_at: "2026-10-24T08:19:05.275Z"
+    command: "cargo test --release --locked --offline --no-default-features -j 2 --test stock_stop_admission direct_admit_rejects_stale_readset_and_preserves_cancellation -- --exact --nocapture --test-threads=1"
+    exit_code: 0
+    commit_sha: "5837aa104633640ce593a2ead8ea2198d46b7812"
