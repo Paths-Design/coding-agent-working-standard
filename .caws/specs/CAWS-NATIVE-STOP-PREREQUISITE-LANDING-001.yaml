@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-STOP-PREREQUISITE-LANDING-001
 title: 'Land reviewed OpenCode transport and original Stop capture prerequisites'
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded source delivery only: three recorded criteria retain executed fixture evidence and exact package-byte landing; parent ordinary Stop custody/authentication/profile/consumer integration, residency, full Python retirement and local adoption remain open with root.'
 created_at: '2026-10-24T03:10:15.575Z'
-updated_at: '2026-10-24T03:10:16.843Z'
+updated_at: '2026-10-24T03:29:54.400Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
