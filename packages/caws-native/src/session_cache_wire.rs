@@ -624,6 +624,211 @@ impl<'a> PrefixOwner<'a> {
         })
     }
 }
+/// Original native input, captured before starting the engine. These values are
+/// observations to make, not an asserted project, completed prefix or grant.
+pub struct OriginalStopCaptureInput<'a> {
+    pub id: &'a str,
+    pub runtime_digest: &'a str,
+    pub surface: &'a str,
+    pub caller_cwd: &'a str,
+    pub caller_environment: &'a std::collections::BTreeMap<String, String>,
+    pub original_payload: &'a RawValue,
+}
+
+/// Keep the owned query failure intact: its retained Child must reach the root's
+/// cleanup/custody owner. Display text is never a substitute for this value.
+#[derive(Debug)]
+pub enum OriginalStopCaptureFailure {
+    Invocation(String),
+    Interrupted(String),
+    Ancestry(String),
+    Project {
+        failure: Box<crate::invocation_project::ProjectFailure>,
+        interruption: Option<String>,
+    },
+}
+impl fmt::Display for OriginalStopCaptureFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Invocation(message) => write!(f, "original Stop invocation: {message}"),
+            Self::Interrupted(message) => write!(f, "original Stop interrupted: {message}"),
+            Self::Ancestry(message) => write!(f, "original Stop ancestry: {message}"),
+            Self::Project {
+                failure,
+                interruption,
+            } => {
+                write!(f, "original Stop {failure}")?;
+                if let Some(message) = interruption {
+                    write!(f, "; original interruption: {message}")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+impl std::error::Error for OriginalStopCaptureFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Project { failure, .. } => Some(failure.as_ref()),
+            _ => None,
+        }
+    }
+}
+fn original_stop_checkpoint(
+    deadline: &crate::monotonic_deadline::MonotonicDeadline,
+    cancel: &mut impl FnMut() -> std::result::Result<(), String>,
+) -> std::result::Result<(), String> {
+    cancel()?;
+    deadline.check().map_err(|error| error.to_string())
+}
+
+/// Actual original-process capture. No Clone, Deserialize, asserted-project
+/// constructor or permission flag exists. This is an unactivated library
+/// prerequisite; it grants no stock selection, profile or publication authority.
+pub struct OriginalStopCapture<'deadline> {
+    id: String,
+    runtime_digest: String,
+    surface: String,
+    caller_cwd: String,
+    caller_environment: std::collections::BTreeMap<String, String>,
+    original_payload: Box<RawValue>,
+    project: crate::invocation_project::ObservedProject,
+    ancestry: crate::agent_pid_cache::OriginalAncestry,
+    deadline: &'deadline crate::monotonic_deadline::MonotonicDeadline,
+    original_pid: u32,
+    owner_attempted: std::cell::Cell<bool>,
+    _original_thread: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+impl<'deadline> OriginalStopCapture<'deadline> {
+    pub fn capture(
+        input: OriginalStopCaptureInput<'_>,
+        deadline: &'deadline crate::monotonic_deadline::MonotonicDeadline,
+        mut cancel: impl FnMut() -> std::result::Result<(), String>,
+    ) -> std::result::Result<Self, OriginalStopCaptureFailure> {
+        original_stop_checkpoint(deadline, &mut cancel)
+            .map_err(OriginalStopCaptureFailure::Interrupted)?;
+        if !cfg!(target_os = "macos")
+            || !matches!(input.surface, "opencode" | "zcode")
+            || input.id.is_empty()
+            || input.id.len() > 128
+            || input.id.contains('\0')
+            || !digest(input.runtime_digest)
+        {
+            return Err(OriginalStopCaptureFailure::Invocation(
+                "unsupported original identity, surface or platform".into(),
+            ));
+        }
+        // Capture ancestry first: no project Child exists on an ancestry error.
+        // This API already supplies String diagnostics; preserve that exact value.
+        let ancestry = crate::agent_pid_cache::OriginalAncestry::capture(
+            input.surface,
+            deadline.expires(),
+            || original_stop_checkpoint(deadline, &mut cancel),
+        )
+        .map_err(OriginalStopCaptureFailure::Ancestry)?;
+        original_stop_checkpoint(deadline, &mut cancel)
+            .map_err(OriginalStopCaptureFailure::Interrupted)?;
+        let interruption = std::cell::RefCell::new(None);
+        let project = {
+            let callback = std::cell::RefCell::new(&mut cancel);
+            crate::invocation_project::observe(
+                input.caller_cwd,
+                input.caller_environment,
+                input.original_payload,
+                deadline.expires(),
+                &|| match original_stop_checkpoint(deadline, &mut **callback.borrow_mut()) {
+                    Ok(()) => false,
+                    Err(message) => {
+                        interruption.borrow_mut().get_or_insert(message);
+                        true
+                    }
+                },
+            )
+        };
+        let project = project.map_err(|failure| OriginalStopCaptureFailure::Project {
+            failure: Box::new(failure),
+            interruption: interruption.into_inner(),
+        })?;
+        original_stop_checkpoint(deadline, &mut cancel)
+            .map_err(OriginalStopCaptureFailure::Interrupted)?;
+        Ok(Self {
+            id: input.id.into(),
+            runtime_digest: input.runtime_digest.into(),
+            surface: input.surface.into(),
+            caller_cwd: input.caller_cwd.into(),
+            caller_environment: input.caller_environment.clone(),
+            original_payload: input.original_payload.to_owned(),
+            project,
+            ancestry,
+            deadline,
+            original_pid: std::process::id(),
+            owner_attempted: std::cell::Cell::new(false),
+            _original_thread: std::marker::PhantomData,
+        })
+    }
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    pub fn runtime_digest(&self) -> &str {
+        &self.runtime_digest
+    }
+    pub fn surface(&self) -> &str {
+        &self.surface
+    }
+    pub fn caller_cwd(&self) -> &str {
+        &self.caller_cwd
+    }
+    pub fn caller_environment(&self) -> &std::collections::BTreeMap<String, String> {
+        &self.caller_environment
+    }
+    pub fn original_payload(&self) -> &RawValue {
+        &self.original_payload
+    }
+    pub fn observed_project(&self) -> &crate::invocation_project::ObservedProject {
+        &self.project
+    }
+    pub fn deadline(&self) -> &crate::monotonic_deadline::MonotonicDeadline {
+        self.deadline
+    }
+
+    /// The first owner attempt is consumed even on a binding refusal. Consume
+    /// captured originals internally; only Ready/dispatch context comes later.
+    /// The returned prefix borrows this externally owned capture and its clock.
+    pub fn prefix_owner<'capture>(
+        &'capture self,
+        invocation: Invocation<'capture>,
+    ) -> std::result::Result<StopPrefixOwner<'capture>, String> {
+        if self.owner_attempted.replace(true) {
+            return Err("original Stop prefix owner already attempted".into());
+        }
+        if self.original_pid != std::process::id()
+            || invocation.id != self.id
+            || invocation.runtime_digest != self.runtime_digest
+            || invocation.surface != self.surface
+            || invocation.original_payload.get() != self.original_payload.get()
+        {
+            return Err("original Stop prefix invocation binding mismatch".into());
+        }
+        StopPrefixOwner::new(StopPrefixInvocation {
+            invocation: Invocation {
+                id: &self.id,
+                runtime_digest: &self.runtime_digest,
+                original_payload: &self.original_payload,
+                surface: &self.surface,
+                event: invocation.event,
+                configuration: invocation.configuration,
+                ready_active: invocation.ready_active,
+                ready_project_digest: invocation.ready_project_digest,
+                dispatched: invocation.dispatched,
+                advertised_capability: invocation.advertised_capability,
+            },
+            original_ancestry: &self.ancestry,
+            original_project: &self.project,
+            deadline: self.deadline,
+        })
+    }
+}
+
 /// Inputs retained by the trusted original native frontend. The supplied
 /// original_project must be the original invocation's independent observation,
 /// never a current-project recomputation or deserialized TS substitute. This

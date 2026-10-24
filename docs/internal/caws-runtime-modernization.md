@@ -8514,19 +8514,20 @@ Additional bounded evidence and unresolved dependencies:
   remains unknown. Root owns the authenticated generation policy and native
   selection/profile join.
 
-- E322: Root owns the unimplemented original Stop join: a binary-private
-  qualification owner alongside GenerationReceipt and a library-owned original
-  capture bridge. The native request supplies original cwd/environment/raw
-  payload before Node; capture must produce project and ancestry observations
-  itself, not accept an asserted project or a TS permission flag. Source
-  inspection identifies two later Git observations in render_owner/store.rs
-  ingress and transcript_store_wire.rs serve. Both qualified branches must
-  consume the same original native observation; changing only ingress leaves
-  recomputation. ProjectFailure retains an uncertain Git Child; converting it to
-  a string or dropping it at frontend exit loses custody. Root owns retained
-  cleanup or the native custodian integration before activation. Exact OpenCode
-  host probe opencode-installed-identity-01 exits0 with1.18.27 and executable
-  SHA f35111b79296714194653fc8e74f28f6732589bacf0fbf59504c592ef6a727b6. Producer
+- E322: Root owns the unimplemented ordinary Stop join: a binary-private
+  qualification owner alongside GenerationReceipt and activation of the
+  library-owned original capture bridge described in E325. The native request
+  must supply original cwd/environment/raw payload before Node; capture must
+  produce project and ancestry observations itself, not accept an asserted
+  project or a TS permission flag. Source inspection identifies two later Git
+  observations in render_owner/store.rs ingress and transcript_store_wire.rs
+  serve. Both qualified branches must consume the same original native
+  observation; changing only ingress leaves recomputation. ProjectFailure
+  retains an uncertain Git Child; converting it to a string or dropping it at
+  frontend exit loses custody. Root owns retained cleanup or the native
+  custodian integration before activation. Exact OpenCode host probe
+  opencode-installed-identity-01 exits0 with1.18.27 and executable SHA
+  f35111b79296714194653fc8e74f28f6732589bacf0fbf59504c592ef6a727b6. Producer
   qualification must use that loader version, preserve nested caller directory
   discovery, and account for remote/managed producers; matching local plugin
   bytes alone cannot establish the effective loaded producer set. The producer
@@ -8570,6 +8571,32 @@ Additional bounded evidence and unresolved dependencies:
   retain status/output and plugin/policy bytes. The same-provider review's
   remaining bounded source observations and transaction evidence are grounded;
   no actual harness or parent acceptance is inferred.
+
+- E325: The library-owned OriginalStopCapture observes actual project and native
+  ancestry from captured cwd/environment/raw payload, retains the original
+  MonotonicDeadline, and binds one prefix-owner attempt to the original process,
+  request, generation digest, surface and payload. Structured project failure
+  retains its actual Git child and original interruption cause. Root executes
+  original-stop-capture-candidate-01: exit0,37 tests; native-check-01 and
+  feature-off-check-01 both exit0. All recorded source/tool inputs remain stable
+  and owned process groups are empty. Retained actual-original-project.json
+  records two real Git children69474/69477, exit0, both pipe EOFs and reap, with
+  nested payload cwd winning over a missing environment project and poisoned
+  GIT_DIR. actual-prefix.json and repository session files retain the envelope,
+  pointer and PID record with the same original clock. Failure/cancellation
+  artifacts retain Git exit128 or SIGKILL9 and structured reasons; these runs
+  settle cleanup and do not exercise uncertain custody after frontend death. Six
+  original-stop-capture-negative-\*-01 mutations each execute an assertion
+  failure and exit101, with exact restoration. The clock mutation establishes
+  checkpoint sensitivity, not absence of later effects. Tests use a native
+  libtest child with controlled OpenCode argv0, not the installed harness. This
+  bridge is not called by main before Node and grants no production
+  qualification. Source inspection finds UID-only resident authentication and
+  two later project observations. Root owns spawning original Git queries inside
+  the durable custodian, protected native registration before Node, and reuse of
+  that one observation through prefix and both store stages. A serialized
+  asserted project over the current public socket cannot satisfy that authority
+  contract. No parent AC or retirement status changes.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
