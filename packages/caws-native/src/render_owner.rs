@@ -38,6 +38,7 @@ const CONFIG_SCHEMA: &str = "caws.render.owner.config.v1";
 const OFFER_SCHEMA: &str = "caws.render.owner.offer.v1";
 const PREPARED_SCHEMA: &str = "caws.render.owner.prepared.v1";
 const TICK: Duration = Duration::from_millis(2);
+mod native_peer;
 mod observations;
 use observations::{
     Observation, ObservationLog, git_capture_failure, image_admission_failure, observation_reason,

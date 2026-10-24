@@ -8598,6 +8598,25 @@ Additional bounded evidence and unresolved dependencies:
   asserted project over the current public socket cannot satisfy that authority
   contract. No parent AC or retirement status changes.
 
+- E327: Native peer admission retains a private CLOEXEC socket, original
+  monotonic deadline, kernel PID/birth/executable and the exact admitted
+  generation member identity. native-peer-candidate-04 exits0 with five actual
+  native-host/Node controls; all101 source pins and tool inputs remain stable,
+  and the supervised process group is empty. Retained peer-observation.json
+  files show native admission/revalidation, zero admission callbacks for a
+  same-UID Node process forging native claims, refusal after peer exit,
+  same-byte member replacement refusal, and original cancellation/expiry. The
+  executable, member and process negative controls each exit101 at the
+  corresponding refusal assertion after incorrectly admitting the mutation;
+  exact source restoration is recorded. Earlier candidate01 compile failure and
+  candidate02 missing Node setting remain retained. Socket cleanup runs during
+  assertion unwinding. These are actual processes in a synthetic generation, not
+  installed Stop delivery, native registration, immutable executable attestation
+  or a PID-reuse experiment. The module has no active production caller. Root
+  owns authenticated original transfer, custodian execution and the ordinary
+  Stop publication/reader/release connection before profile, residency or
+  machine acceptance. Parent evidence remains unchanged.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
