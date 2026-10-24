@@ -157,14 +157,15 @@ acceptance:
     then: 'source and existing documentation match inspected behavior and full package harness fairness and machine cutover obligations remain explicitly with the parent'
   - id: A7
     given: >-
-      interleaved OpenCode plugin instances and created idle compacted events with
-      documented own-session identities or missing identities
-    when: 'the ordinary lifecycle dispatcher is invoked'
+      interleaved OpenCode plugin instances, lifecycle events and SDK-shaped tool
+      post callbacks, including ungoverned explicit instance roots and missing
+      identities
+    when: 'the ordinary lifecycle and tool dispatchers are invoked'
     then: >-
-      each dispatched lifecycle carries only its originating event session and
-      instance project; missing identity never dispatches with a previous session;
-      captured dispatcher arguments and focused negative controls establish the
-      behavior
+      each dispatch carries its own originating event session, arguments and
+      instance project; missing identity never borrows a previous session and
+      explicit ungoverned context never falls through to another host project;
+      retained dispatcher arguments and negative controls establish the behavior
 observability:
   - 'Actual native and engine frames, original and output digests, current-attempt markers, terminal truth, reader observations, retained failures and process cleanup'
 rollback:
