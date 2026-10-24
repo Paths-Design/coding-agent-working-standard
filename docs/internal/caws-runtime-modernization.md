@@ -9564,12 +9564,77 @@ Additional bounded evidence and unresolved dependencies:
   Original monotonic deadline expired refusal instead of compatibility success.
   A fresh control invocation confirms the thread-local guard releases. The
   sqlite-store binary test exits 0 in 6.846s; the retained
-  coalesced-expired-inner-none.json records innerCalls:2,
+  selection-coalesced-expired-inner-none.json records innerCalls:2,
   originalDeadlineUnchanged:true and actualEligibilityConstructed:false.
   Command, raw logs, unchanged source/input pins and empty observed group
   residue live under publication-integration/stop-validation-expired-inner-01.
   This closes the generic scope-expiry question; actual profile/EligibleStop
   construction and production effect timing require the root-owned exact image.
+
+- E357: Fresh production06 builds clean candidate aa2b32f0 with the E354/E355
+  optimizations and E356 test. All eleven stages exit 0 with unchanged source
+  pins and empty observed group residue; native build takes 121.229s under its
+  existing build allowance. The original invocation budget remains 30000ms.
+  Frozen manifest SHA256 is
+  28ca77f22b6011cb94dfe750b5a9d51ef8c8833549dba87725cac470bf79332d; the
+  1222-source pin document is
+  c84d1dda2a698957dcaf9f4cc2370c6476e04d3cc5731f62cd0b4977626fbae0. Native
+  executable SHA256 is
+  64d638e3d046e5f4c0baec61063027de598415423abf2b077454d8c664b3f5b0, completion
+  receipt is 7c548a05f356b5b6e869eecafd7c7d95b68aa67dec204623fee881b5e1e12aca,
+  profile is 01e259ef99c753dbbabcd6586e5f5fb71395bfb257833c348767ec644adca477,
+  and final descriptor is
+  afaa7f00fb13482c2b4961492a02b61b396f4b2f437d6b015523fddc0347f1ae. Root reads
+  thirty equal component comparisons and thirty-one terminal-zero executions,
+  without promoting component scope to whole-runtime acceptance.
+
+  The unchanged positive probe exits 1 in 47.908s. Its actual installed native
+  bytes match that build; native exits 2 at 30031.245ms with renderer owner
+  deadline expired. Generation receipt revalidation records 29 completed calls
+  taking 20972997us; five prefix authority callbacks take 7771723us. These
+  totals overlap. The invocation journal records completed prefix, envelope and
+  pointer, then completed goal-ac-gate and plan-transcript-finalize handlers;
+  session-log reports reconstruction/native-cleanup failure. Owner observations
+  record native_stop_postqueue_validated, publication_original_reserved and
+  publication_retained, without publication_writer_retained. Failure lies after
+  reservation and before writer acquisition returns; the observation cannot
+  distinguish immediate deadline refusal, BeforeWriter authority or incomplete
+  acquisition. No turn or publication marker exists. The source SQLite bytes
+  retain eff667b1cbe750018030f79e81869928011a8265d26b65387eb78aa4d7f0749f.
+
+  This run leaves owner87541 live and its socket present. A read-only correlated
+  status request returns transcriptDatabaseOpenAttempts:0, present:true,
+  phase:acquiring, retained:true and resident store relay reader closed. The
+  durable original operation is unknown after accepted reservation; this is not
+  the pre-reservation cancellation case. Root retains its recovery obligation
+  and has sent no service signal or journal mutation. Concrete artifacts live in
+  production-stop-06-positive-01, production-stop-06-positive-execution-01,
+  production-stop-06-retained-status-01.json and
+  production-stop-06-positive-root-inspection-01.json. The latter joins
+  installed bytes, original deadline, raw diagnostic, actual session files and
+  owner state. Prefix callback execution is observed for this exact private
+  image. Ordinary consumption, release, production deadline compliance and
+  machine adoption fail or remain unverified. Parent acceptance and selected
+  machine remain unchanged.
+
+- E358: Main consolidates adjacent predispatch selected-readset and eligible
+  checks. EligibleStop already owns that same immutable selected readset and
+  brackets profile validation with full generation/local-readset checks; pure
+  dispatch encoding follows without an intervening exchange or effect. The
+  unsupported stock and custom/inactive paths retain their standalone checks.
+  The first combined original_stop_main command exceeds its 110s supervisor
+  allowance after the six-case hostile test reports ok and during the positive
+  test. Preserve that exit -15, timeout and empty observed residue in
+  stop-predispatch-original-01. The separately selected positive test exits 0 in
+  94.044s, with six original-capture/compatibility cases, unchanged source/input
+  pins and empty observed residue, under stop-predispatch-original-positive-01.
+  These fixtures do not construct successful native Stop eligibility; they
+  establish the retained fallback behavior only. Root owns fresh exact-image
+  execution of the consolidated eligible branch and cannot claim a speedup from
+  these tests. Read-only verifier inspection finds hardware SHA256 already
+  selected in the fresh06 AArch64 binary; no compiler feature change is
+  justified by that evidence. Verification phase costs and retained-operation
+  recovery remain root-owned work before another cutover claim.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -9677,12 +9742,13 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-E351 makes the actual production deadline failure the immediate integration
-priority. Root integrates bounded timing diagnostics and scoped verification
-consolidation, then repeats the unchanged positive scenario before queued
-mutation/reclamation and residency work. The next coherent source landing must
-carry this production-path repair and its hostile controls. Build/profile
-success alone cannot release it as a usable runtime replacement.
+E357 establishes actual prefix completion followed by expiry after original
+reservation. Root owns verification-cost reduction, the retained owner's
+recovery and another unchanged positive scenario before queued
+mutation/reclamation and residency work. E358 consolidates adjacent predispatch
+checks; its production effect is unverified. The next coherent source landing
+must carry the measured production-path repair and its hostile controls.
+Build/profile success alone cannot release it as a usable runtime replacement.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -390,7 +390,13 @@ fn execute_observed<'deadline>(
             // before the dispatch attempt, including inactive/custom selection.
             if let Some(receipt) = selection_receipt.as_ref() {
                 progress.mark("selection-predispatch-revalidation");
-                if let Some(selected) = stock_selection.as_ref() {
+                if let Some(eligible) = eligible_stop.as_ref() {
+                    // Eligibility owns this selection's readset and brackets
+                    // its profile checks with the same full freshness checks.
+                    // Validate once here; no exchange/effect occurs before the
+                    // pure dispatch encoding below.
+                    eligible.revalidate(cancellation::check)?;
+                } else if let Some(selected) = stock_selection.as_ref() {
                     selected
                         .revalidate(cancellation::check)
                         .map_err(|refusal| {
@@ -407,7 +413,6 @@ fn execute_observed<'deadline>(
             dispatched = ready.as_ref().is_some_and(|context| context.active);
             progress.mark("dispatch-grant");
             let dispatch = if let Some(eligible) = eligible_stop.as_ref() {
-                eligible.revalidate(cancellation::check)?;
                 eligible.dispatch(&request)?
             } else {
                 service_dispatch.unwrap_or_else(|| protocol::dispatch(&request))
