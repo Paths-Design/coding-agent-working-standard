@@ -1,6 +1,8 @@
 //! Actual native CLI + real Node with a deliberately small protocol simulator.
 //! This checks optional pre-Node discovery/replay, not maintained-engine policy,
-//! OpenCode delivery, native prefix eligibility, SQL or ordinary publication.
+//! OpenCode delivery, admitted stock selection, native prefix eligibility, SQL
+//! or ordinary publication. Its sparse readset must remain unsupported even
+//! when native observation transport and original capture both succeed.
 #![cfg(target_os = "macos")]
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -175,6 +177,7 @@ const send=row=>process.stdout.write(JSON.stringify(row)+'\n');
  };
  if(capability){
   if(capability.schema!=='caws.runtime.selection-observation.v1'||typeof capability.snapshotId!=='string'||capability.limits.maximumObservations!==4096||capability.limits.maximumBytes!==67108864||capability.limits.maximumPathBytes!==16384)throw Error('native selection limits mismatch');
+  if(mode!=='stock-selection-omitted'){
   const source=base+'/repo/selection-source';
   if(mode==='selection-bad-id'||mode==='selection-bad-snapshot'){
    const bad=selectionRequest({kind:'read',path:source});
@@ -198,6 +201,7 @@ const send=row=>process.stdout.write(JSON.stringify(row)+'\n');
   const digest=await readSelection({kind:'runtime-digest',path:nativeNode,singleLink:false});
   const actualNode=fs.readFileSync(nativeNode);
   if(digest.result.kind!=='runtime-digest'||digest.result.sha256!==crypto.createHash('sha256').update(actualNode).digest('hex')||digest.result.stat.size!==actualNode.length||Object.hasOwn(digest.result,'base64'))throw Error('native runtime digest mismatch');
+  }
   fs.writeFileSync(base+'/selection-observed.json',JSON.stringify({advertised:capability,rows:selectionRows}));
  }
 
@@ -228,6 +232,7 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
     let mut results = Vec::new();
     for (case, initial, final_count) in [
         ("captured", 2, 2),
+        ("stock-selection-omitted", 2, 2),
         ("generation-refused", 0, 2),
         ("capture-refused", 1, 3),
         ("selection-invalid-root", 2, 2),
@@ -326,7 +331,18 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
             let trace: Value = serde_json::from_str(traces[0]).unwrap();
             assert_eq!(trace["phase"], "completed");
             assert_eq!(trace["dispatchGrantWritten"], true);
-            let captured = case == "captured";
+            let captured = matches!(case, "captured" | "stock-selection-omitted");
+            // Successful original capture and sealing are not stock selection.
+            // Unsupported must retain the same predispatch freshness check and
+            // ordinary dispatch, without advertising Stop capabilities.
+            assert_eq!(
+                trace["stockSelection"],
+                if captured {
+                    "unsupported"
+                } else {
+                    "not_attempted"
+                }
+            );
             for field in [
                 "selectionAdvertised",
                 "selectionSealed",
@@ -336,7 +352,7 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
             }
             assert_eq!(
                 trace["completedSelectionSequence"],
-                if captured { 3 } else { 0 }
+                if case == "captured" { 3 } else { 0 }
             );
             assert!(!trace.to_string().contains(f.root.to_str().unwrap()));
             f.record("native-progress.json", trace);
@@ -352,26 +368,30 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
                 assert_eq!(row["cleanup"][key], true, "{case}:{key}")
             }
         }
-        if case == "captured" {
+        if matches!(case, "captured" | "stock-selection-omitted") {
             let selection: Value =
                 serde_json::from_slice(&fs::read(f.base.join("selection-observed.json")).unwrap())
                     .unwrap();
-            assert_eq!(selection["rows"].as_array().unwrap().len(), 3);
-            assert!(
-                selection["rows"][0]["chunkLengths"]
-                    .as_array()
-                    .unwrap()
-                    .len()
-                    >= 2
-            );
-            assert_eq!(
-                selection["rows"][1]["observation"]["result"],
-                json!({"kind":"exists","value":false})
-            );
-            assert_eq!(
-                selection["rows"][2]["observation"]["result"]["kind"],
-                "runtime-digest"
-            );
+            if case == "stock-selection-omitted" {
+                assert!(selection["rows"].as_array().unwrap().is_empty());
+            } else {
+                assert_eq!(selection["rows"].as_array().unwrap().len(), 3);
+                assert!(
+                    selection["rows"][0]["chunkLengths"]
+                        .as_array()
+                        .unwrap()
+                        .len()
+                        >= 2
+                );
+                assert_eq!(
+                    selection["rows"][1]["observation"]["result"],
+                    json!({"kind":"exists","value":false})
+                );
+                assert_eq!(
+                    selection["rows"][2]["observation"]["result"]["kind"],
+                    "runtime-digest"
+                );
+            }
         } else {
             assert!(!f.base.join("selection-observed.json").exists());
         }
@@ -480,6 +500,18 @@ fn native_selection_transport_refuses_invalid_overlapping_stale_and_late_request
         .unwrap()
         .unwrap();
         assert_eq!(progress["schema"], "caws.native.invocation-progress.v1");
+        assert_eq!(
+            progress["stockSelection"],
+            if case == "selection-after-ready" {
+                "unsupported"
+            } else {
+                "not_attempted"
+            }
+        );
+        assert_eq!(progress["dispatchGrantWritten"], dispatched);
+        if case == "selection-after-ready" {
+            assert_eq!(progress["selectionPredispatchRevalidated"], true);
+        }
         assert_eq!(
             progress["phase"],
             if case == "selection-stale" {
