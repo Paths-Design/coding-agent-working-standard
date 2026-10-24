@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-SOURCE-LANDING-001
 title: 'Reconcile matched native runtime source and package contracts onto main'
 mode: refactor
-lifecycle_state: active
-worktree: native-source-landing
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded coherent source delivery completed at c41ee44b with code c61ad087: matched native/CLI/package build, exact private installed native cache and guard controls, corruption refusal and native-to-legacy rollback. A1-A3 recorded/read back with full-basis gates and independent review. Full runtime modernization remains active under CAWS-NATIVE-RUNTIME-001 and CAWS-NATIVE-SESSION-PUBLICATION-001: ordinary Stop integration/admission, deep deadline effect checks, in-process parity, Python retirement, harness delivery, residency/fairness, active-owner upgrades and actual machine adoption. No parent completion or local cutover is claimed.'
 created_at: '2026-10-22T22:51:57.793Z'
-updated_at: '2026-10-23T23:12:25.755Z'
+updated_at: '2026-10-24T00:56:00.797Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
