@@ -8858,8 +8858,9 @@ Additional bounded evidence and unresolved dependencies:
 
 - E338: Path confinement uses an explicit path-identity observation rather than
   generic lstat. Native evidence retains kind/device/inode/mode/ownership and
-  traversal anchors; only this operation excludes contents, timestamps and link
-  count. Generic metadata, bytes and inventory operations retain their strict
+  traversal anchors; path identity excludes contents, timestamps and link count.
+  E365 applies the corresponding identity projection to present-directory
+  Exists. Generic metadata, bytes and inventory operations retain their strict
   dependencies. Stock selection requires the explicit observation without a
   missing-row fallback. path-identity-native-unit-01 exits0 with142 cases,
   including sibling-change acceptance and inode/mode/symlink/absence and
@@ -9882,6 +9883,48 @@ Additional bounded evidence and unresolved dependencies:
   it. Successful publication, ordinary consumption, fairness and
   selected-machine adoption remain open.
 
+- E365: Present-directory Exists retains explicit native device/inode/type/mode/
+  uid/gid in both lexical and followed evidence. Directory child
+  size/timestamps/ link count are not existence dependencies. Symlink leaves
+  retain full stamps, followed directory identity and resolved/lexical anchors.
+  File Exists, absence/errors, explicit stat/lstat/list/read and generation
+  verification keep their prior dependencies. The wire reply remains boolean; no
+  receipt refresh, callback removal, deadline extension or path-specific
+  exception is introduced.
+
+  The tests-first exists-writer-baseline-01 command executes actual public
+  writer acquisition against the original native receipt and exits101 in5.806s:
+  `Selection dependency changed: exists`, effectCount0. Its retained
+  selection-exists-directory-writer-bootstrap.json shows identical parent
+  identity, changed full metadata and actual writer marker/custody files.
+  exists-directory-final-01 exits0 with33 selection cases in8.946s; fixture23's
+  artifact records sameParentIdentity:true, fullMetadataChanged:true,
+  error:null, effectCount1 and a caws.render.writer.provisioned.v1 marker.
+  Twelve hostile artifacts retain effectCount0 for replacement, disappearance,
+  permissions, symlink/file substitution, absence appearance, strict
+  metadata/inventory, changed policy, negative child and regular-file Exists.
+  The symlink-target artifact retains one earlier child-churn effect and no
+  second effect after target replacement.
+
+  exists-directory-identity-mutant-01 replaces followed directory UID with0 and
+  exits101 in3.870s at the exact identity assertion (actual0, expected501), not
+  compilation. The original file
+  SHA6d54917f3932cb0d881607ae3089813f484b9c3058035c034c4f1d87e4bfa5b5 is
+  restored exactly. exists-directory-bin-restored-01 exits0 with184 binary cases
+  in8.302s; exists-directory-feature-off-01 exits0 in1.929s and executes no
+  tests. Both final receipts match all112 current crate files; every attempt
+  retains unchanged source/tool pins and empty observed process groups. Raw
+  execution.json, stdout/stderr and generation-artifacts remain under the named
+  publication-integration directories. Compiler dead-code warnings remain.
+
+  Public writer acquisition followed by original-receipt validation is a bounded
+  component seam, not the installed WriterLocked callback join. Fresh09 must
+  qualify the clean combined candidate and exercise the unchanged probe02 with
+  its original30000ms deadline in a new fixture. Preserve fresh08's partial
+  provisioning and fenced Unknown. Publication, ordinary consumption/release,
+  resident fairness and selected-machine adoption remain unverified; no parent
+  criterion or Python-retirement row is completed by this repair.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -10010,9 +10053,11 @@ control. E364's fresh08 producer reaches natural resource-free owner exit while
 preserving Unknown, but first writer provisioning invalidates the .caws
 directory Exists dependency before publication. Root owns an operation-specific
 native directory existence repair, strict authority falsifiers and a new
-exact-image replay. The successful path must establish publication, ordinary
-consumption and release within30s; neither natural failure cleanup nor
-build/profile success supplies it.
+exact-image replay. E365 supplies the repair, failing baseline, ownership-loss
+mutation and restored controls. Root owns the clean-candidate installed replay;
+html_profile prepares its pinned fresh09 recipe. The successful path must
+establish publication, ordinary consumption and release within30s; neither
+natural failure cleanup nor build/profile success supplies it.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

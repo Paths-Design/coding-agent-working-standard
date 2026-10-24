@@ -186,14 +186,31 @@ enum Anchor {
 enum Leaf {
     Identity(PathIdentity),
     Present(Stamp),
+    ExistsDirectory(PathIdentity),
     Absent,
     Failed(i32),
+}
+/// Followed metadata remains explicit. Only present-directory Exists omits
+/// inventory size/times/link count; type/mode, dev/ino and uid/gid stay native.
+#[derive(Debug, PartialEq, Eq)]
+enum Followed {
+    Exact(Stamp),
+    ExistsDirectory(PathIdentity),
+}
+impl Followed {
+    fn of(kind: OperationKind, metadata: &Metadata) -> Self {
+        if kind == OperationKind::Exists && metadata.is_dir() {
+            Self::ExistsDirectory(PathIdentity::of(metadata))
+        } else {
+            Self::Exact(Stamp::of(metadata))
+        }
+    }
 }
 #[derive(Debug, PartialEq, Eq)]
 struct Evidence {
     anchors: Vec<Anchor>,
     leaf: Leaf,
-    followed: Option<Stamp>,
+    followed: Option<Followed>,
     result_sha256: String,
 }
 struct Record {
@@ -565,7 +582,7 @@ impl<'a> SelectionObservationOwner<'a> {
         &self,
         operation: &Operation,
         cancel: &mut impl FnMut() -> Result<(), String>,
-        followed: &mut Option<Stamp>,
+        followed: &mut Option<Followed>,
     ) -> Result<io::Result<Value>, String> {
         let path = Path::new(&operation.path);
         let metadata = matches!(
@@ -594,7 +611,7 @@ impl<'a> SelectionObservationOwner<'a> {
                 .map(|value| json!({"kind":"info","value":value})),
             OperationKind::Stat | OperationKind::Exists => match fs::metadata(path) {
                 Ok(m) => {
-                    *followed = Some(Stamp::of(&m));
+                    *followed = Some(Followed::of(operation.kind, &m));
                     if operation.kind == OperationKind::Exists {
                         Ok(json!({"kind":"exists","value":true}))
                     } else {
@@ -650,7 +667,7 @@ impl<'a> SelectionObservationOwner<'a> {
                 if Stamp::of(&initial) != Stamp::of(&final_metadata) {
                     return Err("Selection directory changed during listing".into());
                 }
-                *followed = Some(Stamp::of(&final_metadata));
+                *followed = Some(Followed::of(operation.kind, &final_metadata));
                 Ok(json!({"kind":"listing","entries":entries}))
             }
             OperationKind::Read | OperationKind::RuntimeFile => {
@@ -665,7 +682,7 @@ impl<'a> SelectionObservationOwner<'a> {
                 } else {
                     match fs::metadata(path) {
                         Ok(m) => {
-                            *followed = Some(Stamp::of(&m));
+                            *followed = Some(Followed::of(operation.kind, &m));
                             Ok(json!({"kind":"executable"}))
                         }
                         Err(e) => Err(e),
@@ -681,7 +698,7 @@ impl<'a> SelectionObservationOwner<'a> {
         &self,
         operation: &Operation,
         cancel: &mut impl FnMut() -> Result<(), String>,
-        followed: &mut Option<Stamp>,
+        followed: &mut Option<Followed>,
     ) -> Result<io::Result<Value>, String> {
         let path = Path::new(&operation.path);
         let runtime = operation.kind == OperationKind::RuntimeFile;
@@ -758,7 +775,7 @@ impl<'a> SelectionObservationOwner<'a> {
         {
             return Err("Selection file changed during read".into());
         }
-        *followed = Some(Stamp::of(&finished));
+        *followed = Some(Followed::of(operation.kind, &finished));
         checkpoint(self.deadline, cancel)?;
         if runtime {
             Ok(info(&finished).map(
@@ -903,11 +920,15 @@ fn absent(error: &io::Error) -> bool {
     )
 }
 fn operation_leaf(path: &Path, kind: OperationKind) -> Leaf {
-    if kind != OperationKind::PathIdentity {
+    if !matches!(kind, OperationKind::PathIdentity | OperationKind::Exists) {
         return optional_stamp(path, false);
     }
     match fs::symlink_metadata(path) {
-        Ok(m) => Leaf::Identity(PathIdentity::of(&m)),
+        Ok(m) if kind == OperationKind::PathIdentity => Leaf::Identity(PathIdentity::of(&m)),
+        Ok(m) if m.is_dir() => Leaf::ExistsDirectory(PathIdentity::of(&m)),
+        // A symlink leaf keeps its exact link stamp even when its followed
+        // target is a directory; resolved target/ancestry remain separate.
+        Ok(m) => Leaf::Present(Stamp::of(&m)),
         Err(e) if absent(&e) => Leaf::Absent,
         Err(e) => Leaf::Failed(e.raw_os_error().unwrap_or(0)),
     }
@@ -1598,7 +1619,7 @@ mod tests {
     }
 
     #[test]
-    fn path_identity_excludes_contents_size_times_and_link_count_only_for_this_operation() {
+    fn path_identity_excludes_regular_file_contents_size_times_and_link_count() {
         fixture(|generation, home, _| {
             let clock = deadline();
             let path = home.join("identity-file");
@@ -2400,5 +2421,269 @@ mod tests {
                 .contains("Original monotonic deadline expired")
             );
         });
+    }
+    fn exists_directory_metadata(path: &Path) -> Value {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) => {
+                json!({"kind":file_kind(metadata.mode()),"dev":metadata.dev(),"ino":metadata.ino(),
+                "mode":metadata.mode(),"uid":metadata.uid(),"gid":metadata.gid(),"size":metadata.size(),"nlink":metadata.nlink(),
+                "mtime":metadata.mtime(),"mtimeNsec":metadata.mtime_nsec(),"ctime":metadata.ctime(),"ctimeNsec":metadata.ctime_nsec()})
+            }
+            Err(error) => json!({"errno":error.raw_os_error(),"error":error.to_string()}),
+        }
+    }
+
+    #[test]
+    fn exists_directory_writer_bootstrap_preserves_original_receipt() {
+        use std::os::unix::fs::PermissionsExt;
+        fixture(|generation, home, _| {
+            let physical_home = home.canonicalize().unwrap();
+            let project = physical_home.join("exists-writer-project");
+            let machine = physical_home.join("exists-writer-machine");
+            for directory in [&project, &machine] {
+                fs::create_dir(directory).unwrap();
+                fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            let governance = project.join(".caws");
+            fs::create_dir(&governance).unwrap();
+            fs::set_permissions(&governance, fs::Permissions::from_mode(0o700)).unwrap();
+            let policy = governance.join("policy.yaml");
+            fs::write(&policy, b"selected policy bytes\n").unwrap();
+            let clock = deadline();
+            let before = fs::symlink_metadata(&governance).unwrap();
+            let mut observed = owner(generation, &clock, &physical_home);
+            let original_exists = capture(&mut observed, OperationKind::Exists, &governance);
+            assert_eq!(
+                original_exists["result"],
+                json!({"kind":"exists","value":true})
+            );
+            capture(&mut observed, OperationKind::PathIdentity, &governance);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            // Public real writer bootstrap. The checked callback is library-
+            // private; this binary-module test revalidates the same receipt
+            // before and after acquisition, without changing that API.
+            receipt.revalidate(|| Ok(())).unwrap();
+            let writer =
+                caws_native::render_writer::acquire(&machine, &project, clock.expires()).unwrap();
+            let after = fs::symlink_metadata(&governance).unwrap();
+            assert_eq!(PathIdentity::of(&before), PathIdentity::of(&after));
+            assert_ne!(Stamp::of(&before), Stamp::of(&after));
+            assert_eq!(fs::read(&policy).unwrap(), b"selected policy bytes\n");
+            let effects = Cell::new(0);
+            let result = effect_after_revalidation(&receipt, &effects);
+            retain(
+                home,
+                "exists-directory-writer-bootstrap",
+                json!({
+                    "scope":"actual public writer bootstrap and actual native observation receipt with synthetic generation; no installed Stop callback join",
+                    "project":project,"writerMachineHome":machine,"originalExists":original_exists,
+                    "before":{"identity":format!("{:?}",PathIdentity::of(&before)),"stamp":format!("{:?}",Stamp::of(&before))},
+                    "after":exists_directory_metadata(&governance),"sameParentIdentity":true,"fullMetadataChanged":true,
+                    "markerPath":governance.join(".render-writer-provisioned"),
+                    "markerBase64":STANDARD.encode(fs::read(governance.join(".render-writer-provisioned")).unwrap()),
+                    "custodyPath":governance.join(".render-writer-custody"),
+                    "custodyMetadata":exists_directory_metadata(&governance.join(".render-writer-custody")),
+                    "effectCount":effects.get(),"error":result.as_ref().err(),
+                    "nativeEvidence":format!("{:?}",receipt.owner.records[0].evidence),
+                    "observations":receipt.observations().collect::<Vec<_>>()
+                }),
+            );
+            assert!(
+                result.is_ok(),
+                "writer bootstrap must not invalidate directory existence: {:?}",
+                result.err()
+            );
+            assert_eq!(effects.get(), 1);
+            drop(writer);
+        });
+    }
+
+    #[test]
+    fn exists_directory_identity_and_absence_changes_refuse_effects() {
+        use std::os::unix::fs::PermissionsExt;
+        for change in ["absent", "replacement", "mode", "symlink", "file-type"] {
+            fixture(|generation, home, _| {
+                let directory = home.join("exists-directory");
+                fs::create_dir(&directory).unwrap();
+                fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+                let original = exists_directory_metadata(&directory);
+                let clock = deadline();
+                let mut observed = owner(generation, &clock, home);
+                let row = capture(&mut observed, OperationKind::Exists, &directory);
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                match change {
+                    "absent" => fs::remove_dir(&directory).unwrap(),
+                    "replacement" => {
+                        fs::rename(&directory, home.join("retained-directory")).unwrap();
+                        fs::create_dir(&directory).unwrap();
+                        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+                    }
+                    "mode" => {
+                        fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap()
+                    }
+                    "symlink" => {
+                        let moved = home.join("retained-directory");
+                        fs::rename(&directory, &moved).unwrap();
+                        symlink(&moved, &directory).unwrap();
+                    }
+                    "file-type" => {
+                        fs::remove_dir(&directory).unwrap();
+                        fs::write(&directory, b"present file").unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                let effects = Cell::new(0);
+                let result = effect_after_revalidation(&receipt, &effects);
+                retain(
+                    home,
+                    &format!("exists-directory-{change}"),
+                    json!({"change":change,"originalExists":row,
+                    "before":original,"after":exists_directory_metadata(&directory),"effectCount":effects.get(),
+                    "error":result.as_ref().err(),"nativeEvidence":format!("{:?}",receipt.owner.records[0].evidence)}),
+                );
+                assert!(result.is_err(), "{change}");
+                assert_eq!(effects.get(), 0, "{change}");
+            });
+        }
+        fixture(|generation, home, _| {
+            let directory = home.join("absent-exists-directory");
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            let row = capture(&mut observed, OperationKind::Exists, &directory);
+            assert_eq!(row["result"]["value"], false);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::create_dir(&directory).unwrap();
+            let effects = Cell::new(0);
+            let result = effect_after_revalidation(&receipt, &effects);
+            retain(
+                home,
+                "exists-directory-absence-appears",
+                json!({"originalExists":row,"after":exists_directory_metadata(&directory),"error":result.as_ref().err(),"effectCount":effects.get()}),
+            );
+            assert!(result.is_err());
+            assert_eq!(effects.get(), 0);
+        });
+    }
+
+    #[test]
+    fn exists_directory_projection_preserves_native_identity_and_symlink_target() {
+        fixture(|generation, home, _| {
+            let target = home.join("exists-target");
+            fs::create_dir(&target).unwrap();
+            let link = home.join("exists-link");
+            symlink(&target, &link).unwrap();
+            let metadata = fs::metadata(&target).unwrap();
+            let expected = PathIdentity {
+                dev: metadata.dev(),
+                ino: metadata.ino(),
+                mode: metadata.mode(),
+                uid: metadata.uid(),
+                gid: metadata.gid(),
+            };
+            assert_eq!(
+                operation_leaf(&target, OperationKind::Exists),
+                Leaf::ExistsDirectory(expected)
+            );
+            let expected = PathIdentity {
+                dev: metadata.dev(),
+                ino: metadata.ino(),
+                mode: metadata.mode(),
+                uid: metadata.uid(),
+                gid: metadata.gid(),
+            };
+            assert_eq!(
+                Followed::of(OperationKind::Exists, &metadata),
+                Followed::ExistsDirectory(expected)
+            );
+            assert!(
+                matches!(
+                    operation_leaf(&link, OperationKind::Exists),
+                    Leaf::Present(_)
+                ),
+                "symlink leaf must retain exact stamp"
+            );
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Exists, &link);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::create_dir(target.join("bootstrap-child")).unwrap();
+            let effects = Cell::new(0);
+            effect_after_revalidation(&receipt, &effects).unwrap();
+            assert_eq!(effects.get(), 1);
+            fs::rename(&target, home.join("retained-target")).unwrap();
+            fs::create_dir(&target).unwrap();
+            let result = effect_after_revalidation(&receipt, &effects);
+            retain(
+                home,
+                "exists-directory-symlink-target",
+                json!({"error":result.as_ref().err(),"effectCount":effects.get(),
+                "target":exists_directory_metadata(&target),"nativeEvidence":format!("{:?}",receipt.owner.records[0].evidence)}),
+            );
+            assert!(result.is_err());
+            assert_eq!(effects.get(), 1);
+        });
+    }
+
+    #[test]
+    fn exists_directory_does_not_relax_explicit_metadata_inventory_policy_or_negative_children() {
+        for change in [
+            "stat",
+            "lstat",
+            "list",
+            "policy",
+            "negative-child",
+            "file-exists",
+        ] {
+            fixture(|generation, home, _| {
+                let directory = home.join("exists-strict-directory");
+                fs::create_dir(&directory).unwrap();
+                let policy = directory.join("policy.yaml");
+                fs::write(&policy, b"original policy").unwrap();
+                let candidate = directory.join("higher-priority.json");
+                let clock = deadline();
+                let mut observed = owner(generation, &clock, home);
+                capture(&mut observed, OperationKind::Exists, &directory);
+                match change {
+                    "stat" => {
+                        capture(&mut observed, OperationKind::Stat, &directory);
+                    }
+                    "lstat" => {
+                        capture(&mut observed, OperationKind::Lstat, &directory);
+                    }
+                    "list" => {
+                        capture(&mut observed, OperationKind::List, &directory);
+                    }
+                    "policy" => {
+                        capture(&mut observed, OperationKind::Read, &policy);
+                    }
+                    "negative-child" => {
+                        capture(&mut observed, OperationKind::Exists, &candidate);
+                    }
+                    "file-exists" => {
+                        capture(&mut observed, OperationKind::Exists, &policy);
+                    }
+                    _ => unreachable!(),
+                }
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                match change {
+                    "policy" | "file-exists" => {
+                        fs::write(&policy, b"changed policy with a different size").unwrap()
+                    }
+                    "negative-child" => fs::write(&candidate, b"new candidate").unwrap(),
+                    _ => fs::create_dir(directory.join("bootstrap-child")).unwrap(),
+                }
+                let effects = Cell::new(0);
+                let result = effect_after_revalidation(&receipt, &effects);
+                retain(
+                    home,
+                    &format!("exists-directory-strict-{change}"),
+                    json!({"change":change,"error":result.as_ref().err(),"effectCount":effects.get(),
+                    "directory":exists_directory_metadata(&directory),"observations":receipt.observations().collect::<Vec<_>>() }),
+                );
+                assert!(result.is_err(), "{change}");
+                assert_eq!(effects.get(), 0, "{change}");
+            });
+        }
     }
 }
