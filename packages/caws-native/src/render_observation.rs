@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use std::time::Instant;
 
 pub const BINDING: &str = "caws.runtime.render-observation.binding.v1";
+pub const STOP_BINDING: &str = "caws.runtime.render-observation.binding.v2";
 pub const REQUEST: &str = "caws.runtime.render-observation.request.v1";
 pub const RESULT: &str = "caws.runtime.render-observation.result.v1";
 pub const CHUNK: &str = "caws.runtime.render-observation.chunk.v1";
@@ -57,6 +58,7 @@ struct Phase {
     correlation: publication::Correlation,
     observation_id: String,
     input_digest: String,
+    source_catalog: Option<Value>,
 }
 impl Phase {
     fn frame(&self, schema: &str, fields: Value) -> Result<Vec<u8>, String> {
@@ -231,10 +233,28 @@ impl<T: Transport> ObservationTransport<'_, T> {
     fn outgoing(&mut self, bytes: &[u8], expires: Instant) -> Result<bool, String> {
         let value = frame_value(bytes)?;
         let schema = value.get("schema").and_then(Value::as_str).unwrap_or("");
-        if schema == publication::PREPARE {
+        if schema == publication::PREPARE || schema == crate::session_publication::STOP_PREPARE {
             let prepare: Prepare = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
             let correlation = prepare.correlation();
-            if prepare.schema != publication::PREPARE
+            let stop = prepare.schema == crate::session_publication::STOP_PREPARE;
+            let input_digest = match &prepare.snapshot.source_catalog {
+                Some(catalog)
+                    if stop
+                        && prepare.kind == publication::Kind::Render
+                        && catalog.get("schema").and_then(Value::as_str)
+                            == Some(crate::session_publication::STOP_SOURCE_CATALOG) =>
+                {
+                    crate::session_publication::stop_source_input_digest(
+                        &prepare.snapshot.files,
+                        catalog,
+                    )?
+                }
+                None if !stop => {
+                    sha(&serde_json::to_vec(&prepare.snapshot.files).map_err(|e| e.to_string())?)
+                }
+                _ => return Err("native Stop catalog version mismatch".into()),
+            };
+            if (prepare.schema != publication::PREPARE && !stop)
                 || prepare.id != self.owner.id
                 || prepare.runtime_digest != self.owner.runtime_digest
                 || !valid_token(&prepare.token)
@@ -242,8 +262,7 @@ impl<T: Transport> ObservationTransport<'_, T> {
                 || !publication::digest(&prepare.snapshot.observation_id)
                 || !publication::digest(&prepare.snapshot.input_digest)
                 || !prepare.snapshot.valid()
-                || sha(&serde_json::to_vec(&prepare.snapshot.files).map_err(|e| e.to_string())?)
-                    != prepare.snapshot.input_digest
+                || input_digest != prepare.snapshot.input_digest
                 || self
                     .owner
                     .correlation
@@ -262,6 +281,7 @@ impl<T: Transport> ObservationTransport<'_, T> {
                     correlation,
                     observation_id: prepare.snapshot.observation_id,
                     input_digest: prepare.snapshot.input_digest,
+                    source_catalog: prepare.snapshot.source_catalog,
                 });
                 let git = self
                     .owner
@@ -305,7 +325,22 @@ impl<T: Transport> ObservationTransport<'_, T> {
                     return Err("native Render INPUTS READY transition mismatch".into());
                 }
                 self.inner.write(bytes, expires)?;
-                self.emit(BINDING, json!({"cwd":self.owner.cwd,"executable":self.owner.executable,"calendarContext":self.owner.calendar_context}), expires)?;
+                let mut fields = json!({"cwd":self.owner.cwd,"executable":self.owner.executable,"calendarContext":self.owner.calendar_context});
+                let schema = if let Some(catalog) = self
+                    .owner
+                    .phase
+                    .as_ref()
+                    .and_then(|phase| phase.source_catalog.as_ref())
+                {
+                    fields
+                        .as_object_mut()
+                        .ok_or("Stop observation binding encoding")?
+                        .insert("sourceCatalog".into(), catalog.clone());
+                    STOP_BINDING
+                } else {
+                    BINDING
+                };
+                self.emit(schema, fields, expires)?;
                 self.owner.active = true;
                 return Ok(true);
             }
@@ -531,6 +566,20 @@ struct Snapshot {
     ended_at: String,
     files: Vec<publication::Descriptor>,
     prior_inventory: Vec<publication::Descriptor>,
+    #[serde(default)]
+    #[serde(deserialize_with = "present_catalog")]
+    source_catalog: Option<Value>,
+}
+fn present_catalog<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Value>, D::Error> {
+    let value = Value::deserialize(deserializer)?;
+    if !value.is_object() {
+        return Err(serde::de::Error::custom(
+            "Stop source catalog must be an object",
+        ));
+    }
+    Ok(Some(value))
 }
 impl Snapshot {
     fn valid(&self) -> bool {

@@ -139,6 +139,59 @@ fn ready() -> Vec<u8> {
         json!({"schema":publication::READY,"id":ID,"runtimeDigest":DIGEST,"token":TOKEN,"attempt":"original-attempt","kind":"render","direction":"inputs"}),
     )
 }
+fn stop_prepare() -> (Value, Value) {
+    // Native-side catalog DTO fixture for the carrier only. Actual filesystem
+    // capture/absence/listing mutations are tested in session_publication.
+    let catalog = json!({"schema":"caws.runtime.stop-render-sources.v1","transcriptPath":"/repo/.caws/sessions/original-session/.transcript-projection.jsonl","audit":{"path":"/repo/.opencode/logs/audit.log","disposition":"absent"},"hookOutcomes":{"path":"/repo/.caws/sessions/original-session/hook-events.jsonl","disposition":"absent"},"subagents":{"claudeCandidate":{"path":"/repo/.caws/sessions/original-session/original-session/subagents","kind":"absent"},"qwenCandidate":{"path":"/repo/.caws/sessions/subagents/original-session","kind":"absent"}}});
+    let mut value: Value = serde_json::from_slice(&prepare()).unwrap();
+    value["schema"] = caws_native::session_publication::STOP_PREPARE.into();
+    value["snapshot"]["inputDigest"] =
+        sha(&serde_json::to_vec(&json!({"files":[],"sourceCatalog":catalog})).unwrap()).into();
+    value["snapshot"]["sourceCatalog"] = catalog.clone();
+    (value, catalog)
+}
+#[test]
+fn stop_catalog_is_carried_only_in_bound_v2_after_actual_inputs_ready() {
+    let fixture = Fixture::new(FOUR_QUERIES);
+    let expires = Instant::now() + Duration::from_secs(10);
+    let mut owner = fixture.owner(expires);
+    let mut recording = Recording::default();
+    let (prepare, catalog) = stop_prepare();
+    {
+        let mut transport = owner.transport(&mut recording, &|| false);
+        transport.write(&frame(prepare.clone()), expires).unwrap();
+        transport.write(&ready(), expires).unwrap();
+    }
+    let rows = recording.rows();
+    let binding = rows.last().unwrap();
+    assert_eq!(binding["schema"], observation::STOP_BINDING);
+    assert_eq!(binding["sourceCatalog"], catalog);
+    assert_eq!(binding["inputDigest"], prepare["snapshot"]["inputDigest"]);
+    assert_eq!(
+        binding["observationId"],
+        prepare["snapshot"]["observationId"]
+    );
+    assert!(fixture.calls().is_empty());
+}
+#[test]
+fn modified_stop_catalog_with_original_digest_is_refused_before_any_git_query() {
+    let fixture = Fixture::new(FOUR_QUERIES);
+    let expires = Instant::now() + Duration::from_secs(10);
+    let mut owner = fixture.owner(expires);
+    let mut recording = Recording::default();
+    let (mut prepare, _) = stop_prepare();
+    prepare["snapshot"]["sourceCatalog"]["audit"]["path"] = "/different/audit.log".into();
+    let error = owner
+        .transport(&mut recording, &|| false)
+        .write(&frame(prepare), expires)
+        .unwrap_err();
+    assert!(
+        error.contains("native Render PREPARE binding mismatch"),
+        "{error}"
+    );
+    assert!(recording.rows().is_empty());
+    assert!(fixture.calls().is_empty());
+}
 fn request(sequence: u32, operation: &str) -> Value {
     let mut value = tuple(observation::REQUEST);
     value["sequence"] = sequence.into();

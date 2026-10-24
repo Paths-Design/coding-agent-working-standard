@@ -1,6 +1,8 @@
 /** One phase lease over the publication client's sole reader and controller. */
 import { createHash } from 'node:crypto';
 import { isAbsolute } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import type { SessionPublicationDescriptor } from './session-publication-wire';
 import { awaitSessionPublicationCallback } from './committed-session-reader';
 import { deriveRenderGitContext, MAX_RENDER_CONTEXT_BYTES } from './render-context';
 import type { SessionPublicationTransport } from './session-publication-client';
@@ -15,6 +17,11 @@ import {
 } from '../transcripts/renderer-calendar';
 import {
   RENDER_OBSERVATION_BINDING,
+  RENDER_OBSERVATION_STOP_BINDING,
+  snapshotStopSourceCatalog,
+  stopSourceInputDigest,
+  materializeStopSources,
+  type StopSourceCatalog,
   RENDER_OBSERVATION_REQUEST,
   RENDER_OBSERVATION_RESULT,
   RENDER_OBSERVATION_CHUNK,
@@ -73,6 +80,13 @@ export async function openNativeRenderObservations(options: {
   readonly transport: SessionPublicationTransport;
   readonly signal: AbortSignal;
   readonly deadlineEpochMs: number;
+  /** Validated PREPARE.v2 catalog and original owned INPUTS, never ambient IO. */
+  readonly stopSourceInput?: {
+    readonly catalog: StopSourceCatalog;
+    readonly files: readonly SessionPublicationDescriptor[];
+    readonly sessionId: string;
+    readonly bytes: (name: string) => Uint8Array;
+  };
 }): Promise<RenderObservationLease> {
   const binding = Object.freeze({ ...options.binding });
   requireValue(
@@ -132,9 +146,17 @@ export async function openNativeRenderObservations(options: {
   };
   try {
     const original = await read(controller.signal, options.deadlineEpochMs);
+    const stop = original.schema === RENDER_OBSERVATION_STOP_BINDING;
     requireValue(
-      original.schema === RENDER_OBSERVATION_BINDING &&
-        exact(original, [...RENDER_OBSERVATION_KEYS, 'cwd', 'executable', 'calendarContext']) &&
+      (original.schema === RENDER_OBSERVATION_BINDING || stop) &&
+        (options.stopSourceInput !== undefined) === stop &&
+        exact(original, [
+          ...RENDER_OBSERVATION_KEYS,
+          'cwd',
+          'executable',
+          'calendarContext',
+          ...(stop ? ['sourceCatalog'] : []),
+        ]) &&
         nativePath(original.cwd) &&
         object(original.executable) &&
         exact(original.executable, ['path', 'physicalPath', 'sha256']) &&
@@ -150,6 +172,23 @@ export async function openNativeRenderObservations(options: {
       sha256: original.executable.sha256,
     });
     const calendarContext = context(original.calendarContext);
+    const stopSources =
+      options.stopSourceInput === undefined
+        ? undefined
+        : (() => {
+            const input = options.stopSourceInput!;
+            const catalog = snapshotStopSourceCatalog(
+              original.sourceCatalog,
+              input.files,
+              input.sessionId
+            );
+            requireValue(
+              isDeepStrictEqual(catalog, input.catalog) &&
+                stopSourceInputDigest(input.files, catalog) === binding.inputDigest,
+              'Stop source catalog differs from original native input observation'
+            );
+            return materializeStopSources(catalog, binding, input.bytes);
+          })();
     const exchange = async <T>(
       operation: 'git' | 'calendar',
       interpret: (bytes: Buffer) => T,
@@ -326,6 +365,7 @@ export async function openNativeRenderObservations(options: {
     };
     const observations: NativeRenderObservations = Object.freeze({
       binding,
+      ...(stopSources === undefined ? {} : { stopSources }),
       async git() {
         return exchange('git', (bytes) => {
           const value = deriveRenderGitContext(bytes, {

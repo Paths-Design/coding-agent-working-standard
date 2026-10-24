@@ -1146,8 +1146,6 @@ impl Actor {
                 .ready_session_id
                 .as_deref()
                 .ok_or("original store session unavailable")?;
-            let directory = Path::new(&root).join(".caws/sessions").join(sid);
-            let mut sources = Vec::new();
             let vendor = match original.surface.as_str() {
                 "opencode" => ".opencode",
                 "zcode" => ".zcode",
@@ -1159,23 +1157,16 @@ impl Actor {
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from)
                 .unwrap_or_else(|| Path::new(&root).join(vendor).join("logs"));
-            for (name, role, path) in [
-                ("audit.log", "audit", audit_root.join("audit.log")),
-                (
-                    "hook-events.jsonl",
-                    "hook_outcomes",
-                    directory.join("hook-events.jsonl"),
-                ),
-            ] {
-                match fs::symlink_metadata(&path) {
-                    Ok(_) => sources.push(publication::SourceInput::capture(
-                        name, role, &path, expires,
-                    )?),
-                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(err(e)),
-                }
-            }
-            let mut publication = publication::Publication::capture_checked(
+            let sources = publication::CapturedStopSources::capture(
+                Path::new(&root),
+                sid,
+                &audit_root,
+                Arc::clone(&job.transport.deadline),
+                Arc::clone(&job.transport.cancelled),
+                expires,
+                &effect_check,
+            )?;
+            let mut publication = publication::Publication::capture_stop_checked(
                 publication::OriginalBinding {
                     project: PathBuf::from(root),
                     id: original.id.clone(),

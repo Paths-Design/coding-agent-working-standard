@@ -13,6 +13,133 @@ const {
 const calendar = require('../../dist/transcripts/renderer-calendar');
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const encoded = (row) => Buffer.from(JSON.stringify(row));
+function stopCatalogFixture() {
+  const path = '/repo/.caws/sessions/s';
+  const data = Buffer.from('{"toolUseId":"native-tool","agentType":"review"}');
+  const descriptor = {
+    name: 'subagent-claude-source',
+    role: 'subagent',
+    byteLength: data.length,
+    sha256: sha(data),
+  };
+  const catalog = {
+    schema: wire.STOP_SOURCE_CATALOG_SCHEMA,
+    transcriptPath: path + '/.transcript-projection.jsonl',
+    audit: { path: '/repo/.opencode/logs/audit.log', disposition: 'absent' },
+    hookOutcomes: { path: path + '/hook-events.jsonl', disposition: 'absent' },
+    subagents: {
+      claudeCandidate: {
+        path: path + '/s/subagents',
+        kind: 'directory',
+        listing: {
+          disposition: 'listed',
+          names: ['agent-one.jsonl', 'agent-one.meta.json'],
+          entries: [
+            {
+              name: 'agent-one.meta.json',
+              file: {
+                path: path + '/s/subagents/agent-one.meta.json',
+                disposition: 'read',
+                descriptor,
+              },
+            },
+          ],
+        },
+      },
+      qwenCandidate: {
+        path: '/repo/.caws/sessions/subagents/s',
+        kind: 'directory',
+        listing: { disposition: 'failed', error: 'native observed EACCES' },
+      },
+    },
+  };
+  const files = [descriptor];
+  const validated = wire.snapshotStopSourceCatalog(catalog, files, 's');
+  const originalBinding = { ...binding, inputDigest: wire.stopSourceInputDigest(files, validated) };
+  return {
+    catalog,
+    files,
+    data,
+    originalBinding,
+    input: { catalog: validated, files, sessionId: 's', bytes: () => data },
+    frame: {
+      ...original(),
+      ...originalBinding,
+      schema: wire.RENDER_OBSERVATION_STOP_BINDING,
+      sourceCatalog: catalog,
+    },
+  };
+}
+
+test('Stop binding materializes native descriptors and explicit absence without sharing input bytes', async () => {
+  const f = stopCatalogFixture(),
+    state = setup([f.frame]);
+  const lease = await state.open({ binding: f.originalBinding, stopSourceInput: f.input });
+  const sources = lease.observations.stopSources;
+  expect(sources.binding).toEqual(f.originalBinding);
+  expect(sources.audit).toEqual(f.catalog.audit);
+  expect(sources.subagents.qwenCandidate.listing).toEqual({
+    disposition: 'failed',
+    error: 'native observed EACCES',
+  });
+  const source = sources.subagents.claudeCandidate.listing.entries[0].file;
+  expect(source.path).toBe('/repo/.caws/sessions/s/s/subagents/agent-one.meta.json');
+  expect(Buffer.from(source.source.bytes).toString()).toBe(
+    '{"toolUseId":"native-tool","agentType":"review"}'
+  );
+  expect(source.source.descriptor).toEqual(f.files[0]);
+  f.data.fill(0);
+  expect(Buffer.from(source.source.bytes).toString()).toBe(
+    '{"toolUseId":"native-tool","agentType":"review"}'
+  );
+  expect(state.writes).toEqual([]);
+  lease.close();
+});
+
+test.each([
+  'path',
+  'omitted-entry',
+  'missing-catalog',
+  'downgrade',
+  'descriptor',
+  'bytes',
+  'input-digest',
+])('Stop source carrier refuses %s before any Git/calendar request', async (failure) => {
+  const f = stopCatalogFixture();
+  if (failure === 'path') f.frame.sourceCatalog.audit.path = '/other/audit.log';
+  if (failure === 'omitted-entry')
+    f.frame.sourceCatalog.subagents.claudeCandidate.listing.entries = [];
+  if (failure === 'missing-catalog') delete f.frame.sourceCatalog;
+  if (failure === 'downgrade') {
+    f.frame.schema = wire.RENDER_OBSERVATION_BINDING;
+    delete f.frame.sourceCatalog;
+  }
+  if (failure === 'descriptor')
+    f.frame.sourceCatalog.subagents.claudeCandidate.listing.entries[0].file.descriptor.sha256 =
+      'f'.repeat(64);
+  if (failure === 'bytes') f.input.bytes = () => Buffer.from('different actual source bytes');
+  if (failure === 'input-digest') {
+    f.originalBinding.inputDigest = 'f'.repeat(64);
+    f.frame.inputDigest = 'f'.repeat(64);
+  }
+  const state = setup([f.frame]);
+  await expect(
+    state.open({ binding: f.originalBinding, stopSourceInput: f.input })
+  ).rejects.toBeInstanceOf(RuntimeProtocolError);
+  expect(state.writes).toEqual([]);
+});
+
+test('generic binding v1 carries no Stop catalog and cannot manufacture explicit absence', async () => {
+  const state = setup([original()]);
+  const lease = await state.open();
+  expect(lease.observations.stopSources).toBeUndefined();
+  lease.close();
+  const f = stopCatalogFixture();
+  delete f.catalog.audit;
+  expect(() => wire.snapshotStopSourceCatalog(f.catalog, f.files, 's')).toThrow(
+    'Invalid Stop source catalog'
+  );
+});
 const binding = Object.freeze({
   id: 'actual-original',
   runtimeDigest: 'a'.repeat(64),
@@ -131,12 +258,13 @@ function setup(rows = []) {
     writes,
     queue,
     transport,
-    open: () =>
+    open: (extra = {}) =>
       openNativeRenderObservations({
         binding,
         transport,
         signal: controller.signal,
         deadlineEpochMs: Date.now() + 60000,
+        ...extra,
       }),
   };
 }
@@ -591,7 +719,7 @@ test('concurrent requests cancel the phase instead of contending for the reader'
   expect(state.writes).toHaveLength(1);
 });
 
-function publicationSetup(enabled, extra = []) {
+function publicationSetup(enabled, extra = [], sessionId = 'session') {
   const correlation = {
     id: binding.id,
     runtimeDigest: binding.runtimeDigest,
@@ -606,7 +734,7 @@ function publicationSetup(enabled, extra = []) {
       snapshot: {
         observationId: binding.observationId,
         inputDigest: binding.inputDigest,
-        sessionId: 'session',
+        sessionId,
         reason: 'end',
         endedAt: '2026-10-23T00:00:00Z',
         files: [],
@@ -644,7 +772,7 @@ function publicationSetup(enabled, extra = []) {
         token: binding.token,
         expectedKinds: ['render'],
         canonicalRoot: '/repo',
-        sessionId: 'session',
+        sessionId,
         renderObservations: enabled,
         prepare,
         consume: (value) => {
@@ -676,6 +804,56 @@ test('publication input exposes the lease only after complete native Render inpu
   ]);
   expect(state.writes[2]).toMatchObject({ kind: 'render', direction: 'prepared' });
   expect(state.observed).toEqual(['not_published']);
+});
+test('Stop PREPARE v2 carries owned INPUTS into the matching native observation lease', async () => {
+  const f = stopCatalogFixture(),
+    state = publicationSetup(true, [], 's');
+  state.queue[0].schema = wire.STOP_PUBLICATION_PREPARE;
+  Object.assign(state.queue[0].snapshot, {
+    inputDigest: f.originalBinding.inputDigest,
+    files: f.files,
+    sourceCatalog: f.catalog,
+  });
+  state.queue.splice(1, 0, {
+    schema: publication.SESSION_PUBLICATION_INPUTS_SCHEMA,
+    id: binding.id,
+    runtimeDigest: binding.runtimeDigest,
+    token: binding.token,
+    attempt: binding.attempt,
+    kind: 'render',
+    name: f.files[0].name,
+    offset: 0,
+    base64: f.data.toString('base64'),
+  });
+  state.queue.splice(3, 0, f.frame);
+  const prepare = jest.fn(async (input) => {
+    const sources = input.observations.stopSources;
+    expect(sources.binding.inputDigest).toBe(f.originalBinding.inputDigest);
+    expect(
+      Buffer.from(sources.subagents.claudeCandidate.listing.entries[0].file.source.bytes)
+    ).toEqual(f.data);
+    expect(sources.audit.disposition).toBe('absent');
+    expect(sources.subagents.qwenCandidate.listing.disposition).toBe('failed');
+    return { disposition: 'aborted', diagnostic: 'carrier control only' };
+  });
+  await expect(state.run(prepare)).resolves.toMatchObject({ status: 'not_published' });
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(state.writes.at(-1).schema).toBe(publication.SESSION_PUBLICATION_CONSUMED_SCHEMA);
+});
+test('Stop PREPARE catalog mutation refuses before preparation or acknowledgement', async () => {
+  const f = stopCatalogFixture(),
+    state = publicationSetup(true, [], 's');
+  state.queue[0].schema = wire.STOP_PUBLICATION_PREPARE;
+  Object.assign(state.queue[0].snapshot, {
+    inputDigest: f.originalBinding.inputDigest,
+    files: f.files,
+    sourceCatalog: f.catalog,
+  });
+  state.queue[0].snapshot.sourceCatalog.audit.path = '/another/audit.log';
+  const prepare = jest.fn();
+  await expect(state.run(prepare)).rejects.toThrow('Stop source catalog input digest mismatch');
+  expect(prepare).not.toHaveBeenCalled();
+  expect(state.writes).toEqual([]);
 });
 test('legacy absence does not read or expose any observation frames', async () => {
   const state = publicationSetup(undefined);
