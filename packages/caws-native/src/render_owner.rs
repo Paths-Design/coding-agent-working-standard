@@ -1441,15 +1441,27 @@ impl Actor {
         project: &Path,
         expires: Instant,
     ) -> Result<Arc<journal::Custody>> {
+        self.publication_writer_checked(project, expires, &|_| Ok(()))
+    }
+    fn publication_writer_checked(
+        &mut self,
+        project: &Path,
+        expires: Instant,
+        check: &crate::monotonic_deadline::EffectCheck<'_>,
+    ) -> Result<Arc<journal::Custody>> {
+        check("owner.writer")?;
         if self.writer_custody.is_none() {
-            self.writer_custody = Some(crate::render_writer::acquire(
+            self.writer_custody = Some(crate::render_writer::acquire_checked(
                 &self.config.home,
                 project,
                 expires,
+                check,
             )?);
         }
         let retained = Arc::clone(self.writer_custody.as_ref().expect("writer acquired"));
+        check("owner.writer.retire")?;
         self.retire_backend(true);
+        check("owner.writer.retired")?;
         if self.unknown || self.process.is_some() || self.writer_intent.is_some() {
             return Err("publication writer retirement is unsettled".into());
         }

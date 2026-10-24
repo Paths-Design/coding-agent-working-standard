@@ -11,6 +11,7 @@ mod protocol;
 mod render_bridge;
 mod runner;
 
+use caws_native::monotonic_deadline::MonotonicDeadline;
 use caws_native::stop_budget::{BudgetIdentity, Charge, StopBudget};
 use std::time::{Duration, Instant};
 
@@ -79,8 +80,14 @@ fn charge(ready: Option<&protocol::Ready>, expires: Instant) -> Result<Charge, S
         .map_err(|e| e.to_string())
 }
 fn execute(config: &cli::Config) -> Result<u8, Failure> {
-    let deadline = Instant::now() + config.timeout;
+    // One original deadline starts before payload capture and crosses store IPC.
+    let original_deadline = MonotonicDeadline::capture(config.timeout)
+        .map_err(|error| Failure::configuration(error.to_string()))?;
+    let deadline = original_deadline.expires();
     let (payload, input_json) = runner::read_payload(deadline).map_err(Failure::configuration)?;
+    original_deadline
+        .check()
+        .map_err(|error| Failure::configuration(error.to_string()))?;
     let request = protocol::Request::new(config, payload, input_json, deadline)
         .map_err(Failure::configuration)?;
     let bytes = request
@@ -187,7 +194,7 @@ fn execute(config: &cli::Config) -> Result<u8, Failure> {
                             caws_native::render_owner::StoreAcquire::capture(
                                 &frame,
                                 request.transcript_store_invocation(context, dispatched),
-                                deadline,
+                                &original_deadline,
                             ),
                             deadline,
                             || cancellation::check().is_err(),

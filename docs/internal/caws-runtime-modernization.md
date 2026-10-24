@@ -8316,6 +8316,134 @@ Additional bounded evidence and unresolved dependencies:
   fairness is inferred. The later deadline candidate `3bc555cb` requires
   separate integrated-image proof.
 
+- E315: Store acquisition carries one original native monotonic expiry through
+  `store-acquire.v2`. Capture begins before payload reading; receiver policy can
+  shorten the deadline, and checks inside the registry lock and after actor
+  queueing precede reservation and publication effects. SessionEnd and renderer
+  Offer carriers remain separate relative-budget obligations. This change does
+  not admit a selection/profile or connect ordinary SQL Stop publication. The
+  external `publication-integration/store-deadline-baseline-01` execution
+  exits101 on the original v1 carrier. `store-deadline-repaired-01` retains an
+  old-owner fixture failure before socket binding; the fixture creates and
+  removes its own rendezvous directory in the repair. The restored store suite
+  `store-deadline-restored-03` exits0 with18 executed cases and the existing
+  prepared-image case ignored. `monotonic-deadline-unit-01` exits0 with12 clock,
+  conversion, overflow and nonrenewal controls; these are component
+  observations. `store-deadline-contention-negative-01` removes only the two
+  under-lock checks and exits101 with `expired waiter reserved a record`; its
+  retained observation has `registryEmpty:false`. The restored registry-original
+  and registry-cap observations have `registryEmpty:true`, `actorCount:0` and
+  expired effective deadlines. Delayed capture retains the original envelope and
+  yields `Original monotonic deadline expired`, null registration and null
+  acquisition. Queued raw/publication observations retain absent
+  writer/publication custody and matching before/after hashes for all25 fixture
+  files. The existing queued record remains truthfully retained; this is not a
+  zero-record claim after previously valid admission. Exact commands,
+  source/tool pins, outputs and empty owned process groups are in each
+  `execution.json`. `store-deadline-native-check-01` and
+  `store-deadline-feature-off-check-01` compile-check the native binary with
+  sqlite-store enabled and default features disabled, respectively; both exit0.
+  These compilation checks do not execute either installed binary. Actual
+  installed store dispatch, selection/readset qualification, mixed-generation
+  resident adoption and parent A1–A8 remain open. Independent review grounds a
+  remaining propagation gap: writer custody and publication helpers receive only
+  the local Instant bound after the actor native check. Expiry or clock failure
+  inside those helpers is not covered by the queue controls. Root owns
+  request-scoped checks at logical mutation/retry boundaries and deterministic
+  deep-effect controls before accepting this deadline contract.
+
+- E316: Coherent source candidate `c41ee44b` lands through governed merge
+  `70ecc61d`; its executable source remains `c61ad087`. Source A2 and A3 records
+  are read back with events12576 and12582; all three bounded source criteria are
+  pass and the source spec closes completed. Main ancestry, worktree removal and
+  unchanged actual machine runtime pointer are independently inspected. This
+  source landing does not accept parent A1–A8 or adopt the private native image.
+  The OpenCode ingress investigation grounds SDK1.17.11 created identity at
+  `properties.info.id`, and idle/compacted identity at `properties.sessionID`.
+  Module-global plugin state permits cross-project routing/context
+  contamination; missing lifecycle identity can reuse an earlier session. Root
+  accepts the clean child identity slice into publication A7 when native tool
+  context cannot enter its worker-owned lane; the child closes superseded,
+  without completed acceptance.
+  `publication-integration/opencode-identity-baseline-01` executes the new
+  controls against old source and exits1 with7 failures, including prior-session
+  dispatch, missing created identity and leaked context.
+  `opencode-identity-repaired-01` exits0 with18 cases after event-specific
+  identity and instance-state repair. Retained
+  `opencode-identity-repaired-fixtures` include the transpiled plugin, actual
+  recording-dispatcher payload JSON, NUL-delimited argv/cwd/project/surface
+  records and call lists. Interleaved idle events dispatch session-a/session-b
+  exactly once each; missing identity dispatches neither; separate plugin
+  instances retain their own roots and context. Pack version9 and its computed
+  fingerprint identify the changed template. `opencode-identity-build-01` exits0
+  with unchanged source pins and no owned process residue. These are
+  callback/transport fixtures, not actual OpenCode activation, Stop-veto
+  delivery or native SQL publication.
+
+- E317: OpenCode callback parity closes two source-grounded holes left by E316.
+  Supplied project context cannot fall through to another host project's cwd; a
+  context-free instance retains the existing cwd fallback. Tool-after uses its
+  own SDK input sessionID and argument object, preserving normalization and
+  rejecting missing identity or ambiguous carriers. Unambiguous legacy
+  output.args remains supported without borrowing cached identity. The
+  `opencode-corrective-baseline-01` tests-only execution exits1 with5 failures:
+  interleaved SDK after records session-b and empty arguments for session-a,
+  missing identity borrows a prior session, and a decoy output argument wins.
+  `opencode-corrective-repaired-01` exits0 with28 cases, but its first root
+  controls were insufficient: their outside fixtures had HOME/.caws ancestry.
+  The corrected fixtures use /private/tmp and retain every ancestor's marker
+  absence in root-selection-evidence.json. `opencode-root-negative-01` restores
+  unconditional cwd fallback only in the transpiled fixture and exits1 with all3
+  selected controls failing; host Stop records contain both host-session and
+  outside-session. `opencode-corrective-final-01` exits0 with28 cases: host
+  routing records contain only host-session, no outside pre/post calls, and SDK
+  after retains session-a, actual arguments and resolved workdir. Raw invocation
+  records, input payloads, transpiled plugin and source pins are retained under
+  publication-integration/opencode-corrective-final-fixtures; each
+  root-selection record maps its retained ungoverned fixture explicitly.
+  `opencode-corrective-build-01` and `opencode-corrective-fingerprint-01` exit0.
+  Pack9 remains the unreleased candidate, with fingerprint
+  e55fcc4a30f2338ee7700dae03cf2aad4a9caa725016092fff997465ccd7ef51. These
+  recording-dispatcher observations do not establish actual OpenCode activation,
+  native Stop qualification, editor delivery or parent acceptance.
+
+- E318: The original native store deadline reaches writer provisioning, custody
+  initialization/acquisition, journal open/recovery and the store publication
+  admit/begin-next/returned/consume transitions, plus publication directory
+  creation, replacement, removal and synchronization. Request-scoped checked
+  APIs retain the original MonotonicDeadline and earlier local bound; legacy
+  callers preserve their existing Instant-only contracts. Cleanup and
+  uncertainty settlement do not renew invocation authority. The first new
+  publication controls fail before effects because metadata was incorrectly
+  prepared as Render output. The corrected tests use the existing Seal exchange
+  and assert its descriptor/bytes before injecting expiry or clock failure.
+  `effect-deadline-publication-repaired-01` retains that failed attempt. Final
+  `effect-deadline-{writer,journal,publication,store}-host-clock-01` executions
+  exit0 with13/43/12/18 exercised cases; the store suite retains its one
+  prepared-image case as ignored. Positive controls use the actual host
+  monotonic checker; hostile controls inject the native observation only at
+  selected deep stages while the captured local Instant remains live. Actual
+  fixture files, scenario/result JSON, journal records and raw
+  CAWS_DEADLINE_EFFECT rows are retained alongside source/tool pins and empty
+  owned process groups. Pre-rename failure retains old metadata and no terminal
+  marker; failure after actual rename retains changed metadata, absent marker
+  and uncertainty. Journal pre-rename failures leave prior bytes intact;
+  post-publication failures retain changed records,
+  publication-may-have-happened and poisoned handles without acknowledging a
+  transition in memory. The positive publication retains exact metadata and
+  .session-publication.json. Eight one-at-a-time `effect-negative-*-02` controls
+  remove custody, journal, capture, rename or transition propagation. Each
+  executes its selected test and exits101 for the missing behavior, including an
+  expired directory creation, changed metadata before permitted rename, and
+  falsely successful journal transitions. Restoration records verify exact
+  source bytes after every control. Native-enabled and feature-off compile
+  checks are retained separately; compilation does not establish installed
+  execution. These are cooperative logical-boundary guarantees, not atomic
+  exclusion of expiry between a check and syscall, syscall interruption,
+  ordinary Stop admission, full lifecycle deadline parity or machine cutover.
+  Root retains the native producer/prefix/profile/consumer join and final-image
+  qualification.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -8422,11 +8550,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                           | Next decisive check                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                              | E314 completes bounded exact-image invocation/refusal and private rollback; land the qualified source slice, then qualify the next production-connected image and actual harness delivery                                                         |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; deadline candidate3bc555cb is committed in the publication lane; deep effect-boundary checks and combined-image integration remain owed | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E316 lands the bounded source slice on main; qualify the next production-connected image and actual harness delivery after the ingress and deadline corrections                                                                                   |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The

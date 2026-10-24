@@ -50,8 +50,9 @@ fn identity(fd: RawFd) -> Result<(u64, u64)> {
         .map_err(|e| JournalError::io("custody identity", e))?;
     Ok((metadata.dev(), metadata.ino()))
 }
-fn owner_lock(file: &File, expires: Instant) -> Result<()> {
+fn owner_lock_checked(file: &File, expires: Instant, check: &EffectCheck<'_>) -> Result<()> {
     loop {
+        original_check(check, "custody.owner_lock")?;
         if Instant::now() >= expires {
             return Err(JournalError::new(
                 ErrorKind::Busy,
@@ -59,6 +60,7 @@ fn owner_lock(file: &File, expires: Instant) -> Result<()> {
             ));
         }
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            original_check(check, "custody.owner_locked")?;
             return check_deadline(expires);
         }
         let error = io::Error::last_os_error();
@@ -79,7 +81,8 @@ fn expected_names() -> BTreeSet<String> {
         .map(|name| name.to_str().expect("constant ASCII").to_owned())
         .collect()
 }
-fn exclusive_file(home: RawFd, name: &CStr) -> Result<File> {
+fn exclusive_file_checked(home: RawFd, name: &CStr, check: &EffectCheck<'_>) -> Result<File> {
+    original_check(check, "custody.exclusive_file")?;
     let file = File::from(owned_fd(
         unsafe {
             libc::openat(
@@ -96,6 +99,7 @@ fn exclusive_file(home: RawFd, name: &CStr) -> Result<File> {
         },
         "exclusive custody file",
     )?);
+    original_check(check, "custody.file_mode")?;
     if unsafe { libc::fchmod(file.as_raw_fd(), 0o600) } != 0 {
         return Err(JournalError::io(
             "custody private mode",
@@ -110,6 +114,14 @@ impl Custody {
     /// function must never be used to recover acquire failures. It will not
     /// delete/reuse preexisting locks, roots, registries or incomplete state.
     pub fn initialize(home_path: &Path, expires: Instant) -> Result<Arc<Self>> {
+        Self::initialize_checked(home_path, expires, &|_| Ok(()))
+    }
+    pub(crate) fn initialize_checked(
+        home_path: &Path,
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<Arc<Self>> {
+        original_check(check, "custody.initialize")?;
         check_deadline(expires)?;
         let home = private_root(home_path, expires)?;
         if !names(home.as_raw_fd(), 3, expires)?.is_empty() {
@@ -118,11 +130,12 @@ impl Custody {
                 "custody home is not pristine",
             ));
         }
-        let lock = exclusive_file(home.as_raw_fd(), OWNER_LOCK)?;
-        owner_lock(&lock, expires)?;
-        sync_fd(lock.as_raw_fd(), expires)?;
-        sync_fd(home.as_raw_fd(), expires)?;
+        let lock = exclusive_file_checked(home.as_raw_fd(), OWNER_LOCK, check)?;
+        owner_lock_checked(&lock, expires, check)?;
+        sync_fd_checked(lock.as_raw_fd(), expires, check)?;
+        sync_fd_checked(home.as_raw_fd(), expires, check)?;
         check_deadline(expires)?;
+        original_check(check, "custody.mkdir")?;
         if unsafe { libc::mkdirat(home.as_raw_fd(), OPERATIONAL_ROOT.as_ptr(), 0o700) } != 0 {
             return Err(JournalError::io(
                 "exclusive operational root",
@@ -130,6 +143,7 @@ impl Custody {
             ));
         }
         let root = directory_at(home.as_raw_fd(), OPERATIONAL_ROOT, false, expires)?;
+        original_check(check, "custody.directory_mode")?;
         if unsafe { libc::fchmod(root.as_raw_fd(), 0o700) } != 0 {
             return Err(JournalError::io(
                 "private operational root mode",
@@ -137,8 +151,8 @@ impl Custody {
             ));
         }
         private_directory(root.as_raw_fd())?;
-        sync_fd(root.as_raw_fd(), expires)?;
-        sync_fd(home.as_raw_fd(), expires)?;
+        sync_fd_checked(root.as_raw_fd(), expires, check)?;
+        sync_fd_checked(home.as_raw_fd(), expires, check)?;
         let (root_device, root_inode) = identity(root.as_raw_fd())?;
         let (lock_device, lock_inode) = identity(lock.as_raw_fd())?;
         let registry = Registry {
@@ -156,9 +170,10 @@ impl Custody {
                 "custody registry byte bound",
             ));
         }
-        let mut temporary = exclusive_file(home.as_raw_fd(), REGISTRY_TEMP)?;
+        let mut temporary = exclusive_file_checked(home.as_raw_fd(), REGISTRY_TEMP, check)?;
         let mut remaining = bytes.as_slice();
         while !remaining.is_empty() {
+            original_check(check, "custody.registry.write")?;
             check_deadline(expires)?;
             let count = temporary
                 .write(remaining)
@@ -171,7 +186,7 @@ impl Custody {
             }
             remaining = &remaining[count..];
         }
-        sync_fd(temporary.as_raw_fd(), expires)?;
+        sync_fd_checked(temporary.as_raw_fd(), expires, check)?;
         if !same_name(
             home.as_raw_fd(),
             REGISTRY_TEMP,
@@ -187,6 +202,7 @@ impl Custody {
         // linkat is an atomic no-replace publication; unlike rename it cannot
         // overwrite a registry that appeared unexpectedly. Initialization never
         // cleans ambiguous artifacts. A crash with two links is refused later.
+        original_check(check, "custody.registry.link")?;
         if unsafe {
             libc::linkat(
                 home.as_raw_fd(),
@@ -202,6 +218,10 @@ impl Custody {
                 io::Error::last_os_error(),
             ));
         }
+        if let Err(mut error) = original_check(check, "custody.registry.linked") {
+            error.publication_may_have_happened = true;
+            return Err(error);
+        }
         if unsafe { libc::unlinkat(home.as_raw_fd(), REGISTRY_TEMP.as_ptr(), 0) } != 0 {
             let mut error = JournalError::io(
                 "remove linked custody temporary",
@@ -210,7 +230,7 @@ impl Custody {
             error.publication_may_have_happened = true;
             return Err(error);
         }
-        if let Err(mut error) = sync_fd(home.as_raw_fd(), expires) {
+        if let Err(mut error) = sync_fd_checked(home.as_raw_fd(), expires, check) {
             error.publication_may_have_happened = true;
             return Err(error);
         }
@@ -225,12 +245,24 @@ impl Custody {
             registry_stamp,
             registry,
         });
+        if let Err(mut error) = original_check(check, "custody.initialized") {
+            error.publication_may_have_happened = true;
+            return Err(error);
+        }
         custody.check(expires)?;
         Ok(custody)
     }
     /// Reopen existing custody. Missing/partial/replaced state is an error; this
     /// path never creates an inode, resets a registry, or selects a fresh root.
     pub fn acquire(home_path: &Path, expires: Instant) -> Result<Arc<Self>> {
+        Self::acquire_checked(home_path, expires, &|_| Ok(()))
+    }
+    pub(crate) fn acquire_checked(
+        home_path: &Path,
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<Arc<Self>> {
+        original_check(check, "custody.acquire")?;
         check_deadline(expires)?;
         let home = private_root(home_path, expires)?;
         let lock = File::from(owned_fd(
@@ -249,7 +281,7 @@ impl Custody {
                 "custody lock is not empty",
             ));
         }
-        owner_lock(&lock, expires)?;
+        owner_lock_checked(&lock, expires, check)?;
         if names(home.as_raw_fd(), 3, expires)? != expected_names() {
             return Err(JournalError::new(
                 ErrorKind::UnsafePath,
@@ -291,11 +323,12 @@ impl Custody {
         // A complete visible initialization whose last directory fsync reported
         // failure may be retried. Re-establish every pinned publication boundary
         // before exposing custody, without manufacturing or repairing any state.
-        sync_fd(custody.owner_lock.as_raw_fd(), expires)?;
-        sync_fd(custody.registry_file.as_raw_fd(), expires)?;
-        sync_fd(custody.root.as_raw_fd(), expires)?;
-        sync_fd(custody.home.as_raw_fd(), expires)?;
+        sync_fd_checked(custody.owner_lock.as_raw_fd(), expires, check)?;
+        sync_fd_checked(custody.registry_file.as_raw_fd(), expires, check)?;
+        sync_fd_checked(custody.root.as_raw_fd(), expires, check)?;
+        sync_fd_checked(custody.home.as_raw_fd(), expires, check)?;
         custody.check(expires)?;
+        original_check(check, "custody.acquired")?;
         Ok(custody)
     }
     pub(super) fn check(&self, expires: Instant) -> Result<()> {
