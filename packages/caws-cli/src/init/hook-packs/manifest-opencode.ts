@@ -73,7 +73,9 @@ import type { HookPackV1 } from './types';
 // call's own workdir), never the git root.
 // Version 9: lifecycle events retain their own session identity; plugin instances
 // isolate project routing and pending context.
-export const OPENCODE_PACK_VERSION = 9;
+// Version 10: explicit machine-bound native Stop producer preserves the original
+// plugin directory; other callbacks retain their project dispatchers.
+export const OPENCODE_PACK_VERSION = 10;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',

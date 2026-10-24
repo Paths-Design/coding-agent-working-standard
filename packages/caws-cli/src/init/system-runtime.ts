@@ -43,6 +43,15 @@ import {
   readPristineBaseline,
 } from './hook-install';
 import { isKnownSurface, resolveHookPack } from './hook-packs/register';
+import { readManifest, readPointer, sha } from './machine-runtime-state';
+import {
+  OPENCODE_PROJECT_PLUGIN,
+  OPENCODE_PROJECT_TRANSPORT,
+  observeOpenCodeLocalProducer,
+  readSelectedOpenCodeProducer,
+  type OpenCodeRegistrationCaller,
+} from './opencode-project-registration';
+import { OPENCODE_NATIVE_PLUGIN_MEMBER } from './opencode-native-plugin';
 
 type Event = keyof typeof MACHINE_EVENTS;
 interface Change {
@@ -66,6 +75,8 @@ export interface SystemOptions {
   fromFile?: string;
   nativeConfigTarget?: string;
   entry?: 'native' | 'legacy';
+  /** Installer's original caller context; native invocations use their captured caller. */
+  registrationEnvironment?: Readonly<Record<string, string>>;
 }
 const encode = (value: unknown): string => JSON.stringify(value, null, 2) + '\n';
 const empty = (): SystemSurfacePolicy => ({
@@ -222,6 +233,32 @@ export function configureSystemRuntime(options: SystemOptions): {
 } {
   const home = options.home ?? machineHome();
   requireRuntime(home);
+  if (options.surface === 'opencode') {
+    const prior = readSystemSurfaceSettings(home, 'opencode');
+    if (
+      options.nativeConfigTarget !== undefined ||
+      options.entry === 'legacy' ||
+      (options.entry !== 'native' && prior?.transport !== OPENCODE_PROJECT_TRANSPORT)
+    )
+      throw new Error(
+        'OpenCode project transport requires explicit --entry native; no JSON hook registration is authored'
+      );
+    requireNativeEntry(home);
+    const pointer = readPointer(home);
+    if (!pointer) throw new Error('Install system runtime first');
+    readSelectedOpenCodeProducer(home, pointer.digest);
+    const file = path.join(home, 'surfaces/opencode/settings.json');
+    const changes: Change[] = [
+      {
+        root: home,
+        path: file,
+        before: before(home, file),
+        after: encode({ version: 1, enabled: true, transport: OPENCODE_PROJECT_TRANSPORT }),
+      },
+    ].filter((change) => change.before !== change.after);
+    applyChanges(home, changes, options.plan === true);
+    return { changed: changes.length > 0, changes, restartRequired: changes.length > 0 };
+  }
   const user = options.userHome ?? os.homedir();
   const vendor = vendorFor(options.surface);
   const priorSettings = readSystemSurfaceSettings(home, options.surface);
@@ -403,7 +440,7 @@ function inferPolicy(
   templates: string
 ): SystemSurfacePolicy {
   const result = empty();
-  const vendor = vendorFor(surface);
+  const vendor = surface === 'opencode' ? '.opencode' : vendorFor(surface);
   const stock = new Map(SHARED_PACK.installedFiles.map((f) => [path.basename(f.sourcePath), f]));
   const oldPolicyPath = path.join(repo, '.caws/hooks/adapter-policy.json');
   const oldPolicy = fs.existsSync(oldPolicyPath)
@@ -561,6 +598,7 @@ export function migrateSystemProject(options: SystemOptions): {
   policy: SystemSurfacePolicy;
   changes: Change[];
 } {
+  if (options.surface === 'opencode') return prepareOpenCodeSystemProject(options, false);
   const home = options.home ?? machineHome();
   const runtime = requireRuntime(home);
   if (!options.plan && configureSystemRuntime({ ...options, plan: true }).changed)
@@ -661,6 +699,156 @@ export function migrateSystemProject(options: SystemOptions): {
   const changed = changes.filter((c) => c.before !== c.after);
   applyChanges(home, changed, options.plan === true);
   return { changed: changed.length > 0, root: repo, policy: selected, changes: changed };
+}
+
+/** Explicit installer transaction for one project-local OpenCode producer.
+ * The native harness still qualifies effective loading and publication separately.
+ * Fresh init may select defaults only when no legacy hooks require migration.
+ */
+export function initializeOpenCodeSystemProject(options: SystemOptions): {
+  changed: boolean;
+  root: string;
+  policy: SystemSurfacePolicy;
+  changes: Change[];
+} {
+  return prepareOpenCodeSystemProject(options, true);
+}
+
+function prepareOpenCodeSystemProject(
+  options: SystemOptions,
+  fresh: boolean
+): {
+  changed: boolean;
+  root: string;
+  policy: SystemSurfacePolicy;
+  changes: Change[];
+} {
+  if (options.surface !== 'opencode') throw new Error('Expected OpenCode project transport');
+  const home = options.home ?? machineHome();
+  const runtime = requireRuntime(home);
+  requireNativeEntry(home);
+  const settings = readSystemSurfaceSettings(home, 'opencode');
+  if (!settings?.enabled || settings.transport !== OPENCODE_PROJECT_TRANSPORT)
+    throw new Error('Configure OpenCode first with --entry native');
+  const pointer = readPointer(home);
+  if (!pointer) throw new Error('Install system runtime first');
+  const producer = readSelectedOpenCodeProducer(home, pointer.digest);
+  const repo = fs.realpathSync(options.repo ?? process.cwd());
+  const environment =
+    options.registrationEnvironment ??
+    Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string'
+      )
+    );
+  const caller: OpenCodeRegistrationCaller = {
+    cwd: repo,
+    environment: {
+      ...environment,
+      HOME: options.userHome ?? environment.HOME ?? os.homedir(),
+    },
+  };
+  const env = Object.fromEntries(
+    Object.entries(environment).filter(([key]) => !key.startsWith('GIT_'))
+  );
+  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd: repo,
+    env,
+    encoding: 'utf8',
+  }).trim();
+  if (path.dirname(common) !== repo)
+    throw new Error('OpenCode migration requires canonical project root');
+  if (
+    fs.existsSync(path.join(repo, '.caws/working-spec.yaml')) ||
+    (!fresh &&
+      (!fs.existsSync(path.join(repo, '.caws/policy.yaml')) ||
+        !fs.existsSync(path.join(repo, '.caws/specs'))))
+  )
+    throw new Error('Legacy governance requires separate migration');
+  const file = observeOpenCodeLocalProducer({ checkout: repo, caller, allowMissing: true });
+  const installed = before(repo, file);
+  if (installed !== null && !Buffer.from(installed).equals(producer)) {
+    const baseline = readPristineBaseline(repo, 'opencode', OPENCODE_PROJECT_PLUGIN);
+    const template = fs.readFileSync(
+      path.join(
+        options.templatesRoot ?? path.resolve(__dirname, '../../templates/hook-packs'),
+        'opencode/plugin.ts'
+      ),
+      'utf8'
+    );
+    let recognized = installed === baseline || comparable(installed) === comparable(template);
+    // A generated producer from a retained generation is an understood upgrade.
+    // Manifest membership is machine-home integrity, not publisher qualification.
+    const runtimes = path.join(home, 'lib/runtimes');
+    for (const digest of fs.readdirSync(runtimes)) {
+      if (recognized || !/^[a-f0-9]{64}$/.test(digest)) continue;
+      const manifest = readManifest(home, digest);
+      const previous = path.join(runtimes, digest, OPENCODE_NATIVE_PLUGIN_MEMBER);
+      if (!manifest[OPENCODE_NATIVE_PLUGIN_MEMBER]) continue;
+      assertMachinePath(home, previous);
+      const bytes = fs.readFileSync(previous);
+      if (
+        sha(bytes) === manifest[OPENCODE_NATIVE_PLUGIN_MEMBER] &&
+        Buffer.from(installed).equals(bytes)
+      )
+        recognized = true;
+    }
+    if (!recognized)
+      throw new Error(
+        'Custom OpenCode plugin requires explicit code reconciliation; --from only reviews policy'
+      );
+  }
+  const projectPath = systemProjectPath(home, repo);
+  const prior = before(home, projectPath);
+  const project = prior === null ? { version: 1, root: repo, surfaces: {} } : JSON.parse(prior);
+  if (
+    project?.version !== 1 ||
+    project.root !== repo ||
+    !project.surfaces ||
+    typeof project.surfaces !== 'object' ||
+    Array.isArray(project.surfaces) ||
+    Object.keys(project).sort().join(',') !== 'root,surfaces,version'
+  )
+    throw new Error('Malformed system project settings');
+  const existing = project.surfaces.opencode;
+  const compatibility: NativeConfiguration = {
+    hooks: Object.fromEntries(
+      Object.entries(MACHINE_EVENTS).map(([event, native]) => [
+        native,
+        [
+          {
+            hooks: [
+              {
+                command: JSON.stringify(path.join(repo, '.caws/hooks/dispatch', event + '.sh')),
+              },
+            ],
+          },
+        ],
+      ])
+    ),
+  };
+  const freshPolicy =
+    fresh && existing === undefined && fs.existsSync(path.join(repo, '.caws/hooks'))
+      ? inferPolicy(
+          repo,
+          'opencode',
+          compatibility,
+          options.templatesRoot ?? path.resolve(__dirname, '../../templates/hook-packs')
+        )
+      : empty();
+  if (!fresh && options.fromFile === undefined && existing === undefined)
+    throw new Error('OpenCode migration requires reviewed --from system policy');
+  const selected: SystemSurfacePolicy = options.fromFile
+    ? JSON.parse(fs.readFileSync(options.fromFile, 'utf8'))
+    : (existing ?? freshPolicy);
+  validateSystemPolicy(repo, selected, runtime);
+  project.surfaces.opencode = selected;
+  const changes: Change[] = [
+    { root: repo, path: file, before: installed, after: producer.toString('utf8') },
+    { root: home, path: projectPath, before: prior, after: encode(project) },
+  ].filter((change) => change.before !== change.after);
+  applyChanges(home, changes, options.plan === true);
+  return { changed: changes.length > 0, root: repo, policy: selected, changes };
 }
 
 /** Filesystem configuration only; native trust and execution need native proof. */

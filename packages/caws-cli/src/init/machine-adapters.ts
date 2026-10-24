@@ -19,6 +19,10 @@ import { IMPLEMENTED_SURFACES, resolveHookPack } from './hook-packs/register';
 import { extractMachineHandlers } from './machine-handler-policy';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
 import { readNativeImage } from './native-runtime-entry';
+import {
+  OPENCODE_NATIVE_PLUGIN_MEMBER,
+  renderOpenCodeNativePlugin,
+} from './opencode-native-plugin';
 
 export interface MachineRuntimeOptions {
   readonly home?: string;
@@ -235,7 +239,7 @@ function activateRuntime(
   if (pointer) atomicMachineWrite(home, pointerPath(home), JSON.stringify(pointer));
 }
 
-function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
+function runtimeFiles(templatesRoot: string, home: string): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
   const add = (dest: string, source: string): void => {
     assertMachinePath(templatesRoot, source);
@@ -256,6 +260,12 @@ function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
       }
     }
   }
+  const opencodePlugin = path.join(templatesRoot, 'opencode/plugin.ts');
+  assertMachinePath(templatesRoot, opencodePlugin);
+  files.set(
+    OPENCODE_NATIVE_PLUGIN_MEMBER,
+    renderOpenCodeNativePlugin(fs.readFileSync(opencodePlugin), home)
+  );
   const defaults: Record<string, string[]> = {};
   for (const event of [
     'pre_tool_use',
@@ -327,7 +337,7 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const home = path.resolve(options.home ?? machineHome());
   const templatesRoot =
     options.templatesRoot ?? path.resolve(__dirname, '../../templates/hook-packs');
-  const files = runtimeFiles(templatesRoot);
+  const files = runtimeFiles(templatesRoot, home);
   const executablePaths = new Set([...files.keys()].filter((relative) => relative.endsWith('.sh')));
   const native = options.nativeImage ? readNativeImage(options.nativeImage) : undefined;
   if (native) {

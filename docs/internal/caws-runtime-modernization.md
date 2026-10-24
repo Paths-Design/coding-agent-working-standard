@@ -8533,6 +8533,32 @@ Additional bounded evidence and unresolved dependencies:
   worker owns configure/migrate/init and observed local registration; root
   retains actual harness and consumer verification. No parent AC changes.
 
+- E323: OpenCode project-native Stop transport has executable configuration,
+  migration and fresh-init paths. The selected runtime inventories generated
+  plugin bytes; explicit native opt-in writes machine transport settings, while
+  migration preserves reviewed policy and refuses unknown plugin growth. Fresh
+  init installs compatibility callbacks and publishes the selected producer
+  last. Native Stop retains its own nested plugin directory and never replays
+  legacy Stop after a native attempt. Other callbacks remain compatibility work.
+  Root executed opencode-producer-baseline-build-01 and baseline-regression-01
+  (exit0,99 cases), then candidate-build-01 and candidate-tests-01 (exit0,38
+  cases). Candidate-regression-01 exits1 with154 passing and one obsolete
+  categorical OpenCode-refusal oracle; the revised explicit-opt-in and legacy
+  image refusal check passes in registration-final-01 (exit0,16 cases). Three
+  behavioral negative controls exit1: collapsed caller cwd, omitted
+  selected-producer equality and overwritten custom plugin. Each exact original
+  is restored; process-group residue is empty. Artifacts under
+  publication-integration/opencode-producer-candidate-fixtures-01 include actual
+  argv.bin/input.json/context.bin, generated producer, selected project policy,
+  local-readset.json and transaction backups. Root checks rollback fixture
+  ZkIJQg plugin against backup before bytes (equal), with no project policy;
+  migration gK9DZi and initialization F3SmRJ match backup after bytes and retain
+  project policies. The executable image and producer recording entry are
+  synthetic test fixtures. These observations do not establish real harness
+  loading/delivery, SQL/profile admission, full Python retirement or cutover.
+  Root owns original native Stop joining and actual installed qualification; the
+  worker's producer assignment is integrated, not parent-complete.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
