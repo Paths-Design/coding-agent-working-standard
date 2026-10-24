@@ -143,6 +143,149 @@ fn identity(id: u64) -> Identity {
     }
 }
 #[test]
+fn pre_reservation_refusal_is_terminal_history_and_rejects_restart_and_generation_replay() {
+    let f = Fixture::new();
+    let mut journal = f.open(1);
+    for id in 1..=3 {
+        let operation = journal
+            .refuse_before_reservation(
+                identity(id),
+                &"d".repeat(64),
+                PreReservationRefusalReason::NativeQualificationRefused,
+                soon(),
+            )
+            .unwrap();
+        assert!(matches!(
+            operation.outcome(),
+            AcceptedOutcome::RefusedBeforeReservation {
+                reason: PreReservationRefusalReason::NativeQualificationRefused,
+                ..
+            }
+        ));
+        assert_eq!(
+            operation.verified_request().unwrap(),
+            "d".repeat(64).as_bytes()
+        );
+        assert_eq!(journal.live_count(), 0);
+        assert_eq!(journal.history_size().unwrap().0, id as usize);
+        assert!(
+            journal
+                .begin_next(&"a".repeat(64), &"b".repeat(64), soon())
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            operation.consumption_digest().is_err(),
+            "refusal is not consumer acknowledgement"
+        );
+    }
+    let bytes = fs::read(f.record(1)).unwrap();
+    drop(journal);
+    let mut reopened = f.open(1);
+    for generation in ['a', 'e'] {
+        let mut original = identity(1);
+        original.source_generation = generation.to_string().repeat(64);
+        assert!(
+            matches!(reopened.admit(original, b"different request", soon()).unwrap(), Admission::Rejected(ref reason) if reason.reason == "refused original request ID; no replay across generations")
+        );
+    }
+    assert_eq!(fs::read(f.record(1)).unwrap(), bytes);
+    admitted(&mut reopened, 4);
+    assert_eq!(
+        begin(&mut reopened).operation().identity().request_id,
+        identity(4).request_id
+    );
+}
+
+#[test]
+fn pre_reservation_refusal_never_overwrites_an_existing_operation() {
+    for state in [
+        "queued", "running", "unknown", "returned", "consumed", "refused",
+    ] {
+        let f = Fixture::new();
+        let mut journal = f.open(1);
+        if state == "refused" {
+            journal
+                .refuse_before_reservation(
+                    identity(1),
+                    &"d".repeat(64),
+                    PreReservationRefusalReason::NativeQualificationRefused,
+                    soon(),
+                )
+                .unwrap();
+        } else {
+            admitted(&mut journal, 1);
+            if state != "queued" {
+                let dispatch = begin(&mut journal);
+                if state == "unknown" {
+                    journal.unknown(&dispatch, soon()).unwrap();
+                }
+                if state == "returned" || state == "consumed" {
+                    let returned = journal
+                        .returned(&dispatch, ok_result(), None, soon())
+                        .unwrap();
+                    if state == "consumed" {
+                        journal
+                            .consume(&returned, &returned.consumption_digest().unwrap(), soon())
+                            .unwrap();
+                    }
+                }
+            }
+        }
+        let before = fs::read(f.record(1)).unwrap();
+        let failure = journal
+            .refuse_before_reservation(
+                identity(1),
+                &"d".repeat(64),
+                PreReservationRefusalReason::NativeQualificationRefused,
+                soon(),
+            )
+            .unwrap_err();
+        assert_eq!(failure.kind, ErrorKind::Invalid, "{state}");
+        assert_eq!(fs::read(f.record(1)).unwrap(), before, "{state}");
+    }
+}
+
+#[test]
+fn pre_reservation_refusal_sync_failure_is_not_a_release_receipt() {
+    for offset in [1, 2] {
+        let f = Fixture::new();
+        let mut journal = f.open(1);
+        journal.fail_sync = Some(journal.sync_count + offset);
+        let failure = journal
+            .refuse_before_reservation(
+                identity(1),
+                &"d".repeat(64),
+                PreReservationRefusalReason::NativeQualificationRefused,
+                soon(),
+            )
+            .unwrap_err();
+        assert_eq!(failure.kind, ErrorKind::Io);
+        assert_eq!(failure.publication_may_have_happened, offset == 2);
+        error(
+            journal.lookup(&identity(1).request_id, soon()),
+            ErrorKind::Poisoned,
+        );
+        drop(journal);
+        let mut reopened = f.open(1);
+        let observed = reopened.lookup(&identity(1).request_id, soon()).unwrap();
+        if offset == 1 {
+            assert!(observed.is_none());
+            assert!(!f.record(1).exists());
+        } else {
+            assert!(matches!(
+                observed.unwrap().outcome(),
+                AcceptedOutcome::RefusedBeforeReservation { .. }
+            ));
+            assert!(matches!(
+                reopened.admit(identity(1), b"{}", soon()).unwrap(),
+                Admission::Rejected(_)
+            ));
+        }
+    }
+}
+
+#[test]
 fn consumed_payload_capacity_progresses_beyond_256_and_rejects_original_after_reopen() {
     let f = Fixture::new();
     let mut journal = f.open(1);

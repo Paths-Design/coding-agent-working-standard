@@ -2266,6 +2266,8 @@ fn idle_store_proof_requires_exact_unknown_and_registry_actor_agreement() {
     );
 }
 
+mod refusal;
+
 // Test-only compatibility launch seam: actual native worker plus a Rust child.
 // The required .py-named files are inert data; no interpreter executes them.
 // This is worker/actor lifecycle evidence, not image admission or rendering.
