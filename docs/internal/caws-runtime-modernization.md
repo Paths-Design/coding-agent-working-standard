@@ -9167,6 +9167,33 @@ Additional bounded evidence and unresolved dependencies:
   unchanged1000hotturns, thirteen-session/four-repository fairness, coherent
   main delivery, installed execution and rollback remain open.
 
+- E347: Candidate3e99f570 commits the E346 connection with a clean owned lane.
+  Independent same-provider source review finds no actionable defect in its
+  inspected connection; root grounds the retained owner, completed-prefix,
+  handler-verification and observation-call coordinates directly. Review does
+  not establish integrated behavior. Explicit package lint02 exits0; the commit
+  hook ignores seven TypeScript files and supplies no substitute lint evidence.
+  Feature-off check02 exits0 in1.479s without executing the runtime. Doctor
+  exits0 with0E/4W/5I; policy gates pass over145 branch/staged paths without
+  parent AC writes. The fresh-stop-profile-production-01 preparation exports
+  this exact committed source, including110 native files, and exits0 in3.544s.
+  Its exported CLI build exits0 in7.351s. The native-build-01 outer supervisor
+  times out at120s, kills its group and observes no remaining group processes.
+  Cargo's retained step exits0 in98.565s; the actual new binary's SQLite
+  identity step exits0 and reports3.53.4, threadSafe1 and compiledPrefixSha256
+  7e9e3380222ac021ed815e49b2b0be31839af540a8954a80db00e523d08c5e98. nm-native
+  and otool-native also exit0. Neither native-completed.json nor a terminal
+  builder failure receipt exists: compiler/identity success cannot replace the
+  interrupted producer's remaining inspections/publication. Raw artifacts remain
+  under fresh-stop-profile-native-build-01 and
+  fresh-stop-profile-production-01/run/native-build in the root artifact
+  directory. Root owns a fresh attempt with outer supervision that permits
+  terminal receipt/settlement while retaining the builder's original deadline;
+  no success may be synthesized from this interrupted output. Fixed30 profile
+  execution, integrated native publication/refusal, coherent main delivery and
+  selected-machine cutover remain unverified. The selected runtime remains
+  408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
