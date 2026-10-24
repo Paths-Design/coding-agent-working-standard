@@ -1,0 +1,39 @@
+id: CAWS-OPENCODE-STOP-IDENTITY-001
+title: 'Bind OpenCode Stop to the current event and plugin instance'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-24T00:46:11.835Z'
+updated_at: '2026-10-24T00:46:11.835Z'
+created_by_session: '01a16a3f-e8d9-7b70-8f20-542c4bfa34f2'
+blast_radius:
+  modules:
+    - 'OpenCode plugin lifecycle dispatch and focused behavioral fixtures'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/opencode/plugin.ts'
+    - 'packages/caws-cli/tests/hooks/opencode-plugin-payload-cwd.test.js'
+  out: []
+invariants:
+  - 'A session.idle event dispatches Stop only for its own declared nonempty string properties.sessionID; missing identity never borrows prior state.'
+  - 'Project root, session identity, missing-core notice and pending context are private to each plugin instance; dispatcher transport and other event contracts remain unchanged.'
+acceptance:
+  - id: A1
+    given: 'one plugin instance has observed two sessions'
+    when: 'idle events interleave and omit their own sessionID'
+    then: 'valid idle dispatches use their own sessionID and missing or invalid idle identities do not dispatch Stop'
+  - id: A2
+    given: 'two plugin instances share one loaded module for distinct projects'
+    when: 'lifecycle and tool callbacks interleave'
+    then: 'captured dispatcher cwd argv payload and CAWS_PROJECT_DIR stay with the originating instance'
+  - id: A3
+    given: 'an ordinary single-session plugin instance'
+    when: 'session created compacted tool and idle callbacks run'
+    then: 'existing dispatcher names payload conventions advisory behavior and context injection remain intact'
+observability:
+  - 'Focused tests retain actual dispatcher argv cwd environment and stdin records under CAWS_TEST_ARTIFACT_DIR when configured.'
+rollback:
+  - 'Revert the isolated plugin and focused test commit; no native or machine registration changes are included.'
+non_functional: {}
+contracts: []
