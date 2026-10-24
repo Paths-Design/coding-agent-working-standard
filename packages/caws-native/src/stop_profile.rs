@@ -2,6 +2,7 @@
 //! No selection, prefix, calendar, engine-dispatch or publication grant is made.
 //! Provenance contains only offline hashes; runtime never locates or runs Python.
 use crate::native_generation::GenerationReceipt;
+use crate::selection_observation::GenerationValidationScope;
 #[cfg(feature = "sqlite-store")]
 use crate::sqlite_build_identity::{ExpectedSqliteIdentity, SqliteIdentityReceipt};
 use caws_native::{monotonic_deadline::MonotonicDeadline, session_cache_wire::OriginalStopCapture};
@@ -328,8 +329,29 @@ impl<'original> StopProfileReceipt<'original> {
     pub(crate) fn capture(
         generation: &'original GenerationReceipt,
         original: &'original OriginalStopCapture<'original>,
+        cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Self, String> {
+        Self::capture_impl(generation, original, None, cancel)
+    }
+    pub(crate) fn capture_in_scope(
+        scope: &GenerationValidationScope<'_, '_>,
+        generation: &'original GenerationReceipt,
+        original: &'original OriginalStopCapture<'original>,
+        cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Self, String> {
+        Self::capture_impl(generation, original, Some(scope), cancel)
+    }
+    // Only this module can select a path; every scoped path requires the real
+    // bracket token, exact generation pointer and original clock.
+    fn capture_impl(
+        generation: &'original GenerationReceipt,
+        original: &'original OriginalStopCapture<'original>,
+        scope: Option<&GenerationValidationScope<'_, '_>>,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<Self, String> {
+        if let Some(scope) = scope {
+            scope.check_binding(generation, original.deadline(), &mut cancel)?;
+        }
         check(original.deadline(), &mut cancel)?;
         #[cfg(not(feature = "sqlite-store"))]
         {
@@ -359,12 +381,21 @@ impl<'original> StopProfileReceipt<'original> {
                 sql.compile_options.clone(),
                 sql.compiled_prefix_sha256.clone(),
             )?;
-            let sqlite = SqliteIdentityReceipt::capture(
-                generation,
-                &expected,
-                original.deadline(),
-                &mut cancel,
-            )?;
+            let sqlite = match scope {
+                Some(scope) => SqliteIdentityReceipt::capture_in_scope(
+                    scope,
+                    generation,
+                    &expected,
+                    original.deadline(),
+                    &mut cancel,
+                ),
+                None => SqliteIdentityReceipt::capture(
+                    generation,
+                    &expected,
+                    original.deadline(),
+                    &mut cancel,
+                ),
+            }?;
             let profile_digest = generation
                 .member_digest(MEMBER, original.deadline().expires(), || {
                     check(original.deadline(), &mut cancel)
@@ -409,8 +440,25 @@ impl<'original> StopProfileReceipt<'original> {
     }
     pub(crate) fn revalidate(
         &self,
+        cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.revalidate_impl(None, cancel)
+    }
+    pub(crate) fn revalidate_in_scope(
+        &self,
+        scope: &GenerationValidationScope<'_, '_>,
+        cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.revalidate_impl(Some(scope), cancel)
+    }
+    fn revalidate_impl(
+        &self,
+        scope: Option<&GenerationValidationScope<'_, '_>>,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<(), String> {
+        if let Some(scope) = scope {
+            scope.check_binding(self.generation, self.original.deadline(), &mut cancel)?;
+        }
         check(self.original.deadline(), &mut cancel)?;
         #[cfg(not(feature = "sqlite-store"))]
         {
@@ -431,7 +479,10 @@ impl<'original> StopProfileReceipt<'original> {
             {
                 return Err("Stop semantic member changed".into());
             }
-            self.sqlite.revalidate(&mut cancel)?;
+            match scope {
+                Some(scope) => self.sqlite.revalidate_in_scope(scope, &mut cancel),
+                None => self.sqlite.revalidate(&mut cancel),
+            }?;
             check(self.original.deadline(), &mut cancel)
         }
     }

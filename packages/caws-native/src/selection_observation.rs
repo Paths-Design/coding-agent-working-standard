@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
+    cell::Cell,
     collections::{BTreeSet, VecDeque},
     fs::{self, File, Metadata, OpenOptions},
     io::{self, Read},
@@ -220,6 +221,41 @@ pub(crate) struct SelectionObservationOwner<'a> {
 pub(crate) struct SelectionObservationReceipt<'native> {
     owner: SelectionObservationOwner<'native>,
 }
+
+std::thread_local! {
+    // Also reject nesting through a different receipt on the same native thread.
+    static VALIDATING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Only an active native readset bracket can construct this token. No cloning,
+/// serialization or public constructor can bypass the complete bracket.
+pub(crate) struct GenerationValidationScope<'scope, 'native> {
+    generation: &'native GenerationReceipt,
+    deadline: &'native MonotonicDeadline,
+    active: &'scope Cell<bool>,
+}
+impl GenerationValidationScope<'_, '_> {
+    pub(crate) fn check_binding(
+        &self,
+        generation: &GenerationReceipt,
+        deadline: &MonotonicDeadline,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        if !self.active.get()
+            || !std::ptr::eq(self.generation, generation)
+            || !std::ptr::eq(self.deadline, deadline)
+        {
+            return Err("Scoped generation/original deadline binding mismatch".into());
+        }
+        checkpoint(self.deadline, cancel)
+    }
+}
+struct ValidationGuard<'a>(&'a Cell<bool>);
+impl Drop for ValidationGuard<'_> {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
+}
 /// The transport may send these bounded chunks in its own correlated frames.
 /// A reply contains the exact existing TS inner observation JSON, including the
 /// explicit runtime-digest extension. Chunk delivery never renews the budget.
@@ -390,6 +426,17 @@ impl<'a> SelectionObservationOwner<'a> {
         self.generation.revalidate(self.deadline.expires(), || {
             checkpoint(self.deadline, cancel)
         })?;
+        self.revalidate_records(cancel)?;
+        // Generation hashes/inventory bracket re-reading the local readset.
+        self.generation.revalidate(self.deadline.expires(), || {
+            checkpoint(self.deadline, cancel)
+        })?;
+        checkpoint(self.deadline, cancel)
+    }
+    fn revalidate_records(
+        &self,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
         for record in &self.records {
             let (_, actual) = self.observe(&record.operation, cancel)?;
             if actual != record.evidence {
@@ -400,10 +447,6 @@ impl<'a> SelectionObservationOwner<'a> {
                 ));
             }
         }
-        // Generation hashes/inventory bracket re-reading the local readset.
-        self.generation.revalidate(self.deadline.expires(), || {
-            checkpoint(self.deadline, cancel)
-        })?;
         checkpoint(self.deadline, cancel)
     }
     fn validate_operation(&self, operation: &Operation) -> Result<(), String> {
@@ -726,7 +769,7 @@ impl<'a> SelectionObservationOwner<'a> {
         }
     }
 }
-impl SelectionObservationReceipt<'_> {
+impl<'native> SelectionObservationReceipt<'native> {
     /// Native-only binding accessors; no engine field supplies these facts.
     pub(crate) fn runtime_digest(&self) -> &str {
         self.owner.generation.digest()
@@ -744,7 +787,61 @@ impl SelectionObservationReceipt<'_> {
         &self,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<(), String> {
+        if VALIDATING.with(Cell::get) {
+            return Err("Nested selection validation is not permitted".into());
+        }
         self.owner.revalidate(&mut cancel)
+    }
+    /// Full hashes/inventory enclose both local sweeps and the native-only
+    /// profile/SQLite work. A callback result cannot return before the second
+    /// sweep and full verification. Its fresh token lifetime cannot escape.
+    pub(crate) fn validate_with<T, E, C>(
+        &self,
+        mut cancel: C,
+        checks: impl for<'scope> FnOnce(
+            &GenerationValidationScope<'scope, 'native>,
+            &mut C,
+        ) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        C: FnMut() -> Result<(), String>,
+        E: From<String>,
+    {
+        VALIDATING.with(|active| {
+            if active.replace(true) {
+                return Err(E::from(
+                    "Nested selection validation is not permitted".into(),
+                ));
+            }
+            let guard = ValidationGuard(active);
+            checkpoint(self.owner.deadline, &mut cancel).map_err(E::from)?;
+            self.owner
+                .generation
+                .revalidate(self.owner.deadline.expires(), || {
+                    checkpoint(self.owner.deadline, &mut cancel)
+                })
+                .map_err(E::from)?;
+            self.owner
+                .revalidate_records(&mut cancel)
+                .map_err(E::from)?;
+            let scope = GenerationValidationScope {
+                generation: self.owner.generation,
+                deadline: self.owner.deadline,
+                active: guard.0,
+            };
+            let result = checks(&scope, &mut cancel);
+            self.owner
+                .revalidate_records(&mut cancel)
+                .map_err(E::from)?;
+            self.owner
+                .generation
+                .revalidate(self.owner.deadline.expires(), || {
+                    checkpoint(self.owner.deadline, &mut cancel)
+                })
+                .map_err(E::from)?;
+            checkpoint(self.owner.deadline, &mut cancel).map_err(E::from)?;
+            result
+        })
     }
     /// Native qualifier consumes these retained native-produced values. An
     /// engine echo of an equal JSON value cannot construct this borrowed owner.
@@ -1172,6 +1269,238 @@ mod tests {
             fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
             println!("selection observation artifact: {}", path.display());
         }
+    }
+
+    #[test]
+    fn coalesced_validation_runs_two_real_full_verifications_and_rejects_nested_work() {
+        fixture(|generation, home, _root| {
+            let policy = home.join("scope-policy.json");
+            fs::write(&policy, b"unchanged").unwrap();
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            let before = crate::installed_generation::verification_count();
+            let work = Cell::new(0);
+            let result: Result<usize, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    scope.check_binding(generation, &clock, cancel)?;
+                    let nested: Result<(), String> =
+                        receipt.validate_with(|| Ok(()), |_, _| Ok(()));
+                    assert!(nested.unwrap_err().contains("Nested"));
+                    assert!(
+                        receipt
+                            .revalidate(|| Ok(()))
+                            .unwrap_err()
+                            .contains("Nested")
+                    );
+                    work.set(work.get() + 1);
+                    Ok(17)
+                },
+            );
+            assert_eq!(result.unwrap(), 17);
+            let scans = crate::installed_generation::verification_count() - before;
+            assert_eq!(
+                scans, 2,
+                "count actual verify_files calls, not mocked scope entries"
+            );
+            assert_eq!(work.get(), 1);
+            receipt.revalidate(|| Ok(())).unwrap(); // scope guard was released
+            retain(
+                home,
+                "coalesced-count",
+                json!({"actualFullVerifications":scans,"innerCalls":work.get(),"returned":17,"nestedRefused":true,"syntheticGeneration":true}),
+            );
+        });
+    }
+
+    #[test]
+    fn coalesced_validation_refuses_changed_readset_after_inner_unsupported_result() {
+        fixture(|generation, home, _root| {
+            let policy = home.join("scope-policy.json");
+            fs::write(&policy, b"before").unwrap();
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            let result: Result<(), String> = receipt.validate_with(
+                || Ok(()),
+                |_, _| {
+                    fs::write(&policy, b"after!").unwrap();
+                    Err("inner unsupported fixture".into())
+                },
+            );
+            let error = result.unwrap_err();
+            assert!(error.contains("Selection dependency changed"), "{error}");
+            assert!(!error.contains("inner unsupported"));
+            retain(
+                home,
+                "coalesced-late-readset",
+                json!({"error":error,"innerResultNotReturned":true,"syntheticGeneration":true}),
+            );
+        });
+    }
+
+    #[test]
+    fn coalesced_validation_refuses_same_byte_generation_replacement_at_closing_bracket() {
+        fixture(|generation, home, root| {
+            let policy = home.join("scope-policy.json");
+            fs::write(&policy, b"unchanged").unwrap();
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            let result: Result<usize, String> = receipt.validate_with(
+                || Ok(()),
+                |_, _| {
+                    let engine = root.join("engine.js");
+                    let replacement = home.join("replacement-engine");
+                    fs::write(&replacement, fs::read(&engine).unwrap()).unwrap();
+                    fs::set_permissions(&replacement, fs::metadata(&engine).unwrap().permissions())
+                        .unwrap();
+                    fs::rename(&replacement, &engine).unwrap();
+                    Ok(23)
+                },
+            );
+            let error = result.unwrap_err();
+            assert!(
+                matches!(
+                    error.as_str(),
+                    "Admitted generation directory changed" | "Admitted generation member changed"
+                ),
+                "{error}"
+            );
+            retain(
+                home,
+                "coalesced-closing-generation",
+                json!({"error":error,"sameByteReplacement":true,"valueNotReturned":23,"syntheticGeneration":true}),
+            );
+        });
+    }
+
+    #[test]
+    fn coalesced_scope_binds_exact_native_generation_clock_and_cancellation() {
+        fixture(|generation, home, _| {
+            fixture(|other, other_home, _| {
+                let clock = deadline();
+                let alien_clock = deadline();
+                let other_receipt = owner(other, &clock, other_home).seal(|| Ok(())).unwrap();
+                let receipt = owner(generation, &clock, home).seal(|| Ok(())).unwrap();
+                let result: Result<(), String> = receipt.validate_with(
+                    || Ok(()),
+                    |scope, cancel| {
+                        let nested: Result<(), String> =
+                            other_receipt.validate_with(|| Ok(()), |_, _| Ok(()));
+                        assert!(nested.unwrap_err().contains("Nested"));
+                        assert!(
+                            scope
+                                .check_binding(other, &clock, cancel)
+                                .unwrap_err()
+                                .contains("binding mismatch")
+                        );
+                        assert!(
+                            scope
+                                .check_binding(generation, &alien_clock, cancel)
+                                .unwrap_err()
+                                .contains("binding mismatch")
+                        );
+                        scope.check_binding(generation, &clock, cancel)
+                    },
+                );
+                result.unwrap();
+                let cancelled = Cell::new(false);
+                let result: Result<(), String> = receipt.validate_with(
+                    || {
+                        if cancelled.get() {
+                            Err("original scope cancellation".into())
+                        } else {
+                            Ok(())
+                        }
+                    },
+                    |_, _| {
+                        cancelled.set(true);
+                        Ok(())
+                    },
+                );
+                assert_eq!(result.unwrap_err(), "original scope cancellation");
+                receipt.revalidate(|| Ok(())).unwrap();
+                retain(
+                    home,
+                    "coalesced-binding-cancel",
+                    json!({"foreignGenerationRefused":true,"differentOriginalClockRefused":true,"cancelCause":"original scope cancellation","guardReleased":true,"syntheticGeneration":true}),
+                );
+            })
+        });
+    }
+
+    #[cfg(feature = "sqlite-store")]
+    #[test]
+    fn coalesced_scope_checks_actual_linked_sqlite_without_nested_full_verifications() {
+        use crate::sqlite_build_identity::{ExpectedSqliteIdentity, SqliteIdentityReceipt};
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let observed = crate::sqlite_build_identity::observe(&clock, || Ok(())).unwrap();
+            let value = serde_json::to_value(&observed).unwrap();
+            let expected = |source: String| {
+                ExpectedSqliteIdentity::from_expected_data(
+                    value["version"].as_str().unwrap().into(),
+                    source,
+                    value["threadSafe"].as_i64().unwrap() as i32,
+                    value["compileOptions"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_str().unwrap().into())
+                        .collect(),
+                    value["compiledPrefixSha256"].as_str().unwrap().into(),
+                )
+                .unwrap()
+            };
+            let expected_identity = expected(value["sourceId"].as_str().unwrap().into());
+            let receipt = owner(generation, &clock, home).seal(|| Ok(())).unwrap();
+            let before = crate::installed_generation::verification_count();
+            let result: Result<(), String> = receipt.validate_with(
+                || Ok(()),
+                |scope, mut cancel| {
+                    let linked = SqliteIdentityReceipt::capture_in_scope(
+                        scope,
+                        generation,
+                        &expected_identity,
+                        &clock,
+                        &mut cancel,
+                    )?;
+                    linked.revalidate_in_scope(scope, &mut cancel)
+                },
+            );
+            result.unwrap();
+            let scans = crate::installed_generation::verification_count() - before;
+            assert_eq!(scans, 2);
+            let wrong = expected(format!(
+                "{}-unqualified",
+                value["sourceId"].as_str().unwrap()
+            ));
+            let result: Result<SqliteIdentityReceipt<'_>, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    SqliteIdentityReceipt::capture_in_scope(
+                        scope, generation, &wrong, &clock, cancel,
+                    )
+                },
+            );
+            let error = result
+                .err()
+                .expect("changed actual SQLite identity must refuse");
+            assert!(
+                error.contains("SQLite identity mismatch: sourceId"),
+                "{error}"
+            );
+            retain(
+                home,
+                "coalesced-actual-sqlite",
+                json!({"actualLinked":value,"actualFullVerifications":scans,"changedExpectedError":error,"syntheticGeneration":true,"noStockOrSemanticGrant":true}),
+            );
+        });
     }
 
     #[test]

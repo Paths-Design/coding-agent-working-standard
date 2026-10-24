@@ -207,6 +207,11 @@ impl std::fmt::Display for Refusal {
         }
     }
 }
+impl From<String> for Refusal {
+    fn from(reason: String) -> Self {
+        Self::Invalidated(reason)
+    }
+}
 fn unsupported(message: impl Into<String>) -> Refusal {
     Refusal::Unsupported(message.into())
 }
@@ -248,38 +253,34 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
                 "Stock Stop generation differs from original machine home",
             ));
         }
-        readset
-            .revalidate(&mut cancel)
-            .map_err(Refusal::Invalidated)?;
-        let view = Readset::new(readset)?;
-        let project = original.observed_project();
-        let context = Context {
-            home: &home,
-            root: &root,
-            checkout: &project.checkout,
-            canonical: &project.canonical_root,
-            caller: Path::new(original.caller_cwd()),
-            environment: original.caller_environment(),
-        };
-        validate_selection(&view, &context)?;
-        for &(relative, expected) in STOCK {
-            checkpoint(original.deadline(), &mut cancel)?;
-            let current = readset
-                .runtime_member(relative, &mut cancel)
-                .map_err(Refusal::Invalidated)?;
-            if current.sha256 != expected {
-                return Err(unsupported(format!("Unreviewed stock source: {relative}")));
+        readset.validate_with(&mut cancel, |_scope, cancel| {
+            let view = Readset::new(readset)?;
+            let project = original.observed_project();
+            let context = Context {
+                home: &home,
+                root: &root,
+                checkout: &project.checkout,
+                canonical: &project.canonical_root,
+                caller: Path::new(original.caller_cwd()),
+                environment: original.caller_environment(),
+            };
+            validate_selection(&view, &context)?;
+            for &(relative, expected) in STOCK {
+                checkpoint(original.deadline(), cancel)?;
+                let current = readset
+                    .runtime_member(relative, &mut *cancel)
+                    .map_err(Refusal::Invalidated)?;
+                if current.sha256 != expected {
+                    return Err(unsupported(format!("Unreviewed stock source: {relative}")));
+                }
             }
-        }
-        validate_producer_identity(&view, &context, readset, &mut cancel)?;
-        readset
-            .revalidate(&mut cancel)
-            .map_err(Refusal::Invalidated)?;
-        checkpoint(original.deadline(), &mut cancel)?;
-        Ok(Self {
-            original,
-            readset,
-            home,
+            validate_producer_identity(&view, &context, readset, cancel)?;
+            checkpoint(original.deadline(), cancel)?;
+            Ok(Self {
+                original,
+                readset,
+                home,
+            })
         })
     }
     pub(crate) fn original(&self) -> &'original OriginalStopCapture<'native> {

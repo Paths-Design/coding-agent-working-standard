@@ -2,6 +2,7 @@
 //! This primitive supplies no production policy, SQL interpreter qualification,
 //! calendar qualification, selection admission, or publication authority.
 use crate::native_generation::GenerationReceipt;
+use crate::selection_observation::GenerationValidationScope;
 use caws_native::monotonic_deadline::MonotonicDeadline;
 use serde::Serialize;
 use std::io::Write;
@@ -154,6 +155,26 @@ pub(crate) struct SqliteIdentityReceipt<'original> {
     observed: SqliteBuildIdentity,
 }
 impl<'original> SqliteIdentityReceipt<'original> {
+    /// The unforgeable scope supplies the full generation bracket. This helper
+    /// still observes the actual linked SQLite and checks the exact owner/clock.
+    pub(crate) fn capture_in_scope(
+        scope: &GenerationValidationScope<'_, '_>,
+        generation: &'original GenerationReceipt,
+        expected: &ExpectedSqliteIdentity,
+        original_deadline: &'original MonotonicDeadline,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Self, String> {
+        scope.check_binding(generation, original_deadline, &mut cancel)?;
+        let observed = observe(original_deadline, &mut cancel)?;
+        exact_match(&observed, expected)?;
+        scope.check_binding(generation, original_deadline, &mut cancel)?;
+        Ok(Self {
+            generation,
+            original_deadline,
+            observed,
+        })
+    }
+
     pub(crate) fn capture(
         generation: &'original GenerationReceipt,
         expected: &ExpectedSqliteIdentity,
@@ -197,6 +218,19 @@ impl<'original> SqliteIdentityReceipt<'original> {
                 checkpoint(self.original_deadline, &mut cancel)
             })?;
         checkpoint(self.original_deadline, &mut cancel)
+    }
+
+    pub(crate) fn revalidate_in_scope(
+        &self,
+        scope: &GenerationValidationScope<'_, '_>,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        scope.check_binding(self.generation, self.original_deadline, &mut cancel)?;
+        let current = observe(self.original_deadline, &mut cancel)?;
+        if current != self.observed {
+            return Err("linked SQLite identity changed".into());
+        }
+        scope.check_binding(self.generation, self.original_deadline, &mut cancel)
     }
 }
 

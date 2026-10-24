@@ -9451,6 +9451,78 @@ Additional bounded evidence and unresolved dependencies:
   under the unchanged 30s deadline. No publication, speedup, residency or parent
   acceptance follows from these diagnostics or checks.
 
+- E353: Fresh production05 builds committed diagnostic candidate 16869077. All
+  eleven stages exit 0 with unchanged source pins and no observed group residue;
+  native build takes 122.425s. The executable is 7461248 bytes with SHA256
+  1c6b80c96387a5af93f99071611100c4a060cc81fa9fe10c42cd2a2921488ce2. Component
+  comparison retains 30 equal rows and 31 child exits 0; the final descriptor
+  SHA256 is e646455dbf0b106c1bd19e3f1b9ff14b22105d6331b4082cd5619167bc647adc.
+  Recipe helpers, tool/reference pins and the positive fixture match
+  production04. Source provenance, candidate image and artifact locations
+  change; the native deadline remains 30000ms. Artifacts live under
+  publication-integration/fresh-stop-profile-production-05 and the eleven
+  fresh-stop-profile-05-\*-01 execution directories. This remains a private
+  image, not machine adoption.
+
+  The actual positive scenario exits 1 in 47.951s; the native child exits 0 in
+  30031.216ms with Original monotonic deadline expired. Its raw progress records
+  generationReceiptRevalidations={count:32,elapsedMicros:23325772} and
+  stopPrefixAuthorityCallbacks={count:0,elapsedMicros:0}. The generation counter
+  includes refused completed calls and excludes initial loading. It measures
+  23.326s of receipt revalidation in this invocation, not 32 successful full
+  passes or an independent timing distribution. The prefix callback is not
+  observed executing; its zero count cannot establish absence of a prefix
+  attempt because the wrapper checks the original deadline first. This run has
+  no retained prefix-result object. Original Render capture, native eligibility
+  and dispatch-written flags are true. The invocation journal contains only
+  invocation_started and dispatch_started; no turn or publication marker exists.
+  Database bytes remain unchanged. The owner exits 0 naturally, with absent
+  socket, empty outstanding originals and no service signals. The outer
+  supervisor observes no group residue and unchanged source pins.
+
+  Raw stdout/stderr, terminal and cleanup records live in
+  production-stop-05-positive-01; exact argv and exit evidence live in
+  production-stop-05-positive-execution-01/execution.json. Root inspection is
+  retained in production-stop-05-positive-root-inspection-01.json. The
+  production trace establishes generation-timer wiring and the immediate cost,
+  but not prefix-timer wiring or successful publication. The initial E352
+  nine-test run also predates the final capture-wrapper cleanup; only its
+  corrected three checks match all 110 crate source pins to 16869077. The
+  selected machine remains 408c06a7…77baa0; parent acceptance remains 0/8.
+
+- E354: Native validation scopes consolidate nested generation scans around
+  stock admission, eligibility construction and eligibility revalidation. Full
+  hashes, inventory and identity checks bracket two selected-readset sweeps and
+  actual profile/linked-SQLite checks. A private borrowed token binds the exact
+  generation and original clock; nested validation refuses. No result, including
+  Unsupported, returns before closing freshness checks. Standalone
+  profile/SQLite APIs preserve their prior full-check behavior. The production
+  verifier itself, deadlines, main dispatch checks and prefix effect APIs are
+  unchanged.
+
+  The sqlite-store coalesced\_ filter exits 0 in 7.367s with five controls.
+  Actual verify_files instrumentation records two full checks around one inner
+  call. Retained artifacts reject a late readset change, same-byte inode
+  replacement, foreign generation/clock, cancellation, nesting and a mismatched
+  expected SQLite sourceId; the linked SQLite observation is retained. Existing
+  selection, stock admission, eligibility, profile and SQLite suites exit 0 with
+  28/7/2/4/7 checks in 2.962/0.296/0.200/0.205/1.321s. Feature-disabled
+  compilation exits 0 in 2.266s. Each supervisor records unchanged source/input
+  pins and no observed group residue; compiler warnings remain explicit in
+  stderr. Logs and commands live under
+  publication-integration/stop-validation-coalesced-01 and
+  stop-validation-coalesced-{selection,admission,eligibility,profile,sqlite,
+  feature-off}-01. The five selection-coalesced-\*.json files under the first
+  run's generation-artifacts retain the actual count and refusal observations.
+
+  These synthetic-generation and linked-library checks do not establish a
+  production speedup, complete stock eligibility, late queued freshness or
+  publication. Root owns the combined exact-image replay. Prefix callback
+  separation must preserve checks before persistent/destructive effects and
+  post-engine decisions while keeping cheap cancellation throughout read/write
+  loops. Cancellation/reclamation, full residency/fairness, Python retirement,
+  harness adoption and rollback remain open. No parent criterion advances.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

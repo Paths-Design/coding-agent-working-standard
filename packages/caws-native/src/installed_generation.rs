@@ -265,11 +265,23 @@ fn file_digest(path: &Path, verify: &mut Verification<'_>) -> Result<String, Str
     read_regular(path, None, verify, |chunk| hash.update(chunk))?;
     Ok(format!("{:x}", hash.finalize()))
 }
+// Accounting is at the actual full hash/inventory implementation, on each test
+// thread independently. Production carries no counter or alternate verifier.
+#[cfg(test)]
+std::thread_local! {
+    static VERIFICATION_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub(crate) fn verification_count() -> usize {
+    VERIFICATION_COUNT.with(std::cell::Cell::get)
+}
 fn verify_files(
     root: &Path,
     manifest: &BTreeMap<String, String>,
     verify: &mut Verification<'_>,
 ) -> Result<(), String> {
+    #[cfg(test)]
+    VERIFICATION_COUNT.with(|count| count.set(count.get() + 1));
     // The already byte-bounded manifest determines every permitted directory.
     // Do not recurse into undeclared empty trees or invent a full-image byte cap.
     let mut directories = BTreeSet::new();
