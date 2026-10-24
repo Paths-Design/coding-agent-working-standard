@@ -12,6 +12,7 @@ use std::{
     io,
     os::{fd::AsRawFd, unix::net::UnixStream},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 type Result<T> = std::result::Result<T, String>;
@@ -30,15 +31,15 @@ struct PeerIdentity {
 }
 
 /// Neither Clone nor Deserialize: only the authenticated connection constructs
-/// this value. The borrowed original clock cannot be renewed by a later caller.
+/// this value. The shared original clock cannot be renewed by a later caller.
 /// The held descriptor is private and close-on-exec; never export it to Node.
-pub(super) struct NativePeer<'deadline> {
+pub(super) struct NativePeer {
     held: UnixStream,
     identity: PeerIdentity,
     generation: Selection,
     native_path: PathBuf,
     native_metadata: MemberMetadata,
-    deadline: &'deadline MonotonicDeadline,
+    deadline: Arc<MonotonicDeadline>,
     original_deadline: DeadlineEnvelope,
 }
 
@@ -173,19 +174,19 @@ fn peer_identity(_stream: &UnixStream) -> Result<PeerIdentity> {
     Err("Original native peer admission is qualified only on macOS".into())
 }
 
-impl<'deadline> NativePeer<'deadline> {
+impl NativePeer {
     pub(super) fn capture(
         stream: &UnixStream,
         trusted_home: &Path,
         exact_request_generation: &str,
-        deadline: &'deadline MonotonicDeadline,
+        deadline: Arc<MonotonicDeadline>,
         mut cancel: impl FnMut() -> Result<()>,
     ) -> Result<Self> {
-        checkpoint(deadline, &mut cancel)?;
+        checkpoint(&deadline, &mut cancel)?;
         let held = held_connection(stream)?;
         let identity = peer_identity(&held)?;
-        checkpoint(deadline, &mut cancel)?;
-        let mut checked = || checkpoint(deadline, &mut cancel);
+        checkpoint(&deadline, &mut cancel)?;
+        let mut checked = || checkpoint(&deadline, &mut cancel);
         let mut verify = Verification::new(deadline.expires(), &mut checked);
         let generation =
             Selection::read_generation(trusted_home, exact_request_generation, &mut verify)?;
@@ -202,6 +203,9 @@ impl<'deadline> NativePeer<'deadline> {
             return Err("Native peer changed during generation verification".into());
         }
         verify.checkpoint()?;
+        drop(verify);
+        drop(checked);
+        let original_deadline = deadline.envelope();
         Ok(Self {
             held,
             identity,
@@ -209,21 +213,34 @@ impl<'deadline> NativePeer<'deadline> {
             native_path,
             native_metadata,
             deadline,
-            original_deadline: deadline.envelope(),
+            original_deadline,
         })
+    }
+
+    /// Check the same live producer without hashing the complete generation.
+    /// Admission and the queue boundary still call full revalidate. Effect
+    /// phase callbacks independently revalidate the original qualification.
+    pub(super) fn check_live(&self, mut cancel: impl FnMut() -> Result<()>) -> Result<()> {
+        checkpoint(&self.deadline, &mut cancel)?;
+        if self.deadline.envelope() != self.original_deadline
+            || peer_identity(&self.held)? != self.identity
+        {
+            return Err("Native peer original process, connection or deadline changed".into());
+        }
+        checkpoint(&self.deadline, &mut cancel)
     }
 
     /// Revalidate the retained connection and original clock, never another
     /// socket, current pointer, JSON PID/path or freshly supplied deadline.
     pub(super) fn revalidate(&self, mut cancel: impl FnMut() -> Result<()>) -> Result<()> {
-        checkpoint(self.deadline, &mut cancel)?;
+        checkpoint(&self.deadline, &mut cancel)?;
         if self.deadline.envelope() != self.original_deadline {
             return Err("Native peer original deadline changed".into());
         }
         if peer_identity(&self.held)? != self.identity {
             return Err("Native peer original process or executable changed".into());
         }
-        let mut checked = || checkpoint(self.deadline, &mut cancel);
+        let mut checked = || checkpoint(&self.deadline, &mut cancel);
         let mut verify = Verification::new(self.deadline.expires(), &mut checked);
         if MemberMetadata::read(&self.native_path, false, &mut verify)? != self.native_metadata {
             return Err("Native peer admitted generation member identity changed".into());

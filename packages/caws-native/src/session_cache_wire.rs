@@ -173,6 +173,17 @@ pub struct Correlation {
     runtime_digest: String,
     token: String,
 }
+impl Correlation {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    pub fn runtime_digest(&self) -> &str {
+        &self.runtime_digest
+    }
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PreviousFrame<'a> {

@@ -11,6 +11,8 @@ use serde_json::value::RawValue;
 use std::sync::{Weak, atomic::AtomicBool};
 
 const ACQUIRE_SCHEMA: &str = "caws.render.owner.store-acquire.v2";
+const NATIVE_ACQUIRE_SCHEMA: &str = "caws.render.owner.store-acquire.native-stop.v1";
+const MAX_NATIVE_CHECKS: usize = 6;
 const ACQUIRE_PREFIX: &str = "caws.render.owner.store-acquire.";
 const STATUS_SCHEMA: &str = "caws.render.owner.store-status.v1";
 const REPLY_SCHEMA: &str = "caws.render.owner.store-relay-reply.v1";
@@ -84,6 +86,8 @@ pub struct StoreAcquire {
     publication: bool,
     #[serde(default)]
     captured_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    native_stop: Option<NativeStopBinding>,
 }
 impl StoreAcquire {
     pub fn capture(bytes: &[u8], i: store::Invocation<'_>, deadline: &MonotonicDeadline) -> Self {
@@ -106,6 +110,7 @@ impl StoreAcquire {
             deadline: deadline.envelope(),
             publication: false,
             captured_at: captured_utc(),
+            native_stop: None,
         }
     }
     /// Root calls this only for the newly selected native session-log path.
@@ -137,7 +142,7 @@ impl StoreAcquire {
         }
     }
     fn request(&self) -> Result<Vec<u8>> {
-        if self.schema != ACQUIRE_SCHEMA
+        if !matches!(self.schema.as_str(), ACQUIRE_SCHEMA | NATIVE_ACQUIRE_SCHEMA)
             || self.id.is_empty()
             || self.id.len() > 256
             || !self
@@ -149,13 +154,231 @@ impl StoreAcquire {
                 .runtime_digest
                 .bytes()
                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            || self.database.as_ref() != self.caller_environment.get("CAWS_TRANSCRIPT_DATABASE")
+            || (self.schema == ACQUIRE_SCHEMA
+                && self.database.as_ref()
+                    != self.caller_environment.get("CAWS_TRANSCRIPT_DATABASE"))
             || self.request_base64.len() > store::MAX_REQUEST_BYTES.div_ceil(3) * 4
         {
             return Err("resident store original invocation envelope mismatch".into());
         }
-        STANDARD.decode(&self.request_base64).map_err(err)
+        if (self.schema == NATIVE_ACQUIRE_SCHEMA) != self.native_stop.is_some()
+            || (self.native_stop.is_some() && !self.publication)
+        {
+            return Err("native Stop registration schema/binding mismatch".into());
+        }
+        let bytes = STANDARD.decode(&self.request_base64).map_err(err)?;
+        if STANDARD.encode(&bytes) != self.request_base64 {
+            return Err("resident store request encoding is not canonical".into());
+        }
+        Ok(bytes)
     }
+}
+
+/// Native check phases are fixed by the owner, never engine-selected actions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeStopPhase {
+    Registration,
+    BeforeReservation,
+    BeforeWriter,
+    WriterLocked,
+    WriterRetired,
+    BeforeSql,
+    BeforePublication,
+}
+fn native_phase_follows(previous: Option<NativeStopPhase>, next: NativeStopPhase) -> bool {
+    use NativeStopPhase::*;
+    matches!(
+        (previous, next),
+        (None, BeforeReservation)
+            | (Some(BeforeReservation), BeforeWriter)
+            | (Some(BeforeWriter), WriterLocked | WriterRetired)
+            | (Some(WriterLocked), WriterRetired)
+            | (Some(WriterRetired), BeforeSql)
+            | (Some(BeforeSql), BeforePublication)
+    )
+}
+/// Delivered only to the native caller's retained qualification callback.
+/// A callback must check its genuine stock/profile/prefix/original owners.
+pub struct NativeStopCheck {
+    phase: NativeStopPhase,
+}
+impl NativeStopCheck {
+    pub fn phase(&self) -> NativeStopPhase {
+        self.phase
+    }
+}
+
+/// Transport data only. Kernel peer admission and a native-local callback are
+/// both required before this can select the admitted-project store entry.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NativeStopBinding {
+    canonical_root: String,
+    render_cwd: String,
+    session_id: String,
+    payload_sha256: String,
+    prefix_sha256: String,
+    prefix_token: String,
+    original_deadline: DeadlineEnvelope,
+}
+impl NativeStopBinding {
+    fn validate(&self, acquire: &StoreAcquire, request: &[u8]) -> Result<()> {
+        if acquire.schema != NATIVE_ACQUIRE_SCHEMA
+            || !acquire.publication
+            || self.original_deadline != acquire.deadline
+            || self.payload_sha256 != sha(acquire.original_payload.get().as_bytes())
+            || self.prefix_sha256.len() != 64
+            || !self
+                .prefix_sha256
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || self.prefix_token.is_empty()
+            || self.prefix_token.len() > 128
+            || self.render_cwd.len() > 4096
+            || !Path::new(&self.render_cwd).is_absolute()
+            || self.render_cwd.contains('\0')
+            || crate::invocation_project::payload_string(&acquire.original_payload, "cwd")?
+                .as_deref()
+                != Some(self.render_cwd.as_str())
+            || store::correlation_root(request, &acquire.invocation()).map_err(err)?
+                != self.canonical_root
+            || crate::invocation_project::payload_string(&acquire.original_payload, "session_id")?
+                .as_deref()
+                != Some(self.session_id.as_str())
+            || acquire.ready_session_id.as_deref() != Some(self.session_id.as_str())
+        {
+            return Err("native Stop original/prefix/project binding mismatch".into());
+        }
+        Ok(())
+    }
+    fn digest(&self, acquire: &StoreAcquire) -> Result<String> {
+        Ok(sha(&serde_json::to_vec(&(acquire, self)).map_err(err)?))
+    }
+}
+
+/// Neither Deserialize nor Clone. Construction borrows the actual original and
+/// completed prefix; the enclosing QualifiedStop owns stock/profile eligibility.
+/// A serialized registration is not a capability and is refused without its
+/// exact native producer and native-local phase checks.
+pub struct NativeStopRegistration<'capture, 'deadline> {
+    acquire: StoreAcquire,
+    original: &'capture crate::session_cache_wire::OriginalStopCapture<'deadline>,
+    completed: &'capture crate::session_cache_wire::CompletedStopPrefix<'deadline>,
+}
+impl<'capture, 'deadline> NativeStopRegistration<'capture, 'deadline> {
+    pub fn capture(
+        bytes: &[u8],
+        invocation: store::Invocation<'_>,
+        original: &'capture crate::session_cache_wire::OriginalStopCapture<'deadline>,
+        completed: &'capture crate::session_cache_wire::CompletedStopPrefix<'deadline>,
+    ) -> Result<Self> {
+        original.deadline().check().map_err(err)?;
+        completed.check()?;
+        let prefix = completed.correlation();
+        let project = original.observed_project();
+        if !std::ptr::eq(original.deadline(), completed.deadline())
+            || original.id() != invocation.id
+            || original.runtime_digest() != invocation.runtime_digest
+            || original.surface() != invocation.surface
+            || invocation.event != "stop"
+            || invocation.configuration != "system"
+            || !invocation.ready_active
+            || !invocation.dispatched
+            || original.original_payload().get() != invocation.original_payload.get()
+            || original.caller_cwd() != invocation.caller_cwd
+            || original.caller_environment() != invocation.caller_environment
+            || prefix.id() != original.id()
+            || prefix.runtime_digest() != original.runtime_digest()
+            || completed.surface() != original.surface()
+            || project.canonical_root.to_str() != Some(completed.canonical_root())
+            || invocation.ready_session_id != Some(completed.supplied_session_id())
+        {
+            return Err("native Stop registration requires this original completed prefix".into());
+        }
+        // This finite profile retains the absolute original payload cwd. An
+        // unproved relative payload cwd cannot borrow the resident's cwd.
+        let supplied =
+            crate::invocation_project::payload_string(original.original_payload(), "cwd")?
+                .filter(|s| !s.is_empty())
+                .ok_or("native Stop requires captured absolute render cwd")?;
+        if !Path::new(&supplied).is_absolute()
+            || Path::new(&supplied) != original.query_cwds()[0].as_path()
+        {
+            return Err("native Stop render cwd differs from original queried candidate".into());
+        }
+        let mut acquire = StoreAcquire::capture_publication(bytes, invocation, original.deadline());
+        acquire.schema = NATIVE_ACQUIRE_SCHEMA.into();
+        let binding = NativeStopBinding {
+            canonical_root: completed.canonical_root().into(),
+            render_cwd: supplied,
+            session_id: completed.supplied_session_id().into(),
+            payload_sha256: sha(original.original_payload().get().as_bytes()),
+            prefix_sha256: sha(&completed.result().encode().map_err(err)?),
+            prefix_token: prefix.token().into(),
+            original_deadline: original.deadline().envelope(),
+        };
+        acquire.native_stop = Some(binding);
+        let registration = Self {
+            acquire,
+            original,
+            completed,
+        };
+        registration.check()?;
+        Ok(registration)
+    }
+    fn check(&self) -> Result<()> {
+        self.original.deadline().check().map_err(err)?;
+        self.completed.check()?;
+        let bytes = self.acquire.request()?;
+        self.acquire
+            .native_stop
+            .as_ref()
+            .ok_or("native Stop binding absent")?
+            .validate(&self.acquire, &bytes)
+    }
+}
+
+/// Non-deserializable binding issued only inside authenticated queued admission.
+/// The SQL entry consumes this instead of observing a different project again.
+pub(crate) struct NativeStoreProject {
+    id: String,
+    runtime_digest: String,
+    root: String,
+    session_id: String,
+    payload_sha256: String,
+    deadline: Arc<MonotonicDeadline>,
+}
+impl NativeStoreProject {
+    pub(crate) fn validate(
+        &self,
+        request: &[u8],
+        invocation: &store::Invocation<'_>,
+    ) -> Result<()> {
+        self.deadline.check().map_err(err)?;
+        if self.id != invocation.id
+            || self.runtime_digest != invocation.runtime_digest
+            || self.payload_sha256 != sha(invocation.original_payload.get().as_bytes())
+            || invocation.ready_session_id != Some(self.session_id.as_str())
+            || store::correlation_root(request, invocation).map_err(err)? != self.root
+        {
+            return Err("authenticated native store project binding changed".into());
+        }
+        Ok(())
+    }
+    pub(crate) fn check(&self) -> Result<()> {
+        self.deadline.check().map_err(err)
+    }
+}
+struct NativeAdmission {
+    peer: super::native_peer::NativePeer,
+    id: String,
+    runtime_digest: String,
+    binding: NativeStopBinding,
+    binding_digest: String,
+    registration: String,
+    checks: usize,
+    last_phase: Option<NativeStopPhase>,
 }
 
 /// The absolute deadline is native-owned same-host evidence, not sender
@@ -466,9 +689,83 @@ pub struct StoreStatus {
     pub completion: Option<StoreCompletion>,
 }
 
+#[derive(Default)]
+struct NativeChallengeState {
+    checks: usize,
+    last_phase: Option<NativeStopPhase>,
+}
+impl NativeChallengeState {
+    fn accept(
+        &mut self,
+        acquire: &StoreAcquire,
+        registration: Option<&str>,
+        project_bound: bool,
+        expected_sequence: u64,
+        frame: &NativeChallengeFrame,
+    ) -> Result<()> {
+        let binding = acquire
+            .native_stop
+            .as_ref()
+            .ok_or("native Stop challenge has no registration")?;
+        if registration != Some(frame.registration.as_str())
+            || !project_bound
+            || frame.sequence != expected_sequence
+            || frame.id != acquire.id
+            || frame.runtime_digest != acquire.runtime_digest
+            || frame.binding_digest != binding.digest(acquire)?
+            || frame.original_deadline != acquire.deadline
+            || frame.challenge.len() != 64
+            || !frame
+                .challenge
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || frame.phase == NativeStopPhase::Registration
+            || !native_phase_follows(self.last_phase, frame.phase)
+            || self.checks >= MAX_NATIVE_CHECKS
+        {
+            return Err("native Stop challenge correlation, phase or budget mismatch".into());
+        }
+        MonotonicDeadline::receive(acquire.deadline)
+            .map_err(err)?
+            .check()
+            .map_err(err)?;
+        self.checks += 1;
+        self.last_phase = Some(frame.phase);
+        Ok(())
+    }
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeChallengeFrame {
+    sequence: u64,
+    id: String,
+    runtime_digest: String,
+    registration: String,
+    binding_digest: String,
+    original_deadline: DeadlineEnvelope,
+    challenge: String,
+    phase: NativeStopPhase,
+}
+fn verify_native_reply(
+    value: ReplyValue,
+    challenge: &str,
+    binding: &str,
+    phase: NativeStopPhase,
+) -> Result<()> {
+    match value {
+        ReplyValue::NativeStopChecked {
+            challenge: actual,
+            binding_digest,
+            phase: actual_phase,
+        } if actual == challenge && binding_digest == binding && actual_phase == phase => Ok(()),
+        _ => Err("native Stop callback response differs from this challenge".into()),
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum OwnerFrame {
+    NativeStopCheck(NativeChallengeFrame),
     Registered {
         id: String,
         runtime_digest: String,
@@ -512,6 +809,8 @@ fn decode_owner_frame(bytes: &[u8], generic_limit: usize) -> Result<OwnerFrame> 
     let frame = serde_json::from_slice(bytes).map_err(err)?;
     let limit = if matches!(&frame, OwnerFrame::PublicationWriteEngineFrame { .. }) {
         publication_wire::MAX_RELAY_FRAME_BYTES
+    } else if matches!(&frame, OwnerFrame::NativeStopCheck(_)) {
+        generic_limit.min(STATUS_MAX)
     } else {
         generic_limit
     };
@@ -530,8 +829,15 @@ struct RelayReply {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum ReplyValue {
+    NativeStopChecked {
+        challenge: String,
+        binding_digest: String,
+        phase: NativeStopPhase,
+    },
     Written,
-    Read { base64: String },
+    Read {
+        base64: String,
+    },
     Credited,
 }
 
@@ -542,6 +848,57 @@ pub fn acquire_store(
     acquire: StoreAcquire,
     expires: Instant,
     is_cancelled: impl Fn() -> bool,
+    transport: &mut (impl store::Transport + publication::Transport),
+) -> StoreCompletion {
+    if acquire.native_stop.is_some() || acquire.schema == NATIVE_ACQUIRE_SCHEMA {
+        return StoreCompletion::unavailable(
+            &acquire.id,
+            &acquire.runtime_digest,
+            "native Stop registration requires its native-local qualification callback".into(),
+        );
+    }
+    acquire_store_inner(c, &acquire, expires, is_cancelled, None, transport)
+}
+
+/// The retained callback runs in the original native process; no owner challenge
+/// is forwarded to the engine transport. The caller's QualifiedStop owns the
+/// stock/profile/source checks and completed-prefix effect boundary.
+pub fn acquire_native_stop_store(
+    c: &OwnerConfig,
+    registration: NativeStopRegistration<'_, '_>,
+    expires: Instant,
+    is_cancelled: impl Fn() -> bool,
+    mut revalidate: impl FnMut(NativeStopCheck) -> Result<()>,
+    transport: &mut (impl store::Transport + publication::Transport),
+) -> StoreCompletion {
+    let mut checked = |phase| {
+        registration.check()?;
+        revalidate(NativeStopCheck { phase })?;
+        registration.check()
+    };
+    if let Err(reason) = checked(NativeStopPhase::Registration) {
+        return StoreCompletion::unavailable(
+            &registration.acquire.id,
+            &registration.acquire.runtime_digest,
+            reason,
+        );
+    }
+    acquire_store_inner(
+        c,
+        &registration.acquire,
+        expires,
+        is_cancelled,
+        Some(&mut checked),
+        transport,
+    )
+}
+
+fn acquire_store_inner(
+    c: &OwnerConfig,
+    acquire: &StoreAcquire,
+    expires: Instant,
+    is_cancelled: impl Fn() -> bool,
+    mut native_check: Option<&mut dyn FnMut(NativeStopPhase) -> Result<()>>,
     transport: &mut (impl store::Transport + publication::Transport),
 ) -> StoreCompletion {
     let mut completion = StoreCompletion::unavailable(
@@ -563,6 +920,7 @@ pub fn acquire_store(
         let mut pending = Vec::new();
         let mut sequence = 0u64;
         let mut publication_credit = publication_wire::CreditBudget::default();
+        let mut native_state = NativeChallengeState::default();
         loop {
             let bytes = frame_while(
                 &mut stream,
@@ -622,14 +980,72 @@ pub fn acquire_store(
                             && result.registration != completion.registration)
                         || (completion.original_project_bound && !result.original_project_bound)
                         || (result.error.is_none()
-                            && (completion.registration.is_none() || result.acquisition.is_none()))
+                            && (completion.registration.is_none()
+                                || result.acquisition.is_none()
+                                || (acquire.native_stop.is_some()
+                                    && native_state.last_phase
+                                        != Some(NativeStopPhase::BeforePublication))))
                     {
                         return Err("resident store completion correlation mismatch".into());
                     }
                     completion = result;
                     return Ok(());
                 }
+                OwnerFrame::NativeStopCheck(frame) => {
+                    native_state.accept(
+                        acquire,
+                        completion.registration.as_deref(),
+                        completion.original_project_bound,
+                        sequence
+                            .checked_add(1)
+                            .ok_or("native relay sequence overflow")?,
+                        &frame,
+                    )?;
+                    sequence = frame.sequence;
+                    let result = native_check
+                        .as_mut()
+                        .ok_or("native Stop challenge has no local owner")?(
+                        frame.phase
+                    )
+                    .and_then(|()| {
+                        original_deadline.check().map_err(err)?;
+                        check(expires)?;
+                        Ok(ReplyValue::NativeStopChecked {
+                            challenge: frame.challenge,
+                            binding_digest: frame.binding_digest,
+                            phase: frame.phase,
+                        })
+                    });
+                    let failed = result.as_ref().err().cloned();
+                    // Refusal is a fixed bounded wire value; the original native
+                    // frontend retains the complete local qualification reason.
+                    let wire_result =
+                        result.map_err(|_| "original native Stop qualification refused".to_owned());
+                    write_all(
+                        &stream,
+                        &encoded(
+                            &RelayReply {
+                                schema: REPLY_SCHEMA.into(),
+                                sequence,
+                                result: wire_result,
+                            },
+                            STATUS_MAX,
+                        )?,
+                        expires,
+                    )?;
+                    if let Some(reason) = failed {
+                        return Err(reason);
+                    }
+                }
                 command => {
+                    if acquire.native_stop.is_some()
+                        && !matches!(
+                            native_state.last_phase,
+                            Some(NativeStopPhase::BeforeSql | NativeStopPhase::BeforePublication)
+                        )
+                    {
+                        return Err("native engine relay preceded native SQL admission".into());
+                    }
                     let received = match &command {
                         OwnerFrame::WriteEngineFrame { sequence, .. }
                         | OwnerFrame::ReadEngineFrame { sequence }
@@ -755,11 +1171,22 @@ struct RelayTransport {
     expires: Instant,
     deadline: Arc<MonotonicDeadline>,
     limit: usize,
+    native: Option<NativeAdmission>,
 }
 impl RelayTransport {
     fn check_deadline(&self) -> Result<()> {
         self.deadline.check().map_err(err)?;
-        check(self.expires)
+        check(self.expires)?;
+        if let Some(native) = &self.native {
+            native.peer.check_live(|| {
+                if self.cancelled.load(Ordering::Acquire) {
+                    Err("resident native Stop frontend disconnected".into())
+                } else {
+                    Ok(())
+                }
+            })?;
+        }
+        Ok(())
     }
     fn exchange(&mut self, command: OwnerFrame, expected: &'static str) -> Result<ReplyValue> {
         self.check_deadline()?;
@@ -785,6 +1212,7 @@ impl RelayTransport {
                         (ReplyValue::Written, "write")
                             | (ReplyValue::Read { .. }, "read")
                             | (ReplyValue::Credited, "credit")
+                            | (ReplyValue::NativeStopChecked { .. }, "native_stop")
                     ) {
                         return Err(
                             "resident store relay acknowledgement operation mismatch".into()
@@ -805,6 +1233,88 @@ impl RelayTransport {
         }
     }
 }
+impl RelayTransport {
+    fn native_check(&mut self, phase: NativeStopPhase) -> Result<()> {
+        let Some(mut native) = self.native.take() else {
+            return Ok(());
+        };
+        let result = (|| {
+            self.check_deadline()?;
+            if phase == NativeStopPhase::Registration
+                || native.checks >= MAX_NATIVE_CHECKS
+                || !native_phase_follows(native.last_phase, phase)
+            {
+                return Err("resident native Stop check phase or budget mismatch".into());
+            }
+            let cancelled = Arc::clone(&self.cancelled);
+            let check_cancelled = || {
+                if cancelled.load(Ordering::Acquire) {
+                    Err("resident native Stop frontend disconnected".into())
+                } else {
+                    Ok(())
+                }
+            };
+            // Full admitted-image verification occurs after queueing. Later
+            // local checks retain this producer; the original frontend callback
+            // revalidates its genuine stock/source/profile owners per phase.
+            if phase == NativeStopPhase::BeforeReservation {
+                native.peer.revalidate(check_cancelled)?;
+            } else {
+                native.peer.check_live(check_cancelled)?;
+            }
+            native.checks += 1;
+            native.last_phase = Some(phase);
+            self.sequence = self
+                .sequence
+                .checked_add(1)
+                .ok_or("native relay sequence exhausted")?;
+            let challenge = random()?;
+            let reply = self.exchange(
+                OwnerFrame::NativeStopCheck(NativeChallengeFrame {
+                    sequence: self.sequence,
+                    id: native.id.clone(),
+                    runtime_digest: native.runtime_digest.clone(),
+                    registration: native.registration.clone(),
+                    binding_digest: native.binding_digest.clone(),
+                    original_deadline: native.binding.original_deadline,
+                    challenge: challenge.clone(),
+                    phase,
+                }),
+                "native_stop",
+            )?;
+            verify_native_reply(reply, &challenge, &native.binding_digest, phase)?;
+            native.peer.check_live(|| {
+                if self.cancelled.load(Ordering::Acquire) {
+                    Err("resident native Stop frontend disconnected".into())
+                } else {
+                    Ok(())
+                }
+            })?;
+            self.check_deadline()
+        })();
+        self.native = Some(native);
+        result
+    }
+    fn native_project(&self) -> Result<NativeStoreProject> {
+        let native = self
+            .native
+            .as_ref()
+            .ok_or("native store has no authenticated producer")?;
+        if native.last_phase != Some(NativeStopPhase::BeforeSql) {
+            return Err("native store project requires its before-SQL check".into());
+        }
+        self.check_deadline()?;
+        Ok(NativeStoreProject {
+            id: native.id.clone(),
+            runtime_digest: native.runtime_digest.clone(),
+            root: native.binding.canonical_root.clone(),
+            session_id: native.binding.session_id.clone(),
+            payload_sha256: native.binding.payload_sha256.clone(),
+            deadline: Arc::clone(&self.deadline),
+        })
+    }
+}
+
 impl store::Transport for RelayTransport {
     fn write(&mut self, bytes: &[u8], _: Instant) -> Result<()> {
         self.sequence += 1;
@@ -993,6 +1503,10 @@ impl Actor {
             job.refuse(&reason);
             return;
         }
+        if original.native_stop.is_some() != job.transport.native.is_some() {
+            job.refuse("native Stop registration lost authenticated producer custody");
+            return;
+        }
         if original.publication {
             self.acquire_publication_job(job, original);
             return;
@@ -1089,32 +1603,73 @@ impl Actor {
             let root = store::correlation_root(&request, &original.invocation()).map_err(err)?;
             job.transport.check_deadline()?;
             let effect_deadline = Arc::clone(&job.transport.deadline);
-            let effect_check = |_: &'static str| {
+            let effect_cancelled = Arc::clone(&job.transport.cancelled);
+            let native_route = job.transport.native.is_some();
+            // The actor is single-threaded. Interior borrowing keeps one relay
+            // sequence/reader while checked filesystem boundaries can perform a
+            // native-only roundtrip; no socket or callback reaches Node.
+            let relay = std::cell::RefCell::new(&mut job.transport);
+            relay
+                .borrow_mut()
+                .native_check(NativeStopPhase::BeforeReservation)?;
+            if native_route {
+                self.stage("native_stop_postqueue_validated", &original.id);
+            }
+            let effect_check = |at: &'static str| {
                 effect_deadline.check().map_err(err)?;
-                check(expires)
+                check(expires)?;
+                if effect_cancelled.load(Ordering::Acquire) {
+                    return Err("publication original frontend disconnected".into());
+                }
+                let phase = match at {
+                    "owner.writer" => Some(NativeStopPhase::BeforeWriter),
+                    "custody.owner_locked" => Some(NativeStopPhase::WriterLocked),
+                    "owner.writer.retired" => Some(NativeStopPhase::WriterRetired),
+                    _ => None,
+                };
+                if let Some(phase) = phase {
+                    relay.borrow_mut().native_check(phase)?;
+                }
+                relay.borrow().check_deadline()
             };
             let reserved = self.reserve_original(&original, expires, &effect_check)?;
             self.stage("publication_original_reserved", &original.id);
             dispatch = Some(reserved);
-            job.transport.check_deadline()?;
+            relay.borrow().check_deadline()?;
             let writer =
                 self.publication_writer_checked(Path::new(&root), expires, &effect_check)?;
             job.record.lock().unwrap_or_else(|e| e.into_inner()).writer = Some(Arc::clone(&writer));
             self.stage("publication_writer_retained", &original.id);
-            job.transport.check_deadline()?;
-            let cancelled = Arc::clone(&job.transport.cancelled);
-            let deadline = Arc::clone(&job.transport.deadline);
-            let acquired = store::serve(
-                &request,
-                original.invocation(),
-                expires,
-                move || {
-                    cancelled.load(Ordering::Acquire)
-                        || deadline.check().is_err()
-                        || Instant::now() >= expires
-                },
-                &mut job.transport,
-            );
+            relay.borrow().check_deadline()?;
+            let cancelled = Arc::clone(&effect_cancelled);
+            let deadline = Arc::clone(&effect_deadline);
+            relay
+                .borrow_mut()
+                .native_check(NativeStopPhase::BeforeSql)?;
+            let cancelled = move || {
+                cancelled.load(Ordering::Acquire)
+                    || deadline.check().is_err()
+                    || Instant::now() >= expires
+            };
+            let acquired = if native_route {
+                let project = relay.borrow().native_project()?;
+                store::serve_admitted(
+                    &request,
+                    original.invocation(),
+                    &project,
+                    expires,
+                    cancelled,
+                    &mut **relay.borrow_mut(),
+                )
+            } else {
+                store::serve(
+                    &request,
+                    original.invocation(),
+                    expires,
+                    cancelled,
+                    &mut **relay.borrow_mut(),
+                )
+            };
             let exhausted_closed = acquired.as_ref().is_ok_and(|a| {
                 matches!(a.end, sql::End::Exhausted)
                     && a.first_failure.is_none()
@@ -1155,14 +1710,23 @@ impl Actor {
                 .caller_environment
                 .get("CAWS_LOG_DIR")
                 .filter(|v| !v.is_empty())
-                .map(PathBuf::from)
+                .map(|value| {
+                    let path = PathBuf::from(value);
+                    if path.is_absolute() {
+                        path
+                    } else if let Some(binding) = &original.native_stop {
+                        Path::new(&binding.render_cwd).join(path)
+                    } else {
+                        path
+                    }
+                })
                 .unwrap_or_else(|| Path::new(&root).join(vendor).join("logs"));
             let sources = publication::CapturedStopSources::capture(
                 Path::new(&root),
                 sid,
                 &audit_root,
-                Arc::clone(&job.transport.deadline),
-                Arc::clone(&job.transport.cancelled),
+                Arc::clone(&effect_deadline),
+                Arc::clone(&effect_cancelled),
                 expires,
                 &effect_check,
             )?;
@@ -1185,22 +1749,25 @@ impl Actor {
             let result = (|| -> Result<()> {
                 publication.exchange_phase(
                     publication_wire::Kind::Projection,
-                    &mut job.transport,
+                    &mut **relay.borrow_mut(),
                     expires,
                 )?;
                 if !publication.aborted() {
                     publication.exchange_phase(
                         publication_wire::Kind::Render,
-                        &mut job.transport,
+                        &mut **relay.borrow_mut(),
                         expires,
                     )?;
                 }
+                relay
+                    .borrow_mut()
+                    .native_check(NativeStopPhase::BeforePublication)?;
                 if !publication.aborted() {
-                    job.transport.check_deadline()?;
+                    relay.borrow().check_deadline()?;
                     publication.publish_checked(expires, &effect_check)?;
                 }
                 let terminal = publication.terminal_digest()?;
-                job.transport.check_deadline()?;
+                relay.borrow().check_deadline()?;
                 let returned = self
                     .journal
                     .returned_checked(
@@ -1214,10 +1781,10 @@ impl Actor {
                     )
                     .map_err(err)?;
                 self.stage("publication_marker_committed", &original.id);
-                publication.write_result(&mut job.transport, expires)?;
-                let consumed = publication::Transport::read(&mut job.transport, expires)?;
+                publication.write_result(&mut **relay.borrow_mut(), expires)?;
+                let consumed = publication::Transport::read(&mut **relay.borrow_mut(), expires)?;
                 let terminal =
-                    publication.consume_receipt(&consumed, &mut job.transport, expires)?;
+                    publication.consume_receipt(&consumed, &mut **relay.borrow_mut(), expires)?;
                 self.journal
                     .consume_checked(&returned, &terminal, expires, &effect_check)
                     .map_err(err)?;
@@ -1347,7 +1914,10 @@ pub(super) fn receive_first(
         let _ = encoded(&OwnerFrame::Complete { completion }, STATUS_MAX)
             .and_then(|bytes| write_all(stream, &bytes, refusal_expires));
     };
-    if envelope.schema != ACQUIRE_SCHEMA {
+    if !matches!(
+        envelope.schema.as_str(),
+        ACQUIRE_SCHEMA | NATIVE_ACQUIRE_SCHEMA
+    ) {
         refuse(
             stream,
             "resident store unsupported acquisition schema; v2 absolute deadline required".into(),
@@ -1369,7 +1939,7 @@ pub(super) fn receive_first(
         &acquire.runtime_digest,
         "resident store refused".into(),
     );
-    let prepared = (|| -> Result<(Arc<Mutex<StoreRecord>>, Vec<u8>, String, Arc<MonotonicDeadline>, Instant)> {
+    let prepared = (|| -> Result<(Arc<Mutex<StoreRecord>>, Vec<u8>, String, Arc<MonotonicDeadline>, Instant, Option<super::native_peer::NativePeer>)> {
         // Validate before request routing or registry/capacity reservation.
         let (deadline, expires) = restore_deadline(&acquire, received, c.limits.request_ms)?;
         if !surplus.is_empty() {
@@ -1377,6 +1947,13 @@ pub(super) fn receive_first(
         }
         let request = acquire.request()?;
         let root = store::correlation_root(&request, &acquire.invocation()).map_err(err)?;
+        let native_peer = if let Some(binding) = &acquire.native_stop {
+            binding.validate(&acquire, &request)?;
+            Some(super::native_peer::NativePeer::capture(stream, &c.home,
+                &acquire.runtime_digest, Arc::clone(&deadline), || {
+                    deadline.check().map_err(err)?; check(expires)
+                })?)
+        } else { None };
         #[cfg(test)]
         observe_store_registry_contention(registry);
         let record = {
@@ -1387,9 +1964,9 @@ pub(super) fn receive_first(
             check(expires)?;
             locked.reserve(acquire)?
         };
-        Ok((record, request, root, deadline, expires))
+        Ok((record, request, root, deadline, expires, native_peer))
     })();
-    let (record, _request, expected_root, deadline, expires) = match prepared {
+    let (record, _request, expected_root, deadline, expires, native_peer) = match prepared {
         Ok(value) => value,
         Err(error) => {
             refused.error = Some(error);
@@ -1416,6 +1993,38 @@ pub(super) fn receive_first(
             runtime_digest: &original.runtime_digest,
             registration: &registration,
         });
+    let native = match native_peer {
+        Some(peer) => {
+            let binding = original
+                .native_stop
+                .as_ref()
+                .expect("native admission binding")
+                .clone();
+            let digest = binding.digest(&original);
+            let binding_digest = match digest {
+                Ok(value) => value,
+                Err(reason) => {
+                    settle_quarantine(
+                        registry,
+                        &record,
+                        Err(store::ServeError::BeforeAcquisition(reason)),
+                    );
+                    return true;
+                }
+            };
+            Some(NativeAdmission {
+                peer,
+                id: original.id.clone(),
+                runtime_digest: original.runtime_digest.clone(),
+                binding,
+                binding_digest,
+                registration: registration.clone(),
+                checks: 0,
+                last_phase: None,
+            })
+        }
+        None => None,
+    };
     let cancelled = Arc::new(AtomicBool::new(false));
     let (reply_tx, replies) = mpsc::sync_channel(1);
     let mut reader = match stream.try_clone() {
@@ -1440,6 +2049,11 @@ pub(super) fn receive_first(
             })
             .and_then(|bytes| {
                 let reply: RelayReply = serde_json::from_slice(&bytes).map_err(err)?;
+                if matches!(&reply.result, Ok(ReplyValue::NativeStopChecked { .. }))
+                    && bytes.len() > STATUS_MAX
+                {
+                    return Err("native Stop callback reply exceeds bound".into());
+                }
                 if bytes.len() > reply_generic_limit
                     && !matches!(&reply.result, Ok(ReplyValue::Read { .. }))
                 {
@@ -1469,19 +2083,36 @@ pub(super) fn receive_first(
         )?;
         write_all(stream, &bytes, expires)?;
         record.lock().unwrap_or_else(|e| e.into_inner()).phase = "observing_original";
-        let project = crate::invocation_project::observe(
-            &original.caller_cwd,
-            &original.caller_environment,
-            &original.original_payload,
-            expires,
-            &|| cancelled.load(Ordering::Acquire) || deadline.check().is_err(),
-        )
-        .map_err(|error| store::ServeError::ProjectObservation(Box::new(error)))?;
-        if project.canonical_root.to_str() != Some(&expected_root) {
-            return Err(store::ServeError::BeforeAcquisition(
-                "store original project binding mismatch".into(),
-            ));
-        }
+        let canonical_root = if let Some(admitted) = &native {
+            admitted.peer.check_live(|| {
+                if cancelled.load(Ordering::Acquire) {
+                    Err("native original disconnected before routing".into())
+                } else {
+                    deadline.check().map_err(err)
+                }
+            })?;
+            if admitted.binding.canonical_root != expected_root {
+                return Err(store::ServeError::BeforeAcquisition(
+                    "native original project routing mismatch".into(),
+                ));
+            }
+            PathBuf::from(&admitted.binding.canonical_root)
+        } else {
+            let project = crate::invocation_project::observe(
+                &original.caller_cwd,
+                &original.caller_environment,
+                &original.original_payload,
+                expires,
+                &|| cancelled.load(Ordering::Acquire) || deadline.check().is_err(),
+            )
+            .map_err(|error| store::ServeError::ProjectObservation(Box::new(error)))?;
+            if project.canonical_root.to_str() != Some(&expected_root) {
+                return Err(store::ServeError::BeforeAcquisition(
+                    "store original project binding mismatch".into(),
+                ));
+            }
+            project.canonical_root
+        };
         record
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1496,14 +2127,10 @@ pub(super) fn receive_first(
         )
         .map_err(store::ServeError::AfterProjectBinding)?;
         write_all(stream, &bytes, expires).map_err(store::ServeError::AfterProjectBinding)?;
-        let key = wire::project_service_key(
-            project
-                .canonical_root
-                .to_str()
-                .ok_or("store project encoding")?,
-        )
-        .map_err(err)
-        .map_err(store::ServeError::AfterProjectBinding)?;
+        let key =
+            wire::project_service_key(canonical_root.to_str().ok_or("store project encoding")?)
+                .map_err(err)
+                .map_err(store::ServeError::AfterProjectBinding)?;
         let route = routing
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1527,6 +2154,7 @@ pub(super) fn receive_first(
                 expires,
                 deadline: Arc::clone(&deadline),
                 limit: c.limits.max_frame_bytes as usize,
+                native,
             },
             _connection: Arc::clone(permit),
             _project: project_permit,

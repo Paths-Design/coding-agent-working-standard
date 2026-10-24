@@ -167,6 +167,7 @@ fn relay_pair() -> (RelayTransport, UnixStream, SyncSender<RelayReply>) {
             expires: expires(),
             deadline: Arc::new(MonotonicDeadline::capture(Duration::from_secs(5)).unwrap()),
             limit: 2_097_152,
+            native: None,
         },
         caller,
         tx,
@@ -1800,4 +1801,298 @@ fn late_relay_acknowledgement_cannot_succeed_past_original_expiry() {
         .unwrap_err();
     assert_eq!(error, "Original monotonic deadline expired");
     join.join().unwrap();
+}
+
+// Raw native-shaped transport data deliberately cannot construct a production
+// native capability. Positive original/prefix ownership is exercised by the
+// existing real-custodian integration target; installed main integration is a
+// separate required trace, not inferred from these socket controls.
+fn native_transport_fixture(f: &Fixture, id: &str) -> StoreAcquire {
+    let mut acquire = f.acquire(id);
+    acquire.schema = NATIVE_ACQUIRE_SCHEMA.into();
+    acquire.publication = true;
+    acquire.native_stop = Some(NativeStopBinding {
+        canonical_root: f.root.to_str().unwrap().into(),
+        render_cwd: f.root.to_str().unwrap().into(),
+        session_id: "s".into(),
+        payload_sha256: sha(acquire.original_payload.get().as_bytes()),
+        prefix_sha256: "b".repeat(64),
+        prefix_token: "fixture-prefix".into(),
+        original_deadline: acquire.deadline,
+    });
+    acquire
+}
+fn native_challenge(
+    acquire: &StoreAcquire,
+    sequence: u64,
+    phase: NativeStopPhase,
+) -> NativeChallengeFrame {
+    NativeChallengeFrame {
+        sequence,
+        id: acquire.id.clone(),
+        runtime_digest: acquire.runtime_digest.clone(),
+        registration: "c".repeat(64),
+        binding_digest: acquire
+            .native_stop
+            .as_ref()
+            .unwrap()
+            .digest(acquire)
+            .unwrap(),
+        original_deadline: acquire.deadline,
+        challenge: "d".repeat(64),
+        phase,
+    }
+}
+fn native_challenge_over_socket(challenge: NativeChallengeFrame) -> NativeChallengeFrame {
+    let (sender, mut receiver) = UnixStream::pair().unwrap();
+    sender.set_nonblocking(true).unwrap();
+    receiver.set_nonblocking(true).unwrap();
+    write_all(
+        &sender,
+        &encoded(&OwnerFrame::NativeStopCheck(challenge), STATUS_MAX).unwrap(),
+        expires(),
+    )
+    .unwrap();
+    let received = frame(&mut receiver, &mut Vec::new(), STATUS_MAX, expires()).unwrap();
+    match decode_owner_frame(&received, STATUS_MAX).unwrap() {
+        OwnerFrame::NativeStopCheck(value) => value,
+        _ => panic!("native-only challenge became an engine relay command"),
+    }
+}
+fn retain_registration_observation(name: &str, value: serde_json::Value) {
+    if let Some(root) = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT") {
+        let path = PathBuf::from(root).join(format!("native-registration-{name}.json"));
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .unwrap();
+        serde_json::to_writer_pretty(&mut file, &value).unwrap();
+        file.sync_all().unwrap();
+    }
+}
+
+#[test]
+fn native_phase_sequence_accepts_cold_and_retained_writer_without_skipping_checks() {
+    use NativeStopPhase::*;
+    let f = Fixture::new();
+    let acquire = native_transport_fixture(&f, "native-phases");
+    let registration = "c".repeat(64);
+    let mut observations = Vec::new();
+    for locked in [true, false] {
+        let mut phases = vec![BeforeReservation, BeforeWriter];
+        if locked {
+            phases.push(WriterLocked);
+        }
+        phases.extend([WriterRetired, BeforeSql, BeforePublication]);
+        let mut state = NativeChallengeState::default();
+        for (index, phase) in phases.iter().enumerate() {
+            let sequence = index as u64 + 1;
+            let frame = native_challenge_over_socket(native_challenge(&acquire, sequence, *phase));
+            state
+                .accept(&acquire, Some(&registration), true, sequence, &frame)
+                .unwrap();
+        }
+        assert_eq!(state.checks, phases.len());
+        assert_eq!(state.last_phase, Some(BeforePublication));
+        let replay = native_challenge_over_socket(native_challenge(
+            &acquire,
+            phases.len() as u64 + 1,
+            BeforePublication,
+        ));
+        let error = state
+            .accept(
+                &acquire,
+                Some(&registration),
+                true,
+                replay.sequence,
+                &replay,
+            )
+            .unwrap_err();
+        assert_eq!(
+            error,
+            "native Stop challenge correlation, phase or budget mismatch"
+        );
+        assert_eq!(state.checks, phases.len());
+        observations.push(serde_json::json!({"writerLockAcquired":locked,"phases":phases,"acceptedChecks":state.checks,"terminalReplayError":error}));
+    }
+    retain_registration_observation(
+        "phase-sequences",
+        serde_json::json!({"scope":"Real socket frames through client phase validation; no authenticated native owner, SQL or production dispatch", "observations":observations}),
+    );
+}
+#[test]
+fn native_challenge_socket_rejects_foreign_identity_clock_phase_and_replay() {
+    let f = Fixture::new();
+    let acquire = native_transport_fixture(&f, "native-wire");
+    let registration = "c".repeat(64);
+    let mut state = NativeChallengeState::default();
+    let first = native_challenge_over_socket(native_challenge(
+        &acquire,
+        1,
+        NativeStopPhase::BeforeReservation,
+    ));
+    state
+        .accept(&acquire, Some(&registration), true, 1, &first)
+        .unwrap();
+    assert_eq!(state.checks, 1);
+    assert_eq!(state.last_phase, Some(NativeStopPhase::BeforeReservation));
+    assert_eq!(
+        state
+            .accept(&acquire, Some(&registration), true, 2, &first)
+            .unwrap_err(),
+        "native Stop challenge correlation, phase or budget mismatch"
+    );
+    let mut refusals = Vec::new();
+    for defect in [
+        "id",
+        "generation",
+        "registration",
+        "digest",
+        "clock",
+        "sequence",
+        "phase",
+        "nonce",
+    ] {
+        let mut value = native_challenge(&acquire, 1, NativeStopPhase::BeforeReservation);
+        match defect {
+            "id" => value.id = "another-original".into(),
+            "generation" => value.runtime_digest = "f".repeat(64),
+            "registration" => value.registration = "e".repeat(64),
+            "digest" => value.binding_digest = "e".repeat(64),
+            "clock" => value.original_deadline.expires_ns += 1,
+            "sequence" => value.sequence = 2,
+            "phase" => value.phase = NativeStopPhase::BeforeSql,
+            "nonce" => value.challenge = "invalid nonce".into(),
+            _ => unreachable!(),
+        }
+        let received = native_challenge_over_socket(value);
+        let mut state = NativeChallengeState::default();
+        let error = state
+            .accept(&acquire, Some(&registration), true, 1, &received)
+            .unwrap_err();
+        assert_eq!(
+            error, "native Stop challenge correlation, phase or budget mismatch",
+            "{defect}"
+        );
+        assert_eq!(
+            state.checks, 0,
+            "foreign challenge consumed a valid phase: {defect}"
+        );
+        refusals.push(serde_json::json!({"defect":defect,"received":received,"error":error,"acceptedChecks":state.checks}));
+    }
+    retain_registration_observation(
+        "foreign-challenges",
+        serde_json::json!({"scope":"Actual socket framing and correlation validation, not native admission", "acceptedFirst":first,"refusals":refusals}),
+    );
+}
+#[test]
+fn native_wire_requires_authentication_before_registry_and_never_uses_publication_boolean_as_grant()
+{
+    // This incomplete-generation socket control pins admission ordering.
+    // tests/native_peer.rs separately exercises actual native/Node process
+    // identities against a complete synthetic installed generation.
+    let f = Fixture::new();
+    let route = routing(&f);
+    let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
+    let acquire = native_transport_fixture(&f, "raw-native-wire");
+    let before = fixture_file_bytes(&f.root);
+    let bytes = encoded(&acquire, f.config.limits.max_frame_bytes as usize).unwrap();
+    let (mut owner, mut client) = UnixStream::pair().unwrap();
+    owner.set_nonblocking(true).unwrap();
+    client.set_nonblocking(true).unwrap();
+    let config = Arc::clone(&f.config);
+    let routed = Arc::clone(&route);
+    let retained = Arc::clone(&registry);
+    let joined = thread::spawn(move || {
+        let received = frame(
+            &mut owner,
+            &mut Vec::new(),
+            config.limits.max_frame_bytes as usize,
+            expires(),
+        )
+        .unwrap();
+        assert!(receive_first(
+            &mut owner,
+            &received,
+            &[],
+            Instant::now(),
+            &config,
+            &routed,
+            &Arc::new(ConnectionPermit(Arc::new(AtomicUsize::new(1)))),
+            &retained
+        ));
+    });
+    write_all(&client, &bytes, expires()).unwrap();
+    let completion = match command(&mut client) {
+        OwnerFrame::Complete { completion } => completion,
+        _ => panic!("raw same-UID socket peer reached registration before native admission"),
+    };
+    joined.join().unwrap();
+    assert!(completion.error.is_some());
+    assert!(completion.registration.is_none());
+    assert!(!completion.original_project_bound);
+    assert!(completion.acquisition.is_none());
+    assert!(registry.lock().unwrap().is_empty());
+    assert!(route.lock().unwrap().actors.is_empty());
+    assert_eq!(fixture_file_bytes(&f.root), before);
+    let file_hashes: BTreeMap<_, _> = before
+        .iter()
+        .map(|(path, bytes)| (path.to_string_lossy().into_owned(), sha(bytes)))
+        .collect();
+    retain_registration_observation(
+        "unauthenticated",
+        serde_json::json!({"scope":"Real socket and incomplete generation; no assertion about actual SQLite opens", "completion":completion,"registryEmpty":registry.lock().unwrap().is_empty(),"actorCount":route.lock().unwrap().actors.len(),"beforeAndAfterFileHashes":file_hashes}),
+    );
+    // This tests unchanged actual files and absent records/routes, not a claim
+    // that an exclusive lock probe alone detects every SQLite open.
+    let (relay, _socket, _replies) = relay_pair();
+    assert_eq!(
+        relay.native_project().err().unwrap(),
+        "native store has no authenticated producer"
+    );
+}
+
+#[test]
+fn native_reply_binds_exact_challenge_digest_and_phase() {
+    let challenge = "a".repeat(64);
+    let digest = "b".repeat(64);
+    for defect in ["none", "challenge", "digest", "phase", "variant"] {
+        let reply = if defect == "variant" {
+            ReplyValue::Written
+        } else {
+            ReplyValue::NativeStopChecked {
+                challenge: if defect == "challenge" {
+                    "c".repeat(64)
+                } else {
+                    challenge.clone()
+                },
+                binding_digest: if defect == "digest" {
+                    "c".repeat(64)
+                } else {
+                    digest.clone()
+                },
+                phase: if defect == "phase" {
+                    NativeStopPhase::BeforeSql
+                } else {
+                    NativeStopPhase::BeforeReservation
+                },
+            }
+        };
+        let result = verify_native_reply(
+            reply,
+            &challenge,
+            &digest,
+            NativeStopPhase::BeforeReservation,
+        );
+        if defect == "none" {
+            assert_eq!(result, Ok(()));
+        } else {
+            assert_eq!(
+                result.unwrap_err(),
+                "native Stop callback response differs from this challenge",
+                "{defect}"
+            );
+        }
+    }
 }

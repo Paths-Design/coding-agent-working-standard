@@ -9039,6 +9039,43 @@ Additional bounded evidence and unresolved dependencies:
   registration proposal. Neither proposal is integrated or verified by these
   checks. No production activation, full Python retirement or cutover follows.
 
+- E344: The resident store has a distinct native Stop registration entry that
+  borrows the actual original capture and completed prefix. NativePeer retains
+  the same monotonic clock and kernel connection through queueing. Native-only
+  challenges correlate identity, generation, binding digest, registration,
+  deadline, sequence and phase; they never enter the Node relay. The actor
+  revalidates after its earlier cohort before durable original reservation,
+  before writer admission, after lock acquisition/retirement, before SQL and
+  before publication. The admitted SQL entry consumes the captured project
+  instead of running another Git observation; the development route retains its
+  independent observation. Relative audit roots resolve against the native
+  registration's original absolute render cwd. Relative payload cwd remains
+  outside this registration's qualified domain, not full parity. Root applied
+  the external proposal after the worker's model-capacity failure, added
+  retained challenge/phase/refusal artifacts and executed the checks serially.
+  native-stop-registration-check-01 exits0 in6.241s with sqlite-store
+  compilation. native-stop-registration-tests-01 exits0 in67.771s:22 store cases
+  execute and the prepared-image actor-ordering case remains explicitly ignored.
+  Its native-registration-phase-sequences.json records six cold-writer and five
+  retained-writer checks with terminal replay refusal;
+  native-registration-foreign-challenges.json retains all eight rejected wire
+  mutations. native-registration-unauthenticated.json retains the actual
+  refusal, zero actor/registry entries and equal before/after file hashes; this
+  incomplete-generation control does not count actual SQLite opens.
+  native-stop-registration-peer-01 exits0 in44.973s with six actual native/Node
+  peer controls, including original-clock ownership, process death, same-byte
+  executable replacement and expiry. native-stop-registration-original-01 exits0
+  in4.301s and retains actual original Git/prefix outputs plus matching
+  registration acceptance and foreign identity/root refusals. Artifacts reside
+  under the root session's publication-integration directory. The feature-off
+  compilation exits0 in15.648s; it does not execute native Stop. These separate
+  observations do not establish the combined authenticated queue/SQL/publication
+  path. Root owns the actual queued-selection-mutation falsifier with direct
+  SQL-open observation, semantic-profile/current-image qualification,
+  main/engine connection and ordinary reader/CONSUMED/release. No production
+  activation, complete Python retirement, fairness or machine adoption is
+  inferred.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -9145,11 +9182,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                  | Next decisive check                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                     | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                                                                                |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; html_profile owns the qualified-profile proposal, and selection_landing_review owns authenticated original/queue registration; root integrates both | Connect separately qualified SQL/renderer profiles, original capture and completed prefix to the maintained store port; bind the source catalog to native captured inputs, preserve the original deadline and revalidate after queueing before reservation/writer/SQL through ordinary publication/reader/release |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                       | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                             |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                | Next decisive check                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                   | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                                                                                |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; html_profile supplies the frozen qualified-profile proposal; E344 adds authenticated original/queue registration; root owns both production joins | Connect separately qualified SQL/renderer profiles, original capture and completed prefix to the maintained store port; bind the source catalog to native captured inputs, preserve the original deadline and revalidate after queueing before reservation/writer/SQL through ordinary publication/reader/release |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                     | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                             |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The

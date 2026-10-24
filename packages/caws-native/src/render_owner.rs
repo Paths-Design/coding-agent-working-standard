@@ -662,8 +662,12 @@ fn validate_prepared(offer: &Offer, prepared: &OwnerPrepared) -> Result<()> {
 mod store;
 #[cfg(feature = "sqlite-store")]
 pub use store::{
-    StoreAcquire, StoreCompletion, StoreStatus, StoreStatusQuery, acquire_store, store_status,
+    NativeStopCheck, NativeStopPhase, NativeStopRegistration, StoreAcquire, StoreCompletion,
+    StoreStatus, StoreStatusQuery, acquire_native_stop_store, acquire_store, store_status,
 };
+
+#[cfg(feature = "sqlite-store")]
+pub(crate) use store::NativeStoreProject;
 
 mod pending;
 use pending::*;
