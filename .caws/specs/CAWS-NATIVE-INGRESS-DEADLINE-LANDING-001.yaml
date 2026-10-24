@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-INGRESS-DEADLINE-LANDING-001
 title: 'Land bounded native deadline and OpenCode ingress corrections'
 mode: fix
-lifecycle_state: active
-worktree: native-ingress-deadline-landing
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded ingress/deadline source integrated with all3 ACs recorded and read back. Exact native and CLI source pins match executed candidate2448b992; actual payload/files and hostile failures retained. Parent/publication remain active for ordinary producer/prefix/profile/consumer wiring, Python retirement, supported harness delivery, residency/fairness, upgrades and machine cutover. Installed selection unchanged.'
 created_at: '2026-10-24T01:52:01.740Z'
-updated_at: '2026-10-24T01:52:33.673Z'
+updated_at: '2026-10-24T01:56:15.096Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
