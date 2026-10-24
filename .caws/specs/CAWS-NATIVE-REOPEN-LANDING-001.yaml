@@ -49,3 +49,8 @@ evidence:
     evidence_ref: "Five scoped gates pass over the two landing paths; doctor exits0 with0E4W5I. Independent read-only Sol review inspected committed86b5f77f and raw focused/family/actual-reader artifacts. Root grounds reviewer coordinates: Fixture::actor reacquires existing custody/journal, Operation is plain data, acquire_publication_job1692 native route and job.complete join are bypassed by direct test. Therefore authenticated installed-process replay/completion delivery remain explicitly unverified, with no claim of usable old-reader rollback or cutover. All packages/docs at f9fdb006 equal reviewed86b5f77f; E379/E380 retain exact outcomes and scope. Feedback is not acceptance proof; actual source and raw logs support only bounded claims."
     recorded_at: "2026-10-24T20:11:22.505Z"
     commit_sha: f9fdb00684c7c650314f87dd638d4549308da031
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Normal governed merge6e4de9c3 delivers both exact candidate86b5f77f blobs to local main; all packages/docs equal candidate. Root postmerge.json in publication-integration/reopen-source-landing-01 verifies all11 preexisting registry entries and every existing nonmain branch tip unchanged, disposable landing lane removed, foreign canonical untracked archive preserved. Actual selected runtime pointer SHA f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e unchanged, stilllegacy408. No parent or publication lane closure; no remote push, package installation or machine adoption."
+    recorded_at: "2026-10-24T20:12:17.639Z"
+    commit_sha: "6e4de9c3b255a9f33d348a7a3819fd933634e87c"
