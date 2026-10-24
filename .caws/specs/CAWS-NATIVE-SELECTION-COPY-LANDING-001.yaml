@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-SELECTION-COPY-LANDING-001
 title: 'Land verification-only selection discovery without discarded manifest copies'
 mode: refactor
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded verification-only selection discovery landed with all four ACs inspected and dual-read-back. Exact six target blobs match694f6212. Does not close parent failed installed deadline, full parity, or machine cutover.'
 created_at: '2026-10-24T22:49:46.033Z'
-updated_at: '2026-10-24T22:49:47.940Z'
+updated_at: '2026-10-24T23:17:09.115Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
