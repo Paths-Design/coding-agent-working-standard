@@ -54,3 +54,9 @@ evidence:
     recorded_at: "2026-10-24T22:58:37.366Z"
     exit_code: 0
     commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "selection-copy-mutable-02 raw102tests0: returned.member assignment succeeds, next reference differs and original contents remain; legacy custom IO gets canonical callback and live changed-file verification refuses. Source helper fallback and public spread inspected. Artifacts /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-copy-mutable-02. Commit verification only; raw check readback supplies test observation."
+    recorded_at: "2026-10-24T22:58:38.714Z"
+    exit_code: 0
+    commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
