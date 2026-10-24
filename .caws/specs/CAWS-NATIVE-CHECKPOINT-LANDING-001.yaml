@@ -40,3 +40,9 @@ non_functional: {}
 contracts:
   - name: 'verification-checkpoints'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exact composition matches reviewed69e482917 across all packages/docs. checkpoint-bin-02 Cargo0 executes191 tests, actual read arrays65536/65536/17 versus cancelled65536 only; ENOTDIR cancellation precedence, successful-open FD closure and original expiry retained in checkpoint JSON artifacts. checkpoint-read-mutation-01 Cargo101 fails intended extra-read assertion; restoration.json matches all115 source files to passing runs. checkpoint-feature-off-01 Cargo check0. Actual-image callback count146228 to132088 with unchanged5973 hashes162328887 bytes12854 FD23713 path metadata operations. Raw commands exits source/tool pins and artifacts under /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration. No causal latency or installed-runtime claim."
+    recorded_at: "2026-10-24T21:00:23.122Z"
+    commit_sha: "4ff7c0fee8ed65cf5391432db672b2344901ad5e"
