@@ -51,3 +51,8 @@ evidence:
     evidence_ref: "Tracker E375/E376 preserves exact tests, first failed paired attempt and positive artifacts, distinguishes partial coverage33/37 from parent0/8, leaves negative/restart/rollback/load/application/machine obligations with root. Second corrected fixture attempt production-stop-12-paired-02 outer1: positive0, native held-image refusal unsafe_path due group-writable /opt/homebrew/Cellar; no negative launch. Actual stage sealed0500/0555/0400; no permission guard or source checks weakened. Existing selected runtime408c06a7 unchanged. This criterion accepts truthful bounded reporting, not runtime migration. Independent review load-bearing owner, closing-bracket, effect and fallback claims grounded at source and raw artifact pins."
     recorded_at: "2026-10-24T19:30:38.469Z"
     commit_sha: "5d5ac7fe2fdbab9ec8bc7787f61f37b46ab0aadc"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Normal CAWS merge2272353010e9d5b9b6c006f2140fa7ca0518098d lands composition5d5ac7fe. Retained pregrant-source-landing-01/composition.json and postmerge.json independently compare all six blobs and all packages/docs bytes to4deb0537 (native source3cd741fd). Scoped gates5PASS over6files, doctor0, review2commits/allpaths admitted. All11 prior registry entries branch tips and physical directories, parent/publication spec bytes and selected machine pointer SHA f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e remain exact. Only disposable landing branch/directory removed; foreign untracked message archive preserved. Source landing only: paired hostile path, restart, rollback, load and machine cutover remain parent obligations."
+    recorded_at: "2026-10-24T19:32:21.266Z"
+    commit_sha: "2272353010e9d5b9b6c006f2140fa7ca0518098d"
