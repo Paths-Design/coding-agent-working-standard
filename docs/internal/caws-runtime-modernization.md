@@ -9559,6 +9559,18 @@ Additional bounded evidence and unresolved dependencies:
   retirement, harness adoption and rollback remain parent obligations; no AC
   advances.
 
+- E356: The coalesced validation expiry control reaches an inner Ok(None),
+  consumes the unchanged original one-second deadline, and observes the exact
+  Original monotonic deadline expired refusal instead of compatibility success.
+  A fresh control invocation confirms the thread-local guard releases. The
+  sqlite-store binary test exits 0 in 6.846s; the retained
+  coalesced-expired-inner-none.json records innerCalls:2,
+  originalDeadlineUnchanged:true and actualEligibilityConstructed:false.
+  Command, raw logs, unchanged source/input pins and empty observed group
+  residue live under publication-integration/stop-validation-expired-inner-01.
+  This closes the generic scope-expiry question; actual profile/EligibleStop
+  construction and production effect timing require the root-owned exact image.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

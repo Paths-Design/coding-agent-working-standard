@@ -1316,6 +1316,76 @@ mod tests {
     }
 
     #[test]
+    fn coalesced_validation_refuses_expiry_during_inner_unsupported_none() {
+        // This pins closing-scope expiry, not actual EligibleStop construction.
+        fixture(|generation, home, _root| {
+            let clock = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+            let original_envelope = clock.envelope();
+            let receipt = owner(generation, &clock, home).seal(|| Ok(())).unwrap();
+            let inner_calls = Cell::new(0);
+            let positive: Result<Option<()>, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    scope.check_binding(generation, &clock, cancel)?;
+                    inner_calls.set(inner_calls.get() + 1);
+                    Ok(None)
+                },
+            );
+            assert_eq!(
+                positive.unwrap(),
+                None,
+                "fresh unsupported result remains compatibility"
+            );
+            let result: Result<Option<()>, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    scope.check_binding(generation, &clock, cancel)?;
+                    // Consume the unchanged real original deadline only after
+                    // the inner work was reached. No receipt/clock is forged.
+                    std::thread::sleep(
+                        clock
+                            .expires()
+                            .saturating_duration_since(std::time::Instant::now())
+                            + Duration::from_millis(2),
+                    );
+                    assert_eq!(
+                        clock.check().unwrap_err().to_string(),
+                        "Original monotonic deadline expired"
+                    );
+                    inner_calls.set(inner_calls.get() + 1);
+                    Ok(None)
+                },
+            );
+            let error =
+                result.expect_err("expired inner Ok(None) must not escape as compatibility");
+            assert_eq!(error, "Original monotonic deadline expired");
+            assert_eq!(
+                inner_calls.get(),
+                2,
+                "both callbacks actually returned unsupported None"
+            );
+            assert_eq!(clock.envelope(), original_envelope);
+
+            // A failed closing check must release the thread's scope guard.
+            // This is a distinct control invocation, not a renewed old clock.
+            let fresh_clock = deadline();
+            let fresh = owner(generation, &fresh_clock, home)
+                .seal(|| Ok(()))
+                .unwrap();
+            let subsequent: Result<Option<()>, String> =
+                fresh.validate_with(|| Ok(()), |_, _| Ok(None));
+            assert_eq!(subsequent.unwrap(), None);
+            retain(
+                home,
+                "coalesced-expired-inner-none",
+                json!({"error":error,"innerCalls":inner_calls.get(),"innerReturnedNone":true,
+                    "expiredUnsupportedNotReturned":true,"originalDeadlineUnchanged":true,
+                    "guardReleased":true,"syntheticGeneration":true,"actualEligibilityConstructed":false}),
+            );
+        });
+    }
+
+    #[test]
     fn coalesced_validation_refuses_changed_readset_after_inner_unsupported_result() {
         fixture(|generation, home, _root| {
             let policy = home.join("scope-policy.json");
