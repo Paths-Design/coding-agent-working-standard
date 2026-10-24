@@ -60,11 +60,12 @@ interface ProjectRoot {
 }
 
 function resolveProjectRoot(ctx: ProjectRoot): string {
-  const seeds: string[] = [];
-  if (ctx.worktree) seeds.push(ctx.worktree);
-  if (ctx.directory) seeds.push(ctx.directory);
-  if (ctx.project?.path) seeds.push(ctx.project.path);
-  if (process.cwd()) seeds.push(process.cwd());
+  const seeds = [ctx.worktree, ctx.directory, ctx.project?.path].filter(
+    (seed): seed is string => typeof seed === 'string' && seed.length > 0
+  );
+  // Supplied plugin context cannot borrow another project's host cwd when it
+  // has no governance. Ambient cwd is only the context-free compatibility path.
+  if (seeds.length === 0) seeds.push(process.cwd());
   for (const seed of seeds) {
     let dir = path.resolve(seed);
     for (let i = 0; i < 24; i++) {
@@ -418,17 +419,43 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
       }
     },
 
-    'tool.execute.after': async (input: ToolInput, output: { args: Record<string, unknown> }) => {
+    'tool.execute.after': async (
+      input: ToolInput & { args?: unknown },
+      output: {
+        title?: string;
+        output?: string;
+        metadata?: unknown;
+        args?: Record<string, unknown>;
+      }
+    ) => {
       try {
+        // SDK after callbacks carry sessionID and args on input; a preceding
+        // lifecycle/tool callback cannot supply this completed call's identity.
+        const sid = input?.sessionID;
+        if (typeof sid !== 'string' || sid.length === 0 || sid === 'unknown') return;
+        const hasInputArgs = Object.prototype.hasOwnProperty.call(input, 'args');
+        // Retain the older output.args-only shape only when it is unambiguous.
+        // Present-but-invalid SDK args never fall back to a different carrier.
+        const legacyOutputArgs =
+          !hasInputArgs &&
+          output &&
+          Object.prototype.hasOwnProperty.call(output, 'args') &&
+          !['title', 'output', 'metadata'].some((key) =>
+            Object.prototype.hasOwnProperty.call(output, key)
+          );
+        const args = asRecord(
+          hasInputArgs ? input.args : legacyOutputArgs ? output.args : undefined
+        );
+        if (!args || Array.isArray(args)) return;
         const root = projectRoot();
         if (root === UNKNOWN_ROOT) return;
         const toolName = mapToolName(input?.tool || '');
-        const toolInput = normalizeArgs(output?.args);
+        const toolInput = normalizeArgs(args);
         const payload = buildPayload(
           toolName,
           toolInput,
           resolveAgentCwd(ctx, toolName, toolInput),
-          currentSessionId
+          sid
         );
         const res = dispatch(root, 'post_tool_use.sh', payload);
         const decision = readDecision(res.stdout, res.exitCode);

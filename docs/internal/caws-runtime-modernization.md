@@ -8380,6 +8380,33 @@ Additional bounded evidence and unresolved dependencies:
   callback/transport fixtures, not actual OpenCode activation, Stop-veto
   delivery or native SQL publication.
 
+- E317: OpenCode callback parity closes two source-grounded holes left by E316.
+  Supplied project context cannot fall through to another host project's cwd; a
+  context-free instance retains the existing cwd fallback. Tool-after uses its
+  own SDK input sessionID and argument object, preserving normalization and
+  rejecting missing identity or ambiguous carriers. Unambiguous legacy
+  output.args remains supported without borrowing cached identity. The
+  `opencode-corrective-baseline-01` tests-only execution exits1 with5 failures:
+  interleaved SDK after records session-b and empty arguments for session-a,
+  missing identity borrows a prior session, and a decoy output argument wins.
+  `opencode-corrective-repaired-01` exits0 with28 cases, but its first root
+  controls were insufficient: their outside fixtures had HOME/.caws ancestry.
+  The corrected fixtures use /private/tmp and retain every ancestor's marker
+  absence in root-selection-evidence.json. `opencode-root-negative-01` restores
+  unconditional cwd fallback only in the transpiled fixture and exits1 with all3
+  selected controls failing; host Stop records contain both host-session and
+  outside-session. `opencode-corrective-final-01` exits0 with28 cases: host
+  routing records contain only host-session, no outside pre/post calls, and SDK
+  after retains session-a, actual arguments and resolved workdir. Raw invocation
+  records, input payloads, transpiled plugin and source pins are retained under
+  publication-integration/opencode-corrective-final-fixtures; each
+  root-selection record maps its retained ungoverned fixture explicitly.
+  `opencode-corrective-build-01` and `opencode-corrective-fingerprint-01` exit0.
+  Pack9 remains the unreleased candidate, with fingerprint
+  e55fcc4a30f2338ee7700dae03cf2aad4a9caa725016092fff997465ccd7ef51. These
+  recording-dispatcher observations do not establish actual OpenCode activation,
+  native Stop qualification, editor delivery or parent acceptance.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

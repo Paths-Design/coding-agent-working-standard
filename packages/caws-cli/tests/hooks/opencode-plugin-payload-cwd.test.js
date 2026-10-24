@@ -252,6 +252,228 @@ describe('OpenCode lifecycle identity and instance isolation', () => {
   });
 });
 
+describe('OpenCode authoritative project context and completed tool identity', () => {
+  test.each([
+    ['worktree', (outside) => ({ worktree: outside })],
+    ['directory', (outside) => ({ directory: outside })],
+    ['project.path', (outside) => ({ project: { path: outside } })],
+  ])('explicit %s outside governance never falls through the host project', async (name, ctx) => {
+    const host = makeProject(`host-${name}`);
+    // TMPDIR and retained artifacts may live below HOME/.caws, which would
+    // intercept the old ancestor walk before its erroneous host-cwd fallback.
+    const outside = fs.realpathSync(
+      fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'caws-opencode-ungoverned-'))
+    );
+    const ancestry = [];
+    for (let directory = outside; ; directory = path.dirname(directory)) {
+      const marker = path.join(directory, '.caws');
+      let markerAbsent = false;
+      try {
+        fs.lstatSync(marker);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        markerAbsent = true;
+      }
+      ancestry.push({ directory, marker, markerAbsent });
+      if (path.dirname(directory) === directory) break;
+    }
+    const evidencePath = path.join(host, 'root-selection-evidence.json');
+    const evidence = {
+      outside,
+      suppliedContext: ctx(outside),
+      hostCwd: host,
+      ancestry,
+      retainedOutside: Boolean(artifactRoot),
+      phase: 'preconditions',
+    };
+    const previous = process.cwd();
+    try {
+      fs.writeFileSync(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
+      expect(ancestry[0].directory).toBe(outside);
+      expect(ancestry[ancestry.length - 1].directory).toBe(path.parse(outside).root);
+      for (const observation of ancestry) expect(observation.markerAbsent).toBe(true);
+      process.chdir(host);
+      jest.resetModules();
+      const { CawsPlugin } = require(pluginPath);
+      const a = await CawsPlugin({ directory: host, worktree: host });
+      const b = await CawsPlugin(ctx(outside));
+      await a.event({ event: { type: 'session.idle', properties: { sessionID: 'host-session' } } });
+      await b.event({
+        event: { type: 'session.idle', properties: { sessionID: 'outside-session' } },
+      });
+      await b['tool.execute.before']({ tool: 'read', sessionID: 'outside-session' }, { args: {} });
+      await b['tool.execute.after'](
+        { tool: 'read', sessionID: 'outside-session', callID: 'outside-call', args: {} },
+        { title: 'read', output: '', metadata: {} }
+      );
+      // Retain the actual positive and hostile dispatches before an assertion
+      // can fail. Baseline must record outside-session on host's dispatcher.
+      fs.writeFileSync(
+        evidencePath,
+        JSON.stringify(
+          {
+            ...evidence,
+            phase: 'callbacks-settled',
+            observedHostRouting: {
+              stop: dispatchRecords(host, 'stop'),
+              preToolUse: dispatchRecords(host, 'pre_tool_use'),
+              postToolUse: dispatchRecords(host, 'post_tool_use'),
+            },
+          },
+          null,
+          2
+        ) + '\n'
+      );
+      expectLifecycleRecords(host, 'stop', ['host-session']);
+      expect(dispatchRecords(host, 'pre_tool_use')).toEqual([]);
+      expect(dispatchRecords(host, 'post_tool_use')).toEqual([]);
+      expect(fs.existsSync(path.join(outside, '.caws'))).toBe(false);
+    } finally {
+      process.chdir(previous);
+      if (!artifactRoot) fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test.each([{}, { worktree: null, directory: '', project: { path: null } }])(
+    'context-free instance %p retains host cwd fallback',
+    async (ctx) => {
+      const host = makeProject(`fallback-${Object.keys(ctx).length}`);
+      const previous = process.cwd();
+      try {
+        process.chdir(host);
+        const hooks = await loadPlugin(ctx);
+        await hooks.event({
+          event: { type: 'session.idle', properties: { sessionID: 'fallback-session' } },
+        });
+        expectLifecycleRecords(host, 'stop', ['fallback-session']);
+      } finally {
+        process.chdir(previous);
+      }
+    }
+  );
+
+  test('SDK after uses its own session args and cwd across an intervening lifecycle event', async () => {
+    const project = makeProject('sdk-after-interleaving');
+    const sessionDir = path.join(project, 'packages/app');
+    const hooks = await loadPlugin({ directory: sessionDir, worktree: project });
+    await hooks['tool.execute.before'](
+      { tool: 'bash', sessionID: 'session-a', callID: 'call-a' },
+      { args: { command: 'before-command' } }
+    );
+    await hooks.event({
+      event: { type: 'session.created', properties: { info: { id: 'session-b' } } },
+    });
+    await hooks['tool.execute.after'](
+      {
+        tool: 'bash',
+        sessionID: 'session-a',
+        callID: 'call-a',
+        args: {
+          command: 'actual-after-command',
+          workdir: '../after-dir',
+          filePath: 'actual.txt',
+          oldString: 'old',
+          newString: 'new',
+        },
+      },
+      { title: 'Bash result', output: 'actual result', metadata: {} }
+    );
+    expect(dispatchRecords(project, 'post_tool_use')).toEqual([
+      {
+        script: path.join(project, '.caws/hooks/dispatch/post_tool_use.sh'),
+        cwd: project,
+        projectDir: project,
+        surface: 'opencode',
+        argv: [],
+        payload: {
+          tool_name: 'Bash',
+          session_id: 'session-a',
+          tool_use_id: '',
+          tool_input: {
+            command: 'actual-after-command',
+            workdir: '../after-dir',
+            file_path: 'actual.txt',
+            old_string: 'old',
+            new_string: 'new',
+          },
+          cwd: path.resolve(sessionDir, '../after-dir'),
+        },
+      },
+    ]);
+    expectLifecycleRecords(project, 'session_start', ['session-b']);
+  });
+
+  test('after with missing or invalid own sessionID never borrows a prior session', async () => {
+    const project = makeProject('after-missing-identity');
+    const hooks = await loadPlugin({ directory: project, worktree: project });
+    await hooks['tool.execute.before']({ tool: 'read', sessionID: 'prior-session' }, { args: {} });
+    for (const sessionID of [undefined, null, '', 'unknown', 7]) {
+      await hooks['tool.execute.after'](
+        { tool: 'read', sessionID, callID: 'missing-id', args: { filePath: 'completed.txt' } },
+        { title: 'read', output: '', metadata: {} }
+      );
+      expect(dispatchRecords(project, 'post_tool_use')).toEqual([]);
+    }
+    expect(
+      dispatchRecords(project, 'pre_tool_use').map((record) => record.payload.session_id)
+    ).toEqual(['prior-session']);
+  });
+
+  test('unambiguous legacy output.args retains own identity and normalized args', async () => {
+    const project = makeProject('legacy-after-args');
+    const hooks = await loadPlugin({ directory: project, worktree: project });
+    await hooks['tool.execute.after'](
+      { tool: 'write', sessionID: 'legacy-session' },
+      { args: { filePath: 'legacy.txt', content: 'exact content' } }
+    );
+    expect(recordedPayload(project, 'post_tool_use')).toEqual({
+      tool_name: 'Write',
+      session_id: 'legacy-session',
+      tool_use_id: '',
+      cwd: project,
+      tool_input: { file_path: 'legacy.txt', content: 'exact content' },
+    });
+  });
+
+  test('present SDK args win over an unrelated legacy-shaped output carrier', async () => {
+    const project = makeProject('sdk-after-decoy-output');
+    const hooks = await loadPlugin({ directory: project, worktree: project });
+    await hooks['tool.execute.after'](
+      { tool: 'read', sessionID: 'actual-session', args: { filePath: 'actual.txt' } },
+      { title: 'read', output: '', metadata: {}, args: { filePath: 'decoy.txt' } }
+    );
+    expect(recordedPayload(project, 'post_tool_use')).toEqual({
+      tool_name: 'Read',
+      session_id: 'actual-session',
+      tool_use_id: '',
+      cwd: project,
+      tool_input: { file_path: 'actual.txt' },
+    });
+  });
+
+  test('invalid SDK args and mixed missing-input carriers cannot fall back to output.args', async () => {
+    const project = makeProject('ambiguous-after-args');
+    const hooks = await loadPlugin({ directory: project, worktree: project });
+    for (const args of [undefined, null, [], 7, 'not an argument object']) {
+      await hooks['tool.execute.after'](
+        { tool: 'read', sessionID: 'actual-session', args },
+        { args: { filePath: 'decoy.txt' } }
+      );
+      expect(dispatchRecords(project, 'post_tool_use')).toEqual([]);
+    }
+    await hooks['tool.execute.after'](
+      { tool: 'read', sessionID: 'actual-session' },
+      {
+        title: 'SDK output without SDK args',
+        output: '',
+        metadata: {},
+        args: { filePath: 'decoy.txt' },
+      }
+    );
+    expect(dispatchRecords(project, 'post_tool_use')).toEqual([]);
+  });
+});
+
 describe('opencode plugin payload cwd', () => {
   test('a Bash tool call reaches the pre dispatcher with cwd set to the session directory, not the git root', async () => {
     const project = makeProject('pre-dir');
@@ -272,8 +494,13 @@ describe('opencode plugin payload cwd', () => {
     const sessionDir = path.join(project, 'packages', 'app');
     const hooks = await loadPlugin({ directory: sessionDir, worktree: project });
     await hooks['tool.execute.after'](
-      { tool: 'bash', sessionID: 'ses_1' },
-      { args: { command: 'echo x > a.txt' } }
+      {
+        tool: 'bash',
+        sessionID: 'ses_1',
+        callID: 'post-call',
+        args: { command: 'echo x > a.txt' },
+      },
+      { title: 'Bash', output: '', metadata: {} }
     );
     expect(recordedPayload(project, 'post_tool_use').cwd).toBe(sessionDir);
   });
