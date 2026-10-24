@@ -9640,11 +9640,12 @@ Additional bounded evidence and unresolved dependencies:
   selection verification, closing identities, member hashing and
   inventory/modes. Fixed-size counters retain completed and failed phase calls,
   elapsed time, actual path/FD metadata attempts, hash attempts and bytes
-  supplied to SHA256. Initial generation loading and ordinary member lookups
-  remain excluded. Phase times are inclusive; member hashing includes
-  confinement and authenticated reads, so it is not a measurement of compression
-  alone. No authority check, cancellation checkpoint, deadline, hash or
-  inventory requirement is removed.
+  supplied to SHA256. Initial generation loading, ordinary member lookups and
+  resident-owner NativePeer scans remain excluded: these are frontend receipt
+  totals. Phase times are inclusive; member hashing includes confinement and
+  authenticated reads, so it is not a measurement of compression alone. No
+  authority check, cancellation checkpoint, deadline, hash or inventory
+  requirement is removed.
 
   Supervised verification-phase-native-01 executes all31 native_generation
   tests, exit0 in11.321s. Actual success artifact records two passes,2566 hashed
@@ -9692,8 +9693,9 @@ Additional bounded evidence and unresolved dependencies:
   fixture's live-process hold, not the durable Unknown recovery obligation or
   production failure. A fresh isolated scenario may exercise the changed
   candidate; this retained operation must not be replayed. Root retains the
-  missing cooperative quiescence and proof-bearing Unknown settlement contracts
-  through cutover acceptance.
+  missing cooperative quiescence and applicable unknown-write recovery evidence
+  through cutover acceptance. E361 clarifies that durable fenced Unknown does
+  not require an invented terminal or automatic settlement.
 
 - E361: Fresh07 executes clean57ad2b70 with diagnostics820b8c8f and consolidated
   predispatchb2128e50. Frozen manifest074e8aba and1222-source pins3bbb52f6
@@ -9857,11 +9859,12 @@ mutation/reclamation and residency work. E358 consolidates adjacent predispatch
 checks; its production effect is unverified. The next coherent source landing
 must carry the measured production-path repair and its hostile controls.
 Build/profile success alone cannot release it as a usable runtime replacement.
-E359 supplies tested phase instrumentation without a production timing claim.
-Resolve the retained scenario's process hold while preserving Unknown, then
-measure the exact combined image. Durable Unknown recovery remains an
-independent acceptance obligation even if controlled process containment
-succeeds.
+E359 supplies tested frontend phase instrumentation. E360/E361 contain both
+retained fixture processes while preserving Unknown. Fresh07 measures repeated
+member verification as the largest observed frontend phase and fails the
+original deadline. Root owns that cost repair and conservative idle retirement
+of resource-free durable Unknown. Preserve fenced uncertainty; automatic
+settlement of every Unknown is not a requirement.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
