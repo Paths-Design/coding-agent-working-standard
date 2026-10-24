@@ -8640,6 +8640,39 @@ Additional bounded evidence and unresolved dependencies:
   Stop publication/reader/release connection before profile, residency or
   machine acceptance. Parent evidence remains unchanged.
 
+- E328: Original project discovery uses the existing native custodian with
+  inherited private configuration, exact original payload/deadline binding and
+  two bounded Git operations. RemoteFailure retains the custodian Child and
+  control; retry only settles cleanup, and Drop never signals the custodian.
+  original-project-custodian-runtime-03 exits0 with six scenarios and103 stable
+  source pins. Actual native custodians execute explicitly identified fixture
+  Git; original-project-success.json retains both query cwds, filtered
+  environment, raw output, exit0, both EOFs and reap. The withheld-pipe artifact
+  retains pending stdoutEof=false/reaped=false, then terminal Cleanup failure
+  with both EOFs/reap after writer release; no second query or capture success
+  follows. Drop retains the same custodian birth until that release. Frontend
+  TERM/KILL records retain actual frontend/custodian/Git/descendant ancestry and
+  groups, followed by absence of all three survivor instances. Cancellation,
+  output-limit, malformed output and changed executable controls retain their
+  structured refusals and terminal cleanup. This does not prove physical kernel
+  stall recovery, atomic executable pinning or trusted wrapper descendants.
+  Initial compile101 exposed a Reply/ResultFrame writer mismatch; runtime01
+  exposed quadratic receive scanning exhausting the bounded writer. The repair
+  preserves separate frame limits and scans only new bytes without extending the
+  writer deadline. Pending-to-success and too-small reply-bound mutants each
+  exit101 at behavioral assertions, with restoration retained. Six private wire
+  tests,15 existing project tests,10 existing context-Git tests and the
+  sqlite-store compile check pass; the first context regression's missing Node
+  setting remains recorded. The large-reply unit03 attempt also records a test
+  receiver timeout started before serialization; the receiver instead ends at
+  explicit writer shutdown under the outer supervisor, retaining the production
+  writer's unchanged bounded progress contract. The old cleanup placeholder is
+  omitted from wire diagnostic prose because correlated receipt rows own actual
+  cleanup facts. Root owns joining this capture to prefix and authenticated
+  registration before Node, then the ordinary publication/reader/release path.
+  No production Stop activation, parent acceptance, Python retirement or machine
+  adoption is earned.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
