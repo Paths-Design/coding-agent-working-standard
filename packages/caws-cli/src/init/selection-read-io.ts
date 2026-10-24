@@ -1,5 +1,6 @@
 /** Selection read boundary; observations confer no write or publication authority. */
 import * as fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import { types } from 'node:util';
 
 export interface SelectionFileInfo {
@@ -12,6 +13,13 @@ export interface SelectionFileInfo {
   readonly mtimeMs: number;
   readonly ctimeMs: number;
 }
+/** Identity consumed by path confinement; no directory inventory metadata. */
+export interface SelectionPathIdentity {
+  readonly kind: SelectionFileInfo['kind'];
+  readonly dev: string;
+  readonly ino: string;
+  readonly mode: number;
+}
 export interface SelectionRuntimeFile {
   readonly bytes: Buffer;
   readonly stat: SelectionFileInfo;
@@ -23,13 +31,15 @@ export type SelectionRuntimeVerifier = (
 ) => Record<string, string>;
 export interface SelectionReadIo {
   lstat(file: string): SelectionFileInfo;
+  pathIdentity?(file: string): SelectionPathIdentity;
   stat(file: string): SelectionFileInfo;
   exists(file: string): boolean;
   readFile(file: string): Buffer;
   readDirectory(file: string): readonly string[];
   requireExecutable(file: string): void;
   readRuntimeFile(file: string, singleLink?: boolean): SelectionRuntimeFile;
-  /** Optional digest memo tied to the same immutable runtime-file observation. */
+  /** Optional compact digest observation. Its coherence with byte reads is owned
+   * by the native capture/admission boundary, not this data interface. */
   runtimeFileDigest?(file: string): string;
   verifyRuntime?(
     home: string,
@@ -38,17 +48,34 @@ export interface SelectionReadIo {
   ): Record<string, string>;
 }
 export type SelectionReadOperation = Readonly<{
-  kind: 'lstat' | 'stat' | 'exists' | 'read' | 'list' | 'executable' | 'runtime-file';
+  kind:
+    | 'lstat'
+    | 'path-identity'
+    | 'stat'
+    | 'exists'
+    | 'read'
+    | 'list'
+    | 'executable'
+    | 'runtime-file'
+    | 'runtime-digest'
+    | 'runtime-generation';
   path: string;
   singleLink?: boolean;
 }>;
 export type SelectionReadResult =
   | Readonly<{ kind: 'info'; value: SelectionFileInfo }>
+  | Readonly<{ kind: 'path-identity'; value: SelectionPathIdentity }>
   | Readonly<{ kind: 'exists'; value: boolean }>
   | Readonly<{ kind: 'bytes'; base64: string }>
   | Readonly<{ kind: 'listing'; entries: readonly string[] }>
   | Readonly<{ kind: 'executable' }>
   | Readonly<{ kind: 'runtime-file'; base64: string; stat: SelectionFileInfo }>
+  | Readonly<{ kind: 'runtime-digest'; sha256: string; stat: SelectionFileInfo }>
+  | Readonly<{
+      kind: 'runtime-generation';
+      digest: string;
+      manifest: Readonly<Record<string, string>>;
+    }>
   | Readonly<{ kind: 'error'; name: string; message: string; code?: string }>;
 
 function fileInfo(stat: fs.Stats): SelectionFileInfo {
@@ -68,6 +95,9 @@ function fileInfo(stat: fs.Stats): SelectionFileInfo {
     mtimeMs: stat.mtimeMs,
     ctimeMs: stat.ctimeMs,
   });
+}
+function projectPathIdentity(info: SelectionPathIdentity): SelectionPathIdentity {
+  return Object.freeze({ kind: info.kind, dev: info.dev, ino: info.ino, mode: info.mode });
 }
 function same(a: SelectionFileInfo, b: SelectionFileInfo, singleLink: boolean): boolean {
   return (
@@ -108,6 +138,7 @@ function captureRuntimeFile(file: string, singleLink = false): SelectionRuntimeF
 }
 export const liveSelectionReadIo: SelectionReadIo = Object.freeze({
   lstat: (file: string) => fileInfo(fs.lstatSync(file)),
+  pathIdentity: (file: string) => projectPathIdentity(fileInfo(fs.lstatSync(file))),
   stat: (file: string) => fileInfo(fs.statSync(file)),
   exists: (file: string) => fs.existsSync(file),
   readFile: (file: string) => fs.readFileSync(file),
@@ -134,6 +165,13 @@ export function captureSelectionRead(
 ): SelectionReadResult {
   try {
     switch (operation.kind) {
+      case 'path-identity':
+        return {
+          kind: 'path-identity',
+          value: io.pathIdentity
+            ? io.pathIdentity(operation.path)
+            : projectPathIdentity(io.lstat(operation.path)),
+        };
       case 'lstat':
         return { kind: 'info', value: io.lstat(operation.path) };
       case 'stat':
@@ -147,6 +185,20 @@ export function captureSelectionRead(
       case 'executable':
         io.requireExecutable(operation.path);
         return { kind: 'executable' };
+      case 'runtime-generation':
+        // This summary can be produced only by the original native generation
+        // owner. Tooling retains its ordinary complete filesystem verifier.
+        throw new Error('Runtime generation summary requires the original native owner');
+      case 'runtime-digest': {
+        // Tooling captures guarded bytes synchronously. Production native
+        // capture supplies its independently admitted compact observation.
+        const captured = io.readRuntimeFile(operation.path, operation.singleLink);
+        return {
+          kind: 'runtime-digest',
+          sha256: createHash('sha256').update(captured.bytes).digest('hex'),
+          stat: captured.stat,
+        };
+      }
       case 'runtime-file': {
         const captured = io.readRuntimeFile(operation.path, operation.singleLink);
         return {

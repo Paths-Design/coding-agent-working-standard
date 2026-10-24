@@ -1,0 +1,2005 @@
+//! Original-invocation selection reads owned by native code.
+//!
+//! Requests and serialized replies are correlation data, never authority. The
+//! owner retains the actual positive and negative dependencies, exact native
+//! operation-specific metadata, and original deadline. A sealed readset is necessary input to the
+//! selection qualifier; it does not establish that the resolver requested every
+//! mandatory input, chose the right profile, or may publish anything.
+use crate::native_generation::{GenerationReceipt, RuntimeMemberDigest};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use caws_native::monotonic_deadline::MonotonicDeadline;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    fs::{self, File, Metadata, OpenOptions},
+    io::{self, Read},
+    os::unix::{
+        ffi::OsStrExt,
+        fs::{MetadataExt, OpenOptionsExt},
+    },
+    path::{Component, Path, PathBuf},
+};
+
+const CHUNK: usize = 64 * 1024;
+const JS_MAX: u64 = 9_007_199_254_740_991;
+
+/// Native-authored resource bounds, not values accepted from an engine frame.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Limits {
+    pub maximum_observations: usize,
+    pub maximum_bytes: usize,
+    pub maximum_path_bytes: usize,
+    pub maximum_file_bytes: usize,
+    pub maximum_directory_entries: usize,
+}
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            maximum_observations: 4096,
+            maximum_bytes: 64 * 1024 * 1024,
+            maximum_path_bytes: 16 * 1024,
+            maximum_file_bytes: 32 * 1024 * 1024,
+            maximum_directory_entries: 16_384,
+        }
+    }
+}
+impl Limits {
+    fn validate(self) -> Result<Self, String> {
+        if [
+            self.maximum_observations,
+            self.maximum_bytes,
+            self.maximum_path_bytes,
+            self.maximum_file_bytes,
+            self.maximum_directory_entries,
+        ]
+        .into_iter()
+        .any(|n| n == 0 || n as u128 > JS_MAX as u128)
+        {
+            return Err("Positive safe-integer native selection limits required".into());
+        }
+        Ok(self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum OperationKind {
+    PathIdentity,
+    Lstat,
+    Stat,
+    Exists,
+    Read,
+    List,
+    Executable,
+    RuntimeFile,
+    RuntimeDigest,
+    RuntimeGeneration,
+}
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct Operation {
+    pub kind: OperationKind,
+    pub path: String,
+    #[serde(
+        default,
+        deserialize_with = "present_single_link",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub single_link: Option<bool>,
+}
+// A present null is not absence. This preserves the exact operation schema and
+// lets runtime-generation reject every present singleLink field, including false.
+fn present_single_link<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<bool>, D::Error> {
+    bool::deserialize(deserializer).map(Some)
+}
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SelectionObservationRequest {
+    pub snapshot_id: String,
+    pub sequence: usize,
+    pub operation: Operation,
+}
+
+/// Nanoseconds, inode, ownership and link count remain native evidence. The
+/// millisecond JS projection in the reply is never used to revalidate identity.
+#[derive(Debug, PartialEq, Eq)]
+struct Stamp {
+    dev: u64,
+    ino: u64,
+    mode: u32,
+    uid: u32,
+    gid: u32,
+    size: u64,
+    nlink: u64,
+    mtime: i64,
+    mtime_nsec: i64,
+    ctime: i64,
+    ctime_nsec: i64,
+}
+impl Stamp {
+    fn of(m: &Metadata) -> Self {
+        Self {
+            dev: m.dev(),
+            ino: m.ino(),
+            mode: m.mode(),
+            uid: m.uid(),
+            gid: m.gid(),
+            size: m.size(),
+            nlink: m.nlink(),
+            mtime: m.mtime(),
+            mtime_nsec: m.mtime_nsec(),
+            ctime: m.ctime(),
+            ctime_nsec: m.ctime_nsec(),
+        }
+    }
+}
+/// Explicit path-confinement evidence. Directory inventory, contents and link
+/// count belong to separate strict observations; uid/gid remain native-only.
+#[derive(Debug, PartialEq, Eq)]
+struct PathIdentity {
+    dev: u64,
+    ino: u64,
+    mode: u32,
+    uid: u32,
+    gid: u32,
+}
+impl PathIdentity {
+    fn of(m: &Metadata) -> Self {
+        Self {
+            dev: m.dev(),
+            ino: m.ino(),
+            mode: m.mode(),
+            uid: m.uid(),
+            gid: m.gid(),
+        }
+    }
+    fn projected(&self) -> Value {
+        json!({"kind":file_kind(self.mode),"dev":self.dev.to_string(),
+            "ino":self.ino.to_string(),"mode":self.mode})
+    }
+}
+/// An ancestor's directory inventory is not a dependency of every child read.
+/// A list operation retains that inventory separately. Symlink identity/target
+/// are retained so traversal cannot silently switch while the leaf stays equal.
+#[derive(Debug, PartialEq, Eq)]
+enum Anchor {
+    Found {
+        path: PathBuf,
+        dev: u64,
+        ino: u64,
+        mode: u32,
+        uid: u32,
+        gid: u32,
+        link: Option<PathBuf>,
+    },
+    Failed {
+        path: PathBuf,
+        errno: i32,
+    },
+}
+#[derive(Debug, PartialEq, Eq)]
+enum Leaf {
+    Identity(PathIdentity),
+    Present(Stamp),
+    Absent,
+    Failed(i32),
+}
+#[derive(Debug, PartialEq, Eq)]
+struct Evidence {
+    anchors: Vec<Anchor>,
+    leaf: Leaf,
+    followed: Option<Stamp>,
+    result_sha256: String,
+}
+struct Record {
+    operation: Operation,
+    observation: Value,
+    evidence: Evidence,
+}
+
+/// Neither Clone nor Deserialize; construction performs actual native reads.
+pub(crate) struct SelectionObservationOwner<'a> {
+    generation: &'a GenerationReceipt,
+    deadline: &'a MonotonicDeadline,
+    roots: Vec<PathBuf>,
+    real_roots: Vec<PathBuf>,
+    limits: Limits,
+    snapshot_id: String,
+    records: Vec<Record>,
+    operations: BTreeSet<(OperationKind, String, bool)>,
+    bytes: usize,
+    sealed: bool,
+}
+/// An opaque owner keeps the exact readset alive across the queue, borrowing
+/// only the retained original generation and deadline. This is not serializable
+/// and has no constructor accepting JSON receipts.
+pub(crate) struct SelectionObservationReceipt<'native> {
+    owner: SelectionObservationOwner<'native>,
+}
+/// The transport may send these bounded chunks in its own correlated frames.
+/// A reply contains the exact existing TS inner observation JSON, including the
+/// explicit runtime-digest extension. Chunk delivery never renews the budget.
+pub(crate) struct ObservationReply<'a> {
+    bytes: Vec<u8>,
+    cursor: usize,
+    deadline: &'a MonotonicDeadline,
+}
+impl ObservationReply<'_> {
+    pub(crate) fn next_chunk(
+        &mut self,
+        maximum: usize,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Option<&[u8]>, String> {
+        checkpoint(self.deadline, &mut cancel)?;
+        if maximum == 0 || maximum > CHUNK {
+            return Err("Selection reply chunk bound must be 1..65536".into());
+        }
+        if self.cursor == self.bytes.len() {
+            return Ok(None);
+        }
+        let end = self.bytes.len().min(self.cursor.saturating_add(maximum));
+        let start = self.cursor;
+        self.cursor = end;
+        checkpoint(self.deadline, &mut cancel)?;
+        Ok(Some(&self.bytes[start..end]))
+    }
+    pub(crate) fn sha256(
+        &self,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<String, String> {
+        let mut digest = Sha256::new();
+        for chunk in self.bytes.chunks(CHUNK) {
+            checkpoint(self.deadline, &mut cancel)?;
+            digest.update(chunk);
+        }
+        checkpoint(self.deadline, &mut cancel)?;
+        Ok(hex(&digest.finalize()))
+    }
+    pub(crate) fn byte_len(&self) -> usize {
+        self.bytes.len()
+    }
+}
+
+impl<'a> SelectionObservationOwner<'a> {
+    /// roots must come from retained original native inputs (machine home,
+    /// original project, original HOME/XDG selection roots), never engine JSON.
+    /// Metadata probes on their ancestors are allowed for TS path confinement.
+    pub(crate) fn new(
+        generation: &'a GenerationReceipt,
+        deadline: &'a MonotonicDeadline,
+        roots: Vec<PathBuf>,
+        limits: Limits,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Self, String> {
+        let limits = limits.validate()?;
+        checkpoint(deadline, &mut cancel)?;
+        if roots.is_empty() {
+            return Err("Native selection roots required".into());
+        }
+        let mut real_roots = Vec::new();
+        for root in &roots {
+            validate_path(root, limits.maximum_path_bytes)?;
+            checkpoint(deadline, &mut cancel)?;
+            real_roots.push(resolve_root(root, deadline, &mut cancel)?);
+            checkpoint(deadline, &mut cancel)?;
+        }
+        generation.revalidate(deadline.expires(), || checkpoint(deadline, &mut cancel))?;
+        let mut nonce = [0u8; 16];
+        File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut nonce))
+            .map_err(|e| format!("Selection snapshot nonce: {e}"))?;
+        checkpoint(deadline, &mut cancel)?;
+        Ok(Self {
+            generation,
+            deadline,
+            roots,
+            real_roots,
+            limits,
+            snapshot_id: format!("selection-{}", hex(&nonce)),
+            records: Vec::new(),
+            operations: BTreeSet::new(),
+            bytes: 0,
+            sealed: false,
+        })
+    }
+    pub(crate) fn snapshot_id(&self) -> &str {
+        &self.snapshot_id
+    }
+    pub(crate) fn capture_json(
+        &mut self,
+        request: &[u8],
+        cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<ObservationReply<'a>, String> {
+        // Correlation overhead is fixed; reject an oversized frame before parse.
+        if request.len() > self.limits.maximum_path_bytes.saturating_add(1024) {
+            return Err("Selection observation request exceeds bound".into());
+        }
+        let request: SelectionObservationRequest = serde_json::from_slice(request)
+            .map_err(|e| format!("Invalid selection observation request: {e}"))?;
+        self.capture(request, cancel)
+    }
+    pub(crate) fn capture(
+        &mut self,
+        request: SelectionObservationRequest,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<ObservationReply<'a>, String> {
+        checkpoint(self.deadline, &mut cancel)?;
+        if self.sealed {
+            return Err("Selection observations are sealed".into());
+        }
+        if request.snapshot_id != self.snapshot_id || request.sequence != self.records.len() + 1 {
+            return Err("Selection observation correlation mismatch".into());
+        }
+        self.validate_operation(&request.operation)?;
+        let key = (
+            request.operation.kind,
+            request.operation.path.clone(),
+            request.operation.single_link.unwrap_or(false),
+        );
+        if self.operations.contains(&key) {
+            return Err("Duplicate selection operation".into());
+        }
+        if self.records.len() >= self.limits.maximum_observations {
+            return Err("Selection observation count exceeds bound".into());
+        }
+        let (result, evidence) = self.observe(&request.operation, &mut cancel)?;
+        let observation = json!({"snapshotId": self.snapshot_id,
+            "sequence":request.sequence,
+            "observationId":format!("{}-{}",self.snapshot_id,request.sequence),
+            "operation":request.operation,"result":result});
+        let bytes = serde_json::to_vec(&observation).map_err(|e| e.to_string())?;
+        let total = self
+            .bytes
+            .checked_add(bytes.len())
+            .ok_or("Selection bytes overflow")?;
+        if total > self.limits.maximum_bytes {
+            return Err("Selection observation bytes exceed bound".into());
+        }
+        checkpoint(self.deadline, &mut cancel)?;
+        self.records.push(Record {
+            operation: request.operation,
+            observation,
+            evidence,
+        });
+        self.operations.insert(key);
+        self.bytes = total;
+        Ok(ObservationReply {
+            bytes,
+            cursor: 0,
+            deadline: self.deadline,
+        })
+    }
+    pub(crate) fn seal(
+        mut self,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<SelectionObservationReceipt<'a>, String> {
+        if self.sealed {
+            return Err("Selection observations already sealed".into());
+        }
+        // A failed seal cannot be continued by requesting an alternate readset.
+        self.sealed = true;
+        self.revalidate(&mut cancel)?;
+        Ok(SelectionObservationReceipt { owner: self })
+    }
+    fn revalidate(&self, cancel: &mut impl FnMut() -> Result<(), String>) -> Result<(), String> {
+        checkpoint(self.deadline, cancel)?;
+        self.generation.revalidate(self.deadline.expires(), || {
+            checkpoint(self.deadline, cancel)
+        })?;
+        for record in &self.records {
+            let (_, actual) = self.observe(&record.operation, cancel)?;
+            if actual != record.evidence {
+                return Err(format!(
+                    "Selection dependency changed: {} {}",
+                    kind_name(record.operation.kind),
+                    record.operation.path
+                ));
+            }
+        }
+        // Generation hashes/inventory bracket re-reading the local readset.
+        self.generation.revalidate(self.deadline.expires(), || {
+            checkpoint(self.deadline, cancel)
+        })?;
+        checkpoint(self.deadline, cancel)
+    }
+    fn validate_operation(&self, operation: &Operation) -> Result<(), String> {
+        let path = Path::new(&operation.path);
+        validate_path(path, self.limits.maximum_path_bytes)?;
+        if operation.single_link.is_some()
+            && !matches!(
+                operation.kind,
+                OperationKind::RuntimeFile | OperationKind::RuntimeDigest
+            )
+        {
+            return Err("singleLink is only valid for runtime reads".into());
+        }
+        if operation.kind == OperationKind::RuntimeGeneration
+            && path.as_os_str() != self.generation.root().as_os_str()
+        {
+            return Err("Runtime generation summary requires the exact original root".into());
+        }
+        let metadata = matches!(
+            operation.kind,
+            OperationKind::PathIdentity
+                | OperationKind::Lstat
+                | OperationKind::Stat
+                | OperationKind::Exists
+        );
+        if !self
+            .roots
+            .iter()
+            .any(|r| path.starts_with(r) || (metadata && r.starts_with(path)))
+        {
+            return Err("Selection read escapes native roots".into());
+        }
+        if operation.kind == OperationKind::RuntimeDigest
+            && !path.starts_with(self.generation.root())
+        {
+            return Err("Runtime digest is outside the admitted generation".into());
+        }
+        Ok(())
+    }
+    fn observe(
+        &self,
+        operation: &Operation,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<(Value, Evidence), String> {
+        checkpoint(self.deadline, cancel)?;
+        let path = Path::new(&operation.path);
+        let follow_leaf = !matches!(
+            operation.kind,
+            OperationKind::PathIdentity
+                | OperationKind::Lstat
+                | OperationKind::RuntimeFile
+                | OperationKind::RuntimeDigest
+                | OperationKind::RuntimeGeneration
+        );
+        let before = anchors(path, follow_leaf, self.deadline, cancel)?;
+        let leaf_before = operation_leaf(path, operation.kind);
+        let mut followed = None;
+        let result = if operation.kind == OperationKind::RuntimeGeneration {
+            let manifest =
+                self.generation
+                    .manifest_summary(path, self.deadline.expires(), || {
+                        checkpoint(self.deadline, cancel)
+                    })?;
+            json!({"kind":"runtime-generation","digest":self.generation.digest(),"manifest":manifest})
+        } else if operation.kind == OperationKind::RuntimeDigest {
+            let relative = path
+                .strip_prefix(self.generation.root())
+                .map_err(|e| e.to_string())?
+                .to_str()
+                .ok_or("Non-UTF8 runtime member")?;
+            let member =
+                self.generation
+                    .member_digest(relative, self.deadline.expires(), || {
+                        checkpoint(self.deadline, cancel)
+                    })?;
+            if operation.single_link.unwrap_or(false) && member.metadata.nlink != 1 {
+                return Err("Native entry member is not single-link".into());
+            }
+            json!({"kind":"runtime-digest","sha256":member.sha256,
+                "stat":member_info(&member)?})
+        } else {
+            // Only OS failures become captured error results. Cancellation,
+            // exhausted budgets, path-policy refusal and incoherent reads abort.
+            match self.read_operation(operation, cancel, &mut followed)? {
+                Ok(value) => value,
+                Err(error) => {
+                    if operation.kind == OperationKind::Exists && absent(&error) {
+                        json!({"kind":"exists","value":false})
+                    } else {
+                        error_result(&error)
+                    }
+                }
+            }
+        };
+        checkpoint(self.deadline, cancel)?;
+        let leaf_after = operation_leaf(path, operation.kind);
+        let after = anchors(path, follow_leaf, self.deadline, cancel)?;
+        if before != after || leaf_before != leaf_after {
+            return Err(format!(
+                "Selection path changed during read: {}",
+                operation.path
+            ));
+        }
+        let result_sha256 = hash(&serde_json::to_vec(&result).map_err(|e| e.to_string())?);
+        Ok((
+            result,
+            Evidence {
+                anchors: after,
+                leaf: leaf_after,
+                followed,
+                result_sha256,
+            },
+        ))
+    }
+    fn read_operation(
+        &self,
+        operation: &Operation,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+        followed: &mut Option<Stamp>,
+    ) -> Result<io::Result<Value>, String> {
+        let path = Path::new(&operation.path);
+        let metadata = matches!(
+            operation.kind,
+            OperationKind::PathIdentity
+                | OperationKind::Lstat
+                | OperationKind::Stat
+                | OperationKind::Exists
+        );
+        if !metadata {
+            checkpoint(self.deadline, cancel)?;
+            match fs::canonicalize(path) {
+                Ok(real) if self.real_roots.iter().any(|r| real.starts_with(r)) => {}
+                Ok(_) => {
+                    return Err("Selection content follows a symlink outside native roots".into());
+                }
+                Err(e) => return Ok(Err(e)),
+            }
+            checkpoint(self.deadline, cancel)?;
+        }
+        let value = match operation.kind {
+            OperationKind::PathIdentity => fs::symlink_metadata(path)
+                .map(|m| json!({"kind":"path-identity","value":PathIdentity::of(&m).projected()})),
+            OperationKind::Lstat => fs::symlink_metadata(path)
+                .and_then(|m| info(&m))
+                .map(|value| json!({"kind":"info","value":value})),
+            OperationKind::Stat | OperationKind::Exists => match fs::metadata(path) {
+                Ok(m) => {
+                    *followed = Some(Stamp::of(&m));
+                    if operation.kind == OperationKind::Exists {
+                        Ok(json!({"kind":"exists","value":true}))
+                    } else {
+                        info(&m).map(|value| json!({"kind":"info","value":value}))
+                    }
+                }
+                Err(e) => Err(e),
+            },
+            OperationKind::List => {
+                let initial = match fs::metadata(path) {
+                    Ok(m) => m,
+                    Err(e) => return Ok(Err(e)),
+                };
+                let directory = match fs::read_dir(path) {
+                    Ok(d) => d,
+                    Err(e) => return Ok(Err(e)),
+                };
+                let mut entries = Vec::new();
+                let mut names_bytes = 0usize;
+                for entry in directory {
+                    checkpoint(self.deadline, cancel)?;
+                    let entry = match entry {
+                        Ok(e) => e,
+                        Err(e) => return Ok(Err(e)),
+                    };
+                    let name = entry
+                        .file_name()
+                        .into_string()
+                        .map_err(|_| "Non-UTF8 selection directory entry")?;
+                    if name.is_empty()
+                        || name == "."
+                        || name == ".."
+                        || name.contains('/')
+                        || name.contains('\0')
+                    {
+                        return Err("Invalid selection directory entry".into());
+                    }
+                    names_bytes = names_bytes
+                        .checked_add(name.len())
+                        .ok_or("Selection listing bytes overflow")?;
+                    if entries.len() >= self.limits.maximum_directory_entries
+                        || names_bytes > self.limits.maximum_bytes
+                    {
+                        return Err("Selection listing exceeds bound".into());
+                    }
+                    entries.push(name);
+                }
+                entries.sort();
+                let final_metadata = match fs::metadata(path) {
+                    Ok(m) => m,
+                    Err(e) => return Ok(Err(e)),
+                };
+                if Stamp::of(&initial) != Stamp::of(&final_metadata) {
+                    return Err("Selection directory changed during listing".into());
+                }
+                *followed = Some(Stamp::of(&final_metadata));
+                Ok(json!({"kind":"listing","entries":entries}))
+            }
+            OperationKind::Read | OperationKind::RuntimeFile => {
+                return self.read_bytes(operation, cancel, followed);
+            }
+            OperationKind::Executable => {
+                let cpath = std::ffi::CString::new(path.as_os_str().as_bytes())
+                    .map_err(|e| e.to_string())?;
+                // access(X_OK) matches the existing TS adapter's real-ID check.
+                if unsafe { libc::access(cpath.as_ptr(), libc::X_OK) } != 0 {
+                    Err(io::Error::last_os_error())
+                } else {
+                    match fs::metadata(path) {
+                        Ok(m) => {
+                            *followed = Some(Stamp::of(&m));
+                            Ok(json!({"kind":"executable"}))
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+            }
+            OperationKind::RuntimeDigest | OperationKind::RuntimeGeneration => unreachable!(),
+        };
+        checkpoint(self.deadline, cancel)?;
+        Ok(value)
+    }
+    fn read_bytes(
+        &self,
+        operation: &Operation,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+        followed: &mut Option<Stamp>,
+    ) -> Result<io::Result<Value>, String> {
+        let path = Path::new(&operation.path);
+        let runtime = operation.kind == OperationKind::RuntimeFile;
+        let initial = match if runtime {
+            fs::symlink_metadata(path)
+        } else {
+            fs::metadata(path)
+        } {
+            Ok(m) => m,
+            Err(e) => return Ok(Err(e)),
+        };
+        if !initial.is_file() {
+            return Ok(Err(io::Error::from_raw_os_error(if initial.is_dir() {
+                libc::EISDIR
+            } else {
+                libc::EINVAL
+            })));
+        }
+        if operation.single_link.unwrap_or(false) && initial.nlink() != 1 {
+            return Err("Native entry member is not single-link".into());
+        }
+        if initial.size() > self.limits.maximum_file_bytes as u64 {
+            return Err("Selection file exceeds native byte bound".into());
+        }
+        let flags = libc::O_CLOEXEC | libc::O_NONBLOCK | if runtime { libc::O_NOFOLLOW } else { 0 };
+        let mut file = match OpenOptions::new().read(true).custom_flags(flags).open(path) {
+            Ok(f) => f,
+            Err(e) => return Ok(Err(e)),
+        };
+        let opened = match file.metadata() {
+            Ok(m) => m,
+            Err(e) => return Ok(Err(e)),
+        };
+        if Stamp::of(&initial) != Stamp::of(&opened) {
+            return Err("Selection file replaced before read".into());
+        }
+        let mut bytes = Vec::new();
+        let mut chunk = [0u8; CHUNK];
+        loop {
+            checkpoint(self.deadline, cancel)?;
+            let count = match file.read(&mut chunk) {
+                Ok(n) => n,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Ok(Err(e)),
+            };
+            if count == 0 {
+                break;
+            }
+            if bytes
+                .len()
+                .checked_add(count)
+                .filter(|n| *n <= self.limits.maximum_file_bytes)
+                .is_none()
+            {
+                return Err("Selection file exceeds native byte bound".into());
+            }
+            bytes.extend_from_slice(&chunk[..count]);
+        }
+        let finished = match file.metadata() {
+            Ok(m) => m,
+            Err(e) => return Ok(Err(e)),
+        };
+        let pathname = match if runtime {
+            fs::symlink_metadata(path)
+        } else {
+            fs::metadata(path)
+        } {
+            Ok(m) => m,
+            Err(e) => return Ok(Err(e)),
+        };
+        if Stamp::of(&initial) != Stamp::of(&finished)
+            || Stamp::of(&initial) != Stamp::of(&pathname)
+            || finished.size() != bytes.len() as u64
+        {
+            return Err("Selection file changed during read".into());
+        }
+        *followed = Some(Stamp::of(&finished));
+        checkpoint(self.deadline, cancel)?;
+        if runtime {
+            Ok(info(&finished).map(
+                |stat| json!({"kind":"runtime-file","base64":STANDARD.encode(&bytes),"stat":stat}),
+            ))
+        } else {
+            Ok(Ok(json!({"kind":"bytes","base64":STANDARD.encode(&bytes)})))
+        }
+    }
+}
+impl SelectionObservationReceipt<'_> {
+    /// Native-only binding accessors; no engine field supplies these facts.
+    pub(crate) fn runtime_digest(&self) -> &str {
+        self.owner.generation.digest()
+    }
+    pub(crate) fn generation_root(&self) -> &Path {
+        self.owner.generation.root()
+    }
+    pub(crate) fn deadline(&self) -> &MonotonicDeadline {
+        self.owner.deadline
+    }
+    pub(crate) fn snapshot_id(&self) -> &str {
+        self.owner.snapshot_id()
+    }
+    pub(crate) fn revalidate(
+        &self,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.owner.revalidate(&mut cancel)
+    }
+    /// Native qualifier consumes these retained native-produced values. An
+    /// engine echo of an equal JSON value cannot construct this borrowed owner.
+    pub(crate) fn observations(&self) -> impl Iterator<Item = &Value> {
+        self.owner.records.iter().map(|record| &record.observation)
+    }
+    pub(crate) fn runtime_member(
+        &self,
+        relative: &str,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<RuntimeMemberDigest, String> {
+        checkpoint(self.owner.deadline, &mut cancel)?;
+        self.owner
+            .generation
+            .member_digest(relative, self.owner.deadline.expires(), || {
+                checkpoint(self.owner.deadline, &mut cancel)
+            })
+    }
+}
+fn checkpoint(
+    deadline: &MonotonicDeadline,
+    cancel: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), String> {
+    deadline.check().map_err(|e| e.to_string())?;
+    cancel()?;
+    deadline.check().map_err(|e| e.to_string())
+}
+fn kind_name(kind: OperationKind) -> &'static str {
+    match kind {
+        OperationKind::PathIdentity => "path-identity",
+        OperationKind::Lstat => "lstat",
+        OperationKind::Stat => "stat",
+        OperationKind::Exists => "exists",
+        OperationKind::Read => "read",
+        OperationKind::List => "list",
+        OperationKind::Executable => "executable",
+        OperationKind::RuntimeFile => "runtime-file",
+        OperationKind::RuntimeDigest => "runtime-digest",
+        OperationKind::RuntimeGeneration => "runtime-generation",
+    }
+}
+fn validate_path(path: &Path, maximum: usize) -> Result<(), String> {
+    if !path.is_absolute()
+        || path.as_os_str().as_bytes().len() > maximum
+        || path.as_os_str().as_bytes().contains(&0)
+        || path
+            .components()
+            .any(|c| matches!(c, Component::ParentDir | Component::CurDir))
+        || path.to_str().is_none()
+    {
+        return Err("Absolute normalized bounded UTF-8 selection path required".into());
+    }
+    Ok(())
+}
+fn absent(error: &io::Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(libc::ENOENT) | Some(libc::ENOTDIR)
+    )
+}
+fn operation_leaf(path: &Path, kind: OperationKind) -> Leaf {
+    if kind != OperationKind::PathIdentity {
+        return optional_stamp(path, false);
+    }
+    match fs::symlink_metadata(path) {
+        Ok(m) => Leaf::Identity(PathIdentity::of(&m)),
+        Err(e) if absent(&e) => Leaf::Absent,
+        Err(e) => Leaf::Failed(e.raw_os_error().unwrap_or(0)),
+    }
+}
+fn optional_stamp(path: &Path, follow: bool) -> Leaf {
+    match if follow {
+        fs::metadata(path)
+    } else {
+        fs::symlink_metadata(path)
+    } {
+        Ok(m) => Leaf::Present(Stamp::of(&m)),
+        Err(e) if absent(&e) => Leaf::Absent,
+        Err(e) => Leaf::Failed(e.raw_os_error().unwrap_or(0)),
+    }
+}
+fn anchors(
+    path: &Path,
+    follow_leaf: bool,
+    deadline: &MonotonicDeadline,
+    cancel: &mut impl FnMut() -> Result<(), String>,
+) -> Result<Vec<Anchor>, String> {
+    let mut result = Vec::new();
+    for parent in path.ancestors().skip(1) {
+        checkpoint(deadline, cancel)?;
+        let m = match fs::symlink_metadata(parent) {
+            Ok(m) => m,
+            Err(e) if absent(&e) => continue,
+            Err(e) => {
+                result.push(Anchor::Failed {
+                    path: parent.into(),
+                    errno: e.raw_os_error().unwrap_or(0),
+                });
+                continue;
+            }
+        };
+        let link = if m.file_type().is_symlink() {
+            match fs::read_link(parent) {
+                Ok(link) => Some(link),
+                Err(e) => {
+                    result.push(Anchor::Failed {
+                        path: parent.into(),
+                        errno: e.raw_os_error().unwrap_or(0),
+                    });
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+        result.push(Anchor::Found {
+            path: parent.into(),
+            dev: m.dev(),
+            ino: m.ino(),
+            mode: m.mode(),
+            uid: m.uid(),
+            gid: m.gid(),
+            link,
+        });
+    }
+    // Lexical anchors alone miss a replaced symlink target directory when
+    // both directories contain a preexisting hardlink to the same leaf. Walk
+    // the actual target chain, retaining every traversed object identity.
+    result.extend(resolved_anchors(path, follow_leaf, deadline, cancel)?);
+    checkpoint(deadline, cancel)?;
+    Ok(result)
+}
+#[derive(Debug)]
+enum TraversalComponent {
+    Root,
+    Parent,
+    Name(std::ffi::OsString),
+}
+fn components(path: &Path) -> Result<VecDeque<TraversalComponent>, String> {
+    path.components()
+        .filter_map(|component| match component {
+            Component::RootDir => Some(Ok(TraversalComponent::Root)),
+            Component::ParentDir => Some(Ok(TraversalComponent::Parent)),
+            Component::Normal(name) => Some(Ok(TraversalComponent::Name(name.to_owned()))),
+            Component::CurDir => None,
+            Component::Prefix(_) => Some(Err("Unsupported selection traversal prefix".into())),
+        })
+        .collect()
+}
+fn resolved_anchors(
+    path: &Path,
+    follow_leaf: bool,
+    deadline: &MonotonicDeadline,
+    cancel: &mut impl FnMut() -> Result<(), String>,
+) -> Result<Vec<Anchor>, String> {
+    let target = if follow_leaf {
+        path
+    } else {
+        path.parent().unwrap_or(path)
+    };
+    let mut pending = components(target)?;
+    let mut resolved = PathBuf::from("/");
+    let mut result = Vec::new();
+    let mut links = 0usize;
+    let mut steps = 0usize;
+    while let Some(component) = pending.pop_front() {
+        checkpoint(deadline, cancel)?;
+        steps += 1;
+        if steps > 16_384 {
+            return Err("Selection traversal exceeds native component bound".into());
+        }
+        match component {
+            TraversalComponent::Root => {
+                resolved = PathBuf::from("/");
+            }
+            TraversalComponent::Parent => {
+                resolved.pop();
+                if resolved.as_os_str().is_empty() {
+                    resolved.push("/");
+                }
+            }
+            TraversalComponent::Name(name) => {
+                resolved.push(name);
+            }
+        }
+        let metadata = match fs::symlink_metadata(&resolved) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                // Missing and denied target paths are dependencies too. Do not
+                // turn a denied traversal into a false existence result.
+                result.push(Anchor::Failed {
+                    path: resolved.clone(),
+                    errno: error.raw_os_error().unwrap_or(0),
+                });
+                break;
+            }
+        };
+        let link = if metadata.file_type().is_symlink() {
+            match fs::read_link(&resolved) {
+                Ok(target) => Some(target),
+                Err(error) => {
+                    result.push(Anchor::Failed {
+                        path: resolved.clone(),
+                        errno: error.raw_os_error().unwrap_or(0),
+                    });
+                    break;
+                }
+            }
+        } else {
+            None
+        };
+        result.push(Anchor::Found {
+            path: resolved.clone(),
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+            mode: metadata.mode(),
+            uid: metadata.uid(),
+            gid: metadata.gid(),
+            link: link.clone(),
+        });
+        if let Some(target) = link {
+            links += 1;
+            if links > 40 {
+                result.push(Anchor::Failed {
+                    path: resolved.clone(),
+                    errno: libc::ELOOP,
+                });
+                break;
+            }
+            // Relative targets start at the symlink's containing directory;
+            // absolute targets reset at Root. Preserve all target components,
+            // including objects traversed before '..', and nested symlinks.
+            resolved.pop();
+            let mut target_components = components(&target)?;
+            target_components.append(&mut pending);
+            pending = target_components;
+        }
+    }
+    checkpoint(deadline, cancel)?;
+    Ok(result)
+}
+/// Resolve a native-authored root even if its final selection directory is
+/// absent. Canonicalize the existing ancestor, retaining the lexical remainder.
+fn resolve_root(
+    path: &Path,
+    deadline: &MonotonicDeadline,
+    cancel: &mut impl FnMut() -> Result<(), String>,
+) -> Result<PathBuf, String> {
+    let mut existing = path;
+    let mut remainder = Vec::new();
+    loop {
+        checkpoint(deadline, cancel)?;
+        match fs::canonicalize(existing) {
+            Ok(mut root) => {
+                for name in remainder.into_iter().rev() {
+                    root.push(name);
+                }
+                return Ok(root);
+            }
+            Err(e) if absent(&e) => {
+                remainder.push(
+                    existing
+                        .file_name()
+                        .ok_or("Selection root has no existing ancestor")?
+                        .to_os_string(),
+                );
+                existing = existing
+                    .parent()
+                    .ok_or("Selection root has no existing ancestor")?;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+}
+fn error_result(error: &io::Error) -> Value {
+    let code = match error.raw_os_error() {
+        Some(libc::ENOENT) => "ENOENT",
+        Some(libc::ENOTDIR) => "ENOTDIR",
+        Some(libc::EACCES) => "EACCES",
+        Some(libc::EPERM) => "EPERM",
+        Some(libc::ELOOP) => "ELOOP",
+        Some(libc::EISDIR) => "EISDIR",
+        Some(libc::EINVAL) => "EINVAL",
+        Some(libc::EMFILE) => "EMFILE",
+        Some(libc::ENFILE) => "ENFILE",
+        Some(libc::EIO) => "EIO",
+        Some(libc::ENAMETOOLONG) => "ENAMETOOLONG",
+        Some(libc::EOVERFLOW) => "EOVERFLOW",
+        _ => "EUNKNOWN",
+    };
+    json!({"kind":"error","name":"Error","message":error.to_string(),"code":code})
+}
+fn file_kind(mode: u32) -> &'static str {
+    match mode & libc::S_IFMT as u32 {
+        value if value == libc::S_IFREG as u32 => "file",
+        value if value == libc::S_IFDIR as u32 => "directory",
+        value if value == libc::S_IFLNK as u32 => "symlink",
+        _ => "other",
+    }
+}
+fn info(m: &Metadata) -> io::Result<Value> {
+    projected_info(
+        m.mode(),
+        m.dev(),
+        m.ino(),
+        m.size(),
+        m.nlink(),
+        m.mtime(),
+        m.mtime_nsec(),
+        m.ctime(),
+        m.ctime_nsec(),
+    )
+}
+fn member_info(member: &RuntimeMemberDigest) -> Result<Value, String> {
+    let m = &member.metadata;
+    projected_info(
+        m.mode,
+        m.dev,
+        m.ino,
+        m.size,
+        m.nlink,
+        m.mtime,
+        m.mtime_nsec,
+        m.ctime,
+        m.ctime_nsec,
+    )
+    .map_err(|e| e.to_string())
+}
+#[allow(clippy::too_many_arguments)]
+fn projected_info(
+    mode: u32,
+    dev: u64,
+    ino: u64,
+    size: u64,
+    nlink: u64,
+    mtime: i64,
+    mtime_nsec: i64,
+    ctime: i64,
+    ctime_nsec: i64,
+) -> io::Result<Value> {
+    if size > JS_MAX || nlink > JS_MAX {
+        return Err(io::Error::from_raw_os_error(libc::EOVERFLOW));
+    }
+    let kind = file_kind(mode);
+    Ok(
+        json!({"kind":kind,"dev":dev.to_string(),"ino":ino.to_string(),"size":size,"mode":mode,"nlink":nlink,
+        "mtimeMs":mtime as f64*1000.0+mtime_nsec as f64/1_000_000.0,
+        "ctimeMs":ctime as f64*1000.0+ctime_nsec as f64/1_000_000.0}),
+    )
+}
+fn hash(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
+}
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{cell::Cell, os::unix::fs::symlink, time::Duration};
+
+    // This fixture verifies filesystem observation and generation binding. Its
+    // synthetic generation is not proof that an actual installed image ran.
+    fn fixture(action: impl FnOnce(&GenerationReceipt, &Path, &Path)) {
+        crate::native_generation::with_selection_generation_fixture(action)
+    }
+    fn deadline() -> MonotonicDeadline {
+        MonotonicDeadline::capture(Duration::from_secs(30)).unwrap()
+    }
+    fn owner<'a>(
+        generation: &'a GenerationReceipt,
+        deadline: &'a MonotonicDeadline,
+        home: &Path,
+    ) -> SelectionObservationOwner<'a> {
+        SelectionObservationOwner::new(
+            generation,
+            deadline,
+            vec![home.into()],
+            Limits::default(),
+            || Ok(()),
+        )
+        .unwrap()
+    }
+    fn request(
+        owner: &SelectionObservationOwner<'_>,
+        kind: OperationKind,
+        path: &Path,
+        single_link: Option<bool>,
+    ) -> SelectionObservationRequest {
+        SelectionObservationRequest {
+            snapshot_id: owner.snapshot_id().into(),
+            sequence: owner.records.len() + 1,
+            operation: Operation {
+                kind,
+                path: path.to_str().unwrap().into(),
+                single_link,
+            },
+        }
+    }
+    fn capture(
+        owner: &mut SelectionObservationOwner<'_>,
+        kind: OperationKind,
+        path: &Path,
+    ) -> Value {
+        let request = request(owner, kind, path, None);
+        let mut reply = owner.capture(request, || Ok(())).unwrap();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = reply.next_chunk(13, || Ok(())).unwrap() {
+            bytes.extend_from_slice(chunk);
+        }
+        serde_json::from_slice(&bytes).unwrap()
+    }
+    fn effect_after_revalidation(
+        receipt: &SelectionObservationReceipt<'_>,
+        effects: &Cell<usize>,
+    ) -> Result<(), String> {
+        receipt.revalidate(|| Ok(()))?;
+        effects.set(effects.get() + 1);
+        Ok(())
+    }
+    fn retain(home: &Path, name: &str, value: Value) {
+        if std::env::var_os("CAWS_NATIVE_GENERATION_TEST_ARTIFACTS").is_some() {
+            let path = home.join(format!("selection-{name}.json"));
+            fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+            println!("selection observation artifact: {}", path.display());
+        }
+    }
+
+    #[test]
+    fn path_identity_accepts_unrelated_sibling_inventory_changes() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let directory = home.join("identity-directory");
+            fs::create_dir(&directory).unwrap();
+            let original = fs::symlink_metadata(&directory).unwrap();
+            let mut observed = owner(generation, &clock, home);
+            let row = capture(&mut observed, OperationKind::PathIdentity, &directory);
+            assert_eq!(
+                row["result"],
+                json!({"kind":"path-identity","value":{
+                    "kind":"directory","dev":original.dev().to_string(),
+                    "ino":original.ino().to_string(),"mode":original.mode()}})
+            );
+            fs::write(directory.join("before-seal"), b"sibling").unwrap();
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::write(directory.join("after-seal"), b"another sibling").unwrap();
+            let effects = Cell::new(0);
+            effect_after_revalidation(&receipt, &effects).unwrap();
+            assert_eq!(effects.get(), 1);
+        });
+    }
+
+    #[test]
+    fn path_identity_excludes_contents_size_times_and_link_count_only_for_this_operation() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let path = home.join("identity-file");
+            fs::write(&path, b"original").unwrap();
+            let before = fs::symlink_metadata(&path).unwrap();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::PathIdentity, &path);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::write(&path, b"changed contents and length").unwrap();
+            fs::hard_link(&path, home.join("identity-file-hardlink")).unwrap();
+            let after = fs::symlink_metadata(&path).unwrap();
+            assert_ne!(Stamp::of(&before), Stamp::of(&after));
+            assert_eq!(PathIdentity::of(&before), PathIdentity::of(&after));
+            receipt.revalidate(|| Ok(())).unwrap();
+        });
+    }
+
+    #[test]
+    fn path_identity_inode_mode_and_symlink_replacements_refuse_effects() {
+        use std::os::unix::fs::PermissionsExt;
+        for change in ["inode", "mode", "symlink"] {
+            fixture(|generation, home, _| {
+                let clock = deadline();
+                let path = home.join("identity-leaf");
+                let replacement = home.join("identity-replacement");
+                fs::write(&path, b"same bytes").unwrap();
+                fs::write(&replacement, b"same bytes").unwrap();
+                let before = PathIdentity::of(&fs::symlink_metadata(&path).unwrap());
+                let mut observed = owner(generation, &clock, home);
+                capture(&mut observed, OperationKind::PathIdentity, &path);
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                match change {
+                    "inode" => fs::rename(&replacement, &path).unwrap(),
+                    "mode" => fs::set_permissions(
+                        &path,
+                        fs::Permissions::from_mode((before.mode & 0o7777) ^ 0o100),
+                    )
+                    .unwrap(),
+                    "symlink" => {
+                        fs::remove_file(&path).unwrap();
+                        symlink(&replacement, &path).unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                assert_ne!(
+                    before,
+                    PathIdentity::of(&fs::symlink_metadata(&path).unwrap())
+                );
+                let effects = Cell::new(0);
+                assert!(
+                    effect_after_revalidation(&receipt, &effects).is_err(),
+                    "{change}"
+                );
+                assert_eq!(effects.get(), 0, "{change}");
+            });
+        }
+    }
+
+    #[test]
+    fn path_identity_absence_becoming_present_refuses_seal_and_dispatch() {
+        for before_seal in [true, false] {
+            fixture(|generation, home, _| {
+                let clock = deadline();
+                let path = home.join("absent-identity");
+                let mut observed = owner(generation, &clock, home);
+                let row = capture(&mut observed, OperationKind::PathIdentity, &path);
+                assert_eq!(row["result"]["kind"], "error");
+                assert_eq!(row["result"]["code"], "ENOENT");
+                if before_seal {
+                    fs::write(&path, b"appeared").unwrap();
+                    assert!(observed.seal(|| Ok(())).is_err());
+                } else {
+                    let receipt = observed.seal(|| Ok(())).unwrap();
+                    fs::write(&path, b"appeared").unwrap();
+                    let effects = Cell::new(0);
+                    assert!(effect_after_revalidation(&receipt, &effects).is_err());
+                    assert_eq!(effects.get(), 0);
+                }
+            });
+        }
+    }
+
+    #[test]
+    fn path_identity_keeps_resolved_symlink_ancestor_replacement_evidence() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let first = home.join("identity-target");
+            let replacement = home.join("identity-target-replacement");
+            fs::create_dir(&first).unwrap();
+            fs::create_dir(&replacement).unwrap();
+            fs::write(first.join("file"), b"same inode").unwrap();
+            fs::hard_link(first.join("file"), replacement.join("file")).unwrap();
+            symlink("identity-target", home.join("identity-link")).unwrap();
+            let path = home.join("identity-link/file");
+            let before = PathIdentity::of(&fs::symlink_metadata(&path).unwrap());
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::PathIdentity, &path);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::rename(&first, home.join("identity-target-retired")).unwrap();
+            fs::rename(&replacement, &first).unwrap();
+            assert_eq!(
+                before,
+                PathIdentity::of(&fs::symlink_metadata(&path).unwrap())
+            );
+            let effects = Cell::new(0);
+            assert!(effect_after_revalidation(&receipt, &effects).is_err());
+            assert_eq!(effects.get(), 0);
+        });
+    }
+
+    #[test]
+    fn strict_lstat_and_list_still_refuse_actual_inventory_changes() {
+        for kind in [OperationKind::Lstat, OperationKind::List] {
+            fixture(|generation, home, _| {
+                let clock = deadline();
+                let directory = home.join("strict-inventory");
+                fs::create_dir(&directory).unwrap();
+                let before = Stamp::of(&fs::symlink_metadata(&directory).unwrap());
+                let mut observed = owner(generation, &clock, home);
+                capture(&mut observed, kind, &directory);
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                fs::create_dir(directory.join("new-directory")).unwrap();
+                assert_ne!(
+                    before,
+                    Stamp::of(&fs::symlink_metadata(&directory).unwrap())
+                );
+                let effects = Cell::new(0);
+                assert!(
+                    effect_after_revalidation(&receipt, &effects).is_err(),
+                    "{kind:?}"
+                );
+                assert_eq!(effects.get(), 0);
+            });
+        }
+    }
+
+    #[test]
+    fn path_identity_keeps_ancestor_scope_exact_schema_cancel_and_original_deadline() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            let outside = home.parent().unwrap().join("unowned-identity-sibling");
+            let denied = request(&observed, OperationKind::PathIdentity, &outside, None);
+            assert!(
+                observed
+                    .capture(denied, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("escapes native roots")
+            );
+            for single_link in [Some(false), Some(true)] {
+                let invalid = request(&observed, OperationKind::PathIdentity, home, single_link);
+                assert!(
+                    observed
+                        .capture(invalid, || Ok(()))
+                        .err()
+                        .unwrap()
+                        .contains("singleLink")
+                );
+            }
+            let null_field = json!({"snapshotId":observed.snapshot_id(),"sequence":1,
+                "operation":{"kind":"path-identity","path":home,"singleLink":null}});
+            assert!(
+                observed
+                    .capture_json(&serde_json::to_vec(&null_field).unwrap(), || Ok(()))
+                    .is_err()
+            );
+            let cancelled = request(&observed, OperationKind::PathIdentity, home, None);
+            assert_eq!(
+                observed
+                    .capture(cancelled, || Err("identity cancelled".into()))
+                    .err()
+                    .unwrap(),
+                "identity cancelled"
+            );
+            assert!(observed.records.is_empty());
+            let row = capture(&mut observed, OperationKind::PathIdentity, Path::new("/"));
+            assert_eq!(row["result"]["value"]["kind"], "directory");
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            assert!(std::ptr::eq(receipt.deadline(), &clock));
+            assert_eq!(
+                receipt
+                    .revalidate(|| Err("queued identity cancelled".into()))
+                    .unwrap_err(),
+                "queued identity cancelled"
+            );
+            let expired = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+            std::thread::sleep(Duration::from_millis(2));
+            assert!(
+                SelectionObservationOwner::new(
+                    generation,
+                    &expired,
+                    vec![home.into()],
+                    Limits::default(),
+                    || Ok(())
+                )
+                .is_err()
+            );
+        });
+    }
+
+    #[test]
+    fn appearing_higher_priority_candidate_blocks_effect_after_seal() {
+        fixture(|generation, home, _| {
+            let original_clock = deadline();
+            let selected = home.join("shared-adapter.json");
+            let higher = home.join("user-adapter.json");
+            fs::write(&selected, b"shared").unwrap();
+            let mut owner = owner(generation, &original_clock, home);
+            let absent = capture(&mut owner, OperationKind::Exists, &higher);
+            assert_eq!(absent["result"], json!({"kind":"exists","value":false}));
+            let selected_value = capture(&mut owner, OperationKind::Read, &selected);
+            assert_eq!(
+                selected_value["result"]["base64"],
+                STANDARD.encode(b"shared")
+            );
+            let receipt = owner.seal(|| Ok(())).unwrap();
+            let effects = Cell::new(0);
+            fs::write(&higher, b"user").unwrap();
+            let failure = effect_after_revalidation(&receipt, &effects).unwrap_err();
+            assert!(
+                failure.contains("Selection dependency changed"),
+                "{failure}"
+            );
+            assert_eq!(effects.get(), 0);
+            retain(
+                home,
+                "appearing-override",
+                json!({
+                    "scope":"actual filesystem observations with synthetic generation and a test effect counter; no store activation",
+                    "originalAbsence":absent,"selected":selected_value,
+                    "appearedBytesBase64":STANDARD.encode(fs::read(higher).unwrap()),
+                    "failure":failure,"effectCount":effects.get(),
+                    "observations":receipt.observations().collect::<Vec<_>>()
+                }),
+            );
+        });
+    }
+    #[test]
+    fn absent_stat_is_error_and_parent_appearance_is_retained() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let candidate = home.join("absent-directory/adapter.json");
+            let mut owner = owner(generation, &clock, home);
+            let row = capture(&mut owner, OperationKind::Stat, &candidate);
+            assert_eq!(row["result"]["kind"], "error");
+            assert_eq!(row["result"]["code"], "ENOENT");
+            let receipt = owner.seal(|| Ok(())).unwrap();
+            fs::create_dir(candidate.parent().unwrap()).unwrap();
+            assert!(receipt.revalidate(|| Ok(())).is_err());
+        });
+    }
+    #[test]
+    fn same_bytes_replacement_and_content_change_are_both_dependencies() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let path = home.join("selected.json");
+            fs::write(&path, b"original").unwrap();
+            let mut first = owner(generation, &clock, home);
+            capture(&mut first, OperationKind::Read, &path);
+            let receipt = first.seal(|| Ok(())).unwrap();
+            let replacement = home.join("replacement.json");
+            fs::write(&replacement, b"original").unwrap();
+            fs::rename(&replacement, &path).unwrap();
+            assert!(receipt.revalidate(|| Ok(())).is_err());
+            let mut second = owner(generation, &clock, home);
+            capture(&mut second, OperationKind::Read, &path);
+            let receipt = second.seal(|| Ok(())).unwrap();
+            fs::write(&path, b"changed!").unwrap();
+            assert!(receipt.revalidate(|| Ok(())).is_err());
+        });
+    }
+    #[test]
+    fn listing_inventory_and_runtime_single_link_are_observed() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let directory = home.join("plugins");
+            fs::create_dir(&directory).unwrap();
+            fs::write(directory.join("a.ts"), b"a").unwrap();
+            let mut first = owner(generation, &clock, home);
+            let row = capture(&mut first, OperationKind::List, &directory);
+            assert_eq!(row["result"]["entries"], json!(["a.ts"]));
+            let receipt = first.seal(|| Ok(())).unwrap();
+            fs::write(directory.join("b.ts"), b"b").unwrap();
+            assert!(receipt.revalidate(|| Ok(())).is_err());
+            let mut second = owner(generation, &clock, home);
+            let request = request(
+                &second,
+                OperationKind::RuntimeFile,
+                &directory.join("a.ts"),
+                Some(true),
+            );
+            second.capture(request, || Ok(())).unwrap();
+            fs::hard_link(directory.join("a.ts"), directory.join("alias.ts")).unwrap();
+            assert!(second.seal(|| Ok(())).is_err());
+        });
+    }
+    #[test]
+    fn runtime_digest_is_exact_admitted_member_without_body_or_pointer_lookup() {
+        fixture(|generation, home, root| {
+            let clock = deadline();
+            let mut owner = owner(generation, &clock, home);
+            let row = capture(
+                &mut owner,
+                OperationKind::RuntimeDigest,
+                &root.join("native/node"),
+            );
+            let expected = generation
+                .member_digest("native/node", clock.expires(), || Ok(()))
+                .unwrap();
+            assert_eq!(row["result"]["kind"], "runtime-digest");
+            assert_eq!(row["result"]["sha256"], expected.sha256);
+            assert!(row["result"].get("base64").is_none());
+            assert_eq!(row["result"]["stat"]["size"], expected.metadata.size);
+            // A current pointer update cannot select another generation.
+            fs::write(
+                home.join("state/adapter-runtime.json"),
+                b"unrelated pointer",
+            )
+            .unwrap();
+            let snapshot_id = owner.snapshot_id().to_owned();
+            let receipt = owner.seal(|| Ok(())).unwrap();
+            assert_eq!(
+                receipt.runtime_member("native/node", || Ok(())).unwrap(),
+                expected
+            );
+            assert_eq!(receipt.observations().count(), 1);
+            assert_eq!(receipt.snapshot_id(), snapshot_id);
+        });
+    }
+    #[test]
+    fn chunks_are_correlated_actual_bytes_and_no_operation_can_follow_seal() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let path = home.join("binary.bin");
+            let bytes = [0, 1, 2, 255];
+            fs::write(&path, bytes).unwrap();
+            let mut owner = owner(generation, &clock, home);
+            let initial_request = request(&owner, OperationKind::Read, &path, None);
+            let encoded = serde_json::to_vec(&json!({"snapshotId":initial_request.snapshot_id,
+                "sequence":initial_request.sequence,"operation":initial_request.operation}))
+            .unwrap();
+            let mut reply = owner.capture_json(&encoded, || Ok(())).unwrap();
+            assert!(reply.byte_len() > bytes.len());
+            assert!(reply.next_chunk(CHUNK + 1, || Ok(())).is_err());
+            let mut assembled = Vec::new();
+            while let Some(chunk) = reply.next_chunk(1, || Ok(())).unwrap() {
+                assembled.extend_from_slice(chunk);
+            }
+            let row: Value = serde_json::from_slice(&assembled).unwrap();
+            assert_eq!(row["snapshotId"], owner.snapshot_id());
+            assert_eq!(row["sequence"], 1);
+            assert_eq!(row["result"]["base64"], STANDARD.encode(bytes));
+            let duplicate = request(&owner, OperationKind::Read, &path, None);
+            assert!(
+                owner
+                    .capture(duplicate, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("Duplicate")
+            );
+            let mut receipt = owner.seal(|| Ok(())).unwrap();
+            let next = request(&receipt.owner, OperationKind::Exists, &path, None);
+            assert!(
+                receipt
+                    .owner
+                    .capture(next, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("sealed")
+            );
+        });
+    }
+    #[test]
+    fn resource_limits_cancellation_and_path_policy_fail_closed() {
+        fixture(|generation, home, root| {
+            let clock = deadline();
+            let path = home.join("large.json");
+            fs::write(&path, b"too large").unwrap();
+            let mut bounds = Limits::default();
+            bounds.maximum_file_bytes = 3;
+            let mut owner = SelectionObservationOwner::new(
+                generation,
+                &clock,
+                vec![home.into()],
+                bounds,
+                || Ok(()),
+            )
+            .unwrap();
+            let read = request(&owner, OperationKind::Read, &path, None);
+            assert!(
+                owner
+                    .capture(read, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("byte bound")
+            );
+            assert!(owner.records.is_empty());
+            let cancelled = request(&owner, OperationKind::Exists, &path, None);
+            assert_eq!(
+                owner
+                    .capture(cancelled, || Err("native cancelled".into()))
+                    .err()
+                    .unwrap(),
+                "native cancelled"
+            );
+            assert!(owner.records.is_empty());
+            let escape = request(
+                &owner,
+                OperationKind::RuntimeDigest,
+                &home.join("state/adapter-runtime.json"),
+                None,
+            );
+            assert!(
+                owner
+                    .capture(escape, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("outside the admitted generation")
+            );
+            let undeclared = request(
+                &owner,
+                OperationKind::RuntimeDigest,
+                &root.join("undeclared"),
+                None,
+            );
+            assert!(owner.capture(undeclared, || Ok(())).is_err());
+            let invalid=br#"{"snapshotId":"x","sequence":1,"operation":{"kind":"exists","path":"/","extra":true}}"#;
+            assert!(owner.capture_json(invalid, || Ok(())).is_err());
+        });
+    }
+    #[test]
+    fn runtime_file_symlink_refused_and_nonruntime_read_preserves_bytes() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let target = home.join("target");
+            let link = home.join("link");
+            fs::write(&target, b"actual").unwrap();
+            symlink(&target, &link).unwrap();
+            let mut owner = owner(generation, &clock, home);
+            let runtime = capture(&mut owner, OperationKind::RuntimeFile, &link);
+            assert_eq!(runtime["result"]["kind"], "error");
+            let ordinary = capture(&mut owner, OperationKind::Read, &link);
+            assert_eq!(ordinary["result"]["base64"], STANDARD.encode(b"actual"));
+            owner.seal(|| Ok(())).unwrap();
+        });
+    }
+    #[test]
+    fn replaced_resolved_target_directory_with_same_hardlinked_leaf_blocks_effect() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let target = home.join("target");
+            let replacement = home.join("replacement");
+            fs::create_dir(&target).unwrap();
+            fs::create_dir(&replacement).unwrap();
+            fs::write(target.join("file"), b"same inode and bytes").unwrap();
+            fs::hard_link(target.join("file"), replacement.join("file")).unwrap();
+            symlink("target", home.join("link")).unwrap();
+            let path = home.join("link/file");
+            let original_leaf = Stamp::of(&fs::metadata(&path).unwrap());
+            let mut owner = owner(generation, &clock, home);
+            capture(&mut owner, OperationKind::Read, &path);
+            let receipt = owner.seal(|| Ok(())).unwrap();
+            fs::rename(&target, home.join("retired")).unwrap();
+            fs::rename(&replacement, &target).unwrap();
+            let current_leaf = Stamp::of(&fs::metadata(&path).unwrap());
+            assert_eq!(current_leaf, original_leaf);
+            let effects = Cell::new(0);
+            let failure = effect_after_revalidation(&receipt, &effects).unwrap_err();
+            assert!(failure.contains("Selection dependency changed"));
+            assert_eq!(effects.get(), 0);
+            retain(
+                home,
+                "resolved-parent-replacement",
+                json!({
+                    "scope":"actual filesystem observations with synthetic generation and a test effect counter; no store activation",
+                    "leafBefore":format!("{original_leaf:?}"),"leafAfter":format!("{current_leaf:?}"),
+                    "leafBytesBase64":STANDARD.encode(fs::read(&path).unwrap()),
+                    "retiredDirectory":info(&fs::metadata(home.join("retired")).unwrap()).unwrap(),
+                    "replacementDirectory":info(&fs::metadata(&target).unwrap()).unwrap(),
+                    "failure":failure,"effectCount":effects.get(),
+                    "observations":receipt.observations().collect::<Vec<_>>()
+                }),
+            );
+        });
+    }
+    #[test]
+    fn nested_symlink_target_chain_and_absent_target_directory_are_dependencies() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let target = home.join("target");
+            let replacement = home.join("replacement");
+            fs::create_dir(&target).unwrap();
+            fs::create_dir(&replacement).unwrap();
+            symlink("target", home.join("middle")).unwrap();
+            symlink("middle", home.join("link")).unwrap();
+            let path = home.join("link/absent.json");
+            let mut owner = owner(generation, &clock, home);
+            assert_eq!(
+                capture(&mut owner, OperationKind::Exists, &path)["result"]["value"],
+                false
+            );
+            let receipt = owner.seal(|| Ok(())).unwrap();
+            fs::rename(&target, home.join("retired")).unwrap();
+            fs::rename(&replacement, &target).unwrap();
+            assert!(!path.exists());
+            let effects = Cell::new(0);
+            let failure = effect_after_revalidation(&receipt, &effects).unwrap_err();
+            assert_eq!(effects.get(), 0);
+            retain(
+                home,
+                "nested-absent-parent-replacement",
+                json!({
+                    "scope":"actual filesystem observations with synthetic generation and a test effect counter; no store activation",
+                    "leafRemainsAbsent":!path.exists(),"failure":failure,"effectCount":effects.get(),
+                    "observations":receipt.observations().collect::<Vec<_>>()
+                }),
+            );
+        });
+    }
+    #[test]
+    fn denied_error_never_means_absent_and_native_ns_are_not_js_projection() {
+        let error = io::Error::from_raw_os_error(libc::EACCES);
+        assert!(!absent(&error));
+        assert_eq!(error_result(&error)["code"], "EACCES");
+        assert_eq!(error_result(&error)["kind"], "error");
+        let a = projected_info(libc::S_IFREG as u32, 1, 2, 3, 1, 1, 1, 1, 1).unwrap();
+        assert_eq!(a["kind"], "file");
+        assert_eq!(a["dev"], "1");
+        assert!(projected_info(libc::S_IFREG as u32, 1, 2, JS_MAX + 1, 1, 1, 1, 1, 1).is_err());
+        let a = Stamp {
+            dev: 1,
+            ino: 2,
+            mode: 0,
+            uid: 1,
+            gid: 1,
+            size: 0,
+            nlink: 1,
+            mtime: 1,
+            mtime_nsec: 1,
+            ctime: 1,
+            ctime_nsec: 1,
+        };
+        let b = Stamp {
+            mtime_nsec: 2,
+            ..Stamp {
+                dev: 1,
+                ino: 2,
+                mode: 0,
+                uid: 1,
+                gid: 1,
+                size: 0,
+                nlink: 1,
+                mtime: 1,
+                mtime_nsec: 1,
+                ctime: 1,
+                ctime_nsec: 1,
+            }
+        };
+        assert_ne!(a, b);
+    }
+    #[test]
+    fn runtime_generation_observes_over_4096_actual_members_in_one_chunked_read() {
+        crate::native_generation::with_large_selection_generation_fixture(
+            |generation, home, root| {
+                let clock = MonotonicDeadline::capture(Duration::from_secs(60)).unwrap();
+                let mut checkpoints = 0;
+                let cancelled = generation.manifest_summary(root, clock.expires(), || {
+                    checkpoints += 1;
+                    if checkpoints == 100 {
+                        Err("retained manifest copy cancelled".into())
+                    } else {
+                        Ok(())
+                    }
+                });
+                assert_eq!(cancelled.unwrap_err(), "retained manifest copy cancelled");
+                assert_eq!(checkpoints, 100);
+                let mut owner = owner(generation, &clock, home);
+                let discovery = request(&owner, OperationKind::RuntimeGeneration, root, None);
+                let mut reply = owner.capture(discovery, || Ok(())).unwrap();
+                let mut chunks = 0;
+                let mut bytes = Vec::new();
+                while let Some(chunk) = reply.next_chunk(CHUNK, || Ok(())).unwrap() {
+                    chunks += 1;
+                    bytes.extend_from_slice(chunk);
+                }
+                let observation: Value = serde_json::from_slice(&bytes).unwrap();
+                let result = &observation["result"];
+                let keys: BTreeSet<_> = result
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .map(String::as_str)
+                    .collect();
+                assert_eq!(keys, BTreeSet::from(["kind", "digest", "manifest"]));
+                assert_eq!(result["kind"], "runtime-generation");
+                assert_eq!(result["digest"], generation.digest());
+                let manifest = result["manifest"].as_object().unwrap();
+                assert!(
+                    manifest.len() > 4096,
+                    "real native manifest must exceed the per-file observation quota"
+                );
+                assert_eq!(manifest.len(), 4108);
+                assert_eq!(
+                    manifest["fixture-members/04099.json"],
+                    hash(b"{\"fixtureMember\":4099}\n")
+                );
+                assert!(!manifest.contains_key("manifest.json"));
+                assert!(chunks > 1);
+                assert_eq!(owner.records.len(), 1);
+                assert_eq!(owner.bytes, bytes.len());
+                assert_eq!(
+                    owner.records[0].operation.kind,
+                    OperationKind::RuntimeGeneration
+                );
+                let receipt = owner.seal(|| Ok(())).unwrap();
+                assert_eq!(receipt.observations().count(), 1);
+                assert!(std::ptr::eq(receipt.deadline(), &clock));
+                receipt.revalidate(|| Ok(())).unwrap();
+                retain(
+                    home,
+                    "generation-large",
+                    json!({"members":manifest.len(),"observations":1,"chunks":chunks,"bytes":bytes.len(),"digest":generation.digest(),"revalidated":true}),
+                );
+            },
+        );
+    }
+    #[test]
+    fn runtime_generation_mutated_member_inventory_and_mode_refuse_before_effect() {
+        for mode in ["member", "inventory", "mode"] {
+            fixture(|generation, home, root| {
+                use std::os::unix::fs::PermissionsExt;
+                let clock = deadline();
+                let mut owner = owner(generation, &clock, home);
+                let observation = capture(&mut owner, OperationKind::RuntimeGeneration, root);
+                assert_eq!(observation["result"]["kind"], "runtime-generation");
+                match mode {
+                    "member" => fs::write(root.join("engine.js"), b"mutated member").unwrap(),
+                    "inventory" => {
+                        fs::write(root.join("native/undeclared"), b"new inventory").unwrap()
+                    }
+                    "mode" => fs::set_permissions(
+                        root.join("engine.js"),
+                        fs::Permissions::from_mode(0o755),
+                    )
+                    .unwrap(),
+                    _ => unreachable!(),
+                }
+                let effects = Cell::new(0);
+                let result = owner
+                    .seal(|| Ok(()))
+                    .and_then(|receipt| effect_after_revalidation(&receipt, &effects));
+                assert!(
+                    result.is_err(),
+                    "{mode} change must refuse original summary"
+                );
+                assert_eq!(effects.get(), 0);
+                retain(
+                    home,
+                    &format!("generation-{mode}"),
+                    json!({"refused":true,"effects":effects.get(),"failure":result.unwrap_err()}),
+                );
+            });
+        }
+    }
+    #[test]
+    fn runtime_generation_stale_after_seal_refuses_and_pointer_update_does_not_reselect() {
+        fixture(|generation, home, root| {
+            let clock = deadline();
+            let mut owner = owner(generation, &clock, home);
+            let observation = capture(&mut owner, OperationKind::RuntimeGeneration, root);
+            let receipt = owner.seal(|| Ok(())).unwrap();
+            fs::write(
+                home.join("state/adapter-runtime.json"),
+                b"another current pointer",
+            )
+            .unwrap();
+            receipt.revalidate(|| Ok(())).unwrap();
+            assert_eq!(observation["result"]["digest"], generation.digest());
+            fs::write(root.join("engine.js"), b"changed after seal").unwrap();
+            let effects = Cell::new(0);
+            assert!(effect_after_revalidation(&receipt, &effects).is_err());
+            assert_eq!(effects.get(), 0);
+        });
+    }
+    #[test]
+    fn runtime_generation_rejects_foreign_root_alias_and_every_present_single_link() {
+        fixture(|generation, home, root| {
+            let clock = deadline();
+            let mut owner = owner(generation, &clock, home);
+            let alias = home.join("generation-alias");
+            symlink(root, &alias).unwrap();
+            let repeated = PathBuf::from(format!(
+                "{}//{}",
+                root.parent().unwrap().display(),
+                root.file_name().unwrap().to_str().unwrap()
+            ));
+            for path in [
+                home.to_path_buf(),
+                root.with_file_name("0".repeat(64)),
+                alias,
+                PathBuf::from(format!("{}/", root.display())),
+                PathBuf::from(format!("{}/.", root.display())),
+                repeated,
+            ] {
+                let discovery = request(&owner, OperationKind::RuntimeGeneration, &path, None);
+                assert!(
+                    owner
+                        .capture(discovery, || Ok(()))
+                        .err()
+                        .unwrap()
+                        .contains("exact original root")
+                );
+                assert!(owner.records.is_empty());
+            }
+            for single_link in [Some(false), Some(true)] {
+                let discovery =
+                    request(&owner, OperationKind::RuntimeGeneration, root, single_link);
+                assert!(owner.capture(discovery, || Ok(())).is_err());
+                assert!(owner.records.is_empty());
+            }
+            let raw = json!({"snapshotId":owner.snapshot_id(),"sequence":1,"operation":{"kind":"runtime-generation","path":root,"singleLink":null}});
+            assert!(
+                owner
+                    .capture_json(&serde_json::to_vec(&raw).unwrap(), || Ok(()))
+                    .is_err()
+            );
+            assert!(owner.records.is_empty());
+        });
+    }
+    #[test]
+    fn runtime_generation_preserves_count_byte_cancel_and_expired_original_limits() {
+        fixture(|generation, home, root| {
+            let clock = deadline();
+            let mut limits = Limits::default();
+            limits.maximum_observations = 1;
+            let mut owner = SelectionObservationOwner::new(
+                generation,
+                &clock,
+                vec![home.into()],
+                limits,
+                || Ok(()),
+            )
+            .unwrap();
+            let discovery = request(&owner, OperationKind::RuntimeGeneration, root, None);
+            assert_eq!(
+                owner
+                    .capture(discovery, || Err("original summary cancelled".into()))
+                    .err()
+                    .unwrap(),
+                "original summary cancelled"
+            );
+            assert!(owner.records.is_empty());
+            capture(&mut owner, OperationKind::RuntimeGeneration, root);
+            let excess = request(
+                &owner,
+                OperationKind::Exists,
+                &home.join("unobserved"),
+                None,
+            );
+            assert!(
+                owner
+                    .capture(excess, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("count exceeds")
+            );
+            let mut limits = Limits::default();
+            limits.maximum_bytes = 128;
+            let mut bounded = SelectionObservationOwner::new(
+                generation,
+                &clock,
+                vec![home.into()],
+                limits,
+                || Ok(()),
+            )
+            .unwrap();
+            let discovery = request(&bounded, OperationKind::RuntimeGeneration, root, None);
+            assert!(
+                bounded
+                    .capture(discovery, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("bytes exceed")
+            );
+            assert!(bounded.records.is_empty());
+            let expired = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+            std::thread::sleep(Duration::from_millis(2));
+            assert!(
+                SelectionObservationOwner::new(
+                    generation,
+                    &expired,
+                    vec![home.into()],
+                    Limits::default(),
+                    || Ok(())
+                )
+                .err()
+                .unwrap()
+                .contains("Original monotonic deadline expired")
+            );
+        });
+    }
+}
