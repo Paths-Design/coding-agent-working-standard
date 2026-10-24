@@ -221,3 +221,8 @@ evidence:
     command: node node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/hooks/opencode-plugin-payload-cwd.test.js
     exit_code: 0
     commit_sha: "6064daa7efd15776c5f327a8a03a4465b12829ec"
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Fresh11 exact-source5f3f09e2 configured native runtime e03fc8e7a809091494451785f017bb88a2ab4f175e75f436eac595e2471a8932: pinned paired probe outer exit1, positive native exit2 at30031.984458ms, no watchdog or signal. Retained readback at /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/production-stop-11-paired-01/retained-failure-readback.json confirms exact distinct-session rows/timestamps, actual turn/index hashes matching marker and ordinary consumer, durable Consumed and heavy release. Goal/plan/session-log handlers complete; agent-stop starts but does not complete. Owner exits0 naturally, socket absent, outstanding originals empty. This is bounded publication evidence inside a FAILED full Stop, not complete replacement acceptance. Negative pair never ran; full harness/performance/fairness/restart/rollback/machine adoption remain unverified. Progress stderr shows36 full generation revalidations,5.846GB hashed,19.770s revalidation; root owns safe bracket coalescing and exact-image rerun without extending30s or caching mutable filesystem observations. Verify checks source commit reachability only."
+    recorded_at: "2026-10-24T18:50:36.887Z"
+    commit_sha: "5f3f09e21cd18a43d860baefab001557b60a1a3c"
