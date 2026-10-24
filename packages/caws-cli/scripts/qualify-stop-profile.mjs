@@ -789,7 +789,7 @@ export async function qualify(requestFile) {
                   throw Error('component corpus unexpectedly requires native local calendar');
                 },
               },
-              signal: new AbortController().signal,
+              signal: new globalThis.AbortController().signal,
               deadlineEpochMs: started + 60000,
             })
         );
