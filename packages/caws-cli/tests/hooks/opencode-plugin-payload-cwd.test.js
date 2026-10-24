@@ -51,7 +51,10 @@ function transpilePlugin() {
 
 beforeAll(() => {
   if (artifactRoot) fs.mkdirSync(artifactRoot, { recursive: true });
-  workDir = fs.mkdtempSync(path.join(artifactRoot || os.tmpdir(), 'caws-opencode-cwd-'));
+  // Shell dispatchers report physical cwd paths, including macOS /var aliases.
+  workDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(artifactRoot || os.tmpdir(), 'caws-opencode-cwd-'))
+  );
   pluginPath = path.join(workDir, 'plugin.cjs');
   fs.writeFileSync(pluginPath, transpilePlugin());
 });

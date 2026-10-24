@@ -231,9 +231,10 @@ export function qualifyTranscriptFloorComponent() {
   assert.equal(ready.disposition, 'ready');
   if (ready.disposition !== 'ready') throw new Error('Expected complete prepared generation');
   assert.equal(ready.publication, 'not_attempted');
+  // Generation identity binds the Claude numeric-policy revision as well as bytes.
   assert.equal(
     ready.generation.identity,
-    '2a92fe14bd721c43b4bf8b31485ac060bf463ca99b577bed8395049588c61c1a'
+    'e6209c7fb0b543757ad984f6fedb018f07722afa774b546821a1dc93a54aaff3'
   );
   assert.equal(ready.checkpoint?.offset, BigInt(source.length));
   assert.deepEqual(ready.generation.proposedRemovals, []);
