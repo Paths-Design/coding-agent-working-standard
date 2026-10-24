@@ -9781,6 +9781,56 @@ Additional bounded evidence and unresolved dependencies:
   idle-retirement-owner-baseline-01; it does not exercise the proposed barrier.
   Parent acceptance, production completion and machine selection are unchanged.
 
+- E363: Resource-free idle retirement uses one serialized actor/registry
+  barrier. Actors refuse pending work, live backend/writer custody, queued
+  effects and any fence other than exact durable Unknown. Retained native
+  originals must match their anchored request bytes, identity and registration;
+  actor and registry record sets agree before commit. Committed actors exit
+  without settling Unknown; the listener drains finished actors before releasing
+  owner custody. Absolute actor idle expiry prevents non-demand probes from
+  postponing ordinary warm-backend cleanup. Unsupported retained SQL/project
+  resources remain quarantined; this change grants no automatic recovery.
+
+  Pinned Cargo idle-retirement-coordinator-01 exits0 in5.794s. Its actual
+  coordinator first refuses a held writer FD, then commits after the test
+  releases that resource. The actor drops its heavy record and shared operation
+  permit. unknown-before.json and unknown-after.json are byte-identical,
+  SHAb5adbeab2c544206056fca3b4329c72ee2820f4cf46df14507f75dc5cecf6069; source
+  database bytes are unchanged. coordinator-stages.jsonl records refusal, commit
+  and actor completion. This controlled native-shaped original does not execute
+  actual native admission or reproduce the production timeout producer.
+
+  idle-retirement-warm-native-01 explicitly runs the ignored warm control, exit0
+  in4.226s. A standalone Rust test child occupies the worker's existing
+  compatibility launch seam; .py-named files are inert markers, no interpreter
+  executes. Real worker34758/backend34759 produce cleanup with direct-child
+  reap, both output EOFs and worker exit0. Eleven probes include ten resource
+  refusals; budget0 and writer-lock reacquisition precede mailbox closure at
+  about1.09s. Temporary probe-triggered timer renewal makes the same check fail:
+  idle-retirement-warm-timer-mutant-01 Cargo101/10.028s retains38 refusals
+  through 4.04s and the specific starvation assertion, followed by owned
+  cleanup. Exact candidate bytes are restored; idle-retirement-warm-restored-01
+  exits0 in6.859s with worker44226/backend44227 cleanup and eleven probes. These
+  controls exercise lifecycle, not renderer semantics or full image admission.
+
+  idle-retirement-store-final-01 exits0 in5.440s with25 executed checks and two
+  ignored cases; the warm case's explicit executions above are separate.
+  idle-retirement-host-final-01 exits0 in4.266s and records two natural host
+  exits, unchanged Unknown and restart fencing. It seeds the journal without a
+  heavy StoreRecord and cannot alone qualify E361's failure path. Earlier
+  idle-retirement-owner-regression-01 and idle-retirement-journal-01 exit0 with
+  30 actor/coordinator and42 journal checks. Feature-off compilation exits0 in
+  idle-retirement-feature-off-01; compiler warnings remain. Retained execution
+  receipts and stdout/stderr under publication-integration establish commands,
+  before/after source/tool pins and empty observed groups for these runs.
+
+  The superseded Python-bearing warm command was refused before execution by the
+  installed foreign-repository write guard. No runtime/guard override or
+  alternate execution of that command occurred. The native-only fixture is a
+  changed test dependency. Root owns committed-candidate review, fresh08 exact
+  image execution and the original30s publication/ordinary-consumption/release
+  chain. No parent criterion or production Python row is completed by E363.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -9902,11 +9952,13 @@ of resource-free durable Unknown. Preserve fenced uncertainty; automatic
 settlement of every Unknown is not a requirement.
 
 E362 implements bounded member traversal reuse with hostile filesystem and
-consumer checks. Root next reviews the committed candidate and measures the
-unchanged positive scenario through a fresh exact image. In parallel, the
-idle-retirement owner corrects probe-induced timer starvation before
-integration; resource-free Unknown must remain durable and fenced across natural
-owner exit.
+consumer checks; committed-candidate review finds no demonstrated regression
+within that inspected scope. E363 integrates resource-free Unknown retirement
+and tests the probe-starvation defect with a failing mutation and restored
+positive control. Root next reviews the combined committed candidate and runs
+the unchanged positive scenario through fresh08. The exact production path must
+establish publication, ordinary consumption and release within30s; its failure
+path must preserve fenced Unknown through natural resource-free owner exit.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

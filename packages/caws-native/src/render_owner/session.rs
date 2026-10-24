@@ -278,6 +278,11 @@ pub(super) struct SessionRegistry {
     capacity: Arc<relay::OperationCapacity>,
 }
 impl SessionRegistry {
+    // Nonempty session records can retain volatile results or project owners.
+    // This bounded idle path does not discard or reinterpret them.
+    pub(super) fn idle_empty(&self) -> bool {
+        self.records.is_empty()
+    }
     pub(super) fn new(capacity: Arc<relay::OperationCapacity>) -> Self {
         Self {
             records: BTreeMap::new(),

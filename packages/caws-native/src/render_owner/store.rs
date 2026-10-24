@@ -515,6 +515,50 @@ pub(super) struct StoreRecord {
     _operation: relay::OperationPermit,
 }
 impl StoreRecord {
+    pub(super) fn idle_unknown(
+        &self,
+        operation: &journal::Operation,
+        expires: Instant,
+    ) -> Result<()> {
+        check(expires)?;
+        // Refuse all SQL/project settlement objects, even already-closed ones.
+        // Generalizing this predicate requires their separate custody proof.
+        if self.result.is_some()
+            || self.writer.is_some()
+            || self.publication.is_some()
+            || self.consumed
+            || !self.original.publication
+            || !self.original_project_bound
+            || self.publication_error.is_none()
+        {
+            return Err("idle store record retains resources or volatile state".into());
+        }
+        let original = serde_json::to_vec(self.original.as_ref()).map_err(err)?;
+        let digest = sha(&original);
+        let identity = operation.identity();
+        let binding = self
+            .original
+            .native_stop
+            .as_ref()
+            .ok_or("idle record has no native original binding")?;
+        let service_key = wire::project_service_key(&binding.canonical_root).map_err(err)?;
+        if identity.project_service_key != service_key
+            || !matches!(
+                operation.outcome(),
+                journal::AcceptedOutcome::Unknown { .. }
+            )
+            || identity.request_id != publication::original_request_id(&self.original.id)
+            || identity.argument_digest != digest
+            || identity.source_generation != self.original.runtime_digest
+            || identity.execution_image_digest != self.original.runtime_digest
+            || operation.verified_request().map_err(err)? != digest.as_bytes()
+        {
+            return Err("idle store record does not match exact durable Unknown".into());
+        }
+        // The original native binding plus exact original hash binds the key;
+        // do not resolve paths or repeat project observation on idle.
+        check(expires)
+    }
     fn completion(&self) -> StoreCompletion {
         let acquisition = match &self.result {
             Some(Ok(a)) => Some(summary(a)),
@@ -582,6 +626,32 @@ impl StoreRegistry {
     }
     pub(super) fn is_empty(&self) -> bool {
         self.records.is_empty()
+    }
+    pub(super) fn idle_matches(&self, expected: &std::collections::BTreeSet<usize>) -> Result<()> {
+        if !self.quarantine.is_empty() {
+            return Err("idle store quarantine retained".into());
+        }
+        if self.is_empty() != expected.is_empty() {
+            return Err("idle store registry/proof presence differs".into());
+        }
+        let mut actual = std::collections::BTreeSet::new();
+        for (id, (runtime, registration, weak)) in &self.records {
+            let record = weak.upgrade().ok_or("idle store record lost its owner")?;
+            let held = record.try_lock().map_err(|_| "idle store record busy")?;
+            if held.original.id != *id
+                || held.original.runtime_digest != *runtime
+                || held.registration != *registration
+            {
+                return Err("idle store registration changed".into());
+            }
+            if !actual.insert(Arc::as_ptr(&record) as usize) {
+                return Err("idle aliased store registration".into());
+            }
+        }
+        if &actual != expected {
+            return Err("idle store record lacks exact actor proof".into());
+        }
+        Ok(())
     }
     fn reserve(&mut self, original: StoreAcquire) -> Result<Arc<Mutex<StoreRecord>>> {
         if self.records.contains_key(&original.id) {

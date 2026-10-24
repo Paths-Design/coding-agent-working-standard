@@ -2159,3 +2159,659 @@ fn native_reply_binds_exact_challenge_digest_and_phase() {
         }
     }
 }
+
+#[test]
+fn idle_store_proof_requires_exact_unknown_and_registry_actor_agreement() {
+    let f = Fixture::new();
+    let acquire = native_transport_fixture(&f, "idle-original");
+    let digest = sha(&serde_json::to_vec(&acquire).unwrap());
+    let custody = journal::Custody::acquire(&custody_path(&f.config), expires()).unwrap();
+    let key = wire::project_service_key(f.root.to_str().unwrap()).unwrap();
+    let mut journal = journal::Journal::open(Arc::clone(&custody), &key, 2, expires()).unwrap();
+    let identity = journal::Identity {
+        request_id: publication::original_request_id(&acquire.id),
+        argument_digest: digest.clone(),
+        project_service_key: key,
+        source_generation: acquire.runtime_digest.clone(),
+        execution_image_digest: acquire.runtime_digest.clone(),
+    };
+    journal
+        .admit(identity, digest.as_bytes(), expires())
+        .unwrap();
+    let dispatch = journal
+        .begin_next(&acquire.runtime_digest, &acquire.runtime_digest, expires())
+        .unwrap()
+        .unwrap();
+    let mut registry = StoreRegistry::new(2);
+    let record = registry.reserve(acquire).unwrap();
+    {
+        let mut r = record.lock().unwrap();
+        r.original_project_bound = true;
+        r.publication_error = Some("original frontend disconnected".into());
+        assert!(r.idle_unknown(dispatch.operation(), expires()).is_err());
+    }
+    let unknown = journal.unknown(&dispatch, expires()).unwrap();
+    let bytes = fs::read(
+        f.config
+            .home
+            .join("state/render-service/custody/operations/services")
+            .join(&unknown.identity().project_service_key)
+            .join(format!("{}.json", unknown.identity().request_id)),
+    )
+    .unwrap();
+    assert!(
+        record
+            .lock()
+            .unwrap()
+            .idle_unknown(&unknown, expires())
+            .is_ok()
+    );
+    let expected = std::collections::BTreeSet::from([Arc::as_ptr(&record) as usize]);
+    assert!(registry.idle_matches(&expected).is_ok());
+    assert!(
+        registry
+            .idle_matches(&std::collections::BTreeSet::new())
+            .is_err()
+    );
+    record.lock().unwrap().publication_error = None;
+    assert!(
+        record
+            .lock()
+            .unwrap()
+            .idle_unknown(&unknown, expires())
+            .is_err()
+    );
+    record.lock().unwrap().publication_error = Some("retained".into());
+    record.lock().unwrap().writer = Some(Arc::clone(&custody));
+    assert!(
+        record
+            .lock()
+            .unwrap()
+            .idle_unknown(&unknown, expires())
+            .is_err()
+    );
+    record.lock().unwrap().writer = None;
+    record.lock().unwrap().result = Some(Err(store::ServeError::AfterProjectBinding(
+        "retained result".into(),
+    )));
+    assert!(
+        record
+            .lock()
+            .unwrap()
+            .idle_unknown(&unknown, expires())
+            .is_err()
+    );
+    record.lock().unwrap().result = None;
+    record.lock().unwrap().consumed = true;
+    assert!(
+        record
+            .lock()
+            .unwrap()
+            .idle_unknown(&unknown, expires())
+            .is_err()
+    );
+    record.lock().unwrap().consumed = false;
+    registry.quarantine.push(Arc::clone(&record));
+    assert!(registry.idle_matches(&expected).is_err());
+    assert_eq!(
+        fs::read(
+            f.config
+                .home
+                .join("state/render-service/custody/operations/services")
+                .join(&unknown.identity().project_service_key)
+                .join(format!("{}.json", unknown.identity().request_id))
+        )
+        .unwrap(),
+        bytes
+    );
+}
+
+// Test-only compatibility launch seam: actual native worker plus a Rust child.
+// The required .py-named files are inert data; no interpreter executes them.
+// This is worker/actor lifecycle evidence, not image admission or rendering.
+#[test]
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[ignore = "requires pinned native, RUSTC/linker/SDK environment and retained artifact root"]
+fn idle_probes_cannot_starve_real_warm_backend_retirement() {
+    let artifact_parent = PathBuf::from(
+        std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
+            .expect("retain the actual warm backend evidence under CAWS_NATIVE_TEST_ARTIFACT_ROOT"),
+    );
+    canonical(&artifact_parent).unwrap();
+    let root = artifact_parent.join(format!("idle-warm-probes-{}", random().unwrap()));
+    private_dir(&root, true).unwrap();
+    let native = PathBuf::from(
+        std::env::var_os("CAWS_NATIVE_TEST_NATIVE").expect("qualified built native executable"),
+    );
+    canonical(&native).unwrap();
+    let native_sha = sha(&fs::read(&native).unwrap());
+    assert_eq!(
+        native_sha,
+        std::env::var("CAWS_NATIVE_TEST_NATIVE_SHA256").expect("explicit built executable SHA256")
+    );
+    let source = PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/idle-backend.rs"
+    ))
+    .canonicalize()
+    .unwrap();
+    let rustc = PathBuf::from(std::env::var_os("RUSTC").expect("qualified RUSTC"))
+        .canonicalize()
+        .unwrap();
+    let linker = PathBuf::from(
+        std::env::var_os("CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER")
+            .expect("qualified explicit target linker"),
+    )
+    .canonicalize()
+    .unwrap();
+    let sdk = PathBuf::from(std::env::var_os("SDKROOT").expect("qualified SDKROOT"))
+        .canonicalize()
+        .unwrap();
+    let deployment =
+        std::env::var("MACOSX_DEPLOYMENT_TARGET").expect("qualified deployment target");
+    let backend_fixture = root.join("idle-backend-fixture");
+    let compiler_argv = vec![
+        "--edition=2024".to_string(),
+        "--target=aarch64-apple-darwin".into(),
+        "--crate-name=caws_idle_backend_fixture".into(),
+        "-C".into(),
+        format!("linker={}", linker.display()),
+        source.to_str().unwrap().into(),
+        "-o".into(),
+        backend_fixture.to_str().unwrap().into(),
+    ];
+    fs::write(root.join("compiler-command.json"),serde_json::to_vec_pretty(&serde_json::json!({
+        "executable":rustc,"executableSha256":sha(&fs::read(&rustc).unwrap()),"argv":compiler_argv,
+        "source":source,"sourceSha256":sha(&fs::read(&source).unwrap()),"linker":linker,
+        "linkerSha256":sha(&fs::read(&linker).unwrap()),"SDKROOT":sdk,"MACOSX_DEPLOYMENT_TARGET":deployment
+    })).unwrap()).unwrap();
+    let compiler_stdout = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(root.join("compiler.stdout"))
+        .unwrap();
+    let compiler_stderr = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(root.join("compiler.stderr"))
+        .unwrap();
+    let compiler_started = Instant::now();
+    let mut compiler = Command::new(&rustc)
+        .args(&compiler_argv)
+        .env("SDKROOT", &sdk)
+        .env("MACOSX_DEPLOYMENT_TARGET", &deployment)
+        .stdin(Stdio::null())
+        .stdout(compiler_stdout)
+        .stderr(compiler_stderr)
+        .spawn()
+        .unwrap();
+    let compiler_until = compiler_started + Duration::from_secs(30);
+    let mut compiler_timed_out = false;
+    let compiler_status = loop {
+        if let Some(status) = compiler.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= compiler_until {
+            compiler_timed_out = true;
+            // Same direct-owned compiler cleanup pattern as tests/invoke.rs.
+            compiler.kill().unwrap();
+            break compiler.wait().unwrap();
+        }
+        thread::sleep(Duration::from_millis(5));
+    };
+    fs::write(root.join("compiler-terminal.json"),serde_json::to_vec_pretty(&serde_json::json!({
+        "pid":compiler.id(),"exitCode":compiler_status.code(),"signal":compiler_status.signal(),
+        "timedOut":compiler_timed_out,"elapsedMicros":compiler_started.elapsed().as_micros(),
+        "binarySha256":if compiler_status.success() {Some(sha(&fs::read(&backend_fixture).unwrap()))}else{None}
+    })).unwrap()).unwrap();
+    assert!(
+        !compiler_timed_out && compiler_status.success(),
+        "native test fixture compilation failed; {}",
+        root.display()
+    );
+    let hooks = root.join("hooks");
+    private_dir(&hooks, true).unwrap();
+    private_dir(&hooks.join("lib"), true).unwrap();
+    private_dir(&root.join("state"), true).unwrap();
+    private_dir(&root.join(".caws"), true).unwrap();
+    private_dir(&root.join(".caws/sessions"), true).unwrap();
+    let daemon = hooks.join("session_log_daemon.py");
+    let renderer = hooks.join("session_log_renderer.py");
+    for file in [&daemon, &renderer] {
+        fs::write(file, b"native idle fixture marker; never executed\n").unwrap();
+        fs::set_permissions(file, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let mut entries = vec![daemon.clone(), renderer.clone()];
+    entries.sort();
+    let fingerprint_body = entries
+        .iter()
+        .map(|path| {
+            let meta = fs::metadata(path).unwrap();
+            format!(
+                "{}:{}",
+                path.display(),
+                i128::from(meta.mtime()) * 1_000_000_000 + i128::from(meta.mtime_nsec())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let fingerprint = sha(fingerprint_body.as_bytes());
+    let fingerprint_file = root.join("backend-fingerprint.txt");
+    fs::write(&fingerprint_file, format!("{fingerprint}\n")).unwrap();
+    fs::set_permissions(&fingerprint_file, fs::Permissions::from_mode(0o600)).unwrap();
+    let c = OwnerConfig {
+        schema: CONFIG_SCHEMA.into(),
+        home: root.clone(),
+        client_root: root.clone(),
+        template_root: root.clone(),
+        client_shell_source: daemon.clone(),
+        native_executable: native.clone(),
+        limits: OwnerLimits {
+            max_connections: 4,
+            max_projects: 2,
+            max_backends: 1,
+            max_queue_per_project: 2,
+            max_frame_bytes: 1048576,
+            max_retained_records: 8,
+            first_frame_ms: 1000,
+            request_ms: 5000,
+            startup_ms: 1000,
+            idle_ms: 1000,
+            backend_idle_seconds: 30,
+            cache_megabytes: 1,
+            worker: backend::WorkerLimits {
+                startup_ms: 10000,
+                connect_ms: 1000,
+                write_ms: 1000,
+                render_ms: 1000,
+                read_ms: 1000,
+                cleanup_ms: 2000,
+            },
+        },
+    };
+    let c = Arc::new(c);
+    provision(&c, expires()).unwrap();
+    let custody = journal::Custody::acquire(&custody_path(&c), expires()).unwrap();
+    let writer = crate::render_writer::acquire(&root, &root, expires()).unwrap();
+    let mut manifest = super::super::tests::offered().prepared.manifest;
+    manifest.execution.root = root.to_str().unwrap().into();
+    manifest.execution.hooks = "hooks".into();
+    manifest.execution.files = serde_json::from_value(serde_json::json!([
+        {"path":"hooks/session_log_daemon.py","sha256":sha(&fs::read(&daemon).unwrap()),"bytes":fs::metadata(&daemon).unwrap().len(),"mode":384},
+        {"path":"hooks/session_log_renderer.py","sha256":sha(&fs::read(&renderer).unwrap()),"bytes":fs::metadata(&renderer).unwrap().len(),"mode":384}
+    ])).unwrap();
+    manifest.toolchain_tcb.tools = serde_json::from_value(serde_json::json!([
+        // Existing compatibility field/argv, populated only by this test fixture.
+        {"name":"python3","path":backend_fixture,"sha256":sha(&fs::read(&backend_fixture).unwrap())}
+    ]))
+    .unwrap();
+    let view = git::GitView {
+        git_directory: root.clone(),
+        git_work_tree: root.clone(),
+        git_original_directory: root.clone(),
+        git_common_directory: root.clone(),
+        metadata_digest: "a".repeat(64),
+        metadata_files: 0,
+        metadata_bytes: 0,
+    };
+    let directory = root.join("worker");
+    private_dir(&directory, true).unwrap();
+    let observations = Arc::new(ObservationLog::open(&c, Instant::now()).unwrap());
+    let mut process = spawn_worker(
+        &c,
+        WorkerCustody {
+            machine: &custody,
+            writer: &writer,
+        },
+        &manifest,
+        view,
+        directory,
+        Arc::clone(&observations),
+        Instant::now() + Duration::from_secs(15),
+    )
+    .unwrap_or_else(|failure| panic!("real worker startup: {}", failure.reason));
+    assert!(
+        process
+            .child
+            .as_mut()
+            .unwrap()
+            .try_wait()
+            .unwrap()
+            .is_none()
+    );
+    let worker_pid = process.child.as_ref().unwrap().id();
+    let backend_pid = process.backend_pid;
+    assert!(backend_pid > 1);
+    let backend_instance: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("backend-instance.json")).unwrap()).unwrap();
+    assert_eq!(backend_instance["pid"], backend_pid);
+    assert_eq!(backend_instance["processGroup"], backend_pid);
+    assert_eq!(backend_instance["fingerprint"], fingerprint);
+    assert_eq!(backend_instance["interpreterExecuted"], false);
+    fs::write(root.join("command.json"),serde_json::to_vec_pretty(&serde_json::json!({
+        "native":native,"nativeSha256":native_sha,"argv":["renderer-worker"],"backendFixture":backend_fixture,
+        "backendFixtureSha256":sha(&fs::read(&backend_fixture).unwrap()),"backendSource":source,
+        "backendSourceSha256":sha(&fs::read(&source).unwrap()),"fingerprint":fingerprint,
+        "fixtureConfigSha256":sha(&fs::read(&fingerprint_file).unwrap()),"workerPid":worker_pid,"backendPid":backend_pid,
+        "compatibilityLaunchSeam":true,"inertPyNamedMarkers":true,"interpreterExecuted":false,
+        "idleMs":c.limits.idle_ms,"probeIntervalMs":100,"imageAdmission":false,"actualWorkerAndBackend":true
+    })).unwrap()).unwrap();
+    let journal =
+        journal::Journal::open(Arc::clone(&custody), &"a".repeat(64), 8, expires()).unwrap();
+    let budget = Arc::new(Mutex::new(Budget {
+        used: 1,
+        maximum: 1,
+    }));
+    let actor = Actor {
+        config: Arc::clone(&c),
+        custody,
+        writer_custody: Some(writer),
+        writer_intent: None,
+        journal,
+        budget: Arc::clone(&budget),
+        process: Some(process),
+        reserved: true,
+        unknown: false,
+        observations: Arc::clone(&observations),
+        phase: "warm-idle",
+        store_records: Vec::new(),
+    };
+    let (sender, receive) = mpsc::sync_channel(2);
+    let mut running = FifoActor {
+        sender: Some(sender),
+        peers: Vec::new(),
+        readers: Vec::new(),
+        actor: Some(thread::spawn(move || actor.run(receive))),
+    };
+    let started = Instant::now();
+    let limit = started + Duration::from_secs(4);
+    let mut probes = Vec::new();
+    loop {
+        let barrier = IdleBarrier::new(Instant::now() + Duration::from_millis(500));
+        let (reply, receive) = mpsc::sync_channel(1);
+        let sent = started.elapsed().as_micros();
+        running
+            .sender
+            .as_ref()
+            .unwrap()
+            .try_send(Mailbox::Idle(IdleProbe {
+                barrier: Arc::clone(&barrier),
+                reply,
+            }))
+            .unwrap_or_else(|_| panic!("warm idle probe send"));
+        let result = receive
+            .recv_timeout(Duration::from_millis(750))
+            .expect("bounded idle probe reply");
+        barrier.finish(false); // These probes never authorize actor/owner exit.
+        probes.push(serde_json::json!({"sentMicros":sent,"replyMicros":started.elapsed().as_micros(),"ready":result.is_ok(),"reason":result.err()}));
+        fs::write(
+            root.join("probes.json"),
+            serde_json::to_vec_pretty(&probes).unwrap(),
+        )
+        .unwrap();
+        let events = fifo_observations(&c);
+        if events
+            .iter()
+            .any(|event| event["event"] == "worker_exit" && event["nativeWorkerPid"] == worker_pid)
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < limit,
+            "repeated aborted probes postponed ordinary real-backend retirement"
+        );
+        thread::sleep(Duration::from_millis(100));
+    }
+    assert!(
+        probes.len() >= 4,
+        "must actually interleave multiple probes before idle retirement"
+    );
+    assert!(probes.iter().take(4).all(|probe| probe["ready"] == false));
+    assert!(
+        probes
+            .windows(2)
+            .all(|pair| pair[1]["sentMicros"].as_u64().unwrap()
+                - pair[0]["sentMicros"].as_u64().unwrap()
+                < 1_000_000),
+        "a probe gap reaching idleMs cannot falsify timer starvation"
+    );
+    assert_eq!(budget.lock().unwrap().used, 0);
+    drop(crate::render_writer::acquire(&root, &root, expires()).unwrap());
+    running.stop();
+    let events = fifo_observations(&c);
+    assert_eq!(
+        events
+            .iter()
+            .filter(
+                |event| event["event"] == "worker_exit" && event["nativeWorkerPid"] == worker_pid
+            )
+            .count(),
+        1
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event["event"] == "worker_cleanup"
+                && event["nativeWorkerPid"] == worker_pid)
+    );
+    fs::write(root.join("terminal.json"),serde_json::to_vec_pretty(&serde_json::json!({
+        "elapsedMicros":started.elapsed().as_micros(),"probes":probes,"budgetUsed":budget.lock().unwrap().used,
+        "actorJoined":true,"workerExitObserved":true,"writerLockReacquired":true,"renderRequested":false
+    })).unwrap()).unwrap();
+    eprintln!("real warm idle probe evidence retained: {}", root.display());
+}
+
+#[test]
+fn idle_coordinator_retires_exact_actor_held_store_unknown_only_after_resource_release() {
+    let f = Fixture::new();
+    private_dir(&f.root.join(".caws"), true).unwrap();
+    private_dir(&f.root.join(".caws/sessions"), true).unwrap();
+    let database_before = fs::read(&f.database).unwrap();
+    let mut actor = f.actor();
+    let operations = relay::OperationCapacity::new(2);
+    let registry = Arc::new(Mutex::new(StoreRegistry::with_capacity(
+        2,
+        Arc::clone(&operations),
+    )));
+    let sessions = Arc::new(Mutex::new(session::SessionRegistry::new(Arc::clone(
+        &operations,
+    ))));
+    let original = native_transport_fixture(&f, "idle-coordinator-heavy-original");
+    let record = registry.lock().unwrap().reserve(original).unwrap();
+    {
+        let mut held = record.lock().unwrap();
+        held.original_project_bound = true;
+        held.publication_error = Some("original caller disconnected after reservation".into());
+    }
+    let original = Arc::clone(&record.lock().unwrap().original);
+    let dispatch = actor
+        .reserve_original(&original, expires(), &|_| Ok(()))
+        .unwrap();
+    let unknown = actor.journal.unknown(&dispatch, expires()).unwrap();
+    actor.unknown = true;
+    actor.store_records.push(Arc::clone(&record));
+    // A genuine held project-writer FD in the record is unsupported live state.
+    record.lock().unwrap().writer =
+        Some(crate::render_writer::acquire(&f.root, &f.root, expires()).unwrap());
+    let operation_path = custody_path(&f.config)
+        .join("operations/services")
+        .join(&unknown.identity().project_service_key)
+        .join(format!("{}.json", unknown.identity().request_id));
+    let before = fs::read(&operation_path).unwrap();
+    let observations = Arc::new(ObservationLog::open(&f.config, Instant::now()).unwrap());
+    actor.observations = Arc::clone(&observations);
+    let custody = Arc::clone(&actor.custody);
+    let budget = Arc::clone(&actor.budget);
+    let (sender, receiver) = mpsc::sync_channel(2);
+    let route = ProjectRoute {
+        sender,
+        capacity: Arc::new(ProjectCapacity {
+            used: AtomicUsize::new(0),
+            maximum: 2,
+        }),
+    };
+    let routing = Arc::new(Mutex::new(Routing {
+        actors: BTreeMap::from([(unknown.identity().project_service_key.clone(), route)]),
+        joins: vec![thread::spawn(move || actor.run(receiver))],
+        config: Arc::clone(&f.config),
+        custody: Arc::clone(&custody),
+        budget,
+        observations,
+    }));
+    struct Drain(Arc<Mutex<Routing>>);
+    impl Drop for Drain {
+        fn drop(&mut self) {
+            let joins = {
+                let mut r = self.0.lock().unwrap();
+                r.actors.clear();
+                std::mem::take(&mut r.joins)
+            };
+            // This control never constructs a BackendProcess or SQL owner.
+            for join in joins {
+                let _ = join.join();
+            }
+        }
+    }
+    let _drain = Drain(Arc::clone(&routing));
+    let evidence = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT").map(|parent| {
+        let path =
+            PathBuf::from(parent).join(format!("idle-heavy-coordinator-{}", random().unwrap()));
+        private_dir(&path, true).unwrap();
+        fs::write(path.join("unknown-before.json"), &before).unwrap();
+        path
+    });
+    let record_stage = |phase: &str, result: bool| {
+        if let Some(path) = &evidence {
+            let mut output = fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .mode(0o600)
+                .open(path.join("coordinator-stages.jsonl"))
+                .unwrap();
+            writeln!(output,"{}",serde_json::json!({"phase":phase,"coordinatorReturn":result,
+                "unknownSha256":sha(&fs::read(&operation_path).unwrap()),"operationPermitRetained":operations.retained(),
+                "registryRecords":registry.lock().unwrap().records.len(),
+                "actorsFinished":routing.lock().unwrap().joins.iter().all(|join|join.is_finished())})).unwrap();
+        }
+    };
+    let active = AtomicUsize::new(0);
+    assert!(operations.retained());
+    assert!(!registry.lock().unwrap().is_empty());
+    let refused = !idle_retirement(
+        &routing,
+        &active,
+        &operations,
+        &sessions,
+        &registry,
+        expires(),
+    );
+    record_stage("writer-resource-refusal", !refused);
+    assert!(
+        refused,
+        "live writer record must refuse real coordinator barrier"
+    );
+    assert!(
+        routing
+            .lock()
+            .unwrap()
+            .joins
+            .iter()
+            .all(|join| !join.is_finished())
+    );
+    assert!(record.lock().unwrap().writer.is_some());
+    assert!(
+        crate::render_writer::acquire(&f.root, &f.root, Instant::now() + Duration::from_millis(30))
+            .is_err()
+    );
+    assert_eq!(fs::read(&operation_path).unwrap(), before);
+    // This test owns the unsupported extra writer FD. Release that resource;
+    // do not modify the durable Unknown or create a terminal acknowledgement.
+    record.lock().unwrap().writer.take();
+    drop(crate::render_writer::acquire(&f.root, &f.root, expires()).unwrap());
+    let weak = Arc::downgrade(&record);
+    drop(record);
+    drop(original);
+    drop(dispatch);
+    assert!(
+        weak.upgrade().is_some(),
+        "actor must still own the actual heavy record"
+    );
+    assert!(operations.retained());
+    let committed = idle_retirement(
+        &routing,
+        &active,
+        &operations,
+        &sessions,
+        &registry,
+        expires(),
+    );
+    record_stage("resource-free-commit", committed);
+    assert!(
+        committed,
+        "exact resource-free heavy record must pass real coordinator"
+    );
+    let until = expires();
+    while routing
+        .lock()
+        .unwrap()
+        .joins
+        .iter()
+        .any(|join| !join.is_finished())
+        && Instant::now() < until
+    {
+        thread::sleep(TICK);
+    }
+    assert!(
+        routing
+            .lock()
+            .unwrap()
+            .joins
+            .iter()
+            .all(|join| join.is_finished())
+    );
+    assert!(
+        weak.upgrade().is_none(),
+        "heavy record must be released by actor exit, not a test-held Arc"
+    );
+    assert!(
+        !operations.retained(),
+        "actual shared operation permit must be released"
+    );
+    assert_eq!(fs::read(&operation_path).unwrap(), before);
+    assert_eq!(fs::read(&f.database).unwrap(), database_before);
+    let journal = journal::Journal::open(
+        custody,
+        &unknown.identity().project_service_key,
+        2,
+        expires(),
+    )
+    .unwrap();
+    assert_eq!(
+        journal
+            .lookup(&unknown.identity().request_id, expires())
+            .unwrap(),
+        Some(unknown.clone())
+    );
+    record_stage("actor-finished-heavy-record-released", true);
+    if let Some(evidence) = &evidence {
+        fs::write(
+            evidence.join("unknown-after.json"),
+            fs::read(&operation_path).unwrap(),
+        )
+        .unwrap();
+        fs::copy(
+            base(&f.config).join("observations.jsonl"),
+            evidence.join("observations.jsonl"),
+        )
+        .unwrap();
+        fs::write(evidence.join("terminal.json"),serde_json::to_vec_pretty(&serde_json::json!({
+            "coordinatorInvoked":true,"heavyRecordAndRegistryPresentBefore":true,"writerRefused":true,
+            "writerResourceReleasedByTest":true,"coordinatorCommitted":true,"actorFinished":true,
+            "heavyRecordReleased":true,"operationPermitReleased":true,"unknownSha256":sha(&before),
+            "unknownUnchanged":true,"databaseSha256":sha(&database_before),"databaseUnchanged":true,
+            "operationRecovery":false,"nativeOriginalAdmission":false
+        })).unwrap()).unwrap();
+    }
+}
