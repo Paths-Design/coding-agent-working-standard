@@ -9418,6 +9418,39 @@ Additional bounded evidence and unresolved dependencies:
   unverified. The selected machine generation remains 408c06a7…77baa0. No parent
   criterion advances from this failed scenario.
 
+- E352: Request-owned diagnostics count and time completed generation-receipt
+  revalidations and Stop-prefix authority callbacks, including refusals. The
+  original invocation owns the counters before capture, so a refused capture
+  does not discard its measurement. Existing progress emission carries count and
+  elapsedMicros only; no payload paths or authority state are added. The initial
+  generation load is excluded. Prefix time includes nested generation time, so
+  the totals must not be summed. Deadlines, verification predicates and effect
+  ordering are unchanged; the instrumentation is not an optimization.
+
+  The first diagnostic filter exits 0 but omits sqlite-store, exercising nine
+  selected checks without the production eligibility path. The corrected
+  --features sqlite-store diagnostic filter exits 0 in 4.649s with ten selected
+  checks, including the four new timing checks and actual linked SQLite
+  identity. The generation suite exits 0 in 0.584s with 28 checks covering
+  replacement, inventory, modes, original expiry and chunk cancellation.
+  Feature-disabled compilation exits 0 in 1.094s. Existing warnings remain in
+  stderr; these are not strict-Clippy observations. All supervisors retain
+  unchanged source/input pins and no observed group residue. Raw commands and
+  logs live under publication-integration/stop-validation-diagnostics-01,
+  stop-validation-diagnostics-sqlite-01, stop-validation-generation-01 and
+  stop-validation-feature-off-01.
+
+  The retained failed-capture fixture reports engineReads=2,
+  receiptRevalidations={count:1,elapsedMicros:186},
+  initialSelectionReadExcluded=true and the exact original error "capture
+  receipt revalidation refused". Its artifact is
+  stop-validation-diagnostics-sqlite-01/generation-artifacts/
+  caws-generation-receipt-26245-0/failed-capture-revalidation-diagnostics.json.
+  This demonstrates counter retention after a refused receipt in that fixture;
+  it does not measure production cost. Root owns a fresh committed-image replay
+  under the unchanged 30s deadline. No publication, speedup, residency or parent
+  acceptance follows from these diagnostics or checks.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

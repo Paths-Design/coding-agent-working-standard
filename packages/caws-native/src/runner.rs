@@ -1707,10 +1707,11 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
             && config.surface == "opencode"
             && config.event == "stop"
     }
-    pub fn capture(
+    pub(crate) fn capture_with_diagnostics(
         config: &Config,
         request: &crate::protocol::Request,
         deadline: &'deadline caws_native::monotonic_deadline::MonotonicDeadline,
+        generation_receipt_revalidations: crate::native_generation::CheckTimings,
         mut phase: impl FnMut(&'static str),
     ) -> Self {
         let mut prepared = Self {
@@ -1739,10 +1740,11 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
             return prepared;
         }
         phase("generation-capture");
-        let generation = match crate::native_generation::GenerationReceipt::capture(
+        let generation = match crate::native_generation::GenerationReceipt::capture_with_diagnostics(
             &home,
             config,
             deadline.expires(),
+            generation_receipt_revalidations,
             || {
                 crate::cancellation::check()?;
                 deadline.check().map_err(|e| e.to_string())

@@ -10,10 +10,53 @@ use crate::{
     installed_generation::{MemberMetadata, Selection, Verification},
 };
 use std::{
+    cell::Cell,
     collections::BTreeMap,
     path::{Path, PathBuf},
-    time::Instant,
+    rc::Rc,
+    time::{Duration, Instant},
 };
+
+/// Request-local diagnostic accumulation. Never consulted by verification or
+/// authority. A shared handle preserves failed-capture measurements after the
+/// partial receipt is dropped; it is not a cache or a process-global counter.
+#[derive(Clone, Default)]
+pub(crate) struct CheckTimings(Rc<Cell<CheckTimingTotals>>);
+#[derive(Clone, Copy, Default)]
+struct CheckTimingTotals {
+    count: u64,
+    elapsed: Duration,
+}
+#[derive(Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CheckTimingSnapshot {
+    pub count: u64,
+    pub elapsed_micros: u64,
+}
+impl CheckTimings {
+    pub(crate) fn measure<R>(&self, operation: impl FnOnce() -> R) -> R {
+        let started = Instant::now();
+        let result = operation();
+        // Record after either successful or refused completion; the operation's
+        // exact result is returned unchanged. Panics are outside CLI outcomes.
+        self.record(started.elapsed());
+        result
+    }
+    fn record(&self, elapsed: Duration) {
+        let previous = self.0.get();
+        self.0.set(CheckTimingTotals {
+            count: previous.count.saturating_add(1),
+            elapsed: previous.elapsed.saturating_add(elapsed),
+        });
+    }
+    pub(crate) fn snapshot(&self) -> CheckTimingSnapshot {
+        let totals = self.0.get();
+        CheckTimingSnapshot {
+            count: totals.count,
+            elapsed_micros: totals.elapsed.as_micros().min(u64::MAX as u128) as u64,
+        }
+    }
+}
 
 /// Fixed-size metadata plus the 64-byte digest; never the runtime file body.
 /// Not deserializable: only this native owner constructs an observation.
@@ -27,6 +70,7 @@ pub(crate) struct RuntimeMemberDigest {
 /// protocol owner must retain this value for the original invocation, correlate
 /// its observation ids/readset, and call revalidate before consuming selection.
 pub(crate) struct GenerationReceipt {
+    receipt_revalidation_timings: CheckTimings,
     selection: Selection,
     expires: Instant,
     files: BTreeMap<PathBuf, MemberMetadata>,
@@ -34,30 +78,59 @@ pub(crate) struct GenerationReceipt {
     ancestors: BTreeMap<PathBuf, MemberMetadata>,
 }
 impl GenerationReceipt {
+    #[cfg(test)]
     pub(crate) fn capture(
         home: &Path,
         config: &Config,
         expires: Instant,
+        cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Self, String> {
+        Self::capture_with_diagnostics(home, config, expires, CheckTimings::default(), cancel)
+    }
+
+    pub(crate) fn capture_with_diagnostics(
+        home: &Path,
+        config: &Config,
+        expires: Instant,
+        receipt_revalidation_timings: CheckTimings,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<Self, String> {
         let mut verify = Verification::new(expires, &mut cancel);
         verify.checkpoint()?;
         let running = std::env::current_exe();
         verify.checkpoint()?;
-        Self::capture_at(
+        Self::capture_at_with_diagnostics(
             home,
             config,
             &running.map_err(|e| e.to_string())?,
             &mut verify,
+            receipt_revalidation_timings,
         )
     }
 
     // The image path and chunk observer are private test seams only.
+    #[cfg(test)]
     fn capture_at(
         home: &Path,
         config: &Config,
         running_native: &Path,
         verify: &mut Verification<'_>,
+    ) -> Result<Self, String> {
+        Self::capture_at_with_diagnostics(
+            home,
+            config,
+            running_native,
+            verify,
+            CheckTimings::default(),
+        )
+    }
+
+    fn capture_at_with_diagnostics(
+        home: &Path,
+        config: &Config,
+        running_native: &Path,
+        verify: &mut Verification<'_>,
+        receipt_revalidation_timings: CheckTimings,
     ) -> Result<Self, String> {
         verify.checkpoint()?;
         let selection = Selection::read_generation(home, &config.digest, verify)?;
@@ -110,6 +183,7 @@ impl GenerationReceipt {
             }
         }
         let receipt = Self {
+            receipt_revalidation_timings,
             selection,
             expires: verify.expires(),
             files,
@@ -356,9 +430,11 @@ impl GenerationReceipt {
         self.revalidate_with(&mut verify)
     }
     fn revalidate_with(&self, verify: &mut Verification<'_>) -> Result<(), String> {
-        self.check_identities(verify)?;
-        self.selection.revalidate(verify)?;
-        self.check_identities(verify)
+        self.receipt_revalidation_timings.measure(|| {
+            self.check_identities(verify)?;
+            self.selection.revalidate(verify)?;
+            self.check_identities(verify)
+        })
     }
 }
 
@@ -444,6 +520,100 @@ mod tests {
         );
         fixture.record("authenticated-member-refusals", serde_json::json!({"bound":1,"sameByteReplacementRefused":true,"originalExpiryRetained":true,"syntheticGeneration":true}));
     }
+
+    #[test]
+    fn diagnostic_timings_accumulate_submicroseconds_and_preserve_refusal_results() {
+        let timings = CheckTimings::default();
+        let shared = timings.clone();
+        timings.record(Duration::from_nanos(500));
+        shared.record(Duration::from_nanos(500));
+        assert_eq!(timings.snapshot().count, 2);
+        assert_eq!(timings.snapshot().elapsed_micros, 1);
+        let result = shared.measure(|| Err::<(), _>("original diagnostic refusal"));
+        assert_eq!(result, Err("original diagnostic refusal"));
+        assert_eq!(
+            timings.snapshot().count,
+            3,
+            "errors count on the same request-owned handle"
+        );
+        assert!(timings.snapshot().elapsed_micros >= 1);
+    }
+    #[test]
+    fn receipt_diagnostic_timings_count_success_and_cancelled_revalidations_only() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let initial = receipt.receipt_revalidation_timings.snapshot();
+        assert_eq!(
+            initial.count, 1,
+            "capture's receipt revalidation counts; initial Selection read does not"
+        );
+        receipt.revalidate(expires(), || Ok(())).unwrap();
+        assert_eq!(receipt.receipt_revalidation_timings.snapshot().count, 2);
+        assert_eq!(
+            receipt.revalidate(expires(), || Err("exact cancellation".into())),
+            Err("exact cancellation".into())
+        );
+        let after = receipt.receipt_revalidation_timings.snapshot();
+        assert_eq!(after.count, 3);
+        assert!(after.elapsed_micros >= initial.elapsed_micros);
+        receipt
+            .member_digest("engine.js", expires(), || Ok(()))
+            .unwrap();
+        assert_eq!(
+            receipt.receipt_revalidation_timings.snapshot().count,
+            3,
+            "member lookup is outside this precisely named counter"
+        );
+    }
+    #[test]
+    fn failed_capture_retains_its_receipt_revalidation_diagnostics_in_original_request() {
+        let f = Fixture::new();
+        let timings = CheckTimings::default();
+        let cancelled = Rc::new(Cell::new(false));
+        let flag = cancelled.clone();
+        let mut cancel = move || {
+            if flag.get() {
+                Err("capture receipt revalidation refused".into())
+            } else {
+                Ok(())
+            }
+        };
+        let reads = Rc::new(Cell::new(0));
+        let observed = reads.clone();
+        let target = f.root.join("engine.js");
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(move |path, _| {
+            if path == target {
+                observed.set(observed.get() + 1);
+                // First read belongs to Selection::read_generation. The second
+                // is inside the receipt's own revalidate_with, before return.
+                if observed.get() == 2 {
+                    cancelled.set(true);
+                }
+            }
+        }));
+        let failure = GenerationReceipt::capture_at_with_diagnostics(
+            &f.home,
+            &f.config,
+            &f.native,
+            &mut verify,
+            timings.clone(),
+        )
+        .err()
+        .expect("the receipt's capture revalidation must refuse");
+        assert_eq!(failure, "capture receipt revalidation refused");
+        assert_eq!(reads.get(), 2);
+        assert_eq!(
+            timings.snapshot().count,
+            1,
+            "failed capture must not discard the request's measurement"
+        );
+        f.record("failed-capture-revalidation-diagnostics", serde_json::json!({
+            "receiptRevalidations":timings.snapshot(), "engineReads":reads.get(), "error":failure,
+            "initialSelectionReadExcluded":true,
+        }));
+    }
+
     fn expires() -> Instant {
         Instant::now() + Duration::from_secs(10)
     }

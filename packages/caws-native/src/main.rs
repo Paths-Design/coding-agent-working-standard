@@ -104,6 +104,8 @@ fn execute<'deadline>(
         native_stop: "not_attempted",
         original_render_captured: false,
         dispatch_written: false,
+        generation_receipt_revalidations: native_generation::CheckTimings::default(),
+        stop_prefix_authority_callbacks: native_generation::CheckTimings::default(),
     };
     progress.mark("payload");
     let outcome =
@@ -143,6 +145,8 @@ struct InvocationProgress {
     native_stop: &'static str,
     original_render_captured: bool,
     dispatch_written: bool,
+    generation_receipt_revalidations: native_generation::CheckTimings,
+    stop_prefix_authority_callbacks: native_generation::CheckTimings,
 }
 impl InvocationProgress {
     fn mark(&mut self, phase: &'static str) {
@@ -152,6 +156,9 @@ impl InvocationProgress {
         if self.marks.last().is_none_or(|(last, _)| *last != phase) && self.marks.len() < 32 {
             self.marks.push((phase, self.started.elapsed().as_millis()));
         }
+    }
+    fn stop_prefix_authority_check<R>(&self, check: impl FnOnce() -> R) -> R {
+        self.stop_prefix_authority_callbacks.measure(check)
     }
     fn snapshot(&self) -> serde_json::Value {
         serde_json::json!({"schema":"caws.native.invocation-progress.v1",
@@ -164,7 +171,9 @@ impl InvocationProgress {
             "stockSelection":self.stock_selection,
             "nativeStop":self.native_stop,
             "originalRenderCaptured":self.original_render_captured,
-            "dispatchGrantWritten":self.dispatch_written})
+            "dispatchGrantWritten":self.dispatch_written,
+            "generationReceiptRevalidations":self.generation_receipt_revalidations.snapshot(),
+            "stopPrefixAuthorityCallbacks":self.stop_prefix_authority_callbacks.snapshot()})
     }
 }
 
@@ -182,10 +191,14 @@ fn execute_observed<'deadline>(
         .map_err(Failure::configuration)?;
     // The optional candidate observes original inputs before Node. It neither
     // selects the native Stop route nor grants any prefix/publication effects.
-    let mut original_stop =
-        runner::OriginalStopPreparation::capture(config, &request, original_deadline, |phase| {
-            progress.mark(phase)
-        });
+    let generation_receipt_revalidations = progress.generation_receipt_revalidations.clone();
+    let mut original_stop = runner::OriginalStopPreparation::capture_with_diagnostics(
+        config,
+        &request,
+        original_deadline,
+        generation_receipt_revalidations,
+        |phase| progress.mark(phase),
+    );
     progress.original_render_captured = original_stop.render.available();
     let outcome = (|| -> Result<u8, Failure<'deadline>> {
         progress.mark("selection-owner");
@@ -533,7 +546,11 @@ fn execute_observed<'deadline>(
                         let mut exchange_failure = None;
                         let mut decision_bytes = None;
                         let execution = admitted.execute_checked(
-                            || eligible.revalidate(cancellation::check),
+                            || {
+                                progress.stop_prefix_authority_check(|| {
+                                    eligible.revalidate(cancellation::check)
+                                })
+                            },
                             |previous| {
                                 let exchange = (|| {
                                     session.send(previous, deadline)?;
@@ -1135,5 +1152,52 @@ mod store_settlement_tests {
             assert_eq!(failure.error.as_deref(), Some("sentinel"));
             assert_eq!(failure.original_project_bound, bound);
         }
+    }
+}
+
+#[cfg(test)]
+mod invocation_diagnostic_tests {
+    use super::*;
+    #[test]
+    fn stop_prefix_authority_diagnostics_count_refusals_and_keep_generation_counts_separate() {
+        let progress = InvocationProgress {
+            started: Instant::now(),
+            phase: "test",
+            marks: vec![],
+            selection: None,
+            completed_selection: 0,
+            selection_advertised: false,
+            selection_sealed: false,
+            selection_revalidated: false,
+            stock_selection: "not_attempted",
+            native_stop: "not_attempted",
+            original_render_captured: false,
+            dispatch_written: false,
+            generation_receipt_revalidations: native_generation::CheckTimings::default(),
+            stop_prefix_authority_callbacks: native_generation::CheckTimings::default(),
+        };
+        assert_eq!(
+            progress.stop_prefix_authority_check(|| Ok::<_, String>(7)),
+            Ok(7)
+        );
+        assert_eq!(
+            progress.stop_prefix_authority_check(|| Err::<(), _>("unchanged authority refusal")),
+            Err("unchanged authority refusal")
+        );
+        let snapshot = progress.snapshot();
+        assert_eq!(snapshot["stopPrefixAuthorityCallbacks"]["count"], 2);
+        assert!(snapshot["stopPrefixAuthorityCallbacks"]["elapsedMicros"].is_u64());
+        assert_eq!(snapshot["generationReceiptRevalidations"]["count"], 0);
+        assert_eq!(
+            snapshot["generationReceiptRevalidations"]["elapsedMicros"],
+            0
+        );
+        assert!(
+            snapshot["stopPrefixAuthorityCallbacks"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .all(|key| matches!(key.as_str(), "count" | "elapsedMicros"))
+        );
     }
 }
