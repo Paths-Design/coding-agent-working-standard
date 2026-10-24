@@ -1,0 +1,45 @@
+id: CAWS-NATIVE-SELECTION-COPY-001
+title: 'Avoid discarded runtime manifest copies during selection discovery'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-24T22:05:36.354Z'
+updated_at: '2026-10-24T22:05:36.354Z'
+created_by_session: '01a16d92-e8a7-70d1-899f-40cd6fb48e61'
+blast_radius:
+  modules:
+    - 'Captured selection runtime verification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/selection-observation.ts'
+    - 'packages/caws-cli/src/runtime/selection.ts'
+    - 'packages/caws-cli/src/init/selection-read-io.ts'
+    - 'packages/caws-cli/src/init/machine-runtime-state.ts'
+    - 'packages/caws-cli/tests/runtime/selection-observation.test.js'
+    - 'packages/caws-cli/tests/init/selection-read-io.test.js'
+  out: []
+invariants:
+  - 'Verification cache keys retain home digest and verifier identity; snapshot dependency identities and collection remain exact.'
+  - 'Manifest-returning verification returns independent copies; verification-only selection avoids discarded copies without weakening native hashing or revalidation.'
+acceptance:
+  - id: A1
+    given: 'repeated discovery over a verified runtime'
+    when: 'selection retries missing observations'
+    then: 'verification-only calls do not clone manifest entries and preserve selection and observation sequence'
+  - id: A2
+    given: 'distinct snapshots and verifier identities or changed dependency identities'
+    when: 'verification is reused'
+    then: 'caches remain separate and changed dependencies are refused'
+  - id: A3
+    given: 'a caller requesting a runtime manifest'
+    when: 'returned entries are mutated'
+    then: 'subsequent results remain independent and unchanged'
+observability:
+  - 'Focused tests retain clone counts selection results and hostile controls without runtime deadline claims.'
+rollback:
+  - 'Revert the bounded source commit; no durable format or machine adoption changes.'
+non_functional: {}
+contracts:
+  - name: 'selection-runtime-verification'
+    type: api
