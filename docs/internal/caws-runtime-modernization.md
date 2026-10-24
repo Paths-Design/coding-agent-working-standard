@@ -10079,6 +10079,48 @@ Additional bounded evidence and unresolved dependencies:
   includes the fixed diagnostic serialization and existing integrity/refusal
   controls, not library/integration suites or an installed invocation.
 
+- E369: Selection retains only the allowed-directory set derived from its
+  authenticated immutable manifest. Initial construction remains under the
+  original expiry and cancellation callback, before full member verification.
+  Revalidation authenticates the live manifest and repeats every member hash,
+  traversal/identity check and actual inventory/mode walk. No successful
+  filesystem observation becomes cached authority. Reused passes remove the
+  obsolete derivation loop and its checkpoints, not the surrounding authority
+  boundaries or actual I/O checkpoints; directory-plan diagnostics report zero.
+
+  manifest-plan-cache-bin-01 exits0 with187pass/1ignored in112.957s including
+  release compilation. The first formatting invocation used edition2021; the
+  crate declares2024. Final formatting restores unrelated layout before the
+  subsequent actual-image and mutation checks. Initial-construction cancellation
+  records no returned Selection, one failed plan phase, no member/inventory
+  entry and unchanged expiry. Direct retained-Selection controls reject a
+  changed live manifest before member hashing and reject an undeclared empty
+  directory after all10 fixture hashes over1283 bytes. These direct controls
+  cannot pass solely through an outer receipt identity sweep.
+
+  manifest-plan-actual-image-03 exits0 in58.887s including release compilation.
+  The unchanged actual5971-member image and callback/pipe probe retain5973
+  hashes over162328887 bytes in each pass. Selection elapsed times are
+  467261/468819/470795us, versus E368's556328/559120/558215us. Every reused
+  directory-plan phase is zero; member and inventory phases still execute. Full
+  image hashes/modes and source/tool pins agree before/after. This is a warmed
+  standalone comparison, not a production latency distribution or proof that
+  publication fits the original30s deadline.
+
+  manifest-plan-empty-directory-mutant-01 disables the actual inventory
+  membership predicate and exits101 after105.720s: the direct revalidation
+  returns Ok instead of the required undeclared-directory error. Its retained
+  fixture and logs establish sensitivity to this specific fault, not a mutation
+  score. The original installed_generation.rs SHA
+  db9f65d0a2fb073c2cbc93c67f62393af987c81a274b3364030af8cce0b5abcf is restored
+  exactly. manifest-plan-cache-restored-bin-01 exits0 in112.569s including
+  compilation with187pass/1ignored, unchanged source/tool pins and empty
+  observed process group. The explicit image probe above covers the ignored
+  test. Doctor exits0 with0E/4W/5I; these checks do not execute library or
+  installed integration suites. Root owns committed-candidate review and fresh10
+  package execution through publication, ordinary CONSUMED and heavy release. No
+  parent criterion or production Python row is completed.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -10211,12 +10253,14 @@ exact-image replay. E365 supplies the repair, failing baseline, ownership-loss
 mutation and restored controls. E366's fresh09 passes actual writer retention
 and SQL close but expires during publication with partial files and no marker.
 Its private owner is externally contained while uncertainty remains intact. Root
-owns coherent source landing and the deadline cost repair. Measure pure
-manifest-plan construction before choosing reuse of derived paths/directories;
-do not cache successful filesystem/hash observations or remove authority and
-durability checks. The successful path must establish publication, ordinary
-consumption and release within30s; neither natural failure cleanup nor
-build/profile success supplies it.
+owns the deadline cost repair; E367 lands the coherent source checkpoint. E368
+measures manifest-plan construction with the production callback chain, and E369
+reuses only immutable manifest-derived directories with direct hostile controls.
+Root owns final review and fresh10 exact-image execution; do not cache
+successful filesystem/hash observations or remove authority and durability
+checks. The successful path must establish publication, ordinary consumption and
+release within30s; neither natural failure cleanup nor build/profile success
+supplies it.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

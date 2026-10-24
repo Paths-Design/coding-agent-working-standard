@@ -41,6 +41,8 @@ pub(crate) struct Selection {
     root: PathBuf,
     pub inspected_digest: String,
     manifest: BTreeMap<String, String>,
+    // Derived only from this immutable admitted manifest, never filesystem state.
+    allowed_directories: BTreeSet<PathBuf>,
     route: Route,
 }
 
@@ -560,16 +562,15 @@ std::thread_local! {
 pub(crate) fn verification_count() -> usize {
     VERIFICATION_COUNT.with(std::cell::Cell::get)
 }
-fn verify_files(
-    root: &Path,
+// Construct once from authenticated manifest bytes under the original budget.
+// Reuse does not authenticate current files, modes, inventory or identities.
+fn manifest_directory_plan(
     manifest: &BTreeMap<String, String>,
     verify: &mut Verification<'_>,
-) -> Result<(), String> {
-    #[cfg(test)]
-    VERIFICATION_COUNT.with(|count| count.set(count.get() + 1));
+) -> Result<BTreeSet<PathBuf>, String> {
     // The already byte-bounded manifest determines every permitted directory.
     // Do not recurse into undeclared empty trees or invent a full-image byte cap.
-    let directories = verify.phase(VerificationPhase::ManifestDirectoryPlan, |verify| {
+    verify.phase(VerificationPhase::ManifestDirectoryPlan, |verify| {
         let mut directories = BTreeSet::new();
         for relative in manifest.keys() {
             verify.checkpoint()?;
@@ -584,7 +585,18 @@ fn verify_files(
             }
         }
         Ok(directories)
-    })?;
+    })
+}
+
+fn verify_files(
+    root: &Path,
+    manifest: &BTreeMap<String, String>,
+    allowed_directories: &BTreeSet<PathBuf>,
+    verify: &mut Verification<'_>,
+) -> Result<(), String> {
+    #[cfg(test)]
+    VERIFICATION_COUNT.with(|count| count.set(count.get() + 1));
+    verify.checkpoint()?;
     verify.phase(VerificationPhase::MemberHashing, |verify| {
         let native = manifest.contains_key(METADATA);
         let mut group: Option<MemberParent> = None;
@@ -666,7 +678,7 @@ fn verify_files(
                         .to_owned();
                     let stat = path_metadata(&path, verify)?;
                     if stat.is_dir() {
-                        if !directories.contains(Path::new(&relative)) {
+                        if !allowed_directories.contains(Path::new(&relative)) {
                             return Err(format!("Undeclared native runtime directory: {relative}"));
                         }
                         pending.push(path);
@@ -726,7 +738,8 @@ impl Selection {
         {
             return Err("Version-1 manifest lacks the legacy driver identity".into());
         }
-        verify_files(&root, &manifest, verify)?;
+        let allowed_directories = manifest_directory_plan(&manifest, verify)?;
+        verify_files(&root, &manifest, &allowed_directories, verify)?;
         let route = if manifest.contains_key(METADATA) {
             let entry: NativeEntry = serde_json::from_slice(&read_manifest_metadata(
                 &root,
@@ -781,6 +794,7 @@ impl Selection {
             root,
             inspected_digest: digest.to_owned(),
             manifest,
+            allowed_directories,
             route,
         })
     }
@@ -830,7 +844,12 @@ impl Selection {
             }
             Ok(())
         })?;
-        verify_files(&self.root, &self.manifest, verify)
+        verify_files(
+            &self.root,
+            &self.manifest,
+            &self.allowed_directories,
+            verify,
+        )
     }
 
     pub(crate) fn native_entry(&self) -> Option<&NativeEntry> {

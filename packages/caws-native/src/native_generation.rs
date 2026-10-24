@@ -883,7 +883,6 @@ mod tests {
             first.identity_after,
             first.member_hashing,
             first.inventory_modes,
-            first.manifest_directory_plan,
             first.manifest_authentication,
         ] {
             assert_eq!(
@@ -892,6 +891,9 @@ mod tests {
             );
             assert_eq!(phase.failures, 0);
         }
+        assert_eq!(first.manifest_directory_plan.count, 0);
+        assert_eq!(first.manifest_directory_plan.failures, 0);
+        assert_eq!(first.manifest_directory_plan.elapsed_micros, 0);
         let expected_bytes = full_verification_hash_bytes(&f, &receipt);
         let expected_hashes = receipt.selection.members().len() as u64 + 2;
         assert_eq!(first.hash_calls, expected_hashes);
@@ -920,7 +922,10 @@ mod tests {
         assert_eq!(second.identity_after.count, 2);
         assert_eq!(second.member_hashing.count, 2);
         assert_eq!(second.inventory_modes.count, 2);
-        assert_eq!(second.manifest_directory_plan.count, 2);
+        assert_eq!(
+            second.manifest_directory_plan,
+            first.manifest_directory_plan
+        );
         assert_eq!(second.manifest_authentication.count, 2);
         assert_eq!(second.hash_calls, 2 * expected_hashes);
         assert_eq!(second.bytes_hashed, 2 * expected_bytes);
@@ -963,7 +968,7 @@ mod tests {
         assert_eq!(
             measured_checks.get(),
             plain_checks.get(),
-            "diagnostic phases add no authority checkpoints"
+            "diagnostic phases add no authority checkpoints to the cached algorithm"
         );
         assert_eq!(plain_verify.expires(), measured_verify.expires());
         assert_eq!(
@@ -1017,40 +1022,59 @@ mod tests {
     #[test]
     fn manifest_phase_diagnostics_refuse_cancellation_during_directory_plan() {
         let f = Fixture::new();
-        let receipt = f.capture().unwrap();
         let diagnostics = VerificationDiagnostics::default();
-        let observed = diagnostics.clone();
+        let armed = Rc::new(Cell::new(false));
+        let flag = armed.clone();
         let checks = Cell::new(0usize);
         let mut cancel = || {
-            // Authentication records its completion before verify_files enters
-            // the plan closure. The third plan checkpoint follows one complete
-            // manifest-key traversal; cancellation is not an entry-only refusal.
-            let snapshot = observed.snapshot();
-            if snapshot.manifest_authentication.count == 1 {
+            if flag.get() {
                 checks.set(checks.get() + 1);
-                if checks.get() == 3 {
-                    return Err("manifest directory plan cancelled".into());
+                // After the manifest chunk: two chunk checkpoints, two FD
+                // checkpoints, two named-leaf checkpoints, read exit, parsed
+                // manifest checkpoint, then three directory-plan checkpoints.
+                // Assert below that refusal occurs in planning, before member I/O.
+                if checks.get() == 11 {
+                    return Err("initial manifest directory plan cancelled".into());
                 }
             }
             Ok(())
         };
-        let mut verify = Verification::new(expires(), &mut cancel);
-        let result = verify.diagnosed(&diagnostics, |verify| receipt.selection.revalidate(verify));
+        let manifest = f.root.join("manifest.json");
+        assert!(fs::metadata(&manifest).unwrap().len() < 65536);
+        let original_expiry = expires();
+        let mut verify = Verification::new(original_expiry, &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            assert_eq!(path, manifest, "cancel before any member read");
+            armed.set(true);
+        }));
+        let result = verify.diagnosed(&diagnostics, |verify| {
+            Selection::read_generation(&f.home, &f.config.digest, verify)
+        });
         let snapshot = diagnostics.snapshot();
-        f.record("manifest-directory-plan-cancelled", serde_json::json!({"result":result,"snapshot":snapshot,"checksAfterAuthentication":checks.get(),"syntheticGeneration":true}));
-        assert_eq!(result, Err("manifest directory plan cancelled".into()));
-        assert_eq!(checks.get(), 3);
-        assert_eq!(snapshot.manifest_authentication.count, 1);
-        assert_eq!(snapshot.manifest_authentication.failures, 0);
+        f.record(
+            "manifest-directory-plan-cancelled",
+            serde_json::json!({
+                "error":result.as_ref().err(),"snapshot":snapshot,
+                "checksAfterManifestChunk":checks.get(),
+                "initialSelectionPublished":result.is_ok(),
+                "originalExpiryUnchanged":verify.expires()==original_expiry,
+                "syntheticGeneration":true
+            }),
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "initial manifest directory plan cancelled"
+        );
+        assert_eq!(checks.get(), 11);
+        assert_eq!(verify.expires(), original_expiry);
+        assert_eq!(snapshot.manifest_authentication.count, 0);
         assert_eq!(snapshot.manifest_directory_plan.count, 1);
         assert_eq!(snapshot.manifest_directory_plan.failures, 1);
         assert_eq!(snapshot.member_hashing.count, 0);
         assert_eq!(snapshot.inventory_modes.count, 0);
-        assert_eq!(snapshot.hash_calls, 1);
-        assert_eq!(
-            snapshot.bytes_hashed,
-            fs::metadata(f.root.join("manifest.json")).unwrap().len()
-        );
+        // Initial manifest parsing is outside revalidation hash counters.
+        assert_eq!(snapshot.hash_calls, 0);
+        assert_eq!(snapshot.bytes_hashed, 0);
     }
 
     #[test]
@@ -1173,13 +1197,15 @@ mod tests {
             for phase in [
                 snapshot.selection_verification,
                 snapshot.manifest_authentication,
-                snapshot.manifest_directory_plan,
                 snapshot.member_hashing,
                 snapshot.inventory_modes,
             ] {
                 assert_eq!(phase.count, 1);
                 assert_eq!(phase.failures, 0);
             }
+            assert_eq!(snapshot.manifest_directory_plan.count, 0);
+            assert_eq!(snapshot.manifest_directory_plan.failures, 0);
+            assert_eq!(snapshot.manifest_directory_plan.elapsed_micros, 0);
             assert_eq!(snapshot.identity_before.count, 0);
             assert_eq!(snapshot.identity_after.count, 0);
             assert_eq!(snapshot.hash_calls, expected_hash_calls);
@@ -1809,6 +1835,25 @@ mod tests {
         fs::remove_file(f.root.join("engine.js")).unwrap();
         fs::write(f.root.join("engine.js"), b"engine\n").unwrap();
         fs::write(f.root.join("manifest.json"), b"{}").unwrap();
+        let diagnostics = VerificationDiagnostics::default();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        let cached = verify.diagnosed(&diagnostics, |verify| receipt.selection.revalidate(verify));
+        let snapshot = diagnostics.snapshot();
+        f.record(
+            "cached-plan-manifest-refusal",
+            serde_json::json!({
+                "error":cached.as_ref().err(),"snapshot":snapshot,
+                "syntheticGeneration":true
+            }),
+        );
+        assert_eq!(
+            cached,
+            Err("Selected manifest changed before launch".into())
+        );
+        assert_eq!(snapshot.manifest_authentication.failures, 1);
+        assert_eq!(snapshot.manifest_directory_plan.count, 0);
+        assert_eq!(snapshot.member_hashing.count, 0);
         assert!(f.capture().unwrap_err_text().contains("manifest integrity"));
     }
     #[test]
@@ -2033,6 +2078,34 @@ mod tests {
     #[test]
     fn undeclared_directory_is_refused_before_descent() {
         let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        fs::create_dir(f.root.join("undeclared")).unwrap();
+        let diagnostics = VerificationDiagnostics::default();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        let cached = verify.diagnosed(&diagnostics, |verify| receipt.selection.revalidate(verify));
+        let snapshot = diagnostics.snapshot();
+        f.record(
+            "cached-plan-empty-directory-refusal",
+            serde_json::json!({
+                "error":cached.as_ref().err(),"snapshot":snapshot,
+                "syntheticGeneration":true
+            }),
+        );
+        assert_eq!(
+            cached,
+            Err("Undeclared native runtime directory: undeclared".into())
+        );
+        assert_eq!(snapshot.manifest_directory_plan.count, 0);
+        assert_eq!(snapshot.inventory_modes.failures, 1);
+        assert_eq!(
+            snapshot.hash_calls,
+            receipt.selection.members().len() as u64 + 2
+        );
+        assert_eq!(
+            snapshot.bytes_hashed,
+            full_verification_hash_bytes(&f, &receipt)
+        );
         fs::create_dir_all(f.root.join("undeclared/deeper/deepest")).unwrap();
         let error = f.capture().unwrap_err_text();
         assert_eq!(error, "Undeclared native runtime directory: undeclared");
