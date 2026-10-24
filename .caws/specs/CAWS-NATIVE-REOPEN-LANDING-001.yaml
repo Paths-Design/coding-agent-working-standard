@@ -39,3 +39,9 @@ non_functional: {}
 contracts:
   - name: 'refusal-reopen'
     type: contract-test
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Composition f9fdb006 matches86b5f77f across all packages/docs and exact two changed blobs; root rehashed all115 native source inputs against refusal-owner-reopen-family-01. Focused release test exits0 selects1, exact same/changed-generation refusal, old custody/record/registry Weak owners vanish, project capacity0; fresh ID passes replay gate then separately refuses. Family exits0 executes6 including persistence failure, partial reservation and inode replacement controls. Exact retained terminal UTF8 body and SHA5186d5f2 independently verified in publication-integration/refusal-owner-reopen-01/native-registration-refusal-owner-reopen.json. Raw command exits and source/tool pins retained in execution.json; composition.json under reopen-source-landing-01. Test-only synthetic transport; no installed authenticated replay claim."
+    recorded_at: "2026-10-24T20:10:59.454Z"
+    commit_sha: f9fdb00684c7c650314f87dd638d4549308da031
