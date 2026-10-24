@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-publication
 created_at: '2026-10-22T07:45:38.932Z'
-updated_at: '2026-10-24T10:03:08.863Z'
+updated_at: '2026-10-24T22:16:00.263Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -124,6 +124,9 @@ scope:
     - packages/caws-native/src/stop_execution.rs
     - packages/caws-cli/src/runtime/live-protocol.ts
     - packages/caws-native/src/transcript_store.rs
+    - packages/caws-cli/src/application/agent-stop.ts
+    - packages/caws-cli/src/runtime/agent-stop.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
   out: []
   support:
     - .github/workflows/release-qualification.yml
