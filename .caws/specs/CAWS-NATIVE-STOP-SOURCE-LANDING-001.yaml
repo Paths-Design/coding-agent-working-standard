@@ -1,0 +1,96 @@
+id: CAWS-NATIVE-STOP-SOURCE-LANDING-001
+title: 'Land reviewed Stop source checkpoint without runtime adoption'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-24T16:00:20.035Z'
+updated_at: '2026-10-24T16:00:20.035Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native and typed Stop admission, observation, publication, custody and bounded verification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+    - 'packages/caws-cli/scripts/qualify-stop-profile.mjs'
+    - 'packages/caws-cli/src/init/native-runtime-entry.ts'
+    - 'packages/caws-cli/src/runtime/engine-entry.ts'
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/handler-executor.ts'
+    - 'packages/caws-cli/src/runtime/live-protocol.ts'
+    - 'packages/caws-cli/src/runtime/protocol.ts'
+    - 'packages/caws-cli/src/runtime/render-observation-client.ts'
+    - 'packages/caws-cli/src/runtime/render-observation-wire.ts'
+    - 'packages/caws-cli/src/runtime/session-cache-client.ts'
+    - 'packages/caws-cli/src/runtime/session-publication-client.ts'
+    - 'packages/caws-cli/src/runtime/session-store-publication.ts'
+    - 'packages/caws-cli/src/runtime/transcript-store-client.ts'
+    - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
+    - 'packages/caws-cli/tests/runtime/engine-routing.test.js'
+    - 'packages/caws-cli/tests/runtime/ordinary-stop-publication.test.js'
+    - 'packages/caws-cli/tests/runtime/render-observation-client.test.js'
+    - 'packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js'
+    - 'packages/caws-cli/tests/tooling/qualify-stop-profile.test.js'
+    - 'packages/caws-native/src/agent_pid_cache.rs'
+    - 'packages/caws-native/src/agent_pid_cache/tests.rs'
+    - 'packages/caws-native/src/installed_generation.rs'
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/native_generation.rs'
+    - 'packages/caws-native/src/protocol.rs'
+    - 'packages/caws-native/src/render_observation.rs'
+    - 'packages/caws-native/src/render_owner.rs'
+    - 'packages/caws-native/src/render_owner/native_peer.rs'
+    - 'packages/caws-native/src/render_owner/pending.rs'
+    - 'packages/caws-native/src/render_owner/session.rs'
+    - 'packages/caws-native/src/render_owner/store.rs'
+    - 'packages/caws-native/src/render_owner/store/tests.rs'
+    - 'packages/caws-native/src/render_owner/tests.rs'
+    - 'packages/caws-native/src/runner.rs'
+    - 'packages/caws-native/src/selection_observation.rs'
+    - 'packages/caws-native/src/service_journal.rs'
+    - 'packages/caws-native/src/service_journal/tests.rs'
+    - 'packages/caws-native/src/session_cache.rs'
+    - 'packages/caws-native/src/session_cache/tests.rs'
+    - 'packages/caws-native/src/session_cache_wire.rs'
+    - 'packages/caws-native/src/session_cache_wire/tests.rs'
+    - 'packages/caws-native/src/session_publication.rs'
+    - 'packages/caws-native/src/sqlite_build_identity.rs'
+    - 'packages/caws-native/src/stop_admission.rs'
+    - 'packages/caws-native/src/stop_execution.rs'
+    - 'packages/caws-native/src/stop_profile.rs'
+    - 'packages/caws-native/src/transcript_store.rs'
+    - 'packages/caws-native/src/transcript_store_wire.rs'
+    - 'packages/caws-native/tests/fixtures/idle-backend.rs'
+    - 'packages/caws-native/tests/idle_unknown.rs'
+    - 'packages/caws-native/tests/native_peer.rs'
+    - 'packages/caws-native/tests/original_stop_capture.rs'
+    - 'packages/caws-native/tests/original_stop_main.rs'
+    - 'packages/caws-native/tests/render_observation.rs'
+  out: []
+invariants:
+  - 'Source landing does not qualify production publication, close parent acceptance, alter the selected machine runtime, or remove branches/worktrees used by other lanes.'
+  - 'Preserve original 30000ms deadlines, full byte/inventory/identity checks and failed Unknown fixtures; no replay or settlement is inferred.'
+acceptance:
+  - id: A1
+    given: 'Reviewed candidate and retained checks'
+    when: 'The coherent checkpoint lands through a separate main-based governed lane'
+    then: 'Landed implementation blobs equal the reviewed candidate and every contributed path has admitted provenance.'
+  - id: A2
+    given: 'Actual positive, hostile and mutation controls for the candidate'
+    when: 'Source landing evidence is adjudicated'
+    then: 'Exact-source executed checks and the failed installed 30000ms scenario are retained with explicit component and runtime limits; no full publication or cutover success is asserted.'
+  - id: A3
+    given: 'Active parent/publication specs, existing dependent lanes and the selected machine generation'
+    when: 'The source landing is complete'
+    then: 'Parent/publication acceptance remains open, existing dependent base refs and worktrees are preserved, and the selected machine runtime is unchanged.'
+observability:
+  - 'Retained execution receipts, source hashes, actual partial-publication files and Unknown journal; main ancestry and live registry/spec/pointer checks.'
+rollback:
+  - 'Use a new governed corrective or revert commit for landed source; do not rewrite history, replay partial publication, remove dependent bases or change the machine pointer.'
+non_functional:
+  security:
+    - 'Preserve explicit native identity fields and all authority/effect checks; bounded source acceptance confers no runtime adoption permission.'
+contracts:
+  - name: 'bounded-stop-source-landing'
+    type: behavior
