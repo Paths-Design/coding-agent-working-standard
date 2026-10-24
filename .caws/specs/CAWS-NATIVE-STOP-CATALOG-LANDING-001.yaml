@@ -1,0 +1,50 @@
+id: CAWS-NATIVE-STOP-CATALOG-LANDING-001
+title: 'Land the native Stop source catalog and typed consumer'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-24T10:39:32.747Z'
+updated_at: '2026-10-24T10:39:32.747Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native publication source capture and typed observation consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+    - 'packages/caws-cli/src/runtime/render-observation-client.ts'
+    - 'packages/caws-cli/src/runtime/render-observation-wire.ts'
+    - 'packages/caws-cli/src/runtime/session-publication-client.ts'
+    - 'packages/caws-cli/src/runtime/session-store-publication.ts'
+    - 'packages/caws-cli/tests/runtime/ordinary-stop-publication.test.js'
+    - 'packages/caws-cli/tests/runtime/render-observation-client.test.js'
+    - 'packages/caws-native/src/render_observation.rs'
+    - 'packages/caws-native/src/render_owner/store.rs'
+    - 'packages/caws-native/src/session_publication.rs'
+    - 'packages/caws-native/tests/render_observation.rs'
+  out: []
+invariants:
+  - 'Captured bytes, absence and inventories remain bound to the native observation lease; caller source assertions confer no authority.'
+  - 'This source landing does not activate production Stop or discharge parent runtime cutover acceptance.'
+acceptance:
+  - id: A1
+    given: 'the reviewed E343 candidate and retained executed capture and consumer controls'
+    when: 'the landing candidate is composed'
+    then: 'all ten source/test files and relevant dependency inputs match the tested source, with byte substitution and observation changes rejected in the retained controls.'
+  - id: A2
+    given: 'the bounded landing and complete parent obligations'
+    when: 'source and tracker are reviewed and policy checks run'
+    then: 'source catalog behavior is accurately scoped, compilation and gates are accounted for, and production activation, Python retirement and selected cutover remain unclaimed.'
+  - id: A3
+    given: 'the clean reviewed lane'
+    when: 'governed merge completes'
+    then: 'local main contains the exact ten source/test blobs and the parent acceptance and selected machine generation remain unchanged.'
+observability:
+  - 'Retained raw Rust capture, typed replay and source-identity artifacts outside worktrees.'
+rollback:
+  - 'Revert the bounded landing through a new governed commit; do not rewrite history or change the selected machine generation.'
+non_functional: {}
+contracts:
+  - name: 'stop-source-catalog'
+    type: contract-test
