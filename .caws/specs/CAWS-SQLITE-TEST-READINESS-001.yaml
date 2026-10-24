@@ -1,0 +1,29 @@
+id: CAWS-SQLITE-TEST-READINESS-001
+title: 'Publish completed SQLite abort fixture readiness atomically'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-24T22:38:03.165Z'
+updated_at: '2026-10-24T22:38:03.165Z'
+created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
+blast_radius:
+  modules:
+    - 'SQLite tooling abort verification fixture'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/tooling/sqlite-static-build.test.js'
+  out: []
+invariants:
+  - 'The readiness deadline and exact yes, abort, SIGKILL, reaping and retained stdout assertions are preserved; production build behavior is unchanged'
+acceptance:
+  - id: A1
+    given: 'a real child producing its readiness marker'
+    when: 'the abort fixture observes the published marker and aborts the child'
+    then: 'completed yes bytes precede the abort and the same direct child is killed and reaped with the exact retained output and abort reason'
+observability:
+  - 'Retain raw focused suite output and original empty-marker full-run failure'
+rollback:
+  - 'Revert the isolated fixture publication commit through an owned lane if readiness or abort semantics differ'
+non_functional: {}
+contracts: []
