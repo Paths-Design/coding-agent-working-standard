@@ -105,3 +105,8 @@ evidence:
     evidence_ref: "Inspected retained exact-source Cargo bin184pass and lib443pass2ignored, feature-off compile only, UID-loss mutant exit101 with semantic assertion failure and restored source. Fresh09 installed positive supervisor exit1/native2 at30043.687ms; partial turn/index/projection, marker absent, no consumption/release. All112native pins match;1223/1224 package paths match and tracker is explicitly reconciled. External containment preserves31entries and Unknown, not production cleanup. Full publication/cutover unverified. Inspected artifact: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/source-landing-composition-01/composition.json. CLI --verify checks commit reachability only; external artifact content was directly inspected, not CLI-rederived."
     recorded_at: "2026-10-24T16:23:23.693Z"
     commit_sha: "89946c2d8d71f00d35828a91c620a3ec9d78e130"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Postmerge direct comparison exit0: all11original registry entries and physical lanes preserved, their branch tips unchanged, non-main dependent base refs unchanged; only disposable landing removed. Parent and publication spec bytes unchanged and ACTIVE; actual selected adapter-runtime.json bytes unchanged at408c06a7. Source landing grants no deployment or parent acceptance. Inspected artifact: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/source-landing-composition-01/postmerge.json. CLI --verify checks commit reachability only; external artifact content was directly inspected, not CLI-rederived."
+    recorded_at: "2026-10-24T16:23:24.738Z"
+    commit_sha: "89946c2d8d71f00d35828a91c620a3ec9d78e130"
