@@ -1,10 +1,11 @@
 id: CAWS-OPENCODE-STOP-IDENTITY-001
 title: 'Bind OpenCode Stop to the current event and plugin instance'
 mode: fix
-lifecycle_state: active
-worktree: opencode-stop-identity
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'No source implementation began: first edit was refused because the native hook uses parent session01a164bc while the CLI correctly owns this clean lane as worker01a16a3f. Root explicitly accepted the full implementation/testing/landing obligation into active root-owned CAWS-NATIVE-SESSION-PUBLICATION-001 with exact scope invariant and A7. External proposal and baseline/API evidence retained at /Users/darianrosebrook/.codex/artifacts/01a16a3f-e8d9-7b70-8f20-542c4bfa34f2/opencode-stop-identity; original ACs remain unchecked. This is supersession, not completion.'
 created_at: '2026-10-24T00:46:11.835Z'
-updated_at: '2026-10-24T00:46:26.485Z'
+updated_at: '2026-10-24T00:56:54.904Z'
 created_by_session: '01a16a3f-e8d9-7b70-8f20-542c4bfa34f2'
 blast_radius:
   modules:
