@@ -2,6 +2,7 @@ import {
   liveSelectionReadIo,
   type SelectionReadIo,
   type SelectionRuntimeFile,
+  type SelectionRuntimeVerifier,
 } from './selection-read-io';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -98,6 +99,56 @@ function validateRuntimeRelative(relative: unknown): asserts relative is string 
     relative.split('/').some((part) => !part || part === '.' || part === '..')
   )
     throw new Error(`Invalid machine runtime path: ${String(relative)}`);
+}
+
+/** Pure shape/path validation for a native-owned generation summary. The
+ * digest is bound to original raw manifest bytes by native verification; parsed
+ * object serialization cannot reconstruct that byte identity. No IO occurs.
+ * This preserves the ordinary verifier's lexical path policy as well as native
+ * traversal rules: assertMachinePath also refuses a first '..fixture' segment.
+ */
+export function validateRuntimeGenerationManifest(
+  expectedDigest: string,
+  observedDigest: unknown,
+  generationRoot: string,
+  manifest: unknown
+): Record<string, string> {
+  if (!validDigest(expectedDigest) || observedDigest !== expectedDigest)
+    throw new Error('Native runtime generation digest mismatch');
+  if (!path.isAbsolute(generationRoot) || path.resolve(generationRoot) !== generationRoot)
+    throw new Error('Native runtime generation root must be absolute and normalized');
+  if (
+    manifest === null ||
+    typeof manifest !== 'object' ||
+    Array.isArray(manifest) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(manifest))
+  )
+    throw new Error('Malformed native runtime generation manifest');
+  const files = manifest as Record<string, unknown>;
+  for (const required of ['launcher.py', 'native-entry.json'])
+    if (!Object.hasOwn(files, required) || !validDigest(files[required]))
+      throw new Error('Native runtime generation manifest lacks ' + required);
+  const result: Record<string, string> = {};
+  for (const [relative, expected] of Object.entries(files)) {
+    validateRuntimeRelative(relative);
+    const file = path.join(generationRoot, relative);
+    const lexical = path.relative(generationRoot, file);
+    if (lexical.startsWith('..') || path.isAbsolute(lexical))
+      throw new Error('Path escapes root: ' + file);
+    if (!validDigest(expected)) throw new Error('Malformed native runtime generation member hash');
+    Object.defineProperty(result, relative, {
+      value: expected,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return result;
+}
+
+/** Identity only: arbitrary callback results cannot borrow the canonical cache. */
+export function isCanonicalRuntimeVerifier(verify: SelectionRuntimeVerifier): boolean {
+  return verify === verifyRuntimeUncached;
 }
 
 function parseNativeEntryMetadata(

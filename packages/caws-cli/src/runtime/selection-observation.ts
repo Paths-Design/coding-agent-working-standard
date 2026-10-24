@@ -2,6 +2,10 @@
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { TextDecoder } from 'node:util';
+import {
+  isCanonicalRuntimeVerifier,
+  validateRuntimeGenerationManifest,
+} from '../init/machine-runtime-state';
 import { parseJsonSource } from './json-custody';
 import { awaitSessionPublicationCallback } from './committed-session-reader';
 import {
@@ -13,6 +17,7 @@ import {
   needSelectionObservation,
   missingSelectionObservation,
   type SelectionFileInfo,
+  type SelectionPathIdentity,
   type SelectionReadIo,
   type SelectionReadOperation,
   type SelectionReadResult,
@@ -73,6 +78,7 @@ function requireOperation(
     ]) ||
     ![
       'lstat',
+      'path-identity',
       'stat',
       'exists',
       'read',
@@ -80,6 +86,7 @@ function requireOperation(
       'executable',
       'runtime-file',
       'runtime-digest',
+      'runtime-generation',
     ].includes(String(value.kind)) ||
     typeof value.path !== 'string' ||
     !path.isAbsolute(value.path) ||
@@ -109,6 +116,21 @@ function requireInfo(value: unknown): asserts value is SelectionFileInfo {
   )
     throw new TypeError('Invalid selection file information');
 }
+function requirePathIdentity(value: unknown): asserts value is SelectionPathIdentity {
+  if (
+    !object(value) ||
+    !exact(value, ['kind', 'dev', 'ino', 'mode']) ||
+    !['file', 'directory', 'symlink', 'other'].includes(String(value.kind)) ||
+    typeof value.dev !== 'string' ||
+    !/^[0-9]+$/.test(value.dev) ||
+    typeof value.ino !== 'string' ||
+    !/^[0-9]+$/.test(value.ino) ||
+    typeof value.mode !== 'number' ||
+    !Number.isSafeInteger(value.mode) ||
+    value.mode < 0
+  )
+    throw new TypeError('Invalid selection path identity');
+}
 function requireBase64(value: unknown): asserts value is string {
   if (typeof value !== 'string' || Buffer.from(value, 'base64').toString('base64') !== value)
     throw new TypeError('Invalid selection byte encoding');
@@ -134,6 +156,10 @@ function requireResult(
     return;
   }
   switch (operation.kind) {
+    case 'path-identity':
+      if (value.kind !== 'path-identity' || !exact(value, ['kind', 'value'])) break;
+      requirePathIdentity(value.value);
+      return;
     case 'lstat':
     case 'stat':
       if (value.kind !== 'info' || !exact(value, ['kind', 'value'])) break;
@@ -172,6 +198,16 @@ function requireResult(
     case 'executable':
       if (value.kind === 'executable' && exact(value, ['kind'])) return;
       break;
+    case 'runtime-generation':
+      if (value.kind !== 'runtime-generation' || !exact(value, ['kind', 'digest', 'manifest']))
+        break;
+      validateRuntimeGenerationManifest(
+        value.digest as string,
+        value.digest,
+        operation.path,
+        value.manifest
+      );
+      return;
     case 'runtime-digest':
       if (
         value.kind !== 'runtime-digest' ||
@@ -222,6 +258,11 @@ function observedError(result: Extract<SelectionReadResult, { kind: 'error' }>):
  * coherence and admission-time revalidation belong to the native owner; this
  * computation grants no freshness or publication authority.
  */
+// Only createNativeSelectionResolver enables this private mode. Public
+// snapshots and tooling never acquire the summary shortcut from recorded data,
+// constructor options, verifier output, or a matching public field.
+const nativeGenerationSnapshots = new WeakSet<SelectionObservationSnapshot>();
+
 export class SelectionObservationSnapshot {
   readonly io: SelectionReadIo;
   readonly limits: SelectionObservationLimits;
@@ -257,6 +298,8 @@ export class SelectionObservationSnapshot {
     };
     this.io = Object.freeze({
       lstat: (file: string) => read({ kind: 'lstat', path: file }, 'info').value,
+      pathIdentity: (file: string) =>
+        read({ kind: 'path-identity', path: file }, 'path-identity').value,
       stat: (file: string) => read({ kind: 'stat', path: file }, 'info').value,
       exists: (file: string) => read({ kind: 'exists', path: file }, 'exists').value,
       readFile: (file: string) =>
@@ -326,6 +369,19 @@ export class SelectionObservationSnapshot {
     }
     return observation.result;
   }
+  private nativeRuntimeGeneration(home: string, digest: string): Record<string, string> {
+    const generationRoot = path.join(home, 'lib/runtimes', digest);
+    const result = this.lookup(Object.freeze({ kind: 'runtime-generation', path: generationRoot }));
+    if (result.kind === 'error') throw observedError(result);
+    if (result.kind !== 'runtime-generation')
+      throw new TypeError('Native runtime generation result kind mismatch');
+    return validateRuntimeGenerationManifest(
+      digest,
+      result.digest,
+      generationRoot,
+      result.manifest
+    );
+  }
   private verifyRuntime(
     home: string,
     digest: string,
@@ -347,7 +403,10 @@ export class SelectionObservationSnapshot {
       dependencies = new Map<string, SelectionReadOperation>();
     this.#collecting = dependencies;
     try {
-      const files = verify(home, digest, this.io);
+      const files =
+        nativeGenerationSnapshots.has(this) && isCanonicalRuntimeVerifier(verify)
+          ? this.nativeRuntimeGeneration(home, digest)
+          : verify(home, digest, this.io);
       const observations = Object.freeze(
         [...dependencies].map(([key, operation]) => {
           const observation = this.#rows.get(key);
@@ -492,6 +551,7 @@ export function createNativeSelectionResolver(
   )
     throw new RuntimeProtocolError('Invalid selection transport original identity');
   const snapshot = new SelectionObservationSnapshot(advertisement.snapshotId, advertisement.limits);
+  nativeGenerationSnapshots.add(snapshot);
   const { snapshotId, limits } = advertisement;
   let attempted = false,
     bytesUsed = 0,
@@ -519,6 +579,10 @@ export function createNativeSelectionResolver(
     if (attempted) throw new RuntimeProtocolError('Native selection resolver already attempted');
     attempted = true;
     active();
+    if (options.runtimeDigest !== runtimeDigest)
+      throw new RuntimeProtocolError(
+        'Native selection runtime digest differs from original request'
+      );
     const result = await resolveObservedInvocationSelection(options, {
       snapshot,
       signal,

@@ -2,7 +2,7 @@
 //!
 //! Requests and serialized replies are correlation data, never authority. The
 //! owner retains the actual positive and negative dependencies, exact native
-//! metadata, and original deadline. A sealed readset is necessary input to the
+//! operation-specific metadata, and original deadline. A sealed readset is necessary input to the
 //! selection qualifier; it does not establish that the resolver requested every
 //! mandatory input, chose the right profile, or may publish anything.
 use crate::native_generation::{GenerationReceipt, RuntimeMemberDigest};
@@ -66,6 +66,7 @@ impl Limits {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum OperationKind {
+    PathIdentity,
     Lstat,
     Stat,
     Exists,
@@ -74,14 +75,26 @@ pub(crate) enum OperationKind {
     Executable,
     RuntimeFile,
     RuntimeDigest,
+    RuntimeGeneration,
 }
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct Operation {
     pub kind: OperationKind,
     pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_single_link",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub single_link: Option<bool>,
+}
+// A present null is not absence. This preserves the exact operation schema and
+// lets runtime-generation reject every present singleLink field, including false.
+fn present_single_link<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<bool>, D::Error> {
+    bool::deserialize(deserializer).map(Some)
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -124,6 +137,31 @@ impl Stamp {
         }
     }
 }
+/// Explicit path-confinement evidence. Directory inventory, contents and link
+/// count belong to separate strict observations; uid/gid remain native-only.
+#[derive(Debug, PartialEq, Eq)]
+struct PathIdentity {
+    dev: u64,
+    ino: u64,
+    mode: u32,
+    uid: u32,
+    gid: u32,
+}
+impl PathIdentity {
+    fn of(m: &Metadata) -> Self {
+        Self {
+            dev: m.dev(),
+            ino: m.ino(),
+            mode: m.mode(),
+            uid: m.uid(),
+            gid: m.gid(),
+        }
+    }
+    fn projected(&self) -> Value {
+        json!({"kind":file_kind(self.mode),"dev":self.dev.to_string(),
+            "ino":self.ino.to_string(),"mode":self.mode})
+    }
+}
 /// An ancestor's directory inventory is not a dependency of every child read.
 /// A list operation retains that inventory separately. Symlink identity/target
 /// are retained so traversal cannot silently switch while the leaf stays equal.
@@ -145,6 +183,7 @@ enum Anchor {
 }
 #[derive(Debug, PartialEq, Eq)]
 enum Leaf {
+    Identity(PathIdentity),
     Present(Stamp),
     Absent,
     Failed(i32),
@@ -378,9 +417,17 @@ impl<'a> SelectionObservationOwner<'a> {
         {
             return Err("singleLink is only valid for runtime reads".into());
         }
+        if operation.kind == OperationKind::RuntimeGeneration
+            && path.as_os_str() != self.generation.root().as_os_str()
+        {
+            return Err("Runtime generation summary requires the exact original root".into());
+        }
         let metadata = matches!(
             operation.kind,
-            OperationKind::Lstat | OperationKind::Stat | OperationKind::Exists
+            OperationKind::PathIdentity
+                | OperationKind::Lstat
+                | OperationKind::Stat
+                | OperationKind::Exists
         );
         if !self
             .roots
@@ -405,12 +452,23 @@ impl<'a> SelectionObservationOwner<'a> {
         let path = Path::new(&operation.path);
         let follow_leaf = !matches!(
             operation.kind,
-            OperationKind::Lstat | OperationKind::RuntimeFile | OperationKind::RuntimeDigest
+            OperationKind::PathIdentity
+                | OperationKind::Lstat
+                | OperationKind::RuntimeFile
+                | OperationKind::RuntimeDigest
+                | OperationKind::RuntimeGeneration
         );
         let before = anchors(path, follow_leaf, self.deadline, cancel)?;
-        let leaf_before = optional_stamp(path, false);
+        let leaf_before = operation_leaf(path, operation.kind);
         let mut followed = None;
-        let result = if operation.kind == OperationKind::RuntimeDigest {
+        let result = if operation.kind == OperationKind::RuntimeGeneration {
+            let manifest =
+                self.generation
+                    .manifest_summary(path, self.deadline.expires(), || {
+                        checkpoint(self.deadline, cancel)
+                    })?;
+            json!({"kind":"runtime-generation","digest":self.generation.digest(),"manifest":manifest})
+        } else if operation.kind == OperationKind::RuntimeDigest {
             let relative = path
                 .strip_prefix(self.generation.root())
                 .map_err(|e| e.to_string())?
@@ -441,7 +499,7 @@ impl<'a> SelectionObservationOwner<'a> {
             }
         };
         checkpoint(self.deadline, cancel)?;
-        let leaf_after = optional_stamp(path, false);
+        let leaf_after = operation_leaf(path, operation.kind);
         let after = anchors(path, follow_leaf, self.deadline, cancel)?;
         if before != after || leaf_before != leaf_after {
             return Err(format!(
@@ -469,7 +527,10 @@ impl<'a> SelectionObservationOwner<'a> {
         let path = Path::new(&operation.path);
         let metadata = matches!(
             operation.kind,
-            OperationKind::Lstat | OperationKind::Stat | OperationKind::Exists
+            OperationKind::PathIdentity
+                | OperationKind::Lstat
+                | OperationKind::Stat
+                | OperationKind::Exists
         );
         if !metadata {
             checkpoint(self.deadline, cancel)?;
@@ -483,6 +544,8 @@ impl<'a> SelectionObservationOwner<'a> {
             checkpoint(self.deadline, cancel)?;
         }
         let value = match operation.kind {
+            OperationKind::PathIdentity => fs::symlink_metadata(path)
+                .map(|m| json!({"kind":"path-identity","value":PathIdentity::of(&m).projected()})),
             OperationKind::Lstat => fs::symlink_metadata(path)
                 .and_then(|m| info(&m))
                 .map(|value| json!({"kind":"info","value":value})),
@@ -566,7 +629,7 @@ impl<'a> SelectionObservationOwner<'a> {
                     }
                 }
             }
-            OperationKind::RuntimeDigest => unreachable!(),
+            OperationKind::RuntimeDigest | OperationKind::RuntimeGeneration => unreachable!(),
         };
         checkpoint(self.deadline, cancel)?;
         Ok(value)
@@ -711,6 +774,7 @@ fn checkpoint(
 }
 fn kind_name(kind: OperationKind) -> &'static str {
     match kind {
+        OperationKind::PathIdentity => "path-identity",
         OperationKind::Lstat => "lstat",
         OperationKind::Stat => "stat",
         OperationKind::Exists => "exists",
@@ -719,6 +783,7 @@ fn kind_name(kind: OperationKind) -> &'static str {
         OperationKind::Executable => "executable",
         OperationKind::RuntimeFile => "runtime-file",
         OperationKind::RuntimeDigest => "runtime-digest",
+        OperationKind::RuntimeGeneration => "runtime-generation",
     }
 }
 fn validate_path(path: &Path, maximum: usize) -> Result<(), String> {
@@ -739,6 +804,16 @@ fn absent(error: &io::Error) -> bool {
         error.raw_os_error(),
         Some(libc::ENOENT) | Some(libc::ENOTDIR)
     )
+}
+fn operation_leaf(path: &Path, kind: OperationKind) -> Leaf {
+    if kind != OperationKind::PathIdentity {
+        return optional_stamp(path, false);
+    }
+    match fs::symlink_metadata(path) {
+        Ok(m) => Leaf::Identity(PathIdentity::of(&m)),
+        Err(e) if absent(&e) => Leaf::Absent,
+        Err(e) => Leaf::Failed(e.raw_os_error().unwrap_or(0)),
+    }
 }
 fn optional_stamp(path: &Path, follow: bool) -> Leaf {
     match if follow {
@@ -962,6 +1037,14 @@ fn error_result(error: &io::Error) -> Value {
     };
     json!({"kind":"error","name":"Error","message":error.to_string(),"code":code})
 }
+fn file_kind(mode: u32) -> &'static str {
+    match mode & libc::S_IFMT as u32 {
+        value if value == libc::S_IFREG as u32 => "file",
+        value if value == libc::S_IFDIR as u32 => "directory",
+        value if value == libc::S_IFLNK as u32 => "symlink",
+        _ => "other",
+    }
+}
 fn info(m: &Metadata) -> io::Result<Value> {
     projected_info(
         m.mode(),
@@ -1005,12 +1088,7 @@ fn projected_info(
     if size > JS_MAX || nlink > JS_MAX {
         return Err(io::Error::from_raw_os_error(libc::EOVERFLOW));
     }
-    let kind = match mode & libc::S_IFMT as u32 {
-        value if value == libc::S_IFREG as u32 => "file",
-        value if value == libc::S_IFDIR as u32 => "directory",
-        value if value == libc::S_IFLNK as u32 => "symlink",
-        _ => "other",
-    };
+    let kind = file_kind(mode);
     Ok(
         json!({"kind":kind,"dev":dev.to_string(),"ino":ino.to_string(),"size":size,"mode":mode,"nlink":nlink,
         "mtimeMs":mtime as f64*1000.0+mtime_nsec as f64/1_000_000.0,
@@ -1094,6 +1172,233 @@ mod tests {
             fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
             println!("selection observation artifact: {}", path.display());
         }
+    }
+
+    #[test]
+    fn path_identity_accepts_unrelated_sibling_inventory_changes() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let directory = home.join("identity-directory");
+            fs::create_dir(&directory).unwrap();
+            let original = fs::symlink_metadata(&directory).unwrap();
+            let mut observed = owner(generation, &clock, home);
+            let row = capture(&mut observed, OperationKind::PathIdentity, &directory);
+            assert_eq!(
+                row["result"],
+                json!({"kind":"path-identity","value":{
+                    "kind":"directory","dev":original.dev().to_string(),
+                    "ino":original.ino().to_string(),"mode":original.mode()}})
+            );
+            fs::write(directory.join("before-seal"), b"sibling").unwrap();
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::write(directory.join("after-seal"), b"another sibling").unwrap();
+            let effects = Cell::new(0);
+            effect_after_revalidation(&receipt, &effects).unwrap();
+            assert_eq!(effects.get(), 1);
+        });
+    }
+
+    #[test]
+    fn path_identity_excludes_contents_size_times_and_link_count_only_for_this_operation() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let path = home.join("identity-file");
+            fs::write(&path, b"original").unwrap();
+            let before = fs::symlink_metadata(&path).unwrap();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::PathIdentity, &path);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::write(&path, b"changed contents and length").unwrap();
+            fs::hard_link(&path, home.join("identity-file-hardlink")).unwrap();
+            let after = fs::symlink_metadata(&path).unwrap();
+            assert_ne!(Stamp::of(&before), Stamp::of(&after));
+            assert_eq!(PathIdentity::of(&before), PathIdentity::of(&after));
+            receipt.revalidate(|| Ok(())).unwrap();
+        });
+    }
+
+    #[test]
+    fn path_identity_inode_mode_and_symlink_replacements_refuse_effects() {
+        use std::os::unix::fs::PermissionsExt;
+        for change in ["inode", "mode", "symlink"] {
+            fixture(|generation, home, _| {
+                let clock = deadline();
+                let path = home.join("identity-leaf");
+                let replacement = home.join("identity-replacement");
+                fs::write(&path, b"same bytes").unwrap();
+                fs::write(&replacement, b"same bytes").unwrap();
+                let before = PathIdentity::of(&fs::symlink_metadata(&path).unwrap());
+                let mut observed = owner(generation, &clock, home);
+                capture(&mut observed, OperationKind::PathIdentity, &path);
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                match change {
+                    "inode" => fs::rename(&replacement, &path).unwrap(),
+                    "mode" => fs::set_permissions(
+                        &path,
+                        fs::Permissions::from_mode((before.mode & 0o7777) ^ 0o100),
+                    )
+                    .unwrap(),
+                    "symlink" => {
+                        fs::remove_file(&path).unwrap();
+                        symlink(&replacement, &path).unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                assert_ne!(
+                    before,
+                    PathIdentity::of(&fs::symlink_metadata(&path).unwrap())
+                );
+                let effects = Cell::new(0);
+                assert!(
+                    effect_after_revalidation(&receipt, &effects).is_err(),
+                    "{change}"
+                );
+                assert_eq!(effects.get(), 0, "{change}");
+            });
+        }
+    }
+
+    #[test]
+    fn path_identity_absence_becoming_present_refuses_seal_and_dispatch() {
+        for before_seal in [true, false] {
+            fixture(|generation, home, _| {
+                let clock = deadline();
+                let path = home.join("absent-identity");
+                let mut observed = owner(generation, &clock, home);
+                let row = capture(&mut observed, OperationKind::PathIdentity, &path);
+                assert_eq!(row["result"]["kind"], "error");
+                assert_eq!(row["result"]["code"], "ENOENT");
+                if before_seal {
+                    fs::write(&path, b"appeared").unwrap();
+                    assert!(observed.seal(|| Ok(())).is_err());
+                } else {
+                    let receipt = observed.seal(|| Ok(())).unwrap();
+                    fs::write(&path, b"appeared").unwrap();
+                    let effects = Cell::new(0);
+                    assert!(effect_after_revalidation(&receipt, &effects).is_err());
+                    assert_eq!(effects.get(), 0);
+                }
+            });
+        }
+    }
+
+    #[test]
+    fn path_identity_keeps_resolved_symlink_ancestor_replacement_evidence() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let first = home.join("identity-target");
+            let replacement = home.join("identity-target-replacement");
+            fs::create_dir(&first).unwrap();
+            fs::create_dir(&replacement).unwrap();
+            fs::write(first.join("file"), b"same inode").unwrap();
+            fs::hard_link(first.join("file"), replacement.join("file")).unwrap();
+            symlink("identity-target", home.join("identity-link")).unwrap();
+            let path = home.join("identity-link/file");
+            let before = PathIdentity::of(&fs::symlink_metadata(&path).unwrap());
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::PathIdentity, &path);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::rename(&first, home.join("identity-target-retired")).unwrap();
+            fs::rename(&replacement, &first).unwrap();
+            assert_eq!(
+                before,
+                PathIdentity::of(&fs::symlink_metadata(&path).unwrap())
+            );
+            let effects = Cell::new(0);
+            assert!(effect_after_revalidation(&receipt, &effects).is_err());
+            assert_eq!(effects.get(), 0);
+        });
+    }
+
+    #[test]
+    fn strict_lstat_and_list_still_refuse_actual_inventory_changes() {
+        for kind in [OperationKind::Lstat, OperationKind::List] {
+            fixture(|generation, home, _| {
+                let clock = deadline();
+                let directory = home.join("strict-inventory");
+                fs::create_dir(&directory).unwrap();
+                let before = Stamp::of(&fs::symlink_metadata(&directory).unwrap());
+                let mut observed = owner(generation, &clock, home);
+                capture(&mut observed, kind, &directory);
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                fs::create_dir(directory.join("new-directory")).unwrap();
+                assert_ne!(
+                    before,
+                    Stamp::of(&fs::symlink_metadata(&directory).unwrap())
+                );
+                let effects = Cell::new(0);
+                assert!(
+                    effect_after_revalidation(&receipt, &effects).is_err(),
+                    "{kind:?}"
+                );
+                assert_eq!(effects.get(), 0);
+            });
+        }
+    }
+
+    #[test]
+    fn path_identity_keeps_ancestor_scope_exact_schema_cancel_and_original_deadline() {
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            let outside = home.parent().unwrap().join("unowned-identity-sibling");
+            let denied = request(&observed, OperationKind::PathIdentity, &outside, None);
+            assert!(
+                observed
+                    .capture(denied, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("escapes native roots")
+            );
+            for single_link in [Some(false), Some(true)] {
+                let invalid = request(&observed, OperationKind::PathIdentity, home, single_link);
+                assert!(
+                    observed
+                        .capture(invalid, || Ok(()))
+                        .err()
+                        .unwrap()
+                        .contains("singleLink")
+                );
+            }
+            let null_field = json!({"snapshotId":observed.snapshot_id(),"sequence":1,
+                "operation":{"kind":"path-identity","path":home,"singleLink":null}});
+            assert!(
+                observed
+                    .capture_json(&serde_json::to_vec(&null_field).unwrap(), || Ok(()))
+                    .is_err()
+            );
+            let cancelled = request(&observed, OperationKind::PathIdentity, home, None);
+            assert_eq!(
+                observed
+                    .capture(cancelled, || Err("identity cancelled".into()))
+                    .err()
+                    .unwrap(),
+                "identity cancelled"
+            );
+            assert!(observed.records.is_empty());
+            let row = capture(&mut observed, OperationKind::PathIdentity, Path::new("/"));
+            assert_eq!(row["result"]["value"]["kind"], "directory");
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            assert!(std::ptr::eq(receipt.deadline(), &clock));
+            assert_eq!(
+                receipt
+                    .revalidate(|| Err("queued identity cancelled".into()))
+                    .unwrap_err(),
+                "queued identity cancelled"
+            );
+            let expired = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+            std::thread::sleep(Duration::from_millis(2));
+            assert!(
+                SelectionObservationOwner::new(
+                    generation,
+                    &expired,
+                    vec![home.into()],
+                    Limits::default(),
+                    || Ok(())
+                )
+                .is_err()
+            );
+        });
     }
 
     #[test]
@@ -1455,5 +1760,246 @@ mod tests {
             }
         };
         assert_ne!(a, b);
+    }
+    #[test]
+    fn runtime_generation_observes_over_4096_actual_members_in_one_chunked_read() {
+        crate::native_generation::with_large_selection_generation_fixture(
+            |generation, home, root| {
+                let clock = MonotonicDeadline::capture(Duration::from_secs(60)).unwrap();
+                let mut checkpoints = 0;
+                let cancelled = generation.manifest_summary(root, clock.expires(), || {
+                    checkpoints += 1;
+                    if checkpoints == 100 {
+                        Err("retained manifest copy cancelled".into())
+                    } else {
+                        Ok(())
+                    }
+                });
+                assert_eq!(cancelled.unwrap_err(), "retained manifest copy cancelled");
+                assert_eq!(checkpoints, 100);
+                let mut owner = owner(generation, &clock, home);
+                let discovery = request(&owner, OperationKind::RuntimeGeneration, root, None);
+                let mut reply = owner.capture(discovery, || Ok(())).unwrap();
+                let mut chunks = 0;
+                let mut bytes = Vec::new();
+                while let Some(chunk) = reply.next_chunk(CHUNK, || Ok(())).unwrap() {
+                    chunks += 1;
+                    bytes.extend_from_slice(chunk);
+                }
+                let observation: Value = serde_json::from_slice(&bytes).unwrap();
+                let result = &observation["result"];
+                let keys: BTreeSet<_> = result
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .map(String::as_str)
+                    .collect();
+                assert_eq!(keys, BTreeSet::from(["kind", "digest", "manifest"]));
+                assert_eq!(result["kind"], "runtime-generation");
+                assert_eq!(result["digest"], generation.digest());
+                let manifest = result["manifest"].as_object().unwrap();
+                assert!(
+                    manifest.len() > 4096,
+                    "real native manifest must exceed the per-file observation quota"
+                );
+                assert_eq!(manifest.len(), 4108);
+                assert_eq!(
+                    manifest["fixture-members/04099.json"],
+                    hash(b"{\"fixtureMember\":4099}\n")
+                );
+                assert!(!manifest.contains_key("manifest.json"));
+                assert!(chunks > 1);
+                assert_eq!(owner.records.len(), 1);
+                assert_eq!(owner.bytes, bytes.len());
+                assert_eq!(
+                    owner.records[0].operation.kind,
+                    OperationKind::RuntimeGeneration
+                );
+                let receipt = owner.seal(|| Ok(())).unwrap();
+                assert_eq!(receipt.observations().count(), 1);
+                assert!(std::ptr::eq(receipt.deadline(), &clock));
+                receipt.revalidate(|| Ok(())).unwrap();
+                retain(
+                    home,
+                    "generation-large",
+                    json!({"members":manifest.len(),"observations":1,"chunks":chunks,"bytes":bytes.len(),"digest":generation.digest(),"revalidated":true}),
+                );
+            },
+        );
+    }
+    #[test]
+    fn runtime_generation_mutated_member_inventory_and_mode_refuse_before_effect() {
+        for mode in ["member", "inventory", "mode"] {
+            fixture(|generation, home, root| {
+                use std::os::unix::fs::PermissionsExt;
+                let clock = deadline();
+                let mut owner = owner(generation, &clock, home);
+                let observation = capture(&mut owner, OperationKind::RuntimeGeneration, root);
+                assert_eq!(observation["result"]["kind"], "runtime-generation");
+                match mode {
+                    "member" => fs::write(root.join("engine.js"), b"mutated member").unwrap(),
+                    "inventory" => {
+                        fs::write(root.join("native/undeclared"), b"new inventory").unwrap()
+                    }
+                    "mode" => fs::set_permissions(
+                        root.join("engine.js"),
+                        fs::Permissions::from_mode(0o755),
+                    )
+                    .unwrap(),
+                    _ => unreachable!(),
+                }
+                let effects = Cell::new(0);
+                let result = owner
+                    .seal(|| Ok(()))
+                    .and_then(|receipt| effect_after_revalidation(&receipt, &effects));
+                assert!(
+                    result.is_err(),
+                    "{mode} change must refuse original summary"
+                );
+                assert_eq!(effects.get(), 0);
+                retain(
+                    home,
+                    &format!("generation-{mode}"),
+                    json!({"refused":true,"effects":effects.get(),"failure":result.unwrap_err()}),
+                );
+            });
+        }
+    }
+    #[test]
+    fn runtime_generation_stale_after_seal_refuses_and_pointer_update_does_not_reselect() {
+        fixture(|generation, home, root| {
+            let clock = deadline();
+            let mut owner = owner(generation, &clock, home);
+            let observation = capture(&mut owner, OperationKind::RuntimeGeneration, root);
+            let receipt = owner.seal(|| Ok(())).unwrap();
+            fs::write(
+                home.join("state/adapter-runtime.json"),
+                b"another current pointer",
+            )
+            .unwrap();
+            receipt.revalidate(|| Ok(())).unwrap();
+            assert_eq!(observation["result"]["digest"], generation.digest());
+            fs::write(root.join("engine.js"), b"changed after seal").unwrap();
+            let effects = Cell::new(0);
+            assert!(effect_after_revalidation(&receipt, &effects).is_err());
+            assert_eq!(effects.get(), 0);
+        });
+    }
+    #[test]
+    fn runtime_generation_rejects_foreign_root_alias_and_every_present_single_link() {
+        fixture(|generation, home, root| {
+            let clock = deadline();
+            let mut owner = owner(generation, &clock, home);
+            let alias = home.join("generation-alias");
+            symlink(root, &alias).unwrap();
+            let repeated = PathBuf::from(format!(
+                "{}//{}",
+                root.parent().unwrap().display(),
+                root.file_name().unwrap().to_str().unwrap()
+            ));
+            for path in [
+                home.to_path_buf(),
+                root.with_file_name("0".repeat(64)),
+                alias,
+                PathBuf::from(format!("{}/", root.display())),
+                PathBuf::from(format!("{}/.", root.display())),
+                repeated,
+            ] {
+                let discovery = request(&owner, OperationKind::RuntimeGeneration, &path, None);
+                assert!(
+                    owner
+                        .capture(discovery, || Ok(()))
+                        .err()
+                        .unwrap()
+                        .contains("exact original root")
+                );
+                assert!(owner.records.is_empty());
+            }
+            for single_link in [Some(false), Some(true)] {
+                let discovery =
+                    request(&owner, OperationKind::RuntimeGeneration, root, single_link);
+                assert!(owner.capture(discovery, || Ok(())).is_err());
+                assert!(owner.records.is_empty());
+            }
+            let raw = json!({"snapshotId":owner.snapshot_id(),"sequence":1,"operation":{"kind":"runtime-generation","path":root,"singleLink":null}});
+            assert!(
+                owner
+                    .capture_json(&serde_json::to_vec(&raw).unwrap(), || Ok(()))
+                    .is_err()
+            );
+            assert!(owner.records.is_empty());
+        });
+    }
+    #[test]
+    fn runtime_generation_preserves_count_byte_cancel_and_expired_original_limits() {
+        fixture(|generation, home, root| {
+            let clock = deadline();
+            let mut limits = Limits::default();
+            limits.maximum_observations = 1;
+            let mut owner = SelectionObservationOwner::new(
+                generation,
+                &clock,
+                vec![home.into()],
+                limits,
+                || Ok(()),
+            )
+            .unwrap();
+            let discovery = request(&owner, OperationKind::RuntimeGeneration, root, None);
+            assert_eq!(
+                owner
+                    .capture(discovery, || Err("original summary cancelled".into()))
+                    .err()
+                    .unwrap(),
+                "original summary cancelled"
+            );
+            assert!(owner.records.is_empty());
+            capture(&mut owner, OperationKind::RuntimeGeneration, root);
+            let excess = request(
+                &owner,
+                OperationKind::Exists,
+                &home.join("unobserved"),
+                None,
+            );
+            assert!(
+                owner
+                    .capture(excess, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("count exceeds")
+            );
+            let mut limits = Limits::default();
+            limits.maximum_bytes = 128;
+            let mut bounded = SelectionObservationOwner::new(
+                generation,
+                &clock,
+                vec![home.into()],
+                limits,
+                || Ok(()),
+            )
+            .unwrap();
+            let discovery = request(&bounded, OperationKind::RuntimeGeneration, root, None);
+            assert!(
+                bounded
+                    .capture(discovery, || Ok(()))
+                    .err()
+                    .unwrap()
+                    .contains("bytes exceed")
+            );
+            assert!(bounded.records.is_empty());
+            let expired = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+            std::thread::sleep(Duration::from_millis(2));
+            assert!(
+                SelectionObservationOwner::new(
+                    generation,
+                    &expired,
+                    vec![home.into()],
+                    Limits::default(),
+                    || Ok(())
+                )
+                .err()
+                .unwrap()
+                .contains("Original monotonic deadline expired")
+            );
+        });
     }
 }

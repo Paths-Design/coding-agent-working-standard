@@ -167,6 +167,65 @@ impl GenerationReceipt {
         &self.selection.inspected_digest
     }
 
+    /// Return only the already verified original manifest. This is snapshot
+    /// data, not a freshness/selection/profile grant. The observation owner must
+    /// keep its existing full-generation construction/seal/revalidation checks.
+    /// Only the exact retained root spelling selects this snapshot: aliases and
+    /// current-pointer/sibling generations cannot query it.
+    pub(crate) fn manifest_summary(
+        &self,
+        exact_root: &Path,
+        expires: Instant,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<BTreeMap<String, String>, String> {
+        let mut verify = Verification::new(expires.min(self.expires), &mut cancel);
+        self.manifest_summary_with(exact_root, &mut verify)
+    }
+    fn manifest_summary_with(
+        &self,
+        exact_root: &Path,
+        verify: &mut Verification<'_>,
+    ) -> Result<BTreeMap<String, String>, String> {
+        verify.checkpoint()?;
+        if exact_root.as_os_str() != self.root().as_os_str() {
+            return Err("Runtime generation summary requires the exact original root".into());
+        }
+        self.check_summary_bindings(verify)?;
+        // The input manifest was byte-bounded and completely verified at native
+        // admission. Check the original budget for every copied entry; do not
+        // hash members or enumerate the whole inventory for each summary read.
+        let mut manifest = BTreeMap::new();
+        for (relative, digest) in self.selection.members() {
+            verify.checkpoint()?;
+            manifest.insert(relative.clone(), digest.clone());
+        }
+        self.check_summary_bindings(verify)?;
+        verify.checkpoint()?;
+        Ok(manifest)
+    }
+    fn check_summary_bindings(&self, verify: &mut Verification<'_>) -> Result<(), String> {
+        self.check_ancestors(verify)?;
+        let root = self.root();
+        if MemberMetadata::read(root, true, verify)?
+            != *self
+                .directories
+                .get(root)
+                .ok_or("Generation root identity unavailable")?
+        {
+            return Err("Admitted generation directory changed".into());
+        }
+        let manifest = root.join("manifest.json");
+        if MemberMetadata::read(&manifest, false, verify)?
+            != *self
+                .files
+                .get(&manifest)
+                .ok_or("Manifest identity unavailable")?
+        {
+            return Err("Admitted generation manifest changed".into());
+        }
+        verify.checkpoint()
+    }
+
     /// Lookup is bounded by the already bounded manifest; no member bytes cross
     /// this boundary and an undeclared/escaping path is never a file-read oracle.
     pub(crate) fn member_digest(
@@ -285,6 +344,15 @@ pub(crate) fn with_selection_generation_fixture<R>(
     tests::with_selection_generation_fixture(action)
 }
 
+/// Fixed additive large-inventory fixture, captured through the same original
+/// verifier seam. This cannot construct or override a production receipt.
+#[cfg(test)]
+pub(crate) fn with_large_selection_generation_fixture<R>(
+    action: impl FnOnce(&GenerationReceipt, &Path, &Path) -> R,
+) -> R {
+    tests::with_large_selection_generation_fixture(action)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +381,9 @@ mod tests {
             Self::with_engine(b"engine\n")
         }
         fn with_engine(engine_bytes: &[u8]) -> Self {
+            Self::with_engine_and_extra_members(engine_bytes, 0)
+        }
+        fn with_engine_and_extra_members(engine_bytes: &[u8], extra_members: usize) -> Self {
             let base = std::env::var_os("CAWS_NATIVE_GENERATION_TEST_ARTIFACTS")
                 .map(PathBuf::from)
                 .unwrap_or_else(std::env::temp_dir);
@@ -347,6 +418,12 @@ mod tests {
                     serde_json::to_vec(&entry).unwrap(),
                 ),
             ]);
+            for index in 0..extra_members {
+                bodies.insert(
+                    format!("fixture-members/{index:05}.json"),
+                    format!("{{\"fixtureMember\":{index}}}\n").into_bytes(),
+                );
+            }
             let mut modes: BTreeMap<String, u32> = bodies
                 .keys()
                 .map(|name| {
@@ -367,6 +444,7 @@ mod tests {
             );
             let mut manifest = BTreeMap::new();
             for (name, bytes) in bodies {
+                fs::create_dir_all(stage.join(&name).parent().unwrap()).unwrap();
                 fs::write(stage.join(&name), &bytes).unwrap();
                 fs::set_permissions(stage.join(&name), fs::Permissions::from_mode(modes[&name]))
                     .unwrap();
@@ -429,6 +507,25 @@ mod tests {
     ) -> R {
         let fixture = Fixture::new();
         let generation = fixture.capture().unwrap();
+        action(&generation, &fixture.home, &fixture.root)
+    }
+
+    pub(super) fn with_large_selection_generation_fixture<R>(
+        action: impl FnOnce(&GenerationReceipt, &Path, &Path) -> R,
+    ) -> R {
+        let fixture = Fixture::with_engine_and_extra_members(b"engine\n", 4100);
+        // Fixture preparation is outside the invocation. Its retained native
+        // receipt still receives one fixed, non-renewed budget for all checks.
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(Instant::now() + Duration::from_secs(120), &mut cancel);
+        let generation = GenerationReceipt::capture_at(
+            &fixture.home,
+            &fixture.config,
+            &fixture.native,
+            &mut verify,
+        )
+        .unwrap();
+        drop(verify);
         action(&generation, &fixture.home, &fixture.root)
     }
 
@@ -1127,6 +1224,102 @@ mod tests {
                 .selected_native_executor(expires(), || Ok(()))
                 .is_err(),
             "same-byte new native inode cannot become this generation's executor"
+        );
+    }
+    #[test]
+    fn generation_summary_returns_retained_manifest_without_member_body_reads() {
+        let fixture = Fixture::new();
+        let generation = fixture.capture().unwrap();
+        let reads = std::cell::Cell::new(0);
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(|_, _| reads.set(reads.get() + 1)));
+        let manifest = generation
+            .manifest_summary_with(&fixture.root, &mut verify)
+            .unwrap();
+        assert_eq!(&manifest, generation.selection.members());
+        assert_eq!(
+            reads.get(),
+            0,
+            "summary must not invoke existing member-content readers"
+        );
+        drop(verify);
+        fs::write(
+            fixture.home.join("state/adapter-runtime.json"),
+            b"different pointer",
+        )
+        .unwrap();
+        assert_eq!(
+            generation
+                .manifest_summary(&fixture.root, expires(), || Ok(()))
+                .unwrap(),
+            manifest
+        );
+    }
+    #[test]
+    fn generation_summary_rejects_aliases_manifest_replacement_expiry_and_cancel() {
+        let fixture = Fixture::new();
+        let generation = fixture.capture().unwrap();
+        for root in [
+            fixture.home.clone(),
+            fixture.root.with_file_name("0".repeat(64)),
+            PathBuf::from(format!("{}/", fixture.root.display())),
+            PathBuf::from(format!("{}/.", fixture.root.display())),
+        ] {
+            assert!(
+                generation
+                    .manifest_summary(&root, expires(), || Ok(()))
+                    .is_err(),
+                "alias {}",
+                root.display()
+            );
+        }
+        assert!(
+            generation
+                .manifest_summary(
+                    &fixture.root,
+                    Instant::now() - Duration::from_secs(1),
+                    || Ok(())
+                )
+                .unwrap_err()
+                .contains("deadline")
+        );
+        assert_eq!(
+            generation
+                .manifest_summary(&fixture.root, expires(), || Err(
+                    "original summary cancelled".into()
+                ))
+                .unwrap_err(),
+            "original summary cancelled"
+        );
+        let manifest = fixture.root.join("manifest.json");
+        let replacement = fixture.home.join("replacement-manifest");
+        fs::write(&replacement, fs::read(&manifest).unwrap()).unwrap();
+        fs::set_permissions(&replacement, fs::Permissions::from_mode(0o644)).unwrap();
+        fs::rename(&replacement, &manifest).unwrap();
+        assert!(
+            generation
+                .manifest_summary(&fixture.root, expires(), || Ok(()))
+                .unwrap_err()
+                .contains("changed")
+        );
+    }
+    #[test]
+    fn generation_summary_cannot_renew_the_retained_receipt_expiry() {
+        let fixture = Fixture::new();
+        let mut generation = fixture.capture().unwrap();
+        // Private negative clock seam: model the original receipt expiring,
+        // then supply a later caller bound. It must still refuse this snapshot.
+        generation.expires = Instant::now() - Duration::from_secs(1);
+        assert!(
+            generation
+                .manifest_summary(
+                    &fixture.root,
+                    Instant::now() + Duration::from_secs(3600),
+                    || Ok(())
+                )
+                .unwrap_err()
+                .contains("deadline")
         );
     }
 }

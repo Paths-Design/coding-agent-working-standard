@@ -382,8 +382,8 @@ impl<'a> Readset<'a> {
         Ok(())
     }
     fn no_symlink(&self, path: &Path) -> Result<(), Refusal> {
-        let result = self.result("lstat", path, false)?;
-        if result["kind"] == "info" && result["value"]["kind"] != "symlink" {
+        let result = self.result("path-identity", path, false)?;
+        if result["kind"] == "path-identity" && result["value"]["kind"] != "symlink" {
             return Ok(());
         }
         if result["kind"] == "error" && result["code"] == "ENOENT" {
@@ -925,11 +925,11 @@ mod tests {
             self.owner.capture(request, || Ok(())).unwrap();
         }
         fn confined(&mut self, root: &Path, path: &Path) {
-            self.read(OperationKind::Lstat, root);
+            self.read(OperationKind::PathIdentity, root);
             let mut cursor = root.to_path_buf();
             for component in path.strip_prefix(root).unwrap().components() {
                 cursor.push(component);
-                self.read(OperationKind::Lstat, &cursor);
+                self.read(OperationKind::PathIdentity, &cursor);
             }
         }
         fn adapter_dependencies(
@@ -997,6 +997,32 @@ mod tests {
         validate_adapter_absence(&Readset::new(receipt)?, context, names)?;
         effects.set(effects.get() + 1);
         Ok(())
+    }
+    #[test]
+    fn confinement_requires_explicit_path_identity_without_lstat_fallback() {
+        fixture(|generation, home, _| {
+            let clock = clock();
+            let path = home.join("confinement-directory");
+            std::fs::create_dir(&path).unwrap();
+            let mut old = Recorder::new(generation, &clock, home);
+            old.read(OperationKind::Lstat, &path);
+            let old_receipt = old.owner.seal(|| Ok(())).unwrap();
+            assert!(
+                matches!(Readset::new(&old_receipt).unwrap().no_symlink(&path),
+                Err(Refusal::Unsupported(message)) if message.contains("path-identity"))
+            );
+            let mut narrow = Recorder::new(generation, &clock, home);
+            narrow.read(OperationKind::PathIdentity, &path);
+            let receipt = narrow.owner.seal(|| Ok(())).unwrap();
+            Readset::new(&receipt).unwrap().no_symlink(&path).unwrap();
+            let link = home.join("confinement-link");
+            std::os::unix::fs::symlink(&path, &link).unwrap();
+            let mut redirected = Recorder::new(generation, &clock, home);
+            redirected.read(OperationKind::PathIdentity, &link);
+            let receipt = redirected.owner.seal(|| Ok(())).unwrap();
+            assert!(matches!(Readset::new(&receipt).unwrap().no_symlink(&link),
+                Err(Refusal::Unsupported(message)) if message.contains("Redirected")));
+        });
     }
     #[test]
     fn omitted_absent_higher_priority_observation_cannot_be_inferred_from_other_rows() {

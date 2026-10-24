@@ -9,6 +9,7 @@ const { captureSelectionRead } = require('../../dist/init/selection-read-io');
 const { setTimeout, clearTimeout } = require('node:timers');
 const { RuntimeFrameReader, writeRuntimeFrame } = require('../../dist/runtime/live-protocol');
 const { installMachineRuntime } = require('../../dist/init/machine-adapters');
+const { sha, verifyRuntime } = require('../../dist/init/machine-runtime-state');
 
 const entry = path.resolve(__dirname, '../../dist/runtime/engine-entry.js');
 const cleanup = { groupSettled: true, stdoutEof: true, stderrEof: true, reaped: true };
@@ -215,6 +216,76 @@ test('unknown capability is refused by the actual entry before project resolutio
   });
 });
 
+// Native peer fixture only: fake executable members are never launched. The
+// ordinary verifier checks the actual fixture before the mock native summary;
+// authentic native generation ownership is covered by separate native tests.
+function prepareNativeSelectionFixture() {
+  const home = path.join(root, 'machine');
+  const stage = path.join(root, 'native-selection-image');
+  fs.cpSync(path.join(home, 'lib/runtimes', identity.runtimeDigest), stage, { recursive: true });
+  const assets = {
+    'native/caws-hook-native': '#!/bin/sh\nexit 0\n',
+    'native/node': '#!/bin/sh\nexit 0\n',
+    'client/engine.js': '// fixture engine, never executed\n',
+    'client/describe.js': '// fixture describe, never executed\n',
+    'native-entry.json': JSON.stringify({
+      schema: 'caws.runtime.native-entry.v1',
+      timeoutMs: 1000,
+      nativeExecutable: 'native/caws-hook-native',
+      nodeExecutable: 'native/node',
+      engineEntry: 'client/engine.js',
+      describeEntry: 'client/describe.js',
+    }),
+  };
+  for (const [relative, bytes] of Object.entries(assets)) {
+    const file = path.join(stage, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, bytes, { mode: relative.startsWith('native/') ? 0o755 : 0o644 });
+  }
+  const members = [];
+  const visit = (directory, prefix = '') => {
+    for (const name of fs.readdirSync(directory).sort()) {
+      const file = path.join(directory, name),
+        relative = prefix + name;
+      if (fs.statSync(file).isDirectory()) visit(file, relative + '/');
+      else {
+        // Legacy installation uses read-only modes. This fixture changes to
+        // native layout, whose declared regular-file modes are 0644 or 0755.
+        fs.chmodSync(file, fs.statSync(file).mode & 0o111 ? 0o755 : 0o644);
+        if (relative !== 'manifest.json') members.push(relative);
+      }
+    }
+  };
+  visit(stage);
+  const modes = Object.fromEntries(
+    [...members, 'native-modes.json']
+      .sort()
+      .map((relative) => [
+        relative,
+        relative === 'native-modes.json'
+          ? 0o644
+          : fs.statSync(path.join(stage, relative)).mode & 0o7777,
+      ])
+  );
+  fs.writeFileSync(path.join(stage, 'native-modes.json'), JSON.stringify(modes), { mode: 0o644 });
+  const manifest = Object.fromEntries(
+    Object.keys(modes).map((relative) => [
+      relative,
+      sha(fs.readFileSync(path.join(stage, relative))),
+    ])
+  );
+  const manifestBytes = JSON.stringify(manifest),
+    digest = sha(manifestBytes);
+  fs.writeFileSync(path.join(stage, 'manifest.json'), manifestBytes, { mode: 0o644 });
+  fs.renameSync(stage, path.join(home, 'lib/runtimes', digest));
+  fs.writeFileSync(
+    path.join(home, 'state/adapter-runtime.json'),
+    JSON.stringify({ version: 1, digest, previous_digest: identity.runtimeDigest })
+  );
+  identity = { ...identity, runtimeDigest: digest };
+  expect(verifyRuntime(home, digest)).toEqual(manifest);
+}
+
 const selectionAdvertisement = () => ({
   schema: 'caws.runtime.selection-observation.v1',
   snapshotId: 'selection-original-entry',
@@ -233,7 +304,20 @@ async function selectionReply(peer, request, corrupt = false) {
       sequence: request.sequence,
       observationId: 'native-' + request.sequence,
       operation: request.operation,
-      result: captureSelectionRead(request.operation),
+      result:
+        request.operation.kind === 'runtime-generation'
+          ? (() => {
+              const generation = path.join(root, 'machine/lib/runtimes', identity.runtimeDigest);
+              expect(request.operation).toEqual({ kind: 'runtime-generation', path: generation });
+              return {
+                kind: 'runtime-generation',
+                digest: identity.runtimeDigest,
+                manifest: JSON.parse(
+                  fs.readFileSync(path.join(generation, 'manifest.json'), 'utf8')
+                ),
+              };
+            })()
+          : captureSelectionRead(request.operation),
     })
   );
   const common = {
@@ -258,6 +342,7 @@ async function selectionReply(peer, request, corrupt = false) {
 }
 
 test('actual entry serializes native selection reads on the existing reader before Ready', async () => {
+  prepareNativeSelectionFixture();
   await withEntry(
     'caws.runtime.context-git.v1',
     async (peer) => {
@@ -270,7 +355,10 @@ test('actual entry serializes native selection reads on the existing reader befo
           expect(requests.map((row) => row.sequence)).toEqual(
             requests.map((_, index) => index + 1)
           );
-          expect(requests.some((row) => row.operation.kind === 'runtime-digest')).toBe(true);
+          expect(
+            requests.filter((row) => row.operation.kind === 'runtime-generation')
+          ).toHaveLength(1);
+          expect(requests.some((row) => row.operation.kind === 'runtime-digest')).toBe(false);
           await finishInactive(peer, frame);
           break;
         }
@@ -289,6 +377,7 @@ test('actual entry serializes native selection reads on the existing reader befo
 });
 
 test('actual entry malformed native selection chunk fails before Ready without live fallback', async () => {
+  prepareNativeSelectionFixture();
   await withEntry(
     'caws.runtime.context-git.v1',
     async (peer) => {

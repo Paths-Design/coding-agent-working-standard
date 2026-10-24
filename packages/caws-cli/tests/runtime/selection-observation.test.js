@@ -7,11 +7,159 @@ const { sha, verifyRuntime } = require('../../dist/init/machine-runtime-state');
 const { MACHINE_EVENTS, machineCommand } = require('../../dist/init/native-hook-identification');
 const { captureSelectionRead, liveSelectionReadIo } = require('../../dist/init/selection-read-io');
 const { resolveInvocationSelection } = require('../../dist/runtime/selection');
+const { assertMachinePath } = require('../../dist/init/machine-paths');
 const {
   SelectionObservationSnapshot,
   resolveObservedInvocationSelection,
   createNativeSelectionResolver,
 } = require('../../dist/runtime/selection-observation');
+
+test('path identity is immutable evidence and cannot satisfy metadata, inventory or bytes', () => {
+  const file = path.join(root, 'owned-directory');
+  fs.mkdirSync(file);
+  const supplied = snapshot('narrow-path');
+  const operation = { kind: 'path-identity', path: file },
+    result = captureSelectionRead(operation);
+  const original = { ...result.value };
+  supplied.record({
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'identity-1',
+    operation,
+    result,
+  });
+  result.value = { ...result.value, ino: '999999' };
+  expect(supplied.io.pathIdentity(file)).toEqual(original);
+  expect(Object.isFrozen(supplied.io.pathIdentity(file))).toBe(true);
+  expect(() => supplied.io.lstat(file)).toThrow('Selection requires a captured read observation');
+  expect(() => supplied.io.stat(file)).toThrow('Selection requires a captured read observation');
+  expect(() => supplied.io.readDirectory(file)).toThrow(
+    'Selection requires a captured read observation'
+  );
+  expect(() => supplied.io.readFile(file)).toThrow(
+    'Selection requires a captured read observation'
+  );
+  const full = captureSelectionRead({ kind: 'lstat', path: file });
+  supplied.record({
+    snapshotId: supplied.snapshotId,
+    sequence: 2,
+    observationId: 'full-2',
+    operation: { kind: 'lstat', path: file },
+    result: full,
+  });
+  expect(supplied.io.lstat(file)).toEqual(full.value);
+  expect(supplied.io.lstat(file).ctimeMs).toBe(full.value.ctimeMs);
+  supplied.seal();
+  fs.renameSync(file, path.join(root, 'original-directory'));
+  fs.mkdirSync(file);
+  expect(captureSelectionRead(operation).value.ino).not.toBe(original.ino);
+  expect(supplied.io.pathIdentity(file)).toEqual(original);
+  // Revalidating retained identity belongs to native seal/dispatch. A TS
+  // snapshot supplies prior evidence, not a claim that the pathname is fresh.
+});
+
+test.each([
+  ['wrong result', (row) => ({ ...row, result: { kind: 'info', value: row.result.value } })],
+  [
+    'extra timestamp',
+    (row) => ({ ...row, result: { ...row.result, value: { ...row.result.value, ctimeMs: 0 } } }),
+  ],
+  [
+    'missing mode',
+    (row) => {
+      const value = { ...row.result.value };
+      delete value.mode;
+      return { ...row, result: { ...row.result, value } };
+    },
+  ],
+  [
+    'invalid kind',
+    (row) => ({
+      ...row,
+      result: { ...row.result, value: { ...row.result.value, kind: 'socket' } },
+    }),
+  ],
+  [
+    'nondecimal device',
+    (row) => ({ ...row, result: { ...row.result, value: { ...row.result.value, dev: '-1' } } }),
+  ],
+  [
+    'numeric inode',
+    (row) => ({ ...row, result: { ...row.result, value: { ...row.result.value, ino: 42 } } }),
+  ],
+  [
+    'unsafe mode',
+    (row) => ({
+      ...row,
+      result: { ...row.result, value: { ...row.result.value, mode: Number.MAX_SAFE_INTEGER + 1 } },
+    }),
+  ],
+  [
+    'negative mode',
+    (row) => ({ ...row, result: { ...row.result, value: { ...row.result.value, mode: -1 } } }),
+  ],
+  ['singleLink false', (row) => ({ ...row, operation: { ...row.operation, singleLink: false } })],
+])('path identity refuses %s without recording progress', (_case, alter) => {
+  const supplied = snapshot('invalid-path-identity'),
+    operation = { kind: 'path-identity', path: root };
+  const row = {
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'identity-1',
+    operation,
+    result: captureSelectionRead(operation),
+  };
+  expect(() => supplied.record(alter(row))).toThrow();
+  expect(supplied.observations).toEqual([]);
+  supplied.record(row);
+  expect(supplied.io.pathIdentity(root)).toEqual(row.result.value);
+});
+
+test('path absence stays original ENOENT and fresh evidence exposes an appearing symlink', () => {
+  const file = path.join(root, 'appearing'),
+    operation = { kind: 'path-identity', path: file };
+  const supplied = snapshot('identity-absence'),
+    result = captureSelectionRead(operation);
+  expect(result).toMatchObject({ kind: 'error', code: 'ENOENT' });
+  supplied.record({
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'missing-1',
+    operation,
+    result,
+  });
+  supplied.seal();
+  fs.symlinkSync(root, file);
+  expect(captureSelectionRead(operation)).toMatchObject({
+    kind: 'path-identity',
+    value: { kind: 'symlink' },
+  });
+  expect(() => assertMachinePath(root, file)).toThrow('Refusing symlink');
+  let originalError;
+  try {
+    supplied.io.pathIdentity(file);
+  } catch (error) {
+    originalError = error;
+  }
+  expect(originalError).toMatchObject({ code: 'ENOENT', message: result.message });
+  expect(() => supplied.io.lstat(file)).toThrow('Uncaptured read in sealed selection snapshot');
+});
+
+test('narrow identity cannot be presented as generic lstat information', () => {
+  const supplied = snapshot('full-info-required'),
+    operation = { kind: 'lstat', path: root };
+  const narrow = captureSelectionRead({ kind: 'path-identity', path: root });
+  expect(() =>
+    supplied.record({
+      snapshotId: supplied.snapshotId,
+      sequence: 1,
+      observationId: 'wrong-info',
+      operation,
+      result: { kind: 'info', value: narrow.value },
+    })
+  ).toThrow('Invalid selection file information');
+  expect(supplied.observations).toEqual([]);
+});
 
 test('compact runtime digest is immutable data and full byte capture stays a separate operation', () => {
   const file = path.join(root, 'runtime-member');
@@ -389,7 +537,7 @@ test('fresh higher-priority adapter exposes changed absence inventory and ancest
   );
   expect(absence.result).toMatchObject({ kind: 'error', code: 'ENOENT' });
   const parentBefore = before.snapshot.observations.find(
-    (row) => row.operation.kind === 'lstat' && row.operation.path === directory
+    (row) => row.operation.kind === 'path-identity' && row.operation.path === directory
   );
   expect(parentBefore.result).toMatchObject({ kind: 'error', code: 'ENOENT' });
   write(adapter, '# user replacement\n');
@@ -402,7 +550,7 @@ test('fresh higher-priority adapter exposes changed absence inventory and ancest
     sha256: sha('# user replacement\n'),
   });
   const parentAfter = after.snapshot.observations.find(
-    (row) => row.operation.kind === 'lstat' && row.operation.path === directory
+    (row) => row.operation.kind === 'path-identity' && row.operation.path === directory
   );
   expect(parentAfter.result.value.kind).toBe('directory');
   const listing = after.snapshot.observations.find(
@@ -897,11 +1045,11 @@ test('native directory closure: undeclared empty tree refuses before descent', (
   expect(selected).toBeNull();
 });
 
-function selectionTransport(changes = {}) {
+function selectionTransport(fixture, changes = {}) {
   const controller = changes.controller ?? new AbortController();
   const request = {
     id: 'transport-original',
-    runtimeDigest: 'a'.repeat(64),
+    runtimeDigest: fixture.options.runtimeDigest,
     deadlineEpochMs: Date.now() + 20_000,
     selectionObservation: {
       schema: 'caws.runtime.selection-observation.v1',
@@ -930,7 +1078,22 @@ function selectionTransport(changes = {}) {
         sequence: frame.sequence,
         observationId: 'native-' + frame.sequence,
         operation: frame.operation,
-        result: captureSelectionRead(frame.operation),
+        // Native-side fixture only: actual Rust generation validation belongs to
+        // its receipt tests. Never ask tooling to manufacture this summary.
+        result:
+          frame.operation.kind === 'runtime-generation'
+            ? (() => {
+                if (frame.operation.path !== fixture.runtime)
+                  throw Error('native generation root mismatch');
+                return {
+                  kind: 'runtime-generation',
+                  digest: fixture.options.runtimeDigest,
+                  manifest: JSON.parse(
+                    fs.readFileSync(path.join(fixture.runtime, 'manifest.json'), 'utf8')
+                  ),
+                };
+              })()
+            : captureSelectionRead(frame.operation),
       };
       const raw = changes.body ? changes.body(row) : Buffer.from(JSON.stringify(row));
       const bytes = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
@@ -969,14 +1132,15 @@ function selectionTransport(changes = {}) {
 }
 
 test('native selection transport assembles bounded chunks and resolves the existing selector once', async () => {
-  const f = fixture();
+  const f = fixture({}, true);
   let bodies = 0;
-  const state = selectionTransport({
+  const state = selectionTransport(f, {
     body: (row) => JSON.stringify(row) + (++bodies === 1 ? ' '.repeat(100_000) : ''),
   });
   const result = await state.resolve(f.options);
   expect(result).toEqual(resolveInvocationSelection(f.options));
-  expect(state.writes.some((row) => row.operation.kind === 'runtime-digest')).toBe(true);
+  expect(state.writes.filter((row) => row.operation.kind === 'runtime-generation')).toHaveLength(1);
+  expect(state.writes.some((row) => row.operation.kind === 'runtime-digest')).toBe(false);
   expect(state.writes.map((row) => row.sequence)).toEqual(state.writes.map((_, i) => i + 1));
   expect(
     state.writes.every(
@@ -1016,8 +1180,8 @@ test.each([
 ])(
   'native selection transport consumes %s failure without live fallback or retry',
   async (_name, changes) => {
-    const f = fixture(),
-      state = selectionTransport(changes);
+    const f = fixture({}, true),
+      state = selectionTransport(f, changes);
     await expect(state.resolve(f.options)).rejects.toThrow();
     expect(state.writes).toHaveLength(1);
     await expect(state.resolve(f.options)).rejects.toThrow('already attempted');
@@ -1026,18 +1190,18 @@ test.each([
 );
 
 test('advertised request and aggregate byte bounds are enforced independently', async () => {
-  const f = fixture();
-  const count = selectionTransport({ limits: { maximumObservations: 1 } });
+  const f = fixture({}, true);
+  const count = selectionTransport(f, { limits: { maximumObservations: 1 } });
   await expect(count.resolve(f.options)).rejects.toThrow('request limit');
   expect(count.writes).toHaveLength(1);
-  const bytes = selectionTransport({ limits: { maximumBytes: 1 } });
+  const bytes = selectionTransport(f, { limits: { maximumBytes: 1 } });
   await expect(bytes.resolve(f.options)).rejects.toThrow('result header');
   expect(bytes.writes).toHaveLength(1);
 });
 
 test('transport keeps the captured deadline and original cancellation reason', async () => {
-  const f = fixture();
-  const expired = selectionTransport();
+  const f = fixture({}, true);
+  const expired = selectionTransport(f);
   // Construct an already-expired resolver, then mutate the public request: its
   // captured original deadline cannot be replaced by that later value.
   expired.request.deadlineEpochMs = Date.now() - 1;
@@ -1049,8 +1213,195 @@ test('transport keeps the captured deadline and original cancellation reason', a
   expired.request.deadlineEpochMs = Date.now() + 60_000;
   await expect(dead(f.options)).rejects.toThrow('original deadline expired');
   const original = new Error('original selection cancellation');
-  const cancelled = selectionTransport({ afterWrite: (controller) => controller.abort(original) });
+  const cancelled = selectionTransport(f, {
+    afterWrite: (controller) => controller.abort(original),
+  });
   await expect(cancelled.resolve(f.options)).rejects.toBe(original);
   expect(cancelled.writes).toHaveLength(1);
   await expect(cancelled.resolve(f.options)).rejects.toThrow('already attempted');
+});
+
+test('native canonical verifier uses one bounded generation summary for more than4096 members', async () => {
+  const members = Object.fromEntries(
+    Array.from({ length: 4200 }, (_, index) => [`bulk/member-${index}`, 'retained member\n'])
+  );
+  const f = fixture(members, true),
+    state = selectionTransport(f);
+  const result = await state.resolve(f.options);
+  expect(result.status).toBe('active');
+  expect(result.handlers.map((row) => row.entry)).toEqual(['first.sh']);
+  const summaries = state.writes.filter((row) => row.operation.kind === 'runtime-generation');
+  expect(summaries).toHaveLength(1);
+  expect(summaries[0].operation).toEqual({ kind: 'runtime-generation', path: f.runtime });
+  expect(state.writes.length).toBeLessThan(256);
+  expect(
+    state.writes.some((row) => row.operation.path.startsWith(path.join(f.runtime, 'bulk')))
+  ).toBe(false);
+  expect(
+    state.writes.some(
+      (row) =>
+        row.operation.kind === 'read' &&
+        row.operation.path === path.join(f.runtime, 'system-policy.json')
+    )
+  ).toBe(true);
+  expect(
+    state.writes.some(
+      (row) =>
+        row.operation.kind === 'read' && row.operation.path === path.join(f.runtime, 'first.sh')
+    )
+  ).toBe(true);
+  // Public/tooling snapshots still run the real complete verifier and cannot
+  // silently inherit this native-only optimization or raise their declared cap.
+  const plain = snapshot('ordinary-large', { maximumObservations: 64 });
+  await expect(observe(f.options, plain)).rejects.toThrow('count limit');
+  expect(plain.observations.every((row) => row.operation.kind !== 'runtime-generation')).toBe(true);
+});
+
+test.each([
+  ['wrong digest', (result) => ({ ...result, digest: 'f'.repeat(64) })],
+  [
+    'missing launcher',
+    (result) => {
+      const manifest = { ...result.manifest };
+      delete manifest['launcher.py'];
+      return { ...result, manifest };
+    },
+  ],
+  [
+    'missing native metadata',
+    (result) => {
+      const manifest = { ...result.manifest };
+      delete manifest['native-entry.json'];
+      return { ...result, manifest };
+    },
+  ],
+  [
+    'bad member hash',
+    (result) => ({ ...result, manifest: { ...result.manifest, member: 'A'.repeat(64) } }),
+  ],
+  [
+    'unsafe path',
+    (result) => ({ ...result, manifest: { ...result.manifest, '../escape': 'b'.repeat(64) } }),
+  ],
+  [
+    'JS lexical sibling prefix',
+    (result) => ({ ...result, manifest: { ...result.manifest, '..fixture': 'b'.repeat(64) } }),
+  ],
+  ['surplus field', (result) => ({ ...result, qualified: true })],
+  ['nonobject manifest', (result) => ({ ...result, manifest: [] })],
+])('native generation %s refuses without fallback or a second attempt', async (_name, alter) => {
+  const f = fixture({}, true),
+    state = selectionTransport(f, {
+      body(row) {
+        return JSON.stringify(
+          row.operation.kind === 'runtime-generation' ? { ...row, result: alter(row.result) } : row
+        );
+      },
+    });
+  await expect(state.resolve(f.options)).rejects.toThrow();
+  expect(state.writes.filter((row) => row.operation.kind === 'runtime-generation')).toHaveLength(1);
+  expect(state.writes.some((row) => row.operation.kind === 'runtime-digest')).toBe(false);
+  const count = state.writes.length;
+  await expect(state.resolve(f.options)).rejects.toThrow('already attempted');
+  expect(state.writes).toHaveLength(count);
+});
+
+test('native generation reply for another root and another original digest cannot satisfy discovery', async () => {
+  const f = fixture({}, true),
+    wrongRoot = selectionTransport(f, {
+      body(row) {
+        return JSON.stringify(
+          row.operation.kind === 'runtime-generation'
+            ? {
+                ...row,
+                operation: { ...row.operation, path: path.join(f.runtime, 'another-generation') },
+              }
+            : row
+        );
+      },
+    });
+  await expect(wrongRoot.resolve(f.options)).rejects.toThrow('operation mismatch');
+  const wrongRequest = selectionTransport(f);
+  await expect(
+    wrongRequest.resolve({ ...f.options, runtimeDigest: 'f'.repeat(64) })
+  ).rejects.toThrow('differs from original request');
+  expect(wrongRequest.writes).toEqual([]);
+  const wrongHome = selectionTransport(f);
+  await expect(
+    wrongHome.resolve({ ...f.options, home: path.join(root, 'alien-home') })
+  ).rejects.toThrow('native generation root mismatch');
+});
+
+test('generation summary cannot supply byte reads or let an alien verifier seed or borrow canonical cache', async () => {
+  const selector = require('../../dist/runtime/selection');
+  const original = selector.resolveInvocationSelection;
+  const f = fixture({ 'uncaptured.bin': 'never requested bytes' }, true);
+  const alienManifest = { 'alien-only': 'f'.repeat(64) };
+  const alien = jest.fn(() => ({ ...alienManifest }));
+  let nativeIo;
+  jest.spyOn(selector, 'resolveInvocationSelection').mockImplementation((options) => {
+    nativeIo = options.io;
+    expect(options.io.verifyRuntime(options.home, options.runtimeDigest, alien)).toEqual(
+      alienManifest
+    );
+    return original(options);
+  });
+  const state = selectionTransport(f);
+  const result = await state.resolve(f.options);
+  expect(result.handlers[0].sha256).toBe(sha('#!/bin/sh\nexit 0\n'));
+  expect(alien).toHaveBeenCalledTimes(1);
+  const after = jest.fn(() => ({ other: 'a'.repeat(64) }));
+  expect(nativeIo.verifyRuntime(f.options.home, f.options.runtimeDigest, after)).toEqual({
+    other: 'a'.repeat(64),
+  });
+  expect(after).toHaveBeenCalledTimes(1);
+  expect(verifyRuntime(f.options.home, f.options.runtimeDigest, nativeIo)['launcher.py']).toBe(
+    sha('# fixture launcher\n')
+  );
+  expect(() => nativeIo.readRuntimeFile(path.join(f.runtime, 'uncaptured.bin'))).toThrow(
+    'Uncaptured read in sealed selection snapshot'
+  );
+  expect(() => nativeIo.readFile(path.join(f.runtime, 'uncaptured.bin'))).toThrow(
+    'Uncaptured read in sealed selection snapshot'
+  );
+  expect(state.writes.filter((row) => row.operation.kind === 'runtime-generation')).toHaveLength(1);
+});
+
+test('public snapshot cannot opt into native generation verification using recorded summary data', async () => {
+  const f = fixture({}, true),
+    supplied = snapshot('public-summary');
+  const manifest = JSON.parse(fs.readFileSync(path.join(f.runtime, 'manifest.json'), 'utf8'));
+  supplied.record({
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'asserted-summary',
+    operation: { kind: 'runtime-generation', path: f.runtime },
+    result: { kind: 'runtime-generation', digest: f.options.runtimeDigest, manifest },
+  });
+  supplied.io.verifyRuntime(f.options.home, f.options.runtimeDigest, () => ({
+    'first.sh': 'f'.repeat(64),
+  }));
+  write(path.join(f.runtime, 'first.sh'), '#!/bin/sh\nexit 29\n', true);
+  await expect(observe(f.options, supplied)).rejects.toThrow(
+    'Machine runtime file modified: first.sh'
+  );
+  expect(supplied.observations.some((row) => row.operation.kind === 'runtime-digest')).toBe(true);
+});
+
+test('runtime generation operation rejects singleLink and cannot become byte content', () => {
+  const f = fixture({}, true),
+    supplied = snapshot('bad-generation-operation');
+  const row = {
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'generation-one',
+    operation: { kind: 'runtime-generation', path: f.runtime, singleLink: false },
+    result: {
+      kind: 'runtime-generation',
+      digest: f.options.runtimeDigest,
+      manifest: JSON.parse(fs.readFileSync(path.join(f.runtime, 'manifest.json'), 'utf8')),
+    },
+  };
+  expect(() => supplied.record(row)).toThrow('Invalid selection read operation');
+  expect(supplied.observations).toHaveLength(0);
 });

@@ -1553,6 +1553,7 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         config: &Config,
         request: &crate::protocol::Request,
         deadline: &'deadline caws_native::monotonic_deadline::MonotonicDeadline,
+        mut phase: impl FnMut(&'static str),
     ) -> Self {
         let mut prepared = Self {
             generation: None,
@@ -1578,6 +1579,7 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
             prepared.refusal = Some("original machine home must be absolute".into());
             return prepared;
         }
+        phase("generation-capture");
         let generation = match crate::native_generation::GenerationReceipt::capture(
             &home,
             config,
@@ -1593,6 +1595,7 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
                 return prepared;
             }
         };
+        phase("original-executor");
         let executor = match generation.selected_native_executor(deadline.expires(), || {
             crate::cancellation::check()?;
             deadline.check().map_err(|e| e.to_string())
@@ -1604,6 +1607,7 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
                 return prepared;
             }
         };
+        phase("original-context-capture");
         let result = caws_native::session_cache_wire::OriginalStopCapture::capture(
             request.original_stop_input(),
             &executor,

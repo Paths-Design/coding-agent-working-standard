@@ -8772,6 +8772,130 @@ Additional bounded evidence and unresolved dependencies:
   under the root session's publication-integration directory outside the source
   ledger.
 
+- E334: Actual native main and the unchanged maintained engine are composed with
+  a fresh 5779-member debug v1 package and the original30s deadline in
+  maintained-selection-execution-01. The probe exits1; native exits0
+  after30572ms but explicitly reports request-deadline expiry and incomplete
+  checks. Only seeded session metadata exists: no invocation journal, turn or
+  index; the pending plan remains and its output contains the original
+  placeholder. Exit0 is therefore not a completion observation. Source
+  inspection finds that per-member lstat/digest discovery cannot fit4096
+  observations. The bounded phase diagnostic in
+  maintained-selection-phase-execution-01 retains a second failure: generation
+  capture7068ms, executor/context through8080ms, owner verification
+  through11467ms and discovery expiry at30032ms after1093 completed native
+  exchanges, last runtime-digest. This locates the failure in discovery, not a
+  measured cap refusal. Phase means last entered phase; completion means native
+  chunk writes, not engine consumption; elapsedLocalMs uses the original
+  conservative local expiry. Diagnostics retain no new payload/path data.
+  selection-phase-hostile-01 exposes an incorrect added assertion expecting one
+  exchange where the simulator performs three; source and retained stderr
+  establish the three-exchange sequence. The corrected hostile replay exits0
+  in71.601s, including refusal at sealing and after Ready. No deadline, resource
+  ceiling, package inventory or protective behavior is relaxed.
+- E335: Native runtime-generation observations reuse only the original
+  GenerationReceipt's verified manifest, exact root spelling and original
+  expiry. Summary reads check ancestor/root/manifest identities; construction,
+  sealing and predispatch full-generation validation remain required.
+  generation-summary-native-unit-01 exits0 with134 cases in8.015s. The actual
+  4108-member fixture produces one394858-byte observation in seven chunks and
+  revalidates. Member, inventory and mode changes refuse before a test callback;
+  its zero-effect counter does not prove zero real store reservations or SQL
+  opens. Foreign roots, aliases, present singleLink, cancellation and expired
+  original receipts refuse. Native feature-off build and default-feature compile
+  checks exit0; default features are empty, so these do not compile or execute
+  SQLite behavior. This manifest data is not stock selection, semantic profile
+  or publication authority. Actual maintained-engine consumption and
+  full-package completion remain required.
+- E336: installed-startup-probe-execution-01 exits0 in4.350s, executing exact
+  private copies of the selected runtime's SQL and renderer entrypoints under
+  captured current-process startup. Seven SQL and eight renderer cases match
+  separate4300-digit profiles. Actual4301-digit numeric/HTML-decimal inputs
+  refuse with the4300-digit ValueError and no corresponding projection/turn; the
+  plain renderer writes user qualified-visible and index turn_count1. Root
+  rechecks232 artifact hashes and identical before/after original-runtime
+  inventories, excluding read atime. The SQL and renderer source hashes equal
+  E330's references; the session-log.sh wrapper differs. This supports separate
+  numeric profile data, not full installed-path/vendor-callback equivalence,
+  ambient module closure, native calendar admission or production Stop policy.
+  Artifacts reside in copied-startup-probe-observation-01 under the root
+  session's publication-integration directory; original installed bytes remain
+  unchanged.
+
+- E337: The typed canonical verifier consumes one native generation observation
+  while public snapshots/tooling retain complete filesystem verification.
+  Callback identity isolates the cache; independent policy/registration/byte
+  reads remain required. The pure validator preserves the TS lexical rejection
+  of a root member named ..fixture, which native path validation alone permits.
+  generation-summary-build-01 exits0 in6.794s. The first focused run rejects two
+  native-layout fixtures that inherited legacy read-only modes; fixture creation
+  is corrected to the native0644/0755 contract without weakening verification.
+  generation-summary-tests-02 exits0 with193 cases in8.937s,
+  including4200-member discovery, malformed/cross-generation results, uncaptured
+  byte reads and callback-cache isolation. The actual5779-member
+  native/maintained-engine image in maintained-selection-summary-execution-01
+  reaches Ready after364 observations at16694ms, then refuses during sealing
+  at20000ms because an lstat dependency on /Users/darianrosebrook/.codex
+  changed. Native exits0 but the scenario correctly exits1. An invocation
+  journal exists, but no dispatch/turn completion is established. This
+  demonstrates progress beyond the discovery timeout, not successful
+  composition. Path-confinement consumers inspect kind rather than directory
+  inventory timestamps; an explicit identity observation must separate those
+  dependencies while generic metadata/list checks stay strict. Root retains this
+  repair and the ordinary publication obligation.
+
+- E338: Path confinement uses an explicit path-identity observation rather than
+  generic lstat. Native evidence retains kind/device/inode/mode/ownership and
+  traversal anchors; only this operation excludes contents, timestamps and link
+  count. Generic metadata, bytes and inventory operations retain their strict
+  dependencies. Stock selection requires the explicit observation without a
+  missing-row fallback. path-identity-native-unit-01 exits0 with142 cases,
+  including sibling-change acceptance and inode/mode/symlink/absence and
+  resolved ancestor replacement refusals; effect counters are test callbacks,
+  not real SQLite-open observations. path-identity-build-01 and
+  path-identity-tests-01 exit0 with208 focused TS cases. The same5779-member
+  debug image in maintained-selection-identity-execution-01 passes sealing
+  at23571ms, then expires during predispatch revalidation at30026ms. Native
+  exits0 while the scenario exits1, with no dispatch grant. This resolves the
+  observed sealing obstruction in that replay but does not establish successful
+  composition or identify the exact metadata field changed in E337. Root next
+  compares the optimized binary with the same source, inventory and original30s
+  deadline; repeated full-generation validation remains intact. Source landing,
+  actual stock admission, profile-bound acquisition/publication, residency and
+  machine cutover remain separate obligations.
+- E339: The same source and5779-member package completes the actual maintained
+  invocation with optimized native binaries. path-identity-native-release-01
+  builds both entrypoints exit0 in43.880s with unchanged source/input pins.
+  maintained-selection-optimized-execution-01 exits0 in20.773s overall; native
+  exits0 after13628ms under the unchanged30000ms invocation deadline. The fresh
+  v1 image retains65 packages and4435 unchanged dependency/root members; no
+  verification pass or resource ceiling is removed. The actual journal contains
+  invocation_started, dispatch_started, compatibility_dispatch_completed,
+  dispatch_completed, adapter_stdout_handoff and adapter_finished exactly once.
+  All four selected stock handlers complete exit0. turn-001.json contains user
+  maintained engine visible user, reply maintained engine visible reply and the
+  original start/model/SHA/nested cwd; session-index.json has turn_count1. The
+  final plan snapshot equals the input transcript and its pending-list file is
+  absent. Root independently rehashes nine output pins. Raw commands, terminal
+  state, journal, turn/index and plan files are retained under
+  publication-integration/maintained-selection-optimized-observation-01 in the
+  root session artifact directory. This is one optimized compatibility-path
+  observation, not a latency distribution, governed release-build receipt,
+  native SQL/publication admission, vendor delivery, Python retirement or
+  machine adoption. The journal correctly retains delivery:not_observed. Debug
+  expiry in E338 remains a real failure; further native admission adds
+  verification work and requires another full-image timing check.
+  path-identity-main-hostile-01 exits0 in67.731s across six actual-main
+  simulator scenarios: wrong request/snapshot identity, duplicate/overlapping
+  reads, stale dependencies and a read after Ready refuse without retry. The
+  late-read case has a dispatch observation and proves post-dispatch refusal,
+  not absence of every effect. path-identity-sqlite-compile-01 explicitly
+  enables sqlite-store and exits0; it compiles the feature and tests without
+  executing SQLite. Focused lint exits0. Full-basis publication gates
+  evaluate131 paths with five PASS dispositions; doctor reports0E/4W/5I. These
+  checks do not extend the compatibility-path observation to native publication
+  or machine adoption.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -8880,7 +9004,7 @@ complete its parent outcome.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                                     |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E330/E331 source is on main at c6b2a0a6; qualify the combined native/maintained-engine selection path, then the production-connected image and actual harness delivery                                                                                  |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | Land the E334–E339 selection slice after committed review; E339 observes the optimized full-image compatibility invocation. Production-connected image, actual harness delivery and rollback remain owed.                                               |
 | Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | E332/E333 native/typed transport must compose through actual stock selection; then independently qualified SQL/renderer profiles, original deadline and queue revalidation before reservation/writer/SQL must reach ordinary publication/reader/release |
 | Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                   |
 

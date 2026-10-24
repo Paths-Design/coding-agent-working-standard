@@ -87,6 +87,53 @@ fn execute<'deadline>(
     config: &cli::Config,
     original_deadline: &'deadline MonotonicDeadline,
 ) -> Result<u8, Failure<'deadline>> {
+    // Bounded diagnostics use the same local clock as the original I/O bound.
+    // They never renew that bound, grant admission, or retain payload/path data.
+    let mut progress = InvocationProgress {
+        started: original_deadline.expires() - config.timeout,
+        phase: "payload",
+        marks: Vec::new(),
+        selection: None,
+        completed_selection: 0,
+    };
+    progress.mark("payload");
+    execute_observed(config, original_deadline, &mut progress).map_err(|mut error| {
+        error
+            .message
+            .push_str(&format!("; native progress {}", progress.snapshot()));
+        error
+    })
+}
+
+struct InvocationProgress {
+    started: Instant,
+    phase: &'static str,
+    marks: Vec<(&'static str, u128)>,
+    selection: Option<(usize, selection_observation::OperationKind)>,
+    completed_selection: usize,
+}
+impl InvocationProgress {
+    fn mark(&mut self, phase: &'static str) {
+        self.phase = phase;
+        // Phases are a fixed native sequence. Discovery requests only update
+        // the last operation below, so neither volume nor caller data grows it.
+        if self.marks.last().is_none_or(|(last, _)| *last != phase) && self.marks.len() < 32 {
+            self.marks.push((phase, self.started.elapsed().as_millis()));
+        }
+    }
+    fn snapshot(&self) -> serde_json::Value {
+        serde_json::json!({"schema":"caws.native.invocation-progress.v1",
+            "phase":self.phase,"elapsedLocalMs":self.started.elapsed().as_millis(),
+            "marks":self.marks,"lastSelection":self.selection,
+            "completedSelectionSequence":self.completed_selection})
+    }
+}
+
+fn execute_observed<'deadline>(
+    config: &cli::Config,
+    original_deadline: &'deadline MonotonicDeadline,
+    progress: &mut InvocationProgress,
+) -> Result<u8, Failure<'deadline>> {
     let deadline = original_deadline.expires();
     let (payload, input_json) = runner::read_payload(deadline).map_err(Failure::configuration)?;
     original_deadline
@@ -97,8 +144,11 @@ fn execute<'deadline>(
     // The optional candidate observes original inputs before Node. It neither
     // selects the native Stop route nor grants any prefix/publication effects.
     let mut original_stop =
-        runner::OriginalStopPreparation::capture(config, &request, original_deadline);
+        runner::OriginalStopPreparation::capture(config, &request, original_deadline, |phase| {
+            progress.mark(phase)
+        });
     let outcome = (|| -> Result<u8, Failure<'deadline>> {
+        progress.mark("selection-owner");
         let selection_limits = selection_observation::Limits::default();
         // Discovery cannot upgrade a refused candidate. Invalid original roots
         // disable this optional observation transport; compatibility remains
@@ -124,6 +174,7 @@ fn execute<'deadline>(
         if let Some(owner) = selection_owner.as_ref() {
             request.advertise_selection_observation(owner.snapshot_id(), selection_limits);
         }
+        progress.mark("request-encoding");
         // Advertisement is native-derived and precedes the only encoded request.
         let bytes = request
             .encode_frame()
@@ -164,6 +215,7 @@ fn execute<'deadline>(
                     .collect(),
             })
             .map_err(Failure::configuration)?;
+        progress.mark("engine-start");
         let mut session = runner::Session::start(config, &request.id, deadline)
             .map_err(Failure::configuration)?;
         let mut ready = None;
@@ -182,14 +234,18 @@ fn execute<'deadline>(
             StoreProjectBinding::NotApplicable
         };
         let proposal = (|| {
+            progress.mark("selection-discovery");
             session.send(&bytes, deadline)?;
             ready = Some(loop {
                 match protocol::validate_frame(&session.frame(deadline)?, &request)? {
                     protocol::EngineFrame::SelectionObservationRequest(frame) => {
+                        let observed = request.selection_request(&frame)?;
+                        progress.selection = Some((observed.sequence, observed.operation.kind));
                         let owner = selection_owner
                             .as_mut()
                             .ok_or("selection observation was not advertised")?;
                         session.run_selection_observation(owner, &request, &frame, deadline)?;
+                        progress.completed_selection = observed.sequence;
                     }
                     protocol::EngineFrame::ContextGitRequest(frame) => {
                         if let Some(replay) = captured_context.as_mut() {
@@ -202,6 +258,8 @@ fn execute<'deadline>(
                         }
                     }
                     protocol::EngineFrame::Ready(value) => {
+                        progress.mark("ready-received");
+                        progress.mark("selection-seal");
                         selection_receipt = selection_owner
                             .take()
                             .map(|owner| owner.seal(cancellation::check))
@@ -216,6 +274,7 @@ fn execute<'deadline>(
                     _ => return Err("engine proposal before dispatch grant".into()),
                 }
             });
+            progress.mark("render-admission");
             let service_dispatch = session.admit_render_offer(
                 config,
                 &request,
@@ -226,11 +285,13 @@ fn execute<'deadline>(
             // the owner through this execution and refuse stale dependencies
             // before the dispatch attempt, including inactive/custom selection.
             if let Some(receipt) = selection_receipt.as_ref() {
+                progress.mark("selection-predispatch-revalidation");
                 receipt.revalidate(cancellation::check)?;
             }
             // A failed write may deliver the complete grant. Record the attempt
             // BEFORE writing; creation of the engine alone is not dispatch.
             dispatched = ready.as_ref().is_some_and(|context| context.active);
+            progress.mark("dispatch-grant");
             session.send(
                 &service_dispatch.unwrap_or_else(|| protocol::dispatch(&request)),
                 deadline,

@@ -434,6 +434,43 @@ fn native_selection_transport_refuses_invalid_overlapping_stale_and_late_request
         };
         let diagnostics = fs::read_to_string(f.base.join("native.stderr")).unwrap();
         assert!(diagnostics.contains(expected), "{case}: {diagnostics}");
+        let progress: Value = serde_json::Deserializer::from_str(
+            diagnostics
+                .split("; native progress ")
+                .nth(1)
+                .expect("native phase evidence"),
+        )
+        .into_iter()
+        .next()
+        .unwrap()
+        .unwrap();
+        assert_eq!(progress["schema"], "caws.native.invocation-progress.v1");
+        assert_eq!(
+            progress["phase"],
+            if case == "selection-stale" {
+                "selection-seal"
+            } else if case == "selection-after-ready" {
+                "dispatch-grant"
+            } else {
+                "selection-discovery"
+            }
+        );
+        let marks = progress["marks"].as_array().unwrap();
+        assert!(marks.len() <= 32);
+        assert!(
+            marks
+                .windows(2)
+                .all(|pair| pair[0][1].as_u64().unwrap() <= pair[1][1].as_u64().unwrap())
+        );
+        assert!(marks.iter().any(|mark| mark[0] == "generation-capture"));
+        assert!(marks.iter().any(|mark| mark[0] == "engine-start"));
+        if case == "selection-stale" {
+            // The simulator mutates the first read, then completes absence and
+            // digest exchanges before Ready triggers whole-readset validation.
+            assert_eq!(progress["completedSelectionSequence"], 3);
+            assert_eq!(progress["lastSelection"], json!([3, "runtime-digest"]));
+        }
+        assert!(!progress.to_string().contains(f.root.to_str().unwrap()));
         assert!(
             diagnostics.contains("request was not retried"),
             "{case}: {diagnostics}"
