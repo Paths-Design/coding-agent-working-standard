@@ -27,9 +27,11 @@ acceptance:
     when: 'targeted failing checks execute'
     then: 'path custody, reviewed reference inventory, transcript generation and mutation topology checks pass and reject their declared hostile controls'
   - id: A2
-    given: 'the repaired integrated candidate'
-    when: 'the repository normal pre-push pipeline executes'
-    then: 'all required stages pass without bypass and origin/main receives the committed main history'
+    given: 'the repaired fixtures and pinned qualification inputs'
+    when: 'the existing and added hostile controls execute'
+    then: >-
+      changed or omitted semantic source, extra semantic source, corrupt transcript
+      output, and unclassified or duplicate source accounting remain rejected
 observability:
   - 'Raw push and targeted-check logs retained under /private/tmp'
 rollback:
