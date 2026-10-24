@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-PRODUCTION-DEPENDENCIES-001
 title: 'Remove unused interactive dependency from the complete native CLI execution image'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-production-dependencies
 created_at: '2026-10-24T23:46:44.935Z'
-updated_at: '2026-10-24T23:46:44.935Z'
+updated_at: '2026-10-24T23:46:46.526Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
