@@ -10485,6 +10485,54 @@ Additional bounded evidence and unresolved dependencies:
   installed-process replay unverified. E379 separately exercises real reader
   process restart; the two checks do not imply the missing end-to-end join.
 
+- **E381 — adjacent verification checks share boundaries without skipping I/O.**
+  A successful `open_regular` uses `file_metadata`'s entry checkpoint as its
+  post-open check; a failed open keeps an explicit cancellation/expiry check
+  before returning its I/O error. After chunk consumption, the next read or
+  final metadata entry checkpoint runs before further I/O. Full generation
+  hashes, metadata observations,64KiB reads, original expiry and effect-boundary
+  callers remain intact. Test-only phase observation replaces the directory-plan
+  oracle's magic callback count with cancellation at actual planning entry.
+
+  `checkpoint-baseline-01` exits0 in188.135s including compilation; its
+  explicitly selected ignored actual-image test runs in6.97s. All three full
+  revalidations observe146228 real clock/cancellation/clock callbacks.
+  `checkpoint-bin-01` exits101 before tests because a stored test hook borrows a
+  vector declared after its verifier. Moving the captured vectors before the
+  verifier fixes that test-only lifetime error. `checkpoint-bin-02` exits0
+  in140.039s: 191tests pass in6.00s, with the timing test separately selected
+  below. `checkpoint-completed-open.json` retains actual ENOTDIR versus
+  cancellation precedence, closed successful-open FDs and unchanged expiry.
+  `checkpoint-post-consume.json` observes actual read results before the
+  post-read cancellation check: positive reads65536/65536/17, cancelled
+  multi-chunk read only65536, cancelled final17-byte read only17, empty reads0.
+  `checkpoint-post-consume-expiry.json` records expiry after one consumed chunk,
+  before final metadata. The initial on-chunk-only oracle could hide an extra
+  read stopped by the later checkpoint; the read-result observation closes that
+  false-confidence condition.
+
+  `checkpoint-read-mutation-01` deliberately removes the next-read entry check
+  and exits101 on the intended assertion: actual reads65536/65536 instead of
+  only65536. Its supervisor reports no timeout or process residue. Restoration
+  compares all115 native source files against both passing executions; the
+  changed file returns to SHA256
+  `8126ff66fa6b7a532358e38f9c5d08db35ced407daffa34f0e801a59bd58c9c6`. This
+  falsifies one missing cancellation boundary, not every possible ordering
+  defect. The source backup and `restoration.json` reside in
+  `checkpoint-read-mutation-source-01` beneath the publication artifact root.
+
+  `checkpoint-optimized-01` exits0 in2.982s; the actual-image test executes
+  in2.05s. `comparison.json` verifies the exact retained image inventory is
+  identical before/after both runs. Every optimized pass uses132088callbacks,
+  removing 14140, or9.67%, while preserving5973hashes,162328887bytes,12854FD
+  metadata operations and23713path metadata operations. Original expiry is
+  unchanged. Baseline pass times1.097/1.968/1.627s and
+  optimized0.489/0.489/0.480s are noninterleaved warm-cache diagnostics with
+  variable host load; they do not establish a causal latency improvement or full
+  Stop deadline margin. The fresh complete image, positive/hostile pair,
+  authenticated restart join and full workload remain owed before cutover
+  acceptance.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -10644,9 +10692,10 @@ deadline margin and the thirteen-session/four-repository workload. The third
 positive's116ms margin makes performance an unresolved cutover dependency. E379
 demonstrates that the older fresh10 reader refuses the retained refusal record
 without changing custody, while fresh12 reopens it and exits idle. A compatible
-rollback package and restored ordinary invocation remain required.
-Pregrant-review identifies adjacent pure checkpoint bookkeeping as a bounded
-optimization hypothesis; no checkpoint throttling, filesystem observation cache
+rollback package and restored ordinary invocation remain required. E381 removes
+adjacent pure checkpoint redundancy and measures9.67% fewer callbacks with
+unchanged hash/metadata work. The full installed-image pair must establish
+useful deadline margin; no checkpoint throttling, filesystem observation cache
 or omitted effect boundary is authorized. Machine adoption remains owed.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                                                            |

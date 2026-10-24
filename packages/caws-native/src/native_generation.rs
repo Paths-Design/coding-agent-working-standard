@@ -1023,19 +1023,13 @@ mod tests {
     fn manifest_phase_diagnostics_refuse_cancellation_during_directory_plan() {
         let f = Fixture::new();
         let diagnostics = VerificationDiagnostics::default();
-        let armed = Rc::new(Cell::new(false));
-        let flag = armed.clone();
+        let planning_entered = Cell::new(false);
+        let manifest_reads = Cell::new(0usize);
         let checks = Cell::new(0usize);
         let mut cancel = || {
-            if flag.get() {
+            if planning_entered.get() {
                 checks.set(checks.get() + 1);
-                // After the manifest chunk: two chunk checkpoints, two FD
-                // checkpoints, two named-leaf checkpoints, read exit, parsed
-                // manifest checkpoint, then three directory-plan checkpoints.
-                // Assert below that refusal occurs in planning, before member I/O.
-                if checks.get() == 11 {
-                    return Err("initial manifest directory plan cancelled".into());
-                }
+                return Err("initial manifest directory plan cancelled".into());
             }
             Ok(())
         };
@@ -1045,7 +1039,12 @@ mod tests {
         let mut verify = Verification::new(original_expiry, &mut cancel);
         verify.on_chunk = Some(Box::new(|path, _| {
             assert_eq!(path, manifest, "cancel before any member read");
-            armed.set(true);
+            manifest_reads.set(manifest_reads.get() + 1);
+        }));
+        verify.on_phase = Some(Box::new(|phase| {
+            if matches!(phase, VerificationPhase::ManifestDirectoryPlan) {
+                planning_entered.set(true);
+            }
         }));
         let result = verify.diagnosed(&diagnostics, |verify| {
             Selection::read_generation(&f.home, &f.config.digest, verify)
@@ -1055,7 +1054,8 @@ mod tests {
             "manifest-directory-plan-cancelled",
             serde_json::json!({
                 "error":result.as_ref().err(),"snapshot":snapshot,
-                "checksAfterManifestChunk":checks.get(),
+                "checksAfterPlanningEntry":checks.get(),"manifestReads":manifest_reads.get(),
+                "planningEntered":planning_entered.get(),
                 "initialSelectionPublished":result.is_ok(),
                 "originalExpiryUnchanged":verify.expires()==original_expiry,
                 "syntheticGeneration":true
@@ -1065,7 +1065,9 @@ mod tests {
             result.unwrap_err(),
             "initial manifest directory plan cancelled"
         );
-        assert_eq!(checks.get(), 11);
+        assert!(planning_entered.get());
+        assert_eq!(manifest_reads.get(), 1);
+        assert_eq!(checks.get(), 1, "first planning checkpoint refuses");
         assert_eq!(verify.expires(), original_expiry);
         assert_eq!(snapshot.manifest_authentication.count, 0);
         assert_eq!(snapshot.manifest_directory_plan.count, 1);
@@ -1130,7 +1132,9 @@ mod tests {
         let expiry = original.expires();
         // Match selection_observation::checkpoint's exact call order; every
         // member/ancestor checkpoint retains both native clock observations.
+        let callback_calls = Cell::new(0u64);
         let mut cancel = || {
+            callback_calls.set(callback_calls.get() + 1);
             original.check().map_err(|error| error.to_string())?;
             crate::cancellation::check()?;
             original.check().map_err(|error| error.to_string())
@@ -1166,15 +1170,18 @@ mod tests {
         for pass in 1..=3 {
             let diagnostics = VerificationDiagnostics::default();
             let before = diagnostics.snapshot();
+            let callback_calls_before = callback_calls.get();
             let pass_started = Instant::now();
             let result = verify.diagnosed(&diagnostics, |verify| {
                 verify.phase(VerificationPhase::SelectionVerification, |verify| {
                     selection.revalidate(verify)
                 })
             });
+            let pass_callback_calls = callback_calls.get() - callback_calls_before;
             let snapshot = diagnostics.snapshot();
             let row = serde_json::json!({
                 "pass":pass,"error":result.as_ref().err(),"snapshot":snapshot,
+                "callbackCalls":pass_callback_calls,
                 "elapsedMicros":pass_started.elapsed().as_micros(),
                 "elapsedOriginalMicros":started.elapsed().as_micros(),
                 "originalDeadlineMs":30000,"sameOriginalExpiry":verify.expires()==expiry,
@@ -1190,6 +1197,10 @@ mod tests {
             emit(&format!("actual-image-plan-pass-{pass}"), row.clone());
             passes.push(row);
             assert_eq!(result, Ok(()), "pass retained before refusal assertion");
+            assert!(
+                pass_callback_calls > 0,
+                "actual revalidation callback calls"
+            );
             assert_eq!(verify.expires(), expiry);
             assert_eq!(before.selection_verification.count, 0);
             assert_eq!(before.hash_calls, 0);
