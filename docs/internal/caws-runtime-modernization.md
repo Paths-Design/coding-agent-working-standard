@@ -9695,6 +9695,55 @@ Additional bounded evidence and unresolved dependencies:
   missing cooperative quiescence and proof-bearing Unknown settlement contracts
   through cutover acceptance.
 
+- E361: Fresh07 executes clean57ad2b70 with diagnostics820b8c8f and consolidated
+  predispatchb2128e50. Frozen manifest074e8aba and1222-source pins3bbb52f6
+  retain the same helpers, tools and unchanged probe02. All11 stages exit0 with
+  unchanged TypeScript/native pins and empty observed groups; native build takes
+  121.363s under its existing allowance. Native executable is7469328 bytes,
+  SHA25614b79473c2c049c7e6c1f69ec0a6fae9a63b1011eef2c281717fbbe463f5e5f0.
+  Completion receipt
+  isbf325bfa5d4011bf717c7f940721ab9585a3d67144c9b09f1aa5c829e4e1f836; descriptor
+  ise935e878b6953df005ef074bfe599928881f5992a3fbd12e7758c19bede16806. Root
+  checks30 equal component rows with matching hashes and31 executions with
+  exit0, null signal/error. These component observations remain controlled
+  scope.
+
+  The unchanged positive probe exits1 in48.459s; original native exits2 at
+  30034.183ms without signal/watchdog. Prefix, envelope and pointer complete;
+  reservation occurs at27949ms, versus29264ms in fresh06. Neither observation is
+  a latency distribution. No turn or publication marker exists. Frontend receipt
+  diagnostics record29 calls/20.785528s,29 opening identity phases/0.881139s, 28
+  closing phases/0.844515s,29 selection phases/19.059843s,29 member phases/
+  15.405265s and28 inventory phases/1.844702s. One member/selection phase fails.
+  There are2191685 path metadata attempts,343876 FD metadata attempts,171938
+  hash attempts and4566595342 hashed bytes. Times overlap; member time includes
+  confinement, metadata and reads, and owner scans are excluded. The result
+  prioritizes repeated member verification cost, not a proved SHA bottleneck.
+
+  Correlated status retains original80224-1792850127351838000, zero transcript
+  database open attempts, phaseacquiring and a relay/deadline error. Actual
+  durable operation01103126 remains accepted/unknown with a matching body
+  checksum. The source database remains
+  eff667b1cbe750018030f79e81869928011a8265d26b65387eb78aa4d7f0749f. Root
+  contains owner80220 using the E360 procedure: exact start1792850127.323678,
+  executable/home/descriptor checks, single-PID SIGTERM and kqueue exit; script
+  exits0, process/group absent, socket refused61, owner lock acquirable, custody
+  and database hashes unchanged. Socket pathname and durable Unknown remain.
+  Artifacts: fresh-stop-profile-production-07/root-stage-execution.json,
+  production-stop-07-positive-execution-01, production-stop-07-positive-01,
+  production-stop-07-retained-status-01.json, production-stop-07-containment-01
+  and production-stop-07-positive-root-inspection-01.json.
+
+  Architecture193–207 and277–288 permit durable fenced Unknown across idle exit
+  or crash; automatic settlement of every Unknown is not required. Quiescence
+  must preserve durable fences and lose no live work. Unknown partial-write
+  recovery requires its own evidence only where that recovery is claimed; do not
+  invent a terminal to release capacity. Root owns conservative idle retirement
+  of resource-free durable Unknown and a measured member-verification repair.
+  E359 review checks all110 crate pins and raw artifacts without demonstrating a
+  semantic regression; it supplies no acceptance. No production completion,
+  native workload fairness, Python retirement or machine adoption is earned.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
