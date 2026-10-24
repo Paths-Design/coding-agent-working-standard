@@ -41,3 +41,10 @@ acceptance:
     then: 'target source matches the candidate and failed installed deadline full parity and machine cutover remain explicit parent obligations'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected publication-integration/selection-copy-baseline-01 raw Jest exit1 specifically45/54 copies; selection-stop-build-01 CLI build0; selection-copy-mutable-02 raw102tests0 and45/54 to0 copies with identical67/56 ordered observations. External root /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/. Landing SUT/test bytes match consumed pins. Commit verification only; actual logs inspected separately. No installed latency claim."
+    recorded_at: "2026-10-24T22:58:36.145Z"
+    exit_code: 0
+    commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
