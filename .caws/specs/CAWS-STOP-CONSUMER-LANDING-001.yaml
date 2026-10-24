@@ -53,3 +53,10 @@ evidence:
     command: "env -i PATH=/usr/bin:/bin LANG=C LC_ALL=C TZ=UTC0 pinned-node scripts/qualify-stop-profile.mjs stop-profile-components-controlled-05.request.json"
     exit_code: 0
     commit_sha: c8b1263084626734d630e18300ed77d7da708161
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "c8b12630 adapter source matches ordinary-stop-adapter-build-02 pins, build exit0; ordinary-stop-adapter-tests-03 exit0 with52 cases and stable source. Actual retained turn, index, projection and marker show original metadata and actual SQL user before ordinary reader consumption. Same-length corruption refuses at reader digest; self-consistent forged generation refuses specifically at adapter expected-byte comparison: test-artifacts/ordinary-stop-publication-tqY3UC/scenario.json has rowsCalls1 continuationCalls1 outcomeCalls[] consumedfalse and retained forged turn/marker. Paired acquisition/cleanup errors preserve both original objects without replay. Artifact base /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/ordinary-stop-adapter-tests-03. SQL/native observation ports are fixtures, calendarCalls0; actual native acquisition/admission and installed invocation excluded. Commit existence verification is separate from inspected executions."
+    recorded_at: "2026-10-24T05:08:08.576Z"
+    command: pinned-node node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/runtime/ordinary-stop-publication.test.js tests/runtime/session-store-publication.test.js tests/tooling/qualify-stop-profile.test.js
+    exit_code: 0
+    commit_sha: c8b1263084626734d630e18300ed77d7da708161
