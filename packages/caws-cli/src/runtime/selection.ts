@@ -5,7 +5,7 @@ import {
 } from '../init/selection-read-io';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
-import { sha, verifyRuntime, readManifest } from '../init/machine-runtime-state';
+import { sha, ensureRuntimeVerified, readManifest } from '../init/machine-runtime-state';
 import {
   isCawsNativeCommand,
   classifyCawsProducerHook,
@@ -302,7 +302,7 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
     assertMachinePath(root, root, io);
   }
   // Preserve the current immutable-snapshot integrity contract, including launcher.py.
-  verifyRuntime(options.home, options.runtimeDigest, io);
+  ensureRuntimeVerified(options.home, options.runtimeDigest, io);
   const runtime = confined(options.home, 'lib/runtimes/' + options.runtimeDigest);
   const projectFile = confined(options.home, 'state/projects/' + sha(options.canonical) + '.json');
   const known = io.exists(projectFile);

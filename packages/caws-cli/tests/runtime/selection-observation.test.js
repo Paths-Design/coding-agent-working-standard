@@ -3,7 +3,11 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { AbortController } = globalThis;
-const { sha, verifyRuntime } = require('../../dist/init/machine-runtime-state');
+const {
+  sha,
+  verifyRuntime,
+  ensureRuntimeVerified,
+} = require('../../dist/init/machine-runtime-state');
 const { MACHINE_EVENTS, machineCommand } = require('../../dist/init/native-hook-identification');
 const { captureSelectionRead, liveSelectionReadIo } = require('../../dist/init/selection-read-io');
 const { resolveInvocationSelection } = require('../../dist/runtime/selection');
@@ -611,6 +615,169 @@ test('retained launcher sentinel escapes broad manifest discovery catch', async 
       (row) => row.operation.kind === 'runtime-file' && row.operation.path === retainedPath
     )
   ).toBe(true);
+});
+
+test.each([false, true])(
+  'verification-only discovery avoids discarded manifest copies with identical observations (native=%s)',
+  async (native) => {
+    const f = fixture({ 'copy-control.bin': 'retained bytes' }, native);
+    const selector = require('../../dist/runtime/selection');
+    const original = selector.resolveInvocationSelection;
+    const freeze = Object.freeze;
+    let copies = 0;
+    // Count enumeration of the actual frozen cache manifest, rather than wall
+    // time or helper calls that could hide another discarded copy.
+    jest.spyOn(Object, 'freeze').mockImplementation((value) => {
+      const frozen = freeze(value);
+      if (value && typeof value === 'object' && Object.hasOwn(value, 'copy-control.bin')) {
+        return new Proxy(frozen, {
+          ownKeys(target) {
+            copies++;
+            return Reflect.ownKeys(target);
+          },
+        });
+      }
+      return frozen;
+    });
+    let legacy = true;
+    jest.spyOn(selector, 'resolveInvocationSelection').mockImplementation((options) =>
+      original({
+        ...options,
+        io: legacy ? { ...options.io, ensureRuntimeVerified: undefined } : options.io,
+      })
+    );
+    const run = async () => {
+      if (native) {
+        const transport = selectionTransport(f);
+        const selection = await transport.resolve(f.options);
+        return { selection, operations: transport.writes.map((row) => row.operation) };
+      }
+      const observed = await observe(f.options, snapshot());
+      return {
+        selection: observed.selection,
+        operations: observed.snapshot.observations.map((row) => row.operation),
+      };
+    };
+    const before = await run(),
+      legacyCopies = copies;
+    legacy = false;
+    copies = 0;
+    const after = await run();
+    console.info(
+      JSON.stringify({
+        native,
+        legacyCopies,
+        verificationOnlyCopies: copies,
+        observations: after.operations.length,
+      })
+    );
+    expect(before.selection.status).toBe('active');
+    expect(legacyCopies).toBeGreaterThan(1);
+    expect(after).toEqual(before);
+    expect(copies).toBe(0);
+  }
+);
+
+test('verification-only hooks preserve canonical callback and legacy custom IO semantics', async () => {
+  const f = fixture(),
+    captured = await observe(f.options);
+  const verify = jest.fn((home, digest, canonical) => {
+    expect(home).toBe(f.options.home);
+    expect(digest).toBe(f.options.runtimeDigest);
+    return canonical(home, digest, captured.snapshot.io);
+  });
+  const legacy = {
+    ...captured.snapshot.io,
+    ensureRuntimeVerified: undefined,
+    verifyRuntime: verify,
+  };
+  expect(ensureRuntimeVerified(f.options.home, f.options.runtimeDigest, legacy)).toBeUndefined();
+  const canonical = verify.mock.calls[0][2];
+  const ensure = jest.fn();
+  expect(
+    ensureRuntimeVerified(f.options.home, f.options.runtimeDigest, {
+      ...legacy,
+      ensureRuntimeVerified: ensure,
+    })
+  ).toBeUndefined();
+  expect(ensure).toHaveBeenCalledWith(f.options.home, f.options.runtimeDigest, canonical);
+  expect(verify).toHaveBeenCalledTimes(1);
+  // With no optional hooks, the ordinary complete verifier still executes.
+  expect(
+    ensureRuntimeVerified(f.options.home, f.options.runtimeDigest, liveSelectionReadIo)
+  ).toBeUndefined();
+  write(path.join(f.runtime, 'first.sh'), '#!/bin/sh\nexit 42\n', true);
+  expect(() =>
+    ensureRuntimeVerified(f.options.home, f.options.runtimeDigest, liveSelectionReadIo)
+  ).toThrow('Machine runtime file modified: first.sh');
+});
+
+test('verification-only cache retains verifier/home/digest/snapshot separation and copy ownership', () => {
+  const a = snapshot('verification-a'),
+    b = snapshot('verification-b');
+  const first = jest.fn(() => ({ member: 'original' }));
+  const second = jest.fn(() => ({ member: 'different verifier' }));
+  const home = '/home',
+    digest = 'a'.repeat(64);
+  a.io.ensureRuntimeVerified(home, digest, first);
+  a.io.ensureRuntimeVerified(home, digest, first);
+  expect(first).toHaveBeenCalledTimes(1);
+  const returned = a.io.verifyRuntime(home, digest, first);
+  returned.member = 'caller mutation';
+  expect(returned.member).toBe('caller mutation');
+  const next = a.io.verifyRuntime(home, digest, first);
+  expect(next).not.toBe(returned);
+  expect(next).toEqual({ member: 'original' });
+  expect(first).toHaveBeenCalledTimes(1);
+  a.io.ensureRuntimeVerified(home, digest, second);
+  expect(second).toHaveBeenCalledTimes(1);
+  expect(a.io.verifyRuntime(home, digest, second)).toEqual({ member: 'different verifier' });
+  a.io.ensureRuntimeVerified('/other', digest, first);
+  a.io.ensureRuntimeVerified(home, 'b'.repeat(64), first);
+  b.io.ensureRuntimeVerified(home, digest, first);
+  expect(first).toHaveBeenCalledTimes(4);
+  expect(a.runtimeSnapshots).toHaveLength(4);
+  expect(b.runtimeSnapshots).toHaveLength(1);
+});
+
+test('cached verification-only dependencies join outer collection and refuse replacement', () => {
+  const supplied = snapshot('nested-verification');
+  const operation = { kind: 'read', path: '/captured-input' };
+  const row = {
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'input-1',
+    operation,
+    result: { kind: 'bytes', base64: Buffer.from('original').toString('base64') },
+  };
+  supplied.record(row);
+  const inner = jest.fn((_home, _digest, io) => ({
+    member: io.readFile(operation.path).toString(),
+  }));
+  const outer = jest.fn((home, digest, io) => {
+    io.ensureRuntimeVerified(home, digest, inner);
+    return { outer: 'verified' };
+  });
+  supplied.io.ensureRuntimeVerified('/home', 'a'.repeat(64), inner);
+  supplied.io.ensureRuntimeVerified('/home', 'a'.repeat(64), outer);
+  supplied.io.ensureRuntimeVerified('/home', 'a'.repeat(64), outer);
+  expect(inner).toHaveBeenCalledTimes(1);
+  expect(outer).toHaveBeenCalledTimes(1);
+  expect(supplied.runtimeSnapshots).toHaveLength(2);
+  const [innerResult, outerResult] = supplied.runtimeSnapshots;
+  expect(innerResult.observations).toHaveLength(1);
+  expect(outerResult.observations).toHaveLength(1);
+  expect(outerResult.observations[0]).toBe(innerResult.observations[0]);
+  expect(outerResult.observations[0]).toBe(supplied.observations[0]);
+  expect(Object.isFrozen(outerResult.observations[0])).toBe(true);
+  expect(() => supplied.record({ ...row, sequence: 2, observationId: 'replacement' })).toThrow(
+    'replacement or repeated identity refused'
+  );
+  const incomplete = snapshot('incomplete-only');
+  expect(() => incomplete.io.ensureRuntimeVerified('/home', 'a'.repeat(64), inner)).toThrow(
+    'Selection requires a captured read observation'
+  );
+  expect(incomplete.runtimeSnapshots).toEqual([]);
 });
 
 test('first discovery uses a compact digest for a large runtime member without carrying its bytes', async () => {
