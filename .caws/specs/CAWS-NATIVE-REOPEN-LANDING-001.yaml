@@ -1,0 +1,40 @@
+id: CAWS-NATIVE-REOPEN-LANDING-001
+title: 'Land refusal reopen test and retained reader evidence'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-10-24T20:08:25.487Z'
+updated_at: '2026-10-24T20:08:25.487Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native replay regression and migration evidence'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/render_owner/store/tests/refusal.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve terminal custody and all existing worktree ownership; bounded evidence does not close full runtime parity'
+acceptance:
+  - id: A1
+    given: 'reviewed publication candidate'
+    when: 'the landing is composed'
+    then: 'both source and tracker blobs match the candidate and focused refusal checks retain exact terminal and capacity evidence'
+  - id: A2
+    given: 'existing parent and foreign lanes and selected runtime'
+    when: 'the bounded lane lands on main'
+    then: 'main contains the exact blobs while existing bindings branches and machine selection remain unchanged'
+  - id: A3
+    given: 'the committed candidate'
+    when: 'scoped gates doctor and independent feedback are inspected'
+    then: 'findings are grounded and restart rollback and cutover nonclaims remain explicit'
+observability:
+  - 'Exact commit blobs raw Cargo checks and actual retained custody reader artifacts'
+rollback:
+  - 'Use normal revert for this test and documentation slice; do not alter runtime custody or machine selection'
+non_functional: {}
+contracts:
+  - name: 'refusal-reopen'
+    type: contract-test
