@@ -7608,6 +7608,37 @@ Additional bounded evidence and unresolved dependencies:
   not a production latency benchmark. A5 remains unchecked with this bounded
   evidence recorded through the authoritative CLI.
 
+- E315: Store acquisition carries one original native monotonic expiry through
+  `store-acquire.v2`. Capture begins before payload reading; receiver policy can
+  shorten the deadline, and checks inside the registry lock and after actor
+  queueing precede reservation and publication effects. SessionEnd and renderer
+  Offer carriers remain separate relative-budget obligations. This change does
+  not admit a selection/profile or connect ordinary SQL Stop publication. The
+  external `publication-integration/store-deadline-baseline-01` execution
+  exits101 on the original v1 carrier. `store-deadline-repaired-01` retains an
+  old-owner fixture failure before socket binding; the fixture creates and
+  removes its own rendezvous directory in the repair. The restored store suite
+  `store-deadline-restored-03` exits0 with18 executed cases and the existing
+  prepared-image case ignored. `monotonic-deadline-unit-01` exits0 with12 clock,
+  conversion, overflow and nonrenewal controls; these are component
+  observations. `store-deadline-contention-negative-01` removes only the two
+  under-lock checks and exits101 with `expired waiter reserved a record`; its
+  retained observation has `registryEmpty:false`. The restored registry-original
+  and registry-cap observations have `registryEmpty:true`, `actorCount:0` and
+  expired effective deadlines. Delayed capture retains the original envelope and
+  yields `Original monotonic deadline expired`, null registration and null
+  acquisition. Queued raw/publication observations retain absent
+  writer/publication custody and matching before/after hashes for all25 fixture
+  files. The existing queued record remains truthfully retained; this is not a
+  zero-record claim after previously valid admission. Exact commands,
+  source/tool pins, outputs and empty owned process groups are in each
+  `execution.json`. `store-deadline-native-check-01` and
+  `store-deadline-feature-off-check-01` compile-check the native binary with
+  sqlite-store enabled and default features disabled, respectively; both exit0.
+  These compilation checks do not execute either installed binary. Actual
+  installed store dispatch, selection/readset qualification, mixed-generation
+  resident adoption and parent A1–A8 remain open.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

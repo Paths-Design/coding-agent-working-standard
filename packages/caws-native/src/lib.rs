@@ -3,6 +3,7 @@
 pub mod agent_pid_cache;
 pub mod context_git;
 pub mod invocation_project;
+pub mod monotonic_deadline;
 pub mod owned_group;
 pub mod plan_snapshots;
 pub mod process_comm_macos;

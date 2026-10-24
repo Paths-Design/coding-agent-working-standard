@@ -4,6 +4,18 @@ use store::Transport;
 fn expires() -> Instant {
     Instant::now() + Duration::from_secs(5)
 }
+fn retain_deadline_observation(name: &str, observation: serde_json::Value) {
+    if let Some(root) = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT") {
+        let path = PathBuf::from(root).join(format!("store-deadline-{name}.json"));
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .unwrap();
+        serde_json::to_writer_pretty(&mut file, &observation).unwrap();
+        file.sync_all().unwrap();
+    }
+}
 struct Fixture {
     root: PathBuf,
     database: PathBuf,
@@ -70,6 +82,10 @@ impl Fixture {
         }
     }
     fn acquire(&self, id: &str) -> StoreAcquire {
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        self.acquire_with_deadline(id, &deadline)
+    }
+    fn acquire_with_deadline(&self, id: &str, deadline: &MonotonicDeadline) -> StoreAcquire {
         let root = self.root.to_str().unwrap();
         let runtime = "a".repeat(64);
         let bytes = serde_json::to_vec(&serde_json::json!({"schema":store::REQUEST_SCHEMA,"id":id,"runtimeDigest":runtime,"token":"token","canonicalRoot":root,"profile":store::PROFILE})).unwrap();
@@ -98,7 +114,7 @@ impl Fixture {
                 caller_cwd: root,
                 caller_environment: &environment,
             },
-            expires(),
+            deadline,
         )
     }
     fn actor(&self) -> Actor {
@@ -133,6 +149,7 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        let _ = fs::remove_dir_all(rendezvous(&self.config));
         let _ = fs::remove_dir_all(&self.root);
     }
 }
@@ -148,11 +165,21 @@ fn relay_pair() -> (RelayTransport, UnixStream, SyncSender<RelayReply>) {
             cancelled: Arc::new(AtomicBool::new(false)),
             sequence: 0,
             expires: expires(),
+            deadline: Arc::new(MonotonicDeadline::capture(Duration::from_secs(5)).unwrap()),
             limit: 2_097_152,
         },
         caller,
         tx,
     )
+}
+fn bind_deadline(
+    mut transport: RelayTransport,
+    record: &Arc<Mutex<StoreRecord>>,
+) -> RelayTransport {
+    let envelope = record.lock().unwrap().original.deadline;
+    transport.deadline = Arc::new(MonotonicDeadline::receive(envelope).unwrap());
+    transport.expires = transport.expires.min(transport.deadline.expires());
+    transport
 }
 fn command(stream: &mut UnixStream) -> OwnerFrame {
     serde_json::from_slice(&frame(stream, &mut Vec::new(), 2_097_152, expires()).unwrap()).unwrap()
@@ -272,7 +299,7 @@ fn resident_actor_retains_full_sql_failure_after_frontend_write_loss() {
     let job = StoreJob {
         record: Arc::clone(&record),
         registry: Arc::clone(&registry),
-        transport,
+        transport: bind_deadline(transport, &record),
         _connection: Arc::new(ConnectionPermit(Arc::new(AtomicUsize::new(1)))),
         _project: capacity.acquire().unwrap(),
     };
@@ -447,6 +474,14 @@ fn owner_refusal(
     acquire: StoreAcquire,
 ) -> StoreCompletion {
     let bytes = encoded(&acquire, f.config.limits.max_frame_bytes as usize).unwrap();
+    owner_refusal_bytes(f, routing, registry, bytes)
+}
+fn owner_refusal_bytes(
+    f: &Fixture,
+    routing: Arc<Mutex<Routing>>,
+    registry: Arc<Mutex<StoreRegistry>>,
+    bytes: Vec<u8>,
+) -> StoreCompletion {
     let (mut owner, mut client) = UnixStream::pair().unwrap();
     owner.set_nonblocking(true).unwrap();
     client.set_nonblocking(true).unwrap();
@@ -572,7 +607,7 @@ fn resident_store_barrier_retains_waiting_slot_until_renderer_cohort_drains() {
     let mut waiting = Some(StoreJob {
         record: Arc::clone(&record),
         registry,
-        transport,
+        transport: bind_deadline(transport, &record),
         _connection: Arc::new(ConnectionPermit(Arc::new(AtomicUsize::new(1)))),
         _project: capacity.acquire().unwrap(),
     });
@@ -843,7 +878,9 @@ fn resident_actor_run_orders_prepared_renderer_store_and_later_renderer() {
             .all(|offer| offer.prepared.staging_root.is_some())
     );
     let config = Arc::new(config);
-    let deadline = Instant::now() + Duration::from_millis(config.limits.request_ms as u64);
+    let original_deadline =
+        MonotonicDeadline::capture(Duration::from_millis(config.limits.request_ms as u64)).unwrap();
+    let deadline = original_deadline.expires();
     provision(&config, deadline).unwrap();
     let custody = journal::Custody::acquire(&custody_path(&config), deadline).unwrap();
     let key = wire::project_service_key(project.to_str().unwrap()).unwrap();
@@ -954,7 +991,7 @@ fn resident_actor_run_orders_prepared_renderer_store_and_later_renderer() {
             caller_cwd: project.to_str().unwrap(),
             caller_environment: &environment,
         },
-        deadline,
+        &original_deadline,
     );
     let registry = Arc::new(Mutex::new(StoreRegistry::new(
         config.limits.max_retained_records as usize,
@@ -973,7 +1010,7 @@ fn resident_actor_run_orders_prepared_renderer_store_and_later_renderer() {
         .send(Mailbox::Store(StoreJob {
             record: Arc::clone(&record),
             registry: Arc::clone(&registry),
-            transport,
+            transport: bind_deadline(transport, &record),
             _connection: Arc::new(ConnectionPermit(Arc::clone(&active))),
             _project: capacity.acquire().unwrap(),
         }))
@@ -1307,4 +1344,460 @@ fn publication_write_outer_envelope_does_not_widen_sql_write_variant() {
             .unwrap()
             .contains("variant envelope bound")
     );
+}
+
+#[test]
+fn store_acquisition_requires_versioned_absolute_expiry_not_remaining_budget() {
+    let f = Fixture::new();
+    let value = serde_json::to_value(f.acquire("absolute-contract")).unwrap();
+    assert_eq!(value["schema"], "caws.render.owner.store-acquire.v2");
+    assert!(
+        value.get("remainingBudgetMs").is_none(),
+        "relative budget must not survive IPC"
+    );
+    let start = value["deadline"]["startedNs"]
+        .as_u64()
+        .expect("original native start");
+    let end = value["deadline"]["expiresNs"]
+        .as_u64()
+        .expect("original absolute expiry");
+    assert!(end > start);
+    assert!(end - start <= 120_000_000_000);
+}
+
+#[test]
+fn invalid_expired_and_other_version_carriers_refuse_before_registry_or_routing() {
+    let f = Fixture::new();
+    let route = routing(&f);
+    let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
+    for (kind, expected) in [
+        (
+            "missing",
+            "resident store invalid v2 absolute deadline envelope",
+        ),
+        (
+            "unknown-field",
+            "resident store invalid v2 absolute deadline envelope",
+        ),
+        (
+            "wrong-type",
+            "resident store invalid v2 absolute deadline envelope",
+        ),
+        ("expired", "Original monotonic deadline expired"),
+        ("future", "Monotonic deadline starts after native now"),
+        ("cap", "Monotonic deadline exceeds 120000ms"),
+        (
+            "v1",
+            "resident store unsupported acquisition schema; v2 absolute deadline required",
+        ),
+        (
+            "unknown-version",
+            "resident store unsupported acquisition schema; v2 absolute deadline required",
+        ),
+    ] {
+        let mut raw = serde_json::to_value(f.acquire(kind)).unwrap();
+        match kind {
+            "missing" => {
+                raw.as_object_mut().unwrap().remove("deadline");
+            }
+            "unknown-field" => {
+                raw["deadline"]["remainingBudgetMs"] = serde_json::json!(5000);
+            }
+            "wrong-type" => {
+                raw["deadline"]["expiresNs"] = serde_json::json!("5000");
+            }
+            "expired" => {
+                raw["deadline"] = serde_json::json!({"startedNs":0,"expiresNs":1});
+            }
+            "future" => {
+                raw["deadline"] = serde_json::json!({"startedNs":u64::MAX-1,"expiresNs":u64::MAX});
+            }
+            "cap" => {
+                raw["deadline"] = serde_json::json!({"startedNs":0,"expiresNs":120_000_000_001u64});
+            }
+            "v1" => {
+                raw["schema"] = serde_json::json!("caws.render.owner.store-acquire.v1");
+                raw.as_object_mut().unwrap().remove("deadline");
+                raw["remainingBudgetMs"] = serde_json::json!(5000);
+            }
+            "unknown-version" => {
+                raw["schema"] = serde_json::json!("caws.render.owner.store-acquire.v99");
+            }
+            _ => unreachable!(),
+        }
+        let mut bytes = serde_json::to_vec(&raw).unwrap();
+        bytes.push(b'\n');
+        let result = owner_refusal_bytes(&f, Arc::clone(&route), Arc::clone(&registry), bytes);
+        assert_eq!(result.error.as_deref(), Some(expected), "{kind}");
+        assert_eq!(result.id, kind);
+        assert!(result.registration.is_none());
+        assert!(!result.original_project_bound);
+        assert!(result.acquisition.is_none());
+        assert!(
+            registry.lock().unwrap().is_empty(),
+            "{kind} reserved a record"
+        );
+        assert!(
+            route.lock().unwrap().actors.is_empty(),
+            "{kind} routed an actor"
+        );
+    }
+    f.can_lock();
+}
+
+#[test]
+fn registry_lock_wait_cannot_reserve_after_original_or_receiver_cap_expiry() {
+    for original_expires_first in [true, false] {
+        let f = Fixture::new();
+        let route = routing(&f);
+        let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
+        let mut config = (*f.config).clone();
+        config.limits.request_ms = if original_expires_first { 5000 } else { 500 };
+        let config = Arc::new(config);
+        let (mut owner, mut client) = UnixStream::pair().unwrap();
+        owner.set_nonblocking(true).unwrap();
+        client.set_nonblocking(true).unwrap();
+        let (at_lock, reached_lock) = mpsc::sync_channel(1);
+        let (finished, completed) = mpsc::sync_channel(1);
+        // Own the lock before the receiving thread can start admission.
+        let locked = registry.lock().unwrap();
+        let deadline = MonotonicDeadline::capture(if original_expires_first {
+            Duration::from_millis(500)
+        } else {
+            Duration::from_secs(5)
+        })
+        .unwrap();
+        let acquire = f.acquire_with_deadline("registry-wait", &deadline);
+        let bytes = encoded(&acquire, config.limits.max_frame_bytes as usize).unwrap();
+        let received = Instant::now();
+        let effective = deadline
+            .expires()
+            .min(received + Duration::from_millis(u64::from(config.limits.request_ms)));
+        let worker_registry = Arc::clone(&registry);
+        let worker_route = Arc::clone(&route);
+        let handler = thread::spawn(move || {
+            BEFORE_STORE_REGISTRY_LOCK.with(|slot| *slot.borrow_mut() = Some(at_lock));
+            assert!(receive_first(
+                &mut owner,
+                &bytes,
+                &[],
+                received,
+                &config,
+                &worker_route,
+                &Arc::new(ConnectionPermit(Arc::new(AtomicUsize::new(1)))),
+                &worker_registry
+            ));
+            finished.send(()).unwrap();
+        });
+        assert!(
+            reached_lock.recv_timeout(Duration::from_secs(1)).unwrap(),
+            "receive_first must reach a genuinely contended registry mutex"
+        );
+        assert!(
+            Instant::now() < effective,
+            "receiver did not reach contention while live"
+        );
+        let bound = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < effective && Instant::now() < bound {
+            thread::sleep(TICK);
+        }
+        assert!(
+            Instant::now() >= effective,
+            "fixture did not cross effective expiry"
+        );
+        if original_expires_first {
+            assert!(deadline.check().is_err());
+        } else {
+            assert!(
+                deadline.check().is_ok(),
+                "cap control must retain a live original"
+            );
+        }
+        drop(locked);
+        completed
+            .recv_timeout(Duration::from_secs(1))
+            .expect("receiver did not finish bounded refusal");
+        handler.join().unwrap();
+        // Inspect authority state before transport decoding: an omitted check
+        // can reserve and then fail its expired Registered write without bytes.
+        retain_deadline_observation(
+            if original_expires_first {
+                "registry-original"
+            } else {
+                "registry-cap"
+            },
+            serde_json::json!({
+                "schema":"caws.store_deadline_observation.v1",
+                "originalDeadline": deadline.envelope(),
+                "originalExpired": deadline.check().is_err(),
+                "effectiveExpired": Instant::now() >= effective,
+                "registryEmpty": registry.lock().unwrap().is_empty(),
+                "actorCount": route.lock().unwrap().actors.len(),
+                "boundary":"actual receive_first under synchronized mutex contention; no installed frontend"
+            }),
+        );
+        assert!(
+            registry.lock().unwrap().is_empty(),
+            "expired waiter reserved a record"
+        );
+        assert!(
+            route.lock().unwrap().actors.is_empty(),
+            "expired waiter created a route"
+        );
+        let result = match command(&mut client) {
+            OwnerFrame::Complete { completion } => completion,
+            _ => panic!("expired mutex waiter registered or issued a relay command"),
+        };
+        assert_eq!(
+            result.error.as_deref(),
+            Some(if original_expires_first {
+                "Original monotonic deadline expired"
+            } else {
+                "renderer owner deadline expired"
+            })
+        );
+        assert!(result.registration.is_none());
+        assert!(!result.original_project_bound);
+        assert!(result.acquisition.is_none());
+        f.can_lock();
+    }
+}
+
+#[test]
+fn delayed_capture_preserves_exact_original_envelope_and_cannot_remint_expiry() {
+    let f = Fixture::new();
+    let route = routing(&f);
+    let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
+    let deadline = MonotonicDeadline::capture(Duration::from_millis(50)).unwrap();
+    let original = deadline.envelope();
+    let bound = Instant::now() + Duration::from_secs(1);
+    while deadline.check().is_ok() && Instant::now() < bound {
+        thread::sleep(TICK);
+    }
+    assert!(
+        deadline.check().is_err(),
+        "fixture never crossed original expiry"
+    );
+    let acquire = f.acquire_with_deadline("delayed-capture", &deadline);
+    assert_eq!(
+        acquire.deadline, original,
+        "capture must forward, never remint the interval"
+    );
+    let result = owner_refusal(&f, Arc::clone(&route), Arc::clone(&registry), acquire);
+    retain_deadline_observation(
+        "delayed-capture",
+        serde_json::json!({
+            "schema":"caws.store_deadline_observation.v1", "originalDeadline":original,
+            "completion":result, "registryEmpty":registry.lock().unwrap().is_empty(),
+            "actorCount":route.lock().unwrap().actors.len(),
+            "boundary":"actual capture and receiver; no installed frontend"
+        }),
+    );
+    assert_eq!(
+        result.error.as_deref(),
+        Some("Original monotonic deadline expired")
+    );
+    assert!(result.registration.is_none());
+    assert!(!result.original_project_bound);
+    assert!(result.acquisition.is_none());
+    assert!(registry.lock().unwrap().is_empty());
+    assert!(route.lock().unwrap().actors.is_empty());
+    f.can_lock();
+}
+
+#[test]
+fn owner_request_limit_is_an_earlier_cap_and_never_changes_original_envelope() {
+    let f = Fixture::new();
+    let acquire = f.acquire("cap");
+    let received = Instant::now();
+    let (deadline, expires) = restore_deadline(&acquire, received, 1000).unwrap();
+    assert_eq!(deadline.envelope(), acquire.deadline);
+    assert_eq!(expires, received + Duration::from_secs(1));
+    let (_, original_cap) = restore_deadline(&acquire, received, 120_000).unwrap();
+    assert!(original_cap > expires);
+    assert!(original_cap < received + Duration::from_secs(6));
+}
+
+fn fixture_file_bytes(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    fn walk(path: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+        for entry in fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.is_file() {
+                out.insert(path.clone(), fs::read(path).unwrap());
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    walk(root, &mut out);
+    out
+}
+
+#[test]
+fn queued_expiry_precedes_publication_reservation_writer_and_sql() {
+    for publication in [false, true] {
+        let f = Fixture::new();
+        let mut actor = f.actor();
+        let mut acquire = f.acquire("queued-expiry");
+        let deadline = MonotonicDeadline::capture(Duration::from_millis(50)).unwrap();
+        acquire.deadline = deadline.envelope();
+        acquire.publication = publication;
+        let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
+        let record = registry.lock().unwrap().reserve(acquire).unwrap();
+        record.lock().unwrap().original_project_bound = true;
+        let (transport, _caller, _replies) = relay_pair();
+        let transport = bind_deadline(transport, &record);
+        let capacity = Arc::new(ProjectCapacity {
+            used: AtomicUsize::new(0),
+            maximum: 1,
+        });
+        let job = StoreJob {
+            record: Arc::clone(&record),
+            registry,
+            transport,
+            _connection: Arc::new(ConnectionPermit(Arc::new(AtomicUsize::new(1)))),
+            _project: capacity.acquire().unwrap(),
+        };
+        let files_before = fixture_file_bytes(&f.root);
+        let bound = Instant::now() + Duration::from_secs(1);
+        while deadline.check().is_ok() && Instant::now() < bound {
+            thread::sleep(TICK);
+        }
+        assert!(
+            deadline.check().is_err(),
+            "fixture never crossed original expiry"
+        );
+        actor.acquire_store_job(job);
+        let completion = record.lock().unwrap().completion();
+        assert_eq!(completion.error.as_deref(), Some("after_project_binding"));
+        let retained = record.lock().unwrap();
+        let files_after = fixture_file_bytes(&f.root);
+        let hashes = |files: &BTreeMap<PathBuf, Vec<u8>>| {
+            files
+                .iter()
+                .map(|(p, b)| {
+                    (
+                        p.strip_prefix(&f.root)
+                            .unwrap()
+                            .to_string_lossy()
+                            .into_owned(),
+                        sha(b),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>()
+        };
+        retain_deadline_observation(
+            if publication {
+                "queued-publication"
+            } else {
+                "queued-raw"
+            },
+            serde_json::json!({
+                "schema":"caws.store_deadline_observation.v1", "publicationRequested":publication,
+                "completion":completion, "actorPhase":actor.phase,
+                "writerPresent":retained.writer.is_some(), "publicationPresent":retained.publication.is_some(),
+                "writerCustodyPresent":actor.writer_custody.is_some(),
+                "filesBefore":hashes(&files_before), "filesAfter":hashes(&files_after),
+                "boundary":"actual expired StoreJob actor call with real SQLite fixture; no installed frontend"
+            }),
+        );
+        assert!(
+            matches!(&retained.result,Some(Err(store::ServeError::AfterProjectBinding(message))) if message=="Original monotonic deadline expired")
+        );
+        assert!(
+            completion.acquisition.is_none(),
+            "SQL was reached after queue expiry"
+        );
+        assert!(retained.writer.is_none());
+        assert!(retained.publication.is_none());
+        assert!(actor.writer_custody.is_none());
+        assert!(!actor.journal.has_unknown(expires()).unwrap());
+        assert_eq!(actor.phase, "store_deadline_refused");
+        assert_eq!(
+            fixture_file_bytes(&f.root),
+            files_before,
+            "expired job changed journal/writer/source files"
+        );
+        f.can_lock();
+    }
+}
+
+#[test]
+fn old_owner_offer_parser_closure_is_identified_before_registration() {
+    let f = Fixture::new();
+    private_dir(&rendezvous(&f.config), true).unwrap();
+    let listener = UnixListener::bind(socket_path(&f.config)).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    fs::set_permissions(socket_path(&f.config), fs::Permissions::from_mode(0o600)).unwrap();
+    let peer = thread::spawn(move || {
+        let until = Instant::now() + Duration::from_secs(2);
+        let (mut stream, _) = loop {
+            match listener.accept() {
+                Ok(peer) => break peer,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < until, "frontend never connected");
+                    thread::sleep(TICK);
+                }
+                Err(error) => panic!("old owner fixture accept: {error}"),
+            }
+        };
+        stream.set_nonblocking(true).unwrap();
+        let bytes = frame(&mut stream, &mut Vec::new(), 2_097_152, expires()).unwrap();
+        let header: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(header["schema"], "caws.render.owner.store-acquire.v2");
+        // An older owner does not recognize v2, then runs this unchanged Offer
+        // decoder and closes without registering/routing the store operation.
+        assert!(serde_json::from_slice::<Offer>(&bytes).is_err());
+    });
+    let (mut relay, _caller, _replies) = relay_pair();
+    let result = acquire_store(
+        &f.config,
+        f.acquire("old-owner"),
+        expires(),
+        || false,
+        &mut relay,
+    );
+    peer.join().unwrap();
+    assert_eq!(
+        result.error.as_deref(),
+        Some(
+            "resident store acquisition v2 unavailable before registration: renderer owner peer EOF"
+        )
+    );
+    assert!(result.registration.is_none());
+    assert!(result.acquisition.is_none());
+    assert!(!result.original_project_bound);
+    f.can_lock();
+}
+
+#[test]
+fn late_relay_acknowledgement_cannot_succeed_past_original_expiry() {
+    let (mut relay, mut caller, replies) = relay_pair();
+    let deadline = Arc::new(MonotonicDeadline::capture(Duration::from_millis(50)).unwrap());
+    relay.expires = deadline.expires();
+    relay.deadline = Arc::clone(&deadline);
+    let (sent, received) = mpsc::sync_channel(1);
+    let join = thread::spawn(move || sent.send(relay.write(b"sentinel\n", expires())).unwrap());
+    assert!(matches!(
+        command(&mut caller),
+        OwnerFrame::WriteEngineFrame { sequence: 1, .. }
+    ));
+    let bound = Instant::now() + Duration::from_secs(1);
+    while deadline.check().is_ok() && Instant::now() < bound {
+        thread::sleep(TICK);
+    }
+    assert!(deadline.check().is_err());
+    // The relay may already have returned on its periodic deadline check.
+    let _ = replies.try_send(RelayReply {
+        schema: REPLY_SCHEMA.into(),
+        sequence: 1,
+        result: Ok(ReplyValue::Written),
+    });
+    let error = received
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(error, "Original monotonic deadline expired");
+    join.join().unwrap();
 }

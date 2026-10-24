@@ -2,6 +2,7 @@
 //! Records are finite, unreleased, and never replayed or evicted. Registry weak
 //! references make status depend on the actual surviving actor/quarantine owner.
 use super::*;
+use crate::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
 use crate::{
     session_publication as publication, session_publication_wire as publication_wire,
     transcript_store as sql, transcript_store_wire as store,
@@ -9,9 +10,31 @@ use crate::{
 use serde_json::value::RawValue;
 use std::sync::{Weak, atomic::AtomicBool};
 
-const ACQUIRE_SCHEMA: &str = "caws.render.owner.store-acquire.v1";
+const ACQUIRE_SCHEMA: &str = "caws.render.owner.store-acquire.v2";
+const ACQUIRE_PREFIX: &str = "caws.render.owner.store-acquire.";
 const STATUS_SCHEMA: &str = "caws.render.owner.store-status.v1";
 const REPLY_SCHEMA: &str = "caws.render.owner.store-relay-reply.v1";
+#[cfg(test)]
+thread_local! {
+    // A test installs this on the receive_first thread only. The probe confirms
+    // actual mutex contention without replacing the production lock operation.
+    static BEFORE_STORE_REGISTRY_LOCK: std::cell::RefCell<Option<mpsc::SyncSender<bool>>> =
+        const { std::cell::RefCell::new(None) };
+}
+#[cfg(test)]
+fn observe_store_registry_contention(registry: &Arc<Mutex<StoreRegistry>>) {
+    BEFORE_STORE_REGISTRY_LOCK.with(|slot| {
+        if let Some(sender) = slot.borrow_mut().take() {
+            let contended = matches!(
+                registry.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            );
+            sender
+                .send(contended)
+                .expect("contention observer receiver");
+        }
+    });
+}
 const STATUS_MAX: usize = 8192;
 const REPLY_MAX: usize = publication_wire::MAX_RELAY_FRAME_BYTES;
 
@@ -56,14 +79,14 @@ pub struct StoreAcquire {
     caller_cwd: String,
     caller_environment: BTreeMap<String, String>,
     request_base64: String,
-    remaining_budget_ms: u64,
+    deadline: DeadlineEnvelope,
     #[serde(default)]
     publication: bool,
     #[serde(default)]
     captured_at: String,
 }
 impl StoreAcquire {
-    pub fn capture(bytes: &[u8], i: store::Invocation<'_>, expires: Instant) -> Self {
+    pub fn capture(bytes: &[u8], i: store::Invocation<'_>, deadline: &MonotonicDeadline) -> Self {
         Self {
             schema: ACQUIRE_SCHEMA.into(),
             id: i.id.into(),
@@ -80,18 +103,19 @@ impl StoreAcquire {
             caller_cwd: i.caller_cwd.into(),
             caller_environment: i.caller_environment.clone(),
             request_base64: STANDARD.encode(bytes),
-            remaining_budget_ms: expires
-                .saturating_duration_since(Instant::now())
-                .as_millis()
-                .min(120_000) as u64,
+            deadline: deadline.envelope(),
             publication: false,
             captured_at: captured_utc(),
         }
     }
     /// Root calls this only for the newly selected native session-log path.
     /// It must not also dispatch the legacy renderer service for this original.
-    pub fn capture_publication(bytes: &[u8], i: store::Invocation<'_>, expires: Instant) -> Self {
-        let mut captured = Self::capture(bytes, i, expires);
+    pub fn capture_publication(
+        bytes: &[u8],
+        i: store::Invocation<'_>,
+        deadline: &MonotonicDeadline,
+    ) -> Self {
+        let mut captured = Self::capture(bytes, i, deadline);
         captured.publication = true;
         captured
     }
@@ -125,7 +149,6 @@ impl StoreAcquire {
                 .runtime_digest
                 .bytes()
                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            || !(1..=120_000).contains(&self.remaining_budget_ms)
             || self.database.as_ref() != self.caller_environment.get("CAWS_TRANSCRIPT_DATABASE")
             || self.request_base64.len() > store::MAX_REQUEST_BYTES.div_ceil(3) * 4
         {
@@ -133,6 +156,23 @@ impl StoreAcquire {
         }
         STANDARD.decode(&self.request_base64).map_err(err)
     }
+}
+
+/// The absolute deadline is native-owned same-host evidence, not sender
+/// attestation. The request limit is an additional cap, never a replacement.
+fn restore_deadline(
+    acquire: &StoreAcquire,
+    received: Instant,
+    request_ms: u32,
+) -> Result<(Arc<MonotonicDeadline>, Instant)> {
+    let deadline = Arc::new(MonotonicDeadline::receive(acquire.deadline).map_err(err)?);
+    let cap = received
+        .checked_add(Duration::from_millis(u64::from(request_ms)))
+        .ok_or("resident store request deadline overflow")?;
+    let expires = deadline.expires().min(cap);
+    check(expires)?;
+    deadline.check().map_err(err)?;
+    Ok((deadline, expires))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -510,6 +550,10 @@ pub fn acquire_store(
         "resident store transport did not settle".into(),
     );
     let exchange = (|| -> Result<()> {
+        let original_deadline = MonotonicDeadline::receive(acquire.deadline).map_err(err)?;
+        let expires = expires.min(original_deadline.expires());
+        original_deadline.check().map_err(err)?;
+        check(expires)?;
         let mut stream = connect(c, expires)?;
         write_all(
             &stream,
@@ -526,13 +570,23 @@ pub fn acquire_store(
                 (c.limits.max_frame_bytes as usize).max(publication_wire::MAX_RELAY_FRAME_BYTES),
                 expires,
                 || {
+                    original_deadline.check().map_err(err)?;
                     if is_cancelled() {
                         Err("resident store frontend cancelled".into())
                     } else {
                         Ok(())
                     }
                 },
-            )?;
+            )
+            .map_err(|reason| {
+                if completion.registration.is_none() {
+                    format!(
+                        "resident store acquisition v2 unavailable before registration: {reason}"
+                    )
+                } else {
+                    reason
+                }
+            })?;
             match decode_owner_frame(&bytes, c.limits.max_frame_bytes as usize)? {
                 OwnerFrame::Registered {
                     id,
@@ -699,10 +753,16 @@ struct RelayTransport {
     cancelled: Arc<AtomicBool>,
     sequence: u64,
     expires: Instant,
+    deadline: Arc<MonotonicDeadline>,
     limit: usize,
 }
 impl RelayTransport {
+    fn check_deadline(&self) -> Result<()> {
+        self.deadline.check().map_err(err)?;
+        check(self.expires)
+    }
     fn exchange(&mut self, command: OwnerFrame, expected: &'static str) -> Result<ReplyValue> {
+        self.check_deadline()?;
         if self.cancelled.load(Ordering::Acquire) {
             return Err("resident store frontend disconnected".into());
         }
@@ -715,6 +775,7 @@ impl RelayTransport {
         loop {
             match self.replies.recv_timeout(TICK) {
                 Ok(reply) => {
+                    self.check_deadline()?;
                     if reply.schema != REPLY_SCHEMA || reply.sequence != self.sequence {
                         return Err("resident store relay acknowledgement mismatch".into());
                     }
@@ -732,7 +793,7 @@ impl RelayTransport {
                     return Ok(value);
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    check(self.expires)?;
+                    self.check_deadline()?;
                     if self.cancelled.load(Ordering::Acquire) {
                         return Err("resident store frontend disconnected".into());
                     }
@@ -922,6 +983,16 @@ impl Actor {
             record.phase = "acquiring";
             Arc::clone(&record.original)
         };
+        let deadline_check = if job.transport.deadline.envelope() != original.deadline {
+            Err("resident store deadline binding mismatch".into())
+        } else {
+            job.transport.check_deadline()
+        };
+        if let Err(reason) = deadline_check {
+            self.stage("store_deadline_refused", &original.id);
+            job.refuse(&reason);
+            return;
+        }
         if original.publication {
             self.acquire_publication_job(job, original);
             return;
@@ -933,11 +1004,17 @@ impl Actor {
                 Err(reason) => Err(store::ServeError::AfterProjectBinding(reason)),
                 Ok(bytes) => {
                     let cancelled = Arc::clone(&job.transport.cancelled);
+                    let deadline = Arc::clone(&job.transport.deadline);
+                    let expires = job.transport.expires;
                     store::serve(
                         &bytes,
                         original.invocation(),
                         job.transport.expires,
-                        move || cancelled.load(Ordering::Acquire),
+                        move || {
+                            cancelled.load(Ordering::Acquire)
+                                || deadline.check().is_err()
+                                || Instant::now() >= expires
+                        },
                         &mut job.transport,
                     )
                 }
@@ -1003,18 +1080,26 @@ impl Actor {
         let outcome = (|| -> Result<()> {
             let request = original.request()?;
             let root = store::correlation_root(&request, &original.invocation()).map_err(err)?;
+            job.transport.check_deadline()?;
             let reserved = self.reserve_original(&original, expires)?;
             self.stage("publication_original_reserved", &original.id);
             dispatch = Some(reserved);
+            job.transport.check_deadline()?;
             let writer = self.publication_writer(Path::new(&root), expires)?;
             job.record.lock().unwrap_or_else(|e| e.into_inner()).writer = Some(Arc::clone(&writer));
             self.stage("publication_writer_retained", &original.id);
+            job.transport.check_deadline()?;
             let cancelled = Arc::clone(&job.transport.cancelled);
+            let deadline = Arc::clone(&job.transport.deadline);
             let acquired = store::serve(
                 &request,
                 original.invocation(),
                 expires,
-                move || cancelled.load(Ordering::Acquire),
+                move || {
+                    cancelled.load(Ordering::Acquire)
+                        || deadline.check().is_err()
+                        || Instant::now() >= expires
+                },
                 &mut job.transport,
             );
             let exhausted_closed = acquired.as_ref().is_ok_and(|a| {
@@ -1106,9 +1191,11 @@ impl Actor {
                     )?;
                 }
                 if !publication.aborted() {
+                    job.transport.check_deadline()?;
                     publication.publish(expires)?;
                 }
                 let terminal = publication.terminal_digest()?;
+                job.transport.check_deadline()?;
                 let returned = self
                     .journal
                     .returned(
@@ -1197,8 +1284,11 @@ pub(super) fn receive_first(
     registry: &Arc<Mutex<StoreRegistry>>,
 ) -> bool {
     #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct Envelope {
         schema: String,
+        id: Option<String>,
+        runtime_digest: Option<String>,
     }
     let Ok(envelope) = serde_json::from_slice::<Envelope>(bytes) else {
         return false;
@@ -1226,31 +1316,74 @@ pub(super) fn receive_first(
         let _ = result;
         return true;
     }
-    if envelope.schema != ACQUIRE_SCHEMA {
+    if !envelope.schema.starts_with(ACQUIRE_PREFIX) {
         return false;
     }
-    let parsed = serde_json::from_slice::<StoreAcquire>(bytes).map_err(err);
-    let Ok(acquire) = parsed else { return true };
-    let expires = (received + Duration::from_millis(acquire.remaining_budget_ms.min(120_000)))
-        .min(received + Duration::from_millis(c.limits.request_ms as u64));
+    // This separate deadline permits a refusal diagnostic only. It never
+    // admits a store operation or renews an expired invocation.
+    let Some(refusal_expires) =
+        received.checked_add(Duration::from_millis(u64::from(c.limits.first_frame_ms)))
+    else {
+        return true;
+    };
+    let refuse = |stream: &mut UnixStream, reason: String| {
+        let id = envelope
+            .id
+            .as_deref()
+            .filter(|s| !s.is_empty() && s.len() <= 256)
+            .unwrap_or("");
+        let runtime = envelope
+            .runtime_digest
+            .as_deref()
+            .filter(|s| s.len() == 64)
+            .unwrap_or("");
+        let completion = StoreCompletion::unavailable(id, runtime, reason);
+        let _ = encoded(&OwnerFrame::Complete { completion }, STATUS_MAX)
+            .and_then(|bytes| write_all(stream, &bytes, refusal_expires));
+    };
+    if envelope.schema != ACQUIRE_SCHEMA {
+        refuse(
+            stream,
+            "resident store unsupported acquisition schema; v2 absolute deadline required".into(),
+        );
+        return true;
+    }
+    let acquire = match serde_json::from_slice::<StoreAcquire>(bytes) {
+        Ok(acquire) => acquire,
+        Err(_) => {
+            refuse(
+                stream,
+                "resident store invalid v2 absolute deadline envelope".into(),
+            );
+            return true;
+        }
+    };
     let mut refused = StoreCompletion::unavailable(
         &acquire.id,
         &acquire.runtime_digest,
         "resident store refused".into(),
     );
-    let prepared = (|| -> Result<(Arc<Mutex<StoreRecord>>, Vec<u8>, String)> {
+    let prepared = (|| -> Result<(Arc<Mutex<StoreRecord>>, Vec<u8>, String, Arc<MonotonicDeadline>, Instant)> {
+        // Validate before request routing or registry/capacity reservation.
+        let (deadline, expires) = restore_deadline(&acquire, received, c.limits.request_ms)?;
         if !surplus.is_empty() {
             return Err("resident store unsolicited first-message bytes".into());
         }
         let request = acquire.request()?;
         let root = store::correlation_root(&request, &acquire.invocation()).map_err(err)?;
-        let record = registry
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .reserve(acquire)?;
-        Ok((record, request, root))
+        #[cfg(test)]
+        observe_store_registry_contention(registry);
+        let record = {
+            let mut locked = registry.lock().unwrap_or_else(|e| e.into_inner());
+            // Waiting for registry custody consumes the original deadline too.
+            // Retain the same original and cap; do not reconstruct or renew.
+            deadline.check().map_err(err)?;
+            check(expires)?;
+            locked.reserve(acquire)?
+        };
+        Ok((record, request, root, deadline, expires))
     })();
-    let (record, _request, expected_root) = match prepared {
+    let (record, _request, expected_root, deadline, expires) = match prepared {
         Ok(value) => value,
         Err(error) => {
             refused.error = Some(error);
@@ -1260,7 +1393,7 @@ pub(super) fn receive_first(
                 },
                 STATUS_MAX,
             )
-            .and_then(|bytes| write_all(stream, &bytes, expires));
+            .and_then(|bytes| write_all(stream, &bytes, refusal_expires));
             return true;
         }
     };
@@ -1291,11 +1424,15 @@ pub(super) fn receive_first(
         }
     };
     let reader_cancelled = Arc::clone(&cancelled);
+    let reader_deadline = Arc::clone(&deadline);
     let reply_generic_limit = c.limits.max_frame_bytes as usize;
     let reader_join = thread::spawn(move || {
         let mut pending = Vec::new();
         loop {
-            let result = frame(&mut reader, &mut pending, REPLY_MAX, expires).and_then(|bytes| {
+            let result = frame_while(&mut reader, &mut pending, REPLY_MAX, expires, || {
+                reader_deadline.check().map_err(err)
+            })
+            .and_then(|bytes| {
                 let reply: RelayReply = serde_json::from_slice(&bytes).map_err(err)?;
                 if bytes.len() > reply_generic_limit
                     && !matches!(&reply.result, Ok(ReplyValue::Read { .. }))
@@ -1331,7 +1468,7 @@ pub(super) fn receive_first(
             &original.caller_environment,
             &original.original_payload,
             expires,
-            &|| cancelled.load(Ordering::Acquire),
+            &|| cancelled.load(Ordering::Acquire) || deadline.check().is_err(),
         )
         .map_err(|error| store::ServeError::ProjectObservation(Box::new(error)))?;
         if project.canonical_root.to_str() != Some(&expected_root) {
@@ -1382,6 +1519,7 @@ pub(super) fn receive_first(
                 cancelled: Arc::clone(&cancelled),
                 sequence: 0,
                 expires,
+                deadline: Arc::clone(&deadline),
                 limit: c.limits.max_frame_bytes as usize,
             },
             _connection: Arc::clone(permit),
