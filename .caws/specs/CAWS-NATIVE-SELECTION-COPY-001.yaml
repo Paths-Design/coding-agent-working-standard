@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-SELECTION-COPY-001
 title: 'Avoid discarded runtime manifest copies during selection discovery'
 mode: refactor
-lifecycle_state: active
-worktree: native-selection-copy
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'Unstarted clean child lane could not receive tracked writes because tool context was canonical-rooted. External source/test proposal and retained baseline/focused evidence transferred to root; root accepted complete A1-A3 obligations in active root-owned CAWS-NATIVE-SELECTION-COPY-LANDING-001. No implementation or unique source commits exist in this lane; supersession does not assert runtime deadline or parent cutover acceptance.'
 created_at: '2026-10-24T22:05:36.354Z'
-updated_at: '2026-10-24T22:05:48.982Z'
+updated_at: '2026-10-24T22:52:26.245Z'
 created_by_session: '01a16d92-e8a7-70d1-899f-40cd6fb48e61'
 blast_radius:
   modules:
