@@ -10,6 +10,8 @@ mod process_effect;
 mod protocol;
 mod render_bridge;
 mod runner;
+mod selection_observation;
+mod stop_admission;
 
 use caws_native::monotonic_deadline::MonotonicDeadline;
 use caws_native::stop_budget::{BudgetIdentity, Charge, StopBudget};
@@ -43,7 +45,8 @@ fn retain_store_result(
     (binding, status)
 }
 
-struct Failure {
+struct Failure<'deadline> {
+    original_stop: Option<runner::OriginalStopPreparation<'deadline>>,
     dispatched: bool,
     ready: Option<Box<protocol::Ready>>,
     message: String,
@@ -53,9 +56,10 @@ struct Failure {
     #[cfg(feature = "sqlite-store")]
     store_project_binding: StoreProjectBinding,
 }
-impl Failure {
+impl<'deadline> Failure<'deadline> {
     fn configuration(message: String) -> Self {
         Self {
+            original_stop: None,
             dispatched: false,
             ready: None,
             message,
@@ -79,418 +83,507 @@ fn charge(ready: Option<&protocol::Ready>, expires: Instant) -> Result<Charge, S
         .charge(expires)
         .map_err(|e| e.to_string())
 }
-fn execute(config: &cli::Config) -> Result<u8, Failure> {
-    // One original deadline starts before payload capture and crosses store IPC.
-    let original_deadline = MonotonicDeadline::capture(config.timeout)
-        .map_err(|error| Failure::configuration(error.to_string()))?;
+fn execute<'deadline>(
+    config: &cli::Config,
+    original_deadline: &'deadline MonotonicDeadline,
+) -> Result<u8, Failure<'deadline>> {
     let deadline = original_deadline.expires();
     let (payload, input_json) = runner::read_payload(deadline).map_err(Failure::configuration)?;
     original_deadline
         .check()
         .map_err(|error| Failure::configuration(error.to_string()))?;
-    let request = protocol::Request::new(config, payload, input_json, deadline)
+    let mut request = protocol::Request::new(config, payload, input_json, deadline)
         .map_err(Failure::configuration)?;
-    let bytes = request
-        .encode_frame()
-        .map_err(|e| Failure::configuration(format!("request encoding: {e}")))?;
-    if bytes.len() - 1 > runner::MAX_REQUEST {
-        return Err(Failure::configuration("request exceeds byte limit".into()));
-    }
-    let captured = (config.surface == "codex" && config.event == "pre_tool_use")
-        .then(|| process_effect::CapturedAncestors::capture(deadline));
-    let prefix_ancestry = (cfg!(target_os = "macos")
-        && config.configuration == "system"
-        && config.event == "session_end"
-        && matches!(config.surface.as_str(), "codex" | "claude-code"))
-    .then(|| {
-        caws_native::agent_pid_cache::OriginalAncestry::capture(
-            &config.surface,
-            deadline,
-            cancellation::check,
-        )
-    })
-    .transpose()
-    .map_err(Failure::configuration)?;
-    let mut context_git =
-        caws_native::context_git::ContextGitOwner::new(caws_native::context_git::Invocation {
-            id: request.id.clone(),
-            runtime_digest: request.runtime_digest.clone(),
-            deadline,
-            environment: request
-                .caller_environment()
-                .iter()
-                .map(|(key, value)| (key.into(), value.into()))
-                .collect(),
+    // The optional candidate observes original inputs before Node. It neither
+    // selects the native Stop route nor grants any prefix/publication effects.
+    let mut original_stop =
+        runner::OriginalStopPreparation::capture(config, &request, original_deadline);
+    let outcome = (|| -> Result<u8, Failure<'deadline>> {
+        let selection_limits = selection_observation::Limits::default();
+        // Discovery cannot upgrade a refused candidate. Invalid original roots
+        // disable this optional observation transport; compatibility remains
+        // unchanged and successful context capture is still replayed below.
+        let mut selection_owner = match (
+            original_stop.generation.as_ref(),
+            original_stop.original.as_ref(),
+        ) {
+            (Some(generation), Some(original)) => request
+                .original_selection_roots(original)
+                .and_then(|roots| {
+                    selection_observation::SelectionObservationOwner::new(
+                        generation,
+                        original_deadline,
+                        roots,
+                        selection_limits,
+                        cancellation::check,
+                    )
+                })
+                .ok(),
+            _ => None,
+        };
+        if let Some(owner) = selection_owner.as_ref() {
+            request.advertise_selection_observation(owner.snapshot_id(), selection_limits);
+        }
+        // Advertisement is native-derived and precedes the only encoded request.
+        let bytes = request
+            .encode_frame()
+            .map_err(|e| Failure::configuration(format!("request encoding: {e}")))?;
+        if bytes.len() - 1 > runner::MAX_REQUEST {
+            return Err(Failure::configuration("request exceeds byte limit".into()));
+        }
+        let mut selection_receipt = None;
+
+        let mut captured_context = original_stop
+            .original
+            .as_ref()
+            .map(protocol::CapturedContext::new);
+        let captured = (config.surface == "codex" && config.event == "pre_tool_use")
+            .then(|| process_effect::CapturedAncestors::capture(deadline));
+        let prefix_ancestry = (cfg!(target_os = "macos")
+            && config.configuration == "system"
+            && config.event == "session_end"
+            && matches!(config.surface.as_str(), "codex" | "claude-code"))
+        .then(|| {
+            caws_native::agent_pid_cache::OriginalAncestry::capture(
+                &config.surface,
+                deadline,
+                cancellation::check,
+            )
         })
+        .transpose()
         .map_err(Failure::configuration)?;
-    let mut session =
-        runner::Session::start(config, &request.id, deadline).map_err(Failure::configuration)?;
-    let mut ready = None;
-    let mut dispatched = false;
-    let mut session_settlement = None;
-    #[cfg(feature = "sqlite-store")]
-    let mut store_settlement = None;
-    #[cfg(feature = "sqlite-store")]
-    let mut store_project_binding = if caws_native::transcript_store_wire::supports_invocation(
-        &config.surface,
-        &config.event,
-        &config.configuration,
-    ) {
-        StoreProjectBinding::Unbound
-    } else {
-        StoreProjectBinding::NotApplicable
-    };
-    let proposal = (|| {
-        session.send(&bytes, deadline)?;
-        ready = Some(loop {
-            match protocol::validate_frame(&session.frame(deadline)?, &request)? {
-                protocol::EngineFrame::ContextGitRequest(frame) => {
-                    session.run_context_git(&mut context_git, &frame, deadline)?;
-                }
-                protocol::EngineFrame::Ready(value) => {
-                    context_git.mark_ready()?;
-                    break value;
-                }
-                protocol::EngineFrame::Failure(message) => return Err(message),
-                _ => return Err("engine proposal before dispatch grant".into()),
-            }
-        });
-        let service_dispatch = session.admit_render_offer(
-            config,
-            &request,
-            ready.as_mut().ok_or("missing engine readiness")?,
-            deadline,
-        )?;
-        // A failed write may deliver the complete grant. Record the attempt
-        // BEFORE writing; creation of the engine alone is not dispatch.
-        dispatched = ready.as_ref().is_some_and(|context| context.active);
-        session.send(
-            &service_dispatch.unwrap_or_else(|| protocol::dispatch(&request)),
-            deadline,
-        )?;
-        let mut cache_attempted = false;
-        let mut prefix_complete = false;
-        let mut publication_attempted = false;
+        let mut context_git =
+            caws_native::context_git::ContextGitOwner::new(caws_native::context_git::Invocation {
+                id: request.id.clone(),
+                runtime_digest: request.runtime_digest.clone(),
+                deadline,
+                environment: request
+                    .caller_environment()
+                    .iter()
+                    .map(|(key, value)| (key.into(), value.into()))
+                    .collect(),
+            })
+            .map_err(Failure::configuration)?;
+        let mut session = runner::Session::start(config, &request.id, deadline)
+            .map_err(Failure::configuration)?;
+        let mut ready = None;
+        let mut dispatched = false;
+        let mut session_settlement = None;
         #[cfg(feature = "sqlite-store")]
-        let mut store_attempted = false;
-        loop {
-            match protocol::validate_frame(&session.frame(deadline)?, &request)? {
-                protocol::EngineFrame::ContextGitRequest(_) => {
-                    return Err("context Git request after Ready".into());
-                }
-                #[cfg(feature = "sqlite-store")]
-                protocol::EngineFrame::TranscriptStoreRequest(frame) => {
-                    if store_attempted || publication_attempted {
-                        return Err("transcript store exchange already attempted".into());
+        let mut store_settlement = None;
+        #[cfg(feature = "sqlite-store")]
+        let mut store_project_binding = if caws_native::transcript_store_wire::supports_invocation(
+            &config.surface,
+            &config.event,
+            &config.configuration,
+        ) {
+            StoreProjectBinding::Unbound
+        } else {
+            StoreProjectBinding::NotApplicable
+        };
+        let proposal = (|| {
+            session.send(&bytes, deadline)?;
+            ready = Some(loop {
+                match protocol::validate_frame(&session.frame(deadline)?, &request)? {
+                    protocol::EngineFrame::SelectionObservationRequest(frame) => {
+                        let owner = selection_owner
+                            .as_mut()
+                            .ok_or("selection observation was not advertised")?;
+                        session.run_selection_observation(owner, &request, &frame, deadline)?;
                     }
-                    store_attempted = true;
-                    publication_attempted = true;
-                    let context = ready.as_ref().ok_or("missing store readiness")?;
-                    let result = match render_bridge::captured_publication_owner_config(
-                        config, &request, context,
-                    ) {
-                        Ok(owner) => caws_native::render_owner::acquire_store(
-                            &owner,
-                            caws_native::render_owner::StoreAcquire::capture(
-                                &frame,
-                                request.transcript_store_invocation(context, dispatched),
-                                &original_deadline,
+                    protocol::EngineFrame::ContextGitRequest(frame) => {
+                        if let Some(replay) = captured_context.as_mut() {
+                            session.replay_context_git(replay, &frame, deadline)?;
+                        } else {
+                            // No optional native capture is retried or upgraded.
+                            // Unsupported/failed candidates keep the existing
+                            // compatibility project's own context observation.
+                            session.run_context_git(&mut context_git, &frame, deadline)?;
+                        }
+                    }
+                    protocol::EngineFrame::Ready(value) => {
+                        selection_receipt = selection_owner
+                            .take()
+                            .map(|owner| owner.seal(cancellation::check))
+                            .transpose()?;
+                        context_git.mark_ready()?;
+                        if let Some(replay) = captured_context.as_mut() {
+                            replay.mark_ready();
+                        }
+                        break value;
+                    }
+                    protocol::EngineFrame::Failure(message) => return Err(message),
+                    _ => return Err("engine proposal before dispatch grant".into()),
+                }
+            });
+            let service_dispatch = session.admit_render_offer(
+                config,
+                &request,
+                ready.as_mut().ok_or("missing engine readiness")?,
+                deadline,
+            )?;
+            // A sealed readset is lifecycle evidence, never eligibility. Keep
+            // the owner through this execution and refuse stale dependencies
+            // before the dispatch attempt, including inactive/custom selection.
+            if let Some(receipt) = selection_receipt.as_ref() {
+                receipt.revalidate(cancellation::check)?;
+            }
+            // A failed write may deliver the complete grant. Record the attempt
+            // BEFORE writing; creation of the engine alone is not dispatch.
+            dispatched = ready.as_ref().is_some_and(|context| context.active);
+            session.send(
+                &service_dispatch.unwrap_or_else(|| protocol::dispatch(&request)),
+                deadline,
+            )?;
+            let mut cache_attempted = false;
+            let mut prefix_complete = false;
+            let mut publication_attempted = false;
+            #[cfg(feature = "sqlite-store")]
+            let mut store_attempted = false;
+            loop {
+                match protocol::validate_frame(&session.frame(deadline)?, &request)? {
+                    protocol::EngineFrame::SelectionObservationRequest(_) => {
+                        return Err("selection observation request after Ready".into());
+                    }
+                    protocol::EngineFrame::ContextGitRequest(_) => {
+                        return Err("context Git request after Ready".into());
+                    }
+                    #[cfg(feature = "sqlite-store")]
+                    protocol::EngineFrame::TranscriptStoreRequest(frame) => {
+                        if store_attempted || publication_attempted {
+                            return Err("transcript store exchange already attempted".into());
+                        }
+                        store_attempted = true;
+                        publication_attempted = true;
+                        let context = ready.as_ref().ok_or("missing store readiness")?;
+                        let result = match render_bridge::captured_publication_owner_config(
+                            config, &request, context,
+                        ) {
+                            Ok(owner) => caws_native::render_owner::acquire_store(
+                                &owner,
+                                caws_native::render_owner::StoreAcquire::capture(
+                                    &frame,
+                                    request.transcript_store_invocation(context, dispatched),
+                                    &original_deadline,
+                                ),
+                                deadline,
+                                || cancellation::check().is_err(),
+                                &mut session,
                             ),
+                            Err(error) => caws_native::render_owner::StoreCompletion::unavailable(
+                                &request.id,
+                                &request.runtime_digest,
+                                error,
+                            ),
+                        };
+                        let (binding, status) = retain_store_result(result, &mut store_settlement);
+                        store_project_binding = binding;
+                        status?;
+                    }
+                    protocol::EngineFrame::SessionSealRequest(frame) => {
+                        if publication_attempted || !prefix_complete {
+                            return Err(
+                                "session seal requires one completed native SessionEnd prefix"
+                                    .into(),
+                            );
+                        }
+                        publication_attempted = true;
+                        let context = ready.as_ref().ok_or("missing session readiness")?;
+                        let owner = render_bridge::captured_publication_owner_config(
+                            config, &request, context,
+                        )?;
+                        let acquisition = caws_native::render_owner::SessionAcquire::capture(
+                            &frame,
+                            &request.session_invocation(context, dispatched),
+                            deadline,
+                        )?;
+                        let result = caws_native::render_owner::acquire_session(
+                            &owner,
+                            acquisition,
                             deadline,
                             || cancellation::check().is_err(),
                             &mut session,
-                        ),
-                        Err(error) => caws_native::render_owner::StoreCompletion::unavailable(
-                            &request.id,
-                            &request.runtime_digest,
-                            error,
-                        ),
-                    };
-                    let (binding, status) = retain_store_result(result, &mut store_settlement);
-                    store_project_binding = binding;
-                    status?;
-                }
-                protocol::EngineFrame::SessionSealRequest(frame) => {
-                    if publication_attempted || !prefix_complete {
-                        return Err(
-                            "session seal requires one completed native SessionEnd prefix".into(),
                         );
+                        let status = result.status();
+                        session_settlement = Some(result);
+                        status?;
                     }
-                    publication_attempted = true;
-                    let context = ready.as_ref().ok_or("missing session readiness")?;
-                    let owner = render_bridge::captured_publication_owner_config(
-                        config, &request, context,
-                    )?;
-                    let acquisition = caws_native::render_owner::SessionAcquire::capture(
-                        &frame,
-                        &request.session_invocation(context, dispatched),
-                        deadline,
-                    )?;
-                    let result = caws_native::render_owner::acquire_session(
-                        &owner,
-                        acquisition,
-                        deadline,
-                        || cancellation::check().is_err(),
-                        &mut session,
-                    );
-                    let status = result.status();
-                    session_settlement = Some(result);
-                    status?;
-                }
-                protocol::EngineFrame::SessionEndPrefixRequest(frame) => {
-                    if cache_attempted || publication_attempted {
-                        return Err(
-                            "session prefix exchange already attempted or publication started"
-                                .into(),
-                        );
-                    }
-                    cache_attempted = true;
-                    let context = ready.as_ref().ok_or("missing prefix readiness")?;
-                    let original = prefix_ancestry
-                        .as_ref()
-                        .ok_or("missing original SessionEnd ancestry")?;
-                    let mut owner = request.session_prefix_owner(context, dispatched, original)?;
-                    let admitted = owner.admit(&frame).map_err(|error| error.to_string())?;
-                    session.credit_session_cache_control(frame.len() + 1)?;
-                    let mut exchange_failure = None;
-                    let mut decision_bytes = None;
-                    let execution =
-                        admitted.execute_checked(deadline, cancellation::check, |previous| {
-                            let exchange = (|| {
-                                session.send(previous, deadline)?;
-                                let decision = session.frame(deadline)?;
-                                decision_bytes = Some(decision.len() + 1);
-                                Ok(decision)
-                            })();
-                            exchange.map_err(|error| {
-                                exchange_failure = Some(error);
-                                caws_native::session_cache_wire::WireError(
-                                    "session prefix transport failed",
-                                )
-                            })
-                        });
-                    if let Some(error) = execution.cancellation_error {
-                        return Err(error);
-                    }
-                    if let Some(error) = execution.exchange_error {
-                        return Err(exchange_failure.unwrap_or_else(|| error.to_string()));
-                    }
-                    if let Some(bytes) = decision_bytes {
-                        session.credit_session_cache_control(bytes)?;
-                    }
-                    prefix_complete = execution.result.prefix_complete();
-                    if !prefix_complete && !execution.result.fallback_safe() {
-                        return Err(
+                    protocol::EngineFrame::SessionEndPrefixRequest(frame) => {
+                        if cache_attempted || publication_attempted {
+                            return Err(
+                                "session prefix exchange already attempted or publication started"
+                                    .into(),
+                            );
+                        }
+                        cache_attempted = true;
+                        let context = ready.as_ref().ok_or("missing prefix readiness")?;
+                        let original = prefix_ancestry
+                            .as_ref()
+                            .ok_or("missing original SessionEnd ancestry")?;
+                        let mut owner =
+                            request.session_prefix_owner(context, dispatched, original)?;
+                        let admitted = owner.admit(&frame).map_err(|error| error.to_string())?;
+                        session.credit_session_cache_control(frame.len() + 1)?;
+                        let mut exchange_failure = None;
+                        let mut decision_bytes = None;
+                        let execution =
+                            admitted.execute_checked(deadline, cancellation::check, |previous| {
+                                let exchange = (|| {
+                                    session.send(previous, deadline)?;
+                                    let decision = session.frame(deadline)?;
+                                    decision_bytes = Some(decision.len() + 1);
+                                    Ok(decision)
+                                })();
+                                exchange.map_err(|error| {
+                                    exchange_failure = Some(error);
+                                    caws_native::session_cache_wire::WireError(
+                                        "session prefix transport failed",
+                                    )
+                                })
+                            });
+                        if let Some(error) = execution.cancellation_error {
+                            return Err(error);
+                        }
+                        if let Some(error) = execution.exchange_error {
+                            return Err(exchange_failure.unwrap_or_else(|| error.to_string()));
+                        }
+                        if let Some(bytes) = decision_bytes {
+                            session.credit_session_cache_control(bytes)?;
+                        }
+                        prefix_complete = execution.result.prefix_complete();
+                        if !prefix_complete && !execution.result.fallback_safe() {
+                            return Err(
                             "session prefix did not complete; effects may be uncertain; no retry"
                                 .into(),
                         );
+                        }
+                        session.send(
+                            &execution
+                                .result
+                                .encode()
+                                .map_err(|error| error.to_string())?,
+                            deadline,
+                        )?;
                     }
-                    session.send(
-                        &execution
-                            .result
-                            .encode()
-                            .map_err(|error| error.to_string())?,
-                        deadline,
-                    )?;
-                }
-                protocol::EngineFrame::SessionCacheRequest(frame) => {
-                    if cache_attempted || publication_attempted {
-                        return Err("session cache exchange already attempted".into());
+                    protocol::EngineFrame::SessionCacheRequest(frame) => {
+                        if cache_attempted || publication_attempted {
+                            return Err("session cache exchange already attempted".into());
+                        }
+                        cache_attempted = true;
+                        let context = ready.as_ref().ok_or("missing cache readiness")?;
+                        let mut owner = request.session_cache_owner(context, dispatched)?;
+                        let admitted = owner.admit(&frame).map_err(|error| error.to_string())?;
+                        session.credit_session_cache_control(frame.len() + 1)?;
+                        let mut exchange_failure = None;
+                        let mut decision_bytes = None;
+                        let execution =
+                            admitted.execute_checked(deadline, cancellation::check, |previous| {
+                                let exchange = (|| {
+                                    session.send(previous, deadline)?;
+                                    let decision = session.frame(deadline)?;
+                                    decision_bytes = Some(decision.len() + 1);
+                                    Ok(decision)
+                                })();
+                                exchange.map_err(|error| {
+                                    exchange_failure = Some(error);
+                                    caws_native::session_cache_wire::WireError(
+                                        "session cache transport failed",
+                                    )
+                                })
+                            });
+                        if let Some(error) = execution.cancellation_error {
+                            return Err(error);
+                        }
+                        if let Some(error) = execution.exchange_error {
+                            return Err(exchange_failure.unwrap_or_else(|| error.to_string()));
+                        }
+                        if let Some(bytes) = decision_bytes {
+                            // The operation accepted the decision schema and correlation.
+                            session.credit_session_cache_control(bytes)?;
+                        }
+                        session.send(
+                            &execution
+                                .result
+                                .encode()
+                                .map_err(|error| error.to_string())?,
+                            deadline,
+                        )?;
                     }
-                    cache_attempted = true;
-                    let context = ready.as_ref().ok_or("missing cache readiness")?;
-                    let mut owner = request.session_cache_owner(context, dispatched)?;
-                    let admitted = owner.admit(&frame).map_err(|error| error.to_string())?;
-                    session.credit_session_cache_control(frame.len() + 1)?;
-                    let mut exchange_failure = None;
-                    let mut decision_bytes = None;
-                    let execution =
-                        admitted.execute_checked(deadline, cancellation::check, |previous| {
-                            let exchange = (|| {
-                                session.send(previous, deadline)?;
-                                let decision = session.frame(deadline)?;
-                                decision_bytes = Some(decision.len() + 1);
-                                Ok(decision)
-                            })();
-                            exchange.map_err(|error| {
-                                exchange_failure = Some(error);
-                                caws_native::session_cache_wire::WireError(
-                                    "session cache transport failed",
-                                )
-                            })
-                        });
-                    if let Some(error) = execution.cancellation_error {
-                        return Err(error);
+                    protocol::EngineFrame::Proposal {
+                        token,
+                        result,
+                        containment,
+                    } => break Ok((token, result, containment)),
+                    protocol::EngineFrame::Failure(message) => break Err(message),
+                    protocol::EngineFrame::Ready(_) => {
+                        break Err("unexpected ready after dispatch grant".into());
                     }
-                    if let Some(error) = execution.exchange_error {
-                        return Err(exchange_failure.unwrap_or_else(|| error.to_string()));
-                    }
-                    if let Some(bytes) = decision_bytes {
-                        // The operation accepted the decision schema and correlation.
-                        session.credit_session_cache_control(bytes)?;
-                    }
-                    session.send(
-                        &execution
-                            .result
-                            .encode()
-                            .map_err(|error| error.to_string())?,
-                        deadline,
-                    )?;
-                }
-                protocol::EngineFrame::Proposal {
-                    token,
-                    result,
-                    containment,
-                } => break Ok((token, result, containment)),
-                protocol::EngineFrame::Failure(message) => break Err(message),
-                protocol::EngineFrame::Ready(_) => {
-                    break Err("unexpected ready after dispatch grant".into());
                 }
             }
+        })();
+        let (token, result, containment) = match proposal {
+            Ok(value) => value,
+            Err(mut message) => {
+                if let Err(error) = session.cleanup() {
+                    message.push_str(&format!("; cleanup: {error}"));
+                }
+                return Err(Failure {
+                    original_stop: None,
+                    dispatched,
+                    ready: ready.map(Box::new),
+                    message,
+                    session_settlement,
+                    #[cfg(feature = "sqlite-store")]
+                    store_settlement,
+                    #[cfg(feature = "sqlite-store")]
+                    store_project_binding,
+                });
+            }
+        };
+        // A valid protective result survives invalid/held effects and late failures.
+        // No path through this terminal phase can ask the engine for more work.
+        let mut post_errors = Vec::new();
+        if let Some(diagnostic) = session.render_diagnostic() {
+            post_errors.push(diagnostic);
         }
+        let mut receipt = None;
+        let target = match containment {
+            protocol::ContainmentProposal::None => None,
+            protocol::ContainmentProposal::Invalid(error) => {
+                post_errors.push(format!("containment intent rejected: {error}; no signal"));
+                None
+            }
+            protocol::ContainmentProposal::Intent(intent) => {
+                let context = process_effect::EffectContext {
+                    surface: &config.surface,
+                    event: &config.event,
+                    active: dispatched,
+                    session_id: ready.as_ref().and_then(|row| row.session_id.as_deref()),
+                    exit_code: result.exit_code,
+                    stdout: &result.stdout,
+                };
+                let validated = if !process_effect::eligible(&intent, &context) {
+                    Err(process_effect::HeldReason::UnsafeTarget)
+                } else if let Some(captured) = captured.as_ref() {
+                    captured.validate(&intent)
+                } else {
+                    Err(process_effect::HeldReason::CaptureUnavailable)
+                };
+                match validated {
+                    Ok(target) => Some(target),
+                    Err(reason) => {
+                        // A closed caller output can also prevent the ACK from
+                        // reaching the engine. Retain the bounded mechanical
+                        // reason independently; never turn this into signal authority.
+                        post_errors.push(format!(
+                            "containment held before output: {reason:?}; no signal"
+                        ));
+                        if reason == process_effect::HeldReason::CaptureUnavailable
+                            && let Some(captured) = captured.as_ref()
+                        {
+                            post_errors
+                                .push(format!("ancestor capture: {}", captured.diagnostic()));
+                        }
+                        receipt = Some(process_effect::ContainmentReceipt::held(&intent, reason));
+                        None
+                    }
+                }
+            }
+        };
+        // TS's wire phase has an 1100ms budget. Share one terminal budget across
+        // output (<=500ms), reobservation/effect (<=250ms), and receipt settlement.
+        let terminal_deadline = Instant::now() + Duration::from_millis(1000);
+        let delivered = if let Some(target) = target {
+            session.begin_terminal_containment(&target);
+            let delivered = runner::write_terminal_native(&result.stdout, &result.stderr, &target);
+            receipt = Some(
+                target.attempt(terminal_deadline.min(Instant::now() + Duration::from_millis(250))),
+            );
+            delivered
+        } else {
+            runner::write_native(&result.stdout, &result.stderr)
+        };
+        let post_deadline = terminal_deadline.min(Instant::now() + Duration::from_millis(500));
+        if delivered.is_ok() && dispatched && config.event == "stop" && result.exit_code == 0 {
+            // Unavailable may already have committed. Never retry this transaction.
+            if let Some(context) = ready.as_ref()
+                && let Err(error) = budget(context, post_deadline)
+                    .and_then(|state| state.reset(post_deadline).map_err(|e| e.to_string()))
+            {
+                post_errors.push(format!("Stop reset: {error}; not retried"));
+            }
+        }
+        let ack = protocol::handoff(&request, &token, delivered.is_ok(), receipt.as_ref())
+            .and_then(|bytes| session.send(&bytes, post_deadline));
+        if let Err(error) = ack {
+            post_errors.push(format!("handoff ACK: {error}; settlement unconfirmed"));
+        }
+        if let Err(error) = session.settle(post_deadline) {
+            post_errors.push(format!(
+                "engine settlement: {error}; settlement unconfirmed"
+            ));
+        }
+        if let Err(error) = session.cleanup() {
+            post_errors.push(format!("cleanup: {error}"));
+        }
+        let mut code = result.exit_code;
+        if let Err(error) = delivered {
+            code = 2;
+            let mut note = String::new();
+            // A valid refusal never charges/resets the infrastructure counter, even
+            // when its native output could not be fully handed off.
+            if dispatched && config.event == "stop" && result.exit_code != 2 {
+                match charge(ready.as_ref(), Instant::now() + Duration::from_millis(100)) {
+                    Ok(Charge::Refuse) => {}
+                    Ok(Charge::Release) => {
+                        code = 0;
+                        note = " Stop infrastructure budget exhausted; releasing this Stop.".into();
+                    }
+                    Err(unavailable) => {
+                        code = 0;
+                        note = format!(
+                            " {unavailable}; releasing this infrastructure Stop; transaction not retried."
+                        );
+                    }
+                }
+            }
+            post_errors.push(format!("output delivery failed: {error}. Output may be partial; consumer receipt is unconfirmed.{note}"));
+        }
+        if !post_errors.is_empty() {
+            runner::write_diagnostic(
+                format!(
+                    "CAWS native post-proposal diagnostic: {}\n",
+                    post_errors.join("; ")
+                )
+                .as_bytes(),
+            );
+        }
+        // Keep the resident record correlation through final frontend output.
+        #[cfg(feature = "sqlite-store")]
+        let _store_settlement = store_settlement.as_ref();
+        let _session_settlement = session_settlement.as_ref();
+        Ok(code)
     })();
-    let (token, result, containment) = match proposal {
-        Ok(value) => value,
-        Err(mut message) => {
-            if let Err(error) = session.cleanup() {
-                message.push_str(&format!("; cleanup: {error}"));
+    match outcome {
+        Ok(code) => {
+            if let Err(error) = original_stop.retry_cleanup() {
+                runner::write_diagnostic(format!("CAWS optional original Stop discovery retains native cleanup custody: {error}; no native retry or publication.\n").as_bytes());
             }
-            return Err(Failure {
-                dispatched,
-                ready: ready.map(Box::new),
-                message,
-                session_settlement,
-                #[cfg(feature = "sqlite-store")]
-                store_settlement,
-                #[cfg(feature = "sqlite-store")]
-                store_project_binding,
-            });
+            Ok(code)
         }
-    };
-    // A valid protective result survives invalid/held effects and late failures.
-    // No path through this terminal phase can ask the engine for more work.
-    let mut post_errors = Vec::new();
-    if let Some(diagnostic) = session.render_diagnostic() {
-        post_errors.push(diagnostic);
-    }
-    let mut receipt = None;
-    let target = match containment {
-        protocol::ContainmentProposal::None => None,
-        protocol::ContainmentProposal::Invalid(error) => {
-            post_errors.push(format!("containment intent rejected: {error}; no signal"));
-            None
-        }
-        protocol::ContainmentProposal::Intent(intent) => {
-            let context = process_effect::EffectContext {
-                surface: &config.surface,
-                event: &config.event,
-                active: dispatched,
-                session_id: ready.as_ref().and_then(|row| row.session_id.as_deref()),
-                exit_code: result.exit_code,
-                stdout: &result.stdout,
-            };
-            let validated = if !process_effect::eligible(&intent, &context) {
-                Err(process_effect::HeldReason::UnsafeTarget)
-            } else if let Some(captured) = captured.as_ref() {
-                captured.validate(&intent)
-            } else {
-                Err(process_effect::HeldReason::CaptureUnavailable)
-            };
-            match validated {
-                Ok(target) => Some(target),
-                Err(reason) => {
-                    // A closed caller output can also prevent the ACK from
-                    // reaching the engine. Retain the bounded mechanical
-                    // reason independently; never turn this into signal authority.
-                    post_errors.push(format!(
-                        "containment held before output: {reason:?}; no signal"
-                    ));
-                    if reason == process_effect::HeldReason::CaptureUnavailable
-                        && let Some(captured) = captured.as_ref()
-                    {
-                        post_errors.push(format!("ancestor capture: {}", captured.diagnostic()));
-                    }
-                    receipt = Some(process_effect::ContainmentReceipt::held(&intent, reason));
-                    None
-                }
-            }
-        }
-    };
-    // TS's wire phase has an 1100ms budget. Share one terminal budget across
-    // output (<=500ms), reobservation/effect (<=250ms), and receipt settlement.
-    let terminal_deadline = Instant::now() + Duration::from_millis(1000);
-    let delivered = if let Some(target) = target {
-        session.begin_terminal_containment(&target);
-        let delivered = runner::write_terminal_native(&result.stdout, &result.stderr, &target);
-        receipt = Some(
-            target.attempt(terminal_deadline.min(Instant::now() + Duration::from_millis(250))),
-        );
-        delivered
-    } else {
-        runner::write_native(&result.stdout, &result.stderr)
-    };
-    let post_deadline = terminal_deadline.min(Instant::now() + Duration::from_millis(500));
-    if delivered.is_ok() && dispatched && config.event == "stop" && result.exit_code == 0 {
-        // Unavailable may already have committed. Never retry this transaction.
-        if let Some(context) = ready.as_ref()
-            && let Err(error) = budget(context, post_deadline)
-                .and_then(|state| state.reset(post_deadline).map_err(|e| e.to_string()))
-        {
-            post_errors.push(format!("Stop reset: {error}; not retried"));
+        Err(mut error) => {
+            error.original_stop = Some(original_stop);
+            Err(error)
         }
     }
-    let ack = protocol::handoff(&request, &token, delivered.is_ok(), receipt.as_ref())
-        .and_then(|bytes| session.send(&bytes, post_deadline));
-    if let Err(error) = ack {
-        post_errors.push(format!("handoff ACK: {error}; settlement unconfirmed"));
-    }
-    if let Err(error) = session.settle(post_deadline) {
-        post_errors.push(format!(
-            "engine settlement: {error}; settlement unconfirmed"
-        ));
-    }
-    if let Err(error) = session.cleanup() {
-        post_errors.push(format!("cleanup: {error}"));
-    }
-    let mut code = result.exit_code;
-    if let Err(error) = delivered {
-        code = 2;
-        let mut note = String::new();
-        // A valid refusal never charges/resets the infrastructure counter, even
-        // when its native output could not be fully handed off.
-        if dispatched && config.event == "stop" && result.exit_code != 2 {
-            match charge(ready.as_ref(), Instant::now() + Duration::from_millis(100)) {
-                Ok(Charge::Refuse) => {}
-                Ok(Charge::Release) => {
-                    code = 0;
-                    note = " Stop infrastructure budget exhausted; releasing this Stop.".into();
-                }
-                Err(unavailable) => {
-                    code = 0;
-                    note = format!(
-                        " {unavailable}; releasing this infrastructure Stop; transaction not retried."
-                    );
-                }
-            }
-        }
-        post_errors.push(format!("output delivery failed: {error}. Output may be partial; consumer receipt is unconfirmed.{note}"));
-    }
-    if !post_errors.is_empty() {
-        runner::write_diagnostic(
-            format!(
-                "CAWS native post-proposal diagnostic: {}\n",
-                post_errors.join("; ")
-            )
-            .as_bytes(),
-        );
-    }
-    // Keep the resident record correlation through final frontend output.
-    #[cfg(feature = "sqlite-store")]
-    let _store_settlement = store_settlement.as_ref();
-    let _session_settlement = session_settlement.as_ref();
-    Ok(code)
 }
-fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
+fn fallback(mut error: Failure<'_>, pre: bool, stop: bool) -> u8 {
+    // Keep the actual optional capture and any RemoteFailure through fallback
+    // output. Retry only cleanup; its original request clock is never renewed.
+    let original_cleanup = error
+        .original_stop
+        .as_mut()
+        .and_then(|owner| owner.retry_cleanup().err());
     let _session_settlement = error.session_settlement.as_ref();
     // Frontend failure retains finite metadata; the resident owns SQL cleanup.
     #[cfg(feature = "sqlite-store")]
@@ -509,6 +602,9 @@ fn fallback(error: Failure, pre: bool, stop: bool) -> u8 {
             ""
         }
     );
+    if let Some(cleanup) = original_cleanup {
+        reason.push_str(&format!(" Original project native custodian retains cleanup: {cleanup}; native candidate was not retried."));
+    }
     let mut block = pre || error.dispatched;
     #[cfg(feature = "sqlite-store")]
     if let Some(outcome) = error
@@ -715,13 +811,29 @@ fn main() {
         }
     }
     let event = |name| args.windows(2).any(|v| v[0] == "--event" && v[1] == name);
-    let result = cancellation::install()
-        .and_then(|()| cli::Config::parse(&args))
-        .map_err(Failure::configuration)
-        .and_then(|config| execute(&config));
-    let code = match result {
-        Ok(code) => code,
-        Err(error) => fallback(error, event("pre_tool_use"), event("stop")),
+    let configuration = cancellation::install().and_then(|()| cli::Config::parse(&args));
+    let code = match configuration {
+        Err(error) => fallback(
+            Failure::configuration(error),
+            event("pre_tool_use"),
+            event("stop"),
+        ),
+        Ok(config) => {
+            // Same original start point: after configuration and before payload.
+            // This outer owner outlives execute and failure output, so the opaque
+            // capture can retain its original clock without a self-reference.
+            match MonotonicDeadline::capture(config.timeout) {
+                Err(error) => fallback(
+                    Failure::configuration(error.to_string()),
+                    event("pre_tool_use"),
+                    event("stop"),
+                ),
+                Ok(original_deadline) => match execute(&config, &original_deadline) {
+                    Ok(code) => code,
+                    Err(error) => fallback(error, event("pre_tool_use"), event("stop")),
+                },
+            }
+        }
     };
     std::process::exit(code.into());
 }

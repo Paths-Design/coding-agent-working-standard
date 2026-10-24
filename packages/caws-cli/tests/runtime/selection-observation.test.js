@@ -10,7 +10,139 @@ const { resolveInvocationSelection } = require('../../dist/runtime/selection');
 const {
   SelectionObservationSnapshot,
   resolveObservedInvocationSelection,
+  createNativeSelectionResolver,
 } = require('../../dist/runtime/selection-observation');
+
+test('compact runtime digest is immutable data and full byte capture stays a separate operation', () => {
+  const file = path.join(root, 'runtime-member');
+  write(file, 'original runtime bytes');
+  const supplied = snapshot('compact-digest');
+  const operation = { kind: 'runtime-digest', path: file, singleLink: false };
+  const result = captureSelectionRead(operation);
+  supplied.record({
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'digest-1',
+    operation,
+    result,
+  });
+  result.sha256 = 'f'.repeat(64);
+  expect(supplied.io.runtimeFileDigest(file)).toBe(sha('original runtime bytes'));
+  expect(() => supplied.io.readRuntimeFile(file)).toThrow(
+    'Selection requires a captured read observation'
+  );
+  supplied.record({
+    snapshotId: supplied.snapshotId,
+    sequence: 2,
+    observationId: 'bytes-2',
+    operation: { kind: 'runtime-file', path: file, singleLink: false },
+    result: captureSelectionRead({ kind: 'runtime-file', path: file }),
+  });
+  supplied.seal();
+  fs.writeFileSync(file, 'new ambient bytes');
+  expect(supplied.io.runtimeFileDigest(file)).toBe(sha('original runtime bytes'));
+  expect(supplied.io.readRuntimeFile(file).bytes.toString()).toBe('original runtime bytes');
+  expect(supplied.runtimeSnapshots).toHaveLength(0);
+});
+
+test.each([
+  ['wrong-kind', (result) => ({ kind: 'runtime-file', base64: '', stat: result.stat })],
+  ['uppercase', (result) => ({ ...result, sha256: 'A'.repeat(64) })],
+  ['short', (result) => ({ ...result, sha256: 'a'.repeat(63) })],
+  ['extra-key', (result) => ({ ...result, base64: '' })],
+  ['missing-stat', (result) => ({ kind: result.kind, sha256: result.sha256 })],
+  [
+    'unsafe-size',
+    (result) => ({ ...result, stat: { ...result.stat, size: Number.MAX_SAFE_INTEGER + 1 } }),
+  ],
+  ['nonfile', (result) => ({ ...result, stat: { ...result.stat, kind: 'symlink' } })],
+  ['extra-stat-key', (result) => ({ ...result, stat: { ...result.stat, authorized: true } })],
+])('runtime-digest decoder refuses %s without recording progress', (_case, alter) => {
+  const file = path.join(root, 'runtime-member');
+  write(file, 'runtime bytes');
+  const supplied = snapshot('bad-digest');
+  const operation = { kind: 'runtime-digest', path: file };
+  const result = captureSelectionRead(operation);
+  const row = {
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'digest-1',
+    operation,
+    result: alter(result),
+  };
+  expect(() => supplied.record(row)).toThrow();
+  expect(supplied.observations).toHaveLength(0);
+  supplied.record({ ...row, result });
+  expect(supplied.io.runtimeFileDigest(file)).toBe(sha('runtime bytes'));
+});
+
+test('digest single-link requests enforce nlink while ordinary digest reads permit hardlinks', () => {
+  const file = path.join(root, 'runtime-member');
+  write(file, 'runtime bytes');
+  fs.linkSync(file, path.join(root, 'hardlink'));
+  const result = captureSelectionRead({ kind: 'runtime-digest', path: file });
+  expect(result.stat.nlink).toBe(2);
+  const supplied = snapshot('link-bound');
+  const row = {
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'digest-1',
+    operation: { kind: 'runtime-digest', path: file, singleLink: true },
+    result,
+  };
+  expect(() => supplied.record(row)).toThrow(
+    'Selection observation result does not match its operation'
+  );
+  supplied.record({ ...row, operation: { ...row.operation, singleLink: false } });
+  expect(supplied.io.runtimeFileDigest(file)).toBe(sha('runtime bytes'));
+});
+
+test('well-formed mismatching runtime digest cannot satisfy the actual manifest verifier', async () => {
+  const f = fixture();
+  const file = path.join(f.runtime, 'first.sh');
+  await expect(
+    observe(f.options, snapshot('wrong-digest'), async (request) => {
+      const row = reply(request);
+      if (request.operation.kind === 'runtime-digest' && request.operation.path === file)
+        row.result.sha256 = 'f'.repeat(64);
+      return row;
+    })
+  ).rejects.toThrow('Machine runtime file modified: first.sh');
+});
+
+test('runtime digest response for a different requested path cannot satisfy discovery', async () => {
+  const f = fixture();
+  await expect(
+    observe(f.options, snapshot('wrong-path'), async (request) => {
+      const row = reply(request);
+      if (request.operation.kind === 'runtime-digest')
+        row.operation = { ...row.operation, path: path.join(f.runtime, 'different-member') };
+      return row;
+    })
+  ).rejects.toThrow('Selection capture operation mismatch');
+});
+
+test('compact digest absence remains the original observed ENOENT error', () => {
+  const file = path.join(root, 'absent-member'),
+    supplied = snapshot('digest-absence');
+  const operation = { kind: 'runtime-digest', path: file };
+  const result = captureSelectionRead(operation);
+  supplied.record({
+    snapshotId: supplied.snapshotId,
+    sequence: 1,
+    observationId: 'absent-1',
+    operation,
+    result,
+  });
+  let error;
+  try {
+    supplied.io.runtimeFileDigest(file);
+  } catch (failure) {
+    error = failure;
+  }
+  expect(error).toMatchObject({ name: result.name, message: result.message, code: 'ENOENT' });
+  expect(supplied.observations).toHaveLength(1);
+});
 
 test('a verifier that catches an uncaptured read cannot cache incomplete verification', () => {
   const supplied = snapshot('swallowed-read');
@@ -174,8 +306,10 @@ test('captured selection equals live semantics and sealed replay performs no amb
   }
   expect(resolveInvocationSelection({ ...f.options, io: captured.snapshot.io })).toEqual(expected);
   const member = path.join(f.runtime, 'first.sh');
-  captured.snapshot.io.readRuntimeFile(member).bytes.fill(0);
-  expect(captured.snapshot.io.readRuntimeFile(member).bytes.toString()).toBe('#!/bin/sh\nexit 0\n');
+  expect(captured.snapshot.io.runtimeFileDigest(member)).toBe(sha('#!/bin/sh\nexit 0\n'));
+  expect(() => captured.snapshot.io.readRuntimeFile(member)).toThrow(
+    'Uncaptured read in sealed selection snapshot'
+  );
 });
 
 test('driver owns original invocation properties before the first asynchronous capture', async () => {
@@ -331,7 +465,7 @@ test('retained launcher sentinel escapes broad manifest discovery catch', async 
   ).toBe(true);
 });
 
-test('first discovery hashes a captured large runtime member once before complete verification', async () => {
+test('first discovery uses a compact digest for a large runtime member without carrying its bytes', async () => {
   const bulk = Buffer.alloc(256 * 1024, 71),
     expectedBulkDigest = sha(bulk);
   const f = fixture({ 'bulk.bin': bulk }),
@@ -351,12 +485,20 @@ test('first discovery hashes a captured large runtime member once before complet
   });
   const captured = await observe(f.options, snapshot(), async (request) => {
     if (bulkCaptured) capturesAfterBulk++;
-    if (request.operation.kind === 'runtime-file' && request.operation.path === bulkPath)
+    if (request.operation.kind === 'runtime-digest' && request.operation.path === bulkPath)
       bulkCaptured = true;
     return reply(request);
   });
   expect(captured.selection.status).toBe('active');
   expect(bulkCaptured).toBe(true);
+  const bulkRows = captured.snapshot.observations.filter((row) => row.operation.path === bulkPath);
+  expect(bulkRows.filter((row) => row.operation.kind === 'runtime-file')).toEqual([]);
+  expect(bulkRows.find((row) => row.operation.kind === 'runtime-digest').result).toEqual({
+    kind: 'runtime-digest',
+    sha256: expectedBulkDigest,
+    stat: liveSelectionReadIo.lstat(bulkPath),
+  });
+  expect(JSON.stringify(bulkRows).length).toBeLessThan(4096);
   expect(capturesAfterBulk).toBeGreaterThan(1);
   expect(hashesOfBulk).toBe(1);
   expect(captured.snapshot.runtimeSnapshots).toHaveLength(1);
@@ -753,4 +895,162 @@ test('native directory closure: undeclared empty tree refuses before descent', (
   expect(failure?.message).toBe('Undeclared native runtime directory: undeclared');
   expect(descended).toEqual([]);
   expect(selected).toBeNull();
+});
+
+function selectionTransport(changes = {}) {
+  const controller = changes.controller ?? new AbortController();
+  const request = {
+    id: 'transport-original',
+    runtimeDigest: 'a'.repeat(64),
+    deadlineEpochMs: Date.now() + 20_000,
+    selectionObservation: {
+      schema: 'caws.runtime.selection-observation.v1',
+      snapshotId: 'native-original-snapshot',
+      limits: {
+        maximumObservations: 4096,
+        maximumBytes: 8 * 1024 * 1024,
+        maximumPathBytes: 8192,
+        ...changes.limits,
+      },
+    },
+  };
+  const queue = [],
+    writes = [];
+  const transport = {
+    async write(frame) {
+      writes.push(frame);
+      const common = {
+        id: frame.id,
+        runtimeDigest: frame.runtimeDigest,
+        snapshotId: frame.snapshotId,
+        sequence: frame.sequence,
+      };
+      const row = {
+        snapshotId: frame.snapshotId,
+        sequence: frame.sequence,
+        observationId: 'native-' + frame.sequence,
+        operation: frame.operation,
+        result: captureSelectionRead(frame.operation),
+      };
+      const raw = changes.body ? changes.body(row) : Buffer.from(JSON.stringify(row));
+      const bytes = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      let header = {
+        schema: 'caws.runtime.selection-observation.result.v1',
+        ...common,
+        byteLength: bytes.length,
+        sha256: sha(bytes),
+      };
+      if (changes.header) header = changes.header(header);
+      queue.push(Buffer.from(JSON.stringify(header)));
+      for (let offset = 0; offset < bytes.length; offset += 65536) {
+        let chunk = {
+          schema: 'caws.runtime.selection-observation.chunk.v1',
+          ...common,
+          offset,
+          base64: bytes.subarray(offset, offset + 65536).toString('base64'),
+        };
+        if (changes.chunk) chunk = changes.chunk(chunk);
+        queue.push(Buffer.from(JSON.stringify(chunk)));
+      }
+      changes.afterWrite?.(controller);
+    },
+    async read() {
+      if (!queue.length) throw Error('controlled selection EOF');
+      return queue.shift();
+    },
+  };
+  return {
+    request,
+    writes,
+    queue,
+    controller,
+    resolve: createNativeSelectionResolver(request, transport, controller.signal),
+  };
+}
+
+test('native selection transport assembles bounded chunks and resolves the existing selector once', async () => {
+  const f = fixture();
+  let bodies = 0;
+  const state = selectionTransport({
+    body: (row) => JSON.stringify(row) + (++bodies === 1 ? ' '.repeat(100_000) : ''),
+  });
+  const result = await state.resolve(f.options);
+  expect(result).toEqual(resolveInvocationSelection(f.options));
+  expect(state.writes.some((row) => row.operation.kind === 'runtime-digest')).toBe(true);
+  expect(state.writes.map((row) => row.sequence)).toEqual(state.writes.map((_, i) => i + 1));
+  expect(
+    state.writes.every(
+      (row) =>
+        row.id === state.request.id &&
+        row.runtimeDigest === state.request.runtimeDigest &&
+        row.snapshotId === state.request.selectionObservation.snapshotId
+    )
+  ).toBe(true);
+  expect(state.queue).toEqual([]);
+  const count = state.writes.length;
+  await expect(state.resolve(f.options)).rejects.toThrow('already attempted');
+  expect(state.writes).toHaveLength(count);
+});
+
+test.each([
+  ['foreign id', { header: (row) => ({ ...row, id: 'foreign' }) }],
+  ['foreign generation', { header: (row) => ({ ...row, runtimeDigest: 'b'.repeat(64) }) }],
+  ['foreign snapshot', { header: (row) => ({ ...row, snapshotId: 'foreign' }) }],
+  ['wrong sequence', { header: (row) => ({ ...row, sequence: 2 }) }],
+  ['header surplus', { header: (row) => ({ ...row, qualified: true }) }],
+  ['digest mismatch', { header: (row) => ({ ...row, sha256: 'f'.repeat(64) }) }],
+  ['chunk surplus bytes', { header: (row) => ({ ...row, byteLength: row.byteLength - 1 }) }],
+  ['offset gap', { chunk: (row) => ({ ...row, offset: 1 }) }],
+  ['chunk identity', { chunk: (row) => ({ ...row, id: 'foreign' }) }],
+  ['empty chunk', { chunk: (row) => ({ ...row, base64: '' }) }],
+  ['noncanonical base64', { chunk: (row) => ({ ...row, base64: row.base64 + ' ' }) }],
+  ['inner snapshot', { body: (row) => JSON.stringify({ ...row, snapshotId: 'foreign' }) }],
+  [
+    'inner operation',
+    {
+      body: (row) => JSON.stringify({ ...row, operation: { ...row.operation, path: '/foreign' } }),
+    },
+  ],
+  ['inner duplicate', { body: (row) => JSON.stringify(row).replace('{', '{"sequence":999,') }],
+  ['invalid UTF8', { body: () => Buffer.from([0xff]) }],
+])(
+  'native selection transport consumes %s failure without live fallback or retry',
+  async (_name, changes) => {
+    const f = fixture(),
+      state = selectionTransport(changes);
+    await expect(state.resolve(f.options)).rejects.toThrow();
+    expect(state.writes).toHaveLength(1);
+    await expect(state.resolve(f.options)).rejects.toThrow('already attempted');
+    expect(state.writes).toHaveLength(1);
+  }
+);
+
+test('advertised request and aggregate byte bounds are enforced independently', async () => {
+  const f = fixture();
+  const count = selectionTransport({ limits: { maximumObservations: 1 } });
+  await expect(count.resolve(f.options)).rejects.toThrow('request limit');
+  expect(count.writes).toHaveLength(1);
+  const bytes = selectionTransport({ limits: { maximumBytes: 1 } });
+  await expect(bytes.resolve(f.options)).rejects.toThrow('result header');
+  expect(bytes.writes).toHaveLength(1);
+});
+
+test('transport keeps the captured deadline and original cancellation reason', async () => {
+  const f = fixture();
+  const expired = selectionTransport();
+  // Construct an already-expired resolver, then mutate the public request: its
+  // captured original deadline cannot be replaced by that later value.
+  expired.request.deadlineEpochMs = Date.now() - 1;
+  const dead = createNativeSelectionResolver(
+    expired.request,
+    { read: jest.fn(), write: jest.fn() },
+    expired.controller.signal
+  );
+  expired.request.deadlineEpochMs = Date.now() + 60_000;
+  await expect(dead(f.options)).rejects.toThrow('original deadline expired');
+  const original = new Error('original selection cancellation');
+  const cancelled = selectionTransport({ afterWrite: (controller) => controller.abort(original) });
+  await expect(cancelled.resolve(f.options)).rejects.toBe(original);
+  expect(cancelled.writes).toHaveLength(1);
+  await expect(cancelled.resolve(f.options)).rejects.toThrow('already attempted');
 });

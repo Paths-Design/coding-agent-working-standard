@@ -1,5 +1,6 @@
 /** Selection read boundary; observations confer no write or publication authority. */
 import * as fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import { types } from 'node:util';
 
 export interface SelectionFileInfo {
@@ -29,7 +30,8 @@ export interface SelectionReadIo {
   readDirectory(file: string): readonly string[];
   requireExecutable(file: string): void;
   readRuntimeFile(file: string, singleLink?: boolean): SelectionRuntimeFile;
-  /** Optional digest memo tied to the same immutable runtime-file observation. */
+  /** Optional compact digest observation. Its coherence with byte reads is owned
+   * by the native capture/admission boundary, not this data interface. */
   runtimeFileDigest?(file: string): string;
   verifyRuntime?(
     home: string,
@@ -38,7 +40,15 @@ export interface SelectionReadIo {
   ): Record<string, string>;
 }
 export type SelectionReadOperation = Readonly<{
-  kind: 'lstat' | 'stat' | 'exists' | 'read' | 'list' | 'executable' | 'runtime-file';
+  kind:
+    | 'lstat'
+    | 'stat'
+    | 'exists'
+    | 'read'
+    | 'list'
+    | 'executable'
+    | 'runtime-file'
+    | 'runtime-digest';
   path: string;
   singleLink?: boolean;
 }>;
@@ -49,6 +59,7 @@ export type SelectionReadResult =
   | Readonly<{ kind: 'listing'; entries: readonly string[] }>
   | Readonly<{ kind: 'executable' }>
   | Readonly<{ kind: 'runtime-file'; base64: string; stat: SelectionFileInfo }>
+  | Readonly<{ kind: 'runtime-digest'; sha256: string; stat: SelectionFileInfo }>
   | Readonly<{ kind: 'error'; name: string; message: string; code?: string }>;
 
 function fileInfo(stat: fs.Stats): SelectionFileInfo {
@@ -147,6 +158,16 @@ export function captureSelectionRead(
       case 'executable':
         io.requireExecutable(operation.path);
         return { kind: 'executable' };
+      case 'runtime-digest': {
+        // Tooling captures guarded bytes synchronously. Production native
+        // capture supplies its independently admitted compact observation.
+        const captured = io.readRuntimeFile(operation.path, operation.singleLink);
+        return {
+          kind: 'runtime-digest',
+          sha256: createHash('sha256').update(captured.bytes).digest('hex'),
+          stat: captured.stat,
+        };
+      }
       case 'runtime-file': {
         const captured = io.readRuntimeFile(operation.path, operation.singleLink);
         return {

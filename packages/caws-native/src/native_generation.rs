@@ -121,6 +121,48 @@ impl GenerationReceipt {
         Ok(receipt)
     }
 
+    /// Exact admitted root, independent of the active runtime pointer.
+    pub(crate) fn root(&self) -> &Path {
+        self.selection.root()
+    }
+
+    /// The caller's native custodian executor comes from the already admitted
+    /// NativeEntry member. No engine frame, PATH or current pointer selects it.
+    pub(crate) fn selected_native_executor(
+        &self,
+        expires: Instant,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<caws_native::invocation_project::SelectedExecutable, String> {
+        let mut verify = Verification::new(expires.min(self.expires), &mut cancel);
+        self.check_identities(&mut verify)?;
+        let entry = self
+            .selection
+            .native_entry()
+            .ok_or("Generation has no native executor")?;
+        let (path, _, _) = self.selection.native_paths(&mut verify)?;
+        let member = self.member_digest_with(&entry.native_executable, &mut verify)?;
+        verify.checkpoint()?;
+        let physical_path = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
+        verify.checkpoint()?;
+        self.check_identities(&mut verify)?;
+        let m = member.metadata;
+        Ok(caws_native::invocation_project::SelectedExecutable {
+            path,
+            physical_path,
+            sha256: member.sha256,
+            identity: caws_native::invocation_project::ExecutableIdentity {
+                device: m.dev,
+                inode: m.ino,
+                bytes: m.size,
+                mode: m.mode,
+                modified_seconds: m.mtime,
+                modified_nanoseconds: m.mtime_nsec,
+                changed_seconds: m.ctime,
+                changed_nanoseconds: m.ctime_nsec,
+            },
+        })
+    }
+
     pub(crate) fn digest(&self) -> &str {
         &self.selection.inspected_digest
     }
@@ -234,6 +276,13 @@ pub(crate) fn with_sqlite_identity_generation_fixture<R>(
     action: impl FnOnce(&GenerationReceipt, &Path, &Path) -> R,
 ) -> R {
     tests::with_sqlite_identity_generation_fixture(action)
+}
+
+#[cfg(test)]
+pub(crate) fn with_selection_generation_fixture<R>(
+    action: impl FnOnce(&GenerationReceipt, &Path, &Path) -> R,
+) -> R {
+    tests::with_selection_generation_fixture(action)
 }
 
 #[cfg(test)]
@@ -375,6 +424,14 @@ mod tests {
             GenerationReceipt::capture_at(&self.home, &self.config, native, &mut verify)
         }
     }
+    pub(super) fn with_selection_generation_fixture<R>(
+        action: impl FnOnce(&GenerationReceipt, &Path, &Path) -> R,
+    ) -> R {
+        let fixture = Fixture::new();
+        let generation = fixture.capture().unwrap();
+        action(&generation, &fixture.home, &fixture.root)
+    }
+
     #[cfg(feature = "sqlite-store")]
     pub(super) fn with_sqlite_identity_generation_fixture<R>(
         action: impl FnOnce(&GenerationReceipt, &Path, &Path) -> R,
@@ -1019,6 +1076,57 @@ mod tests {
                 "expectedPayloadSha256":expected,"admitted":true,"selectedTimeoutMs":1000,
                 "restoredRevalidationOk":true,"originalDeadlineReused":true
             }),
+        );
+    }
+    #[test]
+    fn selected_executor_is_exact_admitted_member_and_original_expiry() {
+        let fixture = Fixture::new();
+        let generation = fixture.capture().unwrap();
+        assert_eq!(generation.root(), fixture.root);
+        let selected = generation
+            .selected_native_executor(expires(), || Ok(()))
+            .unwrap();
+        let native = generation
+            .member_digest("native/caws-native", expires(), || Ok(()))
+            .unwrap();
+        assert_eq!(selected.path, fixture.native);
+        assert_eq!(
+            selected.physical_path,
+            fixture.native.canonicalize().unwrap()
+        );
+        assert_eq!(selected.sha256, native.sha256);
+        assert_eq!(selected.identity.device, native.metadata.dev);
+        assert_eq!(selected.identity.inode, native.metadata.ino);
+        assert_eq!(selected.identity.bytes, native.metadata.size);
+        assert_eq!(
+            selected.identity.modified_nanoseconds,
+            native.metadata.mtime_nsec
+        );
+        assert!(
+            generation
+                .selected_native_executor(Instant::now() - Duration::from_secs(1), || Ok(()))
+                .is_err()
+        );
+        assert_eq!(
+            generation
+                .selected_native_executor(expires(), || Err("original cancelled".into()))
+                .unwrap_err(),
+            "original cancelled"
+        );
+        let bytes = fs::read(&fixture.native).unwrap();
+        let replacement = fixture.native.with_file_name("replacement");
+        fs::write(&replacement, bytes).unwrap();
+        fs::set_permissions(
+            &replacement,
+            fs::Permissions::from_mode(selected.identity.mode & 0o7777),
+        )
+        .unwrap();
+        fs::rename(replacement, &fixture.native).unwrap();
+        assert!(
+            generation
+                .selected_native_executor(expires(), || Ok(()))
+                .is_err(),
+            "same-byte new native inode cannot become this generation's executor"
         );
     }
 }

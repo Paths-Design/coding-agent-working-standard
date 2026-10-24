@@ -436,3 +436,30 @@ describe('native runtime protocol', () => {
     expect(decodeRuntimeResponse(frame, identity).result).toEqual(result);
   });
 });
+
+test('optional native selection advertisement preserves exact native limits without admission flags', () => {
+  const advertisement = {
+    schema: 'caws.runtime.selection-observation.v1',
+    snapshotId: 'selection-native-1',
+    limits: { maximumObservations: 4096, maximumBytes: 64 * 1024 * 1024, maximumPathBytes: 16384 },
+  };
+  expect(decode().selectionObservation).toBeUndefined();
+  const decoded = decode({ selectionObservation: advertisement });
+  expect(decoded.selectionObservation).toEqual(advertisement);
+  expect(Object.isFrozen(decoded.selectionObservation.limits)).toBe(true);
+  expect(decoded.selectionObservation).not.toHaveProperty('qualified');
+  for (const selectionObservation of [
+    null,
+    {},
+    { ...advertisement, qualified: true },
+    { ...advertisement, snapshotId: '' },
+    { ...advertisement, schema: 'caws.runtime.selection-observation.v2' },
+    { ...advertisement, limits: { ...advertisement.limits, maximumBytes: 64 * 1024 * 1024 + 1 } },
+    { ...advertisement, limits: { ...advertisement.limits, maximumObservations: 0 } },
+  ])
+    expect(() => decode({ selectionObservation })).toThrow();
+  const text = JSON.stringify(request({ selectionObservation: advertisement }));
+  expect(() =>
+    decodeRuntimeRequest(text.replace('"maximumBytes":', '"maximumBytes":1,"maximumBytes":'), now)
+  ).toThrow('Duplicate');
+});

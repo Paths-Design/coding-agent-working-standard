@@ -1,6 +1,14 @@
 /** Observed selection computation; no native admission or publication authority. */
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
+import { TextDecoder } from 'node:util';
+import { parseJsonSource } from './json-custody';
+import { awaitSessionPublicationCallback } from './committed-session-reader';
+import {
+  decodeSelectionObservationAdvertisement,
+  RuntimeProtocolError,
+  type RuntimeRequest,
+} from './protocol';
 import {
   needSelectionObservation,
   missingSelectionObservation,
@@ -63,15 +71,23 @@ function requireOperation(
       'path',
       ...(Object.hasOwn(value, 'singleLink') ? ['singleLink'] : []),
     ]) ||
-    !['lstat', 'stat', 'exists', 'read', 'list', 'executable', 'runtime-file'].includes(
-      String(value.kind)
-    ) ||
+    ![
+      'lstat',
+      'stat',
+      'exists',
+      'read',
+      'list',
+      'executable',
+      'runtime-file',
+      'runtime-digest',
+    ].includes(String(value.kind)) ||
     typeof value.path !== 'string' ||
     !path.isAbsolute(value.path) ||
     value.path.includes('\0') ||
     Buffer.byteLength(value.path) > maximumPathBytes ||
     (Object.hasOwn(value, 'singleLink') &&
-      (value.kind !== 'runtime-file' || typeof value.singleLink !== 'boolean'))
+      (!['runtime-file', 'runtime-digest'].includes(String(value.kind)) ||
+        typeof value.singleLink !== 'boolean'))
   )
     throw new TypeError('Invalid selection read operation');
 }
@@ -156,6 +172,17 @@ function requireResult(
     case 'executable':
       if (value.kind === 'executable' && exact(value, ['kind'])) return;
       break;
+    case 'runtime-digest':
+      if (
+        value.kind !== 'runtime-digest' ||
+        !exact(value, ['kind', 'sha256', 'stat']) ||
+        typeof value.sha256 !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(value.sha256)
+      )
+        break;
+      requireInfo(value.stat);
+      if (value.stat.kind !== 'file' || (operation.singleLink && value.stat.nlink !== 1)) break;
+      return;
     case 'runtime-file':
       if (value.kind !== 'runtime-file' || !exact(value, ['kind', 'base64', 'stat'])) break;
       requireBase64(value.base64);
@@ -204,7 +231,6 @@ export class SelectionObservationSnapshot {
     SelectionRuntimeVerifier,
     Map<string, VerifiedSelectionRuntimeSnapshot>
   >();
-  readonly #runtimeDigests = new Map<string, string>();
   #collecting: Map<string, SelectionReadOperation> | null = null;
   #bytes = 0;
   #sealed = false;
@@ -243,18 +269,8 @@ export class SelectionObservationSnapshot {
         const result = read({ kind: 'runtime-file', path: file, singleLink }, 'runtime-file');
         return { bytes: Buffer.from(result.base64, 'base64'), stat: result.stat };
       },
-      runtimeFileDigest: (file: string): string => {
-        const operation = { kind: 'runtime-file' as const, path: file, singleLink: false };
-        const result = read(operation, 'runtime-file');
-        const key = operationKey(operation),
-          existing = this.#runtimeDigests.get(key);
-        if (existing !== undefined) return existing;
-        const digest = createHash('sha256')
-          .update(Buffer.from(result.base64, 'base64'))
-          .digest('hex');
-        this.#runtimeDigests.set(key, digest);
-        return digest;
-      },
+      runtimeFileDigest: (file: string): string =>
+        read({ kind: 'runtime-digest', path: file, singleLink: false }, 'runtime-digest').sha256,
       verifyRuntime: (home: string, digest: string, verify: SelectionRuntimeVerifier) =>
         this.verifyRuntime(home, digest, verify),
     });
@@ -441,4 +457,160 @@ export async function resolveObservedInvocationSelection(
         throw new Error('Selection capture made no progress');
     }
   }
+}
+
+export const SELECTION_OBSERVATION_REQUEST_SCHEMA = 'caws.runtime.selection-observation.request.v1';
+export const SELECTION_OBSERVATION_RESULT_SCHEMA = 'caws.runtime.selection-observation.result.v1';
+export const SELECTION_OBSERVATION_CHUNK_SCHEMA = 'caws.runtime.selection-observation.chunk.v1';
+export const SELECTION_OBSERVATION_CHUNK_BYTES = 64 * 1024;
+export interface SelectionObservationTransport {
+  /** Borrow the entry's sole framed reader; never construct another stdin reader. */
+  read(signal: AbortSignal): Promise<Uint8Array>;
+  write(frame: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<void>;
+}
+
+/** One discovery over the original native snapshot. Errors consume this resolver;
+ * no live read, retry, new snapshot or compatibility fallback follows a request.
+ * Ready ends discovery on the native side as lifecycle only, not qualification. */
+export function createNativeSelectionResolver(
+  request: Pick<
+    RuntimeRequest,
+    'id' | 'runtimeDigest' | 'deadlineEpochMs' | 'selectionObservation'
+  >,
+  transport: SelectionObservationTransport,
+  signal: AbortSignal
+): (options: SelectionOptions) => Promise<InvocationSelection> {
+  const advertisement = decodeSelectionObservationAdvertisement(request.selectionObservation);
+  const { id, runtimeDigest, deadlineEpochMs } = request;
+  if (
+    typeof id !== 'string' ||
+    !id ||
+    id.length > 128 ||
+    id.includes('\0') ||
+    !/^[a-f0-9]{64}$/.test(runtimeDigest) ||
+    !Number.isSafeInteger(deadlineEpochMs)
+  )
+    throw new RuntimeProtocolError('Invalid selection transport original identity');
+  const snapshot = new SelectionObservationSnapshot(advertisement.snapshotId, advertisement.limits);
+  const { snapshotId, limits } = advertisement;
+  let attempted = false,
+    bytesUsed = 0,
+    sequence = 0;
+  const active = (): void => {
+    if (signal.aborted) throw signal.reason;
+    if (Date.now() >= deadlineEpochMs)
+      throw new RuntimeProtocolError('Native selection original deadline expired');
+  };
+  const wait = <T>(callback: () => T | PromiseLike<T>): Promise<T> =>
+    awaitSessionPublicationCallback({ signal, deadlineEpochMs }, callback);
+  const frame = async (maximum: number): Promise<Record<string, unknown>> => {
+    active();
+    const bytes = await wait(() => transport.read(signal));
+    active();
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength > maximum)
+      throw new RuntimeProtocolError('Selection transport frame exceeds bound');
+    const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+    parseJsonSource(text, 16, 1024, true);
+    const row: unknown = JSON.parse(text);
+    if (!object(row)) throw new RuntimeProtocolError('Invalid selection transport frame');
+    return row;
+  };
+  return async (options) => {
+    if (attempted) throw new RuntimeProtocolError('Native selection resolver already attempted');
+    attempted = true;
+    active();
+    const result = await resolveObservedInvocationSelection(options, {
+      snapshot,
+      signal,
+      maximumRequests: limits.maximumObservations,
+      async capture(discovery) {
+        active();
+        if (
+          discovery.snapshotId !== snapshotId ||
+          discovery.sequence !== ++sequence ||
+          sequence > limits.maximumObservations
+        )
+          throw new RuntimeProtocolError('Selection transport request sequence mismatch');
+        const common = { id, runtimeDigest, snapshotId, sequence };
+        await wait(() =>
+          transport.write(
+            {
+              schema: SELECTION_OBSERVATION_REQUEST_SCHEMA,
+              ...common,
+              operation: discovery.operation,
+            },
+            signal
+          )
+        );
+        active();
+        const correlated = (row: Record<string, unknown>): boolean =>
+          Object.entries(common).every(([key, value]) => row[key] === value);
+        const header = await frame(4096);
+        if (
+          !exact(header, [
+            'schema',
+            'id',
+            'runtimeDigest',
+            'snapshotId',
+            'sequence',
+            'byteLength',
+            'sha256',
+          ]) ||
+          header.schema !== SELECTION_OBSERVATION_RESULT_SCHEMA ||
+          !correlated(header) ||
+          typeof header.byteLength !== 'number' ||
+          !Number.isSafeInteger(header.byteLength) ||
+          header.byteLength < 1 ||
+          header.byteLength > limits.maximumBytes - bytesUsed ||
+          typeof header.sha256 !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(header.sha256)
+        )
+          throw new RuntimeProtocolError('Invalid selection transport result header');
+        const chunks: Buffer[] = [];
+        let offset = 0;
+        while (offset < header.byteLength) {
+          const chunk = await frame(96 * 1024);
+          if (
+            !exact(chunk, [
+              'schema',
+              'id',
+              'runtimeDigest',
+              'snapshotId',
+              'sequence',
+              'offset',
+              'base64',
+            ]) ||
+            chunk.schema !== SELECTION_OBSERVATION_CHUNK_SCHEMA ||
+            !correlated(chunk) ||
+            chunk.offset !== offset ||
+            typeof chunk.base64 !== 'string' ||
+            chunk.base64.length > 4 * Math.ceil(SELECTION_OBSERVATION_CHUNK_BYTES / 3)
+          )
+            throw new RuntimeProtocolError('Invalid selection transport chunk');
+          const bytes = Buffer.from(chunk.base64, 'base64');
+          if (
+            bytes.toString('base64') !== chunk.base64 ||
+            bytes.byteLength !==
+              Math.min(SELECTION_OBSERVATION_CHUNK_BYTES, header.byteLength - offset)
+          )
+            throw new RuntimeProtocolError('Invalid selection transport chunk bytes');
+          chunks.push(bytes);
+          offset += bytes.byteLength;
+        }
+        const bytes = Buffer.concat(chunks, header.byteLength);
+        if (createHash('sha256').update(bytes).digest('hex') !== header.sha256)
+          throw new RuntimeProtocolError('Selection transport content digest mismatch');
+        bytesUsed += bytes.byteLength;
+        active();
+        const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+        parseJsonSource(text, 128, 100_000, true);
+        const observation: unknown = JSON.parse(text);
+        // The observed resolver validates exact inner schema, original snapshot,
+        // sequence, operation equality and result before recording any progress.
+        return observation;
+      },
+    });
+    active();
+    return result.selection;
+  };
 }

@@ -18,6 +18,55 @@ export const SESSION_CACHE_CAPABILITY = 'caws.runtime.session-cache.v1';
 export const SESSION_END_PREFIX_CAPABILITY = 'caws.runtime.session-end-prefix.v1';
 export const TRANSCRIPT_STORE_CAPABILITY = 'caws.runtime.transcript-store.v1';
 export const SESSION_PUBLICATION_CAPABILITY = 'caws.runtime.session-publication.v1';
+export const SELECTION_OBSERVATION_CAPABILITY = 'caws.runtime.selection-observation.v1';
+export const MAX_SELECTION_OBSERVATIONS = 4096;
+export const MAX_SELECTION_BYTES = 64 * 1024 * 1024;
+export const MAX_SELECTION_PATH_BYTES = 16 * 1024;
+export interface NativeSelectionObservationAdvertisement {
+  readonly schema: typeof SELECTION_OBSERVATION_CAPABILITY;
+  readonly snapshotId: string;
+  readonly limits: {
+    readonly maximumObservations: number;
+    readonly maximumBytes: number;
+    readonly maximumPathBytes: number;
+  };
+}
+/** Native-selected read limits are data, never source/profile admission. */
+export function decodeSelectionObservationAdvertisement(
+  value: unknown
+): NativeSelectionObservationAdvertisement {
+  if (
+    !record(value) ||
+    !exactKeys(value, ['schema', 'snapshotId', 'limits']) ||
+    value.schema !== SELECTION_OBSERVATION_CAPABILITY ||
+    typeof value.snapshotId !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,256}$/.test(value.snapshotId) ||
+    !record(value.limits) ||
+    !exactKeys(value.limits, ['maximumObservations', 'maximumBytes', 'maximumPathBytes'])
+  )
+    throw new RuntimeProtocolError('Unsupported native selection observation advertisement');
+  const limits = value.limits;
+  for (const [name, ceiling] of [
+    ['maximumObservations', MAX_SELECTION_OBSERVATIONS],
+    ['maximumBytes', MAX_SELECTION_BYTES],
+    ['maximumPathBytes', MAX_SELECTION_PATH_BYTES],
+  ] as const)
+    if (
+      !Number.isSafeInteger(limits[name]) ||
+      (limits[name] as number) < 1 ||
+      (limits[name] as number) > ceiling
+    )
+      throw new RuntimeProtocolError('Invalid native selection observation limits');
+  return Object.freeze({
+    schema: SELECTION_OBSERVATION_CAPABILITY,
+    snapshotId: value.snapshotId,
+    limits: Object.freeze({
+      maximumObservations: limits.maximumObservations as number,
+      maximumBytes: limits.maximumBytes as number,
+      maximumPathBytes: limits.maximumPathBytes as number,
+    }),
+  });
+}
 export const MAX_INPUT_BYTES = 1024 * 1024;
 export const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -53,6 +102,8 @@ export interface RuntimeRequest {
   readonly sessionStore?: typeof TRANSCRIPT_STORE_CAPABILITY;
   /** Native-owned publication exchange; prepared bytes confer no path authority. */
   readonly sessionPublication?: typeof SESSION_PUBLICATION_CAPABILITY;
+  /** Native-owned original/generation read snapshot; omitted by older frontends. */
+  readonly selectionObservation?: NativeSelectionObservationAdvertisement;
   /** Ephemeral native caller snapshot: never include in durable request journals. */
   readonly caller: InvocationCaller & { readonly processId: number };
   readonly deadlineEpochMs: number;
@@ -164,6 +215,7 @@ export function decodeRuntimeRequest(
       ...(Object.hasOwn(value, 'sessionEndPrefix') ? ['sessionEndPrefix'] : []),
       ...(Object.hasOwn(value, 'sessionStore') ? ['sessionStore'] : []),
       ...(Object.hasOwn(value, 'sessionPublication') ? ['sessionPublication'] : []),
+      ...(Object.hasOwn(value, 'selectionObservation') ? ['selectionObservation'] : []),
     ]) ||
     value.schema !== REQUEST_SCHEMA
   ) {
@@ -194,6 +246,12 @@ export function decodeRuntimeRequest(
   // Control envelope identity/capabilities cannot be hidden by last-key wins.
   // Opaque hook payloads retain their independent nested duplicate-key profile.
   const wireSource = protocolSource(wireText, MAX_JSON_DEPTH + 2, MAX_JSON_NODES * 2, 'root');
+  let selectionObservation: NativeSelectionObservationAdvertisement | undefined;
+  if (Object.hasOwn(value, 'selectionObservation')) {
+    const source = objectMemberSource(wireSource, 'selectionObservation')!;
+    parseJsonSource(source.text.slice(source.root.start, source.root.end), 8, 64, true);
+    selectionObservation = decodeSelectionObservationAdvertisement(value.selectionObservation);
+  }
   const callerSource = objectMemberSource(wireSource, 'caller');
   const processSource = callerSource ? objectMemberSource(callerSource, 'processId') : undefined;
   if (
@@ -273,6 +331,7 @@ export function decodeRuntimeRequest(
     ...(value.sessionPublication === SESSION_PUBLICATION_CAPABILITY
       ? { sessionPublication: SESSION_PUBLICATION_CAPABILITY }
       : {}),
+    ...(selectionObservation ? { selectionObservation } : {}),
     caller: Object.freeze({ ...caller, processId: value.caller.processId as number }),
     deadlineEpochMs: value.deadlineEpochMs,
     inputJson: value.inputJson,

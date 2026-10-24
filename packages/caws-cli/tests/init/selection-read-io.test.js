@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const os = require('node:os');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const {
   liveSelectionReadIo: io,
   captureSelectionRead,
@@ -136,4 +137,68 @@ test('capture retains native errors across realms but does not turn arbitrary th
     caught = failure;
   }
   expect(caught).toBe(nonError);
+});
+
+test('runtime-digest tooling retains guarded file identity without transporting bytes', () => {
+  const file = source();
+  const captured = captureSelectionRead({ kind: 'runtime-digest', path: file });
+  expect(captured).toEqual({
+    kind: 'runtime-digest',
+    sha256: createHash('sha256').update('owned bytes').digest('hex'),
+    stat: io.lstat(file),
+  });
+  expect(captured).not.toHaveProperty('base64');
+  // Direct IO keeps its existing synchronous guarded byte capture contract.
+  expect(io.runtimeFileDigest).toBeUndefined();
+  const missing = captureSelectionRead({ kind: 'runtime-digest', path: path.join(root, 'absent') });
+  expect(missing).toMatchObject({ kind: 'error', name: 'Error', code: 'ENOENT' });
+});
+
+test('runtime-digest tooling preserves single-link and replacement refusals and closes the fd', () => {
+  const file = source(),
+    replacement = source('replacement');
+  fs.linkSync(file, path.join(root, 'hardlink'));
+  expect(
+    captureSelectionRead({ kind: 'runtime-digest', path: file, singleLink: true })
+  ).toMatchObject({ kind: 'error', message: `Native entry member is not single-link: ${file}` });
+  fs.unlinkSync(path.join(root, 'hardlink'));
+  const open = fs.openSync;
+  let replaced = false;
+  jest.spyOn(fs, 'openSync').mockImplementation((target, ...args) => {
+    if (target === file && !replaced) {
+      replaced = true;
+      fs.renameSync(replacement, file);
+    }
+    return open(target, ...args);
+  });
+  const close = jest.spyOn(fs, 'closeSync');
+  expect(captureSelectionRead({ kind: 'runtime-digest', path: file })).toMatchObject({
+    kind: 'error',
+    message: `Runtime member replaced: ${file}`,
+  });
+  expect(replaced).toBe(true);
+  expect(close).toHaveBeenCalledTimes(1);
+});
+
+test('runtime-digest tooling does not flatten privately owned missing observation errors', () => {
+  const operation = { kind: 'runtime-digest', path: path.join(root, 'member') };
+  let original;
+  try {
+    needSelectionObservation(operation);
+  } catch (error) {
+    original = error;
+  }
+  let actual;
+  try {
+    captureSelectionRead(operation, {
+      ...io,
+      readRuntimeFile() {
+        throw original;
+      },
+    });
+  } catch (error) {
+    actual = error;
+  }
+  expect(actual).toBe(original);
+  expect(missingSelectionObservation(actual)).toBe(operation);
 });

@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { createHash } = require('node:crypto');
+const { captureSelectionRead } = require('../../dist/init/selection-read-io');
 const { setTimeout, clearTimeout } = require('node:timers');
 const { RuntimeFrameReader, writeRuntimeFrame } = require('../../dist/runtime/live-protocol');
 const { installMachineRuntime } = require('../../dist/init/machine-adapters');
@@ -23,7 +25,7 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
-async function withEntry(capability, observe) {
+async function withEntry(capability, observe, requestChanges = {}) {
   const marker = path.join(root, 'node-git-executed');
   const executable = path.join(root, 'caller-git');
   const quote = (text) => "'" + text.replace(/'/g, "'\\''") + "'";
@@ -52,6 +54,7 @@ async function withEntry(capability, observe) {
     deadlineEpochMs: Date.now() + 4000,
     inputJson: '{}',
     payload: {},
+    ...requestChanges,
   };
   const child = spawn(process.execPath, [entry], {
     cwd: root,
@@ -210,4 +213,97 @@ test('unknown capability is refused by the actual entry before project resolutio
     });
     expect(fs.existsSync(peer.marker)).toBe(false);
   });
+});
+
+const selectionAdvertisement = () => ({
+  schema: 'caws.runtime.selection-observation.v1',
+  snapshotId: 'selection-original-entry',
+  limits: { maximumObservations: 4096, maximumBytes: 64 * 1024 * 1024, maximumPathBytes: 16384 },
+});
+async function finishProjectObservation(peer) {
+  const checkout = await peer.read();
+  await peer.write(result(checkout, root));
+  const common = await peer.read();
+  await peer.write(result(common, path.join(root, '.git')));
+}
+async function selectionReply(peer, request, corrupt = false) {
+  const body = Buffer.from(
+    JSON.stringify({
+      snapshotId: request.snapshotId,
+      sequence: request.sequence,
+      observationId: 'native-' + request.sequence,
+      operation: request.operation,
+      result: captureSelectionRead(request.operation),
+    })
+  );
+  const common = {
+    id: request.id,
+    runtimeDigest: request.runtimeDigest,
+    snapshotId: request.snapshotId,
+    sequence: request.sequence,
+  };
+  await peer.write({
+    schema: 'caws.runtime.selection-observation.result.v1',
+    ...common,
+    byteLength: body.length,
+    sha256: createHash('sha256').update(body).digest('hex'),
+  });
+  for (let offset = 0; offset < body.length; offset += 65536)
+    await peer.write({
+      schema: 'caws.runtime.selection-observation.chunk.v1',
+      ...common,
+      offset: corrupt ? offset + 1 : offset,
+      base64: body.subarray(offset, offset + 65536).toString('base64'),
+    });
+}
+
+test('actual entry serializes native selection reads on the existing reader before Ready', async () => {
+  await withEntry(
+    'caws.runtime.context-git.v1',
+    async (peer) => {
+      await finishProjectObservation(peer);
+      const requests = [];
+      for (;;) {
+        const frame = await peer.read();
+        if (frame.schema === 'caws.runtime.ready.v1') {
+          expect(requests.length).toBeGreaterThan(0);
+          expect(requests.map((row) => row.sequence)).toEqual(
+            requests.map((_, index) => index + 1)
+          );
+          expect(requests.some((row) => row.operation.kind === 'runtime-digest')).toBe(true);
+          await finishInactive(peer, frame);
+          break;
+        }
+        expect(frame).toMatchObject({
+          schema: 'caws.runtime.selection-observation.request.v1',
+          ...identity,
+          snapshotId: 'selection-original-entry',
+        });
+        requests.push(frame);
+        await selectionReply(peer, frame);
+      }
+      expect(fs.existsSync(peer.marker)).toBe(false);
+    },
+    { selectionObservation: selectionAdvertisement() }
+  );
+});
+
+test('actual entry malformed native selection chunk fails before Ready without live fallback', async () => {
+  await withEntry(
+    'caws.runtime.context-git.v1',
+    async (peer) => {
+      await finishProjectObservation(peer);
+      const request = await peer.read();
+      expect(request.schema).toBe('caws.runtime.selection-observation.request.v1');
+      await selectionReply(peer, request, true);
+      expect(await peer.read()).toMatchObject({
+        schema: 'caws.runtime.failure.v1',
+        ...identity,
+        message: expect.stringMatching(/selection transport chunk/),
+      });
+      expect(await peer.terminal()).toMatchObject({ code: 1, signal: null });
+      expect(fs.existsSync(peer.marker)).toBe(false);
+    },
+    { selectionObservation: selectionAdvertisement() }
+  );
 });

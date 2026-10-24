@@ -8729,6 +8729,49 @@ Additional bounded evidence and unresolved dependencies:
   and installed cutover. Capture precedes Node; transfer can use the existing
   store socket after prefix completion without a second registration service.
 
+- E332: Native main captures the optional original OpenCode Stop before Node,
+  retains its original deadline and failed-capture cleanup, and replays
+  successful ContextGit observations without another Git child. Native-owned
+  selection roots feed correlated bounded observation frames on the existing
+  sole reader; Ready seals the readset and dispatch revalidates it. Compact
+  runtime digests avoid transmitting admitted executable bodies. The readset
+  retains negative candidates, lexical and resolved ancestors, and nested
+  symlink dependencies. selection-native-transport-check-01 exits0; feature-off
+  binary tests in selection-native-transport-unit-01 exit0 with126 cases. Actual
+  native main with pinned real Node protocol simulator in
+  selection-native-transport-main-positive-01 exits0 in56.699s across four
+  cases: successful original replay2→2 Git queries, generation refusal0→2,
+  capture refusal1→3 and invalid-root compatibility2→2. selection-observed.json
+  retains a150000-byte source in four encoded-observation chunks
+  of65536/65536/65536/3822 bytes, a true absent candidate and a760-byte
+  runtime-digest observation for the112989184-byte Node member. The six hostile
+  cases in selection-native-transport-main-hostile-01 exit0 in74.566s, retaining
+  exact identity/snapshot/duplicate/overlap/stale/after-Ready refusal
+  diagnostics and no session output. Stop's infrastructure exit semantics are
+  preserved; exit0 alone does not mean the guarded operation completed. The
+  resolved-parent replacement artifact retains identical leaf
+  inode/timestamps/bytes, different parent identities and refusal. Its
+  zero-effect counter is a test callback, not evidence of zero actual store
+  reservations or SQLite opens. Source/input pins remain unchanged during these
+  runs and supervisor residue is empty.
+- E333: The typed engine uses the same native observation transport before
+  Ready. selection-transport-build-01 exits0; selection-transport-tests-01
+  exits0 with178 cases across selection I/O, observation, protocol and compiled
+  engine-entry suites. Actual compiled entry controls consume serial
+  native-shaped replies and reject malformed chunks without ambient-read
+  fallback. The earlier selection-runtime-digest-tests-01 fails because its
+  replay test asks for full bytes after capturing only a digest; the corrected
+  oracle requires the digest and refusal of the uncaptured byte read, retaining
+  a separate explicit byte capture positive. Native and compiled-engine fixtures
+  are separate evidence; their combination, full stock-selection admission,
+  profile qualification, authenticated store transfer and ordinary publication
+  remain root-owned. The finite StockStopSelection predicate has six focused
+  filesystem/readset controls within the126 native cases, but no actual-stock
+  positive admission or production caller. Neither its existence nor those
+  controls grants a native Stop publication capability. All run artifacts reside
+  under the root session's publication-integration directory outside the source
+  ledger.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -8835,11 +8878,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E319 lands ingress and deadline corrections on main; qualify the next production-connected image and actual harness delivery after ordinary Stop integration                                                                                      |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E330/E331 source is on main at c6b2a0a6; qualify the combined native/maintained-engine selection path, then the production-connected image and actual harness delivery                                                                                  |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | E332/E333 native/typed transport must compose through actual stock selection; then independently qualified SQL/renderer profiles, original deadline and queue revalidation before reservation/writer/SQL must reach ordinary publication/reader/release |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                   |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
