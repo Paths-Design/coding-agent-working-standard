@@ -1,0 +1,40 @@
+id: CAWS-NATIVE-PRODUCTION-DEPENDENCIES-001
+title: 'Remove unused interactive dependency from the complete native CLI execution image'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-24T23:46:44.935Z'
+updated_at: '2026-10-24T23:46:44.935Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'CLI production dependency graph and native image packaging'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/package.json'
+    - 'package-lock.json'
+    - 'packages/caws-cli/jest.config.js'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve all CLI command behavior, selected override semantics, complete declared dependency and license validation, every generation content hash and the original runtime deadline.'
+acceptance:
+  - id: A1
+    given: 'the declared production dependency graph and actual code consumers'
+    when: 'the unused interactive dependency is removed through manifest and lock'
+    then: 'no remaining declared consumer requires it and no unrelated dependency version is changed'
+  - id: A2
+    given: 'a detached packed production installation with no ambient module fallback'
+    when: 'maintained CLI commands and native image preparation execute'
+    then: 'required CLI behavior remains available and the complete validated image excludes the removed dependency closure'
+  - id: A3
+    given: 'the committed candidate and raw checks'
+    when: 'independent review and governed landing finish'
+    then: 'target source matches the checked candidate while installed deadline full parity and cutover remain parent obligations'
+observability:
+  - 'Retain raw package installation, command outputs, dependency inventory, image preparation and source pins outside source control.'
+rollback:
+  - 'Revert the bounded manifest lock and configuration change through ordinary governed history.'
+non_functional: {}
+contracts: []
