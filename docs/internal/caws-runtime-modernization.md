@@ -50,13 +50,17 @@ E348 retains the exact composition and postmerge observations. Local main merge
 `89946c2d8d71f00d35828a91c620a3ec9d78e130` contains the reviewed Stop
 integration checkpoint with implementation bytes equal to `ec496156`; E367
 records its bounded acceptance and preserved dependent lanes. It does not
-qualify the failed E366 production invocation. `native-runtime-modernization`
-remains the integration branch for owed work. Evidence entries identify their
-actual component branch or historical revision; ledger-only commits do not
-qualify different runtime bytes. The relative architecture link follows this
-document's branch. Source publication, fresh package qualification, actual
-native execution and cutover acceptance remain separate obligations; E262
-records the landing and its bounded checks.
+qualify the failed E366 production invocation. Local main merge
+`f66e60b9496bc3a1b7f492cb531d753b0df3d216` contains the E368/E369 immutable
+manifest-plan optimization and E370 evidence, with all four source/tracker blobs
+equal to candidate `4f3f6214`. E371 records its bounded landing; the selected
+machine generation and full parent acceptance remain unchanged.
+`native-runtime-modernization` remains the integration branch for owed work.
+Evidence entries identify their actual component branch or historical revision;
+ledger-only commits do not qualify different runtime bytes. The relative
+architecture link follows this document's branch. Source publication, fresh
+package qualification, actual native execution and cutover acceptance remain
+separate obligations; E262 records the landing and its bounded checks.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
@@ -10172,6 +10176,90 @@ Additional bounded evidence and unresolved dependencies:
   same-home replay rejection. No generic dropping of unreserved records or
   automatic settlement of uncertain post-effect operations is licensed.
 
+- E371: The main-based native-plan-cache-landing lane integrates candidate
+  4f3f621438aa23b1c65ef089dd81dd2265b2b327 through composition456e4de2 and main
+  mergef66e60b9496bc3a1b7f492cb531d753b0df3d216. Independent inspection checks
+  the source composition and retained source pins. All five gates and merge
+  dry-run/apply exit0. Direct postmerge comparison establishes four equal
+  implementation/tracker blobs, all11 original registry entries and branch tips
+  unchanged, dependent non-main bases preserved, parent/publication spec bytes
+  unchanged and selected machine pointer bytes unchanged. The disposable landing
+  lane alone is removed. CAWS-NATIVE-PLAN-CACHE-LANDING-001 records A1/A2/A3
+  pass in events13013/13014/13015 and closes completed in event13016. Retained
+  plan-cache-landing-01/before.json, composition.json and postmerge.json under
+  the E370 artifact root identify the compared bytes. This is a bounded local
+  source landing; it does not establish remote publication or machine adoption.
+
+- E372: Reorientation of all207 available CAWS turn records retains the original
+  three outcomes, lead transfer, full first-party replacement and local-cutover
+  goal. The live parent remains active0/8 and the publication lane remains owned
+  by root. The distinct-session external driver replaces identical SQL fixtures
+  with foreign user/reply sentinels and different timestamps. Its oracle-only
+  control exits0 and rejects substituted foreign projection and turn content;
+  session-isolation-oracle-01/stdout.log explicitly states that the corrected
+  fixture has not executed. Root owns the actual fresh-image paired execution.
+
+  The native candidate adds a distinct refused_before_reservation history entry,
+  preserving the original ID and digest without dispatch, publication or a
+  fabricated consumer acknowledgement. Exact terminal history rejects replay
+  across restart/generation. Shared finite terminal-history limits refuse
+  exhaustion without eviction; partial Queued/Running operations are never
+  converted into this refusal. Only the native BeforeReservation failure branch
+  before reserve_original can request this terminal. Persistence failure retains
+  record/permit ownership even when a reported post-rename sync error leaves
+  terminal bytes on disk. Old readers reject the new enum kind: same-home
+  downgrade availability is an unresolved package/rollback obligation, not an
+  established migration property.
+
+  The initial journal check pre-reservation-journal-01 exits0 with3 focused
+  cases; actual checksummed refusal files survive reopen and reject replay.
+  pre-reservation-owner-02 exits0 with3 actor controls but omits the
+  release-lock race. Independent inspection identifies validation before a
+  potentially blocking registry lock. A distinguishing actual-file test holds
+  that lock, observes durable progress, replaces identical bytes through another
+  inode and unblocks release. pre-reservation-contention-baseline-01 exits101
+  because reclamation incorrectly succeeds. The correction acquires registry and
+  record custody before revalidating the exact terminal, then releases without
+  another lock wait. pre-reservation-owner-05 exits0 with5 cases, including both
+  new refusal and replay inode replacement, preserved Queued/Running, unchanged
+  consumed history, and retained state on reported sync failure. Its JSON
+  observations retain both inode values, sameBytes:true, the actual journal
+  refusal, actorRecords:1 and capacityRetained:true for substitution, versus
+  actorRecords:0 and capacityRetained:false for valid terminal replay. Final
+  pre-reservation-final-lib-01 additionally acquires both registry and record
+  locks before validation; its full library execution exits0 in159.956s
+  with451pass/2ignored, stable source/toolchain pins and no observed process
+  residue. pre-reservation-final-bin-01 exits0 in127.395s with187pass/1ignored;
+  pre-reservation-feature-off-01 exits0 in13.343s and establishes compilation
+  without SQLite. Both retain unchanged source/input pins and empty process
+  residue. Ignored controls, full native execution and old-reader compatibility
+  are not credited by these runs.
+
+  The retained owner-01 and owner-03 compile failures concern test fixture
+  construction; owner-04 reaches the intended metadata refusal but expects the
+  later selected-record diagnostic. Source inspection establishes both rejection
+  sites; owner-05 admits either identity-specific error while preserving all
+  resource assertions. No runtime acceptance follows from those corrections.
+  Root retains the exact native challenge, queued selection mutation, zero extra
+  SQL opens, no published turn/marker, natural owner exit and same-home admitted
+  replay obligations. The external paired driver SHA
+  9313290724a35efacdc20fc00f73625bc94dc7f529d6c96126cc11f7bed3de60 replaces
+  obsolete retention assertions with actual refusal history, absent registry,
+  unchanged SQL-open count, missing publication files and natural exit. The
+  pinned Node syntax check exits0; the driver has not executed against the
+  repaired image. The probe checks internal argument-digest consistency, not an
+  independent reconstruction of original StoreAcquire wire bytes.
+
+  Ordinary invocation IDs derive from PID and current nanoseconds in
+  protocol.rs; cli.rs supplies no original-ID option, and native_peer.rs
+  authenticates the exact admitted native executable before registry admission.
+  Restarting an ordinary invocation or sending its copied frame from Node does
+  not exercise same-original-ID history rejection. Root retains an authenticated
+  native replay probe with original-clock semantics; lower-layer journal reopen
+  and actor tests cannot be relabeled as this integrated observation. Neither
+  helper tests nor fresh10 qualify changed runtime bytes, fairness or
+  selected-machine cutover.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -10310,13 +10398,17 @@ reuses only immutable manifest-derived directories with direct hostile controls.
 E370 retains fresh10 publication, ordinary consumption and release within30s,
 with only1.262s deadline margin and no load distribution. Root owns the distinct
 pre-reservation rejection/reclamation repair and the session-distinguishing
-fixture correction before the paired replay. A read-only worker grounds the
-rejection lifecycle; an independent worker checks actual artifact correlations;
-root owns source changes, integration, landing and acceptance. Do not cache
-successful filesystem/hash observations or remove authority and durability
-checks. The next replay must establish semantic session isolation, rejection
-history, reclaimed capacity and natural cleanup; build/profile success cannot
-supply them.
+fixture correction before the paired replay. E371 lands the immutable-plan
+optimization on main; E372 implements bounded refusal history and reclamation
+with a reproduced lock-custody defect and focused controls. Root must qualify
+its committed image through the revised paired probe before any broader runtime
+claim. Same-home old-reader rollback remains unqualified. A read-only worker
+grounds the rejection lifecycle; an independent worker checks actual artifact
+correlations; root owns source changes, integration, landing and acceptance. Do
+not cache successful filesystem/hash observations or remove authority and
+durability checks. The next replay must establish semantic session isolation,
+rejection history, reclaimed capacity and natural cleanup; build/profile success
+cannot supply them.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
