@@ -20,6 +20,52 @@ const {
 } = require('../../dist/transcripts/renderer-calendar');
 
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+test('ordinary Stop consumes lease sources and never reads caller-supplied source paths', async () => {
+  const state = setup(),
+    options = { ...state.options };
+  let reads = 0;
+  Object.defineProperty(options, 'sources', {
+    get() {
+      reads++;
+      throw Error('caller source paths must not be read');
+    },
+  });
+  await expect(executeNativeStopPublication(options)).resolves.toMatchObject({ exitCode: 0 });
+  expect(reads).toBe(0);
+  expect(state.consumed()).toBe(true);
+  expect(state.phases).toEqual(['projection', 'render']);
+});
+
+test('a plausible caller source object cannot replace missing native Stop source observations', async () => {
+  const state = setup();
+  delete state.observations.stopSources;
+  await expect(
+    state.run({
+      sources: {
+        transcriptPath: path.join(state.directory, '.transcript-projection.jsonl'),
+        audit: { path: path.join(root, '.opencode/logs/audit.log'), presence: 'absent' },
+        hookOutcomes: { path: path.join(state.directory, 'hook-events.jsonl'), presence: 'absent' },
+        subagents: {
+          claudeCandidate: { path: path.join(state.directory, 's/subagents'), kind: 'absent' },
+          qwenCandidate: { path: path.join(root, '.caws/sessions/subagents/s'), kind: 'absent' },
+        },
+      },
+    })
+  ).rejects.toThrow('Stop Render requires its original native observation lease');
+  expect(state.observations.git).not.toHaveBeenCalled();
+  expect(state.consumed()).toBe(false);
+});
+
+test('a source catalog from a different original invocation fails before Git or consumption', async () => {
+  const state = setup();
+  state.observations.stopSources.binding = { ...state.observations.binding, id: 'other-original' };
+  await expect(state.run()).rejects.toThrow(
+    'Stop Render requires its original native observation lease'
+  );
+  expect(state.observations.git).not.toHaveBeenCalled();
+  expect(state.consumed()).toBe(false);
+});
 const descriptor = (name, role, bytes) => ({
   name,
   role,
@@ -99,6 +145,17 @@ function setup({
   const captured = new Map(metadataBytes ? [['.meta.json', metadataBytes]] : []);
   const observations = {
     binding,
+    // Native-lease fixture data, not admission or a discovery fallback.
+    stopSources: {
+      binding,
+      transcriptPath: path.join(directory, '.transcript-projection.jsonl'),
+      audit: { path: path.join(root, '.opencode/logs/audit.log'), disposition: 'absent' },
+      hookOutcomes: { path: path.join(directory, 'hook-events.jsonl'), disposition: 'absent' },
+      subagents: {
+        claudeCandidate: { path: path.join(directory, 's/subagents'), kind: 'absent' },
+        qwenCandidate: { path: path.join(root, '.caws/sessions/subagents/s'), kind: 'absent' },
+      },
+    },
     git: jest.fn(async () => {
       if (gitError) throw gitError;
       return {
@@ -287,15 +344,6 @@ function setup({
     },
     maximumProjectionBytes: 65536,
     calendarLimits: { maximumTimestampBytes: 65536, maximumQueries: 1000 },
-    sources: {
-      transcriptPath: path.join(directory, '.transcript-projection.jsonl'),
-      audit: { path: path.join(root, '.opencode/logs/audit.log'), presence: 'absent' },
-      hookOutcomes: { path: path.join(directory, 'hook-events.jsonl'), presence: 'absent' },
-      subagents: {
-        claudeCandidate: { path: path.join(directory, 's/subagents'), kind: 'absent' },
-        qwenCandidate: { path: path.join(root, '.caws/sessions/subagents/s'), kind: 'absent' },
-      },
-    },
     observe: outcome,
   };
   let result;

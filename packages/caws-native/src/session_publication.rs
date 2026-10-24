@@ -337,6 +337,507 @@ impl SourceInput {
         Ok(())
     }
 }
+#[cfg(test)]
+mod stop_source_tests {
+    use super::*;
+    use std::{
+        sync::atomic::{AtomicBool, Ordering},
+        time::Duration,
+    };
+    struct Fixture {
+        root: PathBuf,
+        deadline: Arc<crate::monotonic_deadline::MonotonicDeadline>,
+        cancelled: Arc<AtomicBool>,
+    }
+    impl Fixture {
+        fn new() -> Self {
+            let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir);
+            fs::create_dir_all(&parent).unwrap();
+            let root = parent
+                .canonicalize()
+                .unwrap()
+                .join(format!("stop-sources-{}", random().unwrap()));
+            fs::create_dir(&root).unwrap();
+            Self {
+                root,
+                deadline: Arc::new(
+                    crate::monotonic_deadline::MonotonicDeadline::capture(Duration::from_secs(5))
+                        .unwrap(),
+                ),
+                cancelled: Arc::new(AtomicBool::new(false)),
+            }
+        }
+        fn capture(&self) -> CapturedStopSources {
+            let result = CapturedStopSources::capture(
+                &self.root,
+                "s",
+                &self.root.join(".opencode/logs"),
+                Arc::clone(&self.deadline),
+                Arc::clone(&self.cancelled),
+                Instant::now() + Duration::from_secs(5),
+                &|_| Ok(()),
+            )
+            .unwrap();
+            if std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT").is_some() {
+                fs::write(
+                    self.root.join("captured-catalog.json"),
+                    serde_json::to_vec_pretty(&result.catalog).unwrap(),
+                )
+                .unwrap();
+                let files: Vec<_> = result
+                    .inputs
+                    .iter()
+                    .map(|input| input.captured.descriptor(&input.name, &input.role))
+                    .collect();
+                let bytes: BTreeMap<_, _> = result
+                    .inputs
+                    .iter()
+                    .map(|input| (input.name.clone(), STANDARD.encode(&input.captured.bytes)))
+                    .collect();
+                fs::write(
+                    self.root.join("captured-inputs.json"),
+                    serde_json::to_vec_pretty(&json!({
+                        "sessionId": "s", "files": files, "bytesBase64": bytes,
+                        "sourceCatalog": result.catalog,
+                        "inputDigest": stop_source_input_digest(&files, &result.catalog).unwrap()
+                    }))
+                    .unwrap(),
+                )
+                .unwrap();
+            }
+            result
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            if std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT").is_none() {
+                let _ = fs::remove_dir_all(&self.root);
+            }
+        }
+    }
+    #[test]
+    fn native_stop_absence_is_explicit_and_appearance_refuses_revalidation() {
+        let f = Fixture::new();
+        let captured = f.capture();
+        assert_eq!(captured.catalog["audit"]["disposition"], "absent");
+        assert_eq!(captured.catalog["hookOutcomes"]["disposition"], "absent");
+        assert_eq!(
+            captured.catalog["subagents"]["claudeCandidate"]["kind"],
+            "absent"
+        );
+        assert_eq!(
+            captured.catalog["subagents"]["qwenCandidate"]["kind"],
+            "absent"
+        );
+        assert!(captured.inputs.is_empty());
+        fs::create_dir_all(f.root.join(".opencode/logs")).unwrap();
+        fs::write(f.root.join(".opencode/logs/audit.log"), "appeared").unwrap();
+        assert_eq!(
+            captured
+                .revalidate(Instant::now() + Duration::from_secs(5), &|_| Ok(()))
+                .unwrap_err(),
+            "Stop source path or absence changed"
+        );
+    }
+    #[test]
+    fn native_stop_catalog_reuses_owned_metadata_bytes_and_retains_complete_listing() {
+        let f = Fixture::new();
+        let directory = f.root.join(".caws/sessions/s/s/subagents");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(
+            directory.join("agent-one.meta.json"),
+            br#"{"toolUseId":"tool-one","agentType":"review"}"#,
+        )
+        .unwrap();
+        fs::write(directory.join("agent-one.jsonl"), "ignored transcript").unwrap();
+        let captured = f.capture();
+        assert_eq!(captured.inputs.len(), 1);
+        assert_eq!(
+            captured.catalog["subagents"]["claudeCandidate"]["listing"]["names"],
+            json!(["agent-one.jsonl", "agent-one.meta.json"])
+        );
+        assert_eq!(
+            captured.inputs[0].captured.bytes.as_slice(),
+            br#"{"toolUseId":"tool-one","agentType":"review"}"#
+        );
+        let descriptor = captured.catalog["subagents"]["claudeCandidate"]["listing"]["entries"][0]
+            ["file"]["descriptor"]
+            .clone();
+        assert_eq!(
+            descriptor["sha256"],
+            sha(&captured.inputs[0].captured.bytes)
+        );
+        fs::write(directory.join("agent-two.meta.json"), "{}").unwrap();
+        assert_eq!(
+            captured
+                .revalidate(Instant::now() + Duration::from_secs(5), &|_| Ok(()))
+                .unwrap_err(),
+            "Stop source path or absence changed"
+        );
+    }
+    #[test]
+    fn native_stop_entry_change_and_cancel_are_not_fresh_success() {
+        let f = Fixture::new();
+        let directory = f.root.join(".caws/sessions/s/s/subagents");
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("agent-one.meta.json");
+        fs::write(&path, "{}").unwrap();
+        let captured = f.capture();
+        fs::write(&path, "{\"changed\":true}").unwrap();
+        assert_eq!(
+            captured
+                .revalidate(Instant::now() + Duration::from_secs(5), &|_| Ok(()))
+                .unwrap_err(),
+            "Stop source path or absence changed"
+        );
+        f.cancelled.store(true, Ordering::Release);
+        assert_eq!(
+            captured
+                .revalidate(Instant::now() + Duration::from_secs(5), &|_| Ok(()))
+                .unwrap_err(),
+            "Stop source capture cancelled"
+        );
+    }
+    #[test]
+    fn failed_directory_listing_is_an_error_result_not_absence() {
+        let f = Fixture::new();
+        let file = f.root.join("regular-file");
+        fs::write(&file, "not a directory").unwrap();
+        let failed =
+            catalog_listing(&file, Instant::now() + Duration::from_secs(5), &|_| Ok(())).unwrap();
+        assert!(!failed.unwrap_err().is_empty());
+        let catalog = f.capture();
+        assert_eq!(
+            catalog.revalidate(Instant::now(), &|_| Ok(())).unwrap_err(),
+            "session publication deadline expired"
+        );
+    }
+    #[test]
+    fn relative_audit_override_is_an_explicit_unresolved_domain_refusal() {
+        let f = Fixture::new();
+        let error = CapturedStopSources::capture(
+            &f.root,
+            "s",
+            Path::new("relative-logs"),
+            Arc::clone(&f.deadline),
+            Arc::clone(&f.cancelled),
+            Instant::now() + Duration::from_secs(5),
+            &|_| Ok(()),
+        )
+        .unwrap_err();
+        assert_eq!(error, "invalid native Stop source roots");
+    }
+    #[test]
+    fn stop_catalog_digest_binds_absence_path_and_listing_not_only_file_descriptors() {
+        let f = Fixture::new();
+        let captured = f.capture();
+        let digest = stop_source_input_digest(&[], &captured.catalog).unwrap();
+        let mut changed = captured.catalog.clone();
+        changed["audit"]["path"] = json!("/another/audit.log");
+        assert_ne!(digest, stop_source_input_digest(&[], &changed).unwrap());
+        changed = captured.catalog.clone();
+        changed["audit"]["disposition"] = json!("failed");
+        changed["audit"]["error"] = json!("permission denied");
+        assert_ne!(digest, stop_source_input_digest(&[], &changed).unwrap());
+        assert_ne!(
+            digest,
+            sha(&serde_json::to_vec(&Vec::<wire::Descriptor>::new()).unwrap())
+        );
+    }
+}
+
+pub const STOP_PREPARE: &str = "caws.runtime.session-publication.prepare.v2";
+pub const STOP_SOURCE_CATALOG: &str = "caws.runtime.stop-render-sources.v1";
+pub(crate) fn stop_source_input_digest(
+    files: &[wire::Descriptor],
+    catalog: &serde_json::Value,
+) -> Result<String> {
+    // Value's sorted object representation is the explicit v2 digest domain;
+    // v1 retains its existing descriptor-vector byte identity unchanged.
+    fn sorted(value: serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Array(values) => {
+                serde_json::Value::Array(values.into_iter().map(sorted).collect())
+            }
+            serde_json::Value::Object(values) => {
+                let ordered: BTreeMap<_, _> = values
+                    .into_iter()
+                    .map(|(key, value)| (key, sorted(value)))
+                    .collect();
+                serde_json::Value::Object(ordered.into_iter().collect())
+            }
+            value => value,
+        }
+    }
+    Ok(sha(&serde_json::to_vec(&sorted(
+        json!({"files":files,"sourceCatalog":catalog}),
+    ))
+    .map_err(err)?))
+}
+
+/// Data labels and native-held input witnesses, never a publication grant.
+/// Positive bytes reuse SourceInput and its current-path revalidation contract.
+#[derive(Debug)]
+pub(crate) struct CapturedStopSources {
+    catalog: serde_json::Value,
+    deadline: Arc<crate::monotonic_deadline::MonotonicDeadline>,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+    inputs: Vec<SourceInput>,
+    paths: Vec<(PathBuf, Option<Stamp>, Option<Stamp>)>,
+    directories: Vec<(PathBuf, std::result::Result<Vec<String>, String>)>,
+}
+impl CapturedStopSources {
+    pub(crate) fn capture(
+        project: &Path,
+        session_id: &str,
+        audit_root: &Path,
+        deadline: Arc<crate::monotonic_deadline::MonotonicDeadline>,
+        cancelled: Arc<std::sync::atomic::AtomicBool>,
+        expires: Instant,
+        effect: &EffectCheck<'_>,
+    ) -> Result<Self> {
+        effect("stop.sources.capture")?;
+        if !project.is_absolute() || !audit_root.is_absolute() || !wire::leaf(session_id) {
+            return Err("invalid native Stop source roots".into());
+        }
+        let directory = project.join(".caws/sessions").join(session_id);
+        let transcript = directory.join(".transcript-projection.jsonl");
+        let mut captured = Self {
+            catalog: serde_json::Value::Null,
+            deadline,
+            cancelled,
+            inputs: Vec::new(),
+            paths: Vec::new(),
+            directories: Vec::new(),
+        };
+        let audit = captured.file(
+            "audit.log",
+            "audit",
+            &audit_root.join("audit.log"),
+            false,
+            expires,
+            effect,
+        )?;
+        let hook = captured.file(
+            "hook-events.jsonl",
+            "hook_outcomes",
+            &directory.join("hook-events.jsonl"),
+            false,
+            expires,
+            effect,
+        )?;
+        let claude = captured.directory(
+            "claude",
+            &directory.join(session_id).join("subagents"),
+            expires,
+            effect,
+        )?;
+        let qwen = captured.directory(
+            "qwen",
+            &directory
+                .parent()
+                .ok_or("Stop session parent unavailable")?
+                .join("subagents")
+                .join(session_id),
+            expires,
+            effect,
+        )?;
+        captured.catalog = json!({"schema":STOP_SOURCE_CATALOG,"transcriptPath":catalog_path(&transcript)?,"audit":audit,"hookOutcomes":hook,"subagents":{"claudeCandidate":claude,"qwenCandidate":qwen}});
+        if serde_json::to_vec(&captured.catalog).map_err(err)?.len() > wire::MAX_FRAME_BYTES {
+            return Err("Stop source catalog frame bound".into());
+        }
+        captured.revalidate(expires, effect)?;
+        Ok(captured)
+    }
+    fn checkpoint(&self, expires: Instant, effect: &EffectCheck<'_>) -> Result<()> {
+        effect("stop.sources.check")?;
+        self.deadline.check().map_err(err)?;
+        if self.cancelled.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("Stop source capture cancelled".into());
+        }
+        check(expires)
+    }
+    fn witness(&mut self, path: &Path, expires: Instant, effect: &EffectCheck<'_>) -> Result<bool> {
+        effect("stop.sources.path")?;
+        self.checkpoint(expires, effect)?;
+        catalog_path(path)?;
+        let (named, followed) = catalog_stamps(path)?;
+        let present = named.is_some();
+        self.paths.push((path.into(), named, followed));
+        effect("stop.sources.path.complete")?;
+        self.checkpoint(expires, effect)?;
+        Ok(present)
+    }
+    fn file(
+        &mut self,
+        alias: &str,
+        role: &str,
+        path: &Path,
+        tolerate_read_failure: bool,
+        expires: Instant,
+        effect: &EffectCheck<'_>,
+    ) -> Result<serde_json::Value> {
+        if !self.witness(path, expires, effect)? {
+            return Ok(json!({"path":catalog_path(path)?,"disposition":"absent"}));
+        }
+        effect("stop.sources.file")?;
+        self.checkpoint(expires, effect)?;
+        let input = SourceInput::capture(alias, role, path, expires);
+        effect("stop.sources.file.complete")?;
+        self.checkpoint(expires, effect)?;
+        match input {
+            Ok(input) => {
+                if self.inputs.len() >= wire::MAX_ARTIFACTS
+                    || self
+                        .inputs
+                        .iter()
+                        .map(|i| i.captured.bytes.len())
+                        .sum::<usize>()
+                        .saturating_add(input.captured.bytes.len())
+                        > wire::MAX_TOTAL_BYTES
+                {
+                    return Err("Stop source inventory bound".into());
+                }
+                let descriptor = input.captured.descriptor(&input.name, &input.role);
+                self.inputs.push(input);
+                Ok(json!({"path":catalog_path(path)?,"disposition":"read","descriptor":descriptor}))
+            }
+            Err(error) if tolerate_read_failure => Ok(
+                json!({"path":catalog_path(path)?,"disposition":"failed","error":catalog_error(&error)}),
+            ),
+            Err(error) => Err(error),
+        }
+    }
+    fn directory(
+        &mut self,
+        tier: &str,
+        path: &Path,
+        expires: Instant,
+        effect: &EffectCheck<'_>,
+    ) -> Result<serde_json::Value> {
+        if !self.witness(path, expires, effect)? {
+            return Ok(json!({"path":catalog_path(path)?,"kind":"absent"}));
+        }
+        effect("stop.sources.directory")?;
+        self.checkpoint(expires, effect)?;
+        let metadata = match fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(json!({"path":catalog_path(path)?,"kind":"not-directory"}));
+            }
+            Err(error) => return Err(err(error)),
+        };
+        if !metadata.is_dir() {
+            return Ok(json!({"path":catalog_path(path)?,"kind":"not-directory"}));
+        }
+        let listing = catalog_listing(path, expires, &|_| self.checkpoint(expires, effect))?;
+        self.directories.push((path.into(), listing.clone()));
+        let listing = match listing {
+            Err(error) => json!({"disposition":"failed","error":error}),
+            Ok(names) => {
+                let mut entries = Vec::new();
+                for name in &names {
+                    effect("stop.sources.entry")?;
+                    self.checkpoint(expires, effect)?;
+                    // Only metadata matching the stock glob is opened. Other
+                    // names remain in the retained directory inventory witness.
+                    if !name.starts_with("agent-") || !name.ends_with(".meta.json") {
+                        continue;
+                    }
+                    let alias = format!("subagent-{tier}-{}", sha(name.as_bytes()));
+                    let file =
+                        self.file(&alias, "subagent", &path.join(&name), true, expires, effect)?;
+                    entries.push(json!({"name":name,"file":file}));
+                }
+                json!({"disposition":"listed","names":names,"entries":entries})
+            }
+        };
+        Ok(json!({"path":catalog_path(path)?,"kind":"directory","listing":listing}))
+    }
+    fn revalidate(&self, expires: Instant, effect: &EffectCheck<'_>) -> Result<()> {
+        for (path, named, followed) in &self.paths {
+            effect("stop.sources.revalidate.path")?;
+            self.checkpoint(expires, effect)?;
+            let current = catalog_stamps(path)?;
+            if &current.0 != named || &current.1 != followed {
+                return Err("Stop source path or absence changed".into());
+            }
+        }
+        for (path, prior) in &self.directories {
+            effect("stop.sources.revalidate.listing")?;
+            if &catalog_listing(path, expires, &|_| self.checkpoint(expires, effect))? != prior {
+                return Err("Stop source directory listing changed".into());
+            }
+        }
+        // SourceInput owns the positive buffers; Publication revalidates them
+        // alongside all prior inputs before each phase and before publication.
+        self.checkpoint(expires, effect)
+    }
+}
+fn catalog_path(path: &Path) -> Result<&str> {
+    let value = path.to_str().ok_or("Stop source path is not UTF8")?;
+    if !path.is_absolute() || value.len() > 4096 || value.contains(['\0', '\r', '\n']) {
+        return Err("Stop source path bound".into());
+    }
+    Ok(value)
+}
+fn catalog_stamps(path: &Path) -> Result<(Option<Stamp>, Option<Stamp>)> {
+    let read = |follow| -> Result<Option<Stamp>> {
+        let metadata = if follow {
+            fs::metadata(path)
+        } else {
+            fs::symlink_metadata(path)
+        };
+        match metadata {
+            Ok(metadata) => Ok(Some(stamp(&metadata))),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(err(error)),
+        }
+    };
+    Ok((read(false)?, read(true)?))
+}
+fn catalog_error(value: &str) -> String {
+    value.chars().take(1024).collect()
+}
+fn catalog_listing(
+    path: &Path,
+    expires: Instant,
+    effect: &EffectCheck<'_>,
+) -> Result<std::result::Result<Vec<String>, String>> {
+    effect("stop.sources.listing")?;
+    check(expires)?;
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(error) => return Ok(Err(catalog_error(&err(error)))),
+    };
+    let mut names = Vec::new();
+    for entry in entries {
+        effect("stop.sources.listing.entry")?;
+        check(expires)?;
+        if names.len() >= wire::MAX_ARTIFACTS {
+            return Err("Stop source directory entry bound".into());
+        }
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => return Ok(Err(catalog_error(&err(error)))),
+        };
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| "Stop source filename is not UTF8")?;
+        if name.is_empty() || name.len() > 255 || name.contains(['/', '\0']) {
+            return Err("Stop source filename bound".into());
+        }
+        names.push(name);
+    }
+    names.sort();
+    effect("stop.sources.listing.complete")?;
+    check(expires)?;
+    Ok(Ok(names))
+}
+
 pub trait Transport {
     fn write(&mut self, bytes: &[u8], expires: Instant) -> Result<()>;
     /// Returns the exact engine JSON frame including its single consumed LF.
@@ -375,6 +876,7 @@ pub struct Publication {
     prior: BTreeMap<String, Captured>,
     prior_marker: Option<Captured>,
     sources: Vec<SourceInput>,
+    stop_sources: Option<CapturedStopSources>,
     prepared: BTreeMap<String, (wire::Descriptor, Vec<u8>)>,
     removals: BTreeSet<String>,
     phases: Vec<wire::Kind>,
@@ -388,6 +890,22 @@ pub struct Publication {
     fail_after_removal: bool,
 }
 impl Publication {
+    pub(crate) fn capture_stop_checked(
+        original: OriginalBinding,
+        writer: Arc<journal::Custody>,
+        reservation: &journal::Dispatch,
+        mut sources: CapturedStopSources,
+        expires: Instant,
+        effect: &EffectCheck<'_>,
+    ) -> Result<Self> {
+        sources.revalidate(expires, effect)?;
+        let inputs = std::mem::take(&mut sources.inputs);
+        let mut publication =
+            Self::capture_checked(original, writer, reservation, inputs, expires, effect)?;
+        sources.revalidate(expires, effect)?;
+        publication.stop_sources = Some(sources);
+        Ok(publication)
+    }
     pub fn capture(
         original: OriginalBinding,
         writer: Arc<journal::Custody>,
@@ -459,6 +977,7 @@ impl Publication {
             prior,
             prior_marker,
             sources,
+            stop_sources: None,
             prepared: BTreeMap::new(),
             removals: BTreeSet::new(),
             phases: Vec::new(),
@@ -544,6 +1063,9 @@ impl Publication {
         expected_marker: Option<&Captured>,
         expires: Instant,
     ) -> Result<()> {
+        if let Some(sources) = &self.stop_sources {
+            sources.revalidate(expires, &|_| Ok(()))?;
+        }
         self.directory.revalidate(expires)?;
         let current = self.directory.inventory(expires)?;
         if current.len() != expected.len()
@@ -562,7 +1084,13 @@ impl Publication {
             return Err("publication prior marker changed".into());
         }
         for source in &self.sources {
+            if let Some(catalog) = &self.stop_sources {
+                catalog.checkpoint(expires, &|_| Ok(()))?;
+            }
             source.revalidate(expires)?;
+            if let Some(catalog) = &self.stop_sources {
+                catalog.checkpoint(expires, &|_| Ok(()))?;
+            }
         }
         Ok(())
     }
@@ -609,9 +1137,34 @@ impl Publication {
             files.push((descriptor.clone(), bytes));
         }
         let descriptors: Vec<_> = files.iter().map(|(d, _)| d.clone()).collect();
-        let input_digest = sha(&serde_json::to_vec(&descriptors).map_err(err)?);
+        let catalog = (kind == wire::Kind::Render)
+            .then(|| {
+                self.stop_sources
+                    .as_ref()
+                    .map(|sources| sources.catalog.clone())
+            })
+            .flatten();
+        let input_digest = match &catalog {
+            Some(catalog) => stop_source_input_digest(&descriptors, catalog)?,
+            None => sha(&serde_json::to_vec(&descriptors).map_err(err)?),
+        };
         let observation_id = random()?;
-        self.write(transport, wire::PREPARE, json!({"kind":kind,"snapshot":{"observationId":observation_id,"inputDigest":input_digest,"sessionId":self.original.session_id,"reason":self.original.reason,"endedAt":self.original.ended_at,"files":descriptors,"priorInventory":self.prior_descriptors()}}), expires)?;
+        let mut snapshot = json!({"observationId":observation_id,"inputDigest":input_digest,"sessionId":self.original.session_id,"reason":self.original.reason,"endedAt":self.original.ended_at,"files":descriptors,"priorInventory":self.prior_descriptors()});
+        let schema = if let Some(catalog) = catalog {
+            snapshot
+                .as_object_mut()
+                .ok_or("Stop snapshot encoding")?
+                .insert("sourceCatalog".into(), catalog);
+            STOP_PREPARE
+        } else {
+            wire::PREPARE
+        };
+        self.write(
+            transport,
+            schema,
+            json!({"kind":kind,"snapshot":snapshot}),
+            expires,
+        )?;
         for (descriptor, bytes) in files {
             for (index, chunk) in bytes.chunks(wire::MAX_CHUNK_BYTES).enumerate() {
                 self.write(transport, wire::INPUTS, json!({"kind":kind,"name":descriptor.name,"offset":index*wire::MAX_CHUNK_BYTES,"base64":STANDARD.encode(chunk)}), expires)?;

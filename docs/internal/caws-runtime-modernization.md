@@ -38,7 +38,12 @@ remote publication, package qualification and runtime acceptance. Local main
 merge `267f85832ea64089adb51c6355a48cf920728608` contains the E334–E340 native
 selection transport, bounded generation discovery and explicit path identity
 slice. `CAWS-NATIVE-SELECTION-LANDING-001` closes with A1–A3 recorded; the full
-parent spec and selected machine runtime remain unchanged.
+parent spec and selected machine runtime remain unchanged. Local main merge
+`56f917d8af052dbc7f473a04c26a9080ff18c5eb` contains the E341/E342 stock
+admission and direct invalidation falsifier. The five landed paths equal
+reviewed candidate `5837aa104633640ce593a2ead8ea2198d46b7812`.
+`CAWS-NATIVE-STOCK-ADMISSION-LANDING-001` closes with A1–A3 recorded; its
+component acceptance does not qualify the production publication chain.
 `native-runtime-modernization` remains the integration branch for owed work.
 Evidence entries identify their actual component branch or historical revision;
 ledger-only commits do not qualify different runtime bytes. The relative
@@ -8996,7 +9001,44 @@ Additional bounded evidence and unresolved dependencies:
   compilation is not SQL execution. The direct constructor and one revalidation
   mutant are exercised, not a complete mutation score or deterministic
   main-level post-seal invalidation. The ordinary native publication chain
-  remains owed.
+  remains owed. Local main merge56f917d8 lands the reviewed five-path slice.
+  stock-admission-landing-01 retains scoped gates exit0, doctor exit0 with
+  0E/4W/5I, the merge and postmerge path/ancestry checks. A1/A2 recording is
+  read back in events12803/12804; A3 records the postmerge observation before
+  the bounded landing spec closes. Parent acceptance and selected-machine state
+  hashes remain unchanged; the temporary landing lane is removed.
+
+- E343: Native Stop publication captures an explicit source catalog for audit,
+  hook outcomes and both stock subagent directory candidates. Captured bytes,
+  absence, directory dispositions and complete bounded names enter the Render
+  prepare.v2 input digest and binding.v2 observation lease. The ordinary Stop
+  adapter consumes the lease's descriptor-bound source buffers; caller-supplied
+  source assertions are removed. Generic prepare.v1/binding.v1 remain separate.
+  stop-source-catalog-native-02 exits0 in43.635s with six capture/refusal
+  controls and retained captured-catalog.json/captured-inputs.json. Appearance
+  after absence, changed metadata, cancellation and expired deadlines refuse;
+  listing failure uses a real regular-file read_dir error, not an
+  EACCES-directory proof. stop-source-catalog-wire-01 exits0 in43.823s with ten
+  native wire/Git/calendar controls, including catalog-digest mutation refusing
+  before Git. The CLI build exits0 in6.300s; stop-source-catalog-ts-01 exits0
+  in3.348s with187 cases in four suites, including generic v1, catalog
+  correlation, ordinary-reader corruption and caller-source rejection.
+  stop-source-catalog-cross-runtime-02 consumes five actual retained Rust
+  captures with compiled TypeScript: input digests agree, tool-one maps to
+  agent-one.jsonl and agent_type review, and substituted bytes refuse. Attempt01
+  fails because the external replay driver used original instead of the declared
+  attempt binding field; its driver and failure remain retained, and production
+  code is unchanged by that correction. Scoped lint exits0; explicit
+  sqlite-store compilation exits0 in17.924s. Compilation does not execute the
+  SQLite publication branch. Artifacts reside under the root session's
+  publication-integration directory. Relative CAWS_LOG_DIR explicitly refuses
+  until the original render-cwd registration resolves it. Root owns that parity
+  repair, native entry integration and actual publication/release. Later
+  registration, profile and dispatch source remains in the owned publication
+  branch and requires its separate execution evidence. The bounded
+  CAWS-NATIVE-STOP-CATALOG-LANDING-001 delivery uses the ten source/test blobs
+  from d66b99e5; its store actor excludes later registration changes. No
+  production activation, full Python retirement or cutover follows.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -9104,11 +9146,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                               | Next decisive check                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                  | E334–E340 selection source is on local main267f8583. Next qualify the production-connected image, actual harness delivery and rollback; E340 establishes only native selection traversal plus compatibility completion.                                                                                           |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E341/E342 execute stock admission and its direct invalidation falsifier in the owned publication lane; html_profile owns the native source-catalog proposal, with root applying and verifying it | Connect separately qualified SQL/renderer profiles, original capture and completed prefix to the maintained store port; bind the source catalog to native captured inputs, preserve the original deadline and revalidate after queueing before reservation/writer/SQL through ordinary publication/reader/release |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                    | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                             |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                         | Next decisive check                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                            | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                                                                                |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; root owns the separate registration/profile/dispatch integration and fresh-image execution | Connect separately qualified SQL/renderer profiles, original capture and completed prefix to the maintained store port; bind the source catalog to native captured inputs, preserve the original deadline and revalidate after queueing before reservation/writer/SQL through ordinary publication/reader/release |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                              | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                             |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The

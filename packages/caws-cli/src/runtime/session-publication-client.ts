@@ -4,7 +4,12 @@ import { isAbsolute, normalize } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { parseJsonSource } from './json-custody';
 import { openNativeRenderObservations } from './render-observation-client';
-import type { NativeRenderObservations } from './render-observation-wire';
+import {
+  STOP_PUBLICATION_PREPARE,
+  snapshotStopSourceCatalog,
+  stopSourceInputDigest,
+  type NativeRenderObservations,
+} from './render-observation-wire';
 import {
   awaitSessionPublicationCallback,
   consumeCommittedSession,
@@ -358,9 +363,11 @@ export async function continueNativeSessionPublication(
     }
     requireValue(!aborted, 'Unexpected preparation after aborted phase');
     const kind = options.expectedKinds[preparedCount];
+    const stopCatalogPhase = frame.schema === STOP_PUBLICATION_PREPARE;
     requireValue(
       kind &&
-        frame.schema === SESSION_PUBLICATION_PREPARE_SCHEMA &&
+        (frame.schema === SESSION_PUBLICATION_PREPARE_SCHEMA ||
+          (stopCatalogPhase && kind === 'render' && options.renderObservations === true)) &&
         exact(frame, [...commonKeys, 'kind', 'snapshot']) &&
         frame.kind === kind &&
         object(frame.snapshot),
@@ -376,6 +383,7 @@ export async function continueNativeSessionPublication(
         'endedAt',
         'files',
         'priorInventory',
+        ...(stopCatalogPhase ? ['sourceCatalog'] : []),
       ]) &&
         text(snapshot.observationId, 128) &&
         snapshot.observationId.length > 0 &&
@@ -388,6 +396,14 @@ export async function continueNativeSessionPublication(
     );
     const files = descriptors(snapshot.files);
     const priorInventory = descriptors(snapshot.priorInventory);
+    const stopCatalog = stopCatalogPhase
+      ? snapshotStopSourceCatalog(snapshot.sourceCatalog, files, options.sessionId)
+      : undefined;
+    if (stopCatalog !== undefined)
+      requireValue(
+        stopSourceInputDigest(files, stopCatalog) === snapshot.inputDigest,
+        'Stop source catalog input digest mismatch'
+      );
     if (initialInventory === undefined) {
       initialInventory = priorInventory;
       for (const item of priorInventory) expectedOutputs.set(item.name, item);
@@ -458,6 +474,20 @@ export async function continueNativeSessionPublication(
             transport,
             signal,
             deadlineEpochMs: request.deadlineEpochMs,
+            ...(stopCatalog === undefined
+              ? {}
+              : {
+                  stopSourceInput: {
+                    catalog: stopCatalog,
+                    files,
+                    sessionId: options.sessionId,
+                    bytes: (name: string) => {
+                      const value = contents.get(name);
+                      requireValue(value !== undefined, 'Stop source references uncaptured bytes');
+                      return Uint8Array.from(value);
+                    },
+                  },
+                }),
           })
         : undefined;
     const input: SessionPublicationInput = Object.freeze({

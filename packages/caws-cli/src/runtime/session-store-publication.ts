@@ -12,7 +12,6 @@ import {
 import type { RenderNumericProfile, ObservedRendererFile } from '../transcripts/render-reader';
 import {
   prepareSessionArtifactsWithCalendar,
-  type PrepareSessionArtifactsCalendarInput,
   type RendererPreparationContext,
   type RendererPreparationLimits,
 } from '../transcripts/render-prepare';
@@ -111,15 +110,6 @@ export async function publishNativeTranscriptStore(
   });
 }
 
-/** Data supplied by the native-owned source observation. In particular, absence
- * is an observation; the adapter never infers it from an omitted optional input.
- * These values confer no generation, profile or publication authority. */
-export interface StopRendererSources {
-  readonly transcriptPath: string;
-  readonly audit: { readonly path: string; readonly presence: 'present' | 'absent' };
-  readonly hookOutcomes: { readonly path: string; readonly presence: 'present' | 'absent' };
-  readonly subagents: PrepareSessionArtifactsCalendarInput['subagents'];
-}
 export interface NativeStopPublicationOptions {
   readonly port: NativeTranscriptStorePublicationPort;
   readonly canonicalRoot: string;
@@ -135,7 +125,6 @@ export interface NativeStopPublicationOptions {
     readonly maximumTimestampBytes: number;
     readonly maximumQueries: number;
   };
-  readonly sources: StopRendererSources;
   readonly observe: (fields: Readonly<Record<string, unknown>>) => void | Promise<void>;
 }
 
@@ -224,10 +213,17 @@ export async function executeNativeStopPublication(
     async prepareRender(input) {
       if (options.signal.aborted) throw options.signal.reason;
       const observations = input.observations;
+      const sources = observations?.stopSources;
       if (
         input.kind !== 'render' ||
         input.sessionId !== options.sessionId ||
         !observations ||
+        !sources ||
+        Object.entries(observations.binding).some(
+          ([key, value]) => sources.binding[key as keyof typeof sources.binding] !== value
+        ) ||
+        sources.binding.observationId !== input.observationId ||
+        sources.binding.inputDigest !== input.inputDigest ||
         observations.binding.observationId !== input.observationId ||
         observations.binding.inputDigest !== input.inputDigest
       )
@@ -268,26 +264,16 @@ export async function executeNativeStopPublication(
       const transcript = source(
         'store-projection.jsonl',
         'projection',
-        options.sources.transcriptPath,
+        sources.transcriptPath,
         'present'
       );
       expectedProjection = Buffer.from(input.bytes('store-projection.jsonl'));
       const prepared = await prepareSessionArtifactsWithCalendar(
         {
           transcript,
-          audit: source(
-            'audit.log',
-            'audit',
-            options.sources.audit.path,
-            options.sources.audit.presence
-          ),
-          hookOutcomes: source(
-            'hook-events.jsonl',
-            'hook_outcomes',
-            options.sources.hookOutcomes.path,
-            options.sources.hookOutcomes.presence
-          ),
-          subagents: options.sources.subagents,
+          audit: sources.audit,
+          hookOutcomes: sources.hookOutcomes,
+          subagents: sources.subagents,
           registry: createDefaultTranscriptRegistry({
             surface: 'opencode',
             numericProfile: rendererProfile,
