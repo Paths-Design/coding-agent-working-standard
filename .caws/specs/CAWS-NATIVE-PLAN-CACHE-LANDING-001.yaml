@@ -40,3 +40,9 @@ non_functional: {}
 contracts:
   - name: 'bounded-plan-cache-source'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Main f66e60b9 contains exact4f3f6214 through reviewed composition456e4de2. Four source/tracker blobs match; all contributed paths admitted by full worktree review; all five gates and merge dry-run/apply exit0. Direct inspected composition/postmerge receipts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/plan-cache-landing-01. --verify proves commit presence only; blob/provenance evidence inspected separately. Bounded source delivery only."
+    recorded_at: "2026-10-24T17:45:55.613Z"
+    commit_sha: f66e60b9496bc3a1b7f492cb531d753b0df3d216
