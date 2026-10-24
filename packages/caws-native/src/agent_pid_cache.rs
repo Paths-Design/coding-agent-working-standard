@@ -1,4 +1,4 @@
-//! Finite macOS SessionEnd PID correlation and progressive reaping. These
+//! Finite macOS session-prefix PID correlation and progressive reaping. These
 //! provenance caches never confer project or session ownership authority.
 //! Capture runs in the original frontend, never in a retained owner or Node.
 use crate::{
@@ -93,12 +93,33 @@ fn birth(pid: u32) -> io::Result<Birth> {
 fn birth(_: u32) -> io::Result<Birth> {
     Err(io::Error::other("unsupported native PID cache platform"))
 }
-fn selected_name(surface: &str) -> Option<&'static [u8]> {
+// Exact shipped shared/lib/agent-surface.sh defaults; no caller-selected list.
+fn selected_names(surface: &str) -> Option<&'static [&'static [u8]]> {
+    match surface {
+        "codex" => Some(&[b"codex"]),
+        "claude-code" => Some(&[b"claude"]),
+        "opencode" => Some(&[b"opencode"]),
+        "zcode" => Some(&[
+            b"zcode-cli",
+            b"zcode-host-local-1",
+            b"zcode-host-local-2",
+            b"zcode-host-local-3",
+        ]),
+        _ => None,
+    }
+}
+fn selected_profile(surface: &str) -> Option<&'static [u8]> {
     match surface {
         "codex" => Some(b"codex"),
         "claude-code" => Some(b"claude"),
+        "opencode" => Some(b"opencode"),
+        "zcode" => Some(b"zcode-cli zcode-host-local-1 zcode-host-local-2 zcode-host-local-3"),
         _ => None,
     }
+}
+fn selected_comm(surface: &str, comm: &[u8]) -> bool {
+    let name = comm.rsplit(|byte| *byte == b'/').next().unwrap_or_default();
+    selected_names(surface).is_some_and(|names| names.contains(&name))
 }
 #[cfg(target_os = "macos")]
 fn find_profile() -> bool {
@@ -135,7 +156,7 @@ impl OriginalAncestry {
         expires: Instant,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<Self, String> {
-        let selected = selected_name(surface);
+        let selected = selected_profile(surface);
         let names = std::env::var_os("CAWS_AGENT_PROCESS_NAMES");
         let supported = find_profile()
             && selected.is_some()
@@ -171,7 +192,6 @@ impl OriginalAncestry {
         if !supported {
             return Ok(captured);
         }
-        let selected = selected_name(surface).unwrap();
         let mut pid = original;
         for _ in 0..MAX_HOPS {
             checkpoint(expires, cancel)?;
@@ -211,7 +231,7 @@ impl OriginalAncestry {
                 pid,
                 birth: before.clone(),
             });
-            if comm.rsplit(|byte| *byte == b'/').next() == Some(selected) {
+            if selected_comm(surface, &comm) {
                 captured.matched = Some(pid);
                 break;
             }
@@ -253,8 +273,7 @@ impl OriginalAncestry {
             if birth(pid).ok().as_ref() != Some(&before) {
                 return Ok(false);
             }
-            return Ok(comm.comm_bytes().rsplit(|byte| *byte == b'/').next()
-                == selected_name(&self.surface));
+            return Ok(selected_comm(&self.surface, comm.comm_bytes()));
         }
         Ok(!self.unavailable)
     }

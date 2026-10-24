@@ -14,10 +14,17 @@ struct Fixture {
     base: PathBuf,
     root: PathBuf,
     sessions: PathBuf,
+    retain: bool,
 }
 impl Fixture {
     fn new() -> Self {
-        let base = std::env::temp_dir().join(format!(
+        let retained = std::env::var_os("CAWS_TEST_ARTIFACT_DIR").map(PathBuf::from);
+        if let Some(parent) = &retained {
+            assert!(parent.is_absolute());
+            fs::create_dir_all(parent).unwrap();
+        }
+        let retain = retained.is_some();
+        let base = retained.unwrap_or_else(std::env::temp_dir).join(format!(
             "caws-agent-pid-{}-{}",
             std::process::id(),
             QUARANTINE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -31,6 +38,7 @@ impl Fixture {
             base,
             root,
             sessions,
+            retain,
         }
     }
     fn directory(&self) -> File {
@@ -52,7 +60,18 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        fs::remove_dir_all(&self.base).unwrap();
+        if self.retain {
+            fs::write(
+                self.base.join("result.json"),
+                serde_json::to_vec_pretty(
+                    &json!({"root":self.root,"completedWithoutPanic":!std::thread::panicking()}),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        } else {
+            fs::remove_dir_all(&self.base).unwrap();
+        }
     }
 }
 
@@ -313,12 +332,14 @@ fn set_age(file: &std::path::Path, age: i64) {
 #[test]
 fn actual_original_frontend_refresh_and_reap() {
     const CHILD: &str = "CAWS_AGENT_PID_NATIVE_TEST_ROOT";
+    const SURFACE: &str = "CAWS_AGENT_PID_NATIVE_TEST_SURFACE";
     if let Some(root) = std::env::var_os(CHILD) {
         let root = PathBuf::from(root);
+        let surface = std::env::var(SURFACE).unwrap_or_else(|_| "codex".into());
         let sessions = root.join(".caws/sessions");
         fs::create_dir_all(&sessions).unwrap();
-        let original = OriginalAncestry::capture("codex", expires(), || Ok(())).unwrap();
-        assert!(original.supports("codex"));
+        let original = OriginalAncestry::capture(&surface, expires(), || Ok(())).unwrap();
+        assert!(original.supports(&surface));
         assert_eq!(original.rows[0].pid, std::process::id());
         assert_eq!(original.matched, Some(std::process::id()));
         let pid = std::process::id();
@@ -350,7 +371,11 @@ fn actual_original_frontend_refresh_and_reap() {
         let input = session_cache::CaptureInput {
             canonical_root: &root,
             supplied_session_id: Some("original-session"),
-            supplied_hook_event: Some("SessionEnd"),
+            supplied_hook_event: Some(if surface == "codex" {
+                "SessionEnd"
+            } else {
+                "Stop"
+            }),
         };
         let mut prepared =
             match session_cache::prepare_prefix(&input, expires(), &mut || Ok(())).unwrap() {
@@ -358,8 +383,20 @@ fn actual_original_frontend_refresh_and_reap() {
                 _ => panic!("unexpected decline"),
             };
         let pid_stage = prepare(prepared.sessions(), &original, expires(), &mut || Ok(())).unwrap();
-        session_cache::commit_prefix(&mut prepared, "codex", None, expires(), &mut || Ok(()))
-            .unwrap();
+        let event = if surface == "codex" {
+            session_cache::PrefixEvent::SessionEnd
+        } else {
+            session_cache::PrefixEvent::Stop
+        };
+        session_cache::commit_prefix_for_event(
+            &mut prepared,
+            &surface,
+            event,
+            None,
+            expires(),
+            &mut || Ok(()),
+        )
+        .unwrap();
         let outcome = pid_stage.commit(
             &mut prepared,
             "original-session",
@@ -367,13 +404,30 @@ fn actual_original_frontend_refresh_and_reap() {
             expires(),
             &mut || Ok(()),
         );
+        fs::write(root.join("prefix-observation.json"),serde_json::to_vec_pretty(&json!({
+            "surface":surface,"pid":pid,"agentPid":outcome.agent_pid,"reap":outcome.reap,
+            "failure":format!("{:?}",outcome.failure),"ownRecord":fs::read(&own).ok().map(|b|String::from_utf8_lossy(&b).into_owned()),
+            "hookEvent":fs::read(root.join(".caws/sessions/original-session/.session-envelope.json")).ok().and_then(|b|serde_json::from_slice::<serde_json::Value>(&b).ok()).map(|v|v["hook_event"].clone()),
+        })).unwrap()).unwrap();
         assert!(outcome.failure.is_none(), "{:?}", outcome.failure);
         assert_eq!(outcome.agent_pid, AgentPidOutcome::Refreshed);
         assert_eq!(outcome.reap, ReapOutcome::Completed);
         let record: serde_json::Value = serde_json::from_slice(&fs::read(&own).unwrap()).unwrap();
         assert_eq!(record["created_at"], "preserved");
         assert_eq!(record["session_id"], "original-session");
-        assert_eq!(record["surface"], "codex");
+        assert_eq!(record["surface"], surface);
+        let envelope: serde_json::Value = serde_json::from_slice(
+            &fs::read(root.join(".caws/sessions/original-session/.session-envelope.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            envelope["hook_event"],
+            if surface == "codex" {
+                "SessionEnd"
+            } else {
+                "Stop"
+            }
+        );
         assert_eq!(
             record["started_at"].as_str(),
             Some(original.rows[0].birth.seconds.to_string().as_str())
@@ -406,29 +460,127 @@ fn actual_original_frontend_refresh_and_reap() {
         )
         .unwrap();
     } else {
-        let fixture = Fixture::new();
-        let output = Command::new(std::env::current_exe().unwrap())
-            .arg0("/controlled-native-frontend/codex")
-            .args([
-                "--exact",
-                "agent_pid_cache::tests::actual_original_frontend_refresh_and_reap",
-                "--nocapture",
-            ])
-            .env(CHILD, &fixture.root)
-            .env("COMMAND_MODE", "unix2003")
-            .env_remove("CAWS_AGENT_PROCESS_NAMES")
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "stdout={} stderr={}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let record: serde_json::Value =
-            serde_json::from_slice(&fs::read(fixture.root.join("child-receipt.json")).unwrap())
+        for (surface, name) in [
+            ("codex", "codex"),
+            ("opencode", "opencode"),
+            ("zcode", "zcode-cli"),
+            ("zcode", "zcode-host-local-1"),
+            ("zcode", "zcode-host-local-2"),
+            ("zcode", "zcode-host-local-3"),
+        ] {
+            let fixture = Fixture::new();
+            let output = Command::new(std::env::current_exe().unwrap())
+                .arg0(format!("/controlled-native-frontend/{name}"))
+                .args([
+                    "--exact",
+                    "agent_pid_cache::tests::actual_original_frontend_refresh_and_reap",
+                    "--nocapture",
+                ])
+                .env(CHILD, &fixture.root)
+                .env(SURFACE, surface)
+                .env("COMMAND_MODE", "unix2003")
+                .env_remove("CAWS_AGENT_PROCESS_NAMES")
+                .output()
                 .unwrap();
-        assert_eq!(record["session_id"], "original-session");
-        assert!(record["started_at"].is_string());
+            if fixture.retain {
+                fs::write(fixture.base.join("case.json"),serde_json::to_vec_pretty(&json!({
+            "surface":surface,"argv0":name,"exit":output.status.code(),"stdout":String::from_utf8_lossy(&output.stdout),"stderr":String::from_utf8_lossy(&output.stderr),
+        })).unwrap()).unwrap();
+            }
+            assert!(
+                output.status.success(),
+                "stdout={} stderr={}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let record: serde_json::Value =
+                serde_json::from_slice(&fs::read(fixture.root.join("child-receipt.json")).unwrap())
+                    .unwrap();
+            assert_eq!(record["session_id"], "original-session");
+            assert!(record["started_at"].is_string());
+        }
     }
+}
+
+#[test]
+fn shipped_opencode_zcode_names_are_closed_exact_basename_profiles() {
+    assert_eq!(selected_profile("opencode"), Some(b"opencode".as_slice()));
+    assert_eq!(
+        selected_profile("zcode"),
+        Some(b"zcode-cli zcode-host-local-1 zcode-host-local-2 zcode-host-local-3".as_slice())
+    );
+    for name in [
+        "zcode-cli",
+        "zcode-host-local-1",
+        "zcode-host-local-2",
+        "zcode-host-local-3",
+    ] {
+        assert!(
+            selected_comm("zcode", format!("/actual/{name}").as_bytes()),
+            "{name}"
+        );
+    }
+    for name in [
+        "zcode",
+        "zcode-host-local-4",
+        "zcode-cli-extra",
+        "/actual/opencode",
+    ] {
+        assert!(!selected_comm("zcode", name.as_bytes()), "{name}");
+    }
+    assert!(!selected_comm("opencode", b"zcode-cli"));
+    assert!(!selected_comm("opencode", b"opencode-extra"));
+    assert!(selected_comm("codex", b"/old/codex"));
+    assert!(selected_comm("claude-code", b"/old/claude"));
+}
+#[test]
+fn named_original_ancestry_selects_first_exact_supported_process() {
+    struct Named {
+        inner: ScriptedObserver,
+        name: Vec<u8>,
+    }
+    impl Observer for Named {
+        fn birth(&mut self, pid: u32) -> io::Result<Birth> {
+            self.inner.birth(pid)
+        }
+        fn comm(&mut self, pid: u32, expires: Instant) -> io::Result<Vec<u8>> {
+            if pid == self.inner.matched {
+                Ok(self.name.clone())
+            } else {
+                self.inner.comm(pid, expires)
+            }
+        }
+    }
+    for (surface, name) in [
+        ("opencode", "opencode"),
+        ("zcode", "zcode-cli"),
+        ("zcode", "zcode-host-local-1"),
+        ("zcode", "zcode-host-local-2"),
+        ("zcode", "zcode-host-local-3"),
+    ] {
+        let mut observer = Named {
+            inner: observer(8, 4),
+            name: format!("/captured/{name}").into_bytes(),
+        };
+        let captured = OriginalAncestry::capture_with(
+            surface,
+            2,
+            true,
+            expires(),
+            &mut || Ok(()),
+            &mut observer,
+        )
+        .unwrap();
+        assert_eq!(captured.matched, Some(4), "{surface}/{name}");
+        assert!(captured.supports(surface));
+        assert!(!captured.supports("codex"));
+    }
+    let mut wrong = Named {
+        inner: observer(8, 4),
+        name: b"zcode-host-local-4".to_vec(),
+    };
+    let captured =
+        OriginalAncestry::capture_with("zcode", 2, true, expires(), &mut || Ok(()), &mut wrong)
+            .unwrap();
+    assert!(captured.matched.is_none());
 }

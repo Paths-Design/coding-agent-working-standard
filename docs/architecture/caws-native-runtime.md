@@ -36,6 +36,32 @@ Rust must not reimplement claim, scope, spec, waiver or policy semantics. A
 native binary provides no evidence that those semantics or native harness
 delivery agree.
 
+## OpenCode project transport
+
+OpenCode's `project-native-stop` transport uses a project-local plugin generated
+from the shared plugin template and inventoried in the selected machine runtime
+as `surfaces/opencode/native-plugin.ts`. Explicit configuration with
+`caws init adapters configure --agent-surface opencode --entry native` enables
+this transport; it does not author JSON hooks or a global plugin. Migration
+requires a reviewed project policy and refuses unrecognized custom plugin code.
+The existing configuration transaction retains original bytes and rolls back a
+producer replacement when the associated policy write fails.
+
+Fresh project initialization installs the compatibility callbacks and publishes
+the selected producer last. Only Stop uses the stable native entry; other
+callbacks retain their project dispatchers. The Stop child receives the plugin's
+own absolute directory as cwd, the resolved governance root as
+`CAWS_PROJECT_DIR`, and the bound machine home as `CAWS_HOME`. Missing native
+entry or a failed native attempt does not replay the legacy Stop dispatcher.
+
+Selection observes the original caller's local discovery roots through the
+captured read boundary. It requires the exact selected producer and stable-entry
+bytes, and refuses unknown local producers, redirected paths and unsupported
+configuration inputs. This establishes local registration consistency, not the
+harness's loaded module set or production SQL/render qualification. Actual
+harness delivery, native profile admission and ordinary consumer execution are
+separate requirements before activation. ZCode requires its own adapter.
+
 ## Load-bearing assumptions and inspected evidence
 
 The source baseline is `fb788cd241424ed3977081c9ad458b6c1fec7c59`.

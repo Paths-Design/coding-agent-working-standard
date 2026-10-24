@@ -7,6 +7,7 @@ export interface SystemSurfaceSettings {
   version: 1;
   enabled: boolean;
   native_config_target?: string;
+  transport?: 'project-native-stop';
 }
 
 export function readSystemSurfaceSettings(
@@ -22,7 +23,13 @@ export function readSystemSurfaceSettings(
     !value ||
     value.version !== 1 ||
     typeof value.enabled !== 'boolean' ||
-    Object.keys(value).some((k) => !['version', 'enabled', 'native_config_target'].includes(k)) ||
+    Object.keys(value).some(
+      (k) => !['version', 'enabled', 'native_config_target', 'transport'].includes(k)
+    ) ||
+    (value.transport !== undefined &&
+      (surface !== 'opencode' ||
+        value.transport !== 'project-native-stop' ||
+        value.native_config_target !== undefined)) ||
     (value.native_config_target !== undefined &&
       (typeof value.native_config_target !== 'string' ||
         !path.isAbsolute(value.native_config_target)))

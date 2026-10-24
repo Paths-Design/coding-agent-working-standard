@@ -8444,6 +8444,160 @@ Additional bounded evidence and unresolved dependencies:
   Root retains the native producer/prefix/profile/consumer join and final-image
   qualification.
 
+- E319: The bounded ingress/deadline correction lands on main through governed
+  merge fec80595; closure commit925b5a59 retains all three recorded component
+  criteria and removes only the temporary landing lane. Normal integration
+  8cefd13b preserves the publication candidate2448b992 executable bytes and
+  canonical governance. The retained ingress-deadline-landing-01 source binding
+  compares all99 native source pins across six positive/compile receipts and
+  all395 pins from the final OpenCode execution: zero mismatches. Package-source
+  diff against2448b992 is empty before and after landing. Full-basis gates
+  evaluate15 files with5 PASS; doctor0E/4W/5I retains installed-hook drift.
+  Acceptance records12627–12629 are read back from both spec and event history.
+  Commit citation verification establishes identity; actual payload, filesystem,
+  negative-control and restoration observations remain E317/E318. The active
+  publication lane merges main and retains root ownership of ordinary Stop
+  producer, native prefix, production profile admission and consumer
+  integration. Stop-prefix and OpenCode producer proposals have formatting/apply
+  checks only; neither is activated or accepted. Residency/fairness, full Python
+  retirement, supported harness delivery and actual machine selection remain
+  unqualified.
+
+- E320: Native Stop prefix preparation adds a distinct event/schema path while
+  preserving the SessionEnd wrapper. The owner retains original project/query
+  settlement, process ancestry and monotonic expiry; completion cannot renew the
+  deadline or erase partial effects. stop-prefix-wire-baseline-01 executes the
+  existing22 wire controls with exit0. stop-prefix-wire-candidate-01 exits0
+  with31 controls; retained actual envelopes carry hook_event Stop and exact
+  session/root pointers. Cancellation after the envelope leaves that file, no
+  pointer and an incomplete result; delayed consumption refuses a previously
+  completed result after its original expiry. These wire fixtures explicitly use
+  synthetic original-project witnesses and do not establish original Git
+  observation. stop-prefix-pid-candidate-01 exits0 with10 controls, including
+  six actual native subprocess cases for Codex, OpenCode and the four shipped
+  ZCode process names. Actual PID records preserve created_at and observed
+  birth, stale entries are removed according to the existing age/liveness rules,
+  and the second reap is rate-limited without replacing its marker. Process-name
+  correlation is not executable authenticity. Five stop-prefix-negative-\*-01
+  mutants each execute one selected control and exit101 for wrong envelope
+  event, renewed expiry, wrong original project, one unsettled query or absent
+  query PID. Restoration receipts verify exact candidate source bytes and no
+  owned process residue. Both positive receipts match all99 native source pins
+  after restoration. This implements a bounded library prerequisite; no
+  production Stop capability or caller is activated. Root retains QualifiedStop
+  admission and the ordinary producer/prefix/profile/SQL/render/consumer join
+  before any parity verdict.
+
+- E321: Linked SQLite identity has a typed exact matcher and receipt borrowing
+  the original native generation and MonotonicDeadline. Expected identity data
+  construction grants no production qualification; no default policy is
+  supplied. sqlite-identity-candidate-01 exits0 with three observation/mismatch
+  controls; sqlite-identity-receipt-01 exits0 with seven controls including
+  actual generation verification over explicitly synthetic fixture members. The
+  retained linked identity is SQLite3.53.4, source
+  bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b33e4e09459bcc,
+  threading1,39 exact sorted options and compiled
+  prefix2034ab7b8e7d48457c74ba4482292d82221270965e813e0e2dc8e9c5c58666c9. Actual
+  manifests, changed engine bytes, retained/replaced directories and original
+  deadline envelopes accompany refusal diagnostics. Corrupted members, replaced
+  original directories and original expiry refuse receipt capture or reuse; an
+  unrelated fresh deadline cannot renew the receipt. The actual binary
+  --sqlite-build-identity invocation in sqlite-identity-diagnostic-01 exits0 and
+  emits the same diagnostic identity. Two sqlite-identity-negative-\*-01
+  controls bypass exact matching or the post-introspection checkpoint: both
+  execute one test and exit101 for falsely successful results, with exact byte
+  restoration and empty owned process groups. All99 source pins match the
+  receipt execution. This is identity evidence, not admitted SQL/renderer
+  semantics or production activation. Ordinary Stop must not execute Python to
+  select a profile. Retained qualification proves explicit CPython3.11.13
+  int4300/int0 baselines; the old installed hook's effective ambient interpreter
+  remains unknown. Root owns the authenticated generation policy and native
+  selection/profile join.
+
+- E322: Root owns the unimplemented ordinary Stop join: a binary-private
+  qualification owner alongside GenerationReceipt and activation of the
+  library-owned original capture bridge described in E325. The native request
+  must supply original cwd/environment/raw payload before Node; capture must
+  produce project and ancestry observations itself, not accept an asserted
+  project or a TS permission flag. Source inspection identifies two later Git
+  observations in render_owner/store.rs ingress and transcript_store_wire.rs
+  serve. Both qualified branches must consume the same original native
+  observation; changing only ingress leaves recomputation. ProjectFailure
+  retains an uncertain Git Child; converting it to a string or dropping it at
+  frontend exit loses custody. Root owns retained cleanup or the native
+  custodian integration before activation. Exact OpenCode host probe
+  opencode-installed-identity-01 exits0 with1.18.27 and executable SHA
+  f35111b79296714194653fc8e74f28f6732589bacf0fbf59504c592ef6a727b6. Producer
+  qualification must use that loader version, preserve nested caller directory
+  discovery, and account for remote/managed producers; matching local plugin
+  bytes alone cannot establish the effective loaded producer set. The producer
+  worker owns configure/migrate/init and observed local registration; root
+  retains actual harness and consumer verification. No parent AC changes.
+
+- E323: OpenCode project-native Stop transport has executable configuration,
+  migration and fresh-init paths. The selected runtime inventories generated
+  plugin bytes; explicit native opt-in writes machine transport settings, while
+  migration preserves reviewed policy and refuses unknown plugin growth. Fresh
+  init installs compatibility callbacks and publishes the selected producer
+  last. Native Stop retains its own nested plugin directory and never replays
+  legacy Stop after a native attempt. Other callbacks remain compatibility work.
+  Root executed opencode-producer-baseline-build-01 and baseline-regression-01
+  (exit0,99 cases), then candidate-build-01 and candidate-tests-01 (exit0,38
+  cases). Candidate-regression-01 exits1 with154 passing and one obsolete
+  categorical OpenCode-refusal oracle; the revised explicit-opt-in and legacy
+  image refusal check passes in registration-final-01 (exit0,16 cases). Three
+  behavioral negative controls exit1: collapsed caller cwd, omitted
+  selected-producer equality and overwritten custom plugin. Each exact original
+  is restored; process-group residue is empty. Artifacts under
+  publication-integration/opencode-producer-candidate-fixtures-01 include actual
+  argv.bin/input.json/context.bin, generated producer, selected project policy,
+  local-readset.json and transaction backups. Root checks rollback fixture
+  ZkIJQg plugin against backup before bytes (equal), with no project policy;
+  migration gK9DZi and initialization F3SmRJ match backup after bytes and retain
+  project policies. The executable image and producer recording entry are
+  synthetic test fixtures. These observations do not establish real harness
+  loading/delivery, SQL/profile admission, full Python retirement or cutover.
+  Root owns original native Stop joining and actual installed qualification; the
+  worker's producer assignment is integrated, not parent-complete.
+
+- E324: Independent review of246254d7 identifies init's other-surface policy
+  bypass. Root reproduces it in opencode-other-surface-counterexample-01:
+  preview and apply both return0 for legacy OpenCode hooks with only a Codex
+  machine policy; both intended refusal assertions fail. Init preflight requires
+  and validates the existing OpenCode surface policy before either path can
+  proceed. opencode-other-surface-build-01 exits0; fixed-01 exits0 with32 cases,
+  including unchanged-tree refusals in both modes and successful repeat init
+  after reviewed OpenCode migration. Counterexample and corrected fixtures
+  retain status/output and plugin/policy bytes. The same-provider review's
+  remaining bounded source observations and transaction evidence are grounded;
+  no actual harness or parent acceptance is inferred.
+
+- E325: The library-owned OriginalStopCapture observes actual project and native
+  ancestry from captured cwd/environment/raw payload, retains the original
+  MonotonicDeadline, and binds one prefix-owner attempt to the original process,
+  request, generation digest, surface and payload. Structured project failure
+  retains its actual Git child and original interruption cause. Root executes
+  original-stop-capture-candidate-01: exit0,37 tests; native-check-01 and
+  feature-off-check-01 both exit0. All recorded source/tool inputs remain stable
+  and owned process groups are empty. Retained actual-original-project.json
+  records two real Git children69474/69477, exit0, both pipe EOFs and reap, with
+  nested payload cwd winning over a missing environment project and poisoned
+  GIT_DIR. actual-prefix.json and repository session files retain the envelope,
+  pointer and PID record with the same original clock. Failure/cancellation
+  artifacts retain Git exit128 or SIGKILL9 and structured reasons; these runs
+  settle cleanup and do not exercise uncertain custody after frontend death. Six
+  original-stop-capture-negative-\*-01 mutations each execute an assertion
+  failure and exit101, with exact restoration. The clock mutation establishes
+  checkpoint sensitivity, not absence of later effects. Tests use a native
+  libtest child with controlled OpenCode argv0, not the installed harness. This
+  bridge is not called by main before Node and grants no production
+  qualification. Source inspection finds UID-only resident authentication and
+  two later project observations. Root owns spawning original Git queries inside
+  the durable custodian, protected native registration before Node, and reuse of
+  that one observation through prefix and both store stages. A serialized
+  asserted project over the current public socket cannot satisfy that authority
+  contract. No parent AC or retirement status changes.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -8552,7 +8706,7 @@ complete its parent outcome.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                               |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E316 lands the bounded source slice on main; qualify the next production-connected image and actual harness delivery after the ingress and deadline corrections                                                                                   |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E319 lands ingress and deadline corrections on main; qualify the next production-connected image and actual harness delivery after ordinary Stop integration                                                                                      |
 | Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
 | Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
 

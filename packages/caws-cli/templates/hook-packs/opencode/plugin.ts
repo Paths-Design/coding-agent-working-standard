@@ -52,6 +52,9 @@ import * as fs from 'node:fs';
 
 const SURFACE = 'opencode';
 const UNKNOWN_ROOT = '';
+// Explicit machine migration renders this one binding in a generation member.
+// Project-pack installation remains on its existing transport until migration.
+const NATIVE_STOP_HOME: string | null = null;
 
 interface ProjectRoot {
   worktree?: string | null;
@@ -115,13 +118,21 @@ interface DispatchResult {
   stderr: string;
 }
 
-function dispatch(root: string, dispatcher: string, payload: string): DispatchResult {
-  const script = path.join(root, '.caws', 'hooks', 'dispatch', dispatcher);
+function dispatch(root: string, dispatcher: string, payload: string,
+  nativeDirectory?: string): DispatchResult {
+  const nativeHome = dispatcher === 'stop.sh' ? NATIVE_STOP_HOME : null;
+  const script = nativeHome !== null
+    ? path.join(nativeHome, 'bin/caws-hook-native')
+    : path.join(root, '.caws', 'hooks', 'dispatch', dispatcher);
+  const args = nativeHome !== null ? [SURFACE, 'stop', '--system'] : [];
+  if (nativeHome !== null && (!nativeDirectory || !path.isAbsolute(nativeDirectory)))
+    return { exitCode: 2, stdout: '', stderr: 'Native Stop requires own absolute plugin directory' };
   try {
-    const res = spawnSync(script, [], {
-      cwd: root,
+    const res = spawnSync(script, args, {
+      cwd: nativeHome !== null ? (nativeDirectory ?? root) : root,
       input: payload,
-      env: { ...process.env, CAWS_AGENT_SURFACE: SURFACE, CAWS_PROJECT_DIR: root },
+      env: { ...process.env, CAWS_AGENT_SURFACE: SURFACE, CAWS_PROJECT_DIR: root,
+        ...(nativeHome !== null ? { CAWS_HOME: nativeHome } : {}) },
       encoding: 'utf8',
       timeout: 45000,
       maxBuffer: 8 * 1024 * 1024,
@@ -502,7 +513,8 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
         currentSessionId = sid;
         const root = projectRoot();
         if (root === UNKNOWN_ROOT) return;
-        dispatch(root, dispatcher, JSON.stringify({ session_id: sid }));
+        dispatch(root, dispatcher, JSON.stringify({ session_id: sid }),
+          typeof ctx.directory === 'string' ? ctx.directory : undefined);
       } catch {
         // lifecycle hooks are advisory
       }

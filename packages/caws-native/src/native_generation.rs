@@ -227,6 +227,15 @@ impl GenerationReceipt {
     }
 }
 
+/// Test-only adapter to the existing verified generation fixture. It captures
+/// through the original verifier seam; no receipt fields are fabricated.
+#[cfg(all(test, feature = "sqlite-store"))]
+pub(crate) fn with_sqlite_identity_generation_fixture<R>(
+    action: impl FnOnce(&GenerationReceipt, &Path, &Path) -> R,
+) -> R {
+    tests::with_sqlite_identity_generation_fixture(action)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,6 +375,15 @@ mod tests {
             GenerationReceipt::capture_at(&self.home, &self.config, native, &mut verify)
         }
     }
+    #[cfg(feature = "sqlite-store")]
+    pub(super) fn with_sqlite_identity_generation_fixture<R>(
+        action: impl FnOnce(&GenerationReceipt, &Path, &Path) -> R,
+    ) -> R {
+        let fixture = Fixture::new();
+        let generation = fixture.capture().unwrap();
+        action(&generation, &fixture.home, &fixture.root)
+    }
+
     impl Drop for Fixture {
         fn drop(&mut self) {
             if std::env::var_os("CAWS_NATIVE_GENERATION_TEST_ARTIFACTS").is_some() {

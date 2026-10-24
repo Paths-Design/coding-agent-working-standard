@@ -34,6 +34,8 @@ import {
   configureSystemRuntime,
   migrateSystemProject,
   systemSurfaceEnabled,
+  initializeOpenCodeSystemProject,
+  assertOpenCodeInitMigration,
 } from '../../init/system-runtime';
 import { adoptMachineAdapter } from '../../init/machine-adapter-policy';
 import { resolveGitBinary } from '../../store/git-binary';
@@ -242,7 +244,8 @@ function performHookPackStep(
   repoRoot: string,
   surface: AgentSurface | null,
   reason: 'explicit' | 'detected' | 'ambiguous' | 'none',
-  options: InitCommandOptions
+  options: InitCommandOptions,
+  nativeOpenCode = false
 ): HookPackInstallResult {
   if (surface === null) {
     // No surface chosen — emit skipped_ambiguous.
@@ -296,7 +299,7 @@ function performHookPackStep(
   // stamp-only files and left them as surprise residue on main; a parallel
   // session hit the same side effect with 45.)
   if (options.overwrite === true && options.force !== true) {
-    return planHookPackStep(repoRoot, surface, options);
+    return planHookPackStep(repoRoot, surface, options, nativeOpenCode);
   }
 
   const installOpts: Parameters<typeof installHookPack>[1] = {
@@ -305,7 +308,16 @@ function performHookPackStep(
   };
 
   const sharedResult = installHookPack(sharedPackForSurface(surface), installOpts);
-  const vendorResult = installHookPack(resolution.pack, installOpts);
+  const vendorPack =
+    nativeOpenCode && surface === 'opencode'
+      ? {
+          ...resolution.pack,
+          installedFiles: resolution.pack.installedFiles.filter(
+            (file) => file.destPath !== '.opencode/plugins/caws.ts'
+          ),
+        }
+      : resolution.pack;
+  const vendorResult = installHookPack(vendorPack, installOpts);
 
   // CAWS-HARNESS-TELEMETRY-ADAPTER-001: on adapter-covered surfaces the
   // telemetry rows are no longer in the install set, so managed copies left
@@ -389,7 +401,8 @@ function mergeHookPackResults(
 function planHookPackStep(
   repoRoot: string,
   surface: AgentSurface | null,
-  options: InitCommandOptions
+  options: InitCommandOptions,
+  nativeOpenCode = false
 ): HookPackInstallResult {
   if (surface === null) {
     return {
@@ -424,7 +437,16 @@ function planHookPackStep(
   };
 
   const sharedResult = planHookPackInstall(sharedPackForSurface(surface), planOpts);
-  const vendorResult = planHookPackInstall(resolution.pack, planOpts);
+  const vendorPack =
+    nativeOpenCode && surface === 'opencode'
+      ? {
+          ...resolution.pack,
+          installedFiles: resolution.pack.installedFiles.filter(
+            (file) => file.destPath !== '.opencode/plugins/caws.ts'
+          ),
+        }
+      : resolution.pack;
+  const vendorResult = planHookPackInstall(vendorPack, planOpts);
   return mergeHookPackResults(sharedResult, vendorResult);
 }
 
@@ -471,6 +493,7 @@ interface InitPlanDocument {
    *  other surface retires anything — an always-present empty section would
    *  read as a promise the command never makes. */
   readonly telemetry_retirement?: TelemetryRetirePlan;
+  readonly opencode_project_transport?: readonly string[];
   readonly next_apply_command: string;
 }
 
@@ -744,6 +767,10 @@ function renderInitPlan(plan: InitPlanDocument): string {
   lines.push(`repo: ${plan.repo_root}`);
   lines.push('');
   lines.push('Canonical .caws state:');
+  if (plan.opencode_project_transport) {
+    lines.push('OpenCode project-native Stop transport (restart required):');
+    for (const file of plan.opencode_project_transport) lines.push(`  would write: ${file}`);
+  }
   lines.push(`  outcome: ${plan.canonical_state.outcome}`);
   for (const p of plan.canonical_state.paths) {
     lines.push(`  - ${p.action}: ${p.relPath}`);
@@ -942,7 +969,23 @@ function runInitPlan(
   const detection = detectAgentHarness(repoRoot);
   const chosen = chooseSurface(opts.agentSurface, detection);
   const system = systemSurfaceEnabled(chosen.surface, opts.home);
-  const hookPlan = planHookPackStep(repoRoot, system ? 'none' : chosen.surface, opts);
+  if (system && chosen.surface === 'opencode')
+    assertOpenCodeInitMigration({ repo: repoRoot, ...(opts.home ? { home: opts.home } : {}) });
+  const opencodeTransport =
+    system && chosen.surface === 'opencode'
+      ? initializeOpenCodeSystemProject({
+          surface: 'opencode',
+          repo: repoRoot,
+          ...(opts.home ? { home: opts.home } : {}),
+          plan: true,
+        })
+      : undefined;
+  const hookPlan = planHookPackStep(
+    repoRoot,
+    system && chosen.surface !== 'opencode' ? 'none' : chosen.surface,
+    opts,
+    system && chosen.surface === 'opencode'
+  );
   const resolution =
     chosen.surface && chosen.surface !== 'none' ? resolveHookPack(chosen.surface) : null;
   const unimplemented =
@@ -1028,6 +1071,9 @@ function runInitPlan(
     ...(codexInstructions ? { codex_instructions: codexInstructions } : {}),
     ...(codexTrustNote ? { codex_trust_note: codexTrustNote } : {}),
     ...(telemetryRetirement ? { telemetry_retirement: telemetryRetirement } : {}),
+    ...(opencodeTransport
+      ? { opencode_project_transport: opencodeTransport.changes.map((c) => c.path) }
+      : {}),
     next_apply_command: applyCommand(opts),
   };
 
@@ -1325,6 +1371,18 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   let system: boolean;
   try {
     system = systemSurfaceEnabled(chosen.surface, opts.home);
+    if (system && chosen.surface === 'opencode') {
+      assertOpenCodeInitMigration({ repo: repoRoot, ...(opts.home ? { home: opts.home } : {}) });
+      const compatibility = planHookPackStep(repoRoot, 'opencode', opts, true);
+      if (compatibility.actions.some((action) => action.action === 'refused'))
+        throw new Error('OpenCode compatibility dispatchers require reconciliation');
+      initializeOpenCodeSystemProject({
+        surface: 'opencode',
+        repo: repoRoot,
+        ...(opts.home ? { home: opts.home } : {}),
+        plan: true,
+      });
+    }
   } catch (error) {
     err(`caws init: ${(error as Error).message}`);
     return 1;
@@ -1376,14 +1434,38 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // Step 2: choose the agent surface and install the hook pack.
   if (system)
     out(
-      `System runtime configured for ${chosen.surface}; stock hooks and native registration are managed in the user home. No project hook pack is installed.`
+      chosen.surface === 'opencode'
+        ? 'System stock hooks are selected with a project-local native Stop producer; other callback dispatchers retain project compatibility.'
+        : `System runtime configured for ${chosen.surface}; stock hooks and native registration are managed in the user home. No project hook pack is installed.`
     );
   const hookPackResult = performHookPackStep(
     repoRoot,
-    system ? 'none' : chosen.surface,
+    system && chosen.surface !== 'opencode' ? 'none' : chosen.surface,
     chosen.reason,
-    opts
+    opts,
+    system && chosen.surface === 'opencode'
   );
+  if (system && chosen.surface === 'opencode') {
+    try {
+      if (hookPackResult.actions.some((action) => action.action === 'refused'))
+        throw new Error('OpenCode compatibility dispatchers were not installed');
+      const preview = opts.overwrite === true && opts.force !== true;
+      initializeOpenCodeSystemProject({
+        surface: 'opencode',
+        repo: repoRoot,
+        ...(opts.home ? { home: opts.home } : {}),
+        ...(preview ? { plan: true } : {}),
+      });
+      out(
+        preview
+          ? 'OpenCode native Stop producer preview; no producer written.'
+          : 'OpenCode project-native Stop producer installed from selected generation; restart and native qualification required.'
+      );
+    } catch (error) {
+      err(`caws init: project transport failed: ${(error as Error).message}`);
+      return 1;
+    }
+  }
 
   // When detection produced an ambiguous result and no explicit flag,
   // the renderer's skipped_ambiguous branch handles the message.
@@ -1507,7 +1589,9 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // it.
   if (system) {
     out(
-      `System activation for ${chosen.surface}: user registration is configured. Verify native hook trust and execution in a fresh harness session.`
+      chosen.surface === 'opencode'
+        ? 'OpenCode project transport prepared; restart and verify native selection, complete Stop execution and consumer delivery in a fresh harness.'
+        : `System activation for ${chosen.surface}: user registration is configured. Verify native hook trust and execution in a fresh harness session.`
     );
   } else {
     // CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: tell the

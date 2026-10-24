@@ -252,6 +252,7 @@ export async function prepareRuntimeInvocation(
           surface: request.surface,
           event: request.event,
           system: request.configuration === 'system',
+          caller: request.caller,
         })
       : { status: 'inactive' as const, reason: context.reason };
   if (signal.aborted) throw signal.reason;
