@@ -1,6 +1,8 @@
 //! Resident acquisition, distinct from RenderOffer v1 and its LF+EOF bridge.
-//! Records are finite, unreleased, and never replayed or evicted. Registry weak
+//! Heavy records release only after durable terminal proof; history is never
+//! replayed or evicted. Registry weak
 //! references make status depend on the actual surviving actor/quarantine owner.
+mod refusal;
 use super::*;
 use crate::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
 use crate::{
@@ -512,9 +514,20 @@ pub(super) struct StoreRecord {
     publication: Option<publication::Publication>,
     publication_error: Option<String>,
     consumed: bool,
+    refused: bool,
     _operation: relay::OperationPermit,
 }
 impl StoreRecord {
+    fn unstarted_publication(&self) -> bool {
+        self.result.is_none()
+            && self.writer.is_none()
+            && self.publication.is_none()
+            && !self.consumed
+            && !self.refused
+            && self.original_project_bound
+            && self.original.publication
+            && self.original.native_stop.is_some()
+    }
     pub(super) fn idle_unknown(
         &self,
         operation: &journal::Operation,
@@ -572,7 +585,7 @@ impl StoreRecord {
             runtime_digest: self.original.runtime_digest.clone(),
             registration: Some(self.registration.clone()),
             original_project_bound: self.original_project_bound,
-            retained: !self.consumed,
+            retained: !self.consumed && !self.refused,
             acquisition,
             project_cleanup: match &self.result {
                 Some(Err(store::ServeError::ProjectObservation(error))) => {
@@ -674,6 +687,7 @@ impl StoreRegistry {
             publication: None,
             publication_error: None,
             consumed: false,
+            refused: false,
             _operation: operation,
         }));
         self.records
@@ -1677,7 +1691,26 @@ impl Actor {
     }
     fn acquire_publication_job(&mut self, mut job: StoreJob, original: Arc<StoreAcquire>) {
         let expires = job.transport.expires;
+        if job.transport.native.is_some() {
+            match self.reject_terminal_replay(&job, &original) {
+                Ok(true) => {
+                    job.complete();
+                    return;
+                }
+                Ok(false) => {}
+                Err(reason) => {
+                    job.record
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .publication_error = Some(reason);
+                    self.stage("publication_retained", &original.id);
+                    job.complete();
+                    return;
+                }
+            }
+        }
         let mut dispatch = None;
+        let mut native_qualification_refused = false;
         let outcome = (|| -> Result<()> {
             let request = original.request()?;
             let root = store::correlation_root(&request, &original.invocation()).map_err(err)?;
@@ -1689,9 +1722,16 @@ impl Actor {
             // sequence/reader while checked filesystem boundaries can perform a
             // native-only roundtrip; no socket or callback reaches Node.
             let relay = std::cell::RefCell::new(&mut job.transport);
-            relay
+            if let Err(reason) = relay
                 .borrow_mut()
-                .native_check(NativeStopPhase::BeforeReservation)?;
+                .native_check(NativeStopPhase::BeforeReservation)
+            {
+                // This flag is set only before entering reserve_original. An
+                // absent returned Dispatch cannot prove absence of durable
+                // Queued/Running state after a partial reservation failure.
+                native_qualification_refused = native_route;
+                return Err(reason);
+            }
             if native_route {
                 self.stage("native_stop_postqueue_validated", &original.id);
             }
@@ -1905,6 +1945,29 @@ impl Actor {
                 }
             }
             Err(reason) => {
+                if native_qualification_refused {
+                    job.record
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .publication_error = Some(reason.clone());
+                    match self.persist_native_refusal(&job, &original) {
+                        Ok(()) => {
+                            job.complete();
+                            return;
+                        }
+                        Err(persistence) => {
+                            job.record
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .publication_error = Some(format!(
+                                "{reason}; refusal custody unresolved: {persistence}"
+                            ));
+                            self.stage("publication_refusal_unresolved", &original.id);
+                            job.complete();
+                            return;
+                        }
+                    }
+                }
                 // Durable Running or returned publication keeps the restart
                 // fence. The record/actor retain every live ownership handle.
                 if let Some(dispatch) = &dispatch {

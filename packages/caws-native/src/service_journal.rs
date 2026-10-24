@@ -25,8 +25,11 @@
 //!
 //! maxRetainedRecords is the explicit persisted live-payload frontier. Exact
 //! terminal consumption atomically replaces a payload with a compact original-ID
-//! tombstone. Consumed history has independent count/byte frontiers; either full
-//! frontier refuses further consumption without evicting an ID. The journal owns
+//! tombstone. Independently established pre-reservation refusal writes a distinct
+//! compact terminal without claiming dispatch or consumer acknowledgement. Both
+//! terminal kinds share count/byte frontiers; exhaustion refuses reclamation
+//! without evicting an ID. Older readers reject the new refusal kind; same-home
+//! downgrade compatibility requires separate qualification. The journal owns
 //! at most 256 full 256-KiB records, 16 MiB of compact records, a 1-KiB config, an
 //! empty lock and one 256-KiB temporary. This is not unbounded retention parity.
 //!
@@ -59,6 +62,7 @@ use std::{
 };
 
 mod custody;
+mod refusal;
 pub use custody::Custody;
 
 pub const MAX_RETAINED_RECORDS: u16 = 256;
@@ -319,6 +323,14 @@ impl ConsumedTerminal {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "execution", deny_unknown_fields)]
 pub enum AcceptedOutcome {
+    /// Accepted registration history, not permission to dispatch. The owner
+    /// established refusal before entering publication reservation; no consumer
+    /// acknowledgement or publication is implied by this terminal record.
+    #[serde(rename = "refused_before_reservation")]
+    RefusedBeforeReservation {
+        admission: Accepted,
+        reason: PreReservationRefusalReason,
+    },
     #[serde(rename = "queued")]
     Queued { admission: Accepted },
     #[serde(rename = "running")]
@@ -351,6 +363,12 @@ pub enum AcceptedOutcome {
     },
 }
 impl AcceptedOutcome {
+    fn terminal_history(&self) -> bool {
+        matches!(
+            self,
+            Self::Consumed { .. } | Self::RefusedBeforeReservation { .. }
+        )
+    }
     fn queued() -> Self {
         Self::Queued {
             admission: Accepted::Value,
@@ -406,6 +424,11 @@ impl AcceptedOutcome {
             _ => true,
         }
     }
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PreReservationRefusalReason {
+    #[serde(rename = "native_qualification_refused")]
+    NativeQualificationRefused,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -498,6 +521,16 @@ impl Operation {
             return Ok(());
         }
         let bytes = self.verified_request()?;
+        if matches!(
+            self.outcome,
+            AcceptedOutcome::RefusedBeforeReservation { .. }
+        ) && bytes != self.identity.argument_digest.as_bytes()
+        {
+            return Err(JournalError::new(
+                ErrorKind::Corrupt,
+                "refusal original digest mismatch",
+            ));
+        }
         if bytes.len() > MAX_VERIFIED_REQUEST_BYTES
             || STANDARD.encode(&bytes) != self.verified_request_base64
             || hash(&bytes) != self.verified_request_sha256
@@ -1593,9 +1626,13 @@ impl Journal {
         {
             self.selected(index, expires)?;
             let previous = &self.entries[index].operation;
-            if matches!(previous.outcome, AcceptedOutcome::Consumed { .. }) {
+            if previous.outcome.terminal_history() {
                 return Ok(Admission::Rejected(RejectedOutcome::new(
-                    "consumed original request ID; no replay across generations",
+                    if matches!(previous.outcome, AcceptedOutcome::Consumed { .. }) {
+                        "consumed original request ID; no replay across generations"
+                    } else {
+                        "refused original request ID; no replay across generations"
+                    },
                 )));
             }
             if previous.identity != identity || previous.verified_request()? != verified_request {
@@ -1829,14 +1866,14 @@ impl Journal {
     fn live_count(&self) -> usize {
         self.entries
             .iter()
-            .filter(|entry| !matches!(entry.operation.outcome, AcceptedOutcome::Consumed { .. }))
+            .filter(|entry| !entry.operation.outcome.terminal_history())
             .count()
     }
     fn history_size(&self) -> Result<(usize, usize)> {
         let mut count = 0usize;
         let mut bytes = 0usize;
         for entry in &self.entries {
-            if matches!(entry.operation.outcome, AcceptedOutcome::Consumed { .. }) {
+            if entry.operation.outcome.terminal_history() {
                 count += 1;
                 bytes = bytes
                     .checked_add(encode(&entry.operation)?.len())
