@@ -1207,7 +1207,7 @@ mod invocation_diagnostic_tests {
             .unwrap();
         assert_eq!(
             phases.len(),
-            9,
+            11,
             "fixed fields only, independent of image size"
         );
         for name in [
@@ -1216,6 +1216,8 @@ mod invocation_diagnostic_tests {
             "identityAfter",
             "memberHashing",
             "inventoryModes",
+            "manifestDirectoryPlan",
+            "manifestAuthentication",
         ] {
             assert_eq!(phases[name]["count"], 0);
             assert_eq!(phases[name]["failures"], 0);

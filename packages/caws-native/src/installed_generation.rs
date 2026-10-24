@@ -41,6 +41,8 @@ pub(crate) struct Selection {
     root: PathBuf,
     pub inspected_digest: String,
     manifest: BTreeMap<String, String>,
+    // Derived only from this immutable admitted manifest, never filesystem state.
+    allowed_directories: BTreeSet<PathBuf>,
     route: Route,
 }
 
@@ -57,7 +59,7 @@ struct PhaseTotals {
 }
 #[derive(Default)]
 struct VerificationTotals {
-    phases: [Cell<PhaseTotals>; 5],
+    phases: [Cell<PhaseTotals>; 7],
     path_metadata_operations: Cell<u64>,
     fd_metadata_operations: Cell<u64>,
     hash_calls: Cell<u64>,
@@ -70,6 +72,8 @@ pub(crate) enum VerificationPhase {
     IdentityAfter,
     MemberHashing,
     InventoryModes,
+    ManifestDirectoryPlan,
+    ManifestAuthentication,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +90,8 @@ pub(crate) struct VerificationSnapshot {
     pub identity_after: PhaseSnapshot,
     pub member_hashing: PhaseSnapshot,
     pub inventory_modes: PhaseSnapshot,
+    pub manifest_directory_plan: PhaseSnapshot,
+    pub manifest_authentication: PhaseSnapshot,
     pub path_metadata_operations: u64,
     pub fd_metadata_operations: u64,
     pub hash_calls: u64,
@@ -132,6 +138,8 @@ impl VerificationDiagnostics {
             identity_after: phase(VerificationPhase::IdentityAfter),
             member_hashing: phase(VerificationPhase::MemberHashing),
             inventory_modes: phase(VerificationPhase::InventoryModes),
+            manifest_directory_plan: phase(VerificationPhase::ManifestDirectoryPlan),
+            manifest_authentication: phase(VerificationPhase::ManifestAuthentication),
             path_metadata_operations: self.0.path_metadata_operations.get(),
             fd_metadata_operations: self.0.fd_metadata_operations.get(),
             hash_calls: self.0.hash_calls.get(),
@@ -554,28 +562,41 @@ std::thread_local! {
 pub(crate) fn verification_count() -> usize {
     VERIFICATION_COUNT.with(std::cell::Cell::get)
 }
+// Construct once from authenticated manifest bytes under the original budget.
+// Reuse does not authenticate current files, modes, inventory or identities.
+fn manifest_directory_plan(
+    manifest: &BTreeMap<String, String>,
+    verify: &mut Verification<'_>,
+) -> Result<BTreeSet<PathBuf>, String> {
+    // The already byte-bounded manifest determines every permitted directory.
+    // Do not recurse into undeclared empty trees or invent a full-image byte cap.
+    verify.phase(VerificationPhase::ManifestDirectoryPlan, |verify| {
+        let mut directories = BTreeSet::new();
+        for relative in manifest.keys() {
+            verify.checkpoint()?;
+            let mut parent = relative_path(relative)?.parent();
+            while let Some(path) = parent {
+                verify.checkpoint()?;
+                if path.as_os_str().is_empty() {
+                    break;
+                }
+                directories.insert(path.to_path_buf());
+                parent = path.parent();
+            }
+        }
+        Ok(directories)
+    })
+}
+
 fn verify_files(
     root: &Path,
     manifest: &BTreeMap<String, String>,
+    allowed_directories: &BTreeSet<PathBuf>,
     verify: &mut Verification<'_>,
 ) -> Result<(), String> {
     #[cfg(test)]
     VERIFICATION_COUNT.with(|count| count.set(count.get() + 1));
-    // The already byte-bounded manifest determines every permitted directory.
-    // Do not recurse into undeclared empty trees or invent a full-image byte cap.
-    let mut directories = BTreeSet::new();
-    for relative in manifest.keys() {
-        verify.checkpoint()?;
-        let mut parent = relative_path(relative)?.parent();
-        while let Some(path) = parent {
-            verify.checkpoint()?;
-            if path.as_os_str().is_empty() {
-                break;
-            }
-            directories.insert(path.to_path_buf());
-            parent = path.parent();
-        }
-    }
+    verify.checkpoint()?;
     verify.phase(VerificationPhase::MemberHashing, |verify| {
         let native = manifest.contains_key(METADATA);
         let mut group: Option<MemberParent> = None;
@@ -657,7 +678,7 @@ fn verify_files(
                         .to_owned();
                     let stat = path_metadata(&path, verify)?;
                     if stat.is_dir() {
-                        if !directories.contains(Path::new(&relative)) {
+                        if !allowed_directories.contains(Path::new(&relative)) {
                             return Err(format!("Undeclared native runtime directory: {relative}"));
                         }
                         pending.push(path);
@@ -717,7 +738,8 @@ impl Selection {
         {
             return Err("Version-1 manifest lacks the legacy driver identity".into());
         }
-        verify_files(&root, &manifest, verify)?;
+        let allowed_directories = manifest_directory_plan(&manifest, verify)?;
+        verify_files(&root, &manifest, &allowed_directories, verify)?;
         let route = if manifest.contains_key(METADATA) {
             let entry: NativeEntry = serde_json::from_slice(&read_manifest_metadata(
                 &root,
@@ -772,6 +794,7 @@ impl Selection {
             root,
             inspected_digest: digest.to_owned(),
             manifest,
+            allowed_directories,
             route,
         })
     }
@@ -813,12 +836,20 @@ impl Selection {
 
     pub(crate) fn revalidate(&self, verify: &mut Verification<'_>) -> Result<(), String> {
         verify.checkpoint()?;
-        if file_digest(&confined(&self.root, "manifest.json", verify)?, verify)?
-            != self.inspected_digest
-        {
-            return Err("Selected manifest changed before launch".into());
-        }
-        verify_files(&self.root, &self.manifest, verify)
+        verify.phase(VerificationPhase::ManifestAuthentication, |verify| {
+            if file_digest(&confined(&self.root, "manifest.json", verify)?, verify)?
+                != self.inspected_digest
+            {
+                return Err("Selected manifest changed before launch".into());
+            }
+            Ok(())
+        })?;
+        verify_files(
+            &self.root,
+            &self.manifest,
+            &self.allowed_directories,
+            verify,
+        )
     }
 
     pub(crate) fn native_entry(&self) -> Option<&NativeEntry> {
