@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-PLAN-CACHE-LANDING-001
+title: 'Land immutable manifest planning and bounded evidence'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-24T17:40:01.750Z'
+updated_at: '2026-10-24T17:40:01.750Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native immutable manifest directory planning and diagnostics'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/installed_generation.rs'
+    - 'packages/caws-native/src/native_generation.rs'
+    - 'packages/caws-native/src/main.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Land exact reviewed source without changing parent acceptance, existing dependent lanes or selected runtime; retain all full hash and live inventory checks.'
+acceptance:
+  - id: A1
+    given: 'Reviewed candidate4f3f6214 and exact source checks'
+    when: 'Source lands through a separate main-based governed lane'
+    then: 'Main implementation and tracker equal the reviewed candidate with admitted path provenance.'
+  - id: A2
+    given: 'Candidate component tests and fresh10 artifacts'
+    when: 'Bounded source acceptance is adjudicated'
+    then: 'Retained hostile and mutation evidence supports immutable-plan reuse while SQL session oracle, pre-reservation cleanup, deadline reliability and cutover gaps remain explicit.'
+  - id: A3
+    given: 'Existing dependent lanes, parent specs and machine selection'
+    when: 'The landing completes'
+    then: 'Existing branch tips, physical lanes, parent acceptance and selected machine bytes remain unchanged.'
+observability:
+  - 'Exact Git blob equality, retained runtime/test receipts, registry/spec/pointer snapshots and matching acceptance events.'
+rollback:
+  - 'Use normal governed corrective or revert commit; do not rewrite history or alter machine selection.'
+non_functional: {}
+contracts:
+  - name: 'bounded-plan-cache-source'
+    type: behavior
