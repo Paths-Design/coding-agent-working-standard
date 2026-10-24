@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
+    cell::Cell,
     collections::{BTreeSet, VecDeque},
     fs::{self, File, Metadata, OpenOptions},
     io::{self, Read},
@@ -185,14 +186,31 @@ enum Anchor {
 enum Leaf {
     Identity(PathIdentity),
     Present(Stamp),
+    ExistsDirectory(PathIdentity),
     Absent,
     Failed(i32),
+}
+/// Followed metadata remains explicit. Only present-directory Exists omits
+/// inventory size/times/link count; type/mode, dev/ino and uid/gid stay native.
+#[derive(Debug, PartialEq, Eq)]
+enum Followed {
+    Exact(Stamp),
+    ExistsDirectory(PathIdentity),
+}
+impl Followed {
+    fn of(kind: OperationKind, metadata: &Metadata) -> Self {
+        if kind == OperationKind::Exists && metadata.is_dir() {
+            Self::ExistsDirectory(PathIdentity::of(metadata))
+        } else {
+            Self::Exact(Stamp::of(metadata))
+        }
+    }
 }
 #[derive(Debug, PartialEq, Eq)]
 struct Evidence {
     anchors: Vec<Anchor>,
     leaf: Leaf,
-    followed: Option<Stamp>,
+    followed: Option<Followed>,
     result_sha256: String,
 }
 struct Record {
@@ -219,6 +237,41 @@ pub(crate) struct SelectionObservationOwner<'a> {
 /// and has no constructor accepting JSON receipts.
 pub(crate) struct SelectionObservationReceipt<'native> {
     owner: SelectionObservationOwner<'native>,
+}
+
+std::thread_local! {
+    // Also reject nesting through a different receipt on the same native thread.
+    static VALIDATING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Only an active native readset bracket can construct this token. No cloning,
+/// serialization or public constructor can bypass the complete bracket.
+pub(crate) struct GenerationValidationScope<'scope, 'native> {
+    generation: &'native GenerationReceipt,
+    deadline: &'native MonotonicDeadline,
+    active: &'scope Cell<bool>,
+}
+impl GenerationValidationScope<'_, '_> {
+    pub(crate) fn check_binding(
+        &self,
+        generation: &GenerationReceipt,
+        deadline: &MonotonicDeadline,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        if !self.active.get()
+            || !std::ptr::eq(self.generation, generation)
+            || !std::ptr::eq(self.deadline, deadline)
+        {
+            return Err("Scoped generation/original deadline binding mismatch".into());
+        }
+        checkpoint(self.deadline, cancel)
+    }
+}
+struct ValidationGuard<'a>(&'a Cell<bool>);
+impl Drop for ValidationGuard<'_> {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
 }
 /// The transport may send these bounded chunks in its own correlated frames.
 /// A reply contains the exact existing TS inner observation JSON, including the
@@ -390,6 +443,17 @@ impl<'a> SelectionObservationOwner<'a> {
         self.generation.revalidate(self.deadline.expires(), || {
             checkpoint(self.deadline, cancel)
         })?;
+        self.revalidate_records(cancel)?;
+        // Generation hashes/inventory bracket re-reading the local readset.
+        self.generation.revalidate(self.deadline.expires(), || {
+            checkpoint(self.deadline, cancel)
+        })?;
+        checkpoint(self.deadline, cancel)
+    }
+    fn revalidate_records(
+        &self,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
         for record in &self.records {
             let (_, actual) = self.observe(&record.operation, cancel)?;
             if actual != record.evidence {
@@ -400,10 +464,6 @@ impl<'a> SelectionObservationOwner<'a> {
                 ));
             }
         }
-        // Generation hashes/inventory bracket re-reading the local readset.
-        self.generation.revalidate(self.deadline.expires(), || {
-            checkpoint(self.deadline, cancel)
-        })?;
         checkpoint(self.deadline, cancel)
     }
     fn validate_operation(&self, operation: &Operation) -> Result<(), String> {
@@ -522,7 +582,7 @@ impl<'a> SelectionObservationOwner<'a> {
         &self,
         operation: &Operation,
         cancel: &mut impl FnMut() -> Result<(), String>,
-        followed: &mut Option<Stamp>,
+        followed: &mut Option<Followed>,
     ) -> Result<io::Result<Value>, String> {
         let path = Path::new(&operation.path);
         let metadata = matches!(
@@ -551,7 +611,7 @@ impl<'a> SelectionObservationOwner<'a> {
                 .map(|value| json!({"kind":"info","value":value})),
             OperationKind::Stat | OperationKind::Exists => match fs::metadata(path) {
                 Ok(m) => {
-                    *followed = Some(Stamp::of(&m));
+                    *followed = Some(Followed::of(operation.kind, &m));
                     if operation.kind == OperationKind::Exists {
                         Ok(json!({"kind":"exists","value":true}))
                     } else {
@@ -607,7 +667,7 @@ impl<'a> SelectionObservationOwner<'a> {
                 if Stamp::of(&initial) != Stamp::of(&final_metadata) {
                     return Err("Selection directory changed during listing".into());
                 }
-                *followed = Some(Stamp::of(&final_metadata));
+                *followed = Some(Followed::of(operation.kind, &final_metadata));
                 Ok(json!({"kind":"listing","entries":entries}))
             }
             OperationKind::Read | OperationKind::RuntimeFile => {
@@ -622,7 +682,7 @@ impl<'a> SelectionObservationOwner<'a> {
                 } else {
                     match fs::metadata(path) {
                         Ok(m) => {
-                            *followed = Some(Stamp::of(&m));
+                            *followed = Some(Followed::of(operation.kind, &m));
                             Ok(json!({"kind":"executable"}))
                         }
                         Err(e) => Err(e),
@@ -638,7 +698,7 @@ impl<'a> SelectionObservationOwner<'a> {
         &self,
         operation: &Operation,
         cancel: &mut impl FnMut() -> Result<(), String>,
-        followed: &mut Option<Stamp>,
+        followed: &mut Option<Followed>,
     ) -> Result<io::Result<Value>, String> {
         let path = Path::new(&operation.path);
         let runtime = operation.kind == OperationKind::RuntimeFile;
@@ -715,7 +775,7 @@ impl<'a> SelectionObservationOwner<'a> {
         {
             return Err("Selection file changed during read".into());
         }
-        *followed = Some(Stamp::of(&finished));
+        *followed = Some(Followed::of(operation.kind, &finished));
         checkpoint(self.deadline, cancel)?;
         if runtime {
             Ok(info(&finished).map(
@@ -726,7 +786,7 @@ impl<'a> SelectionObservationOwner<'a> {
         }
     }
 }
-impl SelectionObservationReceipt<'_> {
+impl<'native> SelectionObservationReceipt<'native> {
     /// Native-only binding accessors; no engine field supplies these facts.
     pub(crate) fn runtime_digest(&self) -> &str {
         self.owner.generation.digest()
@@ -744,7 +804,61 @@ impl SelectionObservationReceipt<'_> {
         &self,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<(), String> {
+        if VALIDATING.with(Cell::get) {
+            return Err("Nested selection validation is not permitted".into());
+        }
         self.owner.revalidate(&mut cancel)
+    }
+    /// Full hashes/inventory enclose both local sweeps and the native-only
+    /// profile/SQLite work. A callback result cannot return before the second
+    /// sweep and full verification. Its fresh token lifetime cannot escape.
+    pub(crate) fn validate_with<T, E, C>(
+        &self,
+        mut cancel: C,
+        checks: impl for<'scope> FnOnce(
+            &GenerationValidationScope<'scope, 'native>,
+            &mut C,
+        ) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        C: FnMut() -> Result<(), String>,
+        E: From<String>,
+    {
+        VALIDATING.with(|active| {
+            if active.replace(true) {
+                return Err(E::from(
+                    "Nested selection validation is not permitted".into(),
+                ));
+            }
+            let guard = ValidationGuard(active);
+            checkpoint(self.owner.deadline, &mut cancel).map_err(E::from)?;
+            self.owner
+                .generation
+                .revalidate(self.owner.deadline.expires(), || {
+                    checkpoint(self.owner.deadline, &mut cancel)
+                })
+                .map_err(E::from)?;
+            self.owner
+                .revalidate_records(&mut cancel)
+                .map_err(E::from)?;
+            let scope = GenerationValidationScope {
+                generation: self.owner.generation,
+                deadline: self.owner.deadline,
+                active: guard.0,
+            };
+            let result = checks(&scope, &mut cancel);
+            self.owner
+                .revalidate_records(&mut cancel)
+                .map_err(E::from)?;
+            self.owner
+                .generation
+                .revalidate(self.owner.deadline.expires(), || {
+                    checkpoint(self.owner.deadline, &mut cancel)
+                })
+                .map_err(E::from)?;
+            checkpoint(self.owner.deadline, &mut cancel).map_err(E::from)?;
+            result
+        })
     }
     /// Native qualifier consumes these retained native-produced values. An
     /// engine echo of an equal JSON value cannot construct this borrowed owner.
@@ -806,11 +920,15 @@ fn absent(error: &io::Error) -> bool {
     )
 }
 fn operation_leaf(path: &Path, kind: OperationKind) -> Leaf {
-    if kind != OperationKind::PathIdentity {
+    if !matches!(kind, OperationKind::PathIdentity | OperationKind::Exists) {
         return optional_stamp(path, false);
     }
     match fs::symlink_metadata(path) {
-        Ok(m) => Leaf::Identity(PathIdentity::of(&m)),
+        Ok(m) if kind == OperationKind::PathIdentity => Leaf::Identity(PathIdentity::of(&m)),
+        Ok(m) if m.is_dir() => Leaf::ExistsDirectory(PathIdentity::of(&m)),
+        // A symlink leaf keeps its exact link stamp even when its followed
+        // target is a directory; resolved target/ancestry remain separate.
+        Ok(m) => Leaf::Present(Stamp::of(&m)),
         Err(e) if absent(&e) => Leaf::Absent,
         Err(e) => Leaf::Failed(e.raw_os_error().unwrap_or(0)),
     }
@@ -1175,6 +1293,308 @@ mod tests {
     }
 
     #[test]
+    fn coalesced_validation_runs_two_real_full_verifications_and_rejects_nested_work() {
+        fixture(|generation, home, _root| {
+            let policy = home.join("scope-policy.json");
+            fs::write(&policy, b"unchanged").unwrap();
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            let before = crate::installed_generation::verification_count();
+            let work = Cell::new(0);
+            let result: Result<usize, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    scope.check_binding(generation, &clock, cancel)?;
+                    let nested: Result<(), String> =
+                        receipt.validate_with(|| Ok(()), |_, _| Ok(()));
+                    assert!(nested.unwrap_err().contains("Nested"));
+                    assert!(
+                        receipt
+                            .revalidate(|| Ok(()))
+                            .unwrap_err()
+                            .contains("Nested")
+                    );
+                    work.set(work.get() + 1);
+                    Ok(17)
+                },
+            );
+            assert_eq!(result.unwrap(), 17);
+            let scans = crate::installed_generation::verification_count() - before;
+            assert_eq!(
+                scans, 2,
+                "count actual verify_files calls, not mocked scope entries"
+            );
+            assert_eq!(work.get(), 1);
+            receipt.revalidate(|| Ok(())).unwrap(); // scope guard was released
+            retain(
+                home,
+                "coalesced-count",
+                json!({"actualFullVerifications":scans,"innerCalls":work.get(),"returned":17,"nestedRefused":true,"syntheticGeneration":true}),
+            );
+        });
+    }
+
+    #[test]
+    fn coalesced_validation_refuses_expiry_during_inner_unsupported_none() {
+        // This pins closing-scope expiry, not actual EligibleStop construction.
+        fixture(|generation, home, _root| {
+            let clock = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+            let original_envelope = clock.envelope();
+            let receipt = owner(generation, &clock, home).seal(|| Ok(())).unwrap();
+            let inner_calls = Cell::new(0);
+            let positive: Result<Option<()>, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    scope.check_binding(generation, &clock, cancel)?;
+                    inner_calls.set(inner_calls.get() + 1);
+                    Ok(None)
+                },
+            );
+            assert_eq!(
+                positive.unwrap(),
+                None,
+                "fresh unsupported result remains compatibility"
+            );
+            let result: Result<Option<()>, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    scope.check_binding(generation, &clock, cancel)?;
+                    // Consume the unchanged real original deadline only after
+                    // the inner work was reached. No receipt/clock is forged.
+                    std::thread::sleep(
+                        clock
+                            .expires()
+                            .saturating_duration_since(std::time::Instant::now())
+                            + Duration::from_millis(2),
+                    );
+                    assert_eq!(
+                        clock.check().unwrap_err().to_string(),
+                        "Original monotonic deadline expired"
+                    );
+                    inner_calls.set(inner_calls.get() + 1);
+                    Ok(None)
+                },
+            );
+            let error =
+                result.expect_err("expired inner Ok(None) must not escape as compatibility");
+            assert_eq!(error, "Original monotonic deadline expired");
+            assert_eq!(
+                inner_calls.get(),
+                2,
+                "both callbacks actually returned unsupported None"
+            );
+            assert_eq!(clock.envelope(), original_envelope);
+
+            // A failed closing check must release the thread's scope guard.
+            // This is a distinct control invocation, not a renewed old clock.
+            let fresh_clock = deadline();
+            let fresh = owner(generation, &fresh_clock, home)
+                .seal(|| Ok(()))
+                .unwrap();
+            let subsequent: Result<Option<()>, String> =
+                fresh.validate_with(|| Ok(()), |_, _| Ok(None));
+            assert_eq!(subsequent.unwrap(), None);
+            retain(
+                home,
+                "coalesced-expired-inner-none",
+                json!({"error":error,"innerCalls":inner_calls.get(),"innerReturnedNone":true,
+                    "expiredUnsupportedNotReturned":true,"originalDeadlineUnchanged":true,
+                    "guardReleased":true,"syntheticGeneration":true,"actualEligibilityConstructed":false}),
+            );
+        });
+    }
+
+    #[test]
+    fn coalesced_validation_refuses_changed_readset_after_inner_unsupported_result() {
+        fixture(|generation, home, _root| {
+            let policy = home.join("scope-policy.json");
+            fs::write(&policy, b"before").unwrap();
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            let result: Result<(), String> = receipt.validate_with(
+                || Ok(()),
+                |_, _| {
+                    fs::write(&policy, b"after!").unwrap();
+                    Err("inner unsupported fixture".into())
+                },
+            );
+            let error = result.unwrap_err();
+            assert!(error.contains("Selection dependency changed"), "{error}");
+            assert!(!error.contains("inner unsupported"));
+            retain(
+                home,
+                "coalesced-late-readset",
+                json!({"error":error,"innerResultNotReturned":true,"syntheticGeneration":true}),
+            );
+        });
+    }
+
+    #[test]
+    fn coalesced_validation_refuses_same_byte_generation_replacement_at_closing_bracket() {
+        fixture(|generation, home, root| {
+            let policy = home.join("scope-policy.json");
+            fs::write(&policy, b"unchanged").unwrap();
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            let result: Result<usize, String> = receipt.validate_with(
+                || Ok(()),
+                |_, _| {
+                    let engine = root.join("engine.js");
+                    let replacement = home.join("replacement-engine");
+                    fs::write(&replacement, fs::read(&engine).unwrap()).unwrap();
+                    fs::set_permissions(&replacement, fs::metadata(&engine).unwrap().permissions())
+                        .unwrap();
+                    fs::rename(&replacement, &engine).unwrap();
+                    Ok(23)
+                },
+            );
+            let error = result.unwrap_err();
+            assert!(
+                matches!(
+                    error.as_str(),
+                    "Admitted generation directory changed" | "Admitted generation member changed"
+                ),
+                "{error}"
+            );
+            retain(
+                home,
+                "coalesced-closing-generation",
+                json!({"error":error,"sameByteReplacement":true,"valueNotReturned":23,"syntheticGeneration":true}),
+            );
+        });
+    }
+
+    #[test]
+    fn coalesced_scope_binds_exact_native_generation_clock_and_cancellation() {
+        fixture(|generation, home, _| {
+            fixture(|other, other_home, _| {
+                let clock = deadline();
+                let alien_clock = deadline();
+                let other_receipt = owner(other, &clock, other_home).seal(|| Ok(())).unwrap();
+                let receipt = owner(generation, &clock, home).seal(|| Ok(())).unwrap();
+                let result: Result<(), String> = receipt.validate_with(
+                    || Ok(()),
+                    |scope, cancel| {
+                        let nested: Result<(), String> =
+                            other_receipt.validate_with(|| Ok(()), |_, _| Ok(()));
+                        assert!(nested.unwrap_err().contains("Nested"));
+                        assert!(
+                            scope
+                                .check_binding(other, &clock, cancel)
+                                .unwrap_err()
+                                .contains("binding mismatch")
+                        );
+                        assert!(
+                            scope
+                                .check_binding(generation, &alien_clock, cancel)
+                                .unwrap_err()
+                                .contains("binding mismatch")
+                        );
+                        scope.check_binding(generation, &clock, cancel)
+                    },
+                );
+                result.unwrap();
+                let cancelled = Cell::new(false);
+                let result: Result<(), String> = receipt.validate_with(
+                    || {
+                        if cancelled.get() {
+                            Err("original scope cancellation".into())
+                        } else {
+                            Ok(())
+                        }
+                    },
+                    |_, _| {
+                        cancelled.set(true);
+                        Ok(())
+                    },
+                );
+                assert_eq!(result.unwrap_err(), "original scope cancellation");
+                receipt.revalidate(|| Ok(())).unwrap();
+                retain(
+                    home,
+                    "coalesced-binding-cancel",
+                    json!({"foreignGenerationRefused":true,"differentOriginalClockRefused":true,"cancelCause":"original scope cancellation","guardReleased":true,"syntheticGeneration":true}),
+                );
+            })
+        });
+    }
+
+    #[cfg(feature = "sqlite-store")]
+    #[test]
+    fn coalesced_scope_checks_actual_linked_sqlite_without_nested_full_verifications() {
+        use crate::sqlite_build_identity::{ExpectedSqliteIdentity, SqliteIdentityReceipt};
+        fixture(|generation, home, _| {
+            let clock = deadline();
+            let observed = crate::sqlite_build_identity::observe(&clock, || Ok(())).unwrap();
+            let value = serde_json::to_value(&observed).unwrap();
+            let expected = |source: String| {
+                ExpectedSqliteIdentity::from_expected_data(
+                    value["version"].as_str().unwrap().into(),
+                    source,
+                    value["threadSafe"].as_i64().unwrap() as i32,
+                    value["compileOptions"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_str().unwrap().into())
+                        .collect(),
+                    value["compiledPrefixSha256"].as_str().unwrap().into(),
+                )
+                .unwrap()
+            };
+            let expected_identity = expected(value["sourceId"].as_str().unwrap().into());
+            let receipt = owner(generation, &clock, home).seal(|| Ok(())).unwrap();
+            let before = crate::installed_generation::verification_count();
+            let result: Result<(), String> = receipt.validate_with(
+                || Ok(()),
+                |scope, mut cancel| {
+                    let linked = SqliteIdentityReceipt::capture_in_scope(
+                        scope,
+                        generation,
+                        &expected_identity,
+                        &clock,
+                        &mut cancel,
+                    )?;
+                    linked.revalidate_in_scope(scope, &mut cancel)
+                },
+            );
+            result.unwrap();
+            let scans = crate::installed_generation::verification_count() - before;
+            assert_eq!(scans, 2);
+            let wrong = expected(format!(
+                "{}-unqualified",
+                value["sourceId"].as_str().unwrap()
+            ));
+            let result: Result<SqliteIdentityReceipt<'_>, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    SqliteIdentityReceipt::capture_in_scope(
+                        scope, generation, &wrong, &clock, cancel,
+                    )
+                },
+            );
+            let error = result
+                .err()
+                .expect("changed actual SQLite identity must refuse");
+            assert!(
+                error.contains("SQLite identity mismatch: sourceId"),
+                "{error}"
+            );
+            retain(
+                home,
+                "coalesced-actual-sqlite",
+                json!({"actualLinked":value,"actualFullVerifications":scans,"changedExpectedError":error,"syntheticGeneration":true,"noStockOrSemanticGrant":true}),
+            );
+        });
+    }
+
+    #[test]
     fn path_identity_accepts_unrelated_sibling_inventory_changes() {
         fixture(|generation, home, _| {
             let clock = deadline();
@@ -1199,7 +1619,7 @@ mod tests {
     }
 
     #[test]
-    fn path_identity_excludes_contents_size_times_and_link_count_only_for_this_operation() {
+    fn path_identity_excludes_regular_file_contents_size_times_and_link_count() {
         fixture(|generation, home, _| {
             let clock = deadline();
             let path = home.join("identity-file");
@@ -2001,5 +2421,269 @@ mod tests {
                 .contains("Original monotonic deadline expired")
             );
         });
+    }
+    fn exists_directory_metadata(path: &Path) -> Value {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) => {
+                json!({"kind":file_kind(metadata.mode()),"dev":metadata.dev(),"ino":metadata.ino(),
+                "mode":metadata.mode(),"uid":metadata.uid(),"gid":metadata.gid(),"size":metadata.size(),"nlink":metadata.nlink(),
+                "mtime":metadata.mtime(),"mtimeNsec":metadata.mtime_nsec(),"ctime":metadata.ctime(),"ctimeNsec":metadata.ctime_nsec()})
+            }
+            Err(error) => json!({"errno":error.raw_os_error(),"error":error.to_string()}),
+        }
+    }
+
+    #[test]
+    fn exists_directory_writer_bootstrap_preserves_original_receipt() {
+        use std::os::unix::fs::PermissionsExt;
+        fixture(|generation, home, _| {
+            let physical_home = home.canonicalize().unwrap();
+            let project = physical_home.join("exists-writer-project");
+            let machine = physical_home.join("exists-writer-machine");
+            for directory in [&project, &machine] {
+                fs::create_dir(directory).unwrap();
+                fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            let governance = project.join(".caws");
+            fs::create_dir(&governance).unwrap();
+            fs::set_permissions(&governance, fs::Permissions::from_mode(0o700)).unwrap();
+            let policy = governance.join("policy.yaml");
+            fs::write(&policy, b"selected policy bytes\n").unwrap();
+            let clock = deadline();
+            let before = fs::symlink_metadata(&governance).unwrap();
+            let mut observed = owner(generation, &clock, &physical_home);
+            let original_exists = capture(&mut observed, OperationKind::Exists, &governance);
+            assert_eq!(
+                original_exists["result"],
+                json!({"kind":"exists","value":true})
+            );
+            capture(&mut observed, OperationKind::PathIdentity, &governance);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            // Public real writer bootstrap. The checked callback is library-
+            // private; this binary-module test revalidates the same receipt
+            // before and after acquisition, without changing that API.
+            receipt.revalidate(|| Ok(())).unwrap();
+            let writer =
+                caws_native::render_writer::acquire(&machine, &project, clock.expires()).unwrap();
+            let after = fs::symlink_metadata(&governance).unwrap();
+            assert_eq!(PathIdentity::of(&before), PathIdentity::of(&after));
+            assert_ne!(Stamp::of(&before), Stamp::of(&after));
+            assert_eq!(fs::read(&policy).unwrap(), b"selected policy bytes\n");
+            let effects = Cell::new(0);
+            let result = effect_after_revalidation(&receipt, &effects);
+            retain(
+                home,
+                "exists-directory-writer-bootstrap",
+                json!({
+                    "scope":"actual public writer bootstrap and actual native observation receipt with synthetic generation; no installed Stop callback join",
+                    "project":project,"writerMachineHome":machine,"originalExists":original_exists,
+                    "before":{"identity":format!("{:?}",PathIdentity::of(&before)),"stamp":format!("{:?}",Stamp::of(&before))},
+                    "after":exists_directory_metadata(&governance),"sameParentIdentity":true,"fullMetadataChanged":true,
+                    "markerPath":governance.join(".render-writer-provisioned"),
+                    "markerBase64":STANDARD.encode(fs::read(governance.join(".render-writer-provisioned")).unwrap()),
+                    "custodyPath":governance.join(".render-writer-custody"),
+                    "custodyMetadata":exists_directory_metadata(&governance.join(".render-writer-custody")),
+                    "effectCount":effects.get(),"error":result.as_ref().err(),
+                    "nativeEvidence":format!("{:?}",receipt.owner.records[0].evidence),
+                    "observations":receipt.observations().collect::<Vec<_>>()
+                }),
+            );
+            assert!(
+                result.is_ok(),
+                "writer bootstrap must not invalidate directory existence: {:?}",
+                result.err()
+            );
+            assert_eq!(effects.get(), 1);
+            drop(writer);
+        });
+    }
+
+    #[test]
+    fn exists_directory_identity_and_absence_changes_refuse_effects() {
+        use std::os::unix::fs::PermissionsExt;
+        for change in ["absent", "replacement", "mode", "symlink", "file-type"] {
+            fixture(|generation, home, _| {
+                let directory = home.join("exists-directory");
+                fs::create_dir(&directory).unwrap();
+                fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+                let original = exists_directory_metadata(&directory);
+                let clock = deadline();
+                let mut observed = owner(generation, &clock, home);
+                let row = capture(&mut observed, OperationKind::Exists, &directory);
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                match change {
+                    "absent" => fs::remove_dir(&directory).unwrap(),
+                    "replacement" => {
+                        fs::rename(&directory, home.join("retained-directory")).unwrap();
+                        fs::create_dir(&directory).unwrap();
+                        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+                    }
+                    "mode" => {
+                        fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap()
+                    }
+                    "symlink" => {
+                        let moved = home.join("retained-directory");
+                        fs::rename(&directory, &moved).unwrap();
+                        symlink(&moved, &directory).unwrap();
+                    }
+                    "file-type" => {
+                        fs::remove_dir(&directory).unwrap();
+                        fs::write(&directory, b"present file").unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                let effects = Cell::new(0);
+                let result = effect_after_revalidation(&receipt, &effects);
+                retain(
+                    home,
+                    &format!("exists-directory-{change}"),
+                    json!({"change":change,"originalExists":row,
+                    "before":original,"after":exists_directory_metadata(&directory),"effectCount":effects.get(),
+                    "error":result.as_ref().err(),"nativeEvidence":format!("{:?}",receipt.owner.records[0].evidence)}),
+                );
+                assert!(result.is_err(), "{change}");
+                assert_eq!(effects.get(), 0, "{change}");
+            });
+        }
+        fixture(|generation, home, _| {
+            let directory = home.join("absent-exists-directory");
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            let row = capture(&mut observed, OperationKind::Exists, &directory);
+            assert_eq!(row["result"]["value"], false);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::create_dir(&directory).unwrap();
+            let effects = Cell::new(0);
+            let result = effect_after_revalidation(&receipt, &effects);
+            retain(
+                home,
+                "exists-directory-absence-appears",
+                json!({"originalExists":row,"after":exists_directory_metadata(&directory),"error":result.as_ref().err(),"effectCount":effects.get()}),
+            );
+            assert!(result.is_err());
+            assert_eq!(effects.get(), 0);
+        });
+    }
+
+    #[test]
+    fn exists_directory_projection_preserves_native_identity_and_symlink_target() {
+        fixture(|generation, home, _| {
+            let target = home.join("exists-target");
+            fs::create_dir(&target).unwrap();
+            let link = home.join("exists-link");
+            symlink(&target, &link).unwrap();
+            let metadata = fs::metadata(&target).unwrap();
+            let expected = PathIdentity {
+                dev: metadata.dev(),
+                ino: metadata.ino(),
+                mode: metadata.mode(),
+                uid: metadata.uid(),
+                gid: metadata.gid(),
+            };
+            assert_eq!(
+                operation_leaf(&target, OperationKind::Exists),
+                Leaf::ExistsDirectory(expected)
+            );
+            let expected = PathIdentity {
+                dev: metadata.dev(),
+                ino: metadata.ino(),
+                mode: metadata.mode(),
+                uid: metadata.uid(),
+                gid: metadata.gid(),
+            };
+            assert_eq!(
+                Followed::of(OperationKind::Exists, &metadata),
+                Followed::ExistsDirectory(expected)
+            );
+            assert!(
+                matches!(
+                    operation_leaf(&link, OperationKind::Exists),
+                    Leaf::Present(_)
+                ),
+                "symlink leaf must retain exact stamp"
+            );
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Exists, &link);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            fs::create_dir(target.join("bootstrap-child")).unwrap();
+            let effects = Cell::new(0);
+            effect_after_revalidation(&receipt, &effects).unwrap();
+            assert_eq!(effects.get(), 1);
+            fs::rename(&target, home.join("retained-target")).unwrap();
+            fs::create_dir(&target).unwrap();
+            let result = effect_after_revalidation(&receipt, &effects);
+            retain(
+                home,
+                "exists-directory-symlink-target",
+                json!({"error":result.as_ref().err(),"effectCount":effects.get(),
+                "target":exists_directory_metadata(&target),"nativeEvidence":format!("{:?}",receipt.owner.records[0].evidence)}),
+            );
+            assert!(result.is_err());
+            assert_eq!(effects.get(), 1);
+        });
+    }
+
+    #[test]
+    fn exists_directory_does_not_relax_explicit_metadata_inventory_policy_or_negative_children() {
+        for change in [
+            "stat",
+            "lstat",
+            "list",
+            "policy",
+            "negative-child",
+            "file-exists",
+        ] {
+            fixture(|generation, home, _| {
+                let directory = home.join("exists-strict-directory");
+                fs::create_dir(&directory).unwrap();
+                let policy = directory.join("policy.yaml");
+                fs::write(&policy, b"original policy").unwrap();
+                let candidate = directory.join("higher-priority.json");
+                let clock = deadline();
+                let mut observed = owner(generation, &clock, home);
+                capture(&mut observed, OperationKind::Exists, &directory);
+                match change {
+                    "stat" => {
+                        capture(&mut observed, OperationKind::Stat, &directory);
+                    }
+                    "lstat" => {
+                        capture(&mut observed, OperationKind::Lstat, &directory);
+                    }
+                    "list" => {
+                        capture(&mut observed, OperationKind::List, &directory);
+                    }
+                    "policy" => {
+                        capture(&mut observed, OperationKind::Read, &policy);
+                    }
+                    "negative-child" => {
+                        capture(&mut observed, OperationKind::Exists, &candidate);
+                    }
+                    "file-exists" => {
+                        capture(&mut observed, OperationKind::Exists, &policy);
+                    }
+                    _ => unreachable!(),
+                }
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                match change {
+                    "policy" | "file-exists" => {
+                        fs::write(&policy, b"changed policy with a different size").unwrap()
+                    }
+                    "negative-child" => fs::write(&candidate, b"new candidate").unwrap(),
+                    _ => fs::create_dir(directory.join("bootstrap-child")).unwrap(),
+                }
+                let effects = Cell::new(0);
+                let result = effect_after_revalidation(&receipt, &effects);
+                retain(
+                    home,
+                    &format!("exists-directory-strict-{change}"),
+                    json!({"change":change,"error":result.as_ref().err(),"effectCount":effects.get(),
+                    "directory":exists_directory_metadata(&directory),"observations":receipt.observations().collect::<Vec<_>>() }),
+                );
+                assert!(result.is_err(), "{change}");
+                assert_eq!(effects.get(), 0, "{change}");
+            });
+        }
     }
 }

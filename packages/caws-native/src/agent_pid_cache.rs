@@ -676,78 +676,124 @@ fn remove_candidate(
     candidate: &Candidate,
     port: &mut impl ReapPort,
 ) -> io::Result<()> {
-    if identity(&candidate.file.metadata()?) != candidate.identity
-        || !same_entry(sessions, &candidate.name, &candidate.identity)?
-    {
-        return Err(io::Error::other(
-            "PID reap candidate changed before removal",
-        ));
-    }
-    let mut quarantine = None;
-    for _ in 0..16 {
-        let name = CString::new(format!(
-            ".caws-agent-pid-reap.{}.{}",
-            std::process::id(),
-            QUARANTINE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ))
-        .unwrap();
-        if unsafe { libc::mkdirat(sessions.as_raw_fd(), name.as_ptr(), 0o700) } == 0 {
-            quarantine = Some((session_cache::directory_at(sessions, &name, false)?, name));
-            break;
+    remove_candidate_with_authority(sessions, candidate, port, &mut || Ok(())).map_err(|failure| {
+        match failure {
+            FailureKind::Io(error) => error,
+            other => io::Error::other(format!("{other:?}")),
         }
-        if io::Error::last_os_error().kind() != io::ErrorKind::AlreadyExists {
-            return Err(io::Error::last_os_error());
-        }
-    }
-    let (directory, name) =
-        quarantine.ok_or_else(|| io::Error::other("PID reap quarantine collision limit"))?;
-    let result = (|| {
-        port.before_move(&candidate.name)?;
-        if unsafe {
-            libc::renameat(
-                sessions.as_raw_fd(),
-                candidate.name.as_ptr(),
-                directory.as_raw_fd(),
-                c"entry".as_ptr(),
-            )
-        } != 0
+    })
+}
+fn reap_authority(
+    authority: &mut impl FnMut() -> Result<(), String>,
+    refused: &mut bool,
+) -> io::Result<()> {
+    authority().map_err(|error| {
+        *refused = true;
+        io::Error::other(error)
+    })
+}
+fn remove_candidate_with_authority(
+    sessions: &File,
+    candidate: &Candidate,
+    port: &mut impl ReapPort,
+    authority: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), FailureKind> {
+    let mut authority_refused = false;
+    let result = (|| -> io::Result<()> {
+        if identity(&candidate.file.metadata()?) != candidate.identity
+            || !same_entry(sessions, &candidate.name, &candidate.identity)?
         {
-            return Err(io::Error::last_os_error());
+            return Err(io::Error::other(
+                "PID reap candidate changed before removal",
+            ));
         }
-        port.after_move(&candidate.name)?;
-        // Rename may update ctime. Compare the moved name with the still-held
-        // original FD, and require its other content/instance fields unchanged.
-        let held = identity(&candidate.file.metadata()?);
-        let content_unchanged = held.dev == candidate.identity.dev
-            && held.ino == candidate.identity.ino
-            && held.size == candidate.identity.size
-            && held.mtime == candidate.identity.mtime
-            && held.mtime_ns == candidate.identity.mtime_ns
-            && held.mode == candidate.identity.mode;
-        if !content_unchanged || !same_entry(&directory, c"entry", &held)? {
-            return match restore(&directory, sessions, &candidate.name) {
-                Ok(()) => Err(io::Error::other(
-                    "replaced PID reap entry restored without deletion",
-                )),
-                Err(error) => Err(io::Error::other(format!(
-                    "replaced PID reap entry retained in {} after restore failed: {error}",
-                    name.to_string_lossy()
-                ))),
-            };
+        let mut quarantine = None;
+        for _ in 0..16 {
+            let name = CString::new(format!(
+                ".caws-agent-pid-reap.{}.{}",
+                std::process::id(),
+                QUARANTINE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ))
+            .unwrap();
+            reap_authority(authority, &mut authority_refused)?;
+            if unsafe { libc::mkdirat(sessions.as_raw_fd(), name.as_ptr(), 0o700) } == 0 {
+                quarantine = Some((session_cache::directory_at(sessions, &name, false)?, name));
+                break;
+            }
+            if io::Error::last_os_error().kind() != io::ErrorKind::AlreadyExists {
+                return Err(io::Error::last_os_error());
+            }
         }
-        // Only the validated moved instance is removed inside the retained
-        // private directory. No subsequent lookup of the shared name is deleted.
-        if unsafe { libc::unlinkat(directory.as_raw_fd(), c"entry".as_ptr(), 0) } != 0 {
-            return Err(io::Error::last_os_error());
+        let (directory, name) =
+            quarantine.ok_or_else(|| io::Error::other("PID reap quarantine collision limit"))?;
+        let result = (|| {
+            port.before_move(&candidate.name)?;
+            reap_authority(authority, &mut authority_refused)?;
+            if unsafe {
+                libc::renameat(
+                    sessions.as_raw_fd(),
+                    candidate.name.as_ptr(),
+                    directory.as_raw_fd(),
+                    c"entry".as_ptr(),
+                )
+            } != 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            port.after_move(&candidate.name)?;
+            // Publication/move authority is not reused for destructive unlink.
+            // A later refusal must restore this already-moved instance without
+            // asking authority for permission to perform compensating cleanup.
+            if let Err(error) = reap_authority(authority, &mut authority_refused) {
+                return match restore(&directory, sessions, &candidate.name) {
+                    Ok(()) => Err(error),
+                    Err(restore_error) => Err(io::Error::other(format!(
+                        "{error}; PID reap entry retained in {} after authority refusal and restore failed: {restore_error}",
+                        name.to_string_lossy()
+                    ))),
+                };
+            }
+            // Rename may update ctime. Compare the moved name with the still-held
+            // original FD, and require its other content/instance fields unchanged.
+            let held = identity(&candidate.file.metadata()?);
+            let content_unchanged = held.dev == candidate.identity.dev
+                && held.ino == candidate.identity.ino
+                && held.size == candidate.identity.size
+                && held.mtime == candidate.identity.mtime
+                && held.mtime_ns == candidate.identity.mtime_ns
+                && held.mode == candidate.identity.mode;
+            if !content_unchanged || !same_entry(&directory, c"entry", &held)? {
+                return match restore(&directory, sessions, &candidate.name) {
+                    Ok(()) => Err(io::Error::other(
+                        "replaced PID reap entry restored without deletion",
+                    )),
+                    Err(error) => Err(io::Error::other(format!(
+                        "replaced PID reap entry retained in {} after restore failed: {error}",
+                        name.to_string_lossy()
+                    ))),
+                };
+            }
+            // Only the validated moved instance is removed inside the retained
+            // private directory. No subsequent lookup of the shared name is deleted.
+            if unsafe { libc::unlinkat(directory.as_raw_fd(), c"entry".as_ptr(), 0) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        })();
+        // AT_REMOVEDIR only removes an empty quarantine; never recursively delete
+        // a retained mismatch or an entry whose restore could not complete.
+        unsafe {
+            libc::unlinkat(sessions.as_raw_fd(), name.as_ptr(), libc::AT_REMOVEDIR);
         }
-        Ok(())
+        result
     })();
-    // AT_REMOVEDIR only removes an empty quarantine; never recursively delete
-    // a retained mismatch or an entry whose restore could not complete.
-    unsafe {
-        libc::unlinkat(sessions.as_raw_fd(), name.as_ptr(), libc::AT_REMOVEDIR);
-    }
-    result
+    result.map_err(|error| {
+        if authority_refused {
+            FailureKind::Cancelled(error.to_string())
+        } else {
+            FailureKind::Io(error)
+        }
+    })
 }
 impl PreparedPid {
     pub(crate) fn commit(
@@ -757,6 +803,17 @@ impl PreparedPid {
         root: &str,
         expires: Instant,
         cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Outcome {
+        self.commit_with_authority(sessions, sid, root, expires, cancel, &mut || Ok(()))
+    }
+    pub(crate) fn commit_with_authority(
+        self,
+        sessions: &mut session_cache::PreparedPrefix,
+        sid: &str,
+        root: &str,
+        expires: Instant,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+        authority: &mut impl FnMut() -> Result<(), String>,
     ) -> Outcome {
         let mut refreshed = false;
         let result = (|| {
@@ -781,16 +838,17 @@ impl PreparedPid {
                 .iter()
                 .find(|row| row.pid == pid)
                 .unwrap();
-            let directory = sessions.ensure_sessions().map_err(FailureKind::Io)?;
+            let directory = sessions.ensure_sessions_with_authority(authority)?;
             let now = session_cache::timestamp().map_err(FailureKind::Io)?;
             let mut bytes=serde_json::to_vec(&json!({"agent_pid":pid,"session_id":sid,"surface":self.original.surface,"repo_root":root,"created_at":self.created.as_ref().unwrap_or(&now),"last_seen_at":now,"started_at":observed.birth.seconds.to_string()})).map_err(|error|FailureKind::Io(io::Error::other(error)))?;
             bytes.push(b'\n');
-            session_cache::publish_json(
+            session_cache::publish_json_with_authority(
                 directory,
                 &CString::new(format!("agent-pid-{pid}.json")).unwrap(),
                 &bytes,
                 expires,
                 cancel,
+                authority,
             )?;
             refreshed = true;
             checkpoint(expires, cancel)?;
@@ -813,7 +871,9 @@ impl PreparedPid {
             }
             // Atomic empty replacement updates the same mtime contract without
             // truncating a hard-linked file outside the directory capability.
-            session_cache::publish_json(directory, MARKER, b"", expires, cancel)?;
+            session_cache::publish_json_with_authority(
+                directory, MARKER, b"", expires, cancel, authority,
+            )?;
             // Preserve distinct hard/grace/orphan pass start times and ordering.
             let mut reap_errors = Vec::new();
             for pass in 0..3 {
@@ -836,11 +896,22 @@ impl PreparedPid {
                         }
                         // Shell kill -0 failure, including EPERM, selects rm.
                     }
-                    if let Err(error) = remove_candidate(directory, candidate, &mut NativeReap) {
+                    if let Err(error) = remove_candidate_with_authority(
+                        directory,
+                        candidate,
+                        &mut NativeReap,
+                        authority,
+                    ) {
+                        if matches!(&error, FailureKind::Cancelled(_) | FailureKind::Deadline) {
+                            return Err(error);
+                        }
                         // Legacy rm failures do not suppress the remaining
                         // candidates or later passes. Retain a bounded diagnostic.
                         if reap_errors.len() < 8 {
-                            reap_errors.push(error.to_string());
+                            reap_errors.push(match error {
+                                FailureKind::Io(error) => error.to_string(),
+                                other => format!("{other:?}"),
+                            });
                         }
                     }
                 }

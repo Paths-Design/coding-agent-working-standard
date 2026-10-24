@@ -7,13 +7,62 @@
 //! No policy decision, project authority, SQL capability, or frame is issued here.
 use crate::{
     cli::Config,
-    installed_generation::{MemberMetadata, Selection, Verification},
+    installed_generation::{
+        MemberMetadata, Selection, Verification, VerificationDiagnostics, VerificationPhase,
+        VerificationSnapshot,
+    },
 };
 use std::{
+    cell::Cell,
     collections::BTreeMap,
     path::{Path, PathBuf},
-    time::Instant,
+    rc::Rc,
+    time::{Duration, Instant},
 };
+
+/// Request-local diagnostic accumulation. Never consulted by verification or
+/// authority. A shared handle preserves failed-capture measurements after the
+/// partial receipt is dropped; it is not a cache or a process-global counter.
+#[derive(Clone, Default)]
+pub(crate) struct CheckTimings(Rc<Cell<CheckTimingTotals>>, VerificationDiagnostics);
+#[derive(Clone, Copy, Default)]
+struct CheckTimingTotals {
+    count: u64,
+    elapsed: Duration,
+}
+#[derive(Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CheckTimingSnapshot {
+    pub count: u64,
+    pub elapsed_micros: u64,
+}
+impl CheckTimings {
+    pub(crate) fn verification_snapshot(&self) -> VerificationSnapshot {
+        self.1.snapshot()
+    }
+    pub(crate) fn measure<R>(&self, operation: impl FnOnce() -> R) -> R {
+        let started = Instant::now();
+        let result = operation();
+        // Record after either successful or refused completion; the operation's
+        // exact result is returned unchanged. Panics are outside CLI outcomes.
+        self.record(started.elapsed());
+        result
+    }
+    fn record(&self, elapsed: Duration) {
+        let previous = self.0.get();
+        self.0.set(CheckTimingTotals {
+            count: previous.count.saturating_add(1),
+            elapsed: previous.elapsed.saturating_add(elapsed),
+        });
+    }
+    pub(crate) fn snapshot(&self) -> CheckTimingSnapshot {
+        let totals = self.0.get();
+        CheckTimingSnapshot {
+            count: totals.count,
+            elapsed_micros: totals.elapsed.as_micros().min(u64::MAX as u128) as u64,
+        }
+    }
+}
 
 /// Fixed-size metadata plus the 64-byte digest; never the runtime file body.
 /// Not deserializable: only this native owner constructs an observation.
@@ -27,6 +76,7 @@ pub(crate) struct RuntimeMemberDigest {
 /// protocol owner must retain this value for the original invocation, correlate
 /// its observation ids/readset, and call revalidate before consuming selection.
 pub(crate) struct GenerationReceipt {
+    receipt_revalidation_timings: CheckTimings,
     selection: Selection,
     expires: Instant,
     files: BTreeMap<PathBuf, MemberMetadata>,
@@ -34,30 +84,59 @@ pub(crate) struct GenerationReceipt {
     ancestors: BTreeMap<PathBuf, MemberMetadata>,
 }
 impl GenerationReceipt {
+    #[cfg(test)]
     pub(crate) fn capture(
         home: &Path,
         config: &Config,
         expires: Instant,
+        cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Self, String> {
+        Self::capture_with_diagnostics(home, config, expires, CheckTimings::default(), cancel)
+    }
+
+    pub(crate) fn capture_with_diagnostics(
+        home: &Path,
+        config: &Config,
+        expires: Instant,
+        receipt_revalidation_timings: CheckTimings,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<Self, String> {
         let mut verify = Verification::new(expires, &mut cancel);
         verify.checkpoint()?;
         let running = std::env::current_exe();
         verify.checkpoint()?;
-        Self::capture_at(
+        Self::capture_at_with_diagnostics(
             home,
             config,
             &running.map_err(|e| e.to_string())?,
             &mut verify,
+            receipt_revalidation_timings,
         )
     }
 
     // The image path and chunk observer are private test seams only.
+    #[cfg(test)]
     fn capture_at(
         home: &Path,
         config: &Config,
         running_native: &Path,
         verify: &mut Verification<'_>,
+    ) -> Result<Self, String> {
+        Self::capture_at_with_diagnostics(
+            home,
+            config,
+            running_native,
+            verify,
+            CheckTimings::default(),
+        )
+    }
+
+    fn capture_at_with_diagnostics(
+        home: &Path,
+        config: &Config,
+        running_native: &Path,
+        verify: &mut Verification<'_>,
+        receipt_revalidation_timings: CheckTimings,
     ) -> Result<Self, String> {
         verify.checkpoint()?;
         let selection = Selection::read_generation(home, &config.digest, verify)?;
@@ -110,6 +189,7 @@ impl GenerationReceipt {
             }
         }
         let receipt = Self {
+            receipt_revalidation_timings,
             selection,
             expires: verify.expires(),
             files,
@@ -277,6 +357,40 @@ impl GenerationReceipt {
         })
     }
 
+    /// Bounded no-follow bytes from an already authenticated member. Reuses
+    /// installed metadata I/O and checks both retained identity and parsed-byte
+    /// digest, closing the manifest-hash-to-parse replacement window.
+    pub(crate) fn member_bytes(
+        &self,
+        relative: &str,
+        maximum: u64,
+        expires: Instant,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Vec<u8>, String> {
+        use sha2::{Digest, Sha256};
+        let mut verify = Verification::new(expires.min(self.expires), &mut cancel);
+        let expected = self.member_digest_with(relative, &mut verify)?;
+        let bytes = crate::installed_generation::read_metadata(
+            self.root(),
+            relative,
+            maximum,
+            &mut verify,
+        )?;
+        let mut hash = Sha256::new();
+        for chunk in bytes.chunks(64 * 1024) {
+            verify.checkpoint()?;
+            hash.update(chunk);
+        }
+        if format!("{:x}", hash.finalize()) != expected.sha256 {
+            return Err("Authenticated runtime member bytes changed".into());
+        }
+        if self.member_digest_with(relative, &mut verify)? != expected {
+            return Err("Authenticated runtime member identity changed".into());
+        }
+        verify.checkpoint()?;
+        Ok(bytes)
+    }
+
     fn check_ancestors(&self, verify: &mut Verification<'_>) -> Result<(), String> {
         verify.checkpoint()?;
         for (path, expected) in &self.ancestors {
@@ -322,9 +436,19 @@ impl GenerationReceipt {
         self.revalidate_with(&mut verify)
     }
     fn revalidate_with(&self, verify: &mut Verification<'_>) -> Result<(), String> {
-        self.check_identities(verify)?;
-        self.selection.revalidate(verify)?;
-        self.check_identities(verify)
+        self.receipt_revalidation_timings.measure(|| {
+            verify.diagnosed(&self.receipt_revalidation_timings.1, |verify| {
+                verify.phase(VerificationPhase::IdentityBefore, |verify| {
+                    self.check_identities(verify)
+                })?;
+                verify.phase(VerificationPhase::SelectionVerification, |verify| {
+                    self.selection.revalidate(verify)
+                })?;
+                verify.phase(VerificationPhase::IdentityAfter, |verify| {
+                    self.check_identities(verify)
+                })
+            })
+        })
     }
 }
 
@@ -357,6 +481,653 @@ pub(crate) fn with_large_selection_generation_fixture<R>(
 mod tests {
     use super::*;
     use std::fs;
+    #[test]
+    fn authenticated_member_bytes_preserve_bound_identity_and_original_expiry() {
+        let fixture = Fixture::new();
+        let mut generation = fixture.capture().unwrap();
+        assert_eq!(
+            generation
+                .member_bytes("engine.js", 1024, expires(), || Ok(()))
+                .unwrap(),
+            b"engine\n"
+        );
+        assert!(
+            generation
+                .member_bytes("engine.js", 1, expires(), || Ok(()))
+                .unwrap_err()
+                .contains("bound")
+        );
+        assert!(
+            generation
+                .member_bytes("not-admitted.json", 1024, expires(), || Ok(()))
+                .is_err()
+        );
+        assert_eq!(
+            generation
+                .member_bytes("engine.js", 1024, expires(), || Err(
+                    "cancel exact member".into()
+                ))
+                .unwrap_err(),
+            "cancel exact member"
+        );
+        generation.expires = Instant::now() - Duration::from_secs(1);
+        assert!(
+            generation
+                .member_bytes(
+                    "engine.js",
+                    1024,
+                    Instant::now() + Duration::from_secs(3600),
+                    || Ok(())
+                )
+                .unwrap_err()
+                .contains("deadline")
+        );
+        let generation = fixture.capture().unwrap();
+        let retired = fixture.root.join("retired-engine");
+        fs::rename(fixture.root.join("engine.js"), &retired).unwrap();
+        fs::write(fixture.root.join("engine.js"), b"engine\n").unwrap();
+        assert!(
+            generation
+                .member_bytes("engine.js", 1024, expires(), || Ok(()))
+                .unwrap_err()
+                .contains("changed")
+        );
+        fixture.record("authenticated-member-refusals", serde_json::json!({"bound":1,"sameByteReplacementRefused":true,"originalExpiryRetained":true,"syntheticGeneration":true}));
+    }
+
+    #[test]
+    fn diagnostic_timings_accumulate_submicroseconds_and_preserve_refusal_results() {
+        let timings = CheckTimings::default();
+        let shared = timings.clone();
+        timings.record(Duration::from_nanos(500));
+        shared.record(Duration::from_nanos(500));
+        assert_eq!(timings.snapshot().count, 2);
+        assert_eq!(timings.snapshot().elapsed_micros, 1);
+        let result = shared.measure(|| Err::<(), _>("original diagnostic refusal"));
+        assert_eq!(result, Err("original diagnostic refusal"));
+        assert_eq!(
+            timings.snapshot().count,
+            3,
+            "errors count on the same request-owned handle"
+        );
+        assert!(timings.snapshot().elapsed_micros >= 1);
+    }
+    #[test]
+    fn receipt_diagnostic_timings_count_success_and_cancelled_revalidations_only() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let initial = receipt.receipt_revalidation_timings.snapshot();
+        assert_eq!(
+            initial.count, 1,
+            "capture's receipt revalidation counts; initial Selection read does not"
+        );
+        receipt.revalidate(expires(), || Ok(())).unwrap();
+        assert_eq!(receipt.receipt_revalidation_timings.snapshot().count, 2);
+        assert_eq!(
+            receipt.revalidate(expires(), || Err("exact cancellation".into())),
+            Err("exact cancellation".into())
+        );
+        let after = receipt.receipt_revalidation_timings.snapshot();
+        assert_eq!(after.count, 3);
+        assert!(after.elapsed_micros >= initial.elapsed_micros);
+        receipt
+            .member_digest("engine.js", expires(), || Ok(()))
+            .unwrap();
+        assert_eq!(
+            receipt.receipt_revalidation_timings.snapshot().count,
+            3,
+            "member lookup is outside this precisely named counter"
+        );
+    }
+    fn member_parent_metadata(path: &Path, directory: bool) -> MemberMetadata {
+        let mut cancel = || Ok(());
+        MemberMetadata::read(
+            path,
+            directory,
+            &mut Verification::new(expires(), &mut cancel),
+        )
+        .unwrap()
+    }
+    fn member_parent_metadata_json(value: &MemberMetadata) -> serde_json::Value {
+        serde_json::json!({"dev":value.dev,"ino":value.ino,"size":value.size,"mode":value.mode,
+            "mtime":value.mtime,"mtimeNs":value.mtime_nsec,"ctime":value.ctime,"ctimeNs":value.ctime_nsec})
+    }
+    fn member_parent_fd_closed(verify: &Verification<'_>) {
+        let fd = verify
+            .last_parent_fd
+            .expect("the actual parent group must have opened");
+        assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EBADF),
+            "the original group FD must be closed, not merely unreachable from a path"
+        );
+    }
+    #[test]
+    fn member_parent_standalone_selection_hashes_every_byte_and_reuses_only_storage() {
+        let bytes = vec![b'x'; 2 * 65536 + 17];
+        let f = Fixture::with_engine(&bytes);
+        let diagnostics = VerificationDiagnostics::default();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        assert_eq!(verify.scratch_address(), None);
+        let selection = verify
+            .diagnosed(&diagnostics, |verify| {
+                Selection::read_generation(&f.home, &f.config.digest, verify)
+            })
+            .unwrap();
+        assert_eq!(selection.inspected_digest, f.config.digest);
+        assert!(selection.native_entry().is_some());
+        assert_eq!(
+            verify.scratch_allocations, 1,
+            "one real allocation across manifest, member and parser reads"
+        );
+        let address = verify.scratch_address().unwrap();
+        member_parent_fd_closed(&verify);
+        let phases = diagnostics.snapshot();
+        assert_eq!(phases.member_hashing.count, 1);
+        assert_eq!(phases.member_hashing.failures, 0);
+        assert_eq!(phases.inventory_modes.count, 1);
+        assert_eq!(phases.inventory_modes.failures, 0);
+        let expected = selection
+            .members()
+            .keys()
+            .map(|name| fs::metadata(f.root.join(name)).unwrap().len())
+            .sum::<u64>()
+            + fs::metadata(f.root.join("native-modes.json"))
+                .unwrap()
+                .len()
+            + fs::metadata(f.root.join("native-entry.json"))
+                .unwrap()
+                .len();
+        assert_eq!(phases.bytes_hashed, expected);
+        assert_eq!(phases.hash_calls, selection.members().len() as u64 + 2);
+        let large = crate::installed_generation::read_metadata(
+            &f.root,
+            "engine.js",
+            bytes.len() as u64,
+            &mut verify,
+        )
+        .unwrap();
+        assert_eq!(large, bytes);
+        let small =
+            crate::installed_generation::read_metadata(&f.root, "describe.js", 1024, &mut verify)
+                .unwrap();
+        assert_eq!(
+            small, b"describe\n",
+            "reused storage must not append the previous large file's tail"
+        );
+        assert_eq!(verify.scratch_address(), Some(address));
+        assert_eq!(verify.scratch_allocations, 1);
+        f.record("member-parent-standalone", serde_json::json!({"phases":phases,"expectedHashedBytes":expected,
+            "scratchAllocations":verify.scratch_allocations,"parentFdClosed":true,"generationReceiptUsed":false,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn member_parent_final_group_refuses_replaced_then_restored_ancestor_without_receipt() {
+        let f = Fixture::new();
+        let target = f.root.join("native/node");
+        let held = f.home.join("held-root");
+        let leaf_before = member_parent_metadata(&target, false);
+        let directory_before = member_parent_metadata(&f.root, true);
+        let changed = Cell::new(false);
+        let diagnostics = VerificationDiagnostics::default();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            if path == target && !changed.replace(true) {
+                fs::rename(&f.root, &held).unwrap();
+                fs::create_dir(&f.root).unwrap();
+                fs::remove_dir(&f.root).unwrap();
+                fs::rename(&held, &f.root).unwrap();
+                assert_eq!(
+                    member_parent_metadata(&target, false),
+                    leaf_before,
+                    "the leaf identity check alone must not distinguish this attack"
+                );
+                assert_ne!(
+                    member_parent_metadata(&f.root, true),
+                    directory_before,
+                    "the filesystem must retain an observable traversal mutation"
+                );
+            }
+        }));
+        let error = verify
+            .diagnosed(&diagnostics, |verify| {
+                Selection::read_generation(&f.home, &f.config.digest, verify)
+            })
+            .unwrap_err();
+        assert!(
+            changed.get(),
+            "mutation must execute inside the final group"
+        );
+        assert_eq!(
+            error,
+            "Runtime hashing traversal changed before group closed"
+        );
+        let phases = diagnostics.snapshot();
+        assert_eq!(phases.member_hashing.failures, 1);
+        assert_eq!(
+            phases.inventory_modes.count, 0,
+            "no successful group may escape to inventory"
+        );
+        let manifest: BTreeMap<String, String> =
+            serde_json::from_slice(&fs::read(f.root.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(
+            phases.hash_calls,
+            manifest.len() as u64,
+            "even the final member completed hashing before closing refusal"
+        );
+        assert_eq!(
+            phases.bytes_hashed,
+            manifest
+                .keys()
+                .map(|name| fs::metadata(f.root.join(name)).unwrap().len())
+                .sum::<u64>()
+        );
+        member_parent_fd_closed(&verify);
+        f.record("member-parent-final-restored-ancestor", serde_json::json!({"error":error,"phases":phases,
+            "directoryBefore":member_parent_metadata_json(&directory_before),"directoryAfter":member_parent_metadata_json(&member_parent_metadata(&f.root,true)),
+            "sameLeafIdentity":member_parent_metadata_json(&leaf_before),"generationReceiptUsed":false,"parentFdClosed":true,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn member_parent_transition_refuses_restored_traversal_before_next_group() {
+        let f = Fixture::new();
+        let held = f.home.join("held-root");
+        let target = f.root.join("engine.js");
+        let changed = Cell::new(false);
+        let next_group_read = Cell::new(false);
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            if path.starts_with(f.root.join("native")) {
+                next_group_read.set(true);
+            }
+            if path == target && !changed.replace(true) {
+                let before = member_parent_metadata(&f.root, true);
+                fs::rename(&f.root, &held).unwrap();
+                fs::create_dir(&f.root).unwrap();
+                fs::remove_dir(&f.root).unwrap();
+                fs::rename(&held, &f.root).unwrap();
+                assert_ne!(member_parent_metadata(&f.root, true), before);
+            }
+        }));
+        let error = Selection::read_generation(&f.home, &f.config.digest, &mut verify).unwrap_err();
+        assert!(changed.get());
+        assert_eq!(
+            error,
+            "Runtime hashing directory changed before group closed"
+        );
+        assert!(
+            !next_group_read.get(),
+            "the changed old group must close before the next parent can be opened/read"
+        );
+        member_parent_fd_closed(&verify);
+        f.record("member-parent-transition", serde_json::json!({"error":error,"nextGroupRead":next_group_read.get(),"parentFdClosed":true,"generationReceiptUsed":false,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn member_parent_refuses_parent_symlink_and_type_change_during_group() {
+        for mutation in ["symlink", "file"] {
+            let f = Fixture::new();
+            let parent = f.root.join("native");
+            let held = f.home.join("held-native");
+            let target = parent.join("node");
+            let changed = Cell::new(false);
+            let diagnostics = VerificationDiagnostics::default();
+            let mut cancel = || Ok(());
+            let mut verify = Verification::new(expires(), &mut cancel);
+            verify.on_chunk = Some(Box::new(|path, _| {
+                if path == target && !changed.replace(true) {
+                    fs::rename(&parent, &held).unwrap();
+                    if mutation == "symlink" {
+                        symlink(&held, &parent).unwrap();
+                    } else {
+                        fs::write(&parent, b"not a directory").unwrap();
+                    }
+                }
+            }));
+            let error = verify
+                .diagnosed(&diagnostics, |verify| {
+                    Selection::read_generation(&f.home, &f.config.digest, verify)
+                })
+                .unwrap_err();
+            assert!(changed.get());
+            if mutation == "symlink" {
+                assert!(
+                    error == "Runtime hashing directory changed before group closed"
+                        || error == "Runtime hashing traversal changed before group closed"
+                        || error.starts_with("Refusing symlink:"),
+                    "{error}"
+                );
+            } else {
+                assert!(error.starts_with("Generation path unavailable"), "{error}");
+            }
+            let phases = diagnostics.snapshot();
+            assert_eq!(phases.member_hashing.failures, 1);
+            assert_eq!(
+                phases.inventory_modes.count, 0,
+                "refusal must occur in the group, not be rescued by later inventory"
+            );
+            member_parent_fd_closed(&verify);
+            f.record("member-parent-kind-change",serde_json::json!({"mutation":mutation,"error":error,"phases":phases,"parentFdClosed":true,"generationReceiptUsed":false,"syntheticGeneration":true}));
+        }
+    }
+    #[test]
+    fn member_parent_mid_group_cancellation_and_original_expiry_close_the_fd() {
+        for kind in ["cancel", "expiry"] {
+            let f = Fixture::new();
+            let target = f.root.join("native/caws-hook-native");
+            let entered = Cell::new(false);
+            let stop = Cell::new(false);
+            let original_expiry = Instant::now() + Duration::from_secs(1);
+            let mut cancel = || {
+                if stop.get() {
+                    Err("original mid-group cancellation".into())
+                } else {
+                    Ok(())
+                }
+            };
+            let mut verify = Verification::new(original_expiry, &mut cancel);
+            verify.on_chunk = Some(Box::new(|path, _| {
+                if path == target {
+                    entered.set(true);
+                    if kind == "cancel" {
+                        stop.set(true);
+                    } else {
+                        while Instant::now() < original_expiry {
+                            std::thread::sleep(Duration::from_millis(1));
+                        }
+                    }
+                }
+            }));
+            let error =
+                Selection::read_generation(&f.home, &f.config.digest, &mut verify).unwrap_err();
+            assert!(
+                entered.get(),
+                "must refuse after the real native parent was opened/read"
+            );
+            assert_eq!(verify.expires(), original_expiry);
+            assert_eq!(
+                error,
+                if kind == "cancel" {
+                    "original mid-group cancellation"
+                } else {
+                    "Runtime verification deadline expired"
+                }
+            );
+            member_parent_fd_closed(&verify);
+            f.record("member-parent-mid-group-refusal",serde_json::json!({"kind":kind,"error":error,"parentFdClosed":true,"enteredGroup":entered.get(),"originalExpiryUnchanged":true,"syntheticGeneration":true}));
+        }
+    }
+    fn full_verification_hash_bytes(f: &Fixture, receipt: &GenerationReceipt) -> u64 {
+        // Manifest bytes, every member, and the separately authenticated mode
+        // parser input are all actually hashed once in a successful full pass.
+        fs::metadata(f.root.join("manifest.json")).unwrap().len()
+            + receipt
+                .selection
+                .members()
+                .keys()
+                .map(|name| fs::metadata(f.root.join(name)).unwrap().len())
+                .sum::<u64>()
+            + fs::metadata(f.root.join("native-modes.json"))
+                .unwrap()
+                .len()
+    }
+    #[test]
+    fn verification_phase_diagnostics_count_hash_bytes_and_exclude_unscoped_work() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let first = receipt.receipt_revalidation_timings.verification_snapshot();
+        for phase in [
+            first.identity_before,
+            first.selection_verification,
+            first.identity_after,
+            first.member_hashing,
+            first.inventory_modes,
+        ] {
+            assert_eq!(
+                phase.count, 1,
+                "only capture's closing receipt verification counts"
+            );
+            assert_eq!(phase.failures, 0);
+        }
+        let expected_bytes = full_verification_hash_bytes(&f, &receipt);
+        let expected_hashes = receipt.selection.members().len() as u64 + 2;
+        assert_eq!(first.hash_calls, expected_hashes);
+        assert_eq!(first.bytes_hashed, expected_bytes);
+        assert_eq!(
+            first.fd_metadata_operations,
+            2 * expected_hashes + 4,
+            "each authenticated read checks both FD endpoints; the fixture's root/native parent groups each check their held FD twice"
+        );
+        assert!(first.path_metadata_operations > first.fd_metadata_operations);
+        receipt
+            .member_digest("engine.js", expires(), || Ok(()))
+            .unwrap();
+        receipt
+            .member_bytes("engine.js", 1024, expires(), || Ok(()))
+            .unwrap();
+        assert_eq!(
+            receipt.receipt_revalidation_timings.verification_snapshot(),
+            first,
+            "ordinary lookups and authenticated byte reads are not full receipt checks"
+        );
+        receipt.revalidate(expires(), || Ok(())).unwrap();
+        let second = receipt.receipt_revalidation_timings.verification_snapshot();
+        assert_eq!(second.identity_before.count, 2);
+        assert_eq!(second.selection_verification.count, 2);
+        assert_eq!(second.identity_after.count, 2);
+        assert_eq!(second.member_hashing.count, 2);
+        assert_eq!(second.inventory_modes.count, 2);
+        assert_eq!(second.hash_calls, 2 * expected_hashes);
+        assert_eq!(second.bytes_hashed, 2 * expected_bytes);
+        assert_eq!(
+            second.path_metadata_operations,
+            2 * first.path_metadata_operations
+        );
+        assert_eq!(
+            second.fd_metadata_operations,
+            2 * first.fd_metadata_operations
+        );
+        f.record("verification-phase-success", serde_json::json!({"snapshot":second,"expectedBytesPerPass":expected_bytes,"initialLoadExcluded":true,"memberLookupsExcluded":true,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn verification_phase_diagnostics_count_failed_entry_and_restore_the_scope() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let initial = receipt.receipt_revalidation_timings.verification_snapshot();
+        let cancelled = Cell::new(true);
+        let mut cancel = || {
+            if cancelled.get() {
+                Err("exact entry refusal".into())
+            } else {
+                Ok(())
+            }
+        };
+        let mut verify = Verification::new(expires(), &mut cancel);
+        assert_eq!(
+            receipt.revalidate_with(&mut verify),
+            Err("exact entry refusal".into())
+        );
+        let refused = receipt.receipt_revalidation_timings.verification_snapshot();
+        assert_eq!(
+            refused.identity_before.count,
+            initial.identity_before.count + 1
+        );
+        assert_eq!(refused.identity_before.failures, 1);
+        assert_eq!(
+            refused.selection_verification,
+            initial.selection_verification
+        );
+        assert_eq!(refused.identity_after, initial.identity_after);
+        assert_eq!(refused.member_hashing, initial.member_hashing);
+        assert_eq!(refused.inventory_modes, initial.inventory_modes);
+        assert_eq!(
+            refused.path_metadata_operations, initial.path_metadata_operations,
+            "pre-call cancellation performed no metadata syscall"
+        );
+        assert_eq!(
+            refused.fd_metadata_operations,
+            initial.fd_metadata_operations
+        );
+        assert_eq!(refused.bytes_hashed, initial.bytes_hashed);
+        cancelled.set(false);
+        MemberMetadata::read(&f.root, true, &mut verify).unwrap();
+        assert_eq!(
+            receipt.receipt_revalidation_timings.verification_snapshot(),
+            refused,
+            "refusal restores unscoped verifier state"
+        );
+        let io_diagnostics = VerificationDiagnostics::default();
+        verify.diagnosed(&io_diagnostics, |verify| {
+            MemberMetadata::read(&f.root, true, verify).unwrap();
+            assert!(
+                MemberMetadata::read(&f.root.join("missing"), false, verify)
+                    .unwrap_err()
+                    .contains("Generation path unavailable")
+            );
+            cancelled.set(true);
+            assert_eq!(
+                MemberMetadata::read(&f.root, true, verify),
+                Err("exact entry refusal".into())
+            );
+        });
+        let io = io_diagnostics.snapshot();
+        assert_eq!(
+            io.path_metadata_operations, 2,
+            "successful and failed syscalls count; pre-call cancellation does not"
+        );
+        assert_eq!(io.fd_metadata_operations, 0);
+        assert_eq!(io.hash_calls, 0);
+        assert_eq!(io.bytes_hashed, 0);
+        f.record("verification-phase-entry-refusal", serde_json::json!({"snapshot":refused,"metadataControl":io,"error":"exact entry refusal","scopeRestored":true,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn verification_phase_diagnostics_count_inventory_refusal_after_complete_hashing() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let initial = receipt.receipt_revalidation_timings.verification_snapshot();
+        let expected_bytes = full_verification_hash_bytes(&f, &receipt);
+        let last_member = f.root.join("native/node");
+        assert_eq!(
+            receipt.selection.members().keys().next_back().unwrap(),
+            "native/node"
+        );
+        let changed = Cell::new(false);
+        let launcher = f.root.join("launcher.py");
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            if path == last_member {
+                fs::set_permissions(&launcher, fs::Permissions::from_mode(0o600)).unwrap();
+                changed.set(true);
+            }
+        }));
+        let error = receipt.revalidate_with(&mut verify).unwrap_err();
+        assert!(
+            changed.get(),
+            "mutation must happen after the opening identity sweep"
+        );
+        assert_eq!(error, "Native runtime mode mismatch: launcher.py");
+        let refused = receipt.receipt_revalidation_timings.verification_snapshot();
+        assert_eq!(
+            refused.identity_before.count,
+            initial.identity_before.count + 1
+        );
+        assert_eq!(refused.identity_before.failures, 0);
+        assert_eq!(
+            refused.selection_verification.count,
+            initial.selection_verification.count + 1
+        );
+        assert_eq!(refused.selection_verification.failures, 1);
+        assert_eq!(
+            refused.member_hashing.count,
+            initial.member_hashing.count + 1
+        );
+        assert_eq!(refused.member_hashing.failures, 0);
+        assert_eq!(
+            refused.inventory_modes.count,
+            initial.inventory_modes.count + 1
+        );
+        assert_eq!(refused.inventory_modes.failures, 1);
+        assert_eq!(
+            refused.identity_after, initial.identity_after,
+            "failed verification never reaches the closing identity sweep"
+        );
+        assert_eq!(refused.bytes_hashed - initial.bytes_hashed, expected_bytes);
+        f.record("verification-phase-inventory-refusal", serde_json::json!({"snapshot":refused,"error":error,"expectedHashedBytesBeforeRefusal":expected_bytes,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn failed_capture_retains_its_receipt_revalidation_diagnostics_in_original_request() {
+        let f = Fixture::new();
+        let timings = CheckTimings::default();
+        let cancelled = Rc::new(Cell::new(false));
+        let flag = cancelled.clone();
+        let mut cancel = move || {
+            if flag.get() {
+                Err("capture receipt revalidation refused".into())
+            } else {
+                Ok(())
+            }
+        };
+        let reads = Rc::new(Cell::new(0));
+        let observed = reads.clone();
+        let target = f.root.join("engine.js");
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(move |path, _| {
+            if path == target {
+                observed.set(observed.get() + 1);
+                // First read belongs to Selection::read_generation. The second
+                // is inside the receipt's own revalidate_with, before return.
+                if observed.get() == 2 {
+                    cancelled.set(true);
+                }
+            }
+        }));
+        let failure = GenerationReceipt::capture_at_with_diagnostics(
+            &f.home,
+            &f.config,
+            &f.native,
+            &mut verify,
+            timings.clone(),
+        )
+        .err()
+        .expect("the receipt's capture revalidation must refuse");
+        assert_eq!(failure, "capture receipt revalidation refused");
+        assert_eq!(reads.get(), 2);
+        assert_eq!(
+            timings.snapshot().count,
+            1,
+            "failed capture must not discard the request's measurement"
+        );
+        let phases = timings.verification_snapshot();
+        assert_eq!(phases.identity_before.count, 1);
+        assert_eq!(phases.identity_before.failures, 0);
+        assert_eq!(phases.selection_verification.count, 1);
+        assert_eq!(phases.selection_verification.failures, 1);
+        assert_eq!(phases.member_hashing.count, 1);
+        assert_eq!(phases.member_hashing.failures, 1);
+        assert_eq!(phases.inventory_modes.count, 0);
+        assert_eq!(phases.identity_after.count, 0);
+        assert_eq!(
+            phases.hash_calls, 3,
+            "manifest and describe.js hashed; engine.js hash attempted but cancelled before compression"
+        );
+        assert_eq!(
+            phases.bytes_hashed,
+            fs::metadata(f.root.join("manifest.json")).unwrap().len()
+                + fs::metadata(f.root.join("describe.js")).unwrap().len(),
+            "bytes read into the refused chunk are not counted as hashed"
+        );
+        f.record(
+            "failed-capture-revalidation-diagnostics",
+            serde_json::json!({
+                "receiptRevalidations":timings.snapshot(), "verificationPhases":phases,
+                "engineReads":reads.get(), "error":failure,
+                "initialSelectionReadExcluded":true,
+            }),
+        );
+    }
+
     fn expires() -> Instant {
         Instant::now() + Duration::from_secs(10)
     }

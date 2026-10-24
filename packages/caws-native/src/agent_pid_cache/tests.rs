@@ -64,7 +64,7 @@ impl Drop for Fixture {
             fs::write(
                 self.base.join("result.json"),
                 serde_json::to_vec_pretty(
-                    &json!({"root":self.root,"completedWithoutPanic":!std::thread::panicking()}),
+                    &json!({"root":self.root,"test":std::thread::current().name(),"completedWithoutPanic":!std::thread::panicking()}),
                 )
                 .unwrap(),
             )
@@ -583,4 +583,136 @@ fn named_original_ancestry_selects_first_exact_supported_process() {
         OriginalAncestry::capture_with("zcode", 2, true, expires(), &mut || Ok(()), &mut wrong)
             .unwrap();
     assert!(captured.matched.is_none());
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn split_authority_after_quarantine_move_restores_original_and_cleans_empty_quarantine() {
+    let f = Fixture::new();
+    let candidate = f.candidate("agent-pid-1.json", b"original held bytes");
+    let moved = std::cell::Cell::new(false);
+    struct AfterMove<'a>(&'a std::cell::Cell<bool>);
+    impl ReapPort for AfterMove<'_> {
+        fn after_move(&mut self, _: &CStr) -> io::Result<()> {
+            self.0.set(true);
+            Ok(())
+        }
+    }
+    let calls = std::cell::Cell::new(0);
+    let failure = remove_candidate_with_authority(
+        &f.directory(),
+        &candidate,
+        &mut AfterMove(&moved),
+        &mut || {
+            calls.set(calls.get() + 1);
+            if moved.get() {
+                Err("source changed after candidate move".into())
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .unwrap_err();
+    assert!(
+        matches!(failure,FailureKind::Cancelled(ref reason) if reason=="source changed after candidate move")
+    );
+    assert_eq!(calls.get(), 3);
+    assert_eq!(
+        fs::read(f.sessions.join("agent-pid-1.json")).unwrap(),
+        b"original held bytes"
+    );
+    let held = candidate.file.metadata().unwrap();
+    let restored = fs::metadata(f.sessions.join("agent-pid-1.json")).unwrap();
+    assert_eq!(
+        (held.dev(), held.ino()),
+        (restored.dev(), restored.ino()),
+        "rollback must retain original instance"
+    );
+    assert!(
+        !fs::read_dir(&f.sessions)
+            .unwrap()
+            .map(Result::unwrap)
+            .any(|e| e
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".caws-agent-pid-reap."))
+    );
+}
+#[cfg(target_os = "macos")]
+#[test]
+fn split_authority_failed_restore_preserves_new_shared_name_and_quarantined_original() {
+    let f = Fixture::new();
+    let candidate = f.candidate("agent-pid-1.json", b"original held bytes");
+    let moved = std::cell::Cell::new(false);
+    struct Occupy<'a>(&'a Fixture, &'a std::cell::Cell<bool>);
+    impl ReapPort for Occupy<'_> {
+        fn after_move(&mut self, name: &CStr) -> io::Result<()> {
+            self.1.set(true);
+            fs::write(
+                self.0.sessions.join(name.to_str().unwrap()),
+                b"new shared bytes",
+            )
+        }
+    }
+    let failure = remove_candidate_with_authority(
+        &f.directory(),
+        &candidate,
+        &mut Occupy(&f, &moved),
+        &mut || {
+            if moved.get() {
+                Err("late authority refusal".into())
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .unwrap_err();
+    assert!(
+        matches!(failure,FailureKind::Cancelled(ref reason) if reason.contains("late authority refusal") && reason.contains("restore failed"))
+    );
+    assert_eq!(
+        fs::read(f.sessions.join("agent-pid-1.json")).unwrap(),
+        b"new shared bytes"
+    );
+    let quarantines: Vec<_> = fs::read_dir(&f.sessions)
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with(".caws-agent-pid-reap.")
+        })
+        .collect();
+    assert_eq!(quarantines.len(), 1);
+    assert_eq!(
+        fs::read(quarantines[0].path().join("entry")).unwrap(),
+        b"original held bytes"
+    );
+}
+#[cfg(target_os = "macos")]
+#[test]
+fn split_authority_is_not_borrowed_by_a_later_reap_candidate() {
+    let f = Fixture::new();
+    let first = f.candidate("agent-pid-1.json", b"first");
+    let second = f.candidate("agent-pid-2.json", b"second");
+    remove_candidate_with_authority(&f.directory(), &first, &mut NativeReap, &mut || Ok(()))
+        .unwrap();
+    let refusal =
+        remove_candidate_with_authority(&f.directory(), &second, &mut NativeReap, &mut || {
+            Err("second candidate source refusal".into())
+        })
+        .unwrap_err();
+    assert!(
+        matches!(refusal,FailureKind::Cancelled(ref reason) if reason=="second candidate source refusal")
+    );
+    assert!(!f.sessions.join("agent-pid-1.json").exists());
+    assert_eq!(
+        fs::read(f.sessions.join("agent-pid-2.json")).unwrap(),
+        b"second"
+    );
+    assert_eq!(
+        fs::read_dir(&f.sessions).unwrap().count(),
+        1,
+        "refusal before creation leaves no quarantine"
+    );
 }

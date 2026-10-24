@@ -338,6 +338,40 @@ pub fn serve<C: Fn() -> bool + Send + Sync + 'static>(
     is_cancelled: C,
     transport: &mut impl Transport,
 ) -> Result<transcript_store::Acquisition<String>, ServeError> {
+    serve_inner(bytes, invocation, deadline, is_cancelled, transport, None)
+}
+
+/// The admitted capability has no public constructor or wire deserializer.
+/// Only the authenticated owner creates it after the original native callback
+/// has revalidated after queueing and immediately before SQL.
+pub(crate) fn serve_admitted<C: Fn() -> bool + Send + Sync + 'static>(
+    bytes: &[u8],
+    invocation: Invocation<'_>,
+    project: &crate::render_owner::NativeStoreProject,
+    deadline: Instant,
+    is_cancelled: C,
+    transport: &mut impl Transport,
+) -> Result<transcript_store::Acquisition<String>, ServeError> {
+    project
+        .validate(bytes, &invocation)
+        .map_err(ServeError::AfterProjectBinding)?;
+    serve_inner(
+        bytes,
+        invocation,
+        deadline,
+        is_cancelled,
+        transport,
+        Some(project),
+    )
+}
+fn serve_inner<C: Fn() -> bool + Send + Sync + 'static>(
+    bytes: &[u8],
+    invocation: Invocation<'_>,
+    deadline: Instant,
+    is_cancelled: C,
+    transport: &mut impl Transport,
+    admitted: Option<&crate::render_owner::NativeStoreProject>,
+) -> Result<transcript_store::Acquisition<String>, ServeError> {
     let is_cancelled: Arc<dyn Fn() -> bool + Send + Sync> = Arc::new(is_cancelled);
     if bytes.len() > MAX_REQUEST_BYTES {
         return Err("store request exceeds byte bound".into());
@@ -379,18 +413,23 @@ pub fn serve<C: Fn() -> bool + Send + Sync + 'static>(
         .database
         .filter(|value| !value.is_empty() && !value.contains('\0'))
         .ok_or("captured store database unavailable")?;
-    let project = crate::invocation_project::observe(
-        invocation.caller_cwd,
-        invocation.caller_environment,
-        invocation.original_payload,
-        deadline,
-        &|| is_cancelled(),
-    )
-    .map_err(|error| ServeError::ProjectObservation(Box::new(error)))?;
-    // Ready/root agreement alone is an engine assertion. Correlate both with
-    // the project independently observed from the original native invocation.
-    if project.canonical_root.to_str() != Some(request.canonical_root.as_str()) {
-        return Err("store original project binding mismatch".into());
+    if let Some(project) = admitted {
+        project
+            .validate(bytes, &invocation)
+            .map_err(ServeError::AfterProjectBinding)?;
+    } else {
+        let project = crate::invocation_project::observe(
+            invocation.caller_cwd,
+            invocation.caller_environment,
+            invocation.original_payload,
+            deadline,
+            &|| is_cancelled(),
+        )
+        .map_err(|error| ServeError::ProjectObservation(Box::new(error)))?;
+        // The development path keeps its independent observation contract.
+        if project.canonical_root.to_str() != Some(request.canonical_root.as_str()) {
+            return Err("store original project binding mismatch".into());
+        }
     }
     // Preserve the established identity even when DB resolution/open or later
     // transport fails. Earlier failures cannot lend Ready a budget namespace.
@@ -415,6 +454,9 @@ pub fn serve<C: Fn() -> bool + Send + Sync + 'static>(
         transport.credit(bytes.len() + 1)?;
         let common = |schema: &str| json!({"schema":schema,"id":request.id,"runtimeDigest":request.runtime_digest,"token":request.token});
         let mut exchange_error = None;
+        if let Some(project) = admitted {
+            project.check().map_err(ServeError::AfterProjectBinding)?;
+        }
         let outcome = transcript_store::acquire_owned(
             path,
             &sid,

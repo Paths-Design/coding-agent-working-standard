@@ -25,7 +25,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStderr, Command, Stdio},
     sync::{
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
         atomic::{AtomicUsize, Ordering},
         mpsc::{self, SyncSender},
     },
@@ -662,8 +662,12 @@ fn validate_prepared(offer: &Offer, prepared: &OwnerPrepared) -> Result<()> {
 mod store;
 #[cfg(feature = "sqlite-store")]
 pub use store::{
-    StoreAcquire, StoreCompletion, StoreStatus, StoreStatusQuery, acquire_store, store_status,
+    NativeStopCheck, NativeStopPhase, NativeStopRegistration, StoreAcquire, StoreCompletion,
+    StoreStatus, StoreStatusQuery, acquire_native_stop_store, acquire_store, store_status,
 };
+
+#[cfg(feature = "sqlite-store")]
+pub(crate) use store::NativeStoreProject;
 
 mod pending;
 use pending::*;
@@ -718,6 +722,171 @@ struct Actor {
     #[cfg(feature = "sqlite-store")]
     store_records: Vec<Arc<Mutex<store::StoreRecord>>>,
 }
+// One process-local idle transaction. No public capability or journal outcome.
+// Actors hold their state unchanged until every actor and registry is proven.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IdleDecision {
+    Checking,
+    Commit,
+    Abort,
+}
+struct IdleBarrier {
+    expires: Instant,
+    decision: Mutex<IdleDecision>,
+    changed: Condvar,
+}
+impl IdleBarrier {
+    fn new(expires: Instant) -> Arc<Self> {
+        Arc::new(Self {
+            expires,
+            decision: Mutex::new(IdleDecision::Checking),
+            changed: Condvar::new(),
+        })
+    }
+    fn finish(&self, commit: bool) -> bool {
+        let mut state = self.decision.lock().unwrap_or_else(|e| e.into_inner());
+        if *state == IdleDecision::Checking {
+            *state = if commit && Instant::now() < self.expires {
+                IdleDecision::Commit
+            } else {
+                IdleDecision::Abort
+            };
+            self.changed.notify_all();
+        }
+        *state == IdleDecision::Commit
+    }
+    fn parked(&self) -> bool {
+        let mut state = self.decision.lock().unwrap_or_else(|e| e.into_inner());
+        while *state == IdleDecision::Checking {
+            let remaining = self.expires.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                *state = IdleDecision::Abort;
+                self.changed.notify_all();
+                break;
+            }
+            state = self
+                .changed
+                .wait_timeout(state, remaining)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        }
+        *state == IdleDecision::Commit
+    }
+}
+struct IdleProof {
+    // Pointer equality is internal to this owner lifetime; not transport identity.
+    store_records: std::collections::BTreeSet<usize>,
+}
+struct IdleProbe {
+    barrier: Arc<IdleBarrier>,
+    reply: SyncSender<Result<IdleProof>>,
+}
+impl Actor {
+    fn idle_proof(&self, expires: Instant) -> Result<IdleProof> {
+        check(expires)?;
+        if self.process.is_some() || self.writer_custody.is_some() || self.writer_intent.is_some() {
+            return Err("idle retirement retains live backend or writer custody".into());
+        }
+        if !self
+            .journal
+            .queued_request_ids(expires)
+            .map_err(err)?
+            .is_empty()
+        {
+            return Err("idle retirement retains queued effects".into());
+        }
+        let fence = self.journal.validated_fence(expires).map_err(err)?;
+        if fence.as_ref().is_some_and(|operation| {
+            !matches!(
+                operation.outcome(),
+                journal::AcceptedOutcome::Unknown { .. }
+            )
+        }) || ((self.unknown || self.reserved) && fence.is_none())
+        {
+            return Err("idle retirement lacks exact durable Unknown".into());
+        }
+        #[cfg(not(feature = "sqlite-store"))]
+        let records = std::collections::BTreeSet::new();
+        #[cfg(feature = "sqlite-store")]
+        let mut records = std::collections::BTreeSet::new();
+        #[cfg(feature = "sqlite-store")]
+        for record in &self.store_records {
+            let held = record.try_lock().map_err(|_| "idle store record busy")?;
+            held.idle_unknown(
+                fence.as_ref().ok_or("idle store record lacks fence")?,
+                expires,
+            )?;
+            if !records.insert(Arc::as_ptr(record) as usize) {
+                return Err("idle duplicate store record".into());
+            }
+        }
+        check(expires)?;
+        Ok(IdleProof {
+            store_records: records,
+        })
+    }
+}
+// The listener thread calls this without accepting new connections. Active
+// connection permits remain live until all earlier producers and jobs stop.
+fn idle_retirement(
+    routing: &Arc<Mutex<Routing>>,
+    active: &AtomicUsize,
+    operations: &relay::OperationCapacity,
+    sessions: &Arc<Mutex<session::SessionRegistry>>,
+    #[cfg(feature = "sqlite-store")] stores: &Arc<Mutex<store::StoreRegistry>>,
+    expires: Instant,
+) -> bool {
+    let barrier = IdleBarrier::new(expires);
+    let outcome = (|| -> Result<()> {
+        if active.load(Ordering::Acquire) != 0 {
+            return Err("idle connections active".into());
+        }
+        let sessions = sessions
+            .try_lock()
+            .map_err(|_| "idle session registry busy")?;
+        if !sessions.idle_empty() {
+            return Err("idle session records retained".into());
+        }
+        let routing = routing.try_lock().map_err(|_| "idle routing busy")?;
+        let mut replies = Vec::new();
+        for route in routing.actors.values() {
+            let (reply, receive) = mpsc::sync_channel(1);
+            route
+                .sender
+                .try_send(Mailbox::Idle(IdleProbe {
+                    barrier: Arc::clone(&barrier),
+                    reply,
+                }))
+                .map_err(|_| "idle actor mailbox unavailable")?;
+            replies.push(receive);
+        }
+        let mut records = std::collections::BTreeSet::new();
+        for receive in replies {
+            let proof = receive
+                .recv_timeout(expires.saturating_duration_since(Instant::now()))
+                .map_err(|_| "idle actor barrier expired")??;
+            for record in proof.store_records {
+                if !records.insert(record) {
+                    return Err("idle store record has multiple actors".into());
+                }
+            }
+        }
+        #[cfg(feature = "sqlite-store")]
+        stores
+            .try_lock()
+            .map_err(|_| "idle store registry busy")?
+            .idle_matches(&records)?;
+        if operations.retained() != !records.is_empty() {
+            return Err("idle operation permit lacks exact record proof".into());
+        }
+        if active.load(Ordering::Acquire) != 0 {
+            return Err("idle demand changed".into());
+        }
+        check(expires)
+    })();
+    barrier.finish(outcome.is_ok())
+}
+
 struct BackendProcess {
     child: Option<Child>,
     control: UnixStream,
@@ -2157,18 +2326,38 @@ pub fn host(path: &Path) -> Result<()> {
         Arc::clone(&operation_capacity),
     )));
     let mut idle_since = Instant::now();
+    let mut retiring = false;
     loop {
-        #[cfg(feature = "sqlite-store")]
-        let retained_store = !store_registry
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_empty();
-        #[cfg(not(feature = "sqlite-store"))]
-        let retained_store = false;
-        if active.load(Ordering::Acquire) > 0 || retained_store || operation_capacity.retained() {
+        if retiring {
+            // Actors committed only with no resource-bearing state. Never call
+            // the unbounded backend retire path or join a still-running actor.
+            let finished = routing
+                .try_lock()
+                .is_ok_and(|r| r.joins.iter().all(|join| join.is_finished()));
+            if finished {
+                break;
+            }
+            thread::sleep(TICK);
+            continue; // Quarantine retains custody; no further admission.
+        }
+        // Retained capacity is not demand. It can still block retirement when
+        // the actor/registry proof finds resources or non-durable state.
+        if active.load(Ordering::Acquire) > 0 {
             idle_since = Instant::now();
         } else if idle_since.elapsed() >= Duration::from_millis(c.limits.idle_ms as u64) {
-            break;
+            retiring = idle_retirement(
+                &routing,
+                &active,
+                &operation_capacity,
+                &session_registry,
+                #[cfg(feature = "sqlite-store")]
+                &store_registry,
+                Instant::now() + Duration::from_millis(c.limits.idle_ms as u64),
+            );
+            idle_since = Instant::now();
+            if retiring {
+                continue;
+            }
         }
         match listener.accept() {
             Ok((mut stream, _)) => {
@@ -2336,8 +2525,8 @@ pub fn host(path: &Path) -> Result<()> {
         }
     }
     drop(listener);
-    // Closing all actor inboxes requests owned-worker cleanup. Joining retains
-    // custody through quarantine; an idle timeout is never an authority override.
+    // Every actor passed the serialized resource-free barrier and finished.
+    // No backend retirement, journal settlement, or still-running join occurs.
     let joins = {
         let mut routing = routing.lock().unwrap_or_else(|e| e.into_inner());
         routing.actors.clear();

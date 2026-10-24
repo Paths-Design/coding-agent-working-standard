@@ -1954,3 +1954,42 @@ fn custody_deadlines_do_not_bootstrap_or_acknowledge_partial_initialization() {
     assert!(Custody::initialize(&home, soon()).is_err());
     assert!(!home.join("operations").exists());
 }
+
+#[test]
+fn validated_fence_distinguishes_running_unknown_and_rejects_replaced_or_changed_bytes() {
+    let f = Fixture::new();
+    let mut journal = f.open(8);
+    assert!(journal.validated_fence(soon()).unwrap().is_none());
+    admitted(&mut journal, 1);
+    let dispatch = journal
+        .begin_next(&"a".repeat(64), &"b".repeat(64), soon())
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        journal.validated_fence(soon()).unwrap().unwrap().outcome(),
+        AcceptedOutcome::Running { .. }
+    ));
+    let unknown = journal.unknown(&dispatch, soon()).unwrap();
+    let before = fs::read(f.record(1)).unwrap();
+    assert_eq!(journal.validated_fence(soon()).unwrap(), Some(unknown));
+    assert_eq!(fs::read(f.record(1)).unwrap(), before);
+    assert!(journal.validated_fence(Instant::now()).is_err());
+    let moved = f.dir().join("outside-record");
+    fs::rename(f.record(1), &moved).unwrap();
+    fs::write(f.record(1), &before).unwrap();
+    fs::set_permissions(f.record(1), fs::Permissions::from_mode(0o600)).unwrap();
+    fs::remove_file(&moved).unwrap();
+    assert!(
+        journal.validated_fence(soon()).is_err(),
+        "same bytes at a new inode cannot authorize retirement"
+    );
+    drop(journal);
+    let journal = f.open(8);
+    let mut bytes = before;
+    bytes[0] = b'!';
+    fs::write(f.record(1), bytes).unwrap();
+    assert!(
+        journal.validated_fence(soon()).is_err(),
+        "changed anchored record cannot authorize retirement"
+    );
+}

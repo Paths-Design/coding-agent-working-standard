@@ -84,6 +84,8 @@ pub struct Request {
     configuration: String,
     session_cache: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stop_prefix: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     selection_observation: Option<SelectionObservationCapability>,
     #[cfg(target_os = "macos")]
     session_end_prefix: &'static str,
@@ -253,6 +255,24 @@ impl Request {
         })
         .map_err(|error| error.to_string())
     }
+    pub fn stop_prefix_invocation<'a>(
+        &'a self,
+        ready: &'a Ready,
+        dispatched: bool,
+    ) -> caws_native::session_cache_wire::Invocation<'a> {
+        caws_native::session_cache_wire::Invocation {
+            id: &self.id,
+            runtime_digest: &self.runtime_digest,
+            original_payload: &self.payload,
+            surface: &self.surface,
+            event: &self.event,
+            configuration: &self.configuration,
+            ready_active: ready.active,
+            ready_project_digest: ready.project_digest.as_deref(),
+            dispatched,
+            advertised_capability: self.stop_prefix,
+        }
+    }
     /// RawValue retains payload formatting. Compact only JSON whitespace outside
     /// strings so a payload newline cannot terminate the transport frame early.
     /// Keep input_json's decoded bytes and every raw number token unchanged.
@@ -369,6 +389,12 @@ impl Request {
             event: config.event.clone(),
             configuration: config.configuration.clone(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            stop_prefix: (cfg!(target_os = "macos")
+                && cfg!(feature = "sqlite-store")
+                && config.configuration == "system"
+                && config.surface == "opencode"
+                && config.event == "stop")
+                .then_some(caws_native::session_cache_wire::STOP_PREFIX_CAPABILITY),
             selection_observation: None,
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
@@ -447,6 +473,7 @@ pub enum EngineFrame {
     SelectionObservationRequest(Vec<u8>),
     SessionCacheRequest(Vec<u8>),
     SessionEndPrefixRequest(Vec<u8>),
+    StopPrefixRequest(Vec<u8>),
     SessionSealRequest(Vec<u8>),
     #[cfg(feature = "sqlite-store")]
     TranscriptStoreRequest(Vec<u8>),
@@ -559,6 +586,12 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
             return Err("selection request exceeds native frame bound".into());
         }
         return Ok(EngineFrame::SelectionObservationRequest(bytes.to_vec()));
+    }
+    if header.schema == caws_native::session_cache_wire::STOP_PREFIX_REQUEST_SCHEMA {
+        if bytes.len() > caws_native::session_cache_wire::MAX_REQUEST_BYTES {
+            return Err("Stop prefix request exceeds frame budget".into());
+        }
+        return Ok(EngineFrame::StopPrefixRequest(bytes.to_vec()));
     }
     if header.schema == caws_native::session_cache_wire::PREFIX_REQUEST_SCHEMA {
         if bytes.len() > caws_native::session_cache_wire::MAX_REQUEST_BYTES {
@@ -765,6 +798,7 @@ mod tests {
             event: "pre_tool_use".into(),
             configuration: "system".into(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            stop_prefix: None,
             selection_observation: None,
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
@@ -835,18 +869,30 @@ mod tests {
     #[test]
     fn prefix_and_seal_classification_preserves_bytes_without_granting_admission() {
         let request = fixture_request();
-        for (schema, prefix) in [
-            (caws_native::session_cache_wire::PREFIX_REQUEST_SCHEMA, true),
-            ("caws.runtime.session-seal.request.v1", false),
+        for (schema, operation) in [
+            (
+                caws_native::session_cache_wire::PREFIX_REQUEST_SCHEMA,
+                "end",
+            ),
+            (
+                caws_native::session_cache_wire::STOP_PREFIX_REQUEST_SCHEMA,
+                "stop",
+            ),
+            ("caws.runtime.session-seal.request.v1", "seal"),
         ] {
             // Deliberately missing identity and operation fields: only the
             // typed owner may admit these bytes after the dispatch phase.
             let bytes = format!("{{\"schema\":\"{schema}\",\"unknown\":true}} ").into_bytes();
             match validate_frame(&bytes, &request).unwrap() {
-                EngineFrame::SessionEndPrefixRequest(retained) if prefix => {
+                EngineFrame::SessionEndPrefixRequest(retained) if operation == "end" => {
                     assert_eq!(retained, bytes)
                 }
-                EngineFrame::SessionSealRequest(retained) if !prefix => assert_eq!(retained, bytes),
+                EngineFrame::StopPrefixRequest(retained) if operation == "stop" => {
+                    assert_eq!(retained, bytes)
+                }
+                EngineFrame::SessionSealRequest(retained) if operation == "seal" => {
+                    assert_eq!(retained, bytes)
+                }
                 _ => panic!("operation lost its typed owner"),
             }
             let oversized = serde_json::to_vec(&serde_json::json!({

@@ -941,6 +941,27 @@ impl Journal {
             .iter()
             .any(|entry| entry.operation.outcome.fenced()))
     }
+    /// Exact anchored bytes for the sole serialization fence. This does not
+    /// settle, consume, cancel, or reinterpret Running as durable Unknown.
+    pub(crate) fn validated_fence(&self, expires: Instant) -> Result<Option<Operation>> {
+        self.current(expires)?;
+        let mut fenced = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| entry.operation.outcome.fenced());
+        let Some((index, entry)) = fenced.next() else {
+            return Ok(None);
+        };
+        if fenced.next().is_some() {
+            return Err(JournalError::new(
+                ErrorKind::Corrupt,
+                "multiple serialization fences",
+            ));
+        }
+        self.selected(index, expires)?;
+        Ok(Some(entry.operation.clone()))
+    }
     /// Read-only identities of queued effects that have no Dispatch. The owner
     /// independently establishes grant withdrawal before retaining cancellations.
     pub fn queued_request_ids(&self, expires: Instant) -> Result<Vec<String>> {

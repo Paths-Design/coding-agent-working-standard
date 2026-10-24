@@ -8,6 +8,8 @@ impl Actor {
         let mut exclusive_waiting: Option<ExclusiveJob> = None;
         let mut exclusive_waiting_observed = false;
         let mut barrier = false;
+        let idle_duration = Duration::from_millis(self.config.limits.idle_ms as u64);
+        let mut idle_expires = Instant::now() + idle_duration;
         loop {
             if let Some(arrival) = bridge_head(pending.iter().map(|entry| &entry.job)) {
                 let entry = pending.pop_front().expect("observed FIFO head");
@@ -31,6 +33,7 @@ impl Actor {
                 }
                 self.stage("finish", &invocation);
                 drop(entry);
+                idle_expires = Instant::now() + idle_duration;
                 if self.unknown {
                     // Dispatch retained Running before any backend command.
                     // Local quarantine also covers failed outcome publication.
@@ -52,6 +55,7 @@ impl Actor {
                     }
                     exclusive_waiting_observed = false;
                     barrier = false;
+                    idle_expires = Instant::now() + idle_duration;
                 } else {
                     if !exclusive_waiting_observed {
                         match exclusive_waiting.as_ref().expect("exclusive waiting job") {
@@ -71,13 +75,49 @@ impl Actor {
             }
             if waiting.is_none() {
                 let timeout = if pending.is_empty() {
-                    Duration::from_millis(self.config.limits.idle_ms as u64)
+                    idle_expires.saturating_duration_since(Instant::now())
                 } else {
                     TICK
                 };
                 match rx.recv_timeout(timeout) {
-                    Ok(Mailbox::Render(job)) => waiting = Some(job),
+                    Ok(Mailbox::Idle(probe)) => {
+                        let proof = if pending.is_empty()
+                            && waiting.is_none()
+                            && exclusive_waiting.is_none()
+                        {
+                            self.idle_proof(probe.barrier.expires)
+                        } else {
+                            Err("idle actor retains pending work".into())
+                        };
+                        let ready = proof.is_ok();
+                        // Publish a refusal only after aborting the common
+                        // decision, so a ready peer cannot commit through it.
+                        if !ready {
+                            probe.barrier.finish(false);
+                        }
+                        if probe.reply.try_send(proof).is_err() {
+                            probe.barrier.finish(false);
+                        }
+                        if ready && probe.barrier.parked() {
+                            // The proof excludes every live worker/writer/cleanup
+                            // object. Preserve durable outcomes; no retire/settle.
+                            return;
+                        }
+                        // Idle probes are not demand and cannot renew the actor's
+                        // ordinary retirement clock. Even a continuously nonempty
+                        // probe mailbox must not starve the already-due timeout.
+                        if pending.is_empty() && Instant::now() >= idle_expires {
+                            self.retire();
+                            idle_expires = Instant::now() + idle_duration;
+                        }
+                        continue;
+                    }
+                    Ok(Mailbox::Render(job)) => {
+                        idle_expires = Instant::now() + idle_duration;
+                        waiting = Some(job);
+                    }
                     Ok(Mailbox::Session(job)) => {
+                        idle_expires = Instant::now() + idle_duration;
                         exclusive_waiting = Some(ExclusiveJob::Session(job));
                         exclusive_waiting_observed = false;
                         barrier = true;
@@ -85,6 +125,7 @@ impl Actor {
                     }
                     #[cfg(feature = "sqlite-store")]
                     Ok(Mailbox::Store(job)) => {
+                        idle_expires = Instant::now() + idle_duration;
                         exclusive_waiting = Some(ExclusiveJob::Store(job));
                         exclusive_waiting_observed = false;
                         barrier = true;
@@ -93,6 +134,7 @@ impl Actor {
                     Err(mpsc::RecvTimeoutError::Timeout) => {
                         if pending.is_empty() {
                             self.retire();
+                            idle_expires = Instant::now() + idle_duration;
                         }
                         continue;
                     }
@@ -138,6 +180,7 @@ impl Actor {
                     });
                     self.stage("finish", &job.offer.invocation_id);
                     waiting.take();
+                    idle_expires = Instant::now() + idle_duration;
                     if self.unknown {
                         self.withdraw_for_unknown(&mut pending, &mut waiting, &rx);
                         self.retire();
@@ -174,6 +217,9 @@ impl Actor {
         for _ in 0..self.config.limits.max_queue_per_project {
             let Ok(job) = inbox.try_recv() else { break };
             match job {
+                Mailbox::Idle(probe) => {
+                    probe.barrier.finish(false);
+                }
                 Mailbox::Render(job) => self.observations.emit(Observation::QueuedOfferWithdrawn {
                     invocation_id: &job.offer.invocation_id,
                     reason: "unknown_fence",
@@ -224,6 +270,7 @@ enum ExclusiveJob {
     Store(store::StoreJob),
 }
 pub(super) enum Mailbox {
+    Idle(IdleProbe),
     Render(Job),
     Session(session::SessionJob),
     #[cfg(feature = "sqlite-store")]

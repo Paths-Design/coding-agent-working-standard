@@ -28,9 +28,9 @@ import {
 export const TRANSCRIPT_STORE_PROFILE = 'cpython-3.11.13-sqlite3.53.4-store-development.v1';
 const PREFIX = 'caws.runtime.transcript-store.';
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
-const MAX_ROWS = 4096;
-const MAX_CELL_BYTES = 256 * 1024;
-const MAX_TOTAL_CELL_BYTES = 16 * 1024 * 1024;
+export const MAX_ROWS = 4096;
+export const MAX_CELL_BYTES = 256 * 1024;
+export const MAX_TOTAL_CELL_BYTES = 16 * 1024 * 1024;
 export interface TranscriptStoreTransport {
   read(signal: AbortSignal): Promise<Uint8Array>;
   write(frame: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<void>;

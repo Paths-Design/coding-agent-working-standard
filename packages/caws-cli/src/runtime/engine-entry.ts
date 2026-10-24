@@ -6,6 +6,8 @@ import {
   SESSION_CACHE_CAPABILITY,
   SESSION_END_PREFIX_CAPABILITY,
   SESSION_PUBLICATION_CAPABILITY,
+  STOP_PREFIX_CAPABILITY,
+  TRANSCRIPT_STORE_CAPABILITY,
   type RuntimeRequest,
 } from './protocol';
 import {
@@ -15,6 +17,7 @@ import {
   SERVICE_READY_SCHEMA,
   RuntimeFrameReader,
   decodeDispatchGrant,
+  isNativeStopAdmission,
   decodeHandoff,
   writeRuntimeFrame,
 } from './live-protocol';
@@ -23,7 +26,9 @@ import { containmentWire } from './containment';
 import {
   createNativeSessionCachePort,
   createNativeSessionEndPrefixPort,
+  createNativeStopPrefixPort,
 } from './session-cache-client';
+import { createNativeTranscriptStorePort } from './transcript-store-client';
 import { createNativeSessionSealPort } from './session-publication-client';
 import { createNativeContextGitPort } from './context-git-client';
 import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
@@ -111,6 +116,24 @@ export async function runEngineEntry(): Promise<void> {
             controller.signal
           )
         : undefined;
+    const stopTransport = {
+      read: (signal: AbortSignal) => reader.read(signal),
+      write: (frame: Readonly<Record<string, unknown>>, signal: AbortSignal) =>
+        writeRuntimeFrame(process.stdout, frame, signal),
+    };
+    const stopCandidate =
+      request.configuration === 'system' &&
+      request.surface === 'opencode' &&
+      request.event === 'stop' &&
+      request.stopPrefix === STOP_PREFIX_CAPABILITY &&
+      request.sessionStore === TRANSCRIPT_STORE_CAPABILITY &&
+      request.sessionPublication === SESSION_PUBLICATION_CAPABILITY;
+    const stopPrefix = stopCandidate
+      ? createNativeStopPrefixPort(request, stopTransport, controller.signal)
+      : undefined;
+    const stopStore = stopCandidate
+      ? createNativeTranscriptStorePort(request, stopTransport, controller.signal)
+      : undefined;
     prepared = await prepareRuntimeInvocation(
       request,
       controller.signal,
@@ -127,7 +150,9 @@ export async function runEngineEntry(): Promise<void> {
             },
             controller.signal
           )
-        : undefined
+        : undefined,
+      stopPrefix,
+      stopStore
     );
     await writeRuntimeFrame(
       process.stdout,
@@ -148,7 +173,10 @@ export async function runEngineEntry(): Promise<void> {
       request,
       prepared.serviceOffer
     );
-    const completion = await prepared.dispatch(admission ?? undefined);
+    const completion =
+      admission && isNativeStopAdmission(admission)
+        ? await prepared.dispatch(undefined, admission)
+        : await prepared.dispatch(admission ?? undefined);
     const result = completion.nativeResult;
     const containment = completion.containment ? containmentWire(completion.containment) : null;
     const token = randomUUID();

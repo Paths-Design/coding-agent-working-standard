@@ -4,7 +4,19 @@ import { decodeServiceGrant } from './service-client';
 import { type NativeRenderAdmission, SERVICE_IMAGE_ADMISSION_SCHEMA } from './service-image';
 import type { NativeRenderOffer } from './service-offer';
 import type { Readable, Writable } from 'node:stream';
-import { MAX_REQUEST_BYTES, RuntimeProtocolError, type RuntimeRequest } from './protocol';
+import {
+  MAX_REQUEST_BYTES,
+  RuntimeProtocolError,
+  STOP_PREFIX_CAPABILITY,
+  TRANSCRIPT_STORE_CAPABILITY,
+  SESSION_PUBLICATION_CAPABILITY,
+  type RuntimeRequest,
+} from './protocol';
+import {
+  STORE_JSON_PROFILE,
+  STORE_JSON_UNLIMITED_PROFILE,
+  type StoreJsonProfile,
+} from '../transcripts/store-json';
 import { parseJsonSource, objectMemberSource } from './json-custody';
 import {
   decodeContainmentReceipt,
@@ -16,6 +28,23 @@ export const READY_SCHEMA = 'caws.runtime.ready.v1';
 export const SERVICE_READY_SCHEMA = 'caws.runtime.ready.v2';
 export const DISPATCH_SCHEMA = 'caws.runtime.dispatch.v1';
 export const SERVICE_DISPATCH_SCHEMA = 'caws.runtime.dispatch.v2';
+export const STOP_DISPATCH_SCHEMA = 'caws.runtime.dispatch.v3';
+export const STOP_ADMISSION_SCHEMA = 'caws.runtime.stop-admission.v1';
+/** Routing selectors received from the native owner; not a stand-alone authority token. */
+export interface NativeStopAdmission {
+  readonly schema: typeof STOP_ADMISSION_SCHEMA;
+  readonly loggerIndex: 2;
+  readonly sqlProfile: StoreJsonProfile;
+  readonly rendererProfile:
+    | 'cpython3.11-json/int-max-str-digits:4300'
+    | 'cpython3.11-json/int-max-str-digits:0';
+  readonly rendererIntegerMaxDigits: 4300 | 0;
+}
+export function isNativeStopAdmission(
+  value: NativeRenderAdmission | NativeStopAdmission
+): value is NativeStopAdmission {
+  return value.schema === STOP_ADMISSION_SCHEMA;
+}
 export const PROPOSAL_SCHEMA = 'caws.runtime.proposal.v2';
 export const HANDOFF_SCHEMA = 'caws.runtime.handoff.v2';
 export const FAILURE_SCHEMA = 'caws.runtime.failure.v1';
@@ -52,9 +81,71 @@ function control(
 
 export function decodeDispatchGrant(
   frame: Uint8Array,
-  identity: Identity,
+  identity: Identity &
+    Partial<
+      Pick<
+        RuntimeRequest,
+        'surface' | 'event' | 'configuration' | 'stopPrefix' | 'sessionStore' | 'sessionPublication'
+      >
+    >,
   offer?: NativeRenderOffer
-): NativeRenderAdmission | null {
+): NativeRenderAdmission | NativeStopAdmission | null {
+  // Existing v1/v2 validation stays unchanged. Strict Stop control parsing is
+  // local to v3 and cannot reinterpret a SessionEnd or renderer grant.
+  if (frame.byteLength > (offer ? 2 * 1024 * 1024 : 4096))
+    throw new RuntimeProtocolError('Control frame exceeds byte limit');
+  let text: string;
+  let header: unknown;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(frame);
+    header = JSON.parse(text);
+  } catch {
+    throw new RuntimeProtocolError('Invalid control frame JSON');
+  }
+  if (
+    header &&
+    typeof header === 'object' &&
+    !Array.isArray(header) &&
+    (header as Record<string, unknown>).schema === STOP_DISPATCH_SCHEMA
+  ) {
+    parseJsonSource(text, 8, 64, true);
+    if (
+      offer ||
+      identity.configuration !== 'system' ||
+      identity.surface !== 'opencode' ||
+      identity.event !== 'stop' ||
+      identity.stopPrefix !== STOP_PREFIX_CAPABILITY ||
+      identity.sessionStore !== TRANSCRIPT_STORE_CAPABILITY ||
+      identity.sessionPublication !== SESSION_PUBLICATION_CAPABILITY
+    )
+      throw new RuntimeProtocolError('Native Stop grant disagrees with invocation');
+    const row = control(frame, identity, STOP_DISPATCH_SCHEMA, [
+      'schema',
+      'id',
+      'runtimeDigest',
+      'nativeStop',
+    ]);
+    const value = row.nativeStop;
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new RuntimeProtocolError('Missing native Stop selectors');
+    const raw = value as Record<string, unknown>;
+    if (
+      Object.keys(raw).sort().join(',') !==
+        'loggerIndex,rendererIntegerMaxDigits,rendererProfile,schema,sqlProfile' ||
+      raw.schema !== STOP_ADMISSION_SCHEMA ||
+      raw.loggerIndex !== 2 ||
+      !(
+        (raw.sqlProfile === STORE_JSON_PROFILE &&
+          raw.rendererIntegerMaxDigits === 4300 &&
+          raw.rendererProfile === 'cpython3.11-json/int-max-str-digits:4300') ||
+        (raw.sqlProfile === STORE_JSON_UNLIMITED_PROFILE &&
+          raw.rendererIntegerMaxDigits === 0 &&
+          raw.rendererProfile === 'cpython3.11-json/int-max-str-digits:0')
+      )
+    )
+      throw new RuntimeProtocolError('Invalid or mismatched native Stop selectors');
+    return Object.freeze({ ...raw }) as unknown as NativeStopAdmission;
+  }
   if (!offer) {
     control(frame, identity, DISPATCH_SCHEMA, ['schema', 'id', 'runtimeDigest']);
     return null;

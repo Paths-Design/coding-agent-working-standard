@@ -34,6 +34,9 @@ import {
   SESSION_CACHE_CAPABILITY,
   SESSION_END_PREFIX_CAPABILITY,
   SESSION_PUBLICATION_CAPABILITY,
+  STOP_PREFIX_CAPABILITY,
+  TRANSCRIPT_STORE_CAPABILITY,
+  MAX_JSON_DEPTH,
   type RuntimeRequest,
 } from './protocol';
 import {
@@ -44,11 +47,30 @@ import {
   sessionCacheInputSupported,
   type NativeSessionCachePort,
   type NativeSessionEndPrefixPort,
+  type NativeStopPrefixPort,
 } from './session-cache-client';
 import type { NativeSessionSealPort } from './session-publication-client';
 import { executeNativeSessionSeal } from './session-seal-runtime';
 import type { NativeSessionSealExecution } from './stock-handlers';
 import type { NativeResult } from './types';
+import type { NativeStopAdmission } from './live-protocol';
+import {
+  executeNativeStopPublication,
+  type NativeStopPublicationOptions,
+} from './session-store-publication';
+import {
+  MAX_ROWS,
+  MAX_CELL_BYTES,
+  MAX_TOTAL_CELL_BYTES,
+  type NativeTranscriptStorePublicationPort,
+} from './transcript-store-client';
+import {
+  MAX_PUBLICATION_ARTIFACT_BYTES,
+  MAX_PUBLICATION_TOTAL_BYTES,
+  MAX_PUBLICATION_ARTIFACTS,
+  MAX_PUBLICATION_SNAPSHOT_BYTES,
+} from './session-publication-wire';
+import { MAX_LOCAL_CALENDAR_QUERIES } from '../transcripts/renderer-calendar';
 import { prepareNativeRenderOffer, type NativeRenderOffer } from './service-offer';
 import { type NativeRenderAdmission, disposeNativeRenderAdmission } from './service-image';
 import {
@@ -119,15 +141,53 @@ export function capturedRefusal(error: unknown): NativeResult | null {
   };
 }
 
+/** Resource refusals are explicit failures, never truncation or compatibility retries.
+ * Bound each retained dimension by an existing transport/resource envelope. */
+export const NATIVE_STOP_PRODUCTION_LIMITS = Object.freeze({
+  storeLimits: Object.freeze({
+    json: Object.freeze({
+      maxInputBytes: MAX_CELL_BYTES,
+      maxDecodedCodepoints: MAX_CELL_BYTES,
+      maxNodes: MAX_CELL_BYTES,
+      maxDepth: MAX_JSON_DEPTH,
+      maxStringCodepoints: MAX_CELL_BYTES,
+      maxNumberChars: MAX_CELL_BYTES,
+    }),
+    maxRows: MAX_ROWS,
+    // One tool part can produce a call and result; text parts produce at most one.
+    maxEvents: MAX_ROWS * 2,
+    maxCodepoints: MAX_PUBLICATION_ARTIFACT_BYTES,
+  }),
+  rendererLimits: Object.freeze({
+    maximumInputBytes: MAX_PUBLICATION_SNAPSHOT_BYTES,
+    maximumArtifactBytes: MAX_PUBLICATION_ARTIFACT_BYTES,
+    maximumTotalArtifactBytes: MAX_PUBLICATION_TOTAL_BYTES,
+    maximumArtifacts: MAX_PUBLICATION_ARTIFACTS,
+  }),
+  maximumProjectionBytes: MAX_PUBLICATION_ARTIFACT_BYTES,
+  calendarLimits: Object.freeze({
+    maximumTimestampBytes: MAX_TOTAL_CELL_BYTES,
+    maximumQueries: MAX_LOCAL_CALENDAR_QUERIES,
+  }),
+});
+
+function priorBashEnvironment(
+  selection: ActiveInvocationSelection,
+  environment: Readonly<Record<string, string>>
+): string | undefined {
+  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
+  return (
+    environment.CAWS_PRIOR_BASH_ENV ||
+    (environment.BASH_ENV !== startup ? environment.BASH_ENV : '')
+  );
+}
+
 function compatibilityRequired(
   request: RuntimeRequest,
   selection: ActiveInvocationSelection,
   environment: Readonly<Record<string, string>>
 ): boolean {
-  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
-  const prior =
-    environment.CAWS_PRIOR_BASH_ENV ||
-    (environment.BASH_ENV !== startup ? environment.BASH_ENV : '');
+  const prior = priorBashEnvironment(selection, environment);
   // Canonical Bash is the first native parser/consumer slice. Other payload
   // adapters retain their full dispatcher until their normalization is ported.
   return (
@@ -211,7 +271,10 @@ export interface PreparedRuntimeInvocation {
   readonly projectDigest: string | null;
   readonly sessionId: string | null;
   readonly serviceOffer?: NativeRenderOffer;
-  dispatch(admission?: NativeRenderAdmission): Promise<PreparedDispatchResult>;
+  dispatch(
+    admission?: NativeRenderAdmission,
+    nativeStop?: NativeStopAdmission
+  ): Promise<PreparedDispatchResult>;
   acknowledgeHandoff(success: boolean, containment?: ContainmentReceipt | null): Promise<string>;
 }
 
@@ -222,7 +285,9 @@ export async function prepareRuntimeInvocation(
   contextGit?: ContextGitPort,
   nativeSessionSeal?: NativeSessionSealPort,
   nativeSessionEndPrefix?: NativeSessionEndPrefixPort,
-  selectionResolver?: (options: SelectionOptions) => Promise<InvocationSelection>
+  selectionResolver?: (options: SelectionOptions) => Promise<InvocationSelection>,
+  nativeStopPrefix?: NativeStopPrefixPort,
+  nativeStopStore?: NativeTranscriptStorePublicationPort
 ): Promise<PreparedRuntimeInvocation> {
   if (request.contextGit === CONTEXT_GIT_CAPABILITY && !contextGit)
     throw new Error('Native context Git capability requires its request-owned port');
@@ -269,7 +334,8 @@ export async function prepareRuntimeInvocation(
       budgetHome: home,
       projectDigest: null,
       sessionId: null,
-      async dispatch(admission) {
+      async dispatch(admission, nativeStop) {
+        if (nativeStop) throw new Error('Inactive invocation cannot accept native Stop routing');
         if (admission) {
           disposeNativeRenderAdmission(admission);
           throw new Error('Inactive invocation cannot accept service admission');
@@ -331,7 +397,9 @@ export async function prepareRuntimeInvocation(
       !identity.sessionId.includes('\0')
         ? identity.sessionId
         : null,
-    async dispatch(admission) {
+    async dispatch(admission, nativeStop) {
+      if (nativeStop && (serviceOffer || admission))
+        throw new Error('Native Stop routing cannot coexist with service admission');
       if (Boolean(serviceOffer) !== Boolean(admission)) {
         if (admission) disposeNativeRenderAdmission(admission);
         throw new Error('Native render admission must match the prepared service offer');
@@ -351,7 +419,88 @@ export async function prepareRuntimeInvocation(
         };
         let compatibility = compatibilityRequired(request, selection, environment);
         let sessionSeal: NativeSessionSealExecution | undefined;
-        if (
+        let stopPublication:
+          | { readonly loggerIndex: 2; execute(): Promise<import('./composer').HandlerResult> }
+          | undefined;
+        if (nativeStop) {
+          const sid = request.payload.session_id;
+          const logger = selection.handlers[nativeStop.loggerIndex];
+          // A disagreement with native routing fails before the mandatory prefix.
+          if (
+            !nativeStopPrefix ||
+            !nativeStopStore ||
+            serviceOffer ||
+            request.configuration !== 'system' ||
+            selection.configuration !== 'system' ||
+            request.surface !== 'opencode' ||
+            selection.surface !== 'opencode' ||
+            request.event !== 'stop' ||
+            selection.event !== 'stop' ||
+            selection.runtimeDigest !== request.runtimeDigest ||
+            selection.hooksDirectory !== selection.runtimeDirectory ||
+            request.stopPrefix !== STOP_PREFIX_CAPABILITY ||
+            request.sessionStore !== TRANSCRIPT_STORE_CAPABILITY ||
+            request.sessionPublication !== SESSION_PUBLICATION_CAPABILITY ||
+            Boolean(priorBashEnvironment(selection, environment)) ||
+            typeof sid !== 'string' ||
+            sid !== identity.sessionId ||
+            !sid ||
+            sid === 'unknown' ||
+            sid === '.' ||
+            sid === '..' ||
+            Buffer.byteLength(sid) > 128 ||
+            !/^[A-Za-z0-9_.@:-]+$/.test(sid) ||
+            typeof request.payload.cwd !== 'string' ||
+            !isAbsolute(request.payload.cwd) ||
+            nativeStop.loggerIndex !== 2 ||
+            !logger ||
+            logger.kind !== 'stock' ||
+            logger.name !== 'session-log.sh' ||
+            logger.entry !== 'session-log.sh' ||
+            logger.args.length ||
+            logger.path !== join(selection.runtimeDirectory, 'session-log.sh') ||
+            Object.keys(selection.overrides).length ||
+            Object.keys(selection.libraryOverrides).length ||
+            selection.handlers.some((handler) => handler.kind !== 'stock') ||
+            Object.values(selection.libraries).some(
+              (library) => !['shared', 'surface'].includes(library.kind)
+            )
+          )
+            throw new Error('Native Stop grant disagrees with active invocation selection');
+          const prefix = await nativeStopPrefix.capture(selection.canonical);
+          journal.append('stop_prefix_completed', {
+            status: prefix.status,
+            prefix_complete: prefix.prefixComplete,
+            envelope_published: prefix.envelopePublished,
+            pointer_published: prefix.pointerPublished,
+            agent_pid: prefix.agentPid,
+            reap: prefix.reap,
+          });
+          if (signal.aborted) throw signal.reason;
+          if (!prefix.prefixComplete || !['completed', 'unavailable'].includes(prefix.status))
+            throw new Error('Native Stop prefix incomplete; compatibility replay refused');
+          compatibility = false;
+          if (prefix.status === 'unavailable')
+            cacheDiagnostic = '[caws runtime] ' + prefix.diagnostic + '\n';
+          const publicationOptions: NativeStopPublicationOptions = {
+            ...NATIVE_STOP_PRODUCTION_LIMITS,
+            port: nativeStopStore,
+            canonicalRoot: selection.canonical,
+            sessionId: sid,
+            signal,
+            deadlineEpochMs: request.deadlineEpochMs,
+            sqlProfile: nativeStop.sqlProfile,
+            rendererProfile: {
+              id: nativeStop.rendererProfile,
+              integerMaxDigits: nativeStop.rendererIntegerMaxDigits,
+            },
+            observe: (fields) => journal.append('stop_publication_consumer_completed', fields),
+          };
+          stopPublication = Object.freeze({
+            loggerIndex: 2 as const,
+            execute: () => executeNativeStopPublication(publicationOptions),
+          });
+        } else if (
           nativeSessionSeal &&
           nativeSessionEndPrefix &&
           request.sessionPublication === SESSION_PUBLICATION_CAPABILITY &&
@@ -479,6 +628,7 @@ export async function prepareRuntimeInvocation(
               execute: createHandlerExecutor({
                 ...options,
                 ...(sessionSeal ? { nativeSessionSeal: sessionSeal } : {}),
+                ...(stopPublication ? { nativeStopPublication: stopPublication } : {}),
               }),
               record: (observation) => journal.record(observation),
               eligibility: (handler) =>
