@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-SOURCE-LANDING-001
 title: 'Reconcile matched native runtime source and package contracts onto main'
 mode: refactor
-lifecycle_state: active
-worktree: native-source-landing
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded coherent source delivery completed at c41ee44b with code c61ad087: matched native/CLI/package build, exact private installed native cache and guard controls, corruption refusal and native-to-legacy rollback. A1-A3 recorded/read back with full-basis gates and independent review. Full runtime modernization remains active under CAWS-NATIVE-RUNTIME-001 and CAWS-NATIVE-SESSION-PUBLICATION-001: ordinary Stop integration/admission, deep deadline effect checks, in-process parity, Python retirement, harness delivery, residency/fairness, active-owner upgrades and actual machine adoption. No parent completion or local cutover is claimed.'
 created_at: '2026-10-22T22:51:57.793Z'
-updated_at: '2026-10-23T13:13:19.350Z'
+updated_at: '2026-10-24T00:56:00.797Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -14,6 +15,9 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'docs/internal/caws-runtime-modernization.md'
+    - packages/caws-cli/templates/hook-packs/shared/audit.sh
+    - packages/caws-cli/tests/hooks/bats/audit-jsonl.bats
+    - packages/caws-cli/tests/hooks/bats/guard-config.bats
   out: []
   support:
     - .gitignore
@@ -315,6 +319,36 @@ scope:
     - packages/caws-cli/tests/runtime/qualify-render-owner.test.js
     - packages/caws-cli/src/runtime/session-store-publication.ts
     - packages/caws-cli/tests/runtime/session-store-publication.test.js
+    - packages/caws-cli/src/init/machine-paths.ts
+    - packages/caws-cli/src/init/selection-read-io.ts
+    - packages/caws-cli/src/init/system-project-policy.ts
+    - packages/caws-cli/src/init/system-surface-settings.ts
+    - packages/caws-cli/src/runtime/render-observation-client.ts
+    - packages/caws-cli/src/runtime/render-observation-wire.ts
+    - packages/caws-cli/src/runtime/selection-observation.ts
+    - packages/caws-cli/src/runtime/session-publication-client.ts
+    - packages/caws-cli/src/transcripts/python-html.ts
+    - packages/caws-cli/src/transcripts/renderer-calendar.ts
+    - packages/caws-cli/tests/init/selection-read-io.test.js
+    - packages/caws-cli/tests/runtime/render-observation-client.test.js
+    - packages/caws-cli/tests/runtime/selection-observation.test.js
+    - packages/caws-cli/tests/transcripts/claude.test.ts
+    - packages/caws-cli/tests/transcripts/python-html.test.ts
+    - packages/caws-cli/tests/transcripts/renderer-calendar.test.ts
+    - packages/caws-cli/tests/transcripts/store-sql-profile.test.js
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/render.rs
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/render_owner/session.rs
+    - packages/caws-native/src/render_owner/session/tests.rs
+    - packages/caws-native/src/renderer_calendar.rs
+    - packages/caws-native/tests/context_git.rs
+    - packages/caws-native/tests/render_context.rs
+    - packages/caws-native/tests/render_observation.rs
+    - packages/caws-native/tests/renderer_calendar.rs
 invariants:
   - 'Preserve main fixes and matched producer/consumer/build contracts; preserve foreign worktrees and all parent publication, residency and machine-cutover obligations'
   - 'A coherent source landing does not accept full runtime cutover, first-party Python retirement, ordinary publication or thirteen-session four-repository qualification'
@@ -346,12 +380,12 @@ evidence:
     recorded_at: "2026-10-22T23:33:52.190Z"
     commit_sha: c9b919e64f9149a09e2e9fff62f40cfdf141d1a8
   - criterion_id: A2
-    status: unchecked
-    evidence_ref: "Combined publication adapter and qualifier source29555bc: normal build exit0/6.660s,113 actual focused Jest checks exit0/3.789s across adapter/store/owner/CI. External raw artifacts source-publication-build-01, source-publication-tests-01 and supplemental source-publication-inputs-01 directly inspected; source and fresh dist pins stable, no timeout or group residue. CI repaired real tar preservation and partial/empty inputs; prior full push05 failed only stale direct-directory archive expectation, retained unmodified. Dormant adapter tested with real TS port plus controlled native-shaped transport and actual ordinary filesystem reader, not actual SQL native execution. Warm05 and258-original capacity01 qualify their separately pinned prior image; exact combined native image/package/installed harness remains owed. External paths are manually inspected evidence; verify here establishes commit existence only. Parent selection, calendar/context carrier, concurrent fairness and cutover remain unaccepted."
-    recorded_at: "2026-10-23T13:32:31.298Z"
-    commit_sha: "29555bc8c0168cdc9692a3990c7c62d3afc28df4"
+    status: pass
+    evidence_ref: "Bounded source criterion only. Fresh matched native coordinator, CLI build and pack at c61ad087 exit0 with unchanged source pins and empty owned groups. publication-integration/combined-package-01 retains tar SHA c0bbdf4b1023163e68d201059f681350f377b84902ddcf2bf7505a78c95fdc2c, exact prefix inspection and descriptor-preparation-05. combined-installed-image-01 executes actual private install/configure/init; clean-child native Bash journals show captured envelope and exits0/read,2/specific force-push block. Corrupted native-entry.json actual launcher exits2 with member-specific integrity failure and unchanged project snapshot; restored bytes retained. Packaged rollback exits0, restores baseline0c5bf4be, same stable launcher then exits0. E310-E312 retain executed selector, SQL profile and metadata hostile checks with failures. E314 at f2a3934b adds only ledger text. Manually inspected external commands/logs/state/hashes; verify checks commit existence, not execution. No vendor callback delivery, whole native chain, ordinary SQL Stop, no-Python, fairness, active-owner native upgrade or machine adoption claim. Deadline3bc555cb is excluded."
+    recorded_at: "2026-10-24T00:54:16.561Z"
+    commit_sha: c61ad0876bce08ffcc50a7d93ab5c3e939a7df98
   - criterion_id: A3
     status: pass
-    evidence_ref: "Candidate29555bc fresh normal CLI build exit0/6.660s and four focused suites113pass exit0/3.789s, external raw stdout/stderr/source pins directly inspected at root artifacts publication-integration/source-publication-build-01 and source-publication-tests-01; supplemental inputs01 pins fresh dist/workflow/test. Documentation-only03fa updates three owners/checks, sequential258 boundary and no selected SQL/native image claim. Doctor0E/4W/5I; all5 gates pass on nine-file committed branch basis. Independent Sonnet5.5 review29555bc vs6aa returned three coupling hypotheses. Direct source discharge: real createNativeTranscriptStorePort used by adapter tests263/309, validates capabilities and final exhausted CLOSED cleanup/metrics before eligibility; captured invocation/token/transport retained at client433-456. Native snapshot self.original.session_id at session_publication594 is compared to supplied session at TS376 before preparation; hostile session control executes adapter and refuses. Wrong-name/role/duplicate renderer controls444-468 invoke adapter run and assert only projection PREPARED, no consume. No test supplies fake eligibility class. CI prior independent review addressed partial/empty fixture, semantic tar listing and exact bytes/link; actualcapacity and warm proof remain separately scoped. Verify checks commit existence, not external execution. Installed drift warnings remain explicit cutover obligations, no native-context/calendar/production acceptance granted."
-    recorded_at: "2026-10-23T13:32:01.105Z"
-    commit_sha: "03fa55759879eb4bd551cab3e0d23418e26ff7e3"
+    evidence_ref: "Independent read-only GPT6.1Sol completion review inspected f2a3934b against cc20be3b, original A1-A3/E298-E314, source interfaces and raw exact-image producer/consumer receipts; no actionable cross-component defect found within bounded landing. Root independently inspected absent ordinary store production caller, native-cache journals with child execution and delivery:not_observed, actual member-corruption stderr, rollback pointer and post-rollback invocation, plan state equality, package SHA and source identities. c41ee44b changes only next-check table wording after review; executable bytes remain c61ad087. Doctor0E/4W/5I; full branch/staged gates at c41ee44b evaluate54files and all5pass. Existing E313/E314 and owner table retain ordinary SQL Stop admission, full native chain, no-Python, residency/fairness, harness enforcement, active-owner upgrade and machine adoption with root. Later deadline3bc555cb is explicitly separate and requires deep effect-boundary repair. Commit verification is identity only; raw external artifacts were manually inspected. No parent acceptance is inferred."
+    recorded_at: "2026-10-24T00:55:39.068Z"
+    commit_sha: c41ee44bced6ae40c99251e1eaa79dee4247107a

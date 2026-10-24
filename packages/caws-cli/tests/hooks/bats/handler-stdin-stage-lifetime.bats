@@ -154,7 +154,11 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   big=$(_payload)
   foreign_payload="$BATS_TEST_TMPDIR/foreign-payload.json"
   foreign_listed="$BATS_TEST_TMPDIR/foreign-listed.tmp"
-  printf '%s' "$big" > "$foreign_payload"
+  # Keep the exported inline value below Linux's per-entry exec limit. The
+  # inherited file is deliberately larger and different, so cmp also detects
+  # accidentally selecting the inline value instead of the inherited file.
+  printf '%s' "$big" | jq -c '.tool_response.data *= 3' > "$foreign_payload"
+  [ "$(wc -c < "$foreign_payload")" -gt 131072 ]
   printf 'not created by run_handlers' > "$foreign_listed"
   # Spill path: handlers read the inherited file, which stays in place.
   run env HOOKS_DIR="$STAGE_PACK" HOOK_INPUT_JSON="$big" HOOK_PAYLOAD_FILE="$foreign_payload" \
@@ -164,6 +168,7 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   [ -f "$foreign_payload" ]
   [ -f "$foreign_listed" ]
   cmp "$foreign_payload" "$OUT_DIR"/reader-*.bytes
+  cp "$OUT_DIR"/reader-*.bytes "$OUT_DIR/inherited-reader.bytes"
   # Staged inline path: a caller's CAWS_TEMP_FILES list is left alone.
   rm -f "$OUT_DIR"/reader-*
   run env HOOKS_DIR="$STAGE_PACK" HOOK_INPUT_JSON="$big" TMPDIR="$STAGE_TMP" OUT_DIR="$OUT_DIR" \
@@ -222,17 +227,26 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   mkdir -p "$stub"
   # The stage is created normally; then TMPDIR (which this test owns) stops
   # accepting removals, as a hostile or misconfigured parent directory would.
-  printf '#!/bin/bash\ncase "$*" in *caws-handler-stdin-*) f=$(%q "$@") || exit 1; chmod a-w "$(dirname "$f")"; echo "$f"; exit 0 ;; esac\nexec %q "$@"\n' \
-    "$real_mktemp" "$real_mktemp" > "$stub/mktemp"
+  printf '#!/bin/bash\nif [ "$#" -eq 0 ]; then f=$(%q "$TMPDIR/dispatcher-XXXXXX") || exit 1; printf "%%s\\n" "$f" >> "$OUT_DIR/dispatcher-files"; printf "%%s\\n" "$f"; exit 0; fi\ncase "$*" in *caws-handler-stdin-*) f=$(%q "$@") || exit 1; chmod a-w "$(dirname "$f")"; echo "$f"; exit 0 ;; esac\nexec %q "$@"\n' \
+    "$real_mktemp" "$real_mktemp" "$real_mktemp" > "$stub/mktemp"
   chmod +x "$stub/mktemp"
   STAGE_PATH="$stub:$PATH" _chain "$big" reader.sh
   [ "$status" -eq 0 ]
   cmp "$expected" "$OUT_DIR"/reader-*.bytes
-  # No payload pathname while the handler ran, and none afterwards.
-  [ ! -s "$(ls "$OUT_DIR"/reader-*.files)" ]
-  [ -z "$(find "$STAGE_TMP" -type f)" ]
+  # Account for every regular file, exempting only the exact stderr capture
+  # created by the observed zero-argument mktemp call. An unexpected payload
+  # file must fail even if it uses a different basename or directory.
+  [ -s "$OUT_DIR/dispatcher-files" ]
+  sort "$OUT_DIR/dispatcher-files" > "$OUT_DIR/expected-files"
+  sort "$OUT_DIR"/reader-*.files > "$OUT_DIR/observed-files"
+  cmp "$OUT_DIR/expected-files" "$OUT_DIR/observed-files"
+  _has "$(cat "$OUT_DIR"/reader-*.tmp)" "dispatcher-"
+  find "$STAGE_TMP" -type f | sort > "$OUT_DIR/remaining-files"
+  cmp "$OUT_DIR/expected-files" "$OUT_DIR/remaining-files"
   # What remains is one empty stage directory, named on stderr.
-  left=$(ls -A "$STAGE_TMP")
+  # GNU mktemp also places dispatcher stderr captures in TMPDIR. They are not
+  # payload stages and remain independently owned by the dispatcher.
+  left=$(find "$STAGE_TMP" -mindepth 1 -maxdepth 1 -type d -name 'caws-handler-stdin-*' -exec basename {} \;)
   [ "${left#caws-handler-stdin-}" != "$left" ]
   [ -d "$STAGE_TMP/$left" ]
   [ -z "$(ls -A "$STAGE_TMP/$left")" ]
@@ -324,4 +338,86 @@ _payload() { # a >32768-character JSON payload with escapes and multibyte text
   _has "$output" "[caws run-handlers] handler stdin stage $STAGE_TMP/caws-handler-stdin-"
   _has "$output" " was replaced by a link; left in place"
   [ -n "$(find "$STAGE_TMP" -type f -name payload -path '*.moved/*')" ]
+}
+
+@test "exec child and pipe paths preserve nonzero handler bytes output and recorded status" {
+  local big real_rm real_mktemp stub mode
+  big=$(_payload)
+  printf '%s' "$big" > "$BATS_TEST_TMPDIR/expected.bytes"
+  real_rm=$(command -v rm)
+  real_mktemp=$(command -v mktemp)
+  stub="$BATS_TEST_TMPDIR/fallback-tools"
+  mkdir "$stub"
+  printf '#!/bin/bash\ncase "$*" in *caws-handler-stdin-*) [ "$STAGE_MODE" != pipe ] || exit 1 ;; esac\nexec %q "$@"\n' "$real_mktemp" > "$stub/mktemp"
+  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */caws-handler-stdin-*/payload) if [ "$STAGE_MODE" = child ] && [ ! -e "$RM_STUB_ONCE" ]; then : > "$RM_STUB_ONCE"; exit 1; fi ;; esac; done\nexec %q "$@"\n' "$real_rm" > "$stub/rm"
+  cat > "$STAGE_PACK/nonzero.sh" <<'EOF'
+#!/bin/bash
+cat > "$OUT_DIR/nonzero.bytes"
+printf 'handler-output\n'
+printf 'handler-error\n' >&2
+exit 23
+EOF
+  chmod +x "$stub/mktemp" "$stub/rm" "$STAGE_PACK/nonzero.sh"
+  for mode in exec child pipe; do
+    run env HOOKS_DIR="$STAGE_PACK" HOOK_INPUT_JSON="$big" TMPDIR="$STAGE_TMP" \
+      OUT_DIR="$OUT_DIR" RUN_HANDLERS="$RUN_HANDLERS" PATH="$stub:$PATH" \
+      STAGE_MODE="$mode" RM_STUB_ONCE="$BATS_TEST_TMPDIR/first-unlink" \
+      /bin/bash -c 'set -uo pipefail; source "$RUN_HANDLERS";
+        _rh_record_execution() {
+          printf "%s\n%s\n" "$4" "$6" > "$OUT_DIR/recorded-result";
+          cat "$5" > "$OUT_DIR/recorded-stderr";
+        }; run_handlers nonzero.sh'
+    cmp "$BATS_TEST_TMPDIR/expected.bytes" "$OUT_DIR/nonzero.bytes"
+    [ "$(cat "$OUT_DIR/recorded-result")" = $'23\nhandler-output' ]
+    [ "$(cat "$OUT_DIR/recorded-stderr")" = handler-error ]
+    _no_stage_in "$STAGE_TMP"
+    cp "$OUT_DIR/recorded-result" "$OUT_DIR/$mode-result"
+    cp "$OUT_DIR/nonzero.bytes" "$OUT_DIR/$mode-bytes"
+    if [ "$mode" = child ]; then
+      [ -f "$BATS_TEST_TMPDIR/first-unlink" ]
+      _has "$output" 'could not remove handler stdin stage'
+    fi
+  done
+}
+
+@test "overlapping dispatches share TMPDIR without sharing stage paths or payloads" {
+  local big real_mktemp stub peer first second
+  big=$(_payload)
+  real_mktemp=$(command -v mktemp)
+  stub="$BATS_TEST_TMPDIR/observed-mktemp"
+  mkdir "$stub"
+  printf '#!/bin/bash\nf=$(%q "$@") || exit 1\ncase "$*" in *caws-handler-stdin-*) printf "%%s\\n" "$f" >> "$OUT_DIR/stage-paths" ;; esac\nprintf "%%s\\n" "$f"\n' "$real_mktemp" > "$stub/mktemp"
+  cat > "$STAGE_PACK/overlap.sh" <<'EOF'
+#!/bin/bash
+cat > "$OUT_DIR/$PEER.bytes"
+: > "$OUT_DIR/$PEER.ready"
+for attempt in $(seq 1 100); do
+  if [ -f "$OUT_DIR/A.ready" ] && [ -f "$OUT_DIR/B.ready" ]; then
+    : > "$OUT_DIR/$PEER.overlapped"
+    exit 0
+  fi
+  sleep 0.02
+done
+exit 91
+EOF
+  chmod +x "$stub/mktemp" "$STAGE_PACK/overlap.sh"
+  for peer in A B; do
+    printf '%s' "$peer$big" > "$OUT_DIR/$peer.expected"
+    env HOOKS_DIR="$STAGE_PACK" HOOK_INPUT_JSON="$peer$big" TMPDIR="$STAGE_TMP" \
+      OUT_DIR="$OUT_DIR" RUN_HANDLERS="$RUN_HANDLERS" PATH="$stub:$PATH" PEER="$peer" \
+      /bin/bash -c 'set -uo pipefail; source "$RUN_HANDLERS"; run_handlers overlap.sh' \
+      > "$OUT_DIR/$peer.stdout" 2> "$OUT_DIR/$peer.stderr" 3>&- &
+    if [ "$peer" = A ]; then first=$!; else second=$!; fi
+  done
+  wait "$first"
+  wait "$second"
+  for peer in A B; do
+    [ -f "$OUT_DIR/$peer.overlapped" ]
+    cmp "$OUT_DIR/$peer.expected" "$OUT_DIR/$peer.bytes"
+    [ ! -s "$OUT_DIR/$peer.stderr" ]
+  done
+  [ "$(wc -l < "$OUT_DIR/stage-paths" | tr -d ' ')" = 2 ]
+  [ "$(sort -u "$OUT_DIR/stage-paths" | wc -l | tr -d ' ')" = 2 ]
+  while IFS= read -r stage; do [ ! -e "$stage" ]; done < "$OUT_DIR/stage-paths"
+  _no_stage_in "$STAGE_TMP"
 }
