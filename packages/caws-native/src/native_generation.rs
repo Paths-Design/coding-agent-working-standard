@@ -883,6 +883,7 @@ mod tests {
             first.identity_after,
             first.member_hashing,
             first.inventory_modes,
+            first.manifest_authentication,
         ] {
             assert_eq!(
                 phase.count, 1,
@@ -890,6 +891,9 @@ mod tests {
             );
             assert_eq!(phase.failures, 0);
         }
+        assert_eq!(first.manifest_directory_plan.count, 0);
+        assert_eq!(first.manifest_directory_plan.failures, 0);
+        assert_eq!(first.manifest_directory_plan.elapsed_micros, 0);
         let expected_bytes = full_verification_hash_bytes(&f, &receipt);
         let expected_hashes = receipt.selection.members().len() as u64 + 2;
         assert_eq!(first.hash_calls, expected_hashes);
@@ -918,6 +922,11 @@ mod tests {
         assert_eq!(second.identity_after.count, 2);
         assert_eq!(second.member_hashing.count, 2);
         assert_eq!(second.inventory_modes.count, 2);
+        assert_eq!(
+            second.manifest_directory_plan,
+            first.manifest_directory_plan
+        );
+        assert_eq!(second.manifest_authentication.count, 2);
         assert_eq!(second.hash_calls, 2 * expected_hashes);
         assert_eq!(second.bytes_hashed, 2 * expected_bytes);
         assert_eq!(
@@ -930,6 +939,291 @@ mod tests {
         );
         f.record("verification-phase-success", serde_json::json!({"snapshot":second,"expectedBytesPerPass":expected_bytes,"initialLoadExcluded":true,"memberLookupsExcluded":true,"syntheticGeneration":true}));
     }
+    #[test]
+    fn manifest_phase_instrumentation_preserves_checkpoint_count_and_result() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let expiry = expires();
+        let plain_checks = Cell::new(0usize);
+        let mut plain_cancel = || {
+            plain_checks.set(plain_checks.get() + 1);
+            Ok(())
+        };
+        let mut plain_verify = Verification::new(expiry, &mut plain_cancel);
+        let plain = receipt.selection.revalidate(&mut plain_verify);
+        let measured_checks = Cell::new(0usize);
+        let mut measured_cancel = || {
+            measured_checks.set(measured_checks.get() + 1);
+            Ok(())
+        };
+        let mut measured_verify = Verification::new(expiry, &mut measured_cancel);
+        let diagnostics = VerificationDiagnostics::default();
+        let measured =
+            measured_verify.diagnosed(&diagnostics, |verify| receipt.selection.revalidate(verify));
+        let snapshot = diagnostics.snapshot();
+        f.record("manifest-phase-checkpoint-control", serde_json::json!({"plain":plain,"measured":measured,"plainCheckpoints":plain_checks.get(),"measuredCheckpoints":measured_checks.get(),"snapshot":snapshot,"syntheticGeneration":true}));
+        assert_eq!(plain, Ok(()));
+        assert_eq!(measured, plain);
+        assert!(plain_checks.get() > 0);
+        assert_eq!(
+            measured_checks.get(),
+            plain_checks.get(),
+            "diagnostic phases add no authority checkpoints to the cached algorithm"
+        );
+        assert_eq!(plain_verify.expires(), measured_verify.expires());
+        assert_eq!(
+            snapshot.hash_calls,
+            receipt.selection.members().len() as u64 + 2
+        );
+        assert_eq!(
+            snapshot.bytes_hashed,
+            full_verification_hash_bytes(&f, &receipt)
+        );
+    }
+
+    #[test]
+    fn manifest_phase_diagnostics_refuse_cancellation_during_authentication() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let diagnostics = VerificationDiagnostics::default();
+        let armed = Rc::new(Cell::new(false));
+        let flag = armed.clone();
+        let mut cancel = move || {
+            if flag.get() {
+                Err("manifest authentication cancelled".into())
+            } else {
+                Ok(())
+            }
+        };
+        let manifest = f.root.join("manifest.json");
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            if path == manifest {
+                armed.set(true);
+            }
+        }));
+        let result = verify.diagnosed(&diagnostics, |verify| receipt.selection.revalidate(verify));
+        let snapshot = diagnostics.snapshot();
+        f.record("manifest-authentication-cancelled", serde_json::json!({"result":result,"snapshot":snapshot,"cancelArmed":armed.get(),"syntheticGeneration":true}));
+        assert_eq!(result, Err("manifest authentication cancelled".into()));
+        assert!(armed.get(), "actual manifest read must arm cancellation");
+        assert_eq!(snapshot.manifest_authentication.count, 1);
+        assert_eq!(snapshot.manifest_authentication.failures, 1);
+        assert_eq!(snapshot.manifest_directory_plan.count, 0);
+        assert_eq!(snapshot.member_hashing.count, 0);
+        assert_eq!(snapshot.inventory_modes.count, 0);
+        assert_eq!(snapshot.hash_calls, 1);
+        assert_eq!(
+            snapshot.bytes_hashed, 0,
+            "refused chunk never reached hash update"
+        );
+    }
+
+    #[test]
+    fn manifest_phase_diagnostics_refuse_cancellation_during_directory_plan() {
+        let f = Fixture::new();
+        let diagnostics = VerificationDiagnostics::default();
+        let armed = Rc::new(Cell::new(false));
+        let flag = armed.clone();
+        let checks = Cell::new(0usize);
+        let mut cancel = || {
+            if flag.get() {
+                checks.set(checks.get() + 1);
+                // After the manifest chunk: two chunk checkpoints, two FD
+                // checkpoints, two named-leaf checkpoints, read exit, parsed
+                // manifest checkpoint, then three directory-plan checkpoints.
+                // Assert below that refusal occurs in planning, before member I/O.
+                if checks.get() == 11 {
+                    return Err("initial manifest directory plan cancelled".into());
+                }
+            }
+            Ok(())
+        };
+        let manifest = f.root.join("manifest.json");
+        assert!(fs::metadata(&manifest).unwrap().len() < 65536);
+        let original_expiry = expires();
+        let mut verify = Verification::new(original_expiry, &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            assert_eq!(path, manifest, "cancel before any member read");
+            armed.set(true);
+        }));
+        let result = verify.diagnosed(&diagnostics, |verify| {
+            Selection::read_generation(&f.home, &f.config.digest, verify)
+        });
+        let snapshot = diagnostics.snapshot();
+        f.record(
+            "manifest-directory-plan-cancelled",
+            serde_json::json!({
+                "error":result.as_ref().err(),"snapshot":snapshot,
+                "checksAfterManifestChunk":checks.get(),
+                "initialSelectionPublished":result.is_ok(),
+                "originalExpiryUnchanged":verify.expires()==original_expiry,
+                "syntheticGeneration":true
+            }),
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "initial manifest directory plan cancelled"
+        );
+        assert_eq!(checks.get(), 11);
+        assert_eq!(verify.expires(), original_expiry);
+        assert_eq!(snapshot.manifest_authentication.count, 0);
+        assert_eq!(snapshot.manifest_directory_plan.count, 1);
+        assert_eq!(snapshot.manifest_directory_plan.failures, 1);
+        assert_eq!(snapshot.member_hashing.count, 0);
+        assert_eq!(snapshot.inventory_modes.count, 0);
+        // Initial manifest parsing is outside revalidation hash counters.
+        assert_eq!(snapshot.hash_calls, 0);
+        assert_eq!(snapshot.bytes_hashed, 0);
+    }
+
+    #[test]
+    #[ignore = "requires explicit retained immutable image and external artifact directory"]
+    fn actual_image_plan_phase_timing() {
+        let home = PathBuf::from(
+            std::env::var_os("CAWS_NATIVE_TIMING_HOME").expect("CAWS_NATIVE_TIMING_HOME required"),
+        );
+        let digest =
+            std::env::var("CAWS_NATIVE_TIMING_DIGEST").expect("CAWS_NATIVE_TIMING_DIGEST required");
+        let artifacts = PathBuf::from(
+            std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
+                .expect("CAWS_NATIVE_TEST_ARTIFACT_ROOT required"),
+        );
+        assert!(home.is_absolute() && artifacts.is_absolute());
+        let home = fs::canonicalize(home).unwrap();
+        let artifacts = fs::canonicalize(artifacts).unwrap();
+        assert!(
+            !artifacts.starts_with(&home),
+            "artifacts must not alter retained image home"
+        );
+        assert!(crate::installed_generation::valid_digest(&digest));
+        let emit = |name: &str, value: serde_json::Value| {
+            use std::io::Write;
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(artifacts.join(format!("{name}.json")))
+                .unwrap();
+            file.write_all(&serde_json::to_vec_pretty(&value).unwrap())
+                .unwrap();
+        };
+        // This ignored test runs alone: installation captures the real caller
+        // and changes process-global signal handlers just as native main does.
+        crate::cancellation::install().unwrap();
+        let parent = unsafe { libc::getppid() };
+        let mut output_metadata = std::mem::MaybeUninit::<libc::stat>::zeroed();
+        // SAFETY: successful fstat initializes this writable structure.
+        assert_eq!(
+            unsafe { libc::fstat(libc::STDOUT_FILENO, output_metadata.as_mut_ptr()) },
+            0
+        );
+        let output_mode = unsafe { output_metadata.assume_init() }.st_mode & libc::S_IFMT;
+        assert_eq!(
+            output_mode,
+            libc::S_IFIFO,
+            "probe stdout must exercise pipe polling"
+        );
+        let started = Instant::now();
+        let original =
+            caws_native::monotonic_deadline::MonotonicDeadline::capture(Duration::from_secs(30))
+                .unwrap();
+        let expiry = original.expires();
+        // Match selection_observation::checkpoint's exact call order; every
+        // member/ancestor checkpoint retains both native clock observations.
+        let mut cancel = || {
+            original.check().map_err(|error| error.to_string())?;
+            crate::cancellation::check()?;
+            original.check().map_err(|error| error.to_string())
+        };
+        let mut verify = Verification::new(expiry, &mut cancel);
+        // Initial read is a real full verification but has no diagnostics handle.
+        let initial = Selection::read_generation(&home, &digest, &mut verify);
+        emit(
+            "actual-image-plan-initial",
+            serde_json::json!({
+                "home":home,"digest":digest,"error":initial.as_ref().err(),
+                "callback":"original-clock/cancellation/original-clock","stdoutKind":"pipe",
+                "capturedParent":parent,"originalDeadline":original.envelope(),
+                "originalDeadlineMs":30000,"initialReadOutsideCounters":true,
+                "warmCacheInfluenced":true,"productionTimingClaim":false,
+            }),
+        );
+        let selection = initial.expect("retained image initial verification must succeed");
+        assert!(
+            selection.native_entry().is_some(),
+            "probe requires native generation"
+        );
+        let root = selection.root();
+        let expected_hash_calls = selection.members().len() as u64 + 2;
+        let manifest_bytes = fs::metadata(root.join("manifest.json")).unwrap().len();
+        let modes_bytes = fs::metadata(root.join("native-modes.json")).unwrap().len();
+        let mut expected_bytes = manifest_bytes + modes_bytes;
+        for name in selection.members().keys() {
+            verify.checkpoint().unwrap();
+            expected_bytes += fs::metadata(root.join(name)).unwrap().len();
+        }
+        let mut passes = Vec::new();
+        for pass in 1..=3 {
+            let diagnostics = VerificationDiagnostics::default();
+            let before = diagnostics.snapshot();
+            let pass_started = Instant::now();
+            let result = verify.diagnosed(&diagnostics, |verify| {
+                verify.phase(VerificationPhase::SelectionVerification, |verify| {
+                    selection.revalidate(verify)
+                })
+            });
+            let snapshot = diagnostics.snapshot();
+            let row = serde_json::json!({
+                "pass":pass,"error":result.as_ref().err(),"snapshot":snapshot,
+                "elapsedMicros":pass_started.elapsed().as_micros(),
+                "elapsedOriginalMicros":started.elapsed().as_micros(),
+                "originalDeadlineMs":30000,"sameOriginalExpiry":verify.expires()==expiry,
+                "initialReadOutsideCounters":true,"initialCounters":before,
+                "manifestMembers":selection.members().len(),"manifestBytes":manifest_bytes,
+                "modesBytes":modes_bytes,"expectedHashCalls":expected_hash_calls,
+                "expectedBytesHashed":expected_bytes,"warmCacheInfluenced":true,
+                "scope":"Selection with frontend callback chain; no receipt identity sweeps or owner scans",
+                "callback":"original-clock/cancellation/original-clock","stdoutKind":"pipe",
+                "capturedParent":parent,"originalDeadline":original.envelope(),
+                "productionTimingClaim":false,
+            });
+            emit(&format!("actual-image-plan-pass-{pass}"), row.clone());
+            passes.push(row);
+            assert_eq!(result, Ok(()), "pass retained before refusal assertion");
+            assert_eq!(verify.expires(), expiry);
+            assert_eq!(before.selection_verification.count, 0);
+            assert_eq!(before.hash_calls, 0);
+            assert_eq!(before.bytes_hashed, 0);
+            for phase in [
+                snapshot.selection_verification,
+                snapshot.manifest_authentication,
+                snapshot.member_hashing,
+                snapshot.inventory_modes,
+            ] {
+                assert_eq!(phase.count, 1);
+                assert_eq!(phase.failures, 0);
+            }
+            assert_eq!(snapshot.manifest_directory_plan.count, 0);
+            assert_eq!(snapshot.manifest_directory_plan.failures, 0);
+            assert_eq!(snapshot.manifest_directory_plan.elapsed_micros, 0);
+            assert_eq!(snapshot.identity_before.count, 0);
+            assert_eq!(snapshot.identity_after.count, 0);
+            assert_eq!(snapshot.hash_calls, expected_hash_calls);
+            assert_eq!(snapshot.bytes_hashed, expected_bytes);
+        }
+        emit(
+            "actual-image-plan-summary",
+            serde_json::json!({
+                "home":home,"digest":digest,"passes":passes,"originalDeadlineMs":30000,
+                "warmCacheInfluenced":true,"productionTimingClaim":false,
+            }),
+        );
+        assert!(
+            Instant::now() < expiry,
+            "original deadline includes all three passes"
+        );
+    }
+
     #[test]
     fn verification_phase_diagnostics_count_failed_entry_and_restore_the_scope() {
         let f = Fixture::new();
@@ -961,6 +1255,14 @@ mod tests {
         assert_eq!(refused.identity_after, initial.identity_after);
         assert_eq!(refused.member_hashing, initial.member_hashing);
         assert_eq!(refused.inventory_modes, initial.inventory_modes);
+        assert_eq!(
+            refused.manifest_directory_plan,
+            initial.manifest_directory_plan
+        );
+        assert_eq!(
+            refused.manifest_authentication,
+            initial.manifest_authentication
+        );
         assert_eq!(
             refused.path_metadata_operations, initial.path_metadata_operations,
             "pre-call cancellation performed no metadata syscall"
@@ -1533,6 +1835,25 @@ mod tests {
         fs::remove_file(f.root.join("engine.js")).unwrap();
         fs::write(f.root.join("engine.js"), b"engine\n").unwrap();
         fs::write(f.root.join("manifest.json"), b"{}").unwrap();
+        let diagnostics = VerificationDiagnostics::default();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        let cached = verify.diagnosed(&diagnostics, |verify| receipt.selection.revalidate(verify));
+        let snapshot = diagnostics.snapshot();
+        f.record(
+            "cached-plan-manifest-refusal",
+            serde_json::json!({
+                "error":cached.as_ref().err(),"snapshot":snapshot,
+                "syntheticGeneration":true
+            }),
+        );
+        assert_eq!(
+            cached,
+            Err("Selected manifest changed before launch".into())
+        );
+        assert_eq!(snapshot.manifest_authentication.failures, 1);
+        assert_eq!(snapshot.manifest_directory_plan.count, 0);
+        assert_eq!(snapshot.member_hashing.count, 0);
         assert!(f.capture().unwrap_err_text().contains("manifest integrity"));
     }
     #[test]
@@ -1757,6 +2078,34 @@ mod tests {
     #[test]
     fn undeclared_directory_is_refused_before_descent() {
         let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        fs::create_dir(f.root.join("undeclared")).unwrap();
+        let diagnostics = VerificationDiagnostics::default();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        let cached = verify.diagnosed(&diagnostics, |verify| receipt.selection.revalidate(verify));
+        let snapshot = diagnostics.snapshot();
+        f.record(
+            "cached-plan-empty-directory-refusal",
+            serde_json::json!({
+                "error":cached.as_ref().err(),"snapshot":snapshot,
+                "syntheticGeneration":true
+            }),
+        );
+        assert_eq!(
+            cached,
+            Err("Undeclared native runtime directory: undeclared".into())
+        );
+        assert_eq!(snapshot.manifest_directory_plan.count, 0);
+        assert_eq!(snapshot.inventory_modes.failures, 1);
+        assert_eq!(
+            snapshot.hash_calls,
+            receipt.selection.members().len() as u64 + 2
+        );
+        assert_eq!(
+            snapshot.bytes_hashed,
+            full_verification_hash_bytes(&f, &receipt)
+        );
         fs::create_dir_all(f.root.join("undeclared/deeper/deepest")).unwrap();
         let error = f.capture().unwrap_err_text();
         assert_eq!(error, "Undeclared native runtime directory: undeclared");

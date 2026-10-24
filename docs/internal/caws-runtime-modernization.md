@@ -46,13 +46,17 @@ reviewed candidate `5837aa104633640ce593a2ead8ea2198d46b7812`.
 component acceptance does not qualify the production publication chain. Local
 main merge `bbe4b3895c53348da4d2703a486b8cabe79cb7d8` contains the E343 source
 catalog and typed consumer. Its bounded landing spec closes with A1–A3 recorded;
-E348 retains the exact composition and postmerge observations.
-`native-runtime-modernization` remains the integration branch for owed work.
-Evidence entries identify their actual component branch or historical revision;
-ledger-only commits do not qualify different runtime bytes. The relative
-architecture link follows this document's branch. Source publication, fresh
-package qualification, actual native execution and cutover acceptance remain
-separate obligations; E262 records the landing and its bounded checks.
+E348 retains the exact composition and postmerge observations. Local main merge
+`89946c2d8d71f00d35828a91c620a3ec9d78e130` contains the reviewed Stop
+integration checkpoint with implementation bytes equal to `ec496156`; E367
+records its bounded acceptance and preserved dependent lanes. It does not
+qualify the failed E366 production invocation. `native-runtime-modernization`
+remains the integration branch for owed work. Evidence entries identify their
+actual component branch or historical revision; ledger-only commits do not
+qualify different runtime bytes. The relative architecture link follows this
+document's branch. Source publication, fresh package qualification, actual
+native execution and cutover acceptance remain separate obligations; E262
+records the landing and its bounded checks.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
@@ -9991,15 +9995,182 @@ Additional bounded evidence and unresolved dependencies:
   a direct file edit confined to the external artifact directory; no guard,
   identity or interpreter file was changed. The rejected attempt is not a run.
 
-  Root owns the separate main-based native-stop-source-landing lane under
-  CAWS-NATIVE-STOP-SOURCE-LANDING-001. Its implementation matches reviewed
-  ec496156; source acceptance requires main blob identity and preservation of
-  existing lanes and the selected pointer. Direct teardown of
+  The bounded source delivery uses a separate main-based lane under
+  CAWS-NATIVE-STOP-SOURCE-LANDING-001. Direct teardown of
   native-runtime-modernization would delete a base ref used by five foreign
-  lanes: --no-close preserves its spec, not its branch. Preserve those lanes,
-  source references and selected machine pointer. Source landing remains
-  separate from the failed production outcome and both active parent
-  obligations.
+  lanes: --no-close preserves its spec, not its branch. E367 records the
+  separate landing while preserving those lanes, source references and selected
+  machine pointer. Source acceptance does not satisfy the failed production
+  outcome or either active parent obligation.
+
+- E367: Local main merge89946c2d lands reviewed source checkpoint4909cdc4.
+  Direct Git comparison establishes identical implementation/test blobs to
+  ec496156/c04dee5b; only governance and the reconciled tracker differ. All112
+  native source pins match the retained bin184pass/lib443pass2ignored and
+  feature-off compilation receipts. Of1224 packaged source pins, only the
+  tracker differs. These are exact-source retained checks, not fresh execution
+  on main. Fresh09 remains failed with partial publication and no marker.
+  source-landing-composition-01 retains the full30-commit, nontruncated scope
+  review, dry-run, actual merge, identity comparisons and postmerge state.
+  Scoped gates pass allfive checks over46paths; doctor exits0 with0E/4W/5I. The
+  commit hook ignores TypeScript ESLint for lack of matching configuration; its
+  successful exit is not lint proof. Same-provider committed composition review
+  finds no demonstrated implementation divergence within its read-only scope.
+  Root verifies the original effect deadline/cancellation handles before relying
+  on that observation.
+
+  Postmerge comparison retains all11 pre-existing registry entries, physical
+  lanes and their branch tips; non-main dependent base refs, parent/publication
+  spec bytes and selected machine pointer remain unchanged. Only the disposable
+  landing lane is removed. A1-A3 are recorded and read back in
+  events12982-12984; event12985 closes only CAWS-NATIVE-STOP-SOURCE-LANDING-001
+  and12986 releases its temporary bridge. The first absolute artifact-path
+  citation is refused without a write. Supported citations verify commit
+  reachability and explicitly retain direct inspection of external artifacts;
+  CLI verification does not execute the cited historical tests. Canonical
+  closure commitc93082ee is integrated into the continuing root-owned
+  publication lane by fast-forward. Full publication, consumption/release,
+  residency, first-party Python retirement, harness adoption and rollback remain
+  open.
+
+- E368: Two fixed diagnostic phases distinguish manifest authentication from
+  allowed-directory derivation in installed-generation verification. Phase
+  wrappers preserve the existing verification call order and checkpoints; their
+  counters do not authorize effects. manifest-plan-phases-01 exits0 after a
+  fresh130.365s release build and executes three focused controls. Actual
+  synthetic artifacts record270 checkpoints with and without diagnostics,
+  authentication cancellation before any hashed bytes, and plan cancellation
+  after three plan checkpoints with678 manifest bytes hashed and no member or
+  inventory phase entered. Initial-load and member-lookup accounting remains
+  excluded from receipt revalidation diagnostics.
+
+  manifest-plan-actual-image-01 exits0 and reads the actual5971-member fresh09
+  image; three passes each perform5973 hashes over162328887 bytes. Its no-op
+  callback and regular stdout omit production's original-clock, parent and
+  pipe-liveness checks, so its15.894-16.285ms plan measurements cannot choose a
+  production optimization. The raw deficient probe and exact supervisor source
+  remain retained. Source inspection identifies the actual callback sequence:
+  original monotonic deadline check, cancellation signal/parent/stdout check,
+  original deadline check, followed by the verifier's local expiry check.
+
+  manifest-plan-actual-image-02 installs the actual cancellation handlers in an
+  isolated ignored test, requires pipe stdout and uses that callback sequence
+  under one captured30s original deadline for the initial load and three passes.
+  It exits0 in58.564s including incremental release compilation. Per-pass total
+  Selection times are556328/559120/558215us; directory derivation is
+  71791/72846/72573us, manifest authentication628/565/594us, member verification
+  411473/412425/411758us and inventory72414/73258/73265us. Every pass retains
+  5973hashes/162328887bytes and the same original expiry. Before/after full
+  image hashes/modes, native source and pinned build inputs agree; the
+  supervisor reports no remaining process group members. Its artifacts are
+  actual-image-plan-initial.json, three pass JSONs, summary and execution
+  receipt in the root's publication-integration directory.
+
+  These warmed, standalone Selection samples include libtest representation and
+  a source-matched callback chain. They do not measure receipt identity sweeps,
+  owner-side scans, complete publication latency or a cold/concurrent
+  distribution. Root owns a bounded reuse of immutable manifest-derived
+  directory data, contingent on preserving fresh manifest authentication, all
+  member hashes/identity checks and complete live inventory/mode verification.
+  No successful filesystem observation becomes cached authority; no runtime
+  speedup or production completion is claimed by the probe. The complete native
+  binary suite in manifest-plan-bin-01 exits0 in5.705s with187pass/1ignored; the
+  ignored actual-image probe has its separate explicit execution above. This
+  includes the fixed diagnostic serialization and existing integrity/refusal
+  controls, not library/integration suites or an installed invocation.
+
+- E369: Selection retains only the allowed-directory set derived from its
+  authenticated immutable manifest. Initial construction remains under the
+  original expiry and cancellation callback, before full member verification.
+  Revalidation authenticates the live manifest and repeats every member hash,
+  traversal/identity check and actual inventory/mode walk. No successful
+  filesystem observation becomes cached authority. Reused passes remove the
+  obsolete derivation loop and its checkpoints, not the surrounding authority
+  boundaries or actual I/O checkpoints; directory-plan diagnostics report zero.
+
+  manifest-plan-cache-bin-01 exits0 with187pass/1ignored in112.957s including
+  release compilation. The first formatting invocation used edition2021; the
+  crate declares2024. Final formatting restores unrelated layout before the
+  subsequent actual-image and mutation checks. Initial-construction cancellation
+  records no returned Selection, one failed plan phase, no member/inventory
+  entry and unchanged expiry. Direct retained-Selection controls reject a
+  changed live manifest before member hashing and reject an undeclared empty
+  directory after all10 fixture hashes over1283 bytes. These direct controls
+  cannot pass solely through an outer receipt identity sweep.
+
+  manifest-plan-actual-image-03 exits0 in58.887s including release compilation.
+  The unchanged actual5971-member image and callback/pipe probe retain5973
+  hashes over162328887 bytes in each pass. Selection elapsed times are
+  467261/468819/470795us, versus E368's556328/559120/558215us. Every reused
+  directory-plan phase is zero; member and inventory phases still execute. Full
+  image hashes/modes and source/tool pins agree before/after. This is a warmed
+  standalone comparison, not a production latency distribution or proof that
+  publication fits the original30s deadline.
+
+  manifest-plan-empty-directory-mutant-01 disables the actual inventory
+  membership predicate and exits101 after105.720s: the direct revalidation
+  returns Ok instead of the required undeclared-directory error. Its retained
+  fixture and logs establish sensitivity to this specific fault, not a mutation
+  score. The original installed_generation.rs SHA
+  db9f65d0a2fb073c2cbc93c67f62393af987c81a274b3364030af8cce0b5abcf is restored
+  exactly. manifest-plan-cache-restored-bin-01 exits0 in112.569s including
+  compilation with187pass/1ignored, unchanged source/tool pins and empty
+  observed process group. The explicit image probe above covers the ignored
+  test. Doctor exits0 with0E/4W/5I; these checks do not execute library or
+  installed integration suites. Root owns committed-candidate review and fresh10
+  package execution through publication, ordinary CONSUMED and heavy release. No
+  parent criterion or production Python row is completed.
+
+- E370: Reorientation reads all available turn records for root session
+  01a164bc-7a2b-75e2-be81-5da9d0a29252 and reconciles the original three
+  integrated outcomes with the later lead transfer and full local-cutover goal.
+  Main c93082eeb includes the E367 source landing; publication candidate
+  2258630ce38a144f2fafa7d75215a84124864a62 additionally contains E368/E369. The
+  selected machine digest remains
+  408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0. Root retains
+  all three outcomes and parent acceptance remains0/8.
+
+  Retained evidence under
+  /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/
+  includes fresh-stop-profile-production-10 and production-stop-10-positive-01.
+  The exact image digest is
+  5e6c4d5d307f265340976bf78026cba27eb27258dba45bdbf8c6061130b1eb0a.
+  production-stop-10-positive-execution-01/execution.json records exit0, 46.977s
+  including setup/cleanup, unchanged source and an empty observed process group.
+  The original native invocation66758-1792862528277789000 records exit0
+  in28737.663ms, no signal, watchdog or spawn error, under the unchanged30000ms
+  deadline. Actual turn-001.json contains the fixture user and reply,
+  session-index.json contains turn_count1, and the committed publication marker
+  hashes match the ordinary reader's turn/index/projection observations. The
+  durable operation is consumed with an empty heavy request. Native stages order
+  SQL CLOSED, marker commit, durable consumption and heavy release; cleanup.json
+  records owner66757 exit0, socket absent and no service signals. SQL CLOSED is
+  source-grounded native instrumentation, not independent SQLite handle tracing.
+  These are retained-run observations re-read during reorientation, not another
+  runtime execution or actual editor delivery.
+
+  The successful fixture has a decisive oracle limitation: create-database.py
+  seeds both session IDs with identical user/reply text and timestamps. The
+  unchanged probe02 assertions therefore cannot distinguish selection of the
+  other session's rows. Consistent operation/session/hash correlation does not
+  close this semantic gap. Root must give the sessions distinct content and
+  timestamps and verify exclusion of the foreign rows through the real reader;
+  preserve the existing positive artifact and identify the changed probe.
+
+  Source inspection also establishes that postqueue selection refusal before
+  reservation retains a StoreRecord/permit without a durable original fence:
+  store.rs acquire_publication_job fails BeforeReservation before
+  reserve_original, and its error branch writes Unknown only when dispatch
+  exists. Actor::idle_proof requires a fence for every retained store record.
+  E363's resource-free Unknown retirement does not cover this path. Probe02's
+  predicted cleanup consequence therefore remains applicable; the paired
+  negative has not executed. Root owns a distinct durable pre-reservation
+  rejection and reclamation contract. Exact rejected-ID history must survive
+  restart before heavy state is released; persistence failure must retain it.
+  Then prove genuine queue wait, changed-selection refusal, zero additional
+  database opens, no publication, record/permit release, natural owner exit and
+  same-home replay rejection. No generic dropping of unreserved records or
+  automatic settlement of uncertain post-effect operations is licensed.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -10133,18 +10304,25 @@ exact-image replay. E365 supplies the repair, failing baseline, ownership-loss
 mutation and restored controls. E366's fresh09 passes actual writer retention
 and SQL close but expires during publication with partial files and no marker.
 Its private owner is externally contained while uncertainty remains intact. Root
-owns coherent source landing and the deadline cost repair. Measure pure
-manifest-plan construction before choosing reuse of derived paths/directories;
-do not cache successful filesystem/hash observations or remove authority and
-durability checks. The successful path must establish publication, ordinary
-consumption and release within30s; neither natural failure cleanup nor
-build/profile success supplies it.
+owns the deadline cost repair; E367 lands the coherent source checkpoint. E368
+measures manifest-plan construction with the production callback chain, and E369
+reuses only immutable manifest-derived directories with direct hostile controls.
+E370 retains fresh10 publication, ordinary consumption and release within30s,
+with only1.262s deadline margin and no load distribution. Root owns the distinct
+pre-reservation rejection/reclamation repair and the session-distinguishing
+fixture correction before the paired replay. A read-only worker grounds the
+rejection lifecycle; an independent worker checks actual artifact correlations;
+root owns source changes, integration, landing and acceptance. Do not cache
+successful filesystem/hash observations or remove authority and durability
+checks. The next replay must establish semantic session isolation, rejection
+history, reclaimed capacity and natural cleanup; build/profile success cannot
+supply them.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                  |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | Execute the fresh exact image through original capture, completed prefix, SQL CLOSED, publication, ordinary reader, CONSUMED and release; pair with queued selection mutation and zero transcript-database open attempts on the same isolated owner |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload               |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.    |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | E370 retains a positive chain; distinguish session rows, implement durable pre-reservation rejection/reclamation, then pair queued selection mutation with zero additional database opens, natural exit and restart rejection         |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
@@ -10153,8 +10331,9 @@ source-grounded oracle/input corrections. E282 demonstrates sequential
 reclamation across 258 originals on one owner; it does not establish concurrent
 admission or fairness. E346 connects the SQL adapter to native observation
 inputs and profile selectors in the owned source candidate. E366 records actual
-combined-image execution through partial publication, with successful ordinary
-consumption and release unverified. Candidate `29555bc8` builds successfully in
+combined-image execution through partial publication; E370 supplies later
+bounded ordinary consumption and release with an open session-selection oracle
+gap. Candidate `29555bc8` builds successfully in
 `publication-integration/source-publication-build-01` (exit 0, 6.660s);
 `source-publication-tests-01` executes 113 checks across the publication
 adapter, store client, warm-owner qualifier and CI archive contract (exit 0,
