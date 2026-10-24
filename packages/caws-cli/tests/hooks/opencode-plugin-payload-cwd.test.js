@@ -29,6 +29,9 @@ const PARSE_INPUT = path.join(PACK_DIR, 'shared', 'lib', 'parse-input.sh');
 
 let workDir;
 let pluginPath;
+const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
+if (artifactRoot && !path.isAbsolute(artifactRoot))
+  throw new Error('Artifact root must be absolute');
 
 function transpilePlugin() {
   let source = ts.transpileModule(fs.readFileSync(PLUGIN_TS, 'utf8'), {
@@ -47,13 +50,14 @@ function transpilePlugin() {
 }
 
 beforeAll(() => {
-  workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-opencode-cwd-'));
+  if (artifactRoot) fs.mkdirSync(artifactRoot, { recursive: true });
+  workDir = fs.mkdtempSync(path.join(artifactRoot || os.tmpdir(), 'caws-opencode-cwd-'));
   pluginPath = path.join(workDir, 'plugin.cjs');
   fs.writeFileSync(pluginPath, transpilePlugin());
 });
 
 afterAll(() => {
-  fs.rmSync(workDir, { recursive: true, force: true });
+  if (!artifactRoot) fs.rmSync(workDir, { recursive: true, force: true });
 });
 
 /** A project whose dispatchers record the stdin payload they receive. */
@@ -62,11 +66,19 @@ function makeProject(name) {
   const dispatchDir = path.join(project, '.caws', 'hooks', 'dispatch');
   fs.mkdirSync(dispatchDir, { recursive: true });
   fs.mkdirSync(path.join(project, 'packages', 'app'), { recursive: true });
-  for (const event of ['pre_tool_use', 'post_tool_use']) {
+  for (const event of ['pre_tool_use', 'post_tool_use', 'session_start', 'stop', 'pre_compact']) {
     const script = path.join(dispatchDir, `${event}.sh`);
     fs.writeFileSync(
       script,
-      `#!/bin/bash\ncat > "$(dirname "$0")/${event}.payload.json"\nexit 0\n`
+      `#!/bin/bash
+record="$(mktemp "$(dirname "$0")/${event}.call.XXXXXX")"
+cat > "$record.payload.json"
+cp "$record.payload.json" "$(dirname "$0")/${event}.payload.json"
+printf '%s\\0' "$0" "$PWD" "$CAWS_PROJECT_DIR" "$CAWS_AGENT_SURFACE" "$@" > "$record.invocation.bin"
+printf '%s\\n' "$record" >> "$(dirname "$0")/${event}.calls"
+if [[ -f "$(dirname "$0")/${event}.stdout" ]]; then cat "$(dirname "$0")/${event}.stdout"; fi
+exit 0
+`
     );
     fs.chmodSync(script, 0o755);
   }
@@ -78,7 +90,7 @@ function recordedPayload(project, event) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-/** Load a fresh plugin instance (the module keeps per-process state). */
+/** Fresh-module helper; isolation controls deliberately share one module below. */
 function loadPlugin(ctx) {
   jest.resetModules();
   return require(pluginPath).CawsPlugin(ctx);
@@ -94,6 +106,151 @@ function hookCwdFor(payload) {
   expect(res.status).toBe(0);
   return res.stdout;
 }
+
+function dispatchRecords(project, event) {
+  const calls = path.join(project, '.caws/hooks/dispatch', `${event}.calls`);
+  if (!fs.existsSync(calls)) return [];
+  return fs
+    .readFileSync(calls, 'utf8')
+    .trim()
+    .split('\n')
+    .map((record) => {
+      const [script, cwd, projectDir, surface, ...argv] = fs
+        .readFileSync(`${record}.invocation.bin`, 'utf8')
+        .split('\0')
+        .slice(0, -1);
+      return {
+        script,
+        cwd,
+        projectDir,
+        surface,
+        argv,
+        payload: JSON.parse(fs.readFileSync(`${record}.payload.json`, 'utf8')),
+      };
+    });
+}
+function expectLifecycleRecords(project, event, sessions) {
+  expect(dispatchRecords(project, event)).toEqual(
+    sessions.map((session_id) => ({
+      script: path.join(project, '.caws/hooks/dispatch', `${event}.sh`),
+      cwd: project,
+      projectDir: project,
+      surface: 'opencode',
+      argv: [],
+      payload: { session_id },
+    }))
+  );
+}
+const lifecycleEvents = [
+  ['session.created', 'session_start', (sessionID) => ({ info: { id: sessionID } })],
+  ['session.idle', 'stop', (sessionID) => ({ sessionID })],
+  ['session.compacted', 'pre_compact', (sessionID) => ({ sessionID })],
+];
+describe('OpenCode lifecycle identity and instance isolation', () => {
+  test.each(lifecycleEvents)(
+    '%s dispatches its declared own identity after another session',
+    async (type, dispatcher, props) => {
+      const project = makeProject(`own-${dispatcher}`);
+      const hooks = await loadPlugin({ directory: project, worktree: project });
+      await hooks['tool.execute.before'](
+        { tool: 'read', sessionID: 'prior-session' },
+        { args: {} }
+      );
+      await hooks.event({ event: { type, properties: props('own-session') } });
+      expectLifecycleRecords(project, dispatcher, ['own-session']);
+    }
+  );
+  test.each(lifecycleEvents)(
+    '%s never inherits a prior identity when its own identity is unusable',
+    async (type, dispatcher) => {
+      const project = makeProject(`missing-${dispatcher}`);
+      const hooks = await loadPlugin({ directory: project, worktree: project });
+      await hooks['tool.execute.before'](
+        { tool: 'read', sessionID: 'prior-session' },
+        { args: {} }
+      );
+      const invalid = [
+        undefined,
+        null,
+        {},
+        { sessionID: '' },
+        { sessionID: 'unknown' },
+        { sessionID: 7 },
+        { sessionID: 'one', sessionId: 'another' },
+      ];
+      if (type === 'session.created') invalid.push({ sessionID: 'one', info: { id: 'another' } });
+      else invalid.push({ id: 'unrelated-event-id' });
+      for (const properties of invalid) {
+        await hooks.event({ event: { type, properties } });
+        expectLifecycleRecords(project, dispatcher, []);
+      }
+    }
+  );
+  test.each(lifecycleEvents)(
+    '%s retains unambiguous explicit session aliases',
+    async (type, dispatcher) => {
+      const project = makeProject(`alias-${dispatcher}`);
+      const hooks = await loadPlugin({ directory: project, worktree: project });
+      await hooks.event({ event: { type, properties: { sessionId: 'legacy-session' } } });
+      await hooks.event({ event: { type, properties: { session: { id: 'nested-session' } } } });
+      expectLifecycleRecords(project, dispatcher, ['legacy-session', 'nested-session']);
+    }
+  );
+  test('two idle sessions interleave without borrowing the last tool or lifecycle identity', async () => {
+    const project = makeProject('idle-interleaving');
+    const hooks = await loadPlugin({ directory: project, worktree: project });
+    await hooks['tool.execute.before']({ tool: 'read', sessionID: 'session-a' }, { args: {} });
+    await hooks['tool.execute.before']({ tool: 'read', sessionID: 'session-b' }, { args: {} });
+    await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'session-a' } } });
+    await hooks.event({ event: { type: 'session.idle', properties: {} } });
+    await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'session-b' } } });
+    expectLifecycleRecords(project, 'stop', ['session-a', 'session-b']);
+  });
+  test('instances sharing one loaded module keep project routing and pending context separate', async () => {
+    const first = makeProject('instance-first');
+    const second = makeProject('instance-second');
+    jest.resetModules();
+    const { CawsPlugin } = require(pluginPath);
+    const a = await CawsPlugin({ directory: first, worktree: first });
+    const b = await CawsPlugin({ directory: second, worktree: second });
+    fs.writeFileSync(
+      path.join(first, '.caws/hooks/dispatch/pre_tool_use.stdout'),
+      JSON.stringify({
+        hookSpecificOutput: { additionalContext: 'first-project-context' },
+      })
+    );
+    await a['tool.execute.before']({ tool: 'read', sessionID: 'first-session' }, { args: {} });
+    await b['tool.execute.before']({ tool: 'read', sessionID: 'second-session' }, { args: {} });
+    const bSystem = { system: [] };
+    await b['experimental.chat.system.transform']({}, bSystem);
+    expect(bSystem.system).toEqual([]);
+    const aSystem = { system: [] };
+    await a['experimental.chat.system.transform']({}, aSystem);
+    expect(aSystem.system).toEqual([
+      'CAWS context (peer notice / message / advisory):\nfirst-project-context',
+    ]);
+    await Promise.all([
+      a.event({ event: { type: 'session.idle', properties: { sessionID: 'first-session' } } }),
+      b.event({ event: { type: 'session.idle', properties: { sessionID: 'second-session' } } }),
+    ]);
+    expectLifecycleRecords(first, 'stop', ['first-session']);
+    expectLifecycleRecords(second, 'stop', ['second-session']);
+    expect(
+      dispatchRecords(first, 'pre_tool_use').map((record) => record.payload.session_id)
+    ).toEqual(['first-session']);
+    expect(
+      dispatchRecords(second, 'pre_tool_use').map((record) => record.payload.session_id)
+    ).toEqual(['second-session']);
+  });
+  test('ordinary single-session lifecycle preserves dispatcher names and advisory behavior', async () => {
+    const project = makeProject('ordinary-lifecycle');
+    const hooks = await loadPlugin({ directory: project, worktree: project });
+    for (const [type, dispatcher, props] of lifecycleEvents) {
+      await hooks.event({ event: { type, properties: props('ordinary-session') } });
+      expectLifecycleRecords(project, dispatcher, ['ordinary-session']);
+    }
+  });
+});
 
 describe('opencode plugin payload cwd', () => {
   test('a Bash tool call reaches the pre dispatcher with cwd set to the session directory, not the git root', async () => {

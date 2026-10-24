@@ -8352,6 +8352,34 @@ Additional bounded evidence and unresolved dependencies:
   request-scoped checks at logical mutation/retry boundaries and deterministic
   deep-effect controls before accepting this deadline contract.
 
+- E316: Coherent source candidate `c41ee44b` lands through governed merge
+  `70ecc61d`; its executable source remains `c61ad087`. Source A2 and A3 records
+  are read back with events12576 and12582; all three bounded source criteria are
+  pass and the source spec closes completed. Main ancestry, worktree removal and
+  unchanged actual machine runtime pointer are independently inspected. This
+  source landing does not accept parent A1–A8 or adopt the private native image.
+  The OpenCode ingress investigation grounds SDK1.17.11 created identity at
+  `properties.info.id`, and idle/compacted identity at `properties.sessionID`.
+  Module-global plugin state permits cross-project routing/context
+  contamination; missing lifecycle identity can reuse an earlier session. Root
+  accepts the clean child identity slice into publication A7 when native tool
+  context cannot enter its worker-owned lane; the child closes superseded,
+  without completed acceptance.
+  `publication-integration/opencode-identity-baseline-01` executes the new
+  controls against old source and exits1 with7 failures, including prior-session
+  dispatch, missing created identity and leaked context.
+  `opencode-identity-repaired-01` exits0 with18 cases after event-specific
+  identity and instance-state repair. Retained
+  `opencode-identity-repaired-fixtures` include the transpiled plugin, actual
+  recording-dispatcher payload JSON, NUL-delimited argv/cwd/project/surface
+  records and call lists. Interleaved idle events dispatch session-a/session-b
+  exactly once each; missing identity dispatches neither; separate plugin
+  instances retain their own roots and context. Pack version9 and its computed
+  fingerprint identify the changed template. `opencode-identity-build-01` exits0
+  with unchanged source pins and no owned process residue. These are
+  callback/transport fixtures, not actual OpenCode activation, Stop-veto
+  delivery or native SQL publication.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
