@@ -21,9 +21,15 @@ invariants:
   - 'Created, idle and compacted lifecycle dispatches use only an unambiguous identity on their own event: created properties.info.id and idle/compacted properties.sessionID, retaining explicit session-named legacy aliases; missing invalid or conflicting identities never borrow prior state.'
 acceptance:
   - id: A1
-    given: 'one plugin instance has observed two sessions'
-    when: 'idle events interleave and omit their own sessionID'
-    then: 'valid idle dispatches use their own sessionID and missing or invalid idle identities do not dispatch Stop'
+    given: >-
+      one plugin instance has observed two sessions using declared lifecycle event
+      shapes and supported explicit session aliases
+    when: >-
+      created idle and compacted events interleave or carry missing invalid
+      conflicting or unrelated identities
+    then: >-
+      each dispatch uses only its own unambiguous session identity and unusable
+      identities produce no lifecycle dispatch
   - id: A2
     given: 'two plugin instances share one loaded module for distinct projects'
     when: 'lifecycle and tool callbacks interleave'
