@@ -32,8 +32,10 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Verified from actual executions at committed957ea83490e751f21d5af64980e605e23a0ca7d2: standalone Node passed17 cases (raw /private/tmp/caws-staged-corpus-node-verified-20261024.log), Jest passed21 cases (raw /private/tmp/caws-staged-corpus-jest-verified-20261024.log and actual result JSON). Root parsed both outputs and matched exactly17 original executed names in order; other4 hook cases passed. Independent source review grounded unchanged counterexamples, backup absence count0, and unchanged30s runner limit. CAWS static wrapper-file name lookup refused the imported-case nodeid as test_not_found and wrote nothing; no named-test verification is claimed by this record. This citation verifies commit identity only; behavior was established by inspected raw runs. Full integrated push remains parent work."
-    recorded_at: "2026-10-24T22:50:31.887Z"
-    command: "node --test scripts/run-staged-checks.test.cjs; node node_modules/jest/bin/jest.js --config jest.config.js --runInBand --runTestsByPath tests/ci/lint-staged-prettier-fence.test.js"
+    evidence_ref: "Standalone Node passed17 cases exit0 in /private/tmp/caws-staged-corpus-node-verified-20261024.log; direct Jest passed21 exit0 in /private/tmp/caws-staged-corpus-jest-verified-20261024.log with actual JSON alongside. Parsed executed names match all17 original cases exactly; other4 hook cases passed. Source review grounded retained counterexamples, exact backup absence count0 and unchanged30s subprocess cap. Imported individual case names are absent from wrapper source, so the corrected citation selects the actual whole Jest wrapper file, which executes all21 cases. Full integrated push remains parent work."
+    recorded_at: "2026-10-24T22:53:04.781Z"
+    test_nodeid: packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js
+    command: node --test scripts/run-staged-checks.test.cjs
     exit_code: 0
     commit_sha: "957ea83490e751f21d5af64980e605e23a0ca7d2"
+    test_verified_at: "957ea83490e751f21d5af64980e605e23a0ca7d2"
