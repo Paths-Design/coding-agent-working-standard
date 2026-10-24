@@ -8444,6 +8444,25 @@ Additional bounded evidence and unresolved dependencies:
   Root retains the native producer/prefix/profile/consumer join and final-image
   qualification.
 
+- E319: The bounded ingress/deadline correction lands on main through governed
+  merge fec80595; closure commit925b5a59 retains all three recorded component
+  criteria and removes only the temporary landing lane. Normal integration
+  8cefd13b preserves the publication candidate2448b992 executable bytes and
+  canonical governance. The retained ingress-deadline-landing-01 source binding
+  compares all99 native source pins across six positive/compile receipts and
+  all395 pins from the final OpenCode execution: zero mismatches. Package-source
+  diff against2448b992 is empty before and after landing. Full-basis gates
+  evaluate15 files with5 PASS; doctor0E/4W/5I retains installed-hook drift.
+  Acceptance records12627–12629 are read back from both spec and event history.
+  Commit citation verification establishes identity; actual payload, filesystem,
+  negative-control and restoration observations remain E317/E318. The active
+  publication lane merges main and retains root ownership of ordinary Stop
+  producer, native prefix, production profile admission and consumer
+  integration. Stop-prefix and OpenCode producer proposals have formatting/apply
+  checks only; neither is activated or accepted. Residency/fairness, full Python
+  retirement, supported harness delivery and actual machine selection remain
+  unqualified.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -8552,7 +8571,7 @@ complete its parent outcome.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                               |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E316 lands the bounded source slice on main; qualify the next production-connected image and actual harness delivery after the ingress and deadline corrections                                                                                   |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E319 lands ingress and deadline corrections on main; qualify the next production-connected image and actual harness delivery after ordinary Stop integration                                                                                      |
 | Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
 | Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
 
