@@ -635,17 +635,33 @@ pub struct OriginalStopCaptureInput<'a> {
     pub original_payload: &'a RawValue,
 }
 
-/// Keep the owned query failure intact: its retained Child must reach the root's
-/// cleanup/custody owner. Display text is never a substitute for this value.
+/// Keep remote custody intact: the original custodian Child/control must reach
+/// the root's cleanup owner. Display text is never a substitute for this value.
 #[derive(Debug)]
 pub enum OriginalStopCaptureFailure {
     Invocation(String),
     Interrupted(String),
     Ancestry(String),
     Project {
-        failure: Box<crate::invocation_project::ProjectFailure>,
+        failure: Box<crate::context_git::original_project::RemoteFailure>,
         interruption: Option<String>,
     },
+}
+impl OriginalStopCaptureFailure {
+    /// No project child can exist on invocation/ancestry/checkpoint errors.
+    /// A project error retains its real remote handle, including after pending.
+    pub fn cleanup_settled(&self) -> bool {
+        match self {
+            Self::Project { failure, .. } => failure.cleanup_settled(),
+            _ => true,
+        }
+    }
+    pub fn retry_cleanup(&mut self) -> std::result::Result<(), String> {
+        match self {
+            Self::Project { failure, .. } => failure.retry_cleanup(),
+            _ => Ok(()),
+        }
+    }
 }
 impl fmt::Display for OriginalStopCaptureFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -685,6 +701,8 @@ fn original_stop_checkpoint(
 /// Actual original-process capture. No Clone, Deserialize, asserted-project
 /// constructor or permission flag exists. This is an unactivated library
 /// prerequisite; it grants no stock selection, profile or publication authority.
+/// Git children are owned by the separate native custodian, selected by the
+/// caller's generation pin; this original process captures its own ancestry.
 pub struct OriginalStopCapture<'deadline> {
     id: String,
     runtime_digest: String,
@@ -692,7 +710,7 @@ pub struct OriginalStopCapture<'deadline> {
     caller_cwd: String,
     caller_environment: std::collections::BTreeMap<String, String>,
     original_payload: Box<RawValue>,
-    project: crate::invocation_project::ObservedProject,
+    project: crate::context_git::original_project::CapturedProject,
     ancestry: crate::agent_pid_cache::OriginalAncestry,
     deadline: &'deadline crate::monotonic_deadline::MonotonicDeadline,
     original_pid: u32,
@@ -702,6 +720,8 @@ pub struct OriginalStopCapture<'deadline> {
 impl<'deadline> OriginalStopCapture<'deadline> {
     pub fn capture(
         input: OriginalStopCaptureInput<'_>,
+        // Supplied by the trusted native-generation selector, never engine input.
+        executor: &crate::invocation_project::SelectedExecutable,
         deadline: &'deadline crate::monotonic_deadline::MonotonicDeadline,
         mut cancel: impl FnMut() -> std::result::Result<(), String>,
     ) -> std::result::Result<Self, OriginalStopCaptureFailure> {
@@ -731,11 +751,16 @@ impl<'deadline> OriginalStopCapture<'deadline> {
         let interruption = std::cell::RefCell::new(None);
         let project = {
             let callback = std::cell::RefCell::new(&mut cancel);
-            crate::invocation_project::observe(
-                input.caller_cwd,
-                input.caller_environment,
-                input.original_payload,
-                deadline.expires(),
+            crate::context_git::original_project::capture(
+                crate::context_git::original_project::Input {
+                    id: input.id,
+                    runtime_digest: input.runtime_digest,
+                    caller_cwd: input.caller_cwd,
+                    environment: input.caller_environment,
+                    payload: input.original_payload,
+                },
+                executor,
+                deadline,
                 &|| match original_stop_checkpoint(deadline, &mut **callback.borrow_mut()) {
                     Ok(()) => false,
                     Err(message) => {
@@ -785,7 +810,7 @@ impl<'deadline> OriginalStopCapture<'deadline> {
         &self.original_payload
     }
     pub fn observed_project(&self) -> &crate::invocation_project::ObservedProject {
-        &self.project
+        self.project.project()
     }
     pub fn deadline(&self) -> &crate::monotonic_deadline::MonotonicDeadline {
         self.deadline
@@ -823,7 +848,7 @@ impl<'deadline> OriginalStopCapture<'deadline> {
                 advertised_capability: invocation.advertised_capability,
             },
             original_ancestry: &self.ancestry,
-            original_project: &self.project,
+            original_project: self.project.project(),
             deadline: self.deadline,
         })
     }

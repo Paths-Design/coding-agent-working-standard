@@ -8673,6 +8673,27 @@ Additional bounded evidence and unresolved dependencies:
   No production Stop activation, parent acceptance, Python retirement or machine
   adoption is earned.
 
+- E329: OriginalStopCapture requires the caller-selected native executor and
+  retains the custodian's opaque CapturedProject rather than repeating direct
+  project queries. Its typed Project failure owns RemoteFailure, forwards
+  cleanup retry/state and preserves the original interruption. Six real-capture
+  tests move from libtest to the original_stop_capture integration target so the
+  custodian executes CARGO_BIN_EXE_caws-native. Two additional controls cover
+  wrong native pins and pending error ownership across retry/Drop.
+  original-stop-custodian-integration-01 exits0 with eight cases and104 stable
+  source pins; actual-original-project.json retains /usr/bin/git children
+  68992/68993, exit0 and both EOFs/reap. actual-prefix.json retains the matching
+  original deadline, envelope, pointer and PID record. Pending retry and Drop
+  artifacts retain the same custodian births while a test owns stdout, then
+  observe both instances absent after release; sessionsExist remains false. The
+  error-cause mutation exits101 at the RemoteFailure downcast assertion, with
+  exact source restoration. Remaining session_cache_wire tests31, sqlite-store
+  check and combined native-peer-candidate-05 tests5 exit0. Controlled OpenCode
+  argv0 remains a test frontend, not a loaded vendor callback. Root retains
+  main-before-Node registration, native-selected profiles, ordinary SQL/render
+  publication, actual reader/release and residency workload. The library join
+  earns no installed adoption or parent acceptance.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
