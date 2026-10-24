@@ -122,6 +122,7 @@ invariants:
   - 'Release heavy records after definitive terminal consumption while retaining durable original-ID rejection across same-home restart and generation'
   - 'Preserve exact provider counts, top-level model order, unrelated metadata and explicit historical-summary preservation; never fallback after a native attempt'
   - 'Continuous same-Arc writer custody spans actual warm-backend retirement, acquisition, anchored publication and exact ordinary-reader CONSUMED; keep at most 256 live heavy operations separately from durable terminal original-ID history, reject replays across restart/generation, and refuse explicit history exhaustion without eviction.'
+  - 'OpenCode lifecycle callbacks bind their own SDK event identity and plugin instance root; missing identity never reuses a previous session or another plugin instance'
 acceptance:
   - id: A1
     given: 'fresh original store and SessionEnd invocations'
@@ -147,6 +148,16 @@ acceptance:
     given: 'the committed integrated candidate'
     when: 'focused checks gates doctor and independent review run'
     then: 'source and existing documentation match inspected behavior and full package harness fairness and machine cutover obligations remain explicitly with the parent'
+  - id: A7
+    given: >-
+      interleaved OpenCode plugin instances and created idle compacted events with
+      documented own-session identities or missing identities
+    when: 'the ordinary lifecycle dispatcher is invoked'
+    then: >-
+      each dispatched lifecycle carries only its originating event session and
+      instance project; missing identity never dispatches with a previous session;
+      captured dispatcher arguments and focused negative controls establish the
+      behavior
 observability:
   - 'Actual native and engine frames, original and output digests, current-attempt markers, terminal truth, reader observations, retained failures and process cleanup'
 rollback:
