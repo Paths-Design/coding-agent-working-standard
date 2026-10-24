@@ -94,3 +94,9 @@ non_functional:
 contracts:
   - name: 'bounded-stop-source-landing'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Main merge89946c2d contains reviewed4909cdc4 with identical implementation and tracker; implementation equals ec496156/c04dee5b. Direct Git ancestry/blob comparison exit0. Full nontruncated review has30commits, every contributed path admitted; merge dry-run and actual merge exit0. Source-only acceptance. Inspected artifact: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/source-landing-composition-01/postmerge.json. CLI --verify checks commit reachability only; external artifact content was directly inspected, not CLI-rederived."
+    recorded_at: "2026-10-24T16:23:22.688Z"
+    commit_sha: "89946c2d8d71f00d35828a91c620a3ec9d78e130"
