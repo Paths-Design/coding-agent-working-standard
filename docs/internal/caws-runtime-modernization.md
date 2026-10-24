@@ -8621,6 +8621,79 @@ Additional bounded evidence and unresolved dependencies:
   candidate comparisons with observed dependency identities. Root integrates
   these assignments before ordinary consumer and residency qualification.
 
+- E327: Native peer admission retains a private CLOEXEC socket, original
+  monotonic deadline, kernel PID/birth/executable and the exact admitted
+  generation member identity. native-peer-candidate-04 exits0 with five actual
+  native-host/Node controls; all101 source pins and tool inputs remain stable,
+  and the supervised process group is empty. Retained peer-observation.json
+  files show native admission/revalidation, zero admission callbacks for a
+  same-UID Node process forging native claims, refusal after peer exit,
+  same-byte member replacement refusal, and original cancellation/expiry. The
+  executable, member and process negative controls each exit101 at the
+  corresponding refusal assertion after incorrectly admitting the mutation;
+  exact source restoration is recorded. Earlier candidate01 compile failure and
+  candidate02 missing Node setting remain retained. Socket cleanup runs during
+  assertion unwinding. These are actual processes in a synthetic generation, not
+  installed Stop delivery, native registration, immutable executable attestation
+  or a PID-reuse experiment. The module has no active production caller. Root
+  owns authenticated original transfer, custodian execution and the ordinary
+  Stop publication/reader/release connection before profile, residency or
+  machine acceptance. Parent evidence remains unchanged.
+
+- E328: Original project discovery uses the existing native custodian with
+  inherited private configuration, exact original payload/deadline binding and
+  two bounded Git operations. RemoteFailure retains the custodian Child and
+  control; retry only settles cleanup, and Drop never signals the custodian.
+  original-project-custodian-runtime-03 exits0 with six scenarios and103 stable
+  source pins. Actual native custodians execute explicitly identified fixture
+  Git; original-project-success.json retains both query cwds, filtered
+  environment, raw output, exit0, both EOFs and reap. The withheld-pipe artifact
+  retains pending stdoutEof=false/reaped=false, then terminal Cleanup failure
+  with both EOFs/reap after writer release; no second query or capture success
+  follows. Drop retains the same custodian birth until that release. Frontend
+  TERM/KILL records retain actual frontend/custodian/Git/descendant ancestry and
+  groups, followed by absence of all three survivor instances. Cancellation,
+  output-limit, malformed output and changed executable controls retain their
+  structured refusals and terminal cleanup. This does not prove physical kernel
+  stall recovery, atomic executable pinning or trusted wrapper descendants.
+  Initial compile101 exposed a Reply/ResultFrame writer mismatch; runtime01
+  exposed quadratic receive scanning exhausting the bounded writer. The repair
+  preserves separate frame limits and scans only new bytes without extending the
+  writer deadline. Pending-to-success and too-small reply-bound mutants each
+  exit101 at behavioral assertions, with restoration retained. Six private wire
+  tests,15 existing project tests,10 existing context-Git tests and the
+  sqlite-store compile check pass; the first context regression's missing Node
+  setting remains recorded. The large-reply unit03 attempt also records a test
+  receiver timeout started before serialization; the receiver instead ends at
+  explicit writer shutdown under the outer supervisor, retaining the production
+  writer's unchanged bounded progress contract. The old cleanup placeholder is
+  omitted from wire diagnostic prose because correlated receipt rows own actual
+  cleanup facts. Root owns joining this capture to prefix and authenticated
+  registration before Node, then the ordinary publication/reader/release path.
+  No production Stop activation, parent acceptance, Python retirement or machine
+  adoption is earned.
+
+- E329: OriginalStopCapture requires the caller-selected native executor and
+  retains the custodian's opaque CapturedProject rather than repeating direct
+  project queries. Its typed Project failure owns RemoteFailure, forwards
+  cleanup retry/state and preserves the original interruption. Six real-capture
+  tests move from libtest to the original_stop_capture integration target so the
+  custodian executes CARGO_BIN_EXE_caws-native. Two additional controls cover
+  wrong native pins and pending error ownership across retry/Drop.
+  original-stop-custodian-integration-01 exits0 with eight cases and104 stable
+  source pins; actual-original-project.json retains /usr/bin/git children
+  68992/68993, exit0 and both EOFs/reap. actual-prefix.json retains the matching
+  original deadline, envelope, pointer and PID record. Pending retry and Drop
+  artifacts retain the same custodian births while a test owns stdout, then
+  observe both instances absent after release; sessionsExist remains false. The
+  error-cause mutation exits101 at the RemoteFailure downcast assertion, with
+  exact source restoration. Remaining session_cache_wire tests31, sqlite-store
+  check and combined native-peer-candidate-05 tests5 exit0. Controlled OpenCode
+  argv0 remains a test frontend, not a loaded vendor callback. Root retains
+  main-before-Node registration, native-selected profiles, ordinary SQL/render
+  publication, actual reader/release and residency workload. The library join
+  earns no installed adoption or parent acceptance.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

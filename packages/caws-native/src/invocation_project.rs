@@ -32,7 +32,7 @@ use std::{
 const MAX_OUTPUT: usize = 1_048_576;
 const MAX_TOOL_BYTES: u64 = 134_217_728;
 const MAX_PATH_BYTES: usize = 4096;
-const QUERY_BUDGET: Duration = Duration::from_secs(5);
+pub(crate) const QUERY_BUDGET: Duration = Duration::from_secs(5);
 const CLEANUP_BUDGET: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -591,7 +591,7 @@ fn resolve_path(base: &str, supplied: &str) -> Result<PathBuf, String> {
     Ok(resolved.into())
 }
 
-fn candidate(
+pub(crate) fn candidate(
     caller_cwd: &str,
     environment: &BTreeMap<String, String>,
     payload: &RawValue,
@@ -886,10 +886,10 @@ fn drain(
     Ok(false)
 }
 
-struct QueryOutput {
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    cleanup: QueryCleanup,
+pub(crate) struct QueryOutput {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub cleanup: QueryCleanup,
 }
 /// Raw terminal observations for the finite Render-context producer. Unlike
 /// project discovery, a settled nonzero exit and non-UTF8 bytes remain data.
@@ -982,6 +982,12 @@ fn query(
 ) -> Result<QueryOutput, ProjectFailure> {
     let output = query_observed(selected, cwd, environment, args, expires, is_cancelled)
         .map_err(|error| error.failure)?;
+    project_query_output(output)
+}
+
+pub(crate) fn project_query_output(
+    output: ObservedQueryOutput,
+) -> Result<QueryOutput, ProjectFailure> {
     let mut failure = if !output.cleanup.reaped.is_some_and(|status| status.success) {
         Some(ProjectFailure::new(
             ProjectPhase::QueryStatus,
@@ -1146,7 +1152,7 @@ fn query_observed(
     })
 }
 
-fn git_path(bytes: &[u8], phase: ProjectPhase) -> Result<PathBuf, ProjectFailure> {
+pub(crate) fn git_path(bytes: &[u8], phase: ProjectPhase) -> Result<PathBuf, ProjectFailure> {
     // Narrow physical-path profile: exactly one UTF-8 line terminated by LF.
     // No trim-based repair of ambiguous/control-bearing Git output.
     let text = std::str::from_utf8(bytes)
@@ -1206,6 +1212,33 @@ pub fn observe(
     expires: Instant,
     is_cancelled: &dyn Fn() -> bool,
 ) -> Result<ObservedProject, ProjectFailure> {
+    observe_with_query(
+        caller_cwd,
+        environment,
+        original_payload,
+        expires,
+        is_cancelled,
+        query,
+    )
+}
+
+// The private custodian changes actual Child ownership, not selection, parser,
+// checkout/common-dir mapping, environment filtering or physical-root semantics.
+pub(crate) fn observe_with_query(
+    caller_cwd: &str,
+    environment: &BTreeMap<String, String>,
+    original_payload: &RawValue,
+    expires: Instant,
+    is_cancelled: &dyn Fn() -> bool,
+    mut run: impl FnMut(
+        &SelectedExecutable,
+        &Path,
+        &BTreeMap<String, String>,
+        &[&str],
+        Instant,
+        &dyn Fn() -> bool,
+    ) -> Result<QueryOutput, ProjectFailure>,
+) -> Result<ObservedProject, ProjectFailure> {
     checkpoint(expires, is_cancelled)?;
     if !caller_cwd.starts_with('/') || caller_cwd.contains('\0') {
         return Err(ProjectFailure::new(
@@ -1230,7 +1263,7 @@ pub fn observe(
         .collect();
     let executable_path = select_executable(caller_cwd, &filtered)?;
     let executable = pin_executable(&executable_path, expires, is_cancelled)?;
-    let first = query(
+    let first = run(
         &executable,
         &candidate,
         &filtered,
@@ -1248,7 +1281,7 @@ pub fn observe(
         failure
     })?;
     // The second query uses Git's checkout spelling, as the TS runtime does.
-    let second = query(
+    let second = run(
         &executable,
         &checkout,
         &filtered,

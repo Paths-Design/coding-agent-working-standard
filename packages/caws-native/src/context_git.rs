@@ -27,6 +27,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "context_git/original_project.rs"]
+pub mod original_project;
+
 #[path = "context_git/render.rs"]
 pub mod render;
 
@@ -685,12 +688,18 @@ fn observe_exit(child: &Child, row: &mut QueryReceipt) -> bool {
     row.exit_code.is_some() || row.signal.is_some()
 }
 fn publish(stream: &mut UnixStream, row: &ResultFrame) -> bool {
-    let Ok(mut bytes) = serde_json::to_vec(row) else {
+    let Ok(bytes) = serde_json::to_vec(row) else {
         return false;
     };
     if bytes.len() >= MAX_RESULT {
         return false;
     }
+    publish_bytes(stream, bytes)
+}
+
+// Callers retain their distinct frame size contracts before entering this
+// bounded nonblocking writer. Sending a receipt does not release child custody.
+fn publish_bytes(stream: &mut UnixStream, mut bytes: Vec<u8>) -> bool {
     bytes.push(b'\n');
     let deadline = Instant::now() + CLEANUP;
     let mut sent = 0;
@@ -777,9 +786,20 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
             revents: 0,
         }]);
     };
-    let envelope: serde_json::Value = serde_json::from_slice(&configuration_bytes)
+    #[derive(Deserialize)]
+    struct Schema {
+        schema: Option<String>,
+    }
+    let envelope: Schema = serde_json::from_slice(&configuration_bytes)
         .map_err(|e| format!("context Git configuration: {e}"))?;
-    if envelope.get("schema").is_some() {
+    if envelope.schema.as_deref() == Some(original_project::CONFIG_SCHEMA) {
+        return original_project::run_configuration(
+            &mut stream,
+            &configuration_bytes,
+            configuration_cancelled,
+        );
+    }
+    if envelope.schema.is_some() {
         return render::run_configuration(
             &mut stream,
             &configuration_bytes,

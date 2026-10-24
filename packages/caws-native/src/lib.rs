@@ -2,6 +2,7 @@
 
 pub mod agent_pid_cache;
 pub mod context_git;
+mod installed_generation;
 pub mod invocation_project;
 pub mod monotonic_deadline;
 pub mod owned_group;
