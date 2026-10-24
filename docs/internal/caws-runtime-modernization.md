@@ -8941,6 +8941,63 @@ Additional bounded evidence and unresolved dependencies:
   f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e remain
   unchanged across landing. No remote push or machine installation is claimed.
 
+- E341: The maintained native entry calls StockStopSelection::admit after Ready
+  and successful sealing. The selection borrows the original capture and sealed
+  receipt; Unsupported retains compatibility's predispatch freshness check,
+  while Invalidated terminates the invocation. The bounded native diagnostic
+  distinguishes not_attempted, unsupported, admitted and invalidated without
+  granting prefix, profile, SQL or publication authority. The release build in
+  stock-admission-release-01 exits0 in10.710s. The fresh maintained full-image
+  invocation in maintained-stock-admission-execution-01 exits0 in23.399s
+  overall; its native terminal exits0 in16267ms under the original30000ms
+  deadline. maintained-stock-admission-observation-01/native-progress.json
+  records364 observations, stockSelection:admitted, successful sealing and
+  predispatch revalidation, and one dispatch. Native SHA256 is
+  704c474d46dedf1defa8bef79f3433af6a2925332dc9e13f09e88220c4e127cb. All four
+  handlers execute through compatibility; the turn preserves the expected
+  user/reply and original metadata, the index has one turn, and the final plan
+  snapshot equals the source transcript byte-for-byte. Root rehashes 107 native
+  and436 TypeScript source pins, six selected/output pins and seven session
+  files. reorient-stock-admission-controls-01 exits0 in12.603s: sparse and empty
+  readsets remain unsupported with freshness checking; absent capture does not
+  attempt admission. reorient-stock-admission-hostile-01 exits0 in 12.538s: five
+  protocol/stale cases refuse before dispatch; the late request refuses after
+  dispatch without retry, which does not establish zero effects.
+  stock-admission-unit-baseline-01 exits0 in24.019s with142 binary-unit checks,
+  unchanged inputs/source and no group residue. These controls use a simulated
+  engine; the retained maintained-engine positive uses actual compiled entry
+  code. The stale simulator case fails during sealing and does not exercise
+  admission's Invalidated branch. These artifacts remain under the root
+  session's publication-integration directory. No production Stop store port,
+  semantic profile qualification, native publication/consumer/release, Python
+  retirement, vendor delivery, resident fairness or selected-machine cutover is
+  established. Root owns those integrations; E342 exercises direct admission
+  invalidation separately from main's protocol routing.
+- E342: tests/stock_stop_admission.rs calls the production admission constructor
+  with a genuine OriginalStopCapture, Cargo-built custodian and two settled Git
+  queries. The synthetic generation supplies no stock-positive or installed
+  execution claim. stock-admission-direct-01 exits0 in25.401s: the retained
+  direct-stock-admit.json records Unsupported for a fresh sparse readset,
+  Invalidated for a dependency changed after sealing, and Invalidated preserving
+  the cancellation sentinel with exactly one callback. The session directory
+  remains absent. Removing only admission's initial readset revalidation in an
+  isolated source copy makes stock-admission-mutant-01 exit101 in25.600s at the
+  exact wrong-variant assertion: Unsupported instead of Invalidated. No live
+  source is mutated. The first restored run, stock-admission-direct-restored-01,
+  also exits101 because a shared Cargo target reuses the mutant test executable
+  despite unchanged original source pins; that failed attempt remains evidence
+  against treating source pins alone as executable identity. A distinct fresh
+  target in stock-admission-direct-fresh-01 rebuilds the original source and
+  exits0 in59.737s with unchanged108 source pins, input pins and no group
+  residue. Its binary identities and constructor artifacts are retained beside
+  the raw logs. Subsequent checks must use this fresh target rather than the
+  contaminated target-feature-off cache. stock-admission-sqlite-compile-01
+  exits0 with the explicit sqlite-store feature before the test-only addition;
+  compilation is not SQL execution. The direct constructor and one revalidation
+  mutant are exercised, not a complete mutation score or deterministic
+  main-level post-seal invalidation. The ordinary native publication chain
+  remains owed.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -9047,11 +9104,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E334–E340 selection source is on local main267f8583. Next qualify the production-connected image, actual harness delivery and rollback; E340 establishes only native selection traversal plus compatibility completion.                                                                  |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | Connect the landed E340 selection receipt to native stock admission and separately qualified SQL/renderer profiles without invocation-time Python discovery; preserve original deadline and queue revalidation before reservation/writer/SQL through ordinary publication/reader/release |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                    |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                               | Next decisive check                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                  | E334–E340 selection source is on local main267f8583. Next qualify the production-connected image, actual harness delivery and rollback; E340 establishes only native selection traversal plus compatibility completion.                                                                                           |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E341/E342 execute stock admission and its direct invalidation falsifier in the owned publication lane; html_profile owns the native source-catalog proposal, with root applying and verifying it | Connect separately qualified SQL/renderer profiles, original capture and completed prefix to the maintained store port; bind the source catalog to native captured inputs, preserve the original deadline and revalidate after queueing before reservation/writer/SQL through ordinary publication/reader/release |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                    | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                             |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
