@@ -9670,6 +9670,31 @@ Additional bounded evidence and unresolved dependencies:
   recovery. Root must inspect real-image phase measurements before attributing
   the remaining deadline failure and preserve the original30000ms request bound.
 
+- E360: Root contains the owned fresh06 fixture process without settling its
+  operation. Live libproc identity matches PID87541, UID501, original start
+  1792847592.342745 and the pinned private executable64d638e3; lsof names the
+  same executable, fixture outputs, socket and custody locks. A fresh process
+  tree/group observation contains only that owner. Root registers a kqueue exit
+  observation, rechecks identity and sends SIGTERM to that PID only. The bounded
+  script exits0 and observes NOTE_EXIT, absent process identity, no related
+  processes, socket connection refused errno61 and an acquirable owner lock.
+  Every retained custody file and source SQLite hash remains unchanged. The
+  socket pathname and fixture stay preserved; the operation remains accepted /
+  Unknown. No journal mutation, consumption acknowledgement or replay occurs.
+
+  production-stop-06-containment-01/execution.json retains before/after
+  identity, hashes and observations; before-lsof.txt retains descriptors.
+  attempt-01.json preserves the first script's exit1 before signaling: Python
+  kqueue lacks the attempted context-manager API. The corrected script closes
+  the queue explicitly. Rechecked process identity and kqueue observation bound
+  this owned cleanup; they are not an atomic PID-addressed signal primitive or
+  proof about arbitrary escaped processes. Process containment removes this
+  fixture's live-process hold, not the durable Unknown recovery obligation or
+  production failure. A fresh isolated scenario may exercise the changed
+  candidate; this retained operation must not be replayed. Root retains the
+  missing cooperative quiescence and proof-bearing Unknown settlement contracts
+  through cutover acceptance.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
