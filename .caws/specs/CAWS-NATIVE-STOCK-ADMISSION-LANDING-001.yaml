@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-STOCK-ADMISSION-LANDING-001
+title: 'Land native stock Stop admission with retained freshness evidence'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-24T08:13:35.943Z'
+updated_at: '2026-10-24T08:13:35.943Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native original Stop selection admission and mainline delivery'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/stop_admission.rs'
+    - 'packages/caws-native/tests/original_stop_main.rs'
+    - 'packages/caws-native/tests/stock_stop_admission.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Unsupported selection retains the sealed receipt and predispatch freshness; invalidated original evidence cannot become fallback permission.'
+  - 'This slice grants no native prefix, SQL, publication or full-runtime acceptance and does not change selected machine state.'
+acceptance:
+  - id: A1
+    given: 'actual original capture and sealed native observations'
+    when: 'sparse, stale and cancelled selection enter admission'
+    then: 'sparse selection remains unsupported, stale and cancelled evidence is invalidated, and the retained receipt remains available for predispatch checks.'
+  - id: A2
+    given: 'an isolated installed full image and maintained engine'
+    when: 'an ordinary stock OpenCode Stop executes'
+    then: 'native progress records admitted stock selection and predispatch revalidation within the original deadline, while concrete outputs and compatibility execution remain explicit.'
+  - id: A3
+    given: 'the reviewed committed candidate and passing scoped checks'
+    when: 'the bounded source slice lands on local main'
+    then: 'source ancestry and ledger state agree, with parent acceptance and selected machine runtime unchanged.'
+observability:
+  - 'Retained native progress, direct admission refusal artifacts, raw mutant and fresh-target logs, source and binary pins.'
+rollback:
+  - 'Use a governed source revert if needed; the selected machine generation is not changed by this landing.'
+non_functional: {}
+contracts: []
